@@ -1,6 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import type { ExportFormat } from "./export.ts"
 import { adaptPackageSounds } from "./sounds.ts"
+import { adaptIosToolbar } from "./ios-toolbar.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson, sxiDerivedFiles } from "./palm/sxi-projection.ts"
 import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
 
@@ -459,7 +460,7 @@ export class SkinArchive {
     this.changed.clear()
   }
 
-  private packagedFiles(format: ExportFormat): Record<string, Uint8Array> {
+  private packagedFiles(format: ExportFormat, warnings?: string[]): Record<string, Uint8Array> {
     const output = new Map<string, Uint8Array>()
     const single = this.layout.endsWith("single")
     const add = (name: string, data: Uint8Array) => addZipEntry(output, name, data)
@@ -487,6 +488,8 @@ export class SkinArchive {
         }
       }
     }
+    // Android-authored toolbars need the iOS LOGO entry points, or iOS draws faint default icons.
+    if (format === "bdi" && this.layout.startsWith("bds")) adaptIosToolbar(output, warnings)
 
     return Object.fromEntries(output)
   }
@@ -511,7 +514,7 @@ export class SkinArchive {
   /** Packages for a BDI/BDS platform, pointing key sounds at a format that platform plays (AIFF / OGG). */
   async platformBytesAsync(format: "bdi" | "bds", warnings?: string[]): Promise<Uint8Array> {
     assertRepackable(this.format, format)
-    const files = new Map(Object.entries(this.packagedFiles(format)))
+    const files = new Map(Object.entries(this.packagedFiles(format, warnings)))
     const adapted = await adaptPackageSounds(files, format)
     warnings?.push(...adapted.warnings)
     return zipSync(Object.fromEntries(files), { level: 6 })
