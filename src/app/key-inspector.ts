@@ -27,6 +27,7 @@ import { selectedRects } from "./key-editing"
 import { updateStylePreviews } from "./style-picker"
 import { ssfInspectorTitle } from "./ssf-inspector"
 import { sxiInspectorTitle } from "./sxi-inspector"
+import { legacyAnimationInspectorTitle } from "./legacy-animation-inspector"
 import { populateDocumentInspector, populateBdaConfigInspector } from "./document-inspector"
 import { populateFontControls } from "./skin-fonts"
 import { populateTextStyleGroup, selectedKeyTextRefs, textRefValues, writeTextRefs, type TextProperty } from "./text-styles"
@@ -297,7 +298,11 @@ export function populateKeyInspector(): void {
     ? `${appState.selectedPath.split("/").pop()} · ${sections.length > 1 ? "keys.*" : sections[0]}`
     : appState.selectedPath || "选择文件以查看属性"
   selectedKeyContext.title = appState.selectedPath
-  const nativeTitle = ssfSelected ? ssfInspectorTitle() : sxiSelected ? sxiInspectorTitle() : undefined
+  const nativeTitle = ssfSelected
+    ? ssfInspectorTitle()
+    : sxiSelected
+      ? sxiInspectorTitle()
+      : legacyAnimationInspectorTitle()
   if (nativeTitle) {
     selectedKeyName.textContent = nativeTitle.name
     selectedKeyContext.textContent = nativeTitle.context

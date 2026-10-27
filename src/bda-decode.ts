@@ -373,10 +373,16 @@ export function decodeBdaAppearanceUncached(bytes: Uint8Array): BdaAppearance {
 
 export function decodeBdaAnimation(bytes: Uint8Array): BdaAnimation {
   const root = fields(bytes)
+  // proto int32 的负数是二进制补码 varint，按 32 位有符号还原。
+  const int32 = (field: ProtoField | undefined): number => {
+    const value = field?.varint ?? 0
+    return value > 0x7fffffff ? value - 0x1_0000_0000 : value
+  }
   const numberRange = (field: ProtoField | undefined): BdaNumberRange => {
     const value = message(field)
-    const min = first(value, 1)?.varint ?? 0
-    return [min, first(value, 2)?.varint ?? min]
+    const min = int32(first(value, 1))
+    const max = first(value, 2)
+    return [min, max ? int32(max) : min]
   }
   const vectorRange = (field: ProtoField | undefined): BdaVectorRange => {
     const value = message(field)
@@ -402,16 +408,32 @@ export function decodeBdaAnimation(bytes: Uint8Array): BdaAnimation {
       if (key) effects.set(`${kind}:${key}`, decode(key, message(first(entry, 2))))
     }
   }
+  const intPair = (field: ProtoField | undefined): [number, number] | undefined => {
+    const value = message(field)
+    if (!value.length) return
+    return [int32(first(value, 1)), int32(first(value, 2))]
+  }
+  const intpolXY = (field: ProtoField | undefined): [number, number] | undefined => {
+    const value = message(field)
+    if (!value.length) return
+    return [first(value, 1)?.varint ?? 0, first(value, 2)?.varint ?? 0]
+  }
   const transform = (kind: BdaTransformAnimation["kind"]) => (key: string, value: ProtoField[]): BdaTransformAnimation => {
     const scalar = kind === "alpha" || kind === "rotate"
     const pixel = kind === "shift" && first(value, 9) !== undefined && first(value, 10) !== undefined
+    const pivot = kind === "scale" || kind === "rotate"
     const from = pixel ? vectorRange(first(value, 9)) : scalar
       ? [numberRange(first(value, 5)), numberRange(first(value, 5))] as BdaVectorRange
       : vectorRange(first(value, 5))
     const to = pixel ? vectorRange(first(value, 10)) : scalar
       ? [numberRange(first(value, 6)), numberRange(first(value, 6))] as BdaVectorRange
       : vectorRange(first(value, 6))
-    return { kind, key, ...common(value), from, to, relative: kind === "scale" || kind === "shift" && !pixel }
+    return {
+      kind, key, ...common(value), from, to,
+      relative: kind === "scale" || kind === "shift" && !pixel,
+      ...(kind === "scale" || kind === "shift" ? { interpolationXY: intpolXY(first(value, 11)) } : {}),
+      ...(pivot ? { pivotPx: intPair(first(value, 9)), pivot: intPair(first(value, 10)) } : {}),
+    }
   }
   const simpleKinds = ["group", "alpha", "scale", "shift", "rotate"] as const
   const complexKinds = ["frame", "image", "emitter", "lottie", "video"] as const
@@ -481,6 +503,21 @@ export function decodeBdaAnimation(bytes: Uint8Array): BdaAnimation {
       alphaSpeed: range(first(value, 20)), velocity: range(first(value, 21)),
       velocityDirection: range(first(value, 22)), acceleration: range(first(value, 23)),
       accelerationDirection: range(first(value, 24)),
+      finishAfterPractices: first(value, 9)?.varint ?? 0,
+      keepParticlesOnRemove: first(value, 10)?.varint ?? 0,
+      mirrorUp: first(value, 11)?.varint ?? 0,
+      paths: value.filter((field) => field.number === 25).map((field) => ({
+        elements: message(field).filter((element) => element.number === 1).map((element) => {
+          const item = message(element)
+          return {
+            type: first(item, 1)?.varint ?? 0,
+            point1: intPair(first(item, 2)),
+            point2: intPair(first(item, 3)),
+            point3: intPair(first(item, 4)),
+          }
+        }),
+      })),
+      emitterType: first(value, 26)?.varint ?? 0,
     }
   })
   addMap(11, "lottie", media("lottie"))

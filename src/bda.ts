@@ -182,6 +182,14 @@ export type BdaAnimationBinding = {
   condition?: string
   removeOnInteraction?: boolean
 }
+export type BdaPoint = [number, number]
+export type BdaAnimationPathElement = {
+  type: number
+  point1?: BdaPoint
+  point2?: BdaPoint
+  point3?: BdaPoint
+}
+export type BdaAnimationPath = { elements: BdaAnimationPathElement[] }
 export type BdaTransformAnimation = {
   kind: "alpha" | "scale" | "shift" | "rotate"
   key: string
@@ -191,6 +199,12 @@ export type BdaTransformAnimation = {
   removeOnFinish: boolean
   duration: number
   interpolation: number
+  /** scale / shift 的 X、Y 插值器（IntpolXY），缺省时沿用 interpolation。 */
+  interpolationXY?: [number, number]
+  /** scale / rotate 的缩放或旋转中心，百分比 0–100。 */
+  pivot?: BdaPoint
+  /** scale / rotate 的缩放或旋转中心，像素坐标，优先于 pivot。 */
+  pivotPx?: BdaPoint
   from: BdaVectorRange
   to: BdaVectorRange
   relative: boolean
@@ -217,6 +231,15 @@ export type BdaEmitterAnimation = {
   velocityDirection: BdaNumberRange
   acceleration: BdaNumberRange
   accelerationDirection: BdaNumberRange
+  /** 粒子动效结束时机：0 = 发射完所有粒子，1 = 粒子全部消失（FINISH_AFTER_PRACTICES）。 */
+  finishAfterPractices: number
+  /** 移除动效时是否连已发射的粒子一起移除（REMOVE_INCLUDE_PRACTICES）。 */
+  keepParticlesOnRemove: number
+  /** 向父层级的镜像次数（MIRROR_UP）。 */
+  mirrorUp: number
+  /** 粒子运动路径；旧版用 [PATH*] 表达，编辑器只读展示。 */
+  paths: BdaAnimationPath[]
+  emitterType: number
 }
 export type BdaGroupAnimation = {
   kind: "group"

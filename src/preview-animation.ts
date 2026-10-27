@@ -69,32 +69,45 @@ export function animationDuration(frame: LegacyAnimationFrame): number {
   return frame.duration * frame.repeat * (frame.reverse ? 2 : 1)
 }
 
+/** 旧版 FROM/TO 允许 rand(a,b) 随机写法（手册第 182 页）；预览取区间中点，保持结果稳定。 */
+function legacyNumbers(value: string | undefined): number[] {
+  if (!value) return []
+  const numbers: number[] = []
+  for (const match of value.matchAll(/rand\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)|(-?\d+(?:\.\d+)?)/g)) {
+    const number = match[3] === undefined
+      ? (Number(match[1]) + Number(match[2])) / 2
+      : Number(match[3])
+    if (Number.isFinite(number)) numbers.push(number)
+  }
+  return numbers
+}
+
 export function scalePair(value: string | undefined): [number, number] | undefined {
-  const parts = value?.split(",").map(Number)
-  if (!parts || parts.length < 2 || parts.some((part) => !Number.isFinite(part))) return
+  const parts = legacyNumbers(value)
+  if (parts.length < 2) return
   return [parts[0] / 100, parts[1] / 100]
 }
 
 export function pixelPair(value: string | undefined): [number, number] | undefined {
-  const parts = value?.split(",").map(Number)
-  if (!parts || parts.length < 2 || parts.some((part) => !Number.isFinite(part))) return
+  const parts = legacyNumbers(value)
+  if (parts.length < 2) return
   return [parts[0], parts[1]]
 }
 
 export function opacityPair(value: string | undefined): [number, number] | undefined {
-  const number = Number(value)
-  if (!Number.isFinite(number)) return
+  const number = legacyNumbers(value)[0]
+  if (number === undefined) return
   const opacity = Math.max(0, Math.min(1, number / 255))
   return [opacity, opacity]
 }
 
 export function scalarPair(value: string | undefined): [number, number] | undefined {
-  const number = Number(value?.split(",")[0])
-  return Number.isFinite(number) ? [number, number] : undefined
+  const number = legacyNumbers(value)[0]
+  return number === undefined ? undefined : [number, number]
 }
 
 export function numberRange(value: string | undefined, fallback: readonly [number, number]): [number, number] {
-  const parts = value?.split(",").map(Number).filter(Number.isFinite) ?? []
+  const parts = legacyNumbers(value)
   return [parts[0] ?? fallback[0], parts[1] ?? parts[0] ?? fallback[1]]
 }
 

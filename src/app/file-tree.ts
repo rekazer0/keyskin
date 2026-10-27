@@ -345,11 +345,9 @@ export function renderFiles(): void {
     entries.push({ group: "资源配置", label: "样式配置", path: stylePath, className: "nav-style", icon: "palette", navMode: "style" })
     entries.push({ group: "资源配置", label: "按键音效", path: stylePath, className: "nav-resource", icon: "volume-2", navMode: "sound" })
   }
-  const addAnimationEntries = (path: string, suffix = ""): void => {
-    entries.push(
-      { group: "资源配置", label: `动效设计${suffix}`, path, className: "nav-style", icon: "film", navMode: "motion" },
-      { group: "资源配置", label: `粒子设计${suffix}`, path, className: "nav-style", icon: "wand-sparkles", navMode: "particle" },
-    )
+  const legacyAnimationPath = appState.archive.format === "bda" ? undefined : legacyAnimationConfigPath()
+  if (legacyAnimationPath) {
+    entries.push({ group: "资源配置", label: "动画与动效", path: legacyAnimationPath, className: "nav-style", icon: "wand-sparkles" })
   }
   if (legacyAnimationPath) addAnimationEntries(legacyAnimationPath)
   if (appState.archive.format === "bda") {

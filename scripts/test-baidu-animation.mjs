@@ -1,233 +1,187 @@
-// Real editor UI + a BDS ZIP fixture. Exercises the native anim.ini inspector integration.
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { chromium } from "playwright"
 import { createServer } from "vite"
-import { unzipSync, zipSync, strToU8 } from "fflate"
+import { chromium } from "playwright"
+import { unzipSync } from "fflate"
+import { SkinArchive } from "../src/skin.ts"
+import { convertBdaArchive } from "../src/bda-convert.ts"
+import { bdaAnimatedSkinBytes, bdsBaseArchive } from "../tests/helpers/bda-animation-fixture.mjs"
 
-const animationPath = "light/skin/res/anim.ini"
-const original = [
-  "; unknown comments and formatting survive edits", "ANIM_NUM=7", "VENDOR_GLOBAL = keep-global", "",
-  "[ANIM1]", "CATEGORY=0", "TYPE=0", "DURATION=160", "DELAY=10", "REPEAT_CNT=2", "REPEAT_MODE=0", "REMOVE=0", "INTPOL=0", "FROM=255", "TO=0", "VENDOR_TEXT = odd,value=keep", "",
-  "[ANIM2]", "CATEGORY=0", "TYPE=2", "DURATION=200", "FROM_PX=1,2", "TO_PX=30,40", "PIVOT=50,50", "INTPOL=2,3", "",
-  "[ANIM3]", "CATEGORY=1", "BUILD_NUM=2", "BUILD_LIST=1,2", "BUILD_METHOD=0", "VENDOR_COMBO=keep-combo", "",
-  "[ANIM4]", "CATEGORY=3", "DURATION=500", "PARTICLE_IMAGE=1", "LIFE=500,1000", "EMIT_REGION=0,0,1,1", "TOTAL_NUMBER=12", "BIRTH_RATE=4", "EMIT_TYPE=7", "VELOCITY=1,2", "INIT_ALPHA=120,255", "",
-  "[ANIM5]", "CATEGORY=0", "TYPE=3", "FROM=80,90", "TO=100,110", "DURATION=100", "",
-  "[ANIM6]", "CATEGORY=2", "SOURCE_FILE=frames.webp", "MODIFY=1", "DURATION=600", "OFFSET=2,3", "",
-  "[ANIM7]", "CATEGORY=77", "TYPE=88", "FROM=custom,tuple,keep", "DURATION=unchanged-unit", "UNKNOWN_ANIMATION=keep-unknown", "",
-  "[VENDOR_SECTION]", "MixedCaseKey = preserve=exact", "",
-].join("\r\n")
-const files = unzipSync(readFileSync(new URL("../public/default-template.bds", import.meta.url)))
-files["res/anim.ini"] = strToU8(original)
-const fixture = Buffer.from(zipSync(files, { level: 1 }))
-let browser
-let server
+// BDA → 旧版：先用转换器生成一个带 anim.ini 的 BDS，作为旧版检查器的输入。
+const converted = convertBdaArchive(SkinArchive.open(bdaAnimatedSkinBytes(), "bda"), bdsBaseArchive())
+const legacySkin = await converted.archive.platformBytesAsync("bds")
+
+const server = await createServer({
+  root: new URL("..", import.meta.url).pathname,
+  logLevel: "error",
+  server: { host: "127.0.0.1", port: 41841, strictPort: false },
+})
+await server.listen()
+const url = `http://127.0.0.1:${server.httpServer.address().port}`
+const browser = await chromium.launch()
 const errors = []
+const openSkin = async (page, name, bytes) => {
+  await page.goto(url)
+  await page.locator("#browser-open").setInputFiles({ name, mimeType: "application/octet-stream", buffer: Buffer.from(bytes) })
+  await page.waitForFunction(() => !document.querySelector("#open")?.disabled)
+  const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+  if (await close.isVisible()) await close.click()
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+}
+const decodeAnimation = (page, path, effect) => page.evaluate(async ({ path, effect }) => {
+  const { appState } = await import("/src/app/state.ts")
+  const { decodeBdaAnimation } = await import("/src/bda-decode.ts")
+  return decodeBdaAnimation(appState.archive.getBytes(path)).effects.get(effect).duration
+}, { path, effect })
+const undoRedo = (page, action) => page.evaluate(async (action) => {
+  const history = await import("/src/app/edit-history.ts")
+  history[action]()
+}, action)
 
 try {
-  server = await createServer({
-    root: new URL("..", import.meta.url).pathname,
-    logLevel: "error",
-    server: { port: 41836, strictPort: false, host: "127.0.0.1", hmr: false },
+  // —— 第一部分：BDA animationConfig 的可视化检查器 / 编辑 / 导出 ——
+  const bda = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true })
+  bda.on("pageerror", (error) => errors.push(`BDA: ${error.message}`))
+  bda.on("dialog", (dialog) => dialog.accept())
+  await openSkin(bda, "动效测试.bda", bdaAnimatedSkinBytes())
+  await bda.evaluate(async () => {
+    const { selectFile } = await import("/src/app/navigation.ts")
+    selectFile("light/skin/port/animationConfig")
   })
-  await server.listen()
-  browser = await chromium.launch()
-  const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
-  page.on("pageerror", (error) => errors.push(error.message))
-  page.on("dialog", (dialog) => dialog.accept())
-  const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
-  const section = (id) => page.locator(`#document-fields > [data-animation-section="ANIM${id}"]`)
-  const row = (id, key) => section(id).locator(`[data-document-key="${key}"]`)
-  const input = (id, key) => row(id, key).locator("input").first()
-  const read = () => page.evaluate(async (path) => {
-    const { appState } = await import("/src/app/state.ts")
-    return appState.archive.getText(path)
-  }, animationPath)
-  const value = (id, key) => page.evaluate(async ({ path, id, key }) => {
-    const { appState } = await import("/src/app/state.ts")
-    const { IniDocument } = await import("/src/ini.ts")
-    return IniDocument.parse(appState.archive.getText(path)).get(`ANIM${id}`, key) ?? null
-  }, { path: animationPath, id, key })
-  const waitValue = (id, key, expected) => page.waitForFunction(async ({ path, id, key, expected }) => {
-    const { appState } = await import("/src/app/state.ts")
-    const { IniDocument } = await import("/src/ini.ts")
-    return (IniDocument.parse(appState.archive.getText(path)).get(`ANIM${id}`, key) ?? null) === expected
-  }, { path: animationPath, id, key, expected })
-  const change = async (field, text) => {
-    await field.fill(text)
-    await field.press("Enter")
+
+  const bdaConfig = bda.locator("#bda-config-fields")
+  await bdaConfig.locator(".bda-animation-section").first().waitFor()
+  const groupLabels = await bdaConfig.locator(".bda-animation-section").evaluateAll((sections) =>
+    sections.map((section) => section.dataset.inspectorGroupLabel))
+  for (const label of ["概览", "目标绑定", "透明度", "位移", "粒子", "图片序列"]) {
+    assert.ok(groupLabels.includes(label), `BDA 检查器缺少「${label}」分组：${groupLabels.join("、")}`)
   }
-  const history = async (action) => {
-    await page.evaluate(async (action) => { const history = await import("/src/app/edit-history.ts"); history[action]() }, action)
+  const targetsText = await bdaConfig.locator('[data-inspector-group-label="目标绑定"]').innerText()
+  for (const event of ["按键按下", "按键抬起", "元素显示", "元素隐藏"]) {
+    assert.ok(targetsText.includes(event), `目标绑定缺少事件「${event}」`)
   }
-  const open = async (buffer = fixture, name = "animation.bds", editing = true) => {
-    await page.goto(baseURL)
-    await page.locator("#browser-open").setInputFiles({ name, mimeType: "application/octet-stream", buffer })
-    await page.waitForFunction(() => !document.querySelector("#open").disabled)
-    const close = page.locator("#file-operation-dialog[open] #file-operation-close")
-    if (await close.isVisible().catch(() => false)) await close.click()
-    if (editing) await page.getByRole("button", { name: "编辑模式", exact: true }).click()
-    await page.evaluate(async (path) => { const { selectFile } = await import("/src/app/navigation.ts"); selectFile(path) }, animationPath)
-    await section(1).waitFor({ state: "visible" })
-    await page.waitForTimeout(100)
-  }
-
-  await open()
-  assert.equal(await read(), original, "rendering never rewrites the INI")
-  assert.equal(await page.locator("#document-fields > [data-animation-section^='ANIM']").count(), 7)
-  assert.ok((await page.locator("#mobile-inspector-groups button").allTextContents()).includes("动画 1"))
-  assert.equal(await input(2, "FROM_PX").inputValue(), "1")
-  assert.equal(await row(2, "FROM_PX").locator(".ui-field-pair input").count(), 2)
-  assert.equal(await row(5, "FROM").locator(".ui-field-pair input").count(), 2)
-  assert.equal(await row(4, "EMIT_REGION").locator(".ui-field-pair input").count(), 4)
-  assert.equal(await input(7, "FROM").inputValue(), "custom,tuple,keep")
-  assert.equal(await input(7, "DURATION").getAttribute("type"), null)
-  assert.equal(await row(4, "EMIT_TYPE").locator("select").inputValue(), "7")
-  assert.equal(await row(2, "INTPOL").locator("select").inputValue(), "2,3")
-
-  // The entry point rejects wrong basenames and non-Baidu formats without touching the container.
-  assert.deepEqual(await page.evaluate(async () => {
+  // 时间轴、预览、字段都在。
+  assert.ok(await bdaConfig.locator(".bda-animation-player").count() > 0, "图片序列缺少播放器")
+  assert.ok(await bdaConfig.locator('input[aria-label="时长（毫秒）"]').count() > 0)
+  await bdaConfig.locator('input[aria-label="时长（毫秒）"]').first().fill("700")
+  await bdaConfig.locator('input[aria-label="时长（毫秒）"]').first().press("Tab")
+  await bda.waitForFunction(async () => {
     const { appState } = await import("/src/app/state.ts")
-    const { populateBaiduAnimationInspector } = await import("/src/app/baidu-animation-inspector.ts")
-    const path = appState.selectedPath
-    const archive = appState.archive
-    const container = document.createElement("div")
-    container.textContent = "untouched"
-    try {
-      appState.selectedPath = "light/skin/res/not-anim.ini"
-      const wrongPath = populateBaiduAnimationInspector(container)
-      appState.selectedPath = path
-      appState.archive = { format: "sxi" }
-      const wrongFormat = populateBaiduAnimationInspector(container)
-      return [wrongPath, wrongFormat, container.textContent]
-    } finally {
-      appState.selectedPath = path
-      appState.archive = archive
-    }
-  }), [false, false, "untouched"])
-
-  await change(input(1, "DURATION"), "320")
-  await waitValue(1, "DURATION", "320")
-  assert.equal(await page.locator(".inspector-changes").textContent(), "已改 1")
-  assert.equal(await section(1).locator("h3[data-modified]").count(), 1)
-  await history("undo")
-  await waitValue(1, "DURATION", "160")
-  assert.equal(await input(1, "DURATION").inputValue(), "160")
-  await history("redo")
-  await waitValue(1, "DURATION", "320")
-
-  // Continuous wheel writes stay on the same DOM input and coalesce into exactly one undo step.
-  const beforeWheel = await page.evaluate(async () => (await import("/src/app/state.ts")).appState.undoStack.length)
-  await input(1, "DURATION").focus()
-  await input(1, "DURATION").evaluate((field) => { window.__baiduWheelField = field })
-  for (let index = 0; index < 3; index++) {
-    await input(1, "DURATION").dispatchEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true })
-    await page.waitForTimeout(45)
-    assert.equal(await input(1, "DURATION").evaluate((field) => field === window.__baiduWheelField), true)
-  }
-  await page.waitForTimeout(450)
-  await waitValue(1, "DURATION", "323")
-  assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.undoStack.length), beforeWheel + 1)
-  await history("undo")
-  await waitValue(1, "DURATION", "320")
-
-  // Latest archive text wins, even if an external source edit happens after rendering this pair.
-  await page.evaluate(async (path) => {
+    const { decodeBdaAnimation } = await import("/src/bda-decode.ts")
+    return decodeBdaAnimation(appState.archive.getBytes("light/skin/port/animationConfig"))
+      .effects.get("alpha:press").duration === 700
+  })
+  assert.equal(await decodeAnimation(bda, "light/skin/port/animationConfig", "alpha:press"), 700)
+  // 一步撤销只回退这次编辑。
+  const undoCount = await bda.evaluate(async () => {
     const { appState } = await import("/src/app/state.ts")
-    const { IniDocument } = await import("/src/ini.ts")
-    const { commitText } = await import("/src/app/edit-history.ts")
-    const before = appState.archive.getText(path)
-    const document = IniDocument.parse(before)
-    document.set("ANIM2", "FROM_PX", "1,77")
-    document.set("ANIM2", "CONCURRENT_UNKNOWN", "survives")
-    commitText(path, before, document.toString())
-  }, animationPath)
-  await change(input(2, "FROM_PX"), "9")
-  assert.equal(await value(2, "FROM_PX"), "9,77")
-  assert.equal(await value(2, "CONCURRENT_UNKNOWN"), "survives")
-  await change(row(2, "TO_PX").locator("input").nth(1), "44")
-  await waitValue(2, "TO_PX", "30,44")
-  await row(1, "REMOVE").locator("input").check()
-  await waitValue(1, "REMOVE", "1")
-  await row(1, "REPEAT_MODE").locator("select").selectOption("1")
-  await row(1, "INTPOL").locator("select").selectOption("4")
-  await change(input(2, "DELAY"), "15")
-  await waitValue(2, "DELAY", "15")
-  await row(3, "BUILD_METHOD").locator("select").selectOption("1")
-  await change(input(3, "BUILD_LIST"), "2,1,5")
-  await waitValue(3, "BUILD_NUM", "3")
-  await change(input(4, "LIFE"), "600")
-  await waitValue(4, "LIFE", "600,1000")
-  await change(row(4, "EMIT_REGION").locator("input").nth(2), "0.8")
-  await waitValue(4, "EMIT_REGION", "0,0,0.8,1")
-  await section(4).getByRole("button", { name: "重新播放", exact: true }).click()
-  await change(input(1, "VENDOR_TEXT"), "edited=raw,value")
-  await waitValue(1, "VENDOR_TEXT", "edited=raw,value")
-  await change(input(7, "FROM"), "other,opaque,payload")
-  await waitValue(7, "FROM", "other,opaque,payload")
-  await row(1, "TYPE").locator("select").selectOption("1")
-  assert.match(await row(1, "FROM").textContent(), /旋转/)
-  assert.equal(await value(1, "FROM"), "255")
-  await row(1, "CATEGORY").locator("select").selectOption("3")
-  assert.equal(await row(1, "PARTICLE_IMAGE").count(), 1)
-  assert.equal(await value(1, "FROM"), "255", "category switches don't destroy existing fields")
+    return appState.undoStack.length
+  })
+  assert.equal(undoCount, 1, `预期一步撤销，实际 ${undoCount} 步`)
+  await undoRedo(bda, "undo")
+  assert.equal(await decodeAnimation(bda, "light/skin/port/animationConfig", "alpha:press"), 240)
+  await undoRedo(bda, "redo")
+  assert.equal(await decodeAnimation(bda, "light/skin/port/animationConfig", "alpha:press"), 700)
 
-  const filter = page.locator("#inspector-filter")
-  await page.locator(".inspector-filter-open").click()
-  await filter.fill("VENDOR_COMBO")
-  await page.waitForFunction(() => !document.querySelector('[data-animation-section="ANIM3"]').hasAttribute("data-filter-miss"))
-  assert.equal(await section(2).getAttribute("data-filter-miss"), "")
-  await filter.fill("粒子寿命")
-  await page.waitForFunction(() => !document.querySelector('[data-animation-section="ANIM4"]').hasAttribute("data-filter-miss"))
-  await filter.fill("动画 5")
-  await page.waitForFunction(() => !document.querySelector('[data-animation-section="ANIM5"]').hasAttribute("data-filter-miss"))
-  await filter.press("Escape")
-  await filter.press("Escape")
+  // 导出 Android 旧版皮肤：动效要变成 anim.ini + 样式引用，而不是丢掉。
+  const bdsBytes = await bda.evaluate(async () => {
+    const { exportArchive } = await import("/src/app/archive-io.ts")
+    const result = await exportArchive("bds")
+    return Array.from(result.bytes)
+  })
+  const bdsFiles = unzipSync(new Uint8Array(bdsBytes))
+  assert.ok("light/port/res/anim.ini" in bdsFiles, "导出的 BDS 缺少 anim.ini")
+  const animIni = new TextDecoder().decode(bdsFiles["light/port/res/anim.ini"])
+  assert.match(animIni, /\[ANIM\d+\]/, "anim.ini 没有动画定义")
+  assert.match(animIni, /DURATION=700/, "检查器改的动画时长没有写进导出动效")
+  const css = new TextDecoder().decode(bdsFiles["light/res/default.css"])
+  assert.match(css, /(PRESS_ANIM|SHOW_ANIM|HIDE_ANIM)=\d+/, "default.css 没有动效引用")
+  const particle = animIni.match(/PARTICLE_IMAGE=(\d+)/)?.[1]
+  assert.ok(particle && css.includes(`[STYLE${particle}]`), "粒子图片没有对应的图片样式")
 
-  await page.locator(".inspector-reset").click()
-  await waitValue(1, "DURATION", "160")
-  assert.equal(await value(1, "TYPE"), "0")
-  assert.equal(await value(1, "CATEGORY"), "0")
-  assert.equal(await value(1, "VENDOR_TEXT"), "odd,value=keep")
-  assert.equal(await value(2, "FROM_PX"), "1,2")
-  assert.equal(await value(3, "BUILD_LIST"), "1,2")
-  assert.equal(await value(2, "DELAY"), null, "reset removes a previously absent field")
-  assert.equal(await value(3, "BUILD_NUM"), "2")
-  assert.equal(await value(4, "LIFE"), "500,1000")
-  assert.equal(await value(7, "FROM"), "custom,tuple,keep")
-  assert.equal(await page.locator(".inspector-reset").isHidden(), true)
+  // 导出 BDA（Android 平台转换）时 animationConfig 的编辑要保留。
+  const bdaBytes = await bda.evaluate(async () => {
+    const { exportArchive } = await import("/src/app/archive-io.ts")
+    const result = await exportArchive("bda", "android")
+    return Array.from(result.bytes)
+  })
+  const bdaFiles = unzipSync(new Uint8Array(bdaBytes))
+  const animationPath = Object.keys(bdaFiles).find((path) => /animationConfig$/.test(path))
+  assert.ok(animationPath, "导出的 BDA 缺少 animationConfig")
+  const redownloaded = SkinArchive.open(new Uint8Array(bdaBytes), "bda")
+  const preserved = await bda.evaluate(async (json) => {
+    const { decodeBdaAnimation } = await import("/src/bda-decode.ts")
+    return decodeBdaAnimation(new Uint8Array(json)).effects.get("alpha:press").duration
+  }, Array.from(redownloaded.getBytes("light/skin/port/animationConfig")))
+  assert.equal(preserved, 700, "BDA 导出后动效参数丢失")
 
-  await change(input(1, "DURATION"), "444")
-  const expected = await read()
-  const exported = Buffer.from(await page.evaluate(async () => Array.from((await import("/src/app/state.ts")).appState.archive.toBytes())))
-  await open(exported, "reopened.bds")
-  assert.equal(await read(), expected, "export/reopen preserves every animation, unknown section, key, comment and CRLF")
-  assert.equal(await value(1, "DURATION"), "444")
-  assert.match(await read(), /VENDOR_GLOBAL = keep-global\r\n/)
-  assert.match(await read(), /MixedCaseKey = preserve=exact\r\n/)
-  assert.equal(await value(2, "CONCURRENT_UNKNOWN"), "survives")
+  // 源码面板 JSON 回写：改效果参数后仍能导出动效（不丢失其它效果）。
+  const sourceText = await bda.evaluate(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    const { decodedBdaSource } = await import("/src/bda-source.ts")
+    return decodedBdaSource("light/skin/port/animationConfig", appState.archive.getBytes("light/skin/port/animationConfig"))
+  })
+  const desired = JSON.parse(sourceText)
+  desired.effects["rotate:spin"].duration = 420
+  const sourceBytes = await bda.evaluate(async ({ text }) => {
+    const { appState } = await import("/src/app/state.ts")
+    const { applyDecodedBdaSource } = await import("/src/bda-source.ts")
+    return Array.from(applyDecodedBdaSource("light/skin/port/animationConfig", appState.archive.getBytes("light/skin/port/animationConfig"), text))
+  }, { text: JSON.stringify(desired) })
+  const sourceAnimation = await bda.evaluate(async (json) => {
+    const { decodeBdaAnimation } = await import("/src/bda-decode.ts")
+    const animation = decodeBdaAnimation(new Uint8Array(json))
+    return { duration: animation.effects.get("rotate:spin").duration, count: animation.effects.size }
+  }, sourceBytes)
+  assert.equal(sourceAnimation.duration, 420)
+  assert.equal(sourceAnimation.count, 11, "源码回写后其它动效丢失")
 
-  // BDI uses the same canonical paths; export through the real archive converter and open in UI.
-  const bdi = Buffer.from(await page.evaluate(async () => Array.from((await import("/src/app/state.ts")).appState.archive.toBytes("bdi"))))
-  await open(bdi, "animation.bdi")
-  await change(input(1, "DELAY"), "25")
-  await waitValue(1, "DELAY", "25")
-  await history("undo")
-  await waitValue(1, "DELAY", "10")
+  // 修改源码后重新导出的旧版皮肤仍包含动画（覆盖“导入-编辑-导出”整条链路）。
+  const roundTrip = await bda.evaluate(async (text) => {
+    const { appState } = await import("/src/app/state.ts")
+    const { applyDecodedBdaSource } = await import("/src/bda-source.ts")
+    const path = "light/skin/port/animationConfig"
+    appState.archive.setBytes(path, applyDecodedBdaSource(path, appState.archive.getBytes(path), text))
+    const { exportArchive } = await import("/src/app/archive-io.ts")
+    const result = await exportArchive("bds")
+    return Array.from(result.bytes)
+  }, JSON.stringify(desired))
+  const roundTripFiles = unzipSync(new Uint8Array(roundTrip))
+  const roundTripIni = new TextDecoder().decode(roundTripFiles["light/port/res/anim.ini"])
+  assert.match(roundTripIni, /TYPE=1[\s\S]*?DURATION=420/, "旋转动效的源码修改没有进入导出的 anim.ini")
 
-  await open(fixture, "readonly.bds", false)
-  assert.equal(await input(1, "DURATION").isDisabled(), true)
-  assert.equal(await row(1, "CATEGORY").locator("select").isDisabled(), true)
-  assert.equal(await row(1, "REMOVE").locator("input").isDisabled(), true)
-  assert.equal(await row(2, "FROM_PX").locator("input").nth(1).isDisabled(), true)
-  assert.equal(await page.locator(".inspector-reset").isHidden(), true)
-  // The handler itself also rejects programmatic changes while in interaction-preview mode.
-  await input(1, "DURATION").evaluate((field) => { field.value = "999"; field.dispatchEvent(new Event("change", { bubbles: true })) })
-  assert.equal(await read(), original)
+  // —— 第二部分：旧版 BDS 的 anim.ini 检查器 ——
+  const legacy = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true })
+  legacy.on("pageerror", (error) => errors.push(`BDS: ${error.message}`))
+  await openSkin(legacy, "动效旧版.bds", legacySkin)
+  await legacy.evaluate(async () => {
+    const { selectFile } = await import("/src/app/navigation.ts")
+    selectFile("light/skin/port/res/anim.ini")
+  })
+  const legacyFields = legacy.locator("#document-fields")
+  await legacyFields.locator(".ui-section").first().waitFor()
+  const legacyGroups = await legacyFields.locator(".ui-section, .document-property-section").evaluateAll((sections) =>
+    sections.map((section) => section.dataset.inspectorGroupLabel).filter(Boolean))
+  assert.ok(legacyGroups.some((label) => /动画概览/.test(label)), `旧版检查器缺少动画概览：${legacyGroups.join("、")}`)
+  assert.ok(legacyGroups.some((label) => /动效/.test(label)), "旧版检查器没有列出动效")
+  assert.ok(await legacyFields.locator('[aria-label$="时间轴"]').count() > 0, "旧版检查器缺少时间轴")
+  assert.ok(await legacyFields.locator("canvas").count() > 0, "旧版检查器缺少内联预览")
 
-  assert.deepEqual(errors, [])
-  console.log("BDI/BDS animation inspector: edits, latest-text pair writes, wheel coalescing, undo/redo, filter, reset, read-only and ZIP export/reopen passed; pageerrors=0")
+  const duration = legacyFields.locator('[aria-label="ANIM1 时间轴"]').locator("xpath=ancestor::*[contains(@class,'ui-section')]").locator('input[aria-label="时长"]')
+  await duration.first().fill("999")
+  await duration.first().press("Tab")
+  await legacy.waitForFunction(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    return appState.selectedDocument.get("ANIM1", "DURATION") === "999"
+  })
+  await undoRedo(legacy, "undo")
+  await legacy.waitForFunction(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    return appState.selectedDocument.get("ANIM1", "DURATION") !== "999"
+  })
+
+  assert.deepEqual(errors, [], `页面报错：${errors.join("；")}`)
+  console.log("baidu animation: BDA/BDS 检查器可编辑，动效在编辑/导出/源码回写链路中完整保留")
 } finally {
-  await browser?.close()
-  await server?.close()
+  await browser.close()
+  await server.close()
 }

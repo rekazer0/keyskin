@@ -1,6 +1,6 @@
 import { type BdaAppearance, type BdaStyleRef, type BdaImageAtom, type BdaKey, type BdaHint, type BdaList, type BdaCand, type BdaPanel, type BdaAppearancePart } from "./bda.ts"
 import { bdaColorHex } from "./bda-resolver.ts"
-import { rawFields, rawString, replaceField, encodeVarint, join, encodedField, updateStringMapValue, colorValue, updateBdaDesignWidth, updateBdaStyle, updateBdaAnimationFrame, updateBdaKeySound } from "./bda-encode.ts"
+import { rawFields, rawString, replaceField, encodeVarint, join, encodedField, updateStringMapValue, colorValue, updateBdaDesignWidth, updateBdaStyle, updateBdaAnimationFrame, applyBdaAnimationEffects, updateBdaKeySound } from "./bda-encode.ts"
 import { decodeBdaAppearance, decodeBdaAnimation, decodeBdaSoundConfig } from "./bda-decode.ts"
 
 export function mapObject<K extends string | number, V>(
@@ -487,6 +487,14 @@ export function applyDecodedBdaSource(path: string, bytes: Uint8Array, text: str
         }
       })
     }
+    // 效果定义走 protobuf 定点 patch：只改变化的字段，未知字段保持原样。
+    for (const key of ["targets", "bindings", "targetBindings"] as const) {
+      if (sameJson(desired[key], current[key])) continue
+      throw new Error(`暂不支持修改 BDA 动画${key === "targets" ? "目标" : key === "bindings" ? "绑定" : "目标绑定"}；可在效果定义里改参数`)
+    }
+    const wantedEffects = jsonObject(desired.effects) ?? {}
+    const oldEffects = jsonObject(current.effects) ?? {}
+    if (!sameJson(wantedEffects, oldEffects)) output = applyBdaAnimationEffects(output, wantedEffects, oldEffects)
   } else if (/^\d*soundConfig$/i.test(name)) {
     for (const [group, ios] of [["keySounds", false], ["iosKeySounds", true]] as const) {
       const wantedSounds = jsonObject(desired[group]) ?? {}
@@ -507,7 +515,7 @@ export function applyDecodedBdaSource(path: string, bytes: Uint8Array, text: str
     if (wantedEffect && actualEffect) wantedEffect.sequence = actualEffect.sequence
   }
   if (!sameJson(actual, desired)) {
-    throw new Error("该 BDA JSON 改动暂不支持；可修改设计宽度、样式资源/字体/颜色、动画帧和按键音")
+    throw new Error("该 BDA JSON 改动暂不支持；可修改设计宽度、样式资源/字体/颜色、动画帧、动画效果参数和按键音")
   }
   return output
 }

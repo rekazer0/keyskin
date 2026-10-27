@@ -12,14 +12,13 @@ import { refreshPreview } from "./preview-render"
 import { isStyleReferenceKey, decorateStyleReferenceInput, openStyleReferenceEditor, openBdaStyleReferencePicker } from "./style-references"
 import { syncMobileInspectorGroups } from "./mobile-layout"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
-import { updateBdaDesignWidth, updateBdaAnimationWidth, updateBdaAnimationFrame, updateBdaAnimationEffect } from "../bda-encode.ts"
-import { deferNumberInputRefresh } from "../number-input-wheel.ts"
-import { showError } from "./file-operations"
+import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect } from "../bda-encode.ts"
 import { renderBdaMetadataEditor, renderBdaLayoutEditor, renderBdaConfigEditor } from "../bda-editor.ts"
 import { populateKeyInspector, updateBdaRefs, updateSelectedBdaPanelProperty, updateBdaAppearanceStyleRef } from "./key-inspector"
 import { openImageResourceChooser } from "./resource-inspector"
 import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
+import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
 import { populateBaiduAnimationInspector } from "./baidu-animation-inspector"
 
@@ -315,6 +314,11 @@ export function populateDocumentInspector(): void {
   }
   if (appState.archive?.format === "sxi") {
     documentFieldsGroup.hidden = !populateSxiInspector(documentFields)
+    return
+  }
+  // 旧版百度皮肤的 anim.ini 有自己的可视化动效检查器，不再按通用 INI 行展开。
+  if (appState.archive?.format !== "bda" && /(^|\/)anim\.ini$/i.test(appState.selectedPath) && populateLegacyAnimationInspector(documentFields)) {
+    documentFieldsGroup.hidden = false
     return
   }
   const hasSelection = appState.selectedPath === appState.layoutPath && appState.selectedKeySections.length > 0
@@ -694,11 +698,13 @@ export function populateBdaConfigInspector(): void {
     bytes,
     resolver: visualResolver(),
     editable: isEditing(),
-    animationDesignMode: appState.animationDesignMode,
-    onDesignWidth: (value) => update((before) => /animationConfig$/i.test(path)
-      ? updateBdaAnimationWidth(before, value) : updateBdaDesignWidth(before, value)),
-    onAnimationEffect: (effectID, property, value) => update((before) => updateBdaAnimationEffect(before, effectID, property, value)),
-    onAnimationFrame: (sequence, frame, property, value) => update((before) => updateBdaAnimationFrame(before, sequence, frame, property, value)),
-    onPickAnimationResource: (sequence, frame) => openImageResourceChooser((resourceID) => update((before) => updateBdaAnimationFrame(before, sequence, frame, "resourceID", resourceID))),
+    onDesignWidth: (value) => update(updateBdaDesignWidth(bytes, value)),
+    onAnimationEffect: (effectID, property, value) => update(updateBdaAnimationEffect(bytes, effectID, property, value)),
+    onAnimationFrame: (sequence, frame, property, value) => update(
+      updateBdaAnimationFrame(bytes, sequence, frame, property, value),
+    ),
+    onPickAnimationResource: (sequence, frame) => openImageResourceChooser((resourceID) => update(
+      updateBdaAnimationFrame(bytes, sequence, frame, "resourceID", resourceID),
+    )),
   })
 }

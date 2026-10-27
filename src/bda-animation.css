@@ -1,0 +1,133 @@
+/*
+ * BDA 动画检查器（src/bda-animation-editor.ts）的布局样式。
+ * 控件沿用 components.css 的 .ui-*，分组 / 属性行沿用 inspector.css，
+ * 这里只放动画区域自己的 .bda-animation-* 类，全部只引用 tokens.css 的 token。
+ */
+
+.source .bda-animation-body {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.source .bda-animation-fields {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* 只读值（时间轴、子效果、资源列表…）：单行省略，悬停由标题提示全文。 */
+.source .bda-animation-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source .bda-animation-target {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.source .bda-animation-target-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.source .bda-animation-target-heading > small {
+  margin-left: auto;
+  color: var(--tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+}
+
+/* 图片序列：播放器 + 每帧一张卡片。 */
+.source .bda-animation-frame-card {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 220px;
+}
+
+.source .bda-animation-player {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.source .bda-animation-player-canvas {
+  display: block;
+  width: 100%;
+  height: 96px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--checker-image), var(--checker-light);
+  background-position: 0 0, 4px 4px;
+  background-size: 8px 8px;
+}
+
+.source .bda-animation-player-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.source .bda-animation-player-status {
+  color: var(--tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.source .bda-animation-sequence {
+  display: grid;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.source .bda-animation-frames {
+  display: flex;
+  gap: var(--space-sm);
+  padding-bottom: var(--space-xs);
+  overflow-x: auto;
+}
+
+.source .bda-animation-frame {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.source .bda-animation-frame-preview {
+  width: 88px;
+  height: 64px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--checker-image), var(--checker-light);
+  background-position: 0 0, 4px 4px;
+  background-size: 8px 8px;
+}
+
+@media (hover: hover) {
+  .source .bda-animation-frame-preview:not(:disabled):hover { border-color: var(--line-strong); }
+}
+
+.source .bda-animation-frame-preview:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.source .bda-animation-frame-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

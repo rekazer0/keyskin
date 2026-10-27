@@ -1,0 +1,150 @@
+/* 旧版百度 anim.ini 动画检查器（src/app/legacy-animation-inspector.ts）。只引用 tokens.css 的组件与 token。 */
+.source .legacy-animation-body {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+/* —— 顶部示意预览 —— */
+.source .legacy-animation-preview {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--material-content);
+}
+.source .legacy-animation-preview-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  background: var(--control);
+}
+.source .legacy-animation-preview-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.source .legacy-animation-preview-controls .ui-select {
+  flex: 1;
+  min-width: 0;
+}
+.source .legacy-animation-preview-time {
+  margin-left: auto;
+  color: var(--tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* —— 时间轴条 —— */
+.source .legacy-animation-timeline {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--material-content);
+}
+.source .legacy-animation-timeline-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--secondary);
+  font-size: var(--font-size-xs);
+}
+.source .legacy-animation-timeline-title {
+  font-weight: var(--font-weight-medium);
+}
+.source .legacy-animation-timeline-detail {
+  margin-left: auto;
+  color: var(--tertiary);
+}
+.source .legacy-animation-timeline-track {
+  display: flex;
+  min-height: var(--control-height-sm);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--control);
+  color: var(--tertiary);
+  font-size: var(--font-size-xs);
+}
+.source :is(.legacy-animation-timeline-delay, .legacy-animation-timeline-active) {
+  display: grid;
+  flex-basis: 0;
+  place-items: center;
+  min-width: 0;
+  padding: 0 var(--space-xs);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.source .legacy-animation-timeline-delay {
+  background: var(--line-soft);
+}
+.source .legacy-animation-timeline-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.source .legacy-animation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+
+/* —— 成对的数值格：X/Y、最小/最大、发射区域 —— */
+.source .legacy-animation-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+.source .legacy-animation-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.source .legacy-animation-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* —— 组合动效、粒子预览与引用 —— */
+.source .legacy-animation-block {
+  gap: var(--space-xs);
+}
+.source .legacy-animation-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--state-warn) 12%, transparent);
+  color: var(--secondary);
+  font-size: var(--font-size-xs);
+}
+.source .legacy-animation-particle-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.source .legacy-animation-particle-bar > span {
+  flex: 1;
+  min-width: 0;
+  color: var(--tertiary);
+  font-size: var(--font-size-xs);
+}
+.source .legacy-animation-reference-list {
+  display: grid;
+  gap: var(--space-2xs);
+}
+.source .legacy-animation-reference-detail {
+  margin: 0;
+  color: var(--tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .source :is(.legacy-animation-3, .legacy-animation-4) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

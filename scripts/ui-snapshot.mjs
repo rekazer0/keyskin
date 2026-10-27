@@ -7,11 +7,14 @@ import { chromium } from "playwright"
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
-import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
-import { bdaAnimationFixture } from "../tests/helpers/bda-animation-fixture.mjs"
-import { strToU8, unzipSync, zipSync } from "fflate"
+import { SkinArchive } from "../src/skin.ts"
+import { convertBdaArchive } from "../src/bda-convert.ts"
+import { bdaAnimatedSkinBytes, bdsBaseArchive } from "../tests/helpers/bda-animation-fixture.mjs"
 
 const mode = process.argv[2] ?? "compare"
+// 动效检查器的界面快照样例：一个带 animationConfig 的 BDA，以及它转换出的旧版 anim.ini。
+const animatedBda = bdaAnimatedSkinBytes()
+const animatedBds = await convertBdaArchive(SkinArchive.open(animatedBda, "bda"), bdsBaseArchive()).archive.platformBytesAsync("bds")
 const only = process.argv[3]
 const root = new URL("..", import.meta.url).pathname
 const dir = join(root, ".ui-baseline")
@@ -90,6 +93,22 @@ async function editAndSelectKey(page) {
   await page.waitForSelector('.key-layout-fields:not([hidden]), #document-fields [data-inspector-group-label="布局"], #bda-config-fields[data-bda-scope="key"]', { state: "visible" })
 }
 
+async function openSkinFile(page, name, bytes, path) {
+  await page.locator("#browser-open").setInputFiles({ name, mimeType: "application/octet-stream", buffer: Buffer.from(bytes) })
+  await page.waitForFunction(() => !document.querySelector("#open")?.disabled)
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector("#file-operation-dialog")
+    return !dialog?.open || !document.querySelector("#file-operation-close")?.disabled
+  }, null, { timeout: 60000 })
+  const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+  if (await close.isVisible().catch(() => false)) await close.click()
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  await page.evaluate(async (path) => {
+    const { selectFile } = await import("/src/app/navigation.ts")
+    selectFile(path)
+  }, path)
+}
+
 async function railTabs(page, prefix) {
   const buttons = page.locator("#mobile-inspector-groups button:visible")
   const count = await buttons.count()
@@ -151,6 +170,16 @@ await withPage(async (page) => {
   await editAndSelectKey(page)
   await capture(page, "bda-key")
   await railTabs(page, "bda-key")
+})
+for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
+  await openSkinFile(page, "动效.bda", animatedBda, "light/skin/port/animationConfig")
+  await page.waitForSelector("#bda-config-fields .bda-animation-section")
+  await capture(page, `${colorScheme}-bda-animation`)
+}, { colorScheme })
+await withPage(async (page) => {
+  await openSkinFile(page, "动效.bds", animatedBds, "light/skin/port/res/anim.ini")
+  await page.waitForSelector("#document-fields .legacy-animation-section")
+  await capture(page, "legacy-animation")
 })
 await withPage(async (page) => {
   await openTemplate(page, "palm-harmony")

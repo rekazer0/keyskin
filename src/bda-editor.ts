@@ -570,7 +570,6 @@ export function renderBdaConfigEditor(container: HTMLElement, options: ConfigEdi
       animation: decodeBdaAnimation(options.bytes),
       resolver: options.resolver,
       editable: options.editable,
-      designMode: options.animationDesignMode,
       onDesignWidth: options.onDesignWidth,
       onAnimationFrame: options.onAnimationFrame,
       onAnimationEffect: options.onAnimationEffect,
