@@ -231,12 +231,15 @@ export class PalmBoard {
     return { own, global, cand: typeof file === "string" ? asObject(asObject(this.layout.c)?.[file]) : undefined }
   }
 
-  /** The `.cnd`'s rect, else the board's; a bar without one spans the panel at the default height. */
+  /** The candidate rect includes the input-code inset; the preview renders that row separately. */
   get candidateSize(): { width: number; height: number } | undefined {
     const { own, global, cand } = this.candidateModel()
     if (!cand) return
     const rect = rectOf(cand.rect ?? null) ?? rectOf(own.rect ?? global.rect ?? null)
-    return rect ? { width: rect.width, height: rect.height } : { width: this.width || DEFAULT_PANEL_WIDTH, height: DEFAULT_CANDIDATE_HEIGHT }
+    if (!rect) return { width: this.width || DEFAULT_PANEL_WIDTH, height: DEFAULT_CANDIDATE_HEIGHT }
+    const top = asObject(own.insets ?? global.insets ?? null)?.top
+    const inputHeight = typeof top === "number" && Number.isFinite(top) ? Math.max(0, top) : 0
+    return { width: rect.width, height: Math.max(1, rect.height - inputHeight) }
   }
 
   get candidateBack(): Json {
@@ -303,7 +306,11 @@ export class PalmBoard {
     const size = this.candidateSize
     if (!size) return []
     const bar = item("CAND", { x: 0, y: 0, ...size }, { fores: [], offsets: [] }, {}, {}, { editable: false })
-    return [bar, ...this.icons(state, composing).map(({ item }) => item)]
+    const icons = this.icons(state, composing).map(({ item }) => item)
+    if (!composing && !this.icons(state).length) {
+      icons.push(item("BUILTIN_TOOLBAR", bar.rect, { fores: [], offsets: [] }, {}, {}, { editable: false }))
+    }
+    return [bar, ...icons]
   }
 
   /** The bubble layout (`h.<file>`) the board's keys pop. */

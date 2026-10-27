@@ -42,7 +42,7 @@ export function updateInspectorView(): void {
     const tab = button.dataset.inspectorTab
     const available = appState.resourceConfigActive
       ? tab === "ai" || tab === "properties" || tab === "source" && Boolean(appState.selectedPath) && !(
-        appState.archive?.format === "bda" && appState.resourceInspectorMode === "image"
+        (appState.archive?.format === "bda" || appState.archive?.format === "ssf") && appState.resourceInspectorMode === "image"
       )
       :
       tab === "ai"
@@ -58,6 +58,10 @@ export function updateInspectorView(): void {
     sourceName.textContent = appState.inspectorTab === "source" && appState.selectedResourcePath
       ? appState.archive?.format === "bda" ? "BDA 切片由 appearanceConfig 管理" : appState.tilePath
       : appState.selectedResourcePath || appState.selectedPath
+    if (appState.archive?.format === "sxi" && appState.archive.derivedPointer(appState.selectedPath)) {
+      source.value = appState.archive.getText("skin.json")
+      sourceName.textContent = "skin.json"
+    }
     quickInspector.hidden = true
     asset.hidden = true
     resourceInspector.hidden = appState.inspectorTab !== "properties"
@@ -157,7 +161,7 @@ export function updateSourceHighlight(): void {
   const matches = sourceSearchMatches()
   updateSourceSearchStatus(matches)
   const selectedRanges = sxiSource
-    ? sxiSectionRanges(source.value, sections)
+    ? sxiSectionRanges(source.value, sections, appState.archive?.derivedPointer(appState.selectedPath))
     : bdaSource
     ? jsonPropertyRanges(source.value, selectedBdaSourceKeys())
     : sections.length ? iniSectionRanges(source.value, sections) : appState.sourceHistoryHighlight ? [appState.sourceHistoryHighlight] : []
@@ -305,7 +309,7 @@ export function selectKeyFromSourceOffset(offset: number): void {
   )
   const property = bdaSource ? jsonPropertyAtOffset(source.value, offset) : undefined
   const sxiSection = appState.archive.format === "sxi"
-    ? appState.layoutDocument?.sections().find((name) => sxiSectionRanges(source.value, [name]).some(([a, b]) => offset >= a && offset < b))
+    ? appState.layoutDocument?.sections().find((name) => sxiSectionRanges(source.value, [name], appState.archive?.derivedPointer(appState.selectedPath)).some(([a, b]) => offset >= a && offset < b))
     : undefined
   const section = sxiSection ?? (bdaSource ? undefined : iniSectionAtOffset(source.value, offset))
   const panelKey = property && property !== "cand" ? property : undefined

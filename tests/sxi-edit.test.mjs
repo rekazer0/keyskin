@@ -75,6 +75,19 @@ test('SXI source ranges follow key IDs, nested bases, escaped strings and state 
   assert.doesNotThrow(() => sxiSectionRanges('{"keys":[{', ['KEY9']))
 })
 
+test('SXI full source ranges stay within the selected board and theme', () => {
+  const skin = parseSkinJson(original)
+  skin.default.port_layout.b.other = { keys: [{ id: '9', marker: 'other' }] }
+  skin.night = { port_layout: { b: { full26Pinyin: { keys: [{ id: '9', marker: 'night' }] } } } }
+  const text = encodeSkinJson(skin)
+  for (const [pointer, expected] of [[layout, board.keys[0]], [['night', ...layout.slice(1)], skin.night.port_layout.b.full26Pinyin.keys[0]]]) {
+    const ranges = sxiSectionRanges(text, ['KEY9'], pointer)
+    assert.equal(ranges.length, 1)
+    assert.deepEqual(JSON.parse(text.slice(...ranges[0])), expected)
+  }
+  assert.deepEqual(sxiSectionRanges(text, ['KEY9'], ['missing']), [])
+})
+
 test('SXI image edits target an orientation table even when identical tables were deduplicated in the projection', () => {
   const skin = parseSkinJson(original)
   skin.default.s_port = structuredClone(skin.default.s_info)

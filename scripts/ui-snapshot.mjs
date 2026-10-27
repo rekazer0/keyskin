@@ -7,6 +7,9 @@ import { chromium } from "playwright"
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
+import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
+import { bdaAnimationFixture } from "../tests/helpers/bda-animation-fixture.mjs"
+import { strToU8, unzipSync, zipSync } from "fflate"
 
 const mode = process.argv[2] ?? "compare"
 const only = process.argv[3]
@@ -157,6 +160,22 @@ await withPage(async (page) => {
   await capture(page, "palm-key")
   await railTabs(page, "palm-key")
 })
+await withPage(async (page) => {
+  // 手心动画检查器：每类动画一条时间轴，组合轨道、浮动物体与 a1 的三种写法都在这一列里。
+  await page.locator("#browser-open").setInputFiles({ name: "动画.sxi", mimeType: "application/octet-stream", buffer: Buffer.from(sxiAnimationFixture()) })
+  await page.waitForFunction(() => !document.querySelector("#open")?.disabled)
+  const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+  if (await close.isVisible().catch(() => false)) await close.click()
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  await page.evaluate(async (path) => {
+    const { selectFile } = await import("/src/app/navigation.ts")
+    selectFile(path)
+  }, "light/skin/res/anim.ini")
+  await page.waitForSelector(".sxi-animation-section")
+  await page.waitForTimeout(400)
+  await capture(page, "palm-animation")
+  await railTabs(page, "palm-animation")
+})
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await page.locator("#browser-open").setInputFiles({ name: "检查器.ssf", mimeType: "application/octet-stream", buffer: Buffer.from(ssfFixture()) })
   await page.waitForFunction(() => !document.querySelector("#open")?.disabled)
@@ -184,6 +203,27 @@ await withPage(async (page) => {
 }, { viewport: { width: 390, height: 844 } })
 await withPage(async (page) => { await page.waitForTimeout(800); await capture(page, "new-project") }, { url: `${baseURL}new-project.html` })
 await withPage(async (page) => { await page.waitForTimeout(800); await capture(page, "picker") }, { url: `${baseURL}picker.html` })
+
+for (const colorScheme of ["light", "dark"]) for (const format of ["bda", "bds"]) await withPage(async (page) => {
+  let bytes = bdaAnimationFixture()
+  const path = format === "bda" ? "light/skin/port/animationConfig" : "light/skin/res/anim.ini"
+  if (format === "bds") {
+    const files = unzipSync(readFileSync(join(root, "public/default-template.bds")))
+    files["res/anim.ini"] = strToU8("[GLOBAL]\nANIM_NUM=2\n[ANIM1]\nCATEGORY=0\nTYPE=3\nDURATION=180\nFROM=80,80\nTO=100,100\nREPEAT_CNT=2\nREPEAT_MODE=1\n[ANIM2]\nCATEGORY=3\nPARTICLE_IMAGE=1\nLIFE=500,1000\nEMIT_REGION=0,0,1,1\nTOTAL_NUMBER=12\nBIRTH_RATE=4\n")
+    bytes = zipSync(files)
+  }
+  await page.locator("#browser-open").setInputFiles({ name: `animation.${format}`, mimeType: "application/octet-stream", buffer: Buffer.from(bytes) })
+  await page.waitForFunction(() => !document.querySelector("#open").disabled)
+  const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+  if (await close.isVisible().catch(() => false)) await close.click()
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  await page.evaluate(async (path) => { (await import("/src/app/navigation.ts")).selectFile(path) }, path)
+  await page.waitForSelector(format === "bda" ? ".bda-animation-section" : "[data-animation-section]")
+  await capture(page, `${colorScheme}-${format}-animation`)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(async () => { (await import("/src/app/mobile-layout.ts")).setMobilePane("inspector") })
+  await capture(page, `mobile-${colorScheme}-${format}-animation`)
+}, { colorScheme })
 
 await browser.close()
 await server.close()

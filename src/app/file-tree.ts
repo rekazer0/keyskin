@@ -2,7 +2,7 @@ import { appState } from "./state"
 import { isBdaVirtualTextPath, isBdaAppearancePartPath, bdaAppearanceStylePath, bdaBasePath } from "./bda-documents"
 import { symbolSpan } from "../icons"
 import { layout, files, theme, orientation, documentName } from "./dom"
-import { selectFile, overviewGroupState } from "./navigation"
+import { selectFile, overviewGroupState, currentNavigationMode } from "./navigation"
 import { isSsfBoardPath, ssfThemeFolder, SSF_SOUNDS_PATH } from "./ssf-documents"
 import { mobilePortraitQuery, sourceThumbnail } from "./canvas-interaction"
 import { setMobilePane } from "./mobile-layout"
@@ -57,10 +57,14 @@ export function addNavButton(
       layout.value = path.endsWith("_9.ini") ? "py_9.ini" : "py_26.ini"
       appState.previewReturnName = path.split("/").pop() ?? layout.value
     }
-    selectFile(path, "overview", navMode === "resource" ? "image" : navMode === "style" ? "style" : navMode === "sound" ? "sound" : "document")
+    selectFile(path, "overview", navMode === "resource" ? "image" : navMode === "style" ? "style" : navMode === "sound" ? "sound" : navMode === "motion" || navMode === "particle" ? navMode : "document")
     if (mobilePortraitQuery.matches) setMobilePane("inspector")
   })
   parent.append(button)
+  if (appState.sidebarView === "overview" && path === appState.selectedPath && navMode === currentNavigationMode()) {
+    button.classList.add("selected")
+    appState.selectedFileButton = button
+  }
 }
 
 type NavEntry = {
@@ -182,8 +186,6 @@ export function renderFiles(): void {
 
   const entries: NavEntry[] = []
   const bdaConfigGroups = [
-    ["animation", "动画效果", "动画配置", "film"],
-    ["lightAnimation", "轻量动画", "轻量动画", "wand-sparkles"],
     ["sound", "按键音效", "声音配置", "volume-2"],
     ["switch", "开关配置", "开关配置", "toggle-right"],
     ["sticker", "贴纸配置", "贴纸配置", "sticker"],
@@ -254,10 +256,9 @@ export function renderFiles(): void {
       ["手写与语音", "voice", "语音", "mic"],
     ]
     for (const [group, name, label, icon] of boards) {
-      entries.push({ group, label, path: `${theme.value}/skin/${orientation.value}/${name}.ini`, className: "nav-layout", icon })
+      entries.push({ group, label, path: `${theme.value}/skin/${orientation.value}/${name}.ini`, className: "nav-layout", icon, meta: "phoneSkin.ini" })
     }
   }
-  const hiddenLayouts = new Set<string>()
   const configPrefix = `${theme.value}/skin/${orientation.value}/`
   const appearancePath = bdaAppearancePath(appState.archive, theme.value, orientation.value)
   const appearanceBytes = appearancePath && appState.archive.getBytes(appearancePath)
@@ -265,7 +266,6 @@ export function renderFiles(): void {
   if (appState.archive.format === "bda" && appearance) {
     for (const panelName of appearance.panels.keys()) {
       const name = `${panelName}.ini`
-      if (hiddenLayouts.has(name)) continue
       const info = iniTypes[name] ?? {
         group: "面板样式",
         label: panelName.replaceAll("_", " "),
@@ -305,13 +305,12 @@ export function renderFiles(): void {
       navMode: "sound",
     })
   }
+  const legacyAnimationPath = ["sxi", "bdi", "bds"].includes(appState.archive.format) ? legacyAnimationConfigPath() : undefined
   const layoutPaths = appState.archive.format === "bda" || appState.archive.format === "ssf" ? [] : appState.archive.names()
   for (const path of layoutPaths.sort()) {
-    const basePath = path
     if (!path.startsWith(configPrefix) || path.slice(configPrefix.length).includes("/") || !/\.ini$/i.test(path)) continue
-    if (appState.archive.format === "bda" && !appState.bdaBase?.isText(basePath)) continue
     const name = path.split("/").pop() ?? path
-    if (hiddenLayouts.has(name)) continue
+    if (path === legacyAnimationPath) continue
     const info = iniTypes[name] ?? {
       group: "扩展布局",
       label: name.replace(/\.ini$/i, "").replaceAll("_", " "),
@@ -346,11 +345,17 @@ export function renderFiles(): void {
     entries.push({ group: "资源配置", label: "样式配置", path: stylePath, className: "nav-style", icon: "palette", navMode: "style" })
     entries.push({ group: "资源配置", label: "按键音效", path: stylePath, className: "nav-resource", icon: "volume-2", navMode: "sound" })
   }
-  const legacyAnimationPath = appState.archive.format === "bda" ? undefined : legacyAnimationConfigPath()
-  if (legacyAnimationPath) {
-    entries.push({ group: "资源配置", label: "粒子动效", path: legacyAnimationPath, className: "nav-style", icon: "wand-sparkles" })
+  const addAnimationEntries = (path: string, suffix = ""): void => {
+    entries.push(
+      { group: "资源配置", label: `动效设计${suffix}`, path, className: "nav-style", icon: "film", navMode: "motion" },
+      { group: "资源配置", label: `粒子设计${suffix}`, path, className: "nav-style", icon: "wand-sparkles", navMode: "particle" },
+    )
   }
+  if (legacyAnimationPath) addAnimationEntries(legacyAnimationPath)
   if (appState.archive.format === "bda") {
+    const animationPaths = (["animation", "lightAnimation"] as const).flatMap((kind) =>
+      bdaConfigPaths(appState.archive!, theme.value, orientation.value, kind))
+    for (const path of animationPaths) addAnimationEntries(path, animationPaths.length > 1 ? ` · ${path.split("/").pop()}` : "")
     for (const [kind, group, label, icon] of bdaConfigGroups) {
       const paths = bdaConfigPaths(appState.archive, theme.value, orientation.value, kind)
       for (const path of paths) entries.push({
@@ -363,12 +368,12 @@ export function renderFiles(): void {
       })
     }
   }
-  // 手心皮肤的条目都来自 skin.json：用手心自己的键盘名称，注脚是它在 skin.json 里的位置。
+  // Overview metadata names the native source file, never a generated preview layout.
   if (appState.archive.format === "sxi") {
     for (const entry of entries) {
       const pointer = appState.archive.derivedPointer(entry.path)
       if (!pointer) continue
-      entry.meta = pointer.filter((step, index) => index > 0 && !/_layout$/.test(step)).join(".") || pointer[0]
+      entry.meta = "skin.json"
       if (pointer[2] === "b") entry.label = palmBoardLabel(pointer[3])
     }
   }
@@ -391,7 +396,7 @@ export function renderFiles(): void {
     iconOwners.set(entry.icon, entry)
   }
   const groups = appState.archive.format === "bda"
-    ? ["皮肤信息", "资源配置", "面板样式", "动画效果", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
+    ? ["皮肤信息", "资源配置", "面板样式", "按键音效", "开关配置", "贴纸配置", "场景配置"]
     : ["皮肤", "资源配置", "键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局"]
   for (const group of groups) {
     // 预览生成的百度文件不属于搜狗原包，只有搜狗键盘布局作为入口显示。
@@ -452,7 +457,7 @@ export function renderFiles(): void {
   const sourceNameCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare
   type SourceNode = { folders: Map<string, SourceNode>; paths: string[] }
   const root: SourceNode = { folders: new Map(), paths: [] }
-  for (const path of appState.archive.names().filter((name) => !name.endsWith("/") && !appState.archive?.isOverlay(name))) {
+  for (const path of appState.archive.names().filter((name) => !name.endsWith("/") && !appState.archive?.isOverlay(name) && !appState.archive?.derivedPointer(name))) {
     const parts = path.split("/")
     let node = root
     for (const part of parts.slice(0, -1)) {
@@ -581,6 +586,7 @@ export function renderFiles(): void {
       button.draggable = true
       button.addEventListener("click", () => {
         if (appState.archive?.isText(path) || appState.archive?.isImage(path) || appState.archive?.isBdaConfig(path)) {
+          appState.animationDesignMode = "all"
           selectFile(path, "source")
           if (mobilePortraitQuery.matches) setMobilePane("inspector")
         } else selectSourceRow(button)

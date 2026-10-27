@@ -490,6 +490,7 @@ export function decodeBdaAnimation(bytes: Uint8Array): BdaAnimation {
     const target = string(first(entry, 1))
     const list = message(first(entry, 2))
     const bindings: BdaAnimationBinding[] = list.flatMap((field): BdaAnimationBinding[] => {
+      if (field.number !== 1 && field.number !== 2) return []
       const item = message(field)
       if (field.number === 1) {
         const simple = first(item, 2)?.varint

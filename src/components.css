@@ -466,3 +466,12 @@ body {
 }
 /* 文本框的焦点由边框 + 贴边光晕表示，不再叠一圈有间隙的 outline */
 :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):focus-visible { outline: 0; }
+
+/* —— 动画预览：舞台、播放控制、可定位时间轴 —— */
+.ui-animation-player { display: grid; gap: var(--space-sm); min-width: 0; }
+.ui-animation-stage { display: grid; place-items: center; min-height: 144px; overflow: hidden; border-radius: var(--radius-md); background: var(--checker-image), var(--checker-light); }
+.ui-animation-stage > canvas { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
+.ui-animation-transport { display: flex; align-items: center; gap: var(--space-xs); }
+.ui-animation-transport > .ui-slider { flex: 1; width: 0; min-width: 0; }
+.ui-animation-time { flex: none; color: var(--secondary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+.ui-animation-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.6; overflow-wrap: anywhere; }

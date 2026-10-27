@@ -67,14 +67,16 @@ export function scrollSelectedSource(): void {
   if (sourceEditor.hidden || !sections.length && !bdaKeys.length && !appState.sourceHistoryHighlight) return
   const bdaRange = jsonPropertyRanges(source.value, bdaKeys)[0]
   const iniRange = iniSectionRanges(source.value, sections)[0]
-  const sxiRange = appState.archive?.derivedPointer(appState.selectedPath) ? sxiSectionRanges(source.value, sections)[0] : undefined
+  const sxiRange = appState.archive?.derivedPointer(appState.selectedPath) ? sxiSectionRanges(source.value, sections, appState.archive.derivedPointer(appState.selectedPath))[0] : undefined
   const range = sxiRange ?? bdaRange ?? iniRange ?? appState.sourceHistoryHighlight
   if (range) source.revealRange(range[0], range[1])
 }
 
 export function setSourceValue(text: string): void {
   if (deferNumberInputRefresh(setSourceValue, () => setSourceValue(text))) return
-  source.value = text
+  const archive = appState.archive
+  const derivedSource = archive?.format === "sxi" && archive.derivedPointer(appState.selectedPath)
+  source.value = derivedSource ? archive.getText("skin.json") : text
   updateSourceHighlight()
 }
 

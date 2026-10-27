@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from "fflate"
-import { bdaAppearancePath, bdaConfigPath, bdaLayoutDocument, bdaStyleID, bdaPanelKeyName, type BdaAnimation, type BdaImageAtom } from "./bda.ts"
+import { bdaAppearancePath, bdaConfigPath, bdaConfigPaths, bdaLayoutDocument, bdaStyleID, bdaPanelKeyName, type BdaAnimation, type BdaImageAtom } from "./bda.ts"
 import { bdaColorHex } from "./bda-resolver.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
 import { IniDocument } from "./ini.ts"
@@ -185,8 +185,15 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
           `HL_COLOR=${bdaColorHex(style.highlightColor ?? style.normalColor ?? 0)}`,
         ])
       }
-      if (animation.sequences.size) {
-        warnings.push(`${theme}/${orientation} 的 ${animation.sequences.size} 个序列帧动画已降级为首帧静态图`)
+      // Legacy INI cannot carry BDA's protobuf effects. Warn for every config, including
+      // numbered/light variants and transform-only skins, before the caller confirms export.
+      const animationPaths = [...bdaConfigPaths(source, theme, orientation, "animation"), ...bdaConfigPaths(source, theme, orientation, "lightAnimation")]
+      for (const path of animationPaths) {
+        const bytes = source.getBytes(path)!
+        const config = decodeBdaAnimation(bytes)
+        if (!bytes.length) continue
+        const kinds = [...new Set([...config.effects.values()].map((effect) => effect.kind))]
+        warnings.push(`${theme}/${orientation}/${path.split("/").pop()} 的动效（${kinds.join("、") || "未识别配置"}）无法保留到 ${format.toUpperCase()}，将导出静态外观；保留动效请使用 BDA`)
       }
     }
     if (!themeStyles.size && !soundStyles.size) continue

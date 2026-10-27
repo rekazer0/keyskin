@@ -129,9 +129,38 @@ try {
   // `f_w` is Palm-only: the Baidu projection drops it, the scene keeps the skin's light weight.
   assert.equal(palm.texts.KEY2[0].weight, 300)
   assert.deepEqual(palm.texts.KEY12.map(({ text }) => text), ['清空'])
+  const palmToolbar = await page.evaluate(async () => {
+    const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
+    const built = await toolbarPreview.sceneForState()
+    await toolbarPreview.whenDrawn()
+    const layers = built.keys.find((key) => key.section === 'BUILTIN_TOOLBAR').layers(false).fore
+    return { height: toolbarPreview.panelHeight, layers: layers.map(({ rect }) => rect), keys: toolbarPreview.keys.map(({ section }) => section), background: built.background.length }
+  })
+  assert.equal(palmToolbar.height, 70, 'input-code inset is not an empty toolbar row')
+  assert.equal(palmToolbar.background, 0, 'toolbar icons are not an always-visible background')
+  assert.ok(palmToolbar.keys.includes('BUILTIN_TOOLBAR'))
+  assert.equal(palmToolbar.layers.length, 5)
+  for (const rect of palmToolbar.layers) {
+    assert.equal(rect.y + rect.height / 2, 35, 'toolbar icons are vertically centred')
+    assert.ok(rect.height > 40 && rect.height < 50, 'toolbar icons match the compact bar')
+  }
   // 9-key pinyin swaps 123 for 分 while composing (fix_a S4 → key_fix 10).
   const composing = await scene(4)
   assert.deepEqual(composing.texts.KEY14.map(({ text }) => text), ['分'])
+  assert.equal(await page.evaluate(async () => {
+    const { toolbarPreview, setSimulatedComposition } = await import('/src/app/canvas-interaction.ts')
+    const { refreshSimulationState } = await import('/src/app/preview-render.ts')
+    setSimulatedComposition('ni')
+    refreshSimulationState()
+    await toolbarPreview.whenDrawn()
+    return toolbarPreview.keys.some(({ section }) => section === 'BUILTIN_TOOLBAR')
+  }), false, 'built-in toolbar does not overlap composing candidates')
+  await page.evaluate(async () => {
+    const { setSimulatedComposition } = await import('/src/app/canvas-interaction.ts')
+    const { refreshSimulationState } = await import('/src/app/preview-render.ts')
+    setSimulatedComposition('')
+    refreshSimulationState()
+  })
   const toolbar = await page.evaluate(async () => {
     const { candidateBackgroundPreview } = await import('/src/app/canvas-interaction.ts')
     return (await candidateBackgroundPreview.sceneForState()).background.length

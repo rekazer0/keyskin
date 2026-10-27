@@ -7,7 +7,7 @@ import { showError } from "./file-operations"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
 import { IniDocument } from "../ini.ts"
-import { SXI_SKIN_PATH, applySxiFragments, encodeSkinJson, parseSkinJson, parseSkinJsonValue, sxiFragment, sxiFragmentPath } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH, parseSkinJson, parseSkinJsonValue } from "../palm/sxi-projection.ts"
 import type { JsonObject } from "../palm/sxi-ini.ts"
 import type { SkinArchive } from "../skin.ts"
 
@@ -20,50 +20,40 @@ export function palmSkin(archive: SkinArchive): JsonObject {
   return skin
 }
 
-// `.sxi` sources are JSON: a derived layout/style shows its `skin.json` fragment, stored JSON
-// files show their own text.
+// `.sxi` layouts, styles and tiles are generated views; the source editor always shows the native
+// skin.json instead of exposing one of those converted files as source.
 export function isSxiSourcePath(path: string): boolean {
   const archive = appState.archive
   return archive?.format === "sxi" && (Boolean(archive.derivedPointer(path)) || archive.isText(path) && /\.json$/i.test(path))
 }
 
-function sxiSourceText(path: string): string {
-  const archive = appState.archive!
-  const pointer = archive.derivedPointer(path)
-  if (!pointer) return archive.getText(path)
-  return encodeSkinJson(sxiFragment(parseSkinJson(archive.getText(SXI_SKIN_PATH)), pointer))
+function sxiSourcePath(path: string): string {
+  return appState.archive!.derivedPointer(path) ? SXI_SKIN_PATH : path
 }
 
 export function showSxiSource(path: string): void {
-  const pointer = appState.archive!.derivedPointer(path)
-  if (!pointer) appState.selectedDocument = undefined
-  setSourceValue(sxiSourceText(path))
+  const sourcePath = sxiSourcePath(path)
+  if (!appState.archive!.derivedPointer(path)) appState.selectedDocument = undefined
+  setSourceValue(appState.archive!.getText(sourcePath))
   source.disabled = false
-  sourceName.textContent = pointer ? `${SXI_SKIN_PATH} · ${pointer.join(".")}` : path
+  sourceName.textContent = sourcePath
 }
 
 export function commitSxiSourceEdit(): void {
   const archive = appState.archive
   const path = appState.selectedPath
   if (!isEditing() || !archive || !isSxiSourcePath(path)) return
-  const pointer = archive.derivedPointer(path)
+  const sourcePath = sxiSourcePath(path)
   try {
-    if (pointer) {
-      const before = archive.getText(SXI_SKIN_PATH)
-      commitText(SXI_SKIN_PATH, before, applySxiFragments(before, [{ path: sxiFragmentPath(pointer), text: source.value }]))
-    } else {
-      if (path === SXI_SKIN_PATH) parseSkinJson(source.value)
-      else parseSkinJsonValue(source.value)
-      commitText(path, archive.getText(path), source.value)
-    }
+    if (sourcePath === SXI_SKIN_PATH) parseSkinJson(source.value)
+    else parseSkinJsonValue(source.value)
+    commitText(sourcePath, archive.getText(sourcePath), source.value)
   } catch (error) {
-    showError(error, "编辑 skin.json")
+    showError(error, `编辑 ${sourcePath}`)
   }
-  if (archive.isText(path) && path === appState.layoutPath) {
-    appState.layoutDocument = IniDocument.parse(archive.getText(path))
-    appState.selectedDocument = appState.layoutDocument
-  }
-  if (archive.isText(path)) showSxiSource(path)
+  if (archive.isText(appState.layoutPath)) appState.layoutDocument = IniDocument.parse(archive.getText(appState.layoutPath))
+  if (archive.isText(path)) appState.selectedDocument = IniDocument.parse(archive.getText(path))
+  showSxiSource(path)
   refreshPreview()
   populateKeyInspector()
   updateDirty()

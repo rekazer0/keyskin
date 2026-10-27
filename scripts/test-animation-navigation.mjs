@@ -1,0 +1,137 @@
+// Real Playwright navigation: shared source files, independent animation views, undo/tree rebuilds.
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { chromium } from "playwright"
+import { createServer } from "vite"
+import { unzipSync, zipSync, strToU8 } from "fflate"
+import { SkinArchive } from "../src/skin.ts"
+import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
+import { bdaAnimationFixture } from "../tests/helpers/bda-animation-fixture.mjs"
+
+const files = unzipSync(readFileSync(new URL("../public/default-template.bds", import.meta.url)))
+files["res/anim.ini"] = strToU8([
+  "ANIM_NUM=2", "[ANIM1]", "CATEGORY=0", "TYPE=0", "DURATION=160", "FROM=255", "TO=0",
+  "[ANIM2]", "CATEGORY=3", "DURATION=600", "TOTAL_NUMBER=12", "BIRTH_RATE=4", "PARTICLE_IMAGE=1", "",
+].join("\r\n"))
+const bds = zipSync(files)
+const fixtures = [
+  { format: "sxi", bytes: sxiAnimationFixture(), paths: ["light/skin/res/anim.ini"] },
+  { format: "bds", bytes: bds, paths: ["light/skin/res/anim.ini"] },
+  { format: "bdi", bytes: SkinArchive.open(bds, "bds").toBytes("bdi"), paths: ["light/skin/res/anim.ini"] },
+  { format: "bda", bytes: bdaAnimationFixture(), paths: ["light/skin/port/animationConfig", "light/skin/port/1animationConfig", "light/skin/port/lightAnimationConfig"] },
+]
+const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41839, strictPort: false, host: "127.0.0.1", hmr: false } })
+await server.listen()
+const browser = await chromium.launch()
+const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
+const errors = []
+page.on("pageerror", (error) => errors.push(error.message))
+page.on("dialog", (dialog) => dialog.accept())
+const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
+const entry = (path, mode) => page.locator(`.sidebar-overview button[data-path="${path}"][data-nav-mode="${mode}"]`)
+const state = () => page.evaluate(async () => {
+  const { appState } = await import("/src/app/state.ts")
+  return {
+    path: appState.selectedPath,
+    mode: appState.animationDesignMode,
+    resource: appState.resourceConfigActive,
+    imageHidden: document.querySelector("#workspace-image-figure").hidden,
+    selectedMode: appState.selectedFileButton?.dataset.navMode ?? null,
+    selectedPath: appState.selectedFileButton?.dataset.path ?? null,
+    selectedConnected: appState.selectedFileButton?.isConnected ?? false,
+  }
+})
+async function check(path, mode, source = false) {
+  const value = await state()
+  assert.equal(value.path, path)
+  assert.equal(value.mode, mode)
+  assert.equal(value.resource, false, "animation views use the document inspector, not image resources")
+  assert.equal(value.imageHidden, true)
+  assert.equal(value.selectedConnected, true)
+  assert.equal(value.selectedPath, path)
+  if (!source) {
+    assert.equal(value.selectedMode, mode)
+    assert.equal(await entry(path, mode).evaluate((node) => node.classList.contains("selected")), true)
+    assert.equal(await page.locator(".sidebar-overview button.selected").count(), 1)
+  }
+}
+
+try {
+  for (const fixture of fixtures) {
+    await page.goto(baseURL)
+    await page.locator("#browser-open").setInputFiles({ name: `navigation.${fixture.format}`, mimeType: "application/octet-stream", buffer: Buffer.from(fixture.bytes) })
+    await page.waitForFunction(() => !document.querySelector("#open").disabled)
+    const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+    if (await close.isVisible()) await close.click()
+    await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+    assert.equal((await state()).mode, "all")
+    assert.equal(await page.locator('.nav-group[data-overview-group="动画效果"], .nav-group[data-overview-group="轻量动画"]').count(), 0)
+    const archiveBefore = await page.evaluate(async (paths) => {
+      const { appState } = await import("/src/app/state.ts")
+      return { names: appState.archive.names(), bytes: paths.map((path) => Array.from(appState.archive.getBytes(path))) }
+    }, fixture.paths)
+
+    for (const path of fixture.paths) {
+      assert.equal(await page.locator(`.sidebar-overview button[data-path="${path}"]`).count(), 2)
+      for (const mode of ["motion", "particle"]) {
+        const button = entry(path, mode)
+        assert.equal(await button.count(), 1)
+        assert.equal(await button.locator(".nav-label").textContent(), `${mode === "motion" ? "动效设计" : "粒子设计"}${fixture.paths.length > 1 ? ` · ${path.split("/").pop()}` : ""}`)
+        assert.equal(await button.evaluate((node) => node.closest(".nav-group").dataset.overviewGroup), "资源配置")
+        if (fixture.format === "sxi") assert.equal(await button.locator(".nav-meta").textContent(), "skin.json")
+        await button.click()
+        await check(path, mode)
+        // Tree rebuilding alone must restore both the mode and its connected selected button.
+        await page.evaluate(async () => (await import("/src/app/file-tree.ts")).renderFiles())
+        await check(path, mode)
+        // Document refresh is what history/source-sync callers use, with no animation argument.
+        await page.evaluate(async (path) => (await import("/src/app/navigation.ts")).selectFile(path, "overview", "document"), path)
+        await check(path, mode)
+      }
+    }
+    assert.deepEqual(await page.evaluate(async (paths) => {
+      const { appState } = await import("/src/app/state.ts")
+      return { names: appState.archive.names(), bytes: paths.map((path) => Array.from(appState.archive.getBytes(path))) }
+    }, fixture.paths), archiveBefore, "navigation never rewrites or relocates source data")
+
+    const path = fixture.paths[0]
+    for (const mode of ["motion", "particle"]) {
+      await entry(path, mode).click()
+      // A real history entry, then real undo/redo (including renderFiles + document reselection).
+      await page.evaluate(async (format) => {
+        const { appState } = await import("/src/app/state.ts")
+        const { commitText } = await import("/src/app/edit-history.ts")
+        const historyPath = format === "sxi" ? "skin.json" : "Info.txt"
+        const before = appState.archive.getText(historyPath)
+        commitText(historyPath, before, `${before}\n`)
+      }, fixture.format)
+      for (const action of ["undo", "redo", "undo"]) {
+        await page.evaluate(async (action) => (await import("/src/app/edit-history.ts"))[action](), action)
+        await check(path, mode)
+      }
+    }
+
+    // Raw-source entry explicitly opts into the unfiltered view, including on the same path.
+    const rawPath = fixture.format === "sxi" ? "skin.json" : path
+    await page.locator('[data-sidebar-view="source"]').click()
+    await page.evaluate(async (path) => (await import("/src/app/source-files.ts")).ensureSourcePathRendered(path), rawPath)
+    await page.locator(`.raw-files button[data-path="${rawPath}"]`).click()
+    await check(rawPath, "all", true)
+    await page.locator('[data-sidebar-view="overview"]').click()
+    await entry(path, "particle").click()
+    // A different ordinary document resets to all rather than carrying the animation filter.
+    const documentGroup = page.locator('.nav-group').filter({ has: page.locator('button[data-nav-mode="document"]') }).first()
+    if (!await documentGroup.evaluate((node) => node.open)) await documentGroup.locator(':scope > summary').click()
+    await page.locator('.sidebar-overview button[data-nav-mode="document"]').first().click()
+    assert.equal((await state()).mode, "all")
+    assert.equal((await state()).resource, false)
+    await page.evaluate(async (path) => (await import("/src/app/navigation.ts")).selectFile(path, "overview"), path)
+    assert.equal((await state()).mode, "all")
+    console.log(`${fixture.format}: resource grouping, two shared-path entries, selection, mode, rebuild, undo/redo, raw source and no image workspace passed`)
+  }
+  assert.deepEqual(errors, [])
+  console.log("Animation navigation: SXI/BDS/BDI/BDA passed; pageerrors=0")
+} finally {
+  await browser.close()
+  await server.close()
+}

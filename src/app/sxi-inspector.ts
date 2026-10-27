@@ -12,6 +12,7 @@ import { element } from "../dom-element.ts"
 import { orientation } from "./dom"
 import { appState } from "./state"
 import { gestureRows, renderSxiGroup, sxiSkin, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
+import { populateSxiAnimationInspector, sxiAnimationInspectorTitle } from "./sxi-animation-inspector"
 
 // Board parts a canvas selection can stand for, by the section the renderer gives them.
 const PART_SECTIONS: Record<string, string> = {
@@ -45,15 +46,15 @@ function palmSelection(skin: JsonObject): Selection | undefined {
   const archive = appState.archive
   const pointer = archive?.format === "sxi" ? archive.derivedPointer(appState.selectedPath) : undefined
   if (!pointer) return
-  if (pointer[2] === "b" && appState.selectedPath === appState.layoutPath) {
-    if (!appState.selectedKeySections.length) return { kind: "board", board: pointer }
+  if (pointer[2] === "b") {
+    if (appState.selectedPath !== appState.layoutPath || !appState.selectedKeySections.length) return { kind: "board", board: pointer }
     const models = [...new Map(appState.selectedKeySections.flatMap((section) => {
       const model = sectionPointer(skin, pointer, section)
       return model ? [[model.join("\u0000"), model] as const] : []
     })).values()]
     return models.length ? { kind: "keys", board: pointer, models } : { kind: "board", board: pointer }
   }
-  // Styles, animations and tiles are edited in the style and resource views.
+  // Styles and tiles are edited in the style and resource views.
   return pointer.length === 1 || pointer[2] === "c" || pointer[2] === "h" ? { kind: "part", pointer } : undefined
 }
 
@@ -131,6 +132,7 @@ function palmKeyGroups(skin: JsonObject, board: SxiPointer, models: SxiPointer[]
  */
 export function populateSxiInspector(container: HTMLElement): boolean {
   container.replaceChildren()
+  if (populateSxiAnimationInspector(container)) return true
   const skin = sxiSkin()
   const selected = skin && palmSelection(skin)
   if (!skin || !selected) return false
@@ -151,6 +153,8 @@ function partTitle(pointer: SxiPointer): string {
 
 /** Inspector header for a Palm selection: the board, key or part, and where it sits in skin.json. */
 export function sxiInspectorTitle(): { name: string; context: string } | undefined {
+  const animation = sxiAnimationInspectorTitle()
+  if (animation) return animation
   const skin = sxiSkin()
   const selected = skin && palmSelection(skin)
   if (!skin || !selected) return

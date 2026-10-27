@@ -18,7 +18,7 @@ import {
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
-  Shirt,
+  Shirt, Pause,
 } from "lucide"
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
@@ -30,7 +30,7 @@ const icons: Record<string, IconNode> = {
   "arrow-left-right": ArrowLeftRight, "trash-2": Trash2, "chevron-down": ChevronDown,
   "chevron-right": ChevronRight, "chevron-left": ChevronLeft, "chevron-up": ChevronUp,
   "arrow-up": ArrowUp, "arrow-down": ArrowDown, "arrow-left": ArrowLeft,
-  "arrow-right": ArrowRight, "circle-dot": CircleDot, music: Music, play: Play,
+  "arrow-right": ArrowRight, "circle-dot": CircleDot, music: Music, play: Play, pause: Pause,
   info: Info, "align-start-vertical": AlignStartVertical,
   "align-end-vertical": AlignEndVertical, "align-start-horizontal": AlignStartHorizontal,
   "align-end-horizontal": AlignEndHorizontal, "arrow-up-down": ArrowUpDown,

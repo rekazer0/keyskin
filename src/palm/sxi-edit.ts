@@ -67,7 +67,17 @@ export function addSxiImageStyle(text: string, pointer: string[], property: "NM_
 }
 
 // Locate whole key objects, respecting nested braces and escaped strings in JSON.
-export function sxiSectionRanges(text: string, sections: readonly string[]): Array<readonly [number, number]> {
+export function sxiSectionRanges(text: string, sections: readonly string[], pointer: readonly string[] = []): Array<readonly [number, number]> {
+  if (pointer.length) {
+    let fragment = text, offset = 0
+    for (const part of pointer) {
+      const range = jsonPropertyRanges(fragment, [part])[0]
+      if (!range) return []
+      offset += range[0]
+      fragment = fragment.slice(range[0], range[1])
+    }
+    return sxiSectionRanges(fragment, sections).map(([start, end]) => [start + offset, end + offset] as const)
+  }
   const keys = jsonPropertyRanges(text, ["keys"])[0]
   const ranges: Array<readonly [number, number]> = []
   if (keys) {

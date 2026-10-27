@@ -516,7 +516,7 @@ export function wireFilesAndSettings(): void {
       scheduleSourceInputHighlight(true)
       return
     }
-    const before = appState.selectedDocument?.toString() ?? appState.archive.getText(appState.selectedPath)
+    const before = appState.archive.getText(appState.selectedPath)
     appState.selectedDocument = IniDocument.parse(source.value)
     commitText(appState.selectedPath, before, source.value)
     if (appState.selectedPath === appState.layoutPath) appState.layoutDocument = appState.selectedDocument

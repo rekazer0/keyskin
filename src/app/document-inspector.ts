@@ -12,13 +12,16 @@ import { refreshPreview } from "./preview-render"
 import { isStyleReferenceKey, decorateStyleReferenceInput, openStyleReferenceEditor, openBdaStyleReferencePicker } from "./style-references"
 import { syncMobileInspectorGroups } from "./mobile-layout"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
-import { updateBdaDesignWidth, updateBdaAnimationFrame } from "../bda-encode.ts"
+import { updateBdaDesignWidth, updateBdaAnimationWidth, updateBdaAnimationFrame, updateBdaAnimationEffect } from "../bda-encode.ts"
+import { deferNumberInputRefresh } from "../number-input-wheel.ts"
+import { showError } from "./file-operations"
 import { renderBdaMetadataEditor, renderBdaLayoutEditor, renderBdaConfigEditor } from "../bda-editor.ts"
-import { updateBdaRefs, updateSelectedBdaPanelProperty, updateBdaAppearanceStyleRef } from "./key-inspector"
+import { populateKeyInspector, updateBdaRefs, updateSelectedBdaPanelProperty, updateBdaAppearanceStyleRef } from "./key-inspector"
 import { openImageResourceChooser } from "./resource-inspector"
 import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
+import { populateBaiduAnimationInspector } from "./baidu-animation-inspector"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -321,6 +324,11 @@ export function populateDocumentInspector(): void {
     preview.setParticlePreview()
     return
   }
+  if (populateBaiduAnimationInspector(documentFields)) {
+    documentFieldsGroup.hidden = false
+    documentFieldsGroup.dataset.path = appState.selectedPath
+    return
+  }
   const specialized = new Set<string>()
   const toolbarSections = new Set(isToolbarPath(appState.selectedPath) ? effectiveToolbarSections() : [])
   if (isSkinInfoPath(appState.selectedPath)) {
@@ -613,6 +621,7 @@ export function selectedBdaSourceKeys(): string[] {
 }
 
 export function populateBdaConfigInspector(): void {
+  if (deferNumberInputRefresh(populateBdaConfigInspector, populateBdaConfigInspector)) return
   bdaConfigFields.replaceChildren()
   if (!appState.archive || appState.archive.format !== "bda") {
     bdaConfigFieldsGroup.hidden = true
@@ -665,25 +674,31 @@ export function populateBdaConfigInspector(): void {
   const bytes = appState.archive.isBdaConfig(appState.selectedPath) ? appState.archive.getBytes(appState.selectedPath) : undefined
   bdaConfigFieldsGroup.hidden = !bytes
   if (!bytes) return
-  const update = (after: Uint8Array) => {
-    commitBytes(appState.selectedPath, bytes, after)
-    if (/appearanceConfig$/i.test(appState.selectedPath)) refreshBdaLayout(appState.layoutPath)
-    refreshSelectedBdaSource()
-    refreshPreview()
-    populateBdaConfigInspector()
-    updateDirty()
+  const path = appState.selectedPath
+  const archive = appState.archive
+  const update = (edit: (before: Uint8Array) => Uint8Array) => {
+    if (!isEditing() || appState.archive !== archive || appState.selectedPath !== path) return
+    const before = archive.getBytes(path)
+    if (!before) return
+    try {
+      commitBytes(path, before, edit(before))
+      if (/appearanceConfig$/i.test(path)) refreshBdaLayout(appState.layoutPath)
+      refreshSelectedBdaSource()
+      refreshPreview()
+      populateKeyInspector()
+      updateDirty()
+    } catch (error) { showError(error, "修改 BDA 配置") }
   }
   renderBdaConfigEditor(bdaConfigFields, {
-    path: appState.selectedPath,
+    path,
     bytes,
     resolver: visualResolver(),
     editable: isEditing(),
-    onDesignWidth: (value) => update(updateBdaDesignWidth(bytes, value)),
-    onAnimationFrame: (sequence, frame, property, value) => update(
-      updateBdaAnimationFrame(bytes, sequence, frame, property, value),
-    ),
-    onPickAnimationResource: (sequence, frame) => openImageResourceChooser((resourceID) => update(
-      updateBdaAnimationFrame(bytes, sequence, frame, "resourceID", resourceID),
-    )),
+    animationDesignMode: appState.animationDesignMode,
+    onDesignWidth: (value) => update((before) => /animationConfig$/i.test(path)
+      ? updateBdaAnimationWidth(before, value) : updateBdaDesignWidth(before, value)),
+    onAnimationEffect: (effectID, property, value) => update((before) => updateBdaAnimationEffect(before, effectID, property, value)),
+    onAnimationFrame: (sequence, frame, property, value) => update((before) => updateBdaAnimationFrame(before, sequence, frame, property, value)),
+    onPickAnimationResource: (sequence, frame) => openImageResourceChooser((resourceID) => update((before) => updateBdaAnimationFrame(before, sequence, frame, "resourceID", resourceID))),
   })
 }

@@ -104,7 +104,7 @@ export function sxiDerivedFiles(skin: JsonObject): Map<string, SxiDerivedFile> {
       if (hasEntries(style.ss_1) && (own || !same(style.ss_1, shared?.ss_1))) {
         add(`${directory}/default.css`, [themeKey, styleKey, "ss_1"], stylesIni(style.ss_1))
       }
-      if (hasEntries(style.ss_2) && (own || !same(style.ss_2, shared?.ss_2))) {
+      if (asObject(style.ss_2) && (own || !same(style.ss_2, shared?.ss_2))) {
         add(`${directory}/anim.ini`, [themeKey, styleKey, "ss_2"], animationsIni(style.ss_2))
       }
       const sharedTiles = asObject(shared?.info)

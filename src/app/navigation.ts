@@ -17,10 +17,15 @@ import { sourceEditPath } from "./ssf-documents"
 import { isSxiSourcePath, showSxiSource } from "./sxi-documents"
 import { ensureSourcePathRendered, setSidebarView, updateSourceFileActions } from "./source-files"
 
+export function currentNavigationMode(): string {
+  if (appState.resourceConfigActive) return appState.resourceInspectorMode === "image" ? "resource" : appState.resourceInspectorMode
+  return appState.animationDesignMode === "all" ? "document" : appState.animationDesignMode
+}
+
 export function selectFile(
   path: string,
   preferredSidebarView = appState.sidebarView,
-  resourceMode: "document" | "image" | "style" | "sound" = "document",
+  resourceMode: "document" | "image" | "style" | "sound" | "motion" | "particle" = "document",
   preserveInspectorView = false,
 ): void {
   if (resourceMode !== "image") appState.bdaSliceReturn = undefined
@@ -35,7 +40,10 @@ export function selectFile(
   if (path !== appState.selectedPath) appState.sourceHistoryHighlight = undefined
   appState.styleReturnPath = ""
   appState.styleReturnCandidate = false
-  appState.resourceConfigActive = resourceMode !== "document"
+  // A document refresh (undo, source sync, tree rebuild) keeps the selected animation view.
+  if (resourceMode === "motion" || resourceMode === "particle") appState.animationDesignMode = resourceMode
+  else if (path !== appState.selectedPath) appState.animationDesignMode = "all"
+  appState.resourceConfigActive = resourceMode === "image" || resourceMode === "style" || resourceMode === "sound"
   appState.resourceInspectorMode = resourceMode === "style" ? "style" : resourceMode === "sound" ? "sound" : "image"
   const guideLabel = appState.resourceInspectorMode === "image" && appState.resourceConfigActive ? "切片网格" : "辅助线"
   for (const button of [toggleGuides, mobileToggleGuides]) {
@@ -112,7 +120,7 @@ export function selectFile(
     hideImageWorkspace()
     appState.selectedDocument = IniDocument.parse(appState.archive.getText(path))
     const sourcePath = sourceEditPath(path)
-    setSourceValue(sourcePath === path ? appState.selectedDocument.toString() : appState.archive.getText(sourcePath))
+    setSourceValue(appState.archive.getText(sourcePath))
     source.disabled = false
     sourceName.textContent = sourcePath
     const previewLayout =
@@ -170,13 +178,7 @@ export function selectFile(
   appState.selectedFileButton?.classList.remove("selected")
   if (preferredSidebarView === "source") ensureSourcePathRendered(path)
   const preferredContainer = files.querySelector(preferredSidebarView === "overview" ? ".sidebar-overview" : ".raw-files")
-  const navMode = appState.resourceInspectorMode === "style" && appState.resourceConfigActive
-    ? "style"
-    : appState.resourceInspectorMode === "sound" && appState.resourceConfigActive
-      ? "sound"
-    : appState.resourceConfigActive
-      ? "resource"
-      : "document"
+  const navMode = currentNavigationMode()
   appState.selectedFileButton = preferredContainer?.querySelector<HTMLElement>(`button[data-path="${CSS.escape(path)}"][data-nav-mode="${navMode}"]`)
     ?? preferredContainer?.querySelector<HTMLElement>(`button[data-path="${CSS.escape(path)}"]`)
     ?? files.querySelector<HTMLElement>(`button[data-path="${CSS.escape(path)}"]`)

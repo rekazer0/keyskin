@@ -132,10 +132,14 @@ export async function palmCandidateScene(board: PalmBoard, styles: PalmStyles, s
       return { back: base.back === undefined ? [] : await styles.back(base.back, pressed, rect), fore }
     })
   }))
+  if (!keys.length) {
+    const fore = await builtInToolbar(board, styles)
+    keys.push(await sceneKey("BUILTIN_TOOLBAR", { x: 0, y: 0, ...size }, async () => ({ back: [], fore })))
+  }
   const back = board.candidateBack
   return {
     bar: back === undefined ? [] : await styles.back(back, false, { x: 0, y: 0, ...size }),
-    icons: { background: keys.length ? [] : await builtInToolbar(board, styles), keys },
+    icons: { background: [], keys },
   }
 }
 
@@ -147,8 +151,8 @@ async function builtInToolbar(board: PalmBoard, styles: PalmStyles): Promise<Sce
   const size = board.candidateSize
   if (!size || typeof document === "undefined") return []
   const color = styles.resolveText(String(board.candidateTextStyles.words ?? ""), false)?.color ?? "#333333"
-  // Measured on that preview: icons a nineteenth of the bar's width.
-  const side = Math.min(size.width / 19, size.height)
+  // Match the built-in bar's icon-to-height ratio, including on landscape keyboards.
+  const side = Math.min(size.width / 14, size.height * 2 / 3)
   const slot = size.width / 7
   const icon = async (name: string, x: number): Promise<SceneLayer> => {
     // Rasterised at 3× so the canvas's device scale keeps the strokes sharp.

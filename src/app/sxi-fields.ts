@@ -88,8 +88,11 @@ export function editSxi(change: (skin: JsonObject) => void): void {
   refreshSxiDocument()
 }
 
-/** Sets `path` under every target model; `undefined` removes the field. Missing objects on the way are added. */
-function writePalm(targets: SxiPointer[], path: string[], next: Json | ((current: Json, index: number) => Json)): void {
+/**
+ * Sets `path` under every target model as one undo step; `undefined` removes the field. Missing
+ * objects on the way are added. Shared with the animation inspector, whose rows target one model.
+ */
+export function writeSxiValue(targets: SxiPointer[], path: string[], next: Json | ((current: Json, index: number) => Json)): void {
   editSxi((skin) => {
     for (const [index, target] of targets.entries()) {
       let model = asObject(sxiValue(skin, target))
@@ -134,7 +137,7 @@ function trackRow(row: HTMLElement, block: SxiBlock, path: string[], rowKey: unk
   row.addEventListener("inspector-reset", (event) => {
     event.preventDefault()
     const baseline = JSON.parse((event as CustomEvent<string>).detail) as Json[]
-    writePalm(block.targets, path, (current, index) => restore(current, baseline[index]))
+    writeSxiValue(block.targets, path, (current, index) => restore(current, baseline[index]))
   })
 }
 
@@ -166,9 +169,9 @@ function numberRow(block: SxiBlock, path: string[], label: string, values: Json[
   const input = palmInput(text === "inf" ? "text" : "number", text, mixed, label)
   input.addEventListener("change", () => {
     const entered = input.value.trim()
-    if (!entered) return writePalm(block.targets, path, undefined)
+    if (!entered) return writeSxiValue(block.targets, path, undefined)
     try {
-      writePalm(block.targets, path, numberValue(entered))
+      writeSxiValue(block.targets, path, numberValue(entered))
     } catch (error) {
       showError(error, label)
     }
@@ -181,7 +184,7 @@ function textRow(block: SxiBlock, path: string[], label: string, values: Json[])
   const row = palmRow("label", block, path, label, values)
   const { value, mixed } = sharedValue(values)
   const input = palmInput("text", typeof value === "string" ? value : "", mixed, label)
-  input.addEventListener("change", () => writePalm(block.targets, path, input.value === "" ? undefined : input.value))
+  input.addEventListener("change", () => writeSxiValue(block.targets, path, input.value === "" ? undefined : input.value))
   row.append(input)
   return row
 }
@@ -194,7 +197,7 @@ function switchRow(block: SxiBlock, path: string[], label: string, values: Json[
   input.setAttribute("aria-label", label)
   input.checked = values[0] === true
   input.disabled = !isEditing()
-  input.addEventListener("change", () => writePalm(block.targets, path, input.checked))
+  input.addEventListener("change", () => writeSxiValue(block.targets, path, input.checked))
   row.append(input)
   return row
 }
@@ -222,16 +225,16 @@ function palmColorRow(block: SxiBlock, path: string[], label: string, values: Js
   for (const input of [picker, alpha]) input.disabled = !isEditing()
   // Each target keeps the part of its own colour that was not edited.
   const own = (color: Json) => typeof color === "string" && PALM_COLOR.test(color) ? argb(color) : "FF000000"
-  picker.addEventListener("change", () => writePalm(block.targets, path, (color) => `${own(color).slice(0, 2)}${picker.value.slice(1).toUpperCase()}`))
+  picker.addEventListener("change", () => writeSxiValue(block.targets, path, (color) => `${own(color).slice(0, 2)}${picker.value.slice(1).toUpperCase()}`))
   alpha.addEventListener("change", () => {
     if (alpha.value === "" || !alpha.checkValidity()) return
     const hex = Math.round(Number(alpha.value) * 255).toString(16).padStart(2, "0").toUpperCase()
-    writePalm(block.targets, path, (color) => `${hex}${own(color).slice(2)}`)
+    writeSxiValue(block.targets, path, (color) => `${hex}${own(color).slice(2)}`)
   })
   text.addEventListener("change", () => {
     const entered = text.value.trim().replace(/^(?:0x|#)/i, "")
-    if (!entered) writePalm(block.targets, path, undefined)
-    else if (PALM_COLOR.test(entered)) writePalm(block.targets, path, argb(entered))
+    if (!entered) writeSxiValue(block.targets, path, undefined)
+    else if (PALM_COLOR.test(entered)) writeSxiValue(block.targets, path, argb(entered))
     else text.value = current
   })
   control.append(picker, text, alpha)
@@ -248,7 +251,7 @@ function listRow(block: SxiBlock, path: string[], label: string, values: Json[])
   const input = palmInput("text", list.join(spaced ? " " : ","), mixed, label)
   input.addEventListener("change", () => {
     const parts = input.value.split(spaced ? /\s+/ : ",").map((part) => part.trim()).filter(Boolean)
-    writePalm(block.targets, path, parts.map((part) => !spaced && Number.isFinite(Number(part)) ? Number(part) : part))
+    writeSxiValue(block.targets, path, parts.map((part) => !spaced && Number.isFinite(Number(part)) ? Number(part) : part))
   })
   row.append(input)
   return row
@@ -262,7 +265,7 @@ function partsRow(block: SxiBlock, path: string[], label: string, affixes: strin
   numberParts(row, label, affixes, parts.map((part, index) => mixedParts[index] || part === undefined ? "" : String(part)), (values) => {
     const index = edited
     edited = -1
-    if (index >= 0 && values[index] !== "") writePalm(block.targets, path, (current, model) => update(index, Number(values[index]), current, model))
+    if (index >= 0 && values[index] !== "") writeSxiValue(block.targets, path, (current, model) => update(index, Number(values[index]), current, model))
   }, affixes.length === 4 ? 4 : undefined)
   Array.from(row.querySelectorAll("input")).forEach((input, index) => {
     if (mixedParts[index]) input.placeholder = "混合"
@@ -347,7 +350,7 @@ function styleRow(block: SxiBlock, path: string[], label: string, reference: str
       showError(new Error("样式编号必须是非负整数"), label)
       return refreshSxiDocument()
     }
-    writePalm(block.targets, path, list.length ? listed ? list : list[0] : undefined)
+    writeSxiValue(block.targets, path, list.length ? listed ? list : list[0] : undefined)
   })
   row.append(input)
   decorateStyleReferenceInput(input, reference)
@@ -398,7 +401,7 @@ export function gestureRows(block: SxiBlock, path: string[], values: Json[]): HT
     const input = palmInput("text", value === undefined ? "" : String(value), mixed, `${label}动作`)
     if (icon && !mixed) input.placeholder = name === "HOLD" ? "未设置" : "+"
     input.setAttribute("list", options.id)
-    input.addEventListener("change", () => writePalm(block.targets, path, (current) => setGesture(current, button, input.value.trim())))
+    input.addEventListener("change", () => writeSxiValue(block.targets, path, (current) => setGesture(current, button, input.value.trim())))
     node.append(input)
     if (icon) {
       const meaning = element("small")

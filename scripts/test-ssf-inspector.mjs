@@ -58,6 +58,9 @@ try {
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   await page.locator('.sidebar-overview button[data-path="light/skin/port/py_26.ini"]').click()
+  assert.equal(await page.locator('.raw-files button[data-path^="light/skin/"]').count(), 0)
+  assert.equal(await page.locator('#source-name').textContent(), skin)
+  assert.equal(await page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).source.value), strFromU8(files[skin]))
   assert.ok(await fields.locator(':scope > .ui-section').count() > 3)
   assert.equal(await fields.locator('details, summary').count(), 0)
   // Raw property names filter rows; unmatched subsections disappear as a unit.

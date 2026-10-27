@@ -65,11 +65,12 @@ export function join(parts: Uint8Array[]): Uint8Array {
   return output
 }
 
-export function encodedField(number: number, wire: 0 | 2, payload: Uint8Array): Uint8Array {
+export function encodedField(number: number, wire: 0 | 1 | 2 | 5, payload: Uint8Array): Uint8Array {
   return join([encodeVarint(number * 8 + wire), ...(wire === 2 ? [encodeVarint(payload.length)] : []), payload])
 }
 
-export function replaceField(bytes: Uint8Array, number: number, wire: 0 | 2, payload: Uint8Array): Uint8Array {
+
+export function replaceField(bytes: Uint8Array, number: number, wire: 0 | 1 | 2 | 5, payload: Uint8Array): Uint8Array {
   const field = rawFields(bytes).find((item) => item.number === number)
   const replacement = encodedField(number, wire, payload)
   return field
@@ -354,5 +355,89 @@ export function updateBdaImageInnerRect(
     )
     const nextRect = replaceField(replaceField(originalRect, 1, 2, point), 2, 2, size)
     return replaceField(style, state, 2, replaceField(atom, 2, 2, nextRect))
+  })
+}
+
+function animationScalar(bytes: Uint8Array, field: number, value: string | number | boolean, fixed = false): Uint8Array {
+  const number = Number(value)
+  if (!Number.isFinite(number) || (fixed ? !Number.isFinite(Math.fround(number)) : !Number.isInteger(number) || number < 0 || number > 0xffffffff)) {
+    throw new Error("BDA 动画数值无效")
+  }
+  if (!fixed) return replaceField(bytes, field, 0, encodeVarint(number))
+  const payload = new Uint8Array(4)
+  new DataView(payload.buffer).setFloat32(0, number, true)
+  return replaceField(bytes, field, 5, payload)
+}
+
+export function updateBdaAnimationWidth(bytes: Uint8Array, width: number): Uint8Array {
+  if (width <= 0) throw new Error("BDA 设计宽度必须是正整数")
+  return animationScalar(bytes, 12, width)
+}
+
+export function updateBdaAnimationEffect(bytes: Uint8Array, effectID: string, property: string, value: string | number | boolean): Uint8Array {
+  const separator = effectID.indexOf(":")
+  const kind = effectID.slice(0, separator)
+  const key = effectID.slice(separator + 1)
+  const fieldNumber = ({ group: 3, alpha: 4, scale: 5, shift: 6, rotate: 7, frame: 8, image: 9, emitter: 10, lottie: 11, video: 13 } as Record<string, number>)[kind]
+  if (separator < 0 || fieldNumber === undefined) throw new Error(`BDA 动画效果不存在：${effectID}`)
+  // An effect is the map entry's value (field 2), never the entry containing its key.
+  return updateStringMapValue(bytes, fieldNumber, key, (effect) => {
+    const transform = ["alpha", "scale", "shift", "rotate"].includes(kind)
+    const media = ["frame", "lottie", "video"].includes(kind)
+    const fields: Record<string, number> = {
+      repeatCount: kind === "group" ? 2 : kind === "emitter" ? 3 : 1,
+      removeOnFinish: kind === "emitter" ? 5 : media ? 2 : 4,
+      ...(!media ? { repeatMode: kind === "group" ? 3 : kind === "emitter" ? 4 : 2 } : {}),
+      ...(transform ? { delay: 3, duration: 7, interpolation: 8 } : {}),
+      ...(kind === "group" ? { buildMode: 1, delay: 5 } : {}),
+      ...(kind === "emitter" ? { duration: 6, birthRate: 7, totalNumber: 8 } : {}),
+      ...(kind === "image" ? { loopForever: 6, startRepeatFrame: 7 } : {}),
+      ...(media ? { startRepeatFrame: 4 } : {}),
+    }
+    const field = fields[property]
+    if (field !== undefined) return animationScalar(effect, field, value, kind === "emitter" && property === "duration")
+    if (media && property === "resourceID") {
+      const resource = rawFields(effect).find((item) => item.number === 3)?.bytes ?? new Uint8Array()
+      return replaceField(effect, 3, 2, replaceField(resource, 2, 2, new TextEncoder().encode(String(value))))
+    }
+    if (transform) {
+      const scalar = kind === "alpha" || kind === "rotate"
+      const match = (scalar ? /^(from|to)(Min|Max)$/ : /^(from|to)(X|Y)(Min|Max)$/).exec(property)
+      if (match) {
+        const pixel = kind === "shift" && [9, 10].every((number) => rawFields(effect).some((item) => item.number === number))
+        const number = (match[1] === "from" ? 5 : 6) + (pixel ? 4 : 0)
+        const vector = rawFields(effect).find((item) => item.number === number)?.bytes ?? new Uint8Array()
+        const axis = match[2] === "X" ? 1 : 2
+        const range = scalar ? vector : rawFields(vector).find((item) => item.number === axis)?.bytes ?? new Uint8Array()
+        // A missing upper bound defaults to the lower bound; preserve it when changing min.
+        const min = rawFields(range).find((item) => item.number === 1)?.varint ?? 0
+        const bounded = rawFields(range).some((item) => item.number === 2) ? range : animationScalar(range, 2, min)
+        const next = animationScalar(bounded, match.at(-1) === "Min" ? 1 : 2, value)
+        return replaceField(effect, number, 2, scalar ? next : replaceField(vector, axis, 2, next))
+      }
+    }
+    if (kind === "emitter") {
+      const ranges = ["life", "rotation", "spin", "scale", "scaleSpeed", "alpha", "alphaSpeed", "velocity", "velocityDirection", "acceleration", "accelerationDirection"]
+      const match = /^(\w+)(Min|Max)$/.exec(property)
+      const index = match ? ranges.indexOf(match[1]) : -1
+      if (match && index >= 0) {
+        const number = index + 14
+        const range = rawFields(effect).find((item) => item.number === number)?.bytes ?? new Uint8Array()
+        const read = (field: number) => {
+          const item = rawFields(range).find((item) => item.number === field)
+          return item?.wire === 5 ? new DataView(range.buffer, range.byteOffset + item.payloadStart, 4).getFloat32(0, true) : 0
+        }
+        const min = match[2] === "Min" ? Number(value) : read(1)
+        const max = match[2] === "Max" ? Number(value) : read(1) + read(2)
+        const next = animationScalar(animationScalar(range, 1, min, true), 2, max - min, true)
+        return replaceField(effect, number, 2, next)
+      }
+      const edge = ["emitTop", "emitLeft", "emitBottom", "emitRight"].indexOf(property)
+      if (edge >= 0) {
+        const region = rawFields(effect).find((item) => item.number === 12)?.bytes ?? new Uint8Array()
+        return replaceField(effect, 12, 2, animationScalar(region, edge + 1, value, true))
+      }
+    }
+    throw new Error(`BDA 动画效果不支持：${property}`)
   })
 }

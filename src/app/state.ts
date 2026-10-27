@@ -121,6 +121,7 @@ export const appState = {
   previewReturnName: "py_9.ini",
   resourceConfigActive: false,
   resourceInspectorMode: "image" as "image" | "style" | "sound",
+  animationDesignMode: "all" as "all" | "motion" | "particle",
   selectedStyleID: "",
   selectedSoundID: "",
   selectedBdaStyleGroup: "imageStyles" as BdaAppearanceStyleGroup,

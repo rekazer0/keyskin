@@ -90,7 +90,11 @@ function applyFilter(): void {
   for (const section of headedSections(root)) {
     const sectionHit = !query || sectionName(section).toLowerCase().includes(query)
     const sectionRows = Array.from(section.querySelectorAll<HTMLElement>(ROW_SELECTOR))
-    const hits = new Set(sectionRows.filter((row) => sectionHit || rowText(row).includes(query)))
+    // 分组内的子标题也是分组名（手心动画按「时间与曲线」「液体外观」等再分），命中时整块保留。
+    const blockHits = Array.from(section.querySelectorAll<HTMLElement>(".ui-subsection"))
+      .filter((block) => block.querySelector(":scope > h4")?.textContent?.toLowerCase().includes(query))
+    const hits = new Set(sectionRows.filter((row) => sectionHit || rowText(row).includes(query)
+      || Boolean(query) && blockHits.some((block) => block.contains(row))))
     // 外层行没命中、里面的子行命中时，外层也要留着。
     for (const row of hits) {
       for (let outer = row.parentElement?.closest<HTMLElement>(ROW_SELECTOR); outer && section.contains(outer); outer = outer.parentElement?.closest<HTMLElement>(ROW_SELECTOR)) hits.add(outer)

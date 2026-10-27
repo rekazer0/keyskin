@@ -1,7 +1,8 @@
 import { drawVisualText, type Visual, type VisualResolver } from "./atlas.ts"
-import { bdaStyleID, type BdaAppearance, type BdaAnimationFrame, type BdaKey, type BdaStyleRef } from "./bda.ts"
+import { bdaStyleID, type BdaAppearance, type BdaKey, type BdaStyleRef } from "./bda.ts"
 import { bdaColorHex } from "./bda-resolver.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
+import { renderBdaAnimationEditor } from "./bda-animation-editor.ts"
 import { bdaLayoutStyleGroups, type BdaLayoutStyleItem } from "./bda-layout-styles.ts"
 import { element } from "./dom-element.ts"
 
@@ -41,8 +42,10 @@ type ConfigEditorOptions = {
   bytes: Uint8Array
   resolver?: VisualResolver
   editable: boolean
+  animationDesignMode?: "all" | "motion" | "particle"
   onDesignWidth: (value: number) => void
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
+  onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
 }
 
@@ -123,61 +126,6 @@ function paintVisual(canvas: HTMLCanvasElement, visual: Visual | undefined, boun
   if (visual) drawVisualText(context, visual, { x: 0, y: 0, width, height })
 }
 
-function bdaAnimationDurations(frames: BdaAnimationFrame[]): number[] {
-  return frames.map((frame) => Math.max(16, frame.duration ?? 100))
-}
-
-function animationPlayer(frames: BdaAnimationFrame[], resolver: VisualResolver | undefined): HTMLElement {
-  const player = element("section", "bda-animation-player")
-  const canvas = element("canvas")
-  const controls = element("div")
-  const play = element("button")
-  const status = element("output")
-  const durations = bdaAnimationDurations(frames)
-  let timer: number | undefined
-  let run = 0
-
-  const show = (index: number) => {
-    status.value = frames.length ? `第 ${index + 1} / ${frames.length} 帧` : "没有动画帧"
-    const resourceID = frames[index]?.resourceID
-    if (!resourceID) return drawVisual(canvas, undefined)
-    void resolver?.resolveResource?.(resourceID)
-      .then((visual) => { if (canvas.isConnected) drawVisual(canvas, visual) })
-      .catch(() => {})
-  }
-  const stop = (label: string) => {
-    run += 1
-    if (timer !== undefined) window.clearTimeout(timer)
-    timer = undefined
-    play.textContent = label
-  }
-  const start = () => {
-    if (!frames.length) return
-    if (timer !== undefined) return stop("播放预览")
-    const currentRun = ++run
-    let index = 0
-    play.textContent = "停止"
-    const advance = () => {
-      if (currentRun !== run || !player.isConnected) return
-      show(index)
-      timer = window.setTimeout(() => {
-        index += 1
-        if (index < frames.length) advance()
-        else stop("重新播放")
-      }, durations[index])
-    }
-    advance()
-  }
-
-  play.type = "button"
-  play.textContent = "播放预览"
-  play.disabled = !frames.length
-  play.addEventListener("click", start)
-  show(0)
-  controls.append(play, status)
-  player.append(canvas, controls)
-  return player
-}
 
 function stylePreview(
   ref: BdaStyleRef,
@@ -618,55 +566,16 @@ export function renderBdaConfigEditor(container: HTMLElement, options: ConfigEdi
     return
   }
   if (/animationConfig$/i.test(name)) {
-    const animation = decodeBdaAnimation(options.bytes)
-    const summary = inspectorSection(element("article", "bda-animation-card"), "动画")
-    const kinds = new Set([...animation.effects.values()].map((effect) => effect.kind))
-    summary.append(heading("动画配置", `${animation.targets.length} 个目标 · ${animation.effects.size} 个定义 · ${[...kinds].join(" / ") || "无动画"}`))
-    container.append(summary)
-    for (const sequence of animation.sequences.values()) {
-      const card = inspectorSection(element("article", "bda-animation-card"), sequence.name)
-      card.append(heading(sequence.name, `${sequence.frames.length} 帧`), animationPlayer(sequence.frames, options.resolver))
-      const strip = element("div", "bda-frame-strip")
-      sequence.frames.forEach((frame, index) => {
-        const item = element("article", "bda-frame-card")
-        item.append(heading(`第 ${index + 1} 帧`, frame.resourceID))
-        const row = element("div", "bda-frame-row")
-        const controls = element("div", "bda-frame-controls")
-        if (frame.resourceID !== undefined) {
-          const preview = element("button", "bda-frame-resource-button")
-          const canvas = element("canvas")
-          const caption = element("span")
-          preview.type = "button"
-          preview.disabled = !options.editable
-          preview.setAttribute("aria-label", `更换第 ${index + 1} 帧图片资源`)
-          caption.textContent = options.editable ? "点击更换图片" : "图片资源"
-          preview.append(canvas, caption)
-          preview.addEventListener("click", () => options.onPickAnimationResource(sequence.name, index))
-          void options.resolver?.resolveResource?.(frame.resourceID)
-            .then((visual) => { if (canvas.isConnected) drawVisual(canvas, visual) })
-            .catch(() => {})
-          row.append(preview)
-          controls.append(textField("图片资源", frame.resourceID, !options.editable, (value) => options.onAnimationFrame(sequence.name, index, "resourceID", value)))
-        }
-        if (frame.duration !== undefined) {
-          controls.append(rangeField("时长（毫秒）", frame.duration, 0, 2000, !options.editable, (value) => options.onAnimationFrame(sequence.name, index, "duration", value)))
-        }
-        row.append(controls)
-        item.append(row)
-        strip.append(item)
-      })
-      card.append(strip)
-      container.append(card)
-    }
-    for (const effect of animation.effects.values()) {
-      if (effect.kind === "image") continue
-      const card = inspectorSection(element("article", "bda-animation-card"), effect.key)
-      const resource = "resource" in effect ? effect.resource?.resourceID : effect.kind === "emitter"
-        ? effect.resources.map((item) => item.resourceID).join("、")
-        : effect.kind === "group" ? effect.items.map((item) => `${item.kind}:${item.key}`).join("、") : undefined
-      card.append(heading(effect.key, `${effect.kind}${resource ? ` · ${resource}` : ""}`))
-      container.append(card)
-    }
+    renderBdaAnimationEditor(container, {
+      animation: decodeBdaAnimation(options.bytes),
+      resolver: options.resolver,
+      editable: options.editable,
+      designMode: options.animationDesignMode,
+      onDesignWidth: options.onDesignWidth,
+      onAnimationFrame: options.onAnimationFrame,
+      onAnimationEffect: options.onAnimationEffect,
+      onPickAnimationResource: options.onPickAnimationResource,
+    })
     return
   }
   if (/^\d*soundConfig$/i.test(name)) {

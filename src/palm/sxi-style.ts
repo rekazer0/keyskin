@@ -74,7 +74,7 @@ const BASE_FIELDS: Array<[string, string, FieldKind]> = [
   ["clear", "REMOVE", "bool"],
 ]
 
-const ANIMATION_FIELDS: Record<string, Array<[string, string, FieldKind]>> = {
+export const ANIMATION_FIELDS: Record<string, Array<[string, string, FieldKind]>> = {
   a1: [
     ["style", "INTPOL", "number"],
     ["duration", "DURATION", "number"],
@@ -217,7 +217,7 @@ const ANIMATION_FIELDS: Record<string, Array<[string, string, FieldKind]>> = {
   ],
 }
 
-const FLOATER_FIELDS: Array<[string, string, FieldKind]> = [
+export const FLOATER_FIELDS: Array<[string, string, FieldKind]> = [
   ["file", "SOURCE_FILE", "string"],
   ["mode", "MODE", "number"],
   ["mass", "MASS", "number"],
