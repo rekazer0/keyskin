@@ -42,7 +42,6 @@ type ConfigEditorOptions = {
   bytes: Uint8Array
   resolver?: VisualResolver
   editable: boolean
-  animationDesignMode?: "all" | "motion" | "particle"
   onDesignWidth: (value: number) => void
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void

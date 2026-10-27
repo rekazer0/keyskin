@@ -1,7 +1,6 @@
 import { IniDocument } from "./ini.ts"
-import { animationEasing, bdaParticleEmitter, parseLegacyParticleEmitter, type LegacyParticleEmitter } from "./preview-animation.ts"
+import { animationEasing, parseLegacyParticleEmitter, type LegacyParticleEmitter } from "./preview-animation.ts"
 import { trackEnd, type Pair, type Track } from "./native-motion.ts"
-import type { BdaAnimation, BdaAnimationEffect } from "./bda.ts"
 
 export type PreviewClip = {
   tracks: Track[]
@@ -104,60 +103,5 @@ export function iniPreviewClip(document: IniDocument, section: string, ancestors
       track.pivot = [point[0] / 64, point[1] / 64]
     }
   } else clip.notes.push("此特殊动效暂不支持桌面播放，请在真机验证；参数仍可完整编辑")
-  return clip
-}
-
-export function bdaPreviewClip(animation: BdaAnimation, effect: BdaAnimationEffect, ancestors: string[] = []): PreviewClip {
-  const clip = empty()
-  const id = `${effect.kind}:${effect.key}`
-  if (ancestors.includes(id) || ancestors.length >= 16) {
-    clip.notes.push("组合引用循环或层级过深，已跳过")
-    return clip
-  }
-  if (effect.kind === "group") {
-    for (const item of effect.items) {
-      const child = animation.effects.get(`${item.kind}:${item.key}`)
-      if (child) merge(clip, bdaPreviewClip(animation, child, [...ancestors, id]), effect.buildMode === 1 ? clip.duration : 0)
-      else clip.notes.push(`子效果 ${item.key} 不存在`)
-    }
-    if (effect.delay) {
-      const delayed = empty()
-      merge(delayed, clip, effect.delay)
-      Object.assign(clip, delayed)
-    }
-    if (effect.repeatCount !== 1 || effect.repeatMode === 1) clip.notes.push("组合仅预览一次；组级重复与往返请在真机验证")
-  } else if (effect.kind === "emitter") {
-    const emitter = bdaParticleEmitter(effect)
-    clip.duration = Math.max(effect.duration * 1000, emitter.totalNumber / emitter.birthRate * 1000 + Math.max(...emitter.life))
-    clip.particles.push({ emitter, start: 0, duration: clip.duration })
-    clip.notes.push("粒子弹道预览；随机范围固定采样，真机效果可能不同")
-    clip.notes.push("仅预览一轮发射，重复与清理行为请在真机验证")
-  } else if (effect.kind === "alpha" || effect.kind === "rotate" || effect.kind === "scale" || effect.kind === "shift") {
-    const scale = effect.kind === "alpha" ? 1 / 255 : effect.kind === "scale" || effect.kind === "shift" && effect.relative ? 1 / 100 : 1
-    const midpoint = (range: Pair) => (range[0] + range[1]) / 2 * scale
-    const from: Pair = [midpoint(effect.from[0]), midpoint(effect.from[1])]
-    const to: Pair = [midpoint(effect.to[0]), midpoint(effect.to[1])]
-    const track: Track = {
-      kind: effect.kind === "alpha" ? "opacity" : effect.kind === "shift" ? "translate" : effect.kind,
-      start: effect.delay, duration: effect.duration, passes: passes(effect.repeatCount, effect.repeatMode === 1, clip),
-      alternate: effect.repeatMode === 1, hold: !effect.removeOnFinish, relative: effect.relative,
-      value: (progress) => {
-        const eased = animationEasing(effect.interpolation, progress)
-        return [from[0] + (to[0] - from[0]) * eased, from[1] + (to[1] - from[1]) * eased]
-      },
-    }
-    clip.tracks.push(track)
-    clip.duration = trackEnd(track)
-    clip.notes.push("示例按键 · 随机范围取中值")
-  } else if (effect.kind === "image" || effect.kind === "frame") {
-    const frames = effect.kind === "image" ? effect.sequence.frames : [{ resourceID: effect.resource?.resourceID, duration: 100 }]
-    const resources = frames.map((frame) => ({ id: frame.resourceID ?? "", duration: Math.max(1, frame.duration ?? 100) }))
-    const repeats = passes(effect.kind === "image" && effect.loopForever ? Infinity : effect.repeatCount, false, clip)
-    const duration = resources.reduce((sum, frame) => sum + frame.duration, 0)
-    clip.images.push({ resources, start: 0, duration, passes: repeats, offset: [0, 0] })
-    clip.duration = duration * repeats
-    if (effect.kind === "frame") clip.notes.push("资源帧仅显示首帧，动态媒体请在真机验证")
-    else if (effect.kind === "image" && (effect.repeatMode === 1 || effect.startRepeatFrame)) clip.notes.push("序列帧按正向完整片段预览；往返与起始重复帧请在真机验证")
-  } else clip.notes.push("此媒体格式暂不支持桌面播放；请在真机验证")
   return clip
 }

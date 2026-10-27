@@ -14,13 +14,12 @@ import { syncMobileInspectorGroups } from "./mobile-layout"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
 import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect } from "../bda-encode.ts"
 import { renderBdaMetadataEditor, renderBdaLayoutEditor, renderBdaConfigEditor } from "../bda-editor.ts"
-import { populateKeyInspector, updateBdaRefs, updateSelectedBdaPanelProperty, updateBdaAppearanceStyleRef } from "./key-inspector"
+import { updateBdaRefs, updateSelectedBdaPanelProperty, updateBdaAppearanceStyleRef } from "./key-inspector"
 import { openImageResourceChooser } from "./resource-inspector"
 import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
-import { populateBaiduAnimationInspector } from "./baidu-animation-inspector"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -328,11 +327,6 @@ export function populateDocumentInspector(): void {
     preview.setParticlePreview()
     return
   }
-  if (populateBaiduAnimationInspector(documentFields)) {
-    documentFieldsGroup.hidden = false
-    documentFieldsGroup.dataset.path = appState.selectedPath
-    return
-  }
   const specialized = new Set<string>()
   const toolbarSections = new Set(isToolbarPath(appState.selectedPath) ? effectiveToolbarSections() : [])
   if (isSkinInfoPath(appState.selectedPath)) {
@@ -625,7 +619,6 @@ export function selectedBdaSourceKeys(): string[] {
 }
 
 export function populateBdaConfigInspector(): void {
-  if (deferNumberInputRefresh(populateBdaConfigInspector, populateBdaConfigInspector)) return
   bdaConfigFields.replaceChildren()
   if (!appState.archive || appState.archive.format !== "bda") {
     bdaConfigFieldsGroup.hidden = true
@@ -678,23 +671,16 @@ export function populateBdaConfigInspector(): void {
   const bytes = appState.archive.isBdaConfig(appState.selectedPath) ? appState.archive.getBytes(appState.selectedPath) : undefined
   bdaConfigFieldsGroup.hidden = !bytes
   if (!bytes) return
-  const path = appState.selectedPath
-  const archive = appState.archive
-  const update = (edit: (before: Uint8Array) => Uint8Array) => {
-    if (!isEditing() || appState.archive !== archive || appState.selectedPath !== path) return
-    const before = archive.getBytes(path)
-    if (!before) return
-    try {
-      commitBytes(path, before, edit(before))
-      if (/appearanceConfig$/i.test(path)) refreshBdaLayout(appState.layoutPath)
-      refreshSelectedBdaSource()
-      refreshPreview()
-      populateKeyInspector()
-      updateDirty()
-    } catch (error) { showError(error, "修改 BDA 配置") }
+  const update = (after: Uint8Array) => {
+    commitBytes(appState.selectedPath, bytes, after)
+    if (/appearanceConfig$/i.test(appState.selectedPath)) refreshBdaLayout(appState.layoutPath)
+    refreshSelectedBdaSource()
+    refreshPreview()
+    populateBdaConfigInspector()
+    updateDirty()
   }
   renderBdaConfigEditor(bdaConfigFields, {
-    path,
+    path: appState.selectedPath,
     bytes,
     resolver: visualResolver(),
     editable: isEditing(),

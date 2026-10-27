@@ -186,6 +186,8 @@ export function renderFiles(): void {
 
   const entries: NavEntry[] = []
   const bdaConfigGroups = [
+    ["animation", "动画效果", "动画配置", "film"],
+    ["lightAnimation", "轻量动画", "轻量动画", "wand-sparkles"],
     ["sound", "按键音效", "声音配置", "volume-2"],
     ["switch", "开关配置", "开关配置", "toggle-right"],
     ["sticker", "贴纸配置", "贴纸配置", "sticker"],
@@ -345,15 +347,16 @@ export function renderFiles(): void {
     entries.push({ group: "资源配置", label: "样式配置", path: stylePath, className: "nav-style", icon: "palette", navMode: "style" })
     entries.push({ group: "资源配置", label: "按键音效", path: stylePath, className: "nav-resource", icon: "volume-2", navMode: "sound" })
   }
-  const legacyAnimationPath = appState.archive.format === "bda" ? undefined : legacyAnimationConfigPath()
-  if (legacyAnimationPath) {
+  // 手心 anim.ini 分动效/粒子两个入口；百度 anim.ini 用单一的动画检查器。
+  if (legacyAnimationPath && appState.archive.format === "sxi") {
+    entries.push(
+      { group: "资源配置", label: "动效设计", path: legacyAnimationPath, className: "nav-style", icon: "film", navMode: "motion" },
+      { group: "资源配置", label: "粒子设计", path: legacyAnimationPath, className: "nav-style", icon: "wand-sparkles", navMode: "particle" },
+    )
+  } else if (legacyAnimationPath) {
     entries.push({ group: "资源配置", label: "动画与动效", path: legacyAnimationPath, className: "nav-style", icon: "wand-sparkles" })
   }
-  if (legacyAnimationPath) addAnimationEntries(legacyAnimationPath)
   if (appState.archive.format === "bda") {
-    const animationPaths = (["animation", "lightAnimation"] as const).flatMap((kind) =>
-      bdaConfigPaths(appState.archive!, theme.value, orientation.value, kind))
-    for (const path of animationPaths) addAnimationEntries(path, animationPaths.length > 1 ? ` · ${path.split("/").pop()}` : "")
     for (const [kind, group, label, icon] of bdaConfigGroups) {
       const paths = bdaConfigPaths(appState.archive, theme.value, orientation.value, kind)
       for (const path of paths) entries.push({
@@ -394,7 +397,7 @@ export function renderFiles(): void {
     iconOwners.set(entry.icon, entry)
   }
   const groups = appState.archive.format === "bda"
-    ? ["皮肤信息", "资源配置", "面板样式", "按键音效", "开关配置", "贴纸配置", "场景配置"]
+    ? ["皮肤信息", "资源配置", "面板样式", "动画效果", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
     : ["皮肤", "资源配置", "键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局"]
   for (const group of groups) {
     // 预览生成的百度文件不属于搜狗原包，只有搜狗键盘布局作为入口显示。

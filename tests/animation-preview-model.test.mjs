@@ -1,10 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { IniDocument } from '../src/ini.ts'
-import { iniPreviewClip, bdaPreviewClip } from '../src/animation-preview-model.ts'
+import { iniPreviewClip } from '../src/animation-preview-model.ts'
 import { motionAt } from '../src/native-motion.ts'
-import { decodeBdaAnimation } from '../src/bda-decode.ts'
-import { bdaAnimationBytes } from './helpers/bda-animation-fixture.mjs'
 import { animationTable } from './helpers/sxi-animation-fixture.mjs'
 import { animationsIni } from '../src/palm/sxi-style.ts'
 
@@ -56,18 +54,4 @@ test('pixels, opacity, pivots and infinite clips retain their semantics', () => 
   doc.set('ANIM1', 'FROM', '255')
   doc.set('ANIM1', 'TO', '0')
   assert.equal(motionAt(iniPreviewClip(doc, 'ANIM1').tracks, 50, size).opacity, 0.5)
-})
-
-test('BDA previews actual transform midpoint, particles, images and unsupported media', () => {
-  const animation = decodeBdaAnimation(bdaAnimationBytes())
-  const clip = (id) => bdaPreviewClip(animation, animation.effects.get(id))
-  assert.equal(clip('alpha:fade').duration, 25 + 180 * 2 * 2)
-  const shift = clip('shift:move')
-  const atEnd = motionAt(shift.tracks, 25 + 180, size)
-  assert.deepEqual(atEnd.translation, [25, 45])
-  assert.equal(clip('emitter:snow').particles.length, 1)
-  assert.ok(Number.isFinite(clip('emitter:snow').duration))
-  assert.equal(clip('image:spark').images[0].resources.length, 2)
-  assert.equal(clip('group:press').tracks.length, 2)
-  assert.match(clip('video:movie').notes.join(' '), /暂不支持/)
 })

@@ -1,24 +1,11 @@
 // Real Playwright navigation: shared source files, independent animation views, undo/tree rebuilds.
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import { chromium } from "playwright"
 import { createServer } from "vite"
-import { unzipSync, zipSync, strToU8 } from "fflate"
-import { SkinArchive } from "../src/skin.ts"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
-import { bdaAnimationFixture } from "../tests/helpers/bda-animation-fixture.mjs"
 
-const files = unzipSync(readFileSync(new URL("../public/default-template.bds", import.meta.url)))
-files["res/anim.ini"] = strToU8([
-  "ANIM_NUM=2", "[ANIM1]", "CATEGORY=0", "TYPE=0", "DURATION=160", "FROM=255", "TO=0",
-  "[ANIM2]", "CATEGORY=3", "DURATION=600", "TOTAL_NUMBER=12", "BIRTH_RATE=4", "PARTICLE_IMAGE=1", "",
-].join("\r\n"))
-const bds = zipSync(files)
 const fixtures = [
   { format: "sxi", bytes: sxiAnimationFixture(), paths: ["light/skin/res/anim.ini"] },
-  { format: "bds", bytes: bds, paths: ["light/skin/res/anim.ini"] },
-  { format: "bdi", bytes: SkinArchive.open(bds, "bds").toBytes("bdi"), paths: ["light/skin/res/anim.ini"] },
-  { format: "bda", bytes: bdaAnimationFixture(), paths: ["light/skin/port/animationConfig", "light/skin/port/1animationConfig", "light/skin/port/lightAnimationConfig"] },
 ]
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41839, strictPort: false, host: "127.0.0.1", hmr: false } })
 await server.listen()

@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
-import { readFileSync } from 'node:fs'
-import { unzipSync, zipSync, strToU8 } from 'fflate'
 import { sxiAnimationFixture } from '../tests/helpers/sxi-animation-fixture.mjs'
-import { bdaAnimationFixture } from '../tests/helpers/bda-animation-fixture.mjs'
 
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { port: 41841, strictPort: false, host: '127.0.0.1', hmr: false } })
 await server.listen()
@@ -13,8 +10,6 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('dialog', (dialog) => dialog.accept())
-const files = unzipSync(readFileSync(new URL('../public/default-template.bds', import.meta.url)))
-files['res/anim.ini'] = strToU8('[ANIM1]\nCATEGORY=0\nTYPE=2\nDURATION=1500\nFROM_PX=0,0\nTO_PX=80,0\n[ANIM2]\nCATEGORY=3\nPARTICLE_IMAGE=1\nTOTAL_NUMBER=12\nBIRTH_RATE=4\nLIFE=1000,1000\n')
 const fingerprint = () => page.evaluate(async () => {
   const { appState } = await import('/src/app/state.ts')
   return { undo: appState.undoStack.length, revision: appState.archive.revision, dirty: [...appState.dirtyPaths ?? []] }
@@ -30,9 +25,7 @@ const sample = (player) => player.locator('canvas').evaluate((canvas) => canvas.
 
 try {
   for (const [format, bytes, selector, editableField] of [
-    ['bds', zipSync(files), '[data-animation-section="ANIM1"]', '持续时间'],
     ['sxi', sxiAnimationFixture(), '.sxi-animation-section', '持续时间'],
-    ['bda', bdaAnimationFixture(), '[data-animation-effect="alpha:fade"]', '持续时间'],
   ]) {
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
     await page.locator('#browser-open').setInputFiles({ name: `preview.${format}`, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
