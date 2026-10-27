@@ -20,9 +20,13 @@ export function solidColorStyle(css: IniDocument, style: string, slice: SliceRea
   const [x, y, width, height] = found.rect
   const offset = ((y + Math.floor(height / 2)) * image.width + x + Math.floor(width / 2)) * 4
   const color = [...image.data.subarray(offset, offset + 3)].map((value) => value.toString(16).padStart(2, "0")).join("").toUpperCase()
-  // STYLE_NUM is often stale in hand-made skins; go past every style that exists.
+  return appendStyle(css, [{ key: "NM_COLOR", value: color }, { key: "HL_COLOR", value: color }])
+}
+
+/** Adds a style numbered past every existing one: STYLE_NUM is often stale in hand-made skins. */
+export function appendStyle(css: IniDocument, entries: Array<{ key: string; value: string }>): string {
   const id = String(Math.max(Number(css.get("GLOBAL", "STYLE_NUM")) || 0, ...css.sections().map((name) => Number(name.match(/^STYLE(\d+)$/)?.[1] ?? 0))) + 1)
-  css.appendSection(`STYLE${id}`, [{ key: "NM_COLOR", value: color }, { key: "HL_COLOR", value: color }])
+  css.appendSection(`STYLE${id}`, entries)
   css.set("GLOBAL", "STYLE_NUM", id)
   return id
 }
