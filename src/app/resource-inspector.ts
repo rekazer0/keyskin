@@ -18,7 +18,13 @@ import { translatedConfigLabel } from "./document-inspector"
 import { refreshPreview } from "./preview-render"
 import { soundPathForFilename, soundResourcePaths, SOUND_ACCEPT, isSoundPath } from "../sounds.ts"
 import { symbolSpan } from "../icons"
-import { availableStyleIDs, styleKinds, styleKind, styleKindBadge } from "./style-picker"
+import { availableStyleIDs, styleKinds, styleKind, styleKindBadge, styleConfigDocument, styleSoundFile } from "./style-picker"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
+import { asObject } from "../palm/sxi-ini.ts"
+import { renderSxiGroup } from "./sxi-fields"
+import { palmStyle, palmStyleImage, palmStylePointer } from "./sxi-styles"
+import { palmTileSlices } from "../palm/palm-style-edit.ts"
+import { openPalmSkin } from "./sxi-documents"
 import { showImage, showError, showStatus } from "./file-operations"
 import { updateSourceHighlight } from "./source-panel"
 
@@ -70,9 +76,10 @@ export function editBdaStyleImageSlice(ref: BdaStyleRef, highlighted: boolean): 
 
 export function chooseStyleImageSlice(property: "NM_IMG" | "HL_IMG"): void {
   const target = styleSectionTarget(appState.selectedStyleID, property)
-  const path = styleConfigPath()
-  const stylesDocument = appState.archive?.isText(path) ? IniDocument.parse(appState.archive.getText(path)) : undefined
-  const current = stylesDocument?.get(`STYLE${appState.selectedStyleID}`, property)?.split(",")[0]?.trim()
+  const image = appState.archive?.format === "sxi"
+    ? palmStyleImage(appState.selectedStyleID, property === "HL_IMG")
+    : styleConfigDocument()?.get(`STYLE${appState.selectedStyleID}`, property)
+  const current = image?.split(",")[0]?.trim()
   const imagePath = resourceImagePaths(appState.archive?.names() ?? [], theme.value, orientation.value)
     .find((candidate) => candidate.split("/").pop()?.replace(/\.png$/i, "") === current)
   appState.stylePickerTarget = undefined
@@ -82,6 +89,8 @@ export function chooseStyleImageSlice(property: "NM_IMG" | "HL_IMG"): void {
 
 export function styleSectionTarget(styleID: string, property: "NM_IMG" | "HL_IMG"): StyleImagePickerTarget | undefined {
   const path = styleConfigPath()
+  // A Palm style's images are written in skin.json by its id (image-pickers.ts).
+  if (appState.archive?.format === "sxi") return palmStylePointer(styleID) ? { source: "BACK_STYLE", property, path, sections: [`STYLE${styleID}`] } : undefined
   if (!appState.archive?.isText(path)) return
   return {
     source: "BACK_STYLE",
@@ -151,11 +160,11 @@ export async function renderStyleResourceDetail(): Promise<void> {
     return
   }
   const path = styleConfigPath()
-  if (!appState.archive?.isText(path) || !appState.selectedStyleID) return
-  const stylesDocument = IniDocument.parse(appState.archive.getText(path))
+  const palm = appState.archive?.format === "sxi" ? palmStylePointer(appState.selectedStyleID) : undefined
+  if (!appState.archive?.isText(path) && !palm || !appState.selectedStyleID) return
   const section = `STYLE${appState.selectedStyleID}`
   resourceName.textContent = section
-  resourceMeta.textContent = path
+  resourceMeta.textContent = palm ? `${SXI_SKIN_PATH} · ${palm.join(".")}` : path
   imageResourceDetail.hidden = true
   styleResourceDetail.hidden = false
   styleDetailPreviews.hidden = false
@@ -164,6 +173,14 @@ export async function renderStyleResourceDetail(): Promise<void> {
     drawVisualPreview(retinaThumbnail(styleDetailNormal, 128, 88), [await resolver.resolve(appState.selectedStyleID, false).catch(() => undefined)], false)
     drawVisualPreview(retinaThumbnail(styleDetailHighlighted, 128, 88), [await resolver.resolve(appState.selectedStyleID, true).catch(() => undefined)], false)
   }
+  // A Palm style is shown as its skin.json model, the way the Palm inspector shows every part.
+  if (palm) {
+    const group = renderSxiGroup("样式", [{ targets: [palm] }], { code: palm.slice(1).join(".") })
+    styleDetailFields.replaceChildren(...group ? [group] : [])
+    return
+  }
+  const archive = appState.archive!
+  const stylesDocument = IniDocument.parse(archive.getText(path))
   styleDetailFields.replaceChildren()
   const existing = stylesDocument.entries(section)
   const common = ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "SHOW", "INFO"]
@@ -220,7 +237,7 @@ export async function renderStyleResourceDetail(): Promise<void> {
     } else if (key.endsWith("SOUND_PATH")) {
       const filename = stylesDocument.get(section, key) ?? ""
       const soundPaths = currentSoundEntries()
-      const soundPath = soundPathForFilename(appState.archive.names(), theme.value, orientation.value, filename)
+      const soundPath = soundPathForFilename(archive.names(), theme.value, orientation.value, filename)
       const card = document.createElement("span")
       card.className = "style-detail-sound-card"
       const playButton = document.createElement("button")
@@ -322,7 +339,8 @@ export async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeo
     await renderBdaStyleResourceGallery(galleryCanvas)
     return
   }
-  if (!appState.archive?.isText(styleConfigPath())) return
+  const stylesDocument = styleConfigDocument()
+  if (!appState.archive || !stylesDocument && appState.archive.format !== "sxi") return
   if (resourceCategory.dataset.styleCategories !== "bdi") {
     resourceCategory.replaceChildren(
       new Option("全部样式", "all"),
@@ -331,16 +349,16 @@ export async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeo
     resourceCategory.dataset.styleCategories = "bdi"
   }
   const query = resourceSearch.value.trim().toLowerCase()
-  const stylesDocument = IniDocument.parse(appState.archive.getText(styleConfigPath()))
   const category = resourceCategory.value
+  // What a style says about itself: INFO / SHOW in default.css, a Palm style's text (`s_1.text`).
+  const notes = (styleID: string) => stylesDocument
+    ? stylesDocument.entries(`STYLE${styleID}`).filter((entry) => entry.key === "INFO" || entry.key === "SHOW").map((entry) => entry.value)
+    : [String(asObject(palmStyle(styleID)?.s_1)?.text ?? "")]
   const styleIDs = availableStyleIDs().filter((styleID) => {
-    const entries = stylesDocument.entries(`STYLE${styleID}`)
-    const hasSound = Boolean(stylesDocument.get(`STYLE${styleID}`, "PRESS_SOUND_PATH")?.trim())
+    const hasSound = Boolean(styleSoundFile(styleID, stylesDocument))
     // 声音可与视觉属性共存，按是否带音效筛；其余按样式类型筛。
     if (category === "sound" ? !hasSound : category !== "all" && styleKind(styleID, stylesDocument) !== category) return false
-    return !query || styleID.includes(query) || entries.some((entry) =>
-      (entry.key === "INFO" || entry.key === "SHOW") && entry.value.toLowerCase().includes(query),
-    )
+    return !query || styleID.includes(query) || notes(styleID).some((note) => note.toLowerCase().includes(query))
   })
   resourceListTitle.textContent = "样式配置"
   resourceSearch.placeholder = "搜索样式"
@@ -361,7 +379,7 @@ export async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeo
     button.className = "resource-item style-resource-item"
     button.dataset.path = `STYLE${styleID}`
     button.title = `STYLE${styleID}`
-    const soundFilename = stylesDocument.get(`STYLE${styleID}`, "PRESS_SOUND_PATH")?.trim()
+    const soundFilename = styleSoundFile(styleID, stylesDocument)
     const soundPath = soundFilename
       ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, soundFilename)
       : undefined
@@ -572,11 +590,15 @@ export function renderResourceInspector(): void {
     const meta = document.createElement("small")
     const hasTil = appState.archive.isText(path.replace(/\.png$/i, ".til"))
     const bdaUsageCount = bdaUsageCounts.get(bdaImageResourceID(path)) ?? 0
+    // Sogou styles take whole images: only the size says anything about them. Palm slices are skin.json's tile maps.
+    const palmSlices = appState.archive.format === "sxi" ? palmTileSlices(openPalmSkin(), path).length : 0
     meta.textContent = appState.archive.format === "bda"
       ? bdaUsageCount ? `${bdaUsageCount} 个样式引用` : "未被外观引用"
+      : appState.archive.format === "ssf" ? ""
+      : appState.archive.format === "sxi" ? palmSlices ? `${palmSlices} 个切片` : "无切片"
       : hasTil ? "TIL" : "无 TIL"
     image.addEventListener("load", () => {
-      meta.textContent = `${image.naturalWidth} × ${image.naturalHeight} · ${meta.textContent}`
+      meta.textContent = [`${image.naturalWidth} × ${image.naturalHeight}`, meta.textContent].filter(Boolean).join(" · ")
     })
     button.append(image, name, meta)
     button.addEventListener("click", () => {

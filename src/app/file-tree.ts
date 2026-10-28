@@ -7,6 +7,10 @@ import { isSsfBoardPath, ssfThemeFolder, SSF_SOUNDS_PATH } from "./ssf-documents
 import { mobilePortraitQuery, sourceThumbnail } from "./canvas-interaction"
 import { setMobilePane } from "./mobile-layout"
 import { palmBoardLabel } from "../palm/palm-labels.ts"
+import { boardFileName } from "../palm/sxi-layout.ts"
+import { asObject } from "../palm/sxi-ini.ts"
+import { SXI_SKIN_PATH, sxiFragment, sxiFragmentPath } from "../palm/sxi-json.ts"
+import { openPalmSkin, palmBoardTypes, palmOrientation, palmTheme, PALM_SHARED_BOARD, sxiBoardAddress, sxiPointer } from "./sxi-documents"
 import { bdaAppearancePath, bdaConfigPaths } from "../bda.ts"
 import { decodeBdaAppearance } from "../bda-decode.ts"
 import { toolbarConfigPath, styleConfigPath, legacyAnimationConfigPath } from "./config-context"
@@ -26,7 +30,7 @@ export function addNavButton(
   navMode = className === "nav-resource" ? "resource" : "document",
   meta = path.split("/").pop() ?? path,
 ): void {
-  if (!appState.archive?.names().includes(path) && !isBdaVirtualTextPath(path) && !isBdaAppearancePartPath(path)) return
+  if (!appState.archive?.names().includes(path) && !isBdaVirtualTextPath(path) && !isBdaAppearancePartPath(path) && !isSsfBoardPath(path) && !sxiPointer(path)) return
   const button = document.createElement("button")
   button.className = `nav-item ${className}`
   button.dataset.path = path
@@ -120,6 +124,31 @@ export function layoutLabel(name: string): string {
   return iniTypes[name]?.label ?? name.replace(/\.ini$/i, "").replaceAll("_", " ")
 }
 
+/** A Palm theme and orientation's boards, candidate bars and bubbles, listed from skin.json like the Baidu layouts they correspond to. */
+function palmOverviewEntries(): NavEntry[] {
+  const layout = [palmTheme(), `${palmOrientation()}_layout`]
+  const skin = openPalmSkin()
+  const parts = (kind: string) => Object.keys(asObject(skin ? sxiFragment(skin, [...layout, kind]) : undefined) ?? {})
+  const rank = (type: string) => ({ "py_9.ini": 0, "py_26.ini": 1, "bh.ini": 3 } as Record<string, number>)[boardFileName(type)] ?? 2
+  const boards = [...parts("b").includes(PALM_SHARED_BOARD) ? [PALM_SHARED_BOARD] : [], ...palmBoardTypes()]
+    .sort((a, b) => rank(a) - rank(b) || boardFileName(a).localeCompare(boardFileName(b)))
+  const hints = parts("h")
+  return [
+    ...boards.map((type) => {
+      const info = iniTypes[boardFileName(type)] ?? { group: "扩展布局", className: "nav-layout", icon: "" }
+      return { ...info, label: palmBoardLabel(type), path: sxiBoardAddress(type) }
+    }),
+    ...parts("c").map((name, _, all) => ({ group: "键盘组件", label: all.length > 1 ? `候选栏与工具栏 · ${name}` : "候选栏与工具栏", path: sxiFragmentPath([...layout, "c", name]), className: "nav-component", icon: "panel-top" })),
+    ...hints.map((name) => {
+      // Like Baidu's hint1.pop / hint2.pop: `hint2` is the long-press bubble.
+      const long = name === "hint2"
+      const kind = long ? "长按气泡" : "按键气泡"
+      const label = hints.filter((other) => (other === "hint2") === long).length > 1 ? `${kind} · ${name}` : kind
+      return { group: "键盘组件", label, path: sxiFragmentPath([...layout, "h", name]), className: "nav-component", icon: long ? "message-square-more" : "message-square" }
+    }),
+  ]
+}
+
 export function renderFiles(): void {
   // 重建文件树前记住展开的文件夹，上传、删除、撤销后树不会整体收起。
   const openFolders = Array.from(files.querySelectorAll<HTMLDetailsElement>("details.raw-folder[open]"))
@@ -192,8 +221,8 @@ export function renderFiles(): void {
     ["sticker", "贴纸配置", "贴纸配置", "sticker"],
     ["scene", "场景配置", "场景配置", "layers"],
   ] as const
-  const overviewPath = appState.archive.names().includes(`${theme.value}/skin/Info.txt`)
-    ? `${theme.value}/skin/Info.txt`
+  const overviewPath = appState.archive.format === "sxi" ? sxiFragmentPath(["info"])
+    : appState.archive.names().includes(`${theme.value}/skin/Info.txt`) ? `${theme.value}/skin/Info.txt`
     : "Info.txt"
   entries.push({
     group: appState.archive.format === "bda" ? "皮肤信息" : "皮肤",
@@ -222,7 +251,7 @@ export function renderFiles(): void {
       { group: "资源配置", label: "音频资源", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "audio-lines", navMode: "sound" },
       { group: "资源配置", label: "运营配置", path: "op.ini", className: "nav-style", icon: "sparkles" },
     )
-    // 搜狗手机输入法的全部键盘（取自官方安装包），按它的叫法列出；画布用的是预览转换出的布局。
+    // 搜狗手机输入法的全部键盘（取自官方安装包），按它的叫法列出；键位来自官方骨架，外观来自 phoneSkin.ini。
     const boards = [
       ["键盘布局", "py_9", "拼音九键", "grid-3x3"],
       ["键盘布局", "py_26", "拼音全键", "keyboard"],
@@ -307,7 +336,7 @@ export function renderFiles(): void {
     })
   }
   const legacyAnimationPath = ["sxi", "bdi", "bds"].includes(appState.archive.format) ? legacyAnimationConfigPath() : undefined
-  const layoutPaths = appState.archive.format === "bda" || appState.archive.format === "ssf" ? [] : appState.archive.names()
+  const layoutPaths = ["bda", "ssf", "sxi"].includes(appState.archive.format) ? [] : appState.archive.names()
   for (const path of layoutPaths.sort()) {
     if (!path.startsWith(configPrefix) || path.slice(configPrefix.length).includes("/") || !/\.ini$/i.test(path)) continue
     const name = path.split("/").pop() ?? path
@@ -325,7 +354,8 @@ export function renderFiles(): void {
     })
   }
 
-  const candidatePath = appState.archive.format === "bda" ? undefined : toolbarConfigPath()
+  if (appState.archive.format === "sxi") entries.push(...palmOverviewEntries())
+  const candidatePath = appState.archive.format === "bda" || appState.archive.format === "sxi" ? undefined : toolbarConfigPath()
   if (candidatePath) {
     entries.push({ group: "键盘组件", label: "候选栏与工具栏", path: candidatePath, className: "nav-component", icon: "panel-top" })
   }
@@ -370,15 +400,8 @@ export function renderFiles(): void {
       })
     }
   }
-  // Overview metadata names the native source file, never a generated preview layout.
-  if (appState.archive.format === "sxi") {
-    for (const entry of entries) {
-      const pointer = appState.archive.derivedPointer(entry.path)
-      if (!pointer) continue
-      entry.meta = "skin.json"
-      if (pointer[2] === "b") entry.label = palmBoardLabel(pointer[3])
-    }
-  }
+  // A Palm entry's file is skin.json itself.
+  for (const entry of entries) if (sxiPointer(entry.path)) entry.meta = SXI_SKIN_PATH
   // 每个文件一个图标：未登记或与前面撞图标的文件按名字归族，取族里还没用过的图标。
   const iconFamilies: [RegExp, string[]][] = [
     [/num|数字/i, ["calculator", "binary", "hash", "sigma", "pi"]],
@@ -401,9 +424,8 @@ export function renderFiles(): void {
     ? ["皮肤信息", "资源配置", "面板样式", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
     : ["皮肤", "资源配置", "键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局"]
   for (const group of groups) {
-    // 预览生成的百度文件不属于搜狗原包，只有搜狗键盘布局作为入口显示。
-    const grouped = entries.filter((entry) => entry.group === group && (!appState.archive?.isOverlay(entry.path) || isSsfBoardPath(entry.path)) && (
-      appState.archive?.names().includes(entry.path) ||
+    const grouped = entries.filter((entry) => entry.group === group && (
+      appState.archive?.names().includes(entry.path) || isSsfBoardPath(entry.path) || Boolean(sxiPointer(entry.path)) ||
       appState.archive?.format === "bda" && (isBdaAppearancePartPath(entry.path) || Boolean(appState.bdaBase?.isText(bdaBasePath(entry.path))))
     ))
     if (group === "键盘布局" && appState.archive.format !== "ssf") {
@@ -459,7 +481,7 @@ export function renderFiles(): void {
   const sourceNameCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare
   type SourceNode = { folders: Map<string, SourceNode>; paths: string[] }
   const root: SourceNode = { folders: new Map(), paths: [] }
-  for (const path of appState.archive.names().filter((name) => !name.endsWith("/") && !appState.archive?.isOverlay(name) && !appState.archive?.derivedPointer(name))) {
+  for (const path of appState.archive.names().filter((name) => !name.endsWith("/"))) {
     const parts = path.split("/")
     let node = root
     for (const part of parts.slice(0, -1)) {

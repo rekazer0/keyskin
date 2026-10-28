@@ -8,9 +8,9 @@ import { IniDocument } from '../src/ini.ts'
 import { SkinArchive } from '../src/skin.ts'
 import { archiveCopyPaths } from '../src/panel-tools.ts'
 import { adaptSxiForIos26 } from '../src/palm/sxi-ios26.ts'
-import { applySxiCopies, scaleSxiPart, sxiCopyParts, sxiFilePointer, sxiFolderParts } from '../src/palm/sxi-panel-copy.ts'
+import { applySxiCopies, scaleSxiPart, sxiCopyParts, sxiFolderParts, sxiPartAddresses } from '../src/palm/sxi-panel-copy.ts'
 import { applySxiLayoutImage } from '../src/palm/sxi-layout-image.ts'
-import { encodeSkinJson, sxiDerivedFiles } from '../src/palm/sxi-projection.ts'
+import { encodeSkinJson } from '../src/palm/sxi-json.ts'
 import { adaptSsfSkinForIos26, isSsfSkinFile } from '../src/ssf/ssf-ios26.ts'
 import { scaleSsfLook } from '../src/ssf/ssf-resolutions.ts'
 import { listSsfResolutionInTheme, listSsfResolutionInTime, ssfResolutionFolder } from '../src/ssf/ssf-panel-copy.ts'
@@ -79,40 +79,35 @@ test('Sogou iOS 26: RootView almost transparent, every candidate view fully, key
   assert.equal(IniDocument.parse(adaptSsfSkinForIos26('[General]\nX=1\n')).get('CandidateView', 'BG_COLOR'), '0x00D0D4DB')
 })
 
-test('Palm panel copy: paths map to skin.json parts', () => {
-  assert.deepEqual(sxiFilePointer('light/skin/port/py_26.ini'), ['default', 'port_layout', 'b', 'full26Pinyin'])
-  assert.deepEqual(sxiFilePointer('dark/skin/land/py_26_copy.ini'), ['night', 'land_layout', 'b', 'py_26_copy'])
-  assert.deepEqual(sxiFilePointer('light/skin/port/cand1.cnd'), ['default', 'port_layout', 'c', 'cand1'])
-  assert.deepEqual(sxiFilePointer('light/skin/land/hint1.pop'), ['default', 'land_layout', 'h', 'hint1'])
-  assert.deepEqual(sxiFilePointer('dark/skin/res/default.css'), ['night', 's_info', 'ss_1'])
-  assert.deepEqual(sxiFilePointer('light/skin/port/res/anim.ini'), ['default', 's_port', 'ss_2'])
-  assert.deepEqual(sxiFilePointer('light/skin/res/btn.til'), ['default', 's_info', 'info', 'btn'])
-  assert.equal(sxiFilePointer('light/skin/port_copy/py_26.ini'), undefined)
-  assert.equal(sxiFilePointer('light/skin/res/other.css'), undefined)
+test('Palm panel copy: skin.json parts are listed by address, package folders stand for their parts', () => {
+  const addresses = sxiPartAddresses(templateText)
+  assert.ok(addresses.includes('skin.json/default/port_layout/b/full26Pinyin'))
+  assert.ok(addresses.includes('skin.json/night/land_layout/c/cand1'))
+  assert.ok(addresses.includes('skin.json/default/s_info/ss_1'))
+  assert.ok(addresses.some((path) => path.startsWith('skin.json/default/s_info/info/')))
+  assert.ok(!addresses.some((path) => /\.(?:ini|css|til|cnd|pop)$/.test(path)), 'no Baidu file names')
   assert.deepEqual(sxiFolderParts('light/skin/'), [['default']])
   assert.deepEqual(sxiFolderParts('dark/skin/land'), [['night', 'land_layout'], ['night', 's_land'], ['night', 'r_land']])
   assert.deepEqual(sxiFolderParts('light/skin/port/res/'), [['default', 's_port'], ['default', 'r_port']])
   assert.equal(sxiFolderParts('light/skin/res/logo/'), undefined)
 })
 
-test('Palm panel copy: folders copy whole parts, files their own part, unknown targets are refused', () => {
-  const names = template.names()
-  const derived = (path) => template.derivedPointer(path)
-  const folder = archiveCopyPaths(names, 'light/skin/port/', 'dark/skin/land/')
-  const parts = sxiCopyParts(folder, { source: 'light/skin/port/', target: 'dark/skin/land/' }, derived)
-  assert.deepEqual(parts.map(({ target }) => target.join('.')), ['night.land_layout', 'night.s_land', 'night.r_land'])
-  const copied = JSON.parse(applySxiCopies(templateText, parts))
+test('Palm panel copy: an address folder copies its whole part, an address its own part, other targets are refused', () => {
+  const names = [...template.names(), ...sxiPartAddresses(templateText)]
+  const folders = { source: 'skin.json/default/port_layout/', target: 'skin.json/night/land_layout/' }
+  const folder = archiveCopyPaths(names, folders.source, folders.target)
+  assert.deepEqual(sxiCopyParts(folder, folders), [{ source: ['default', 'port_layout'], target: ['night', 'land_layout'] }])
+  const copied = JSON.parse(applySxiCopies(templateText, sxiCopyParts(folder, folders)))
   assert.deepEqual(copied.night.land_layout, templateSkin.default.port_layout)
-  assert.equal(copied.night.s_land, undefined, 'no own style table to copy: the shared one applies')
-  const file = archiveCopyPaths(names, 'light/skin/port/py_9.ini', 'light/skin/land/py_9.ini')
-  assert.deepEqual(sxiCopyParts(file, undefined, derived), [{ source: ['default', 'port_layout', 'b', 't9Pinyin'], target: ['default', 'land_layout', 'b', 't9Pinyin'] }])
-  assert.throws(() => sxiCopyParts(archiveCopyPaths(names, 'light/skin/port/', 'light/skin/port_copy/'), { source: 'light/skin/port/', target: 'light/skin/port_copy/' }, derived), /没有保存/)
-  // A whole theme takes its resource lists along, flat and nested spellings alike.
-  const theme = JSON.parse(applySxiCopies(templateText, [{ source: ['default'], target: ['night'] }], 1, 1, { source: 'light/skin/', target: 'dark/skin/' }))
+  const board = archiveCopyPaths(names, 'skin.json/default/port_layout/b/t9Pinyin', 'skin.json/default/land_layout/b/t9Pinyin')
+  assert.deepEqual(sxiCopyParts(board, undefined), [{ source: ['default', 'port_layout', 'b', 't9Pinyin'], target: ['default', 'land_layout', 'b', 't9Pinyin'] }])
+  assert.throws(() => sxiCopyParts(archiveCopyPaths(names, 'skin.json/default/port_layout/b/t9Pinyin', 'light/skin/port/py_9.ini'), undefined), /不是 skin\.json 中的位置/)
+  // Image files have no part of their own.
+  assert.deepEqual(sxiCopyParts([{ source: 'light/skin/res/a.png', target: 'light/skin/res/b.png' }], undefined), [])
+  // A whole theme folder takes its resource lists along, flat and nested spellings alike.
+  const theme = JSON.parse(applySxiCopies(templateText, sxiCopyParts([], { source: 'light/skin/', target: 'dark/skin/' }), 1, 1, { source: 'light/skin/', target: 'dark/skin/' }))
   assert.deepEqual(theme.night.r_info, templateSkin.default.r_info.map((path) => path.replace(/^light\//, 'dark/')))
   assert.deepEqual(theme.night.port_layout, templateSkin.default.port_layout)
-  // The views of the copy are what the editor lists.
-  assert.ok(sxiDerivedFiles(theme).has('dark/skin/port/py_26.ini'))
 })
 
 test('Palm panel copy: scaling covers rects, sizes, positions and insets, nothing else', () => {

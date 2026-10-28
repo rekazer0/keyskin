@@ -1,4 +1,7 @@
-import { sxiSectionRanges } from "../palm/sxi-edit.ts"
+import { sxiFragmentRange, sxiSectionRanges } from "../palm/sxi-edit.ts"
+import { palmAnimationTableAddress, palmCandidateAddress, palmStyleTableAddress, sxiPointer } from "./sxi-documents"
+import { palmStylePointer } from "./sxi-styles"
+import { palmTilePointer } from "../palm/palm-style-edit.ts"
 import { appState } from "./state"
 import { skinState, sourceEditor, theme, orientation, colorPickers, colorAlphas, candidateArea, toolbarStrip, candidateBackgroundCanvas, candidateInputBackgroundCanvas, candidateInputBox, candidateInputText, toolbarCanvas } from "./dom"
 import { isListCell } from "../layout.ts"
@@ -18,7 +21,8 @@ import { drawInputBarBackground, setCanvasSize } from "../preview-draw.ts"
 import { bdaStyleID } from "../bda.ts"
 import { devicePreviewTransparent, inputBarInKeyboard } from "./preview-render"
 import { canvasEditable } from "./edit-history"
-import { isSsfBoardPath, ssfSelectedBindings } from "./ssf-documents"
+import { isSsfBoardPath, ssfSelectedBindings, ssfSkeleton } from "./ssf-documents"
+import type { SkinArchive } from "../skin.ts"
 
 export function selectedSourceSections(): string[] {
   if (appState.resourceConfigActive && appState.selectedResourcePath) {
@@ -61,43 +65,72 @@ export function effectiveKeyValue(section: string, key: string): string | undefi
   return appState.layoutDocument.get(effective, key) ?? appState.layoutDocument.get(section, key)
 }
 
+/**
+ * The skin.json text a Palm selection stands for: the selected keys of a board, else the part the
+ * selection addresses (a candidate bar, a bubble, the selected style or image's tile map).
+ */
+export function sxiSourceRanges(text: string): Array<readonly [number, number]> {
+  const pointer = sxiPointer(appState.selectedPath)
+  if (!pointer) return []
+  const part = !appState.resourceConfigActive ? pointer
+    : appState.resourceInspectorMode === "style" ? appState.selectedStyleID ? palmStylePointer(appState.selectedStyleID) : undefined
+    : appState.selectedResourcePath ? palmTilePointer(appState.selectedResourcePath) : undefined
+  const sections = appState.resourceConfigActive ? [] : selectedSourceSections()
+  if (sections.length) return sxiSectionRanges(text, sections, pointer)
+  // A whole board is the selection's context, not something to mark.
+  const range = part && part[2] !== "b" ? sxiFragmentRange(text, part) : undefined
+  return range ? [range] : []
+}
+
 export function scrollSelectedSource(): void {
+  if (sourceEditor.hidden) return
   const sections = selectedSourceSections()
   const bdaKeys = selectedBdaSourceKeys()
-  if (sourceEditor.hidden || !sections.length && !bdaKeys.length && !appState.sourceHistoryHighlight) return
+  const sxiRange = sxiSourceRanges(source.value)[0]
+  if (!sxiRange && !sections.length && !bdaKeys.length && !appState.sourceHistoryHighlight) return
   const bdaRange = jsonPropertyRanges(source.value, bdaKeys)[0]
   const iniRange = iniSectionRanges(source.value, sections)[0]
-  const sxiRange = appState.archive?.derivedPointer(appState.selectedPath) ? sxiSectionRanges(source.value, sections, appState.archive.derivedPointer(appState.selectedPath))[0] : undefined
   const range = sxiRange ?? bdaRange ?? iniRange ?? appState.sourceHistoryHighlight
   if (range) source.revealRange(range[0], range[1])
 }
 
 export function setSourceValue(text: string): void {
   if (deferNumberInputRefresh(setSourceValue, () => setSourceValue(text))) return
+  // Every part of a Palm skin is shown in its skin.json.
   const archive = appState.archive
-  const derivedSource = archive?.format === "sxi" && archive.derivedPointer(appState.selectedPath)
-  source.value = derivedSource ? archive.getText("skin.json") : text
+  source.value = sxiPointer(appState.selectedPath) ? archive!.getText("skin.json") : text
   updateSourceHighlight()
+}
+
+/**
+ * Where the canvas reads Baidu layouts, gen.ini and default.css from: the document itself, except a
+ * Sogou skin, which has none of them; its boards come from Sogou's official skeleton (ssf-preview.ts).
+ */
+export function layoutSource(): SkinArchive | undefined {
+  return appState.archive?.format === "ssf" ? ssfSkeleton() : appState.archive
 }
 
 export function currentConfigPath(name: string): string {
   return `${theme.value}/skin/${orientation.value}/${name}`
 }
 
+/** The style table: default.css, or a Palm skin's `ss_1` in skin.json. */
 export function styleConfigPath(): string {
+  if (appState.archive?.format === "sxi") return palmStyleTableAddress()
   const candidates = [
     `${theme.value}/skin/${orientation.value}/res/default.css`,
     `${theme.value}/skin/res/default.css`,
   ]
-  return candidates.find((path) => appState.archive?.names().includes(path)) ?? candidates[0]
+  return candidates.find((path) => layoutSource()?.names().includes(path)) ?? candidates[0]
 }
 
 export function legacyAnimationConfigPath(): string | undefined {
+  if (appState.archive?.format === "sxi") return palmAnimationTableAddress()
   return [
     `${theme.value}/skin/${orientation.value}/anim.ini`,
     `${theme.value}/skin/${orientation.value}/res/anim.ini`,
     `${theme.value}/skin/res/anim.ini`,
-  ].find((path) => appState.archive?.isText(path))
+  ].find((path) => layoutSource()?.isText(path))
 }
 
 export function genConfigPath(): string {
@@ -111,7 +144,8 @@ export function listGeometryDocument(): { document: IniDocument; path: string } 
     return { document: appState.layoutDocument, path: appState.layoutPath }
   }
   const path = genConfigPath()
-  if (appState.archive.isText(path)) return { document: IniDocument.parse(appState.archive.getText(path)), path }
+  const source = layoutSource()
+  if (source?.isText(path)) return { document: IniDocument.parse(source.getText(path)), path }
   return { document: appState.layoutDocument, path: appState.layoutPath }
 }
 
@@ -131,10 +165,10 @@ export function isConfigLayoutPath(path: string): boolean {
 /**
  * 普通皮肤（bds/bdi）里所有布局文档都自带属性面板。
  * BDA 容器内的同名遗留文件由 bda 解析器处理，不能按普通布局文档放行；
- * 搜狗皮肤的每个 INI 由 ssf-inspector.ts 按搜狗字段解析（预览用的转换布局除外）。
+ * 搜狗皮肤自己的每个 INI 由 ssf-inspector.ts 按搜狗字段解析（画布用的官方骨架不属于皮肤）。
  */
 export function showsLayoutProperties(path: string): boolean {
-  if (appState.archive?.format === "ssf") return /\.ini$/i.test(path) && !appState.archive.isOverlay(path)
+  if (appState.archive?.format === "ssf") return /\.ini$/i.test(path) && appState.archive.isText(path)
   return appState.archive?.format !== "bda" && isConfigLayoutPath(path)
 }
 
@@ -174,23 +208,25 @@ export function writeColorControl(control: HTMLInputElement, alphaValue: number)
 export function keyboardContext():
   | { gen: IniDocument; genPath: string; styles: IniDocument; stylePath: string }
   | undefined {
-  if (!appState.archive) return
+  const source = layoutSource()
+  if (!source) return
   const genPath = genConfigPath()
   const stylePath = styleConfigPath()
-  if (!appState.archive.isText(genPath) || !appState.archive.isText(stylePath)) return
+  if (!source.isText(genPath) || !source.isText(stylePath)) return
   return {
-    gen: IniDocument.parse(appState.archive.getText(genPath)),
+    gen: IniDocument.parse(source.getText(genPath)),
     genPath,
-    styles: IniDocument.parse(appState.archive.getText(stylePath)),
+    styles: IniDocument.parse(source.getText(stylePath)),
     stylePath,
   }
 }
 
 export function toolbarConfigPath(): string | undefined {
   if (!appState.archive) return
+  if (appState.archive.format === "sxi") return palmCandidateAddress()
   const directory = `${theme.value}/skin/${orientation.value}`
   const genPath = genConfigPath()
-  const source = appState.archive.format === "bda" ? appState.bdaBase : appState.archive
+  const source = appState.archive.format === "bda" ? appState.bdaBase : layoutSource()
   const sourceGenPath = appState.archive.format === "bda" ? bdaBasePath(genPath) : genPath
   const configured = source?.isText(sourceGenPath)
     ? IniDocument.parse(source.getText(sourceGenPath)).get("CAND", "LAYOUT_NAME")?.trim()

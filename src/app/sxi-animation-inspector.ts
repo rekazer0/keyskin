@@ -39,12 +39,13 @@ import {
 import { asObject, listText, numberText, numberValue, type Json, type JsonObject } from "../palm/sxi-ini.ts"
 import { toPlaySpeedRates } from "../palm/palm-ini.ts"
 import { compactPalmJSON } from "../palm/palm-json.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
 import { editSxi, sxiSkin, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
 import { rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
 
 type AnimationEntry = { id: string; kind: string; model: JsonObject; wrap: JsonObject }
@@ -57,8 +58,7 @@ const FAMILY_ICONS: Record<string, string> = {
 }
 
 function animationPointer(): SxiPointer | undefined {
-  const archive = appState.archive
-  const pointer = archive?.format === "sxi" ? archive.derivedPointer(appState.selectedPath) : undefined
+  const pointer = sxiPointer(appState.selectedPath)
   return pointer?.[2] === "ss_2" ? pointer : undefined
 }
 
@@ -75,8 +75,7 @@ function animationEntries(table: JsonObject): AnimationEntry[] {
 /* —— rows —— */
 function fieldRow(field: AnimationField, saved: Json, target: SxiPointer, path: string[], suffix: string, onReset?: (baseline: Json) => void, label = field.label): HTMLLabelElement {
   const row = element("label", "ui-field document-property-field")
-  // anim.ini key first (what skin authors see in the INI view), skin.json key second.
-  fieldCaption(row, [field.iniKey, field.key].filter(Boolean).join(" "), label)
+  fieldCaption(row, field.key, label)
   row.dataset.inspectorRowKey = JSON.stringify([target, path, suffix])
   // The shell compares this render's value with the first render's for the change mark, and hands
   // the first value back on reset (same contract as sxi-fields' rows).
@@ -346,9 +345,9 @@ function fieldRows(target: SxiPointer, field: AnimationField, value: Json): HTML
 
 
 /* —— segmented rows: a1 type and unit, combination method —— */
-function segmentedRow(label: string, options: Array<[value: string, text: string]>, current: string, onSelect: (value: string) => void, title?: string, identity = label, iniKey?: string, reset?: (baseline: Json) => void): HTMLElement {
+function segmentedRow(label: string, options: Array<[value: string, text: string]>, current: string, onSelect: (value: string) => void, title?: string, identity = label, key?: string, reset?: (baseline: Json) => void): HTMLElement {
   const row = element("div", "ui-field document-property-field")
-  if (iniKey) row.dataset.documentKey = iniKey
+  if (key) row.dataset.documentKey = key
   row.dataset.inspectorRowKey = JSON.stringify(["segmented", identity])
   row.dataset.inspectorValue = JSON.stringify([current])
   const caption = element("span", "document-field-caption")
@@ -399,7 +398,7 @@ function a1TypeRow(target: SxiPointer, entry: AnimationEntry): HTMLElement {
       if (!model) throw new Error("skin.json 中缺少动画")
       applyPatch(model, a1TypePatch(model, Number(next)))
     })
-  }, "透明度、旋转、位移或缩放；切换后起止值换成新属性的写法", `${modelPointer.join(".")}|变化属性`, "TYPE t", (baseline) => {
+  }, "透明度、旋转、位移或缩放；切换后起止值换成新属性的写法", `${modelPointer.join(".")}|变化属性`, "t", (baseline) => {
     // The type decides how from/to are spelled, so a reset puts both back together.
     const saved = asObject(baseline)
     if (!saved) return
@@ -429,7 +428,7 @@ function a1UnitRow(target: SxiPointer, entry: AnimationEntry): HTMLElement {
       const patch = a1UnitPatch(model, value === "pixels" ? "pixels" : "percent")
       if (patch) applyPatch(model, patch)
     })
-  }, "相对按键尺寸或按像素位移", `${target.join(".")}|位移单位`, "FROM_PX TO_PX")
+  }, "相对按键尺寸或按像素位移", `${target.join(".")}|位移单位`, "from_px to_px")
 }
 
 function applyPatch(model: JsonObject, patch: AnimationPatch): void {
@@ -499,7 +498,7 @@ function comboSection(pointer: SxiPointer, entry: AnimationEntry, table: JsonObj
       model.a_method = value
       model.method = { [value === "simultaneous" ? "simultaneous" : "sequential"]: {} }
     })
-  }, "顺序播放会按列表依次衔接", `${target.join(".")}|组合方式`, "BUILD_METHOD"))
+  }, "顺序播放会按列表依次衔接", `${target.join(".")}|组合方式`, "a_method"))
   section.append(comboList({
     editable: isEditing(),
     empty: "还没有子动画；顺序播放需要至少两个。",

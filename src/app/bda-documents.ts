@@ -11,7 +11,7 @@ import { decodeBdaAppearance } from "../bda-decode.ts"
 import { decodedBdaAppearancePart, decodedBdaEditorSource, decodedBdaSource, applyDecodedBdaAppearancePart, bdaDecodedSourceEditable, applyDecodedBdaSource } from "../bda-source.ts"
 import { bdaLayoutNames, BdaResolver } from "../bda-resolver.ts"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
-import { setSourceValue } from "./config-context"
+import { layoutSource, setSourceValue } from "./config-context"
 import { source } from "./canvas-interaction"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
@@ -181,7 +181,8 @@ export function isBdaLayoutPath(path: string): boolean {
 }
 
 export function textDocument(path: string): IniDocument | undefined {
-  if (appState.archive?.isText(path)) return IniDocument.parse(appState.archive.getText(path))
+  const source = layoutSource()
+  if (source?.isText(path)) return IniDocument.parse(source.getText(path))
   if (isBdaVirtualTextPath(path)) {
     let base = IniDocument.parse(appState.bdaBase!.getText(bdaBasePath(path)))
     const info = currentBdaAppearance()
@@ -211,19 +212,20 @@ export function refreshBdaLayout(path = preferredPath()): boolean {
   return true
 }
 
-/** Palm documents resolve styles from skin.json itself, not its projected default.css. */
+/** Palm documents resolve styles from skin.json itself; Sogou boards draw with the official skeleton's styles. */
 export function visualResolver(): VisualResolver | undefined {
-  if (!appState.archive) return
+  const source = layoutSource()
+  if (!appState.archive || !source) return
   const appearancePath = appState.archive.format === "bda" ? bdaAppearancePath(appState.archive, theme.value, orientation.value) : undefined
   const appearanceBytes = appearancePath ? appState.archive.getBytes(appearancePath) : undefined
   // 新建解析器会重新解析样式、重新解码全部 PNG；归档内容（revision）与主题方向不变时复用，保留位图缓存。
-  const key = [appState.archive, appState.archive.revision, appState.bdaBase, appState.bdaBase?.revision, appearanceBytes, theme.value, orientation.value]
+  const key = [appState.archive, appState.archive.revision, appState.bdaBase, appState.bdaBase?.revision, source, appearanceBytes, theme.value, orientation.value]
   if (appState.cachedVisualResolver?.key.every((value, index) => value === key[index])) return appState.cachedVisualResolver.resolver
   const resolver = appearanceBytes
     ? new BdaResolver(appState.archive, appearanceBytes, appState.bdaBase, theme.value, orientation.value)
     : appState.archive.format === "sxi"
       ? new PalmStyles(appState.archive, palmSkin(appState.archive), theme.value === "dark" ? "night" : "default", orientation.value === "land" ? "land" : "port")
-      : new AtlasResolver(appState.archive, theme.value, orientation.value)
+      : new AtlasResolver(source, theme.value, orientation.value)
   appState.cachedVisualResolver = { key, resolver }
   return resolver
 }

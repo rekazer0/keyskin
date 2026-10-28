@@ -300,7 +300,7 @@ export function populateSsfInspector(container: HTMLElement): boolean {
   if (isSsfBoardPath(path) && path === appState.layoutPath) {
     const bindings = ssfSelectedBindings()
     groups = bindings.length > 1 ? commonKeyGroups(bindings.map(({ binding }) => keyGroups(binding))) : bindings.length ? keyGroups(bindings[0].binding) : boardGroups()
-  } else if (appState.archive?.isText(path) && /\.ini$/i.test(path) && !appState.archive.isOverlay(path)) {
+  } else if (appState.archive?.isText(path) && /\.ini$/i.test(path)) {
     groups = fileGroups(path)
   }
   container.append(...groups.flatMap(({ label, blocks, code, key }) => {

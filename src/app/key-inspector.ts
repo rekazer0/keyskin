@@ -254,7 +254,8 @@ export function populateKeyInspector(): void {
   }
   const document = appState.layoutDocument
   const sections = appState.selectedKeySections
-  const hasSelection = Boolean(document && sections.length && appState.selectedPath === appState.layoutPath)
+  // A Palm board has no layout document; its keys are read from skin.json.
+  const hasSelection = Boolean((document || appState.archive?.format === "sxi") && sections.length && appState.selectedPath === appState.layoutPath)
   const skinSelected = isSkinInfoPath(appState.selectedPath)
   const toolbarSelected = isToolbarPath(appState.selectedPath)
   const toolbarSections = toolbarSelected ? effectiveToolbarSections() : []
@@ -365,7 +366,8 @@ export function populateKeyInspector(): void {
     field.disabled = !hasSelection || appState.archive?.format === "bda"
     // 手势格子没配置时显示「+」（十字布局，DESIGN.md §10）。
     field.placeholder = name === "HOLD" ? "未设置（默认弹字符）" : actionFieldNames.has(name) ? "+" : ""
-    if (!hasSelection || bdaSelected) {
+    // A Palm key's fields are skin.json's own (sxi-inspector.ts); these Baidu fields stay empty.
+    if (!hasSelection || bdaSelected || sxiSelected) {
       field.value = ""
       continue
     }
@@ -496,11 +498,8 @@ export function populateKeyInspector(): void {
   // Sogou skins carry no key geometry, so there is nothing to move, copy or delete.
   for (const button of [...keyModeButtons, ...keyActionButtons]) button.hidden = ssfSelected
   for (const button of keyModeButtons) button.disabled = !keyToolsAvailable
-  // Copying or deleting a Palm key adds or drops a skin.json key: not something its views can write.
   for (const button of keyActionButtons) {
-    button.disabled = !keyToolsAvailable || (
-      button.dataset.keyAction === "swap" && appState.selectedKeySections.length !== 2
-    ) || sxiSelected && button.dataset.keyAction !== "swap"
+    button.disabled = !keyToolsAvailable || button.dataset.keyAction === "swap" && appState.selectedKeySections.length !== 2
   }
   if (!keyToolsAvailable && appState.keyMode === "move") {
     appState.keyMode = "select"
@@ -508,7 +507,7 @@ export function populateKeyInspector(): void {
     preview.setEditTool(appState.keyMode)
   }
   for (const button of layoutActionButtons) {
-    button.disabled = bdaSelected || ssfSelected || listSelected || sxiSelected && button.dataset.layoutAction === "merge" || (
+    button.disabled = bdaSelected || ssfSelected || listSelected || (
       button.dataset.layoutAction === "swap" || button.dataset.layoutAction === "merge"
         ? appState.selectedKeySections.length !== 2
         : appState.selectedKeySections.length < 2

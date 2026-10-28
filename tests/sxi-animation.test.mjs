@@ -1,5 +1,5 @@
 // Unit tests for the pure `.sxi` animation model (`ss_2`). Only public exports of
-// `src/palm/sxi-animation.ts` are used; the projection tables in `sxi-style.ts` are the source of
+// `src/palm/sxi-animation.ts` are used; the field tables in `sxi-style.ts` are the source of
 // truth for the fields the inspector has to cover.
 
 import { test } from 'node:test'
@@ -26,12 +26,12 @@ import {
   floaterDefaults,
   floaterFields,
   floaterKeys,
-  projectedFieldKeys,
+  knownFieldKeys,
   newAnimation,
 } from '../src/palm/sxi-animation.ts'
 import { ANIMATION_FIELDS, FLOATER_FIELDS } from '../src/palm/sxi-style.ts'
 import { PALM_INT_MAX } from '../src/palm/palm-json.ts'
-import { sxiDerivedFiles } from '../src/palm/sxi-projection.ts'
+import { sxiBaiduFiles } from '../src/palm/sxi-to-baidu.ts'
 
 const wrap = (kind, model = {}) => ({ id: `ANIM_${kind}`, [kind]: model })
 
@@ -164,7 +164,6 @@ test('every family with a base ends its timing group with the shared playback fi
     assert.ok(timing, `${family.id} 缺少时间与循环分组`)
     const base = timing.fields.filter((field) => field.scope === 'base')
     assert.deepEqual(base.map((field) => field.key), ['count', 'back', 'clear'])
-    assert.deepEqual(base.map((field) => field.iniKey), ['REPEAT_CNT', 'REPEAT_MODE', 'REMOVE'])
     assert.deepEqual(timing.fields.slice(-3), base, `${family.id}: 重复、往返、移除排在时间字段之后`)
     assert.ok(groups.some((group) => group !== timing), `${family.id} 应有自己的属性分组`)
   }
@@ -182,7 +181,7 @@ test('a1 sections follow the inspector order: 变化 (type first), 时间与循�
   assert.deepEqual(animationGroups('a4', {}).map((group) => group.title), ['发射', '运动', '外观', '时间与循环'])
 })
 
-test('the projection fields of every family are all covered by animationGroups, and nothing else leaks', () => {
+test('the known fields of every family are all covered by animationGroups, and nothing else leaks', () => {
   // `count` is the base model's repeat count on every family; a4/a13 reuse the key inside the model.
   const BASE_INSPECTOR_KEYS = ['count', 'back', 'clear']
   // Keys the inspector writes through dedicated controls instead of ANIMATION_FIELDS.
@@ -192,18 +191,18 @@ test('the projection fields of every family are all covered by animationGroups, 
   assert.deepEqual(Object.keys(ANIMATION_FIELDS).sort(), [...families].sort(), 'ANIMATION_FIELDS 应与 a1..a14 的 8 个有 base 的族一一对应')
 
   for (const kind of families) {
-    const projected = projectedFieldKeys(kind)
-    assert.deepEqual(projected, ANIMATION_FIELDS[kind].map(([key]) => key), `${kind}: projectedFieldKeys 应取自 ANIMATION_FIELDS`)
-    assert.ok(projected.length > 0)
+    const known = knownFieldKeys(kind)
+    assert.deepEqual(known, ANIMATION_FIELDS[kind].map(([key]) => key), `${kind}: knownFieldKeys 应取自 ANIMATION_FIELDS`)
+    assert.ok(known.length > 0)
 
     const models = Array.isArray(FAMILY_MODELS[kind]) ? FAMILY_MODELS[kind] : [FAMILY_MODELS[kind]]
     const covered = new Set(models.flatMap((model) => animationFieldKeys(kind, model)))
-    const missing = projected.filter((key) => !covered.has(key))
-    assert.deepEqual(missing, [], `${kind}: 这些投影字段在检查器里没有对应行`)
+    const missing = known.filter((key) => !covered.has(key))
+    assert.deepEqual(missing, [], `${kind}: 这些字段在检查器里没有对应行`)
 
-    const allowed = new Set([...projected, ...BASE_INSPECTOR_KEYS, ...(SPECIAL_INSPECTOR_KEYS[kind] ?? [])])
+    const allowed = new Set([...known, ...BASE_INSPECTOR_KEYS, ...(SPECIAL_INSPECTOR_KEYS[kind] ?? [])])
     const extra = [...covered].filter((key) => !allowed.has(key))
-    assert.deepEqual(extra, [], `${kind}: 检查器暴露了投影不会写入的字段`)
+    assert.deepEqual(extra, [], `${kind}: 检查器暴露了手心不认识的字段`)
   }
 
   // a1's three spellings must stay disjoint, so switching type/unit never leaves a mixed wrap.
@@ -232,16 +231,16 @@ test('the projection fields of every family are all covered by animationGroups, 
 })
 
 test('floater fields and defaults cover FLOATER_FIELDS completely', () => {
-  const projected = FLOATER_FIELDS.map(([key]) => key)
-  assert.deepEqual(floaterKeys(), projected)
+  const known = FLOATER_FIELDS.map(([key]) => key)
+  assert.deepEqual(floaterKeys(), known)
   const fields = floaterFields()
-  assert.deepEqual(fields.map((field) => field.key), projected, 'floaterFields 必须逐项覆盖 FLOATER_FIELDS')
+  assert.deepEqual(fields.map((field) => field.key), known, 'floaterFields 必须逐项覆盖 FLOATER_FIELDS')
   const kinds = { string: 'text', number: 'number', bool: 'bool', point: 'point' }
   for (const [index, [key, , kind]] of FLOATER_FIELDS.entries()) {
     assert.equal(fields[index].kind, key === 'mode' ? 'select' : kinds[kind], `${key} 的控件类型`)
   }
   const defaults = floaterDefaults()
-  assert.deepEqual(Object.keys(defaults).sort(), projected.filter((key) => key !== 'ride').sort())
+  assert.deepEqual(Object.keys(defaults).sort(), known.filter((key) => key !== 'ride').sort())
   assert.equal(defaults.ride, undefined, '未配置搭载对象不能默认为物体 0')
   for (const [key, , kind] of FLOATER_FIELDS) {
     const value = defaults[key]
@@ -555,9 +554,7 @@ test('new animations use native defaults for every supported family', () => {
   assert.throws(() => newAnimation('unknown', '1'))
 })
 
-test('an empty animation table keeps its visual-editor entry', () => {
-  const files = sxiDerivedFiles({ default: { s_info: { ss_2: {} } } })
-  const entry = files.get('light/skin/res/anim.ini')
-  assert.deepEqual(entry.pointer, ['default', 's_info', 'ss_2'])
-  assert.equal(entry.text.trim(), '')
+test('an empty animation table is still exported as an anim.ini', () => {
+  const files = sxiBaiduFiles({ default: { s_info: { ss_2: {} } } })
+  assert.equal(files.get('light/skin/res/anim.ini').trim(), '')
 })

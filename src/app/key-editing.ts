@@ -8,9 +8,22 @@ import { updateSourceHighlight, updateInspectorView } from "./source-panel"
 import { refreshPreview, syncCandidateSelection } from "./preview-render"
 import { type LayoutRect, isListCell, listCellRect, applyLayoutAction as transformLayout, type LayoutAction, mergeLayoutRects, setExactGap, moveRects } from "../layout.ts"
 import { mixedCoordinateDelta } from "../mixed-input.ts"
+import { copyPalmKeys, deletePalmKeys, mergePalmKeys, palmKeyRects, writePalmKeyRects } from "./sxi-keys"
+
+/** A Palm board has no layout document: its keys are edited in skin.json (sxi-keys.ts). */
+const palmBoard = () => appState.archive?.format === "sxi"
+
+/** After a Palm key edit: the canvas shows `sections` selected. */
+function selectPalmKeys(sections: string[]): void {
+  appState.selectedKeySections = sections
+  preview.setSelected(sections)
+  populateKeyInspector()
+  updateSourceHighlight()
+}
 
 export function copySelectedKeys(): void {
   if (!canvasEditable()) return
+  if (palmBoard()) return selectPalmKeys(copyPalmKeys(appState.selectedKeySections))
   if (!appState.archive || !appState.layoutDocument || !appState.selectedKeySections.length) return
   const before = appState.layoutDocument.toString()
   const occupied = new Set(appState.layoutDocument.sections())
@@ -51,6 +64,10 @@ export function copySelectedKeys(): void {
 
 export function deleteSelectedKeys(): void {
   if (!canvasEditable()) return
+  if (palmBoard()) {
+    deletePalmKeys(appState.selectedKeySections)
+    return selectPalmKeys([])
+  }
   if (!appState.archive || !appState.layoutDocument || !appState.selectedKeySections.length) return
   const before = appState.layoutDocument.toString()
   if (!appState.layoutDocument.removeSections(preview.expandSections(appState.selectedKeySections))) return
@@ -84,6 +101,7 @@ export function selectParentObject(): void {
 }
 
 export function selectedRects(): LayoutRect[] {
+  if (palmBoard()) return palmKeyRects(appState.selectedKeySections)
   if (!appState.layoutDocument) return []
   const document = appState.layoutDocument
   return appState.selectedKeySections.flatMap((section) => {
@@ -100,7 +118,7 @@ export function selectedRects(): LayoutRect[] {
 
 export function applyLayoutAction(action: string): void {
   if (!canvasEditable()) return
-  if (!appState.archive || !appState.layoutDocument) return
+  if (!appState.archive || !appState.layoutDocument && !palmBoard()) return
   if (action === "merge") {
     mergeSelectedKeys()
     return
@@ -108,6 +126,8 @@ export function applyLayoutAction(action: string): void {
   const real = selectedRects().filter((rect) => !isListCell(rect.section))
   const rects = transformLayout(real, action as LayoutAction)
   if (rects.length < 2) return
+  if (palmBoard()) return writePalmKeyRects(rects)
+  if (!appState.layoutDocument) return
   const before = appState.layoutDocument.toString()
   for (const rect of rects) {
     appState.layoutDocument.set(
@@ -126,9 +146,11 @@ export function applyLayoutAction(action: string): void {
 
 export function mergeSelectedKeys(): void {
   if (!canvasEditable()) return
-  if (!appState.archive || !appState.layoutDocument) return
+  if (!appState.archive || !appState.layoutDocument && !palmBoard()) return
   const rects = selectedRects().filter((rect) => !isListCell(rect.section))
   if (rects.length !== 2) return
+  if (palmBoard()) return selectPalmKeys([mergePalmKeys(rects[0], rects[1])])
+  if (!appState.layoutDocument) return
   const before = appState.layoutDocument.toString()
   const merged = mergeLayoutRects(rects[0], rects[1])
   appState.layoutDocument.set(merged.section, "VIEW_RECT", [merged.x, merged.y, merged.width, merged.height].map(Math.round).join(","))
@@ -147,7 +169,7 @@ export function mergeSelectedKeys(): void {
 
 export function applyExactGap(field: HTMLInputElement): void {
   if (!canvasEditable()) return
-  if (!appState.archive || !appState.layoutDocument) return
+  if (!appState.archive || !appState.layoutDocument && !palmBoard()) return
   const gap = Number(field.value)
   if (!Number.isFinite(gap)) return
   const rects = setExactGap(
@@ -156,6 +178,8 @@ export function applyExactGap(field: HTMLInputElement): void {
     gap,
   )
   if (rects.length < 2) return
+  if (palmBoard()) return writePalmKeyRects(rects)
+  if (!appState.layoutDocument) return
   const before = appState.layoutDocument.toString()
   for (const rect of rects) {
     appState.layoutDocument.set(
@@ -179,6 +203,11 @@ export function moveSelectedKeys(
   coalesce = false,
 ): void {
   if (!canvasEditable()) return
+  if (palmBoard()) {
+    const rects = moveRects(palmKeyRects(sections), deltaX, deltaY)
+    if (rects.length) writePalmKeyRects(rects, coalesce)
+    return
+  }
   if (!appState.archive || !appState.layoutDocument) return
   const rects = moveRects(sections.flatMap((section) => {
     const values = appState.layoutDocument?.get(section, "VIEW_RECT")?.split(",").map(Number)

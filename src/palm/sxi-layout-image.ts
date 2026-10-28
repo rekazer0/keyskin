@@ -6,7 +6,7 @@
 import type { LayoutImagePlan } from "../layout-image.ts"
 import type { TileRect } from "../tiles.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "./sxi-ini.ts"
-import { encodeSkinJson, parseSkinJson } from "./sxi-projection.ts"
+import { encodeSkinJson, parseSkinJson } from "./sxi-json.ts"
 
 const STYLE_TABLES = ["s_info", "s_port", "s_land"]
 

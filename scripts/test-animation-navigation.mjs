@@ -10,9 +10,10 @@ import { convertBdaArchive } from "../src/bda-convert.ts"
 const bda = bdaAnimatedSkinBytes()
 const bds = await convertBdaArchive(SkinArchive.open(bda, "bda"), bdsBaseArchive()).archive.platformBytesAsync("bds")
 const fixtures = [
-  { format: "sxi", bytes: sxiAnimationFixture(), paths: ["light/skin/res/anim.ini"] },
-  { format: "bds", bytes: bds, paths: ["light/skin/port/res/anim.ini"] },
-  { format: "bda", bytes: bda, paths: ["light/skin/port/animationConfig"] },
+  // A Palm skin's animation table is a part of skin.json, addressed by its pointer.
+  { format: "sxi", bytes: sxiAnimationFixture(), paths: ["skin.json/default/s_info/ss_2"], files: ["skin.json"] },
+  { format: "bds", bytes: bds, paths: ["light/skin/port/res/anim.ini"], files: ["light/skin/port/res/anim.ini"] },
+  { format: "bda", bytes: bda, paths: ["light/skin/port/animationConfig"], files: ["light/skin/port/animationConfig"] },
 ]
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41839, strictPort: false, host: "127.0.0.1", hmr: false } })
 await server.listen()
@@ -63,7 +64,7 @@ try {
     const archiveBefore = await page.evaluate(async (paths) => {
       const { appState } = await import("/src/app/state.ts")
       return { names: appState.archive.names(), bytes: paths.map((path) => Array.from(appState.archive.getBytes(path))) }
-    }, fixture.paths)
+    }, fixture.files)
 
     for (const path of fixture.paths) {
       assert.equal(await page.locator(`.sidebar-overview button[data-path="${path}"]`).count(), 2)
@@ -86,7 +87,7 @@ try {
     assert.deepEqual(await page.evaluate(async (paths) => {
       const { appState } = await import("/src/app/state.ts")
       return { names: appState.archive.names(), bytes: paths.map((path) => Array.from(appState.archive.getBytes(path))) }
-    }, fixture.paths), archiveBefore, "navigation never rewrites or relocates source data")
+    }, fixture.files), archiveBefore, "navigation never rewrites or relocates source data")
 
     const path = fixture.paths[0]
     for (const mode of ["motion", "particle"]) {

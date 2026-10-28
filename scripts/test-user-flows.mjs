@@ -720,7 +720,7 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   assert.equal(await page.locator("#document-name").textContent(), "搜狗测试.ssf")
   // The source tree lists the Sogou files only; the converted Baidu tree behind the preview stays hidden.
   assert.equal(await page.locator('.raw-files [data-path^="light/"]').count(), 0)
-  // Overview entries are SSF files, plus Sogou's keyboards drawn from the preview overlay.
+  // Overview entries are SSF files, plus Sogou's keyboards drawn from the official skeleton.
   assert.equal(await page.locator('[data-sidebar-view="overview"]').isDisabled(), false)
   await page.locator('[data-sidebar-view="overview"]').click()
   const { unzipSync: unzipSsf } = await import("fflate")

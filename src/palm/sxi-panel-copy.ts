@@ -1,33 +1,25 @@
-// 面板复制 for `.sxi`: the layouts, styles and tile maps the editor lists as files are views of
-// `skin.json`, so copying one copies the JSON part it was projected from to the part the target path
-// stands for. A theme, orientation or `res` folder copies its whole part, including what the
-// projection does not show (resource lists, other style tables). Images are ordinary files.
+// 面板复制 for `.sxi`: a part of skin.json is copied by its address ("skin.json/default/port_layout/b/
+// full26Pinyin"; an address folder such as "skin.json/default/port_layout/" is the whole part). A theme or
+// orientation folder of the package (`light/skin/`, `light/skin/port/`) is that theme or orientation:
+// copying it copies its files and the skin.json parts it stands for. Images are ordinary files.
 
-import { boardTypeFromIniFileName } from "./palm-board-types.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
-import { encodeSkinJson, parseSkinJson, sxiFragment } from "./sxi-projection.ts"
+import { encodeSkinJson, parseSkinJson, sxiAddressPointer, sxiFragment, sxiFragmentPath } from "./sxi-json.ts"
 
 const THEME_KEYS: Record<string, string> = { light: "default", dark: "night" }
-const PART_KINDS: Record<string, string> = { ini: "b", cnd: "c", pop: "h" }
 const RECT_FIELDS = new Set(["rect", "hit_rect", "rect1", "rect2"])
 // Baidu's SIZE, POS, CELL_SIZE, FIX_SIZE; `p` / `s` are the offset table's and icons' POS / SIZE.
 const POINT_FIELDS = new Set(["size", "pos", "c_size", "f_size", "p", "s"])
 
-/** The skin.json part a file of the `.sxi` tree is saved in; undefined for paths Palm has no place for. */
-export function sxiFilePointer(path: string): string[] | undefined {
-  const part = /^(light|dark)\/skin\/(port|land)\/([^/]+)\.(ini|cnd|pop)$/.exec(path)
-  if (part) {
-    const [, theme, orientation, name, extension] = part
-    const key = extension === "ini" ? boardTypeFromIniFileName(`${name}.ini`) ?? name : name
-    return [THEME_KEYS[theme], `${orientation}_layout`, PART_KINDS[extension], key]
-  }
-  const style = /^(light|dark)\/skin\/(?:(port|land)\/)?res\/([^/]+)\.(css|ini|til)$/.exec(path)
-  if (!style) return
-  const [, theme, orientation, name, extension] = style
-  const table = [THEME_KEYS[theme], orientation ? `s_${orientation}` : "s_info"]
-  if (extension === "til") return [...table, "info", name]
-  if (`${name}.${extension}` === "default.css") return [...table, "ss_1"]
-  if (`${name}.${extension}` === "anim.ini") return [...table, "ss_2"]
+/** The parts of skin.json the copy dialog lists: boards, candidate bars, bubbles, style and animation tables, tile maps. */
+export function sxiPartAddresses(text: string): string[] {
+  const skin = parseSkinJson(text)
+  const keys = (pointer: string[]) => Object.keys(asObject(sxiFragment(skin, pointer)) ?? {})
+  return keys([]).flatMap((theme) => keys([theme]).flatMap((part) => {
+    if (/_layout$/.test(part)) return keys([theme, part]).flatMap((kind) => keys([theme, part, kind]).map((name) => [theme, part, kind, name]))
+    if (/^s_/.test(part)) return keys([theme, part]).flatMap((table) => table === "info" ? keys([theme, part, table]).map((name) => [theme, part, table, name]) : [[theme, part, table]])
+    return []
+  })).map(sxiFragmentPath)
 }
 
 /**
@@ -105,25 +97,23 @@ function withMovedResources(value: Json, pointer: readonly string[], folders: { 
 export type SxiCopy = { source: string[]; target: string[] }
 
 /**
- * The skin.json parts a copy writes. `derived` gives the part a listed file was projected from;
- * `folders` (with a trailing slash) are given when a folder is copied, and two folders of the same
- * kind copy as one part.
+ * The skin.json parts a copy writes. `folders` (with a trailing slash) are given when a folder is copied:
+ * an address folder copies its whole part, and two package folders of the same kind copy the parts they
+ * stand for. Copied addresses copy their parts; other files have none.
  */
-export function sxiCopyParts(
-  copies: ReadonlyArray<{ source: string; target: string }>,
-  folders: { source: string; target: string } | undefined,
-  derived: (path: string) => string[] | undefined,
-): SxiCopy[] {
+export function sxiCopyParts(copies: ReadonlyArray<{ source: string; target: string }>, folders: { source: string; target: string } | undefined): SxiCopy[] {
+  const whole = folders && [sxiAddressPointer(folders.source), sxiAddressPointer(folders.target)]
+  if (whole?.[0] && whole[1]) return [{ source: whole[0], target: whole[1] }]
   const sourceParts = folders && sxiFolderParts(folders.source)
   const targetParts = folders && sxiFolderParts(folders.target)
   if (sourceParts && targetParts && sourceParts.length === targetParts.length && sourceParts[0].length === targetParts[0].length) {
     return sourceParts.map((source, index) => ({ source, target: targetParts[index] }))
   }
   return copies.flatMap(({ source, target }) => {
-    const pointer = derived(source)
+    const pointer = sxiAddressPointer(source)
     if (!pointer) return []
-    const destination = sxiFilePointer(target)
-    if (!destination) throw new Error(`手心皮肤没有保存 ${target} 的位置，请复制到 light/dark 主题的 port/land 布局或 res 样式目录`)
+    const destination = sxiAddressPointer(target)
+    if (!destination) throw new Error(`${target} 不是 skin.json 中的位置，请复制到 skin.json/… 下`)
     return [{ source: pointer, target: destination }]
   })
 }

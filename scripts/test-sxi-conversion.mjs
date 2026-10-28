@@ -39,6 +39,14 @@ const choose = async (theme, orientation, path) => {
     const { selectFile } = await import("/src/app/navigation.ts")
     themeInput.value = theme
     orientationInput.value = orientation
+    // The .sxi board the exported layout file comes from is a part of skin.json.
+    if (appState.archive.format === "sxi") {
+      const { palmBoardTypes, sxiBoardAddress } = await import("/src/app/sxi-documents.ts")
+      const { boardFileName } = await import("/src/palm/sxi-layout.ts")
+      const type = palmBoardTypes().find((item) => path.endsWith(`/${boardFileName(item)}`))
+      if (!type) throw new Error(`no Palm board exports as ${path}`)
+      path = sxiBoardAddress(type)
+    }
     appState.selectedPath = path
     selectFile(path)
   }, { theme, orientation, path })
@@ -82,9 +90,10 @@ const download = async (trigger) => {
   return pending
 }
 
+// The boards the .sxi has (full26Pinyin and selChinese), by the layout files they export as.
 const views = [
-  ["light", "port", "light/skin/port/en_26.ini"],
   ["light", "port", "light/skin/port/py_26.ini"],
+  ["light", "port", "light/skin/port/sel_ch.ini"],
 ]
 try {
   await page.addInitScript(() => {
@@ -102,6 +111,7 @@ try {
   for (const [theme, orientation, path] of views) {
     await choose(theme, orientation, path)
     source.set(path, await snapshot())
+    assert.ok(source.get(path).keys.length > 0, `${path}: the .sxi board draws its keys`)
   }
 
   const exported = {}

@@ -23,7 +23,8 @@ import { candidateArea, candidateBackgroundCanvas, candidateInput, candidateWord
 import { canvasEditable } from "./edit-history"
 import { applyCandidateTextVisual, applyDeviceKeyboardGeometry, devicePreviewTransparent, inputBarInKeyboard, updatePanelTools } from "./preview-render"
 import { ssfDocumentPackage } from "./ssf-preview"
-import { palmSkin } from "./sxi-documents"
+import { ssfSkeleton } from "./ssf-documents"
+import { isSxiBoardAddress, palmSkin, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
 
 type CandidateScene = { bar: SceneLayer[]; icons: NativeScene }
@@ -44,9 +45,8 @@ function setCandidateScenes(build: (state: number | undefined) => Promise<Candid
 /** The Palm board the open document shows, read from its skin.json as it is now. */
 function palmBoard(): PalmBoard | undefined {
   const archive = appState.archive
-  const pointer = archive?.format === "sxi" ? archive.derivedPointer(appState.layoutPath) : undefined
-  if (!archive || pointer?.[2] !== "b") return
-  const [theme, layoutKey, , type] = pointer as [PalmTheme, string, string, string]
+  if (!archive || !isSxiBoardAddress(appState.layoutPath)) return
+  const [theme, layoutKey, , type] = sxiPointer(appState.layoutPath) as [PalmTheme, string, string, string]
   return new PalmBoard(palmSkin(archive), theme, layoutKey.replace(/_layout$/, "") as PalmOrientation, type)
 }
 
@@ -115,8 +115,8 @@ function palmCandidateBar(board: PalmBoard, styles: PalmStyles, text: CandidateT
 }
 
 /**
- * Refreshes every canvas of an open Palm document from skin.json, without its projected layout.
- * Returns false when the document is not a Palm board.
+ * Refreshes every canvas of an open Palm document from skin.json. Returns false when the document is
+ * not a Palm board.
  */
 export function refreshPalmPreview(): boolean {
   const archive = appState.archive
@@ -181,7 +181,8 @@ function ssfScenes(archive: SkinArchive): boolean {
   const scale = width(layout) && width(templateGen) ? width(layout) / width(templateGen) : 1
   const skeleton = { layout, template: templateLayout, resolver, offsets: templateGen, scale }
   const candidatePath = toolbarConfigPath()
-  const candidates = candidatePath && archive.isText(candidatePath) ? IniDocument.parse(archive.getText(candidatePath)) : undefined
+  const boards = ssfSkeleton()
+  const candidates = candidatePath && boards?.isText(candidatePath) ? IniDocument.parse(boards.getText(candidatePath)) : undefined
   const barHeight = candidates && !toolbarPreview.canvas.closest("[hidden]") ? toolbarPreview.panelHeight : 0
   const size = { width: preview.panelWidth, height: preview.surfaceHeight }
   const popups = hintPreviewEnabled.checked

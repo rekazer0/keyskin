@@ -1,17 +1,16 @@
 // The property inspector for a Palm skin. It shows the skin.json model behind the selection in Palm's own
 // terms (a board's parts; a key's place, styles, text and gestures; a candidate bar or bubble; the skin
-// info) and writes every edit straight into skin.json. The canvas still draws from the views skin.json is
-// projected into for the renderer, but those never show here.
+// info) and writes every edit straight into skin.json.
 
 import { isListCell } from "../layout.ts"
 import { palmBoardLabel, palmPartLabel } from "../palm/palm-labels.ts"
-import { sxiStylePointer } from "../palm/sxi-edit.ts"
 import { asObject, type Json, type JsonObject } from "../palm/sxi-ini.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { element } from "../dom-element.ts"
-import { orientation } from "./dom"
 import { appState } from "./state"
 import { gestureRows, renderSxiGroup, sxiSkin, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
+import { sxiPointer } from "./sxi-documents"
+import { palmStylePointer } from "./sxi-styles"
 import { populateSxiAnimationInspector, sxiAnimationInspectorTitle } from "./sxi-animation-inspector"
 
 // Board parts a canvas selection can stand for, by the section the renderer gives them.
@@ -43,8 +42,7 @@ function sectionPointer(skin: JsonObject, board: SxiPointer, section: string): S
 }
 
 function palmSelection(skin: JsonObject): Selection | undefined {
-  const archive = appState.archive
-  const pointer = archive?.format === "sxi" ? archive.derivedPointer(appState.selectedPath) : undefined
+  const pointer = sxiPointer(appState.selectedPath)
   if (!pointer) return
   if (pointer[2] === "b") {
     if (appState.selectedPath !== appState.layoutPath || !appState.selectedKeySections.length) return { kind: "board", board: pointer }
@@ -86,27 +84,29 @@ function modelGroups(pointer: SxiPointer, model: JsonObject, label: string, omit
   return groups
 }
 
-/** The text styles (`ss_1.<id>.s_1`) the selected keys' foregrounds draw. */
-function textBlocks(skin: JsonObject, board: SxiPointer, models: SxiPointer[]): SxiBlock[] {
-  const table = sxiStylePointer(appState.archive!.getText(SXI_SKIN_PATH), [String(board[0]), "s_info", "ss_1"], orientation.value)
+/** The text styles (`ss_1.<id>.s_1`) the selected keys' foregrounds draw, each where the orientation looks it up. */
+function textBlocks(skin: JsonObject, models: SxiPointer[]): SxiBlock[] {
   const ids = [...new Set(models.flatMap((model) => {
     const layers = sxiValue(skin, [...model, "b", "base_f"])
     return Array.isArray(layers) ? layers.map(String) : []
   }))]
-  return ids.filter((id) => asObject(sxiValue(skin, [...table, id, "s_1"]))).map((id) => ({
-    targets: [[...table, id, "s_1"]],
-    title: `前景样式 ${id}`,
-    code: `${table.slice(1).join(".")}.${id}.s_1`,
-    only: TEXT_FIELDS,
-    expect: ["text", "f_s", "c_normal", "c_hl"],
-  }))
+  return ids.flatMap((id) => {
+    const style = palmStylePointer(id, skin)
+    return style && asObject(sxiValue(skin, [...style, "s_1"])) ? [{
+      targets: [[...style, "s_1"]],
+      title: `前景样式 ${id}`,
+      code: `${style.slice(1).join(".")}.s_1`,
+      only: TEXT_FIELDS,
+      expect: ["text", "f_s", "c_normal", "c_hl"],
+    }] : []
+  })
 }
 
-function palmKeyGroups(skin: JsonObject, board: SxiPointer, models: SxiPointer[]): Array<HTMLElement | undefined> {
+function palmKeyGroups(skin: JsonObject, models: SxiPointer[]): Array<HTMLElement | undefined> {
   if (!models.every((model) => model[model.length - 2] === "keys")) {
     return models.flatMap((model) => modelGroups(model, asObject(sxiValue(skin, model)) ?? {}, palmPartLabel(String(model[model.length - 2] === "key_fix" ? "key_fix" : model[model.length - 1]))))
   }
-  const text = textBlocks(skin, board, models)
+  const text = textBlocks(skin, models)
   const note = models.length > 1 ? "修改会作用于所有选中按键。" : undefined
   const gestures = models.map((model) => sxiValue(skin, [...model, "values"]))
   const gestureBlock: SxiBlock = { targets: models, only: [] }
@@ -137,7 +137,7 @@ export function populateSxiInspector(container: HTMLElement): boolean {
   const selected = skin && palmSelection(skin)
   if (!skin || !selected) return false
   const groups = selected.kind === "keys"
-    ? palmKeyGroups(skin, selected.board, selected.models)
+    ? palmKeyGroups(skin, selected.models)
     : selected.kind === "board"
       ? modelGroups(selected.board, asObject(sxiValue(skin, selected.board)) ?? {}, "键盘", ["keys", "type"])
       : modelGroups(selected.pointer, asObject(sxiValue(skin, selected.pointer)) ?? {}, partTitle(selected.pointer))

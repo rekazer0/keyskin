@@ -74,11 +74,15 @@ test("an .sxi keeps the toolbar plist and menu atlas the export folds into skin.
   files["light/res/logo/pop_menu_icons.png"] = files["light/res/btn.png"]
   const archive = SkinArchive.open(buildSxiZip(SkinArchive.open(zipSync(files))).bytes, "sxi")
   const plistPath = "light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist"
-  for (const skin of [archive, sxiToBaiduArchive(archive)]) {
-    const [item] = parseXmlPlist(skin.getBytes(plistPath))
-    assert.equal(item.Position, "toolbar")
-    assert.equal(item.Titles.Normal.Normal, "语音&输入")
-    assert.equal(item.Images.Normal.Normal, "lg/yuyin")
-    assert.equal(IniDocument.parse(skin.getText("light/skin/res/logo/pop_menu_icons.til")).get("IMG26", "SOURCE_RECT"), "0,0,2,2")
-  }
+  // The .sxi keeps them in skin.json only; the Baidu export writes them out as files again.
+  const skin = JSON.parse(archive.getText("skin.json")).default
+  assert.equal(skin.menu.flat().find((item) => item.Position === "toolbar").Titles.Normal.Normal, "语音&输入")
+  assert.deepEqual(skin.a_m.find((tile) => tile.id === "IMG26").rect1, [[0, 0], [2, 2]])
+  assert.equal(archive.getBytes(plistPath), undefined)
+  const baidu = sxiToBaiduArchive(archive)
+  const [item] = parseXmlPlist(baidu.getBytes(plistPath))
+  assert.equal(item.Position, "toolbar")
+  assert.equal(item.Titles.Normal.Normal, "语音&输入")
+  assert.equal(item.Images.Normal.Normal, "lg/yuyin")
+  assert.equal(IniDocument.parse(baidu.getText("light/skin/res/logo/pop_menu_icons.til")).get("IMG26", "SOURCE_RECT"), "0,0,2,2")
 })

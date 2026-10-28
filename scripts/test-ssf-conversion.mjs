@@ -174,13 +174,16 @@ try {
   await page.waitForFunction(() => !document.querySelector("#open").disabled)
   await closeDialog()
   // The canvas paints the SSF natively; the export starts from the skin's look converted onto the
-  // skeleton, so that conversion is laid over the source and drawn with the converted styles.
+  // skeleton, so the canvas's skeleton is swapped for that conversion and drawn with the converted styles.
   await page.evaluate(async () => {
     const { appState } = await import("/src/app/state.ts")
+    const { SkinArchive } = await import("/src/skin.ts")
     const { documentPackage } = await import("/src/ssf/ssf-convert.ts")
     const { ssfToBaiduFiles } = await import("/src/ssf/ssf-to-baidu.ts")
     const pkg = documentPackage(appState.archive)
-    appState.archive.setOverlay(ssfToBaiduFiles(pkg, appState.ssfTemplates.sogou, Number(pkg.resolution)).files)
+    const files = ssfToBaiduFiles(pkg, appState.ssfTemplates.sogou, Number(pkg.resolution)).files
+    const boards = SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
+    appState.ssfSkeleton = { ...appState.ssfSkeleton, boards }
   })
   const source = new Map()
   for (const view of views) {

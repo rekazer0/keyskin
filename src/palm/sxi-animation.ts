@@ -1,6 +1,6 @@
 // The editing model behind `ss_2` (Palm's animation table). The nine animation families are the ones
-// PalmSkin's `SkinAnimationWrapModel` decodes from anim.ini, so the visual inspector shows exactly the
-// fields the projection writes back; everything here is pure so the mapping stays testable.
+// PalmSkin's `SkinAnimationWrapModel` decodes, so the visual inspector shows exactly the fields Palm reads
+// (ANIMATION_FIELDS); everything here is pure so the mapping stays testable.
 
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 import { ANIMATION_FIELDS, FLOATER_FIELDS } from "./sxi-style.ts"
@@ -13,8 +13,6 @@ export type AnimationField = {
   key: string
   label: string
   kind: AnimationFieldKind
-  /** anim.ini key, so filtering also finds the name skin authors know from the INI view. */
-  iniKey?: string
   options?: AnimationOption[]
   /** Effective value when skin.json omits a select or boolean field. */
   defaultValue?: string
@@ -29,7 +27,7 @@ export type AnimationGroup = { title: string; fields: AnimationField[] }
 
 export type AnimationFamily = {
   id: string
-  /** `CATEGORY` in anim.ini; the base model carries it as `b.c`. */
+  /** The family's category; the base model carries it as `b.c`. */
   category: number
   label: string
   summary: string
@@ -180,15 +178,13 @@ function field(key: string, kind: AnimationFieldKind, overrides: Partial<Animati
   }
 }
 
-/** A group entry; its keys are taken from the projection's field order so nothing can silently drop. */
+/** A group entry; its keys follow ANIMATION_FIELDS (the fields Palm reads) so nothing can silently drop. */
 function group(title: string, keys: Array<[key: string, kind: AnimationFieldKind]>): AnimationGroup {
   return { title, fields: keys.map(([key, kind]) => field(key, kind)) }
 }
 
-const BASE_INI_KEYS: Record<string, string> = { t: "TYPE", count: "REPEAT_CNT", back: "REPEAT_MODE", clear: "REMOVE" }
-
 function baseField(key: string, kind: AnimationFieldKind): AnimationField {
-  return field(key, kind, { scope: "base", iniKey: BASE_INI_KEYS[key] })
+  return field(key, kind, { scope: "base" })
 }
 
 /** 时间与循环: the family's own timing first, then the repeat / reverse / remove every base model owns. */
@@ -297,12 +293,10 @@ const FAMILY_LABELS: Record<string, Record<string, string>> = {
 export function animationGroups(kind: string, model: JsonObject): AnimationGroup[] {
   const groups = FAMILY_GROUPS[kind]?.(model) ?? []
   const labels = FAMILY_LABELS[kind] ?? {}
-  const iniKeys = new Map((ANIMATION_FIELDS[kind] ?? []).map(([key, iniKey]) => [key, iniKey]))
   for (const item of groups) {
     for (const entry of item.fields) {
       if (entry.scope === "base") continue
       entry.label = labels[entry.key] ?? entry.label
-      entry.iniKey ??= iniKeys.get(entry.key)
       if (kind === "a4" && entry.kind === "point") entry.axes = ["最小", "最大"]
     }
   }
@@ -314,8 +308,8 @@ export function animationFieldKeys(kind: string, model: JsonObject = {}): string
   return animationGroups(kind, model).flatMap((item) => item.fields.map((entry) => entry.key))
 }
 
-/** Every field key the projection writes, for coverage tests. `a1` differs by its transform variant. */
-export function projectedFieldKeys(kind: string): string[] {
+/** Every field key Palm reads for a family, for coverage tests. `a1` differs by its transform variant. */
+export function knownFieldKeys(kind: string): string[] {
   return (ANIMATION_FIELDS[kind] ?? []).map(([key]) => key)
 }
 
@@ -355,9 +349,9 @@ function pointDefaults(type: number): { from: [number, number]; to: [number, num
 }
 
 /**
- * Switching `变化属性` rewrites `from/to` in the spelling the new type uses and drops the others:
- * anim.ini reads scalar FROM/TO, percent point FROM/TO and pixel FROM_PX/TO_PX from the same wrap,
- * so leaving two spellings would let the projection write one over the other.
+ * Switching `变化属性` rewrites `from/to` in the spelling the new type uses and drops the others: scalar
+ * `from`, percent point `from_p` and pixel `from_px` are read from the same wrap, so leaving two
+ * spellings would let one stand in for the other.
  */
 export function a1TypePatch(model: JsonObject, nextType: number): AnimationPatch {
   const variant = a1Variant(model)
@@ -504,10 +498,10 @@ export function comboMethod(model: JsonObject): "simultaneous" | "sequential" | 
 /* —— a12 floaters —— */
 export function floaterFields(): AnimationField[] {
   const labels: Record<string, string> = { file: "图片文件", mode: "运动模式" }
-  return FLOATER_FIELDS.map(([key, iniKey, kind]) => {
+  return FLOATER_FIELDS.map(([key, , kind]) => {
     const fieldKind: AnimationFieldKind = kind === "bool" ? "bool" : kind === "point" ? "point" : kind === "string" ? "text" : "number"
     return field(key, key === "mode" ? "select" : fieldKind, {
-      iniKey, label: labels[key] ?? LABELS[key] ?? key,
+      label: labels[key] ?? LABELS[key] ?? key,
       ...key === "swim_range" || key === "swim_pause" ? { axes: ["最小", "最大"] as [string, string] } : {},
     })
   })

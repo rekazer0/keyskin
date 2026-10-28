@@ -6,7 +6,10 @@ import { listen } from "@tauri-apps/api/event"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { type ProjectChoice } from "../../project-chooser"
 import { finishNativeProjectChoice } from "../new-document"
-import { emitStyleLibrary, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, nextStyleID, showNewStyleError, availableStyleIDs } from "../style-picker"
+import { emitStyleLibrary, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, nextStyleID, showNewStyleError, availableStyleIDs, canAddStyle } from "../style-picker"
+import { editSxi } from "../sxi-fields"
+import { addPalmStyle } from "../../palm/palm-style-edit.ts"
+import { palmTheme } from "../sxi-documents"
 import { canvasEditable, isEditing, commitText, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
 import { WHOLE_IMAGE_INDEX } from "../../slice-picker-canvas.ts"
 import { soundPathForFilename } from "../../sounds.ts"
@@ -18,8 +21,8 @@ import { refreshPreview, setGuidesVisible, updateDevicePreview, refreshSimulatio
 import { selectStyleResource, renderResourceInspector, selectResourceImage, uploadKeySound, currentSoundEntries, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
 import { createAtlasWorkspace } from "../../atlas-workspace"
 import { selectFile } from "../navigation"
-import { autoSliceSelectedImage, drawAtlas, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector } from "../tile-editing"
-import { type TileRect, duplicateTileSlice, nextTileIndex } from "../../tiles.ts"
+import { autoSliceSelectedImage, drawAtlas, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector, nextSliceIndex } from "../tile-editing"
+import { type TileRect, duplicateTileSlice } from "../../tiles.ts"
 import { type Change } from "../../history.ts"
 import { showStatus, runFileOperation, showError } from "../file-operations"
 import { resourceRootPath, setLayoutImageBytes, openLayoutImageDialog, syncLayoutImageConfig } from "../layout-image-replace"
@@ -87,7 +90,7 @@ export function wireResourcesAndStartup(): void {
   bindPaneResize($("#sidebar-resize-handle"), "--sidebar-width", "sidebarWidthV2", 180, 420, 248, 1)
   bindPaneResize(inspectorResizeHandle, "--inspector-width", "inspectorWidthV5", 220, Math.max(700, window.innerWidth - 720), 360, -1)
   styleAddButton.addEventListener("click", () => {
-    if (!appState.archive?.isText(styleConfigPath()) || !isEditing()) return
+    if (!canAddStyle() || !isEditing()) return
     newStyleID.value = nextStyleID()
     showNewStyleError("")
     newStyleDialog.showModal()
@@ -106,15 +109,19 @@ export function wireResourcesAndStartup(): void {
       return
     }
     const path = styleConfigPath()
-    if (!appState.archive?.isText(path)) return
-    const stylesDocument = IniDocument.parse(appState.archive.getText(path))
-    const before = stylesDocument.toString()
-    stylesDocument.appendSection(`STYLE${styleID}`, [])
-    const currentMax = Number(stylesDocument.get("GLOBAL", "STYLE_NUM") ?? -1)
-    const numericID = Number(styleID)
-    if (!Number.isFinite(currentMax) || numericID > currentMax) stylesDocument.set("GLOBAL", "STYLE_NUM", styleID)
-    commitText(path, before, stylesDocument.toString())
-    setSourceValue(stylesDocument.toString())
+    // A Palm style joins the theme's shared table in skin.json.
+    if (appState.archive?.format === "sxi") editSxi((skin) => { addPalmStyle(skin, palmTheme(), {}, styleID) })
+    else {
+      if (!appState.archive?.isText(path)) return
+      const stylesDocument = IniDocument.parse(appState.archive.getText(path))
+      const before = stylesDocument.toString()
+      stylesDocument.appendSection(`STYLE${styleID}`, [])
+      const currentMax = Number(stylesDocument.get("GLOBAL", "STYLE_NUM") ?? -1)
+      const numericID = Number(styleID)
+      if (!Number.isFinite(currentMax) || numericID > currentMax) stylesDocument.set("GLOBAL", "STYLE_NUM", styleID)
+      commitText(path, before, stylesDocument.toString())
+      setSourceValue(stylesDocument.toString())
+    }
     const applyTarget = appState.newStyleApplyTarget
     newStyleDialog.close()
     // 检查器缩略图传入的是行内克隆输入框（未挂载），只看是否可编辑。
@@ -330,7 +337,7 @@ export function wireResourcesAndStartup(): void {
         }
         if (event.key.toLowerCase() === "v" && appState.copiedTile && isEditing()) {
           event.preventDefault()
-          const index = nextTileIndex(appState.tileDocument)
+          const index = nextSliceIndex()
           commitTile({ ...appState.copiedTile, index })
           appState.selectedTileIndex = index
           populateTileInspector()

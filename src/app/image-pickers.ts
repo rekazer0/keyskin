@@ -1,10 +1,11 @@
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
-import { setSxiStyleImage, addSxiImageStyle, setSxiForeground, sxiStylePointer } from "../palm/sxi-edit.ts"
-import { refreshSxiDocument } from "./sxi-documents"
-import { showError } from "./file-operations"
+import { asObject } from "../palm/sxi-ini.ts"
+import { editSxi } from "./sxi-fields"
+import { palmKeyForegrounds, palmKeyPointer, palmValue, setPalmStyleImage } from "./sxi-styles"
+import { addPalmStyle, palmTileSlices } from "../palm/palm-style-edit.ts"
+import { openPalmSkin, palmTheme } from "./sxi-documents"
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
-import { styleConfigPath, effectiveKeyValue, effectiveSelectedSections, setSourceValue } from "./config-context"
+import { styleConfigPath, effectiveKeyValue, currentSkinState, setSourceValue } from "./config-context"
 import { isListCell } from "../layout.ts"
 import { type StyleImagePickerTarget, type NativeResourcePickerPayload } from "./types"
 import { setStyleField } from "../keyboard.ts"
@@ -50,35 +51,33 @@ export function updateSelectedImageReference(target: StyleImagePickerTarget | un
   if (!appState.archive || !target) return false
   const { document, path, sections } = target
   if (appState.archive.format === "sxi") {
-    const archive = appState.archive
-    const stylePath = path ?? styleConfigPath()
-    const derived = archive.derivedPointer(stylePath)
-    if (!derived || !isEditing()) return false
-    try {
-      const before = archive.getText(SXI_SKIN_PATH)
-      const pointer = sxiStylePointer(before, derived, orientation.value)
-      if (sections?.length) {
-        commitText(SXI_SKIN_PATH, before, setSxiStyleImage(before, pointer, sections, target.property, value))
-      } else {
-        const input = appState.stylePickerTarget
-        if (!input || input.dataset.keyField !== "FORE_STYLE") return false
-        const added = addSxiImageStyle(before, pointer, target.property, value)
-        const layoutPointer = archive.derivedPointer(appState.layoutPath)
-        if (!layoutPointer) return false
-        let after = added.text
-        for (const section of effectiveSelectedSections()) {
-          const ids = (effectiveKeyValue(section, "FORE_STYLE") ?? "").split(",").map((id) => id.trim()).filter(Boolean)
-          if (input.dataset.styleReferenceAppend === "true") ids.push(added.id)
-          else ids[Number(input.dataset.styleReferenceIndex ?? 0)] = added.id
-          after = setSxiForeground(after, layoutPointer, [section], ids.join(","))
-        }
-        commitText(SXI_SKIN_PATH, before, after)
-        target.path = stylePath
-        target.sections = [`STYLE${added.id}`]
+    if (!isEditing()) return false
+    const pressed = target.property === "HL_IMG"
+    const ids = (sections ?? []).map((section) => section.replace(/^STYLE/, ""))
+    const input = appState.stylePickerTarget
+    if (!ids.length && input?.dataset.keyField !== "FORE_STYLE") return false
+    let added: string | undefined
+    editSxi((skin) => {
+      if (ids.length) return setPalmStyleImage(skin, ids, pressed, value)
+      // A new image layer on the selected keys: the foreground card's 添加, or an empty card.
+      added = addPalmStyle(skin, palmTheme(), { s_2: { normal: value, ...pressed ? { hl: value } : {} } })
+      const state = currentSkinState()
+      for (const section of appState.selectedKeySections) {
+        const pointer = palmKeyPointer(skin, section, state)
+        const model = pointer && asObject(palmValue(skin, pointer))
+        if (!model) throw new Error(`找不到手心按键 ${section}`)
+        const fores = palmKeyForegrounds(skin, section, state)
+        if (input?.dataset.styleReferenceAppend === "true") fores.push(Number(added))
+        else fores[Number(input?.dataset.styleReferenceIndex ?? 0)] = Number(added)
+        model.b = { ...asObject(model.b), base_f: fores }
       }
-      refreshSxiDocument()
-      return true
-    } catch (error) { showError(error, "修改手心前景图片"); return false }
+    })
+    if (added) {
+      target.path = styleConfigPath()
+      target.sections = [`STYLE${added}`]
+    }
+    if (appState.resourceInspectorMode === "style" && appState.resourceConfigActive) void renderStyleResourceDetail()
+    return true
   }
   if (document && path && sections?.length) {
     const before = document.toString()
@@ -186,7 +185,7 @@ export function pickableImagePaths(): string[] {
   if (archive?.format !== "ssf") return resourceImagePaths(names, theme.value, orientation.value)
   const pkg = ssfPackage()
   const roots = [ssfThemeFolder(), pkg && `${pkg.resolution}/`, "default/", "default/res/"].filter((root): root is string => Boolean(root))
-  return names.filter((path) => !archive.isOverlay(path) && /\.(?:png|webp|jpe?g)$/i.test(path)
+  return names.filter((path) => /\.(?:png|webp|jpe?g)$/i.test(path)
     && roots.some((root) => path.startsWith(root) && !path.slice(root.length).includes("/")))
 }
 
@@ -236,7 +235,8 @@ export function openImageSlicePicker(path: string, target: StyleImagePickerTarge
   appState.pickerPath = path
   appState.pickerTarget = target
   const tilePathForPicker = path.replace(/\.png$/i, ".til")
-  appState.pickerSlices = appState.archive.isText(tilePathForPicker) ? tileSlices(IniDocument.parse(appState.archive.getText(tilePathForPicker))) : []
+  appState.pickerSlices = appState.archive.format === "sxi" ? palmTileSlices(openPalmSkin(), path)
+    : appState.archive.isText(tilePathForPicker) ? tileSlices(IniDocument.parse(appState.archive.getText(tilePathForPicker))) : []
   appState.pickerSelectedIndex = !appState.pickerSlices.length && selectedSource
     ? WHOLE_IMAGE_INDEX
     : appState.pickerSlices.find((slice) => selectedSource && slice.source.join(",") === selectedSource.join(","))?.index

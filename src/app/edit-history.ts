@@ -3,7 +3,7 @@ import { appState } from "./state"
 import { type UnsavedDecision, unsavedDecision } from "../unsaved.ts"
 import { flushNumberInputWheel, numberInputGesture } from "../number-input-wheel.ts"
 import { flushSourceAutosave, scheduleSourceAutosave } from "./source-workspace"
-import { showError, showStatus } from "./file-operations"
+import { showError } from "./file-operations"
 import { isTauri, recordChange } from "./canvas-interaction"
 import { message } from "@tauri-apps/plugin-dialog"
 import { saveArchive, currentExportFormat } from "./archive-io"
@@ -22,10 +22,8 @@ import { isBdaAppearancePartPath, refreshBdaLayout, refreshSelectedBdaSource } f
 import { selectFile } from "./navigation"
 import { selectResourceImage, renderResourceInspector } from "./resource-inspector"
 import { decodedBdaEditorSource } from "../bda-source.ts"
-import { sourceEditPath } from "./ssf-documents"
-import { refreshSxiDocument } from "./sxi-documents"
-import { applySxiViewEdit } from "../palm/sxi-edit.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
+import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
+import { sxiPointer } from "./sxi-documents"
 
 export function isEditing(): boolean {
   return mode.value === "edit"
@@ -89,33 +87,8 @@ export function updateHistoryButtons(): void {
   redoButton.disabled = appState.redoStack.length === 0
 }
 
-// SXI layouts and styles are read-only views of skin.json; an inspector edit is dropped and
-// the view reloaded, so the mutated in-memory document does not linger.
-function rejectDerivedEdit(error?: unknown): void {
-  showStatus(error instanceof Error ? error.message : "手心皮肤的布局与样式由 skin.json 生成：请在源码面板编辑对应 JSON")
-  if (appState.selectedPath) selectFile(appState.selectedPath, appState.sidebarView)
-}
-
-/**
- * Edits of a Palm skin's read-only views (layouts, .cnd, default.css, Info.txt) folded into one skin.json
- * change. The views are regenerated after the caller has finished with its own documents.
- */
-function derivedSkinChange(changes: ReadonlyArray<{ path: string; before: string; after: string }>): Change | undefined {
-  const archive = appState.archive!
-  const before = archive.getText(SXI_SKIN_PATH)
-  const after = changes.reduce((skin, change) => applySxiViewEdit(skin, change.path, change.before, change.after), before)
-  queueMicrotask(refreshSxiDocument)
-  return before === after ? undefined : { kind: "text", path: SXI_SKIN_PATH, before, after }
-}
-
 export function commitText(path: string, before: string, after: string, coalesce = false): void {
   if (!appState.archive || before === after) return
-  if (appState.archive.derivedPointer(path)) {
-    let change: Change | undefined
-    try { change = derivedSkinChange([{ path, before, after }]) } catch (error) { return rejectDerivedEdit(error) }
-    if (change?.kind === "text") commitText(change.path, change.before, change.after, coalesce)
-    return
-  }
   acceptAiDraftPreview()
   appState.sourceHistoryHighlight = undefined
   appState.archive.setText(path, after)
@@ -126,7 +99,6 @@ export function commitText(path: string, before: string, after: string, coalesce
 }
 
 export function commitBytes(path: string, before: Uint8Array | undefined, after: Uint8Array): void {
-  if (appState.archive?.derivedPointer(path)) return rejectDerivedEdit()
   if (!appState.archive || before && before.length === after.length && before.every((byte, index) => byte === after[index])) return
   acceptAiDraftPreview()
   appState.archive.setBytes(path, after)
@@ -138,15 +110,6 @@ export function commitBytes(path: string, before: Uint8Array | undefined, after:
 
 export function commitBatch(changes: Change[]): void {
   if (!appState.archive || !changes.length) return
-  const isDerived = (change: Change) => change.kind !== "batch" && Boolean(appState.archive!.derivedPointer(change.path))
-  if (changes.some(isDerived)) {
-    const derived = changes.filter(isDerived)
-    if (derived.some((change) => change.kind !== "text")) return rejectDerivedEdit()
-    let skin: Change | undefined
-    try { skin = derivedSkinChange(derived as Array<Extract<Change, { kind: "text" }>>) } catch (error) { return rejectDerivedEdit(error) }
-    changes = [...changes.filter((change) => !isDerived(change)), ...skin ? [skin] : []]
-    if (!changes.length) return
-  }
   acceptAiDraftPreview()
   for (const change of changes) {
     if (change.kind === "text") appState.archive.setText(change.path, change.after)
@@ -219,7 +182,10 @@ export function refreshHistorySelection(): void {
     appState.selectedTileIndex = appState.slices.some(slice => slice.index === index) ? index : undefined
     populateTileInspector()
     drawAtlas()
-  } else if (appState.selectedPath && (appState.archive?.getBytes(appState.selectedPath) || isBdaAppearancePartPath(appState.selectedPath))) {
+  } else if (appState.selectedPath && (
+    appState.archive?.getBytes(appState.selectedPath) || isBdaAppearancePartPath(appState.selectedPath) ||
+    sxiPointer(appState.selectedPath) || isSsfBoardPath(appState.selectedPath)
+  )) {
     selectFile(appState.selectedPath, appState.sidebarView, resourceMode)
   }
   updateHistoryButtons()

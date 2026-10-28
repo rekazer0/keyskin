@@ -16,7 +16,7 @@ import { message } from "@tauri-apps/plugin-dialog"
 import { invoke, Channel } from "@tauri-apps/api/core"
 import { adaptIos26Variant, adaptIos26KeyboardLayout } from "../ios26.ts"
 import { adaptSxiForIos26 } from "../palm/sxi-ios26.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { adaptSsfSkinForIos26, isSsfSkinFile } from "../ssf/ssf-ios26.ts"
 import { refreshSxiDocument } from "./sxi-documents"
 import { type Change } from "../history.ts"
@@ -190,7 +190,7 @@ export function adaptArchiveForIos26(): boolean {
     return true
   }
   if (archive.format === "ssf") {
-    const looks = archive.names().filter((path) => !archive.isOverlay(path) && isSsfSkinFile(path))
+    const looks = archive.names().filter(isSsfSkinFile)
     if (!looks.length) throw new Error("没有找到可适配的 phoneSkin.ini。")
     commitTextChanges(looks.map((path) => ({ path, before: archive.getText(path), after: adaptSsfSkinForIos26(archive.getText(path)) })))
     return true

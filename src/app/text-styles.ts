@@ -1,5 +1,5 @@
-// 候选栏与整体布局的「文字」分组，以及按键文字的写入。百度 BDS/BDI 与手心写 default.css 的 STYLE 文字
-// 属性（手心的派生 CSS 由 edit-history 转回 skin.json），BDA 写 appearanceConfig 的文字样式；
+// 候选栏与整体布局的「文字」分组，以及按键文字的写入。百度 BDS/BDI 写 default.css 的 STYLE 文字属性，
+// BDA 写 appearanceConfig 的文字样式，手心直接写 skin.json 样式的 s_1（sxi-text.ts）；
 // 搜狗皮肤的文字由 ssf-inspector.ts 处理。皮肤没有的文字样式在第一次修改时新建。
 import { appState } from "./state"
 import { IniDocument } from "../ini.ts"
@@ -14,6 +14,7 @@ import { currentBdaAppearance, bdaAppearancePart } from "./bda-documents"
 import { bdaStyleValue, createBdaPanelTextStyle, updateBdaRefs } from "./key-inspector"
 import { parseStyleColor } from "./resource-inspector"
 import { fontFileField, textStyleGroup, textStyleNote, textStyleRows, textStyleTargetSwitch } from "./dom"
+import { palmSharedTextCount, palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
 
 export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "NM_COLOR" | "HL_COLOR"
 
@@ -25,6 +26,7 @@ type TextTarget = {
   bda?: BdaStyleRef[]
   /** Where a BDA panel gets a new text style when it has none here, and the style it starts from. */
   bdaCreate?: { path: string[]; copyFrom?: BdaStyleRef }
+  palm?: PalmText
   note?: string
 }
 
@@ -175,14 +177,43 @@ function bdaTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } 
   }
 }
 
+function palmTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } | undefined {
+  const palm = palmTextTargets()
+  if (!palm) return
+  if (palm.scope === "candidate") {
+    return {
+      scope: "candidate",
+      targets: [
+        { id: "candidate", label: "候选字", properties: CANDIDATE_PROPERTIES, note: CANDIDATE_NOTE, palm: palm.words },
+        { id: "first", label: "首选", properties: CANDIDATE_PROPERTIES, note: CANDIDATE_NOTE, palm: palm.first },
+        { id: "input", label: "输入码", properties: CANDIDATE_PROPERTIES, note: CANDIDATE_NOTE, palm: palm.input },
+      ],
+    }
+  }
+  const note = (ids: string[]) => {
+    const shared = palmSharedTextCount(ids)
+    return `修改本布局按键用到的 ${ids.length} 个文字样式${shared ? `，其中 ${shared} 个也用于其他布局，会一并改变` : ""}`
+  }
+  const label = palm.label?.ids ?? []
+  const hint = palm.hint?.ids ?? []
+  return {
+    scope: "layout",
+    targets: [
+      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, palm: palm.label, note: label.length ? note(label) : "本布局的按键没有文字样式（字画在图片里）；选中按键可以在「样式」里添加文字样式" },
+      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, palm: palm.hint, note: note(hint) }] : [],
+    ],
+  }
+}
+
 /** The candidate bar's or whole layout's text targets; keys keep their own 文字 group. */
 function textTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } | undefined {
   const archive = appState.archive
   if (!archive || archive.format === "ssf" || appState.selectedKeySections.length) return
-  return archive.format === "bda" ? bdaTargets() : cssTargets()
+  return archive.format === "bda" ? bdaTargets() : archive.format === "sxi" ? palmTargets() : cssTargets()
 }
 
 function targetValues(target: TextTarget, property: TextProperty): string[] {
+  if (target.palm) return palmTextValues(target.palm, property)
   if (target.bda) {
     const info = currentBdaAppearance()
     return info ? target.bda.map((ref) => bdaStyleValue(info.appearance, ref, property)) : []
@@ -191,13 +222,15 @@ function targetValues(target: TextTarget, property: TextProperty): string[] {
 }
 
 function writeTarget(target: TextTarget, property: TextProperty, value: string): void {
-  if (target.bda?.length) updateBdaRefs(target.bda, property, value)
+  if (target.palm) writePalmText(target.palm, property, value)
+  else if (target.bda?.length) updateBdaRefs(target.bda, property, value)
   else if (target.bdaCreate) createBdaPanelTextStyle(target.bdaCreate.path, target.bdaCreate.copyFrom, property, value)
   else writeTextRefs(target.css ?? [], property, value)
 }
 
 /** A target nothing can be written to yet (a layout whose keys have no text, a BDA bar without a style). */
 function writable(target: TextTarget): boolean {
+  if (target.palm) return target.palm.ids.length > 0 || Boolean(target.palm.create)
   return target.bda ? target.bda.length > 0 || Boolean(target.bdaCreate) : (target.css ?? []).some((ref) => ref.owner || ref.foreground)
 }
 

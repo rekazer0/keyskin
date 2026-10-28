@@ -1,10 +1,10 @@
-// `.sxi` style models (`ss_1` text/image styles, `ss_2` animations, `info` tile maps and
-// the skin info) projected back to `default.css`, `anim.ini`, `*.til` and `Info.txt`.
+// `.sxi` style models (`ss_1` text/image styles, `ss_2` animations, `info` tile maps and the skin
+// info) written as Baidu `default.css`, `anim.ini`, `*.til` and `Info.txt`, for exporting a Palm skin as
+// BDI/BDS (sxi-to-baidu.ts). ANIMATION_FIELDS also lists the fields Palm reads per animation family.
 
 import {
   IniWriter,
   asObject,
-  child,
   listText,
   put,
   putFields,
@@ -20,7 +20,7 @@ export function stylesIni(value: Json): IniWriter {
   for (const [index, style] of Object.entries(asObject(value) ?? {})) {
     const model = asObject(style) ?? {}
     const entries = writer.section(typeof model.id === "string" ? model.id : `STYLE${index}`)
-    putFields(entries, child(model, "s_1"), [
+    putFields(entries, asObject(model.s_1) ?? {}, [
       ["text", "SHOW", "string"],
       ["c_type", "FONT_CLEARTYPE", "number"],
       ["f_s", "FONT_SIZE", "number"],
@@ -29,14 +29,14 @@ export function stylesIni(value: Json): IniWriter {
       ["c_hl", "HL_COLOR", "string"],
       ["file", "FONT_PATH", "string"],
     ])
-    putFields(entries, child(model, "s_2"), [["normal", "NM_IMG", "string"], ["hl", "HL_IMG", "string"]])
-    putFields(entries, child(model, "s_3"), [["size", "BORDER_SIZE", "number"], ["color", "BORDER_COLOR", "string"]])
-    putFields(entries, child(model, "s_4"), [
+    putFields(entries, asObject(model.s_2) ?? {}, [["normal", "NM_IMG", "string"], ["hl", "HL_IMG", "string"]])
+    putFields(entries, asObject(model.s_3) ?? {}, [["size", "BORDER_SIZE", "number"], ["color", "BORDER_COLOR", "string"]])
+    putFields(entries, asObject(model.s_4) ?? {}, [
       ["path_1", "PRESS_SOUND_PATH", "string"],
       ["path_2", "PANEL_SHOW_SOUND_PATH", "string"],
       ["path_3", "PANEL_HIDE_SOUND_PATH", "string"],
     ])
-    putFields(entries, child(model, "s_5"), [
+    putFields(entries, asObject(model.s_5) ?? {}, [
       ["1", "PRESS_ANIM", "number"],
       ["2", "RELEASE_ANIM", "number"],
       ["3", "SHOW_ANIM", "number"],
@@ -283,7 +283,7 @@ export function animationsIni(value: Json): IniWriter {
 // `skinInfoJson` (`info`) of the skin, as Info.txt.
 export function infoIni(skin: JsonObject): IniWriter {
   const writer = new IniWriter()
-  putFields(writer.section(""), child(skin, "info"), [
+  putFields(writer.section(""), asObject(skin.info) ?? {}, [
     ["name", "Name", "string"],
     ["description", "Description", "string"],
     ["author", "Author", "string"],

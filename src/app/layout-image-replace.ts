@@ -1,7 +1,7 @@
 import { theme, layout, layoutImageSize, layoutImagePreview, layoutImageFileLabel, layoutImageFile, layoutImageApply, canvasWrap, orientation, layoutImageLayout, layoutImageScope, layoutImageError, layoutImageTargetInputs, layoutImageDialog, layoutImageConfigButtons, layoutImageConfigDesc, layoutImageConfigFieldset } from "./dom"
 import { IniDocument, normalizeKeySections } from "../ini.ts"
 import { appState } from "./state"
-import { currentConfigPath, styleConfigPath, genConfigPath, toolbarConfigPath, setSourceValue } from "./config-context"
+import { currentConfigPath, styleConfigPath, genConfigPath, toolbarConfigPath, setSourceValue, layoutSource } from "./config-context"
 import { type LayoutImageTarget, type LayoutKeyGeometry, planLayoutImage, layoutImageTileBytes, applyCandidateImageStyles, layoutKeyRects, type LayoutImagePlan, validateKeyRects, matchLayoutKeysToCells, planLayoutImageSlices, applyLayoutImageRects, applyLayoutImageStyles } from "../layout-image.ts"
 import { resolvePanelConfig } from "../keyboard.ts"
 import { resolveCandidateRect } from "../candidate-style.ts"
@@ -16,6 +16,8 @@ import { populateKeyInspector } from "./key-inspector"
 import { type LayoutImageConfig } from "./types"
 import { styleConfigDocument } from "./style-picker"
 import { replaceSsfLayoutImage, replaceSxiLayoutImage } from "./layout-image-native"
+import { isSxiBoardAddress, sxiPointer } from "./sxi-documents"
+import { palmBoardLabel } from "../palm/palm-labels.ts"
 
 // 替换键盘样式
 export function resourceRootPath(): string {
@@ -31,7 +33,8 @@ export function currentLayoutDocument(): IniDocument | undefined {
 
 export function currentGenDocument(): IniDocument | undefined {
   const path = genConfigPath()
-  return appState.archive?.isText(path) ? IniDocument.parse(appState.archive.getText(path)) : undefined
+  const source = layoutSource()
+  return source?.isText(path) ? IniDocument.parse(source.getText(path)) : undefined
 }
 
 export function nextResourceBase(root = resourceRootPath()): string {
@@ -76,12 +79,14 @@ export function layoutImageScopeText(): string {
 
 export function openLayoutImageDialog(): void {
   if (!appState.archive || appState.archive.format === "bda") return
-  const layout = currentLayoutDocument()
-  // Palm and Sogou styles live in skin.json / phoneSkin.ini, not a default.css.
-  if (!layout || appState.archive.format !== "sxi" && appState.archive.format !== "ssf" && !styleConfigDocument()) return
+  // A Palm board is read from skin.json; Palm and Sogou styles live in skin.json / phoneSkin.ini, not a default.css.
+  const palmBoard = sxiPointer(appState.layoutPath)
+  if (appState.archive.format === "sxi" ? !isSxiBoardAddress(appState.layoutPath) : !currentLayoutDocument()) return
+  if (appState.archive.format !== "sxi" && appState.archive.format !== "ssf" && !styleConfigDocument()) return
   const themeLabel = theme.value === "dark" ? "深色" : "浅色"
   const orientationLabel = orientation.value === "land" ? "横屏" : "竖屏"
-  layoutImageLayout.textContent = `当前布局：${appState.layoutPath.split("/").pop() ?? "布局"}（${themeLabel} · ${orientationLabel}）`
+  const name = palmBoard ? palmBoardLabel(palmBoard[3]) : appState.layoutPath.split("/").pop() ?? "布局"
+  layoutImageLayout.textContent = `当前布局：${name}（${themeLabel} · ${orientationLabel}）`
   layoutImageError.hidden = true
   layoutImageError.textContent = ""
   if (!appState.layoutImageTarget) {

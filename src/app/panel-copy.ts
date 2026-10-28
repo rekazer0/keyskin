@@ -1,6 +1,7 @@
 // 面板复制: copy a folder or file of the skin, optionally scaled to another panel size. Baidu skins
-// copy files; a Palm skin copies the skin.json parts its layouts and styles are views of; a Sogou skin
-// copies its own files (never the preview overlay) and lists a copied resolution folder.
+// copy files; a Palm skin copies parts of skin.json by their address ("skin.json/default/port_layout/")
+// and its image folders with the parts they belong to; a Sogou skin copies its own files and lists a
+// copied resolution folder.
 
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
@@ -14,12 +15,13 @@ import { commitBatch, updateDirty } from "./edit-history"
 import { updateDevicePreview } from "./preview-render"
 import { resizePng, showError } from "./file-operations"
 import { type Change } from "../history.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
-import { applySxiCopies, sxiCopyParts } from "../palm/sxi-panel-copy.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
+import { applySxiCopies, sxiCopyParts, sxiFolderParts, sxiPartAddresses } from "../palm/sxi-panel-copy.ts"
+import { PalmBoard } from "../palm/palm-board.ts"
 import { scaleSsfLook } from "../ssf/ssf-resolutions.ts"
 import { listSsfResolutionInTheme, listSsfResolutionInTime, ssfResolutionFolder } from "../ssf/ssf-panel-copy.ts"
-import { ssfPackage } from "./ssf-documents"
-import { refreshSxiDocument } from "./sxi-documents"
+import { ssfPackage, ssfSkeleton } from "./ssf-documents"
+import { isSxiBoardAddress, palmBoardTypes, palmSkin, PALM_SHARED_BOARD, palmOrientation, palmTheme, refreshSxiDocument, sxiBoardAddress, sxiPointer } from "./sxi-documents"
 
 export function panelSizeFrom(document: IniDocument | undefined): [number, number] | undefined {
   const size = document?.get("PANEL", "SIZE")?.split(",").map(Number)
@@ -28,33 +30,49 @@ export function panelSizeFrom(document: IniDocument | undefined): [number, numbe
     : undefined
 }
 
-/** A Sogou folder's panel: its screen width, as tall as the preview skeleton's keyboard at that width. */
+/** A Sogou folder's panel: its screen width, as tall as the official skeleton's keyboard at that width. */
 function ssfPanelSize(path: string): [number, number] | undefined {
   const width = ssfResolutionFolder(path)
-  const skeleton = `${theme.value}/skin/port/gen.ini`
-  const size = width && appState.archive?.isText(skeleton) ? panelSizeFrom(IniDocument.parse(appState.archive.getText(skeleton))) : undefined
+  const skeleton = ssfSkeleton()
+  const general = `${theme.value}/skin/port/gen.ini`
+  const size = width && skeleton?.isText(general) ? panelSizeFrom(IniDocument.parse(skeleton.getText(general))) : undefined
   return width && size ? [width, Math.round(size[1] * width / size[0])] : undefined
+}
+
+/**
+ * A Palm board's panel (its own size, else `defaultGlobal`'s); for any other part or folder, the
+ * shared size of the layout it is in (an orientation's, a theme's portrait one).
+ */
+function palmPanelSize(path: string): [number, number] | undefined {
+  const pointer = sxiPointer(path) ?? sxiFolderParts(path)?.[0]
+  if (!pointer?.length || !appState.archive) return
+  const layout = pointer[1]?.endsWith("_layout") ? pointer[1] : `${palmOrientation()}_layout`
+  const type = pointer[2] === "b" && pointer[3] ? pointer[3] : PALM_SHARED_BOARD
+  const board = new PalmBoard(palmSkin(appState.archive), pointer[0] === "night" ? "night" : "default", layout === "land_layout" ? "land" : "port", type)
+  return board.width > 0 && board.height > 0 ? [board.width, board.height] : undefined
 }
 
 export function panelSizeForPath(path: string): [number, number] | undefined {
   if (appState.archive?.format === "ssf") return ssfPanelSize(path)
+  if (appState.archive?.format === "sxi") return palmPanelSize(path)
   if (!appState.archive?.isText(path)) return
   const directory = path.slice(0, path.lastIndexOf("/"))
   return panelSizeFrom(IniDocument.parse(appState.archive.getText(path))) ??
     (appState.archive.isText(`${directory}/gen.ini`) ? panelSizeFrom(IniDocument.parse(appState.archive.getText(`${directory}/gen.ini`))) : undefined)
 }
 
-/** Paths the dialog copies from and to; a Sogou skin's preview overlay is not part of it. */
+/** Paths the dialog copies from and to; a Palm skin also lists the parts of its skin.json. */
 function panelCopyNames(): string[] {
   const archive = appState.archive
   if (!archive) return []
-  return archive.format === "ssf" ? archive.names().filter((path) => !archive.isOverlay(path)) : archive.names()
+  return archive.format === "sxi" && archive.isText(SXI_SKIN_PATH) ? [...archive.names(), ...sxiPartAddresses(archive.getText(SXI_SKIN_PATH))] : archive.names()
 }
 
 export function panelCopySourceSize(): [number, number] | undefined {
   if (!appState.archive) return
   const source = panelCopySource.value.trim().replace(/\\/g, "/").replace(/\/+$/, "")
   if (appState.archive.format === "ssf") return ssfPanelSize(source)
+  if (appState.archive.format === "sxi") return palmPanelSize(source)
   if (appState.archive.isText(source)) return panelSizeForPath(source)
   for (const path of appState.archive.names()) {
     if (path.startsWith(`${source}/`) && /\.ini$/i.test(path)) {
@@ -102,7 +120,7 @@ function defaultPanelCopySource(paths: readonly string[]): string {
   if (paths.includes(appState.selectedPath)) return appState.selectedPath
   const resolution = appState.archive?.format === "ssf" ? ssfPackage()?.resolution : undefined
   const preferred = resolution ? `${resolution}/` : appState.archive?.format === "sxi"
-    ? `${theme.value}/skin/${orientation.value}/`
+    ? `${SXI_SKIN_PATH}/${palmTheme()}/${palmOrientation()}_layout/`
     : `${theme.value}/skin/${orientation.value}/${layout.value}`
   return paths.find((path) => path === preferred) ?? paths[0]
 }
@@ -144,9 +162,9 @@ async function copyNativePanel(copies: ReadonlyArray<{ source: string; target: s
   const changes: Change[] = []
   const encoder = new TextEncoder()
   for (const { source, target } of copies) {
-    if (archive.format === "sxi" && archive.derivedPointer(source)) continue
-    if (archive.format === "sxi" && (target === SXI_SKIN_PATH || archive.derivedPointer(target))) {
-      throw new Error(`${target} 由 skin.json 生成，不能用文件覆盖`)
+    if (archive.format === "sxi" && sxiPointer(source)) continue
+    if (archive.format === "sxi" && (target === SXI_SKIN_PATH || sxiPointer(target))) {
+      throw new Error(`${target} 是 skin.json 中的位置，不能用文件覆盖`)
     }
     const bytes = archive.getBytes(source)!
     const after = scaled && source.toLowerCase().endsWith(".png")
@@ -162,7 +180,7 @@ async function copyNativePanel(copies: ReadonlyArray<{ source: string; target: s
   }
   if (archive.format === "sxi") {
     const folders = copiedFolders(copies)
-    const parts = sxiCopyParts(copies, folders, (path) => archive.derivedPointer(path))
+    const parts = sxiCopyParts(copies, folders)
     if (parts.length) text(SXI_SKIN_PATH, applySxiCopies(archive.getText(SXI_SKIN_PATH), parts, scaled ? xRatio : 1, scaled ? yRatio : 1, folders))
   } else {
     const [source, target] = [panelCopySource.value, panelCopyTarget.value].map((value) => value.trim().replace(/\/+$/, ""))
@@ -215,14 +233,22 @@ export async function copyPanel(): Promise<boolean> {
   }
 
   const targetPath = copies[0].target
-  const variant = targetPath.match(/^(light|dark)\/skin\/(port|land)\//)
+  const palmTarget = sxiPointer(targetPath)
+  const variant = palmTarget
+    ? [, palmTarget[0] === "night" ? "dark" : "light", palmTarget[1]?.match(/^(port|land)_layout$/)?.[1] ?? orientation.value]
+    : targetPath.match(/^(light|dark)\/skin\/(port|land)\//)
   if (variant) {
-    theme.value = variant[1]
+    theme.value = variant[1]!
     orientation.value = variant[2] as "port" | "land"
     syncSegmentedControls()
   }
   renderFiles()
-  if (currentArchive.names().includes(targetPath)) selectFile(targetPath)
+  if (currentArchive.format === "sxi") {
+    // The canvas shows the copied board, else the board it showed in the copy's theme and orientation.
+    const shown = sxiPointer(appState.layoutPath)?.[3] ?? ""
+    const board = isSxiBoardAddress(targetPath) ? targetPath : palmBoardTypes().includes(shown) ? sxiBoardAddress(shown) : sxiBoardAddress(palmBoardTypes()[0] ?? "")
+    if (isSxiBoardAddress(board)) selectFile(board)
+  } else if (currentArchive.names().includes(targetPath)) selectFile(targetPath)
   updateDirty()
   updateDevicePreview()
   return true

@@ -17,7 +17,8 @@ const state = () => page.evaluate(async () => {
   const { appState } = await import('/src/app/state.ts')
   const { source } = await import('/src/app/canvas-interaction.ts')
   const skin = JSON.parse(appState.archive.getText('skin.json'))
-  return { skin, source: source.value, undo: appState.undoStack.length, refs: appState.layoutDocument.get('KEY1', 'FORE_STYLE') }
+  const key = skin.default.port_layout.b.full26Pinyin.keys.find((item) => item.id === '1')
+  return { skin, source: source.value, undo: appState.undoStack.length, refs: (key.b.base_f ?? []).join(',') }
 })
 const selectKey = async (id) => {
   const point = await page.evaluate(async (id) => {
@@ -45,7 +46,7 @@ try {
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   await page.evaluate(async () => {
     const { selectFile } = await import('/src/app/navigation.ts')
-    selectFile('light/skin/port/py_26.ini')
+    selectFile('skin.json/default/port_layout/b/full26Pinyin')
   })
   await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
@@ -58,13 +59,14 @@ try {
     ;(await import('/src/app/edit-history.ts')).undo()
     if (source.value !== before) throw new Error('native JSON source undo failed')
     const { selectFile } = await import('/src/app/navigation.ts')
-    selectFile('light/skin/res/default.css', 'overview', 'image')
-    if (source.value !== appState.archive.getText('skin.json')) throw new Error('resource source exposed a converted view')
-    selectFile('light/skin/port/py_26.ini', 'overview')
+    selectFile('skin.json/default/s_info/ss_1', 'overview', 'image')
+    if (source.value !== appState.archive.getText('skin.json')) throw new Error('resource source is not skin.json')
+    if (appState.archive.names().some((name) => /\.(?:ini|css|til|cnd|pop)$/.test(name))) throw new Error('files were generated from skin.json')
+    selectFile('skin.json/default/port_layout/b/full26Pinyin', 'overview')
   })
   await selectKey(1)
-  // gen.ini is a board model too, but it never becomes the canvas layout.
-  const generalPath = 'light/skin/port/gen.ini'
+  // defaultGlobal is a board model too, but it never becomes the canvas layout.
+  const generalPath = 'skin.json/default/port_layout/b/defaultGlobal'
   const fields = page.locator('#document-fields')
   const beforeGeneral = (await state()).skin
   await page.locator(`.sidebar-overview button[data-path="${generalPath}"]`).click()
@@ -84,14 +86,13 @@ try {
   const changedGeneral = (await state()).skin
   assert.deepEqual(changedGeneral.default.port_layout.b.defaultGlobal.board.size, [1000, 600])
   assert.deepEqual(changedGeneral.default.port_layout.b.full26Pinyin, beforeGeneral.default.port_layout.b.full26Pinyin)
-  assert.match(await page.evaluate(async (path) => (await import('/src/app/state.ts')).appState.archive.getText(path), generalPath), /SIZE=1000,600/)
   await undoRedo('undo')
   assert.deepEqual((await state()).skin, beforeGeneral)
   assert.equal(await generalWidth.inputValue(), '1080')
   await undoRedo('redo')
   assert.deepEqual((await state()).skin, changedGeneral)
   assert.equal(await generalWidth.inputValue(), '1000')
-  await page.locator('.sidebar-overview button[data-path="light/skin/port/py_26.ini"]').click()
+  await page.locator('.sidebar-overview button[data-path="skin.json/default/port_layout/b/full26Pinyin"]').click()
   await selectKey(1)
   const original = (await state()).skin
   const undoBaseline = (await state()).undo
@@ -194,7 +195,7 @@ try {
   // The inspector speaks Palm: skin.json locations and names, none of the Baidu groups or file names.
   assert.equal(await page.locator('.key-layout-fields').isHidden(), true)
   assert.match(await page.locator('#selected-key-context').textContent(), /^full26Pinyin · keys\.\d+$/)
-  const board = page.locator('.sidebar-overview button[data-path="light/skin/port/py_26.ini"]')
+  const board = page.locator('.sidebar-overview button[data-path="skin.json/default/port_layout/b/full26Pinyin"]')
   assert.equal(await board.locator('.nav-label').textContent(), '拼音全键')
   assert.equal(await board.locator('.nav-meta').textContent(), 'skin.json')
   // A changed row keeps its marker across the rebuild that follows every write, and reset restores it.
@@ -207,8 +208,30 @@ try {
   assert.equal(await changes(), changedBefore + 1)
   await page.locator('.inspector-reset').click()
   assert.equal(await fields.locator('[data-document-key="rect.size"] input').first().inputValue(), widthBefore)
+  // Copying and deleting a key add and remove it in the board's `keys`, one undo step each.
+  await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('#mode').value === 'edit')
+  // Key 1 is still selected from the edits above.
+  assert.deepEqual(await page.evaluate(async () => (await import('/src/app/state.ts')).appState.selectedKeySections), ['KEY1'])
+  const keysOf = (skin) => skin.default.port_layout.b.full26Pinyin.keys
+  const beforeCopy = await state()
+  await page.locator('[data-key-action="copy"]').click()
+  const copied = await state()
+  const keyBefore = keysOf(beforeCopy.skin).find((item) => item.id === '1')
+  const copy = keysOf(copied.skin).at(-1)
+  assert.equal(keysOf(copied.skin).length, keysOf(beforeCopy.skin).length + 1)
+  assert.deepEqual({ ...copy, id: keyBefore.id, rect: keyBefore.rect, hit_rect: keyBefore.hit_rect }, keyBefore, 'the copy keeps every other field')
+  assert.deepEqual(copy.rect, [[keyBefore.rect[0][0] + 18, keyBefore.rect[0][1]], keyBefore.rect[1]])
+  assert.deepEqual(await page.evaluate(async () => (await import('/src/app/state.ts')).appState.selectedKeySections), [`KEY${copy.id}`])
+  assert.equal(copied.undo, beforeCopy.undo + 1)
+  await page.locator('[data-key-action="delete"]').click()
+  assert.deepEqual(keysOf((await state()).skin), keysOf(beforeCopy.skin))
+  await undoRedo('undo')
+  assert.deepEqual(keysOf((await state()).skin), keysOf(copied.skin))
+  await undoRedo('undo')
+  assert.deepEqual((await state()).skin, beforeCopy.skin)
   // Skin info is skin.json `info`, edited in place.
-  await page.locator('.sidebar-overview button[data-path="Info.txt"]').click()
+  await page.locator('.sidebar-overview button[data-path="skin.json/info"]').click()
   assert.equal(await page.locator('.skin-fields').isHidden(), true)
   const name = fields.locator('[data-document-key="name"] input')
   await name.fill('手心测试')
@@ -221,7 +244,7 @@ try {
   const reopened = SkinArchive.open(new Uint8Array(saved), 'sxi')
   assert.deepEqual(JSON.parse(reopened.getText('skin.json')), (await state()).skin)
   assert.deepEqual(errors, [])
-  console.log('SXI editing: general config fields and undo/redo, canvas → JSON location, foreground image, text, gestures and save/reopen passed')
+  console.log('SXI editing: general config fields and undo/redo, canvas → JSON location, foreground image, text, gestures, key copy/delete and save/reopen passed')
 } catch (error) {
   await page.screenshot({ path: '/tmp/bdi-sxi-edit-failure.png' }).catch(() => {})
   throw error

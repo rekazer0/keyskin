@@ -29,6 +29,10 @@ import { isSsfPath, looksLikeSsf } from "../ssf/ssf-package.ts"
 import { convertSsfDocument, exportSsf, ssfDocumentBytes } from "../ssf/ssf-convert.ts"
 import { convertSxiToBaidu, convertSxiToBda } from "../palm/sxi-to-baidu.ts"
 import { rebuildSsfPreview, ssfTemplates } from "./ssf-preview"
+import { isSsfBoardPath } from "./ssf-documents"
+import { isSxiBoardAddress, palmThemes, preferredPalmBoard, sxiPointer } from "./sxi-documents"
+import { boardFileName } from "../palm/sxi-layout.ts"
+import { layoutSource } from "./config-context"
 
 export async function loadArchive(
   bytes: Uint8Array | SkinArchive,
@@ -103,8 +107,9 @@ export async function loadArchive(
   appState.aiChatController?.clear()
   if (pendingSourceDirectory !== undefined) appState.sourceWorkspacePendingArchive = nextArchive
   appState.sourceTransfer = undefined
-  const availableThemes = ["light", "dark"].filter((value) =>
-    appState.archive?.names().some((name) => name.startsWith(`${value}/skin/`)),
+  // A Sogou skin's looks are the skeleton's themes; the other formats keep theirs in `<theme>/skin/`.
+  const availableThemes = appState.archive.format === "sxi" ? palmThemes() : ["light", "dark"].filter((value) =>
+    layoutSource()?.names().some((name) => name.startsWith(`${value}/skin/`)),
   )
   if (!availableThemes.includes(theme.value)) theme.value = availableThemes[0] ?? "light"
   syncSegmentedControls()
@@ -137,11 +142,13 @@ export async function loadArchive(
   const bdaLayouts = bdaAvailableLayoutPaths()
   appState.layoutPath = appState.archive.format === "bda" && !bdaLayouts.includes(preferredPath())
     ? bdaLayouts[0] ?? preferredPath()
+    : appState.archive.format === "sxi" ? preferredPalmBoard() ?? preferredPath()
     : preferredPath()
-  appState.previewReturnName = appState.layoutPath.split("/").pop() ?? layout.value
+  const palmBoard = sxiPointer(appState.layoutPath)
+  appState.previewReturnName = palmBoard ? boardFileName(palmBoard[3]) : appState.layoutPath.split("/").pop() ?? layout.value
   const initial = appState.archive.format === "bda" && isBdaLayoutPath(appState.layoutPath)
     ? appState.layoutPath
-    : appState.archive.names().includes(appState.layoutPath)
+    : appState.archive.names().includes(appState.layoutPath) || isSsfBoardPath(appState.layoutPath) || isSxiBoardAddress(appState.layoutPath)
       ? appState.layoutPath
       : appState.archive.names().find((name) => appState.archive?.isText(name))
   if (initial) {

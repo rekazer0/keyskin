@@ -9,7 +9,7 @@ import { type Change } from "../history.ts"
 import { resolveCandidateRect } from "../candidate-style.ts"
 import { PalmBoard, THEME_DIRECTORY, type PalmOrientation, type PalmTheme } from "../palm/palm-board.ts"
 import { applySxiLayoutImage } from "../palm/sxi-layout-image.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { asObject } from "../palm/sxi-ini.ts"
 import { applySsfBackgroundImage, applySsfKeyImage } from "../ssf/ssf-layout-image.ts"
 import { ssfKeyBinding, type SsfKeyBinding } from "../ssf/ssf-keymap.ts"
@@ -25,13 +25,23 @@ import { populateKeyInspector } from "./key-inspector"
 import { currentGenDocument, layoutImageTargetLabel, nextResourceBase, showLayoutImageError, sliceLayoutImage } from "./layout-image-replace"
 import { panelSizeFrom } from "./panel-copy"
 import { refreshPreview } from "./preview-render"
-import { isSsfBoardPath, sourceEditPath, ssfPackage, ssfTheme, ssfThemeFolder } from "./ssf-documents"
-import { palmSkin, refreshSxiDocument } from "./sxi-documents"
+import { isSsfBoardPath, sourceEditPath, ssfPackage, ssfSkeleton, ssfTheme, ssfThemeFolder } from "./ssf-documents"
+import { isSxiBoardAddress, palmSkin, refreshSxiDocument, sxiPointer } from "./sxi-documents"
 
 /** Key rects of the open board in whole pixels: slices are cut on the pixel grid. */
 function keyRects(layout: IniDocument, size: [number, number]) {
   return layoutKeyRects(layout, appState.selectedKeySections, size)
     .map(({ section, rect }) => ({ section, rect: rect.map(Math.round) as TileRect }))
+}
+
+/** The selected keys of a Palm board (else all of them), as skin.json places them; a backdrop key covering the panel is not one. */
+function palmKeyRects(board: PalmBoard): Array<{ section: string; rect: TileRect }> {
+  const selected = new Set(appState.selectedKeySections)
+  return board.keys(undefined).flatMap(({ section, rect }) => {
+    if (selected.size && !selected.has(section)) return []
+    if (rect.x <= 0 && rect.y <= 0 && rect.width >= board.width * 0.9 && rect.height >= board.height * 0.9) return []
+    return [{ section, rect: [rect.x, rect.y, rect.width, rect.height].map(Math.round) as TileRect }]
+  })
 }
 
 function finish(): void {
@@ -46,9 +56,8 @@ function finish(): void {
 export async function replaceSxiLayoutImage(): Promise<void> {
   const archive = appState.archive!
   const target = appState.layoutImageTarget!
-  const pointer = archive.derivedPointer(appState.layoutPath)
-  const layout = appState.layoutDocument
-  if (!pointer || pointer[2] !== "b" || !layout) return showLayoutImageError("请先在画布上打开一个手心键盘布局。")
+  const pointer = sxiPointer(appState.layoutPath)
+  if (!pointer || !isSxiBoardAddress(appState.layoutPath)) return showLayoutImageError("请先在画布上打开一个手心键盘布局。")
   const skin = palmSkin(archive)
   const themeKey = pointer[0] as PalmTheme
   const board = new PalmBoard(skin, themeKey, pointer[1].replace(/_layout$/, "") as PalmOrientation, pointer[3])
@@ -65,7 +74,7 @@ export async function replaceSxiLayoutImage(): Promise<void> {
     image.close()
     plan = planLayoutImage(target, [], IniDocument.parse(""), width, height)
   } else {
-    const sliced = await sliceLayoutImage(keyRects(layout, [board.width, board.height]), board.width, board.height, (keys, cells) => {
+    const sliced = await sliceLayoutImage(palmKeyRects(board), board.width, board.height, (keys, cells) => {
       if (cells.length === keys.length) return keys
       showLayoutImageError(`手心皮肤不能增删按键：图片里识别出 ${cells.length} 个按键区域，当前布局有 ${keys.length} 个按键。`)
     })
@@ -106,7 +115,8 @@ export async function replaceSsfLayoutImage(): Promise<void> {
   const gen = currentGenDocument()
   const panel = panelSizeFrom(layout) ?? panelSizeFrom(gen)
   const candPath = toolbarConfigPath()
-  const bar = gen && candPath && archive.isText(candPath) ? resolveCandidateRect(IniDocument.parse(archive.getText(candPath)), gen) : undefined
+  const boards = ssfSkeleton()
+  const bar = gen && candPath && boards?.isText(candPath) ? resolveCandidateRect(IniDocument.parse(boards.getText(candPath)), gen) : undefined
   if (!panel || !bar) return showLayoutImageError("无法读取这个搜狗键盘的尺寸。")
   const landscape = orientation.value === "land"
   const layoutName = appState.layoutPath.split("/").pop()!

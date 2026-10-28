@@ -1,18 +1,12 @@
-// `.sxi` keyboard, candidate-bar and bubble models projected back to INI text, the inverse
-// of the layout half of `palm-export.ts`. The projection only feeds the renderer: edits go
-// to `skin.json` itself.
+// `.sxi` keyboard, candidate-bar and bubble models written as Baidu INI text, the inverse of the layout
+// half of `palm-export.ts`, for exporting a Palm skin as BDI/BDS (sxi-to-baidu.ts). Also the names Palm
+// gives its board types' layouts (`boardFileName`) and its gesture buttons.
 
 import { iniCodeFromBoardType } from "./palm-board-types.ts"
 import {
   IniWriter,
-  READERS,
   actionText,
-  actionValue,
   asObject,
-  attach,
-  bind,
-  fieldWrite,
-  tipsValue,
   numberText,
   put,
   putBase,
@@ -27,25 +21,12 @@ import {
 /** Palm `values` button indexes, in order. */
 export const BUTTON_KEYS = ["UP", "DOWN", "LEFT", "RIGHT", "CENTER", "SHOW", "HOLD", "HOLDSYM", "BAR_SYM", "BAR_SYM_SEL"]
 
-// Gestures live in a flat `[button, action, ...]` list; an edit replaces, appends or drops one pair.
+// Gestures live in a flat `[button, action, ...]` list.
 function putValues(entries: Map<string, string>, owner: JsonObject, field: string): void {
   const values = Array.isArray(owner[field]) ? owner[field] as Json[] : []
   for (let index = 0; index + 1 < values.length; index += 2) {
     const key = typeof values[index] === "number" ? BUTTON_KEYS[values[index] as number] : undefined
     if (key) put(entries, key, actionText(values[index + 1]))
-  }
-  for (const [button, key] of BUTTON_KEYS.entries()) {
-    bind(entries, key, (text) => {
-      const list = Array.isArray(owner[field]) ? [...owner[field] as Json[]] : []
-      const at = list.findIndex((item, index) => index % 2 === 0 && item === button)
-      if (text?.trim()) {
-        if (at >= 0) list[at + 1] = actionValue(text)
-        else list.push(button, actionValue(text))
-      } else if (at >= 0) list.splice(at, 2)
-      if (list.length) owner[field] = list
-      else delete owner[field]
-      attach(owner)
-    }, values.some((item, index) => index % 2 === 0 && item === button))
   }
 }
 
@@ -58,24 +39,16 @@ function sameRect(left: Json, right: Json): boolean {
 function putKey(writer: IniWriter, key: JsonObject): void {
   const entries = writer.section(`KEY${key.id ?? ""}`)
   putBase(entries, key)
-  // A touch area equal to the key is not projected, so moving the key moves it too.
-  bind(entries, "VIEW_RECT", (text) => {
-    const follows = key.hit_rect !== undefined && sameRect(key.hit_rect, key.rect)
-    fieldWrite(key, "rect", READERS.rect)(text)
-    if (follows) key.hit_rect = key.rect
-  }, key.rect !== undefined)
   put(entries, "VIEW_RECT", rectText(key.rect))
-  bind(entries, "TOUCH_RECT", fieldWrite(key, "hit_rect", READERS.rect), key.hit_rect !== undefined)
+  // A touch area equal to the key is Baidu's default, so it is left out.
   if (key.hit_rect !== undefined && !sameRect(key.hit_rect, key.rect)) put(entries, "TOUCH_RECT", rectText(key.hit_rect))
   putValues(entries, key, "values")
-  bind(entries, "STAT_STYLE", fieldWrite(key, "fix_a", tipsValue), key.fix_a !== undefined)
   put(entries, "STAT_STYLE", tipsText(key.fix_a))
 }
 
 function putTip(writer: IniWriter, name: string, tip: JsonObject): void {
   const entries = writer.section(name)
   putBase(entries, tip)
-  bind(entries, "KEY", fieldWrite(tip, "k", actionValue), tip.k !== undefined)
   put(entries, "KEY", actionText(tip.k))
   putValues(entries, tip, "v")
 }
@@ -187,7 +160,7 @@ export function boardIni(value: Json): IniWriter {
   }
 
   // shortcut: `logoModel` inlines the PANEL/ICON of a separate logo layout; that file name
-  // is not in skin.json, so only the LOGO base is projected.
+  // is not in skin.json, so only the LOGO base is written.
   const logo = sectionOf("LOGO", "logo")
   if (logo) putBase(logo[0], logo[1])
 
