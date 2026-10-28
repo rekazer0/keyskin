@@ -32,7 +32,7 @@ export function selectedVariant(): { theme: "light" | "dark"; orientation: "port
   }
 }
 
-export function preferredVariantExists(path: string): boolean {
+function preferredVariantExists(path: string): boolean {
   return appState.archive?.format === "bda"
     ? bdaAvailableLayoutPaths().includes(path)
     : Boolean(appState.archive?.names().includes(path))

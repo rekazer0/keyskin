@@ -236,7 +236,7 @@ export function selectKey(self: Preview, key: PreviewItem, event: Pick<PointerEv
   self.onSelect([...self.selected])
 }
 
-export function dragDelta(self: Preview, point: { x: number; y: number }): { x: number; y: number } {
+function dragDelta(self: Preview, point: { x: number; y: number }): { x: number; y: number } {
   if (!self.editDrag) return { x: 0, y: 0 }
   return snapRectDelta(
     [...self.editDrag.original.values()],

@@ -15,7 +15,7 @@ import type { PalmJSONValue } from "./palm-json.ts"
 
 type PalmIniEntries = Record<string, string>
 
-export type PalmAnimationBase = {
+type PalmAnimationBase = {
   type: number
   category: number
   repeatCount: number
@@ -23,7 +23,7 @@ export type PalmAnimationBase = {
   removeOnComplete: boolean
 }
 
-export function palmCgPoint(text: string | undefined): [number, number] | undefined {
+function palmCgPoint(text: string | undefined): [number, number] | undefined {
   if (text === undefined) return undefined
   const parts = text.split(",")
   if (parts.length !== 2) return undefined

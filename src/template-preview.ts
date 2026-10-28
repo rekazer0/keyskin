@@ -77,7 +77,7 @@ export async function archiveDemoImage(bytes: Uint8Array): Promise<Blob> {
   return new Blob([demo.slice() as BlobPart], { type: demoImageType(demo) })
 }
 
-export async function renderArchivePreview(bytes: Uint8Array, host: HTMLElement): Promise<HTMLImageElement> {
+async function renderArchivePreview(bytes: Uint8Array, host: HTMLElement): Promise<HTMLImageElement> {
   return renderBlobPreview(await archiveDemoImage(bytes), host)
 }
 

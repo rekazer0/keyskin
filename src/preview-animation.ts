@@ -2,7 +2,7 @@ import { IniDocument } from "./ini.ts"
 import { type Rect, type PreviewItem } from "./preview-items.ts"
 import { type BdaAnimation, type BdaAnimationSequence, type BdaAnimationBinding, type BdaAnimationEffect, type BdaTransformAnimation, type BdaEmitterAnimation } from "./bda.ts"
 
-export type LegacyAnimationFrame = {
+type LegacyAnimationFrame = {
   type: "opacity" | "translate" | "scale" | "rotate"
   start: number
   duration: number
@@ -33,7 +33,7 @@ export type LegacyParticleEmitter = {
   alphaSpeed: readonly [number, number]
 }
 
-export type LegacyParticleFrame = {
+type LegacyParticleFrame = {
   styleID: string
   x: number
   y: number
@@ -42,7 +42,7 @@ export type LegacyParticleFrame = {
   opacity: number
 }
 
-export type LegacyAnimationEffect = {
+type LegacyAnimationEffect = {
   frames: LegacyAnimationFrame[]
   particles: LegacyParticleEmitter[]
   parallel: boolean
@@ -88,20 +88,20 @@ export function scalePair(value: string | undefined): [number, number] | undefin
   return [parts[0] / 100, parts[1] / 100]
 }
 
-export function pixelPair(value: string | undefined): [number, number] | undefined {
+function pixelPair(value: string | undefined): [number, number] | undefined {
   const parts = legacyNumbers(value)
   if (parts.length < 2) return
   return [parts[0], parts[1]]
 }
 
-export function opacityPair(value: string | undefined): [number, number] | undefined {
+function opacityPair(value: string | undefined): [number, number] | undefined {
   const number = legacyNumbers(value)[0]
   if (number === undefined) return
   const opacity = Math.max(0, Math.min(1, number / 255))
   return [opacity, opacity]
 }
 
-export function scalarPair(value: string | undefined): [number, number] | undefined {
+function scalarPair(value: string | undefined): [number, number] | undefined {
   const number = legacyNumbers(value)[0]
   return number === undefined ? undefined : [number, number]
 }
@@ -137,7 +137,7 @@ export function parseLegacyParticleEmitter(animations: IniDocument, section: str
   }
 }
 
-export function seededUnit(seed: number): number {
+function seededUnit(seed: number): number {
   let value = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b)
   value = Math.imul(value ^ value >>> 13, 0xc2b2ae35)
   return ((value ^ value >>> 16) >>> 0) / 0x1_0000_0000
@@ -262,7 +262,7 @@ export function parseLegacyAnimation(
   return result
 }
 
-export function legacyAnimationPair(
+function legacyAnimationPair(
   animation: LegacyAnimation | undefined,
   styleID: string | undefined,
   elapsed: number,
@@ -368,7 +368,7 @@ export function animationSequenceForKey(
   if (animation.sequences.size === 1) return animation.sequences.values().next().value
 }
 
-export function bdaTargetForKey(animation: BdaAnimation, item: PreviewItem): string | undefined {
+function bdaTargetForKey(animation: BdaAnimation, item: PreviewItem): string | undefined {
   const candidates = [item.section, item.center, item.down, `KEY_${item.center}`]
     .map((value) => value.trim().toUpperCase()).filter(Boolean)
   const exact = animation.targets.find((value) => candidates.includes(value.toUpperCase()))
@@ -411,7 +411,7 @@ export function bdaEffectDuration(effect: BdaAnimationEffect): number {
   return 0
 }
 
-export type BdaTransformState = {
+type BdaTransformState = {
   scale?: readonly [number, number]
   translation?: readonly [number, number]
   rotation?: number

@@ -33,7 +33,7 @@ export type PreviewItem = {
   foreAnimStyles: string[]
 }
 
-export function duplicateKeySignature(item: PreviewItem): string | undefined {
+function duplicateKeySignature(item: PreviewItem): string | undefined {
   if (!item.editable || !/^KEY\d+$/i.test(item.section)) return
   const actions = [item.show, item.center, item.up, item.down, item.left, item.right, item.hold]
   if (!actions.some(Boolean)) return
@@ -159,7 +159,7 @@ export function previewStateImpact(
   }
 }
 
-export function previewBackground(theme: "light" | "dark"): string {
+function previewBackground(theme: "light" | "dark"): string {
   return theme === "dark" ? "#1c1c1e" : "#d1d4da"
 }
 
@@ -264,7 +264,7 @@ export function isTouchLongPress(pointerType: string, duration: number, distance
   return pointerType === "touch" && duration >= 450 && distance <= 12
 }
 
-export function previewHitRect(item: PreviewItem, mode: "edit" | "preview"): Rect | undefined {
+function previewHitRect(item: PreviewItem, mode: "edit" | "preview"): Rect | undefined {
   if (mode === "edit") return item.rect
   return item.touchRect === null ? undefined : item.touchRect ?? item.rect
 }
@@ -277,7 +277,7 @@ export function parseRect(value: string | undefined): Rect | undefined {
   return { x, y, width, height }
 }
 
-export function parseTouchRect(value: string | undefined): Rect | null | undefined {
+function parseTouchRect(value: string | undefined): Rect | null | undefined {
   if (value === undefined) return
   const parts = value.split(",").map(Number)
   if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) return
@@ -291,7 +291,7 @@ export function parseOffset(value: string | undefined): [number, number] | undef
   return parts as [number, number]
 }
 
-export function previewItemSections(document: IniDocument, section: string): string[] {
+function previewItemSections(document: IniDocument, section: string): string[] {
   if (!/^ICON\d+$/i.test(section)) return [section]
   const tips = [...(document.get(section, "STAT_STYLE") ?? "").matchAll(/(?:^|\|)S\d+_(\d+)(?=\||$)/g)]
     .map((match) => `TIP${match[1]}`)
@@ -308,7 +308,7 @@ export function offsetFromSection(document: IniDocument | undefined, section: st
   return relative && [Math.trunc(rect.width * relative[0] / 100), Math.trunc(rect.height * relative[1] / 100)]
 }
 
-export function itemFromSection(document: IniDocument, section: string): PreviewItem | undefined {
+function itemFromSection(document: IniDocument, section: string): PreviewItem | undefined {
   const rect = parseRect(document.get(section, "VIEW_RECT"))
   if (!rect) return
   const value = (name: string) => document.get(section, name) ?? ""
@@ -347,7 +347,7 @@ export function itemFromSection(document: IniDocument, section: string): Preview
   }
 }
 
-export function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[] {
+function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[] {
   const value = (name: string) => document.get("LIST", name) ?? defaults?.get("LIST", name)
   const type = value("TYPE")?.trim()
   // TYPE=2 is the runtime scrolling-list container used by some Android skins.

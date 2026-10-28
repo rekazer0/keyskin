@@ -11,7 +11,7 @@ import { isSxiBoardAddress, openPalmSkin, PALM_SHARED_BOARD, palmTheme, sxiPoint
 import { palmKeyForegrounds, palmStyle, palmStylePointer, palmValue, type PalmPointer } from "./sxi-styles"
 import { addPalmStyle } from "../palm/palm-style-edit.ts"
 
-export type PalmTextProperty = "FONT_NAME" | "FONT_SIZE" | "NM_COLOR" | "HL_COLOR"
+type PalmTextProperty = "FONT_NAME" | "FONT_SIZE" | "NM_COLOR" | "HL_COLOR"
 
 /** Styles a text target writes; `create` is where a missing style is referenced from, and what it starts as. */
 export type PalmText = { ids: string[]; create?: { owner: PalmPointer; field: string; list?: boolean; copyFrom?: string } }

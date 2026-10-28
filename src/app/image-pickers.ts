@@ -22,7 +22,7 @@ import { WHOLE_IMAGE_INDEX } from "../slice-picker-canvas.ts"
 import { type TileRect, tileSlices } from "../tiles.ts"
 import { ssfPackage, ssfThemeFolder } from "./ssf-documents"
 
-export function selectedStyleImageSections(source: "BACK_STYLE" | "FORE_STYLE"): { document: IniDocument; path: string; sections: string[] } | undefined {
+function selectedStyleImageSections(source: "BACK_STYLE" | "FORE_STYLE"): { document: IniDocument; path: string; sections: string[] } | undefined {
   if (!appState.archive || !appState.layoutDocument || !appState.selectedKeySections.length) return
   const path = styleConfigPath()
   if (!appState.archive.isText(path)) return

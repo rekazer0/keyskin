@@ -18,13 +18,13 @@ import { watch } from "@tauri-apps/plugin-fs"
 import { sourceDirectory, sourceDirectoryStatus, settingsStorageSection, sourceDirectoryEnabled, chooseSourceDirectory, resetSourceDirectory } from "./dom"
 import { message } from "@tauri-apps/plugin-dialog"
 
-export function sourcePathForWorkspace(path: string): string {
+function sourcePathForWorkspace(path: string): string {
   return appState.sourceWorkspacePrefix && path.startsWith(appState.sourceWorkspacePrefix)
     ? path.slice(appState.sourceWorkspacePrefix.length)
     : path
 }
 
-export function sourcePathForArchive(path: string): string {
+function sourcePathForArchive(path: string): string {
   return resolveSourceArchivePath(
     path,
     appState.sourceWorkspacePrefix,
@@ -32,12 +32,12 @@ export function sourcePathForArchive(path: string): string {
   )
 }
 
-export function sourceWriteKey(path: string): string {
+function sourceWriteKey(path: string): string {
   const normalized = path.replaceAll("\\", "/")
   return navigator.userAgent.includes("Windows") ? normalized.toLowerCase() : normalized
 }
 
-export function rememberSourceWrite(path: string, data: SourceWriteSnapshot): void {
+function rememberSourceWrite(path: string, data: SourceWriteSnapshot): void {
   const key = sourceWriteKey(path)
   const snapshots = sourceWriteSnapshots.get(key) ?? []
   snapshots.push(data)
@@ -72,7 +72,7 @@ export function decodeBase64Archive(value: string): Uint8Array {
   return bytes
 }
 
-export function bdaWorkspaceData(path: string, bytes: Uint8Array): Uint8Array {
+function bdaWorkspaceData(path: string, bytes: Uint8Array): Uint8Array {
   const source = JSON.parse(decodedBdaSource(path, bytes)) as Record<string, unknown>
   source.$bdiEditorRaw = encodeBase64(bytes)
   return new TextEncoder().encode(JSON.stringify(source, null, 2))
@@ -130,7 +130,7 @@ export function scheduleSourceAutosave(paths: string[]): void {
   }, 3 * 60_000)
 }
 
-export async function refreshExternalSourceFiles(workspace: string, paths: string[]): Promise<void> {
+async function refreshExternalSourceFiles(workspace: string, paths: string[]): Promise<void> {
   if (!appState.archive || workspace !== appState.sourceWorkspacePath || !paths.length) return
   const changes = await invoke<SourceChangePayload[]>("read_source_changes", {
     path: workspace,
@@ -214,7 +214,7 @@ export async function refreshExternalSourceFiles(workspace: string, paths: strin
   showStatus(`已实时刷新 ${affected.size} 个源码文件`)
 }
 
-export function queueSourceWatch(paths: string[], workspace: string): void {
+function queueSourceWatch(paths: string[], workspace: string): void {
   if (workspace !== appState.sourceWorkspacePath) return
   for (const path of paths) pendingSourceWatchPaths.add(path)
   if (appState.sourceWatchTimer !== undefined) clearTimeout(appState.sourceWatchTimer)
@@ -254,7 +254,7 @@ export async function activateSourceWorkspace(path: string, prefix = ""): Promis
   }, { recursive: true, delayMs: 120 })
 }
 
-export function setSourceDirectoryState(path: string, custom: boolean, error = ""): void {
+function setSourceDirectoryState(path: string, custom: boolean, error = ""): void {
   sourceDirectory.value = path
   sourceDirectory.closest("label")?.setAttribute("data-invalid", String(Boolean(error)))
   sourceDirectoryStatus.textContent = error || (custom

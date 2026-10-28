@@ -28,13 +28,13 @@ export type LegacyMotionBinding = {
   animation: number
 }
 
-export type LegacyMotion = {
+type LegacyMotion = {
   sections: Map<number, LegacySection>
   bindings: LegacyMotionBinding[]
   warnings: string[]
 }
 
-export type LegacyMotionResources = {
+type LegacyMotionResources = {
   /** 设备是否支持 FROM/TO 的 rand(a,b) 随机写法（Android 7.0+）；iOS 用区间中点。 */
   randomize?: boolean
   /** 粒子图片转成旧版 [STYLE*] 图片样式，返回样式编号；不支持的资源返回 undefined。 */

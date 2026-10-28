@@ -21,16 +21,16 @@ function slot(ref: BdaStyleRef | undefined, label: string, field: string, path: 
   return { ref, type: ref?.type ?? type, label, field, path }
 }
 
-export type BdaLayoutStyleGroup = { key: string; title: string; items: BdaLayoutStyleItem[] }
+type BdaLayoutStyleGroup = { key: string; title: string; items: BdaLayoutStyleItem[] }
 
-export function uniqueStyleItems(items: BdaLayoutStyleItem[]): BdaLayoutStyleItem[] {
+function uniqueStyleItems(items: BdaLayoutStyleItem[]): BdaLayoutStyleItem[] {
   return [...new Map(items.map((item) => [item.path.join("."), item])).values()]
 }
 
 /** The slot after a key's last foreground layer: picking a style there adds a layer (`foreStyles[+]`). */
 export const NEW_FORE_LAYER = "foreStyles[+]"
 
-export function keyStyleItems(name: string, key: BdaKey, path: string[]): BdaLayoutStyleItem[] {
+function keyStyleItems(name: string, key: BdaKey, path: string[]): BdaLayoutStyleItem[] {
   return [
     { ...slot(key.backStyle, "背景样式", "backStyle", [...path, "backStyle"]), owner: name },
     ...key.foreStyles.map((ref, index) => ({ ...slot(ref, `前景样式 ${index + 1}`, `foreStyles[${index}]`, [...path, "foreStyles", String(index)]), owner: name })),

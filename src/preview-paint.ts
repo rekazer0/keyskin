@@ -494,7 +494,7 @@ function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: 
   }
 }
 
-export function drawGuides(self: Preview, keys: readonly PreviewItem[]): void {
+function drawGuides(self: Preview, keys: readonly PreviewItem[]): void {
   if (!self.guides) {
     self.guidesOverlay?.toggleAttribute("hidden", true)
     return

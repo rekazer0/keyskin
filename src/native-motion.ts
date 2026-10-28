@@ -31,7 +31,7 @@ export type Track = {
 }
 
 /** Opacity 0..1, rotation in degrees, translation in scene units, pivot as a share of the target. */
-export type Motion = { scale?: Pair; translation?: Pair; rotation?: number; opacity?: number; pivot?: Pair }
+type Motion = { scale?: Pair; translation?: Pair; rotation?: number; opacity?: number; pivot?: Pair }
 
 /** An image an animation draws over the keys, with its own motion. `slot` pairs a press clip with the show clip it replaces. */
 export type SceneSprite = { visual: Visual; rect: Rect; motion?: Motion; slot?: number }

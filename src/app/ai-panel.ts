@@ -103,11 +103,11 @@ export function aiEditableProjectImages(target: SkinArchive, scope: "panel" | "p
   })
 }
 
-export function aiWantsWholeProject(prompt: string): boolean {
+function aiWantsWholeProject(prompt: string): boolean {
   return /整个皮肤|全局|所有面板|全部面板|所有主题|全部主题|全项目|整个项目|全局修改/i.test(prompt)
 }
 
-export function aiWantsVariants(prompt: string): boolean {
+function aiWantsVariants(prompt: string): boolean {
   return /多版|几版|几个方案|多个方案|多套方案|[三3]\s*个方案|不同方向|方案选择/i.test(prompt)
 }
 
@@ -118,7 +118,7 @@ export function setAiDesignScope(project: boolean): void {
   aiDesignScope.title = project ? "AI 可以修改整个皮肤的所有面板，点击改为只改当前面板" : "AI 只修改当前面板及其引用的样式，点击改为整个皮肤"
 }
 
-export function aiPreviewImage(): { type: "image"; data: string; mimeType: string } | undefined {
+function aiPreviewImage(): { type: "image"; data: string; mimeType: string } | undefined {
   if (!previewCanvas.width || !previewCanvas.height) return
   try {
     const layers = [
@@ -149,7 +149,7 @@ export function aiPreviewImage(): { type: "image"; data: string; mimeType: strin
   }
 }
 
-export function aiSelectedKeyContext(): { label: string; sections: string[]; values: Record<string, string> } {
+function aiSelectedKeyContext(): { label: string; sections: string[]; values: Record<string, string> } {
   if (appState.archive?.format === "ssf") {
     // A Sogou key is styled by its classes; the canvas key sections belong to the skeleton board.
     const sections = ssfSelectedBindings().flatMap(({ binding }) => binding.sections)
@@ -234,7 +234,7 @@ export function aiDesignErrorMessage(error: unknown): string {
   return `AI 设计失败：${raw}`
 }
 
-export async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: readonly File[]): Promise<AiChatRunResult> {
+async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: readonly File[]): Promise<AiChatRunResult> {
   if (!isTauri()) {
     throw new Error("AI 设计当前仅在桌面应用中可用。")
   }
@@ -376,7 +376,7 @@ export async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, 
  * Derives the canvas sections an AI draft would touch, by comparing the INI
  * sections (or JSON keys) present before and after each proposed file change.
  */
-export function aiDraftSections(changes: readonly AiSkinDraftChange[]): string[] {
+function aiDraftSections(changes: readonly AiSkinDraftChange[]): string[] {
   const sections = new Set<string>()
   for (const change of changes) {
     if (change.syntax === "png") continue
@@ -394,7 +394,7 @@ export function aiDraftSections(changes: readonly AiSkinDraftChange[]): string[]
   return [...sections]
 }
 
-export function iniSectionTexts(source: string): Array<[string, string]> {
+function iniSectionTexts(source: string): Array<[string, string]> {
   const headers = [...source.matchAll(/^\s*\[([^\]]+)]\s*$/gm)]
   return headers.map((header, index) => [
     header[1],
@@ -402,7 +402,7 @@ export function iniSectionTexts(source: string): Array<[string, string]> {
   ])
 }
 
-export function createAiVariantReview(variant: AiDraftVariant, index: number): HTMLLIElement {
+function createAiVariantReview(variant: AiDraftVariant, index: number): HTMLLIElement {
   const item = document.createElement("li")
   item.className = "ai-variant-card"
   const button = document.createElement("button")
@@ -423,7 +423,7 @@ export function createAiVariantReview(variant: AiDraftVariant, index: number): H
   return item
 }
 
-export function chooseAiVariant(id: string): void {
+function chooseAiVariant(id: string): void {
   const draft = appState.aiDesignDraft
   const variant = draft?.variants?.find((item) => item.id === id)
   if (!draft || !variant) return
@@ -587,7 +587,7 @@ export function rememberAiDesignModel(): void {
   } catch {}
 }
 
-export function syncModelProfiles(all: ModelConfiguration[]): void {
+function syncModelProfiles(all: ModelConfiguration[]): void {
   const current = appState.savedModels[Number(aiDesignModel.value)]
   let remembered: string | null = null
   try { remembered = localStorage.getItem(AI_DESIGN_MODEL_KEY) } catch {}

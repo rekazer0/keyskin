@@ -6,16 +6,16 @@ import type { SsfKeyBinding } from "./ssf-keymap.ts"
 import { parseSsfImage, type SsfImageRef } from "./ssf-package.ts"
 
 /** Accepts an image reference; converters also require the file to exist. */
-export type SsfImageCheck = (ref: SsfImageRef) => boolean
+type SsfImageCheck = (ref: SsfImageRef) => boolean
 
-export type SsfBackground = {
+type SsfBackground = {
   /** Key section whose BG_IMAGES names the background; absent when a shared default class draws it. */
   owner?: string
   /** Section holding the NORMAL / PRESSED images. */
   images: string
 }
 
-export type SsfForeground =
+type SsfForeground =
   /** keys.ini: `[owner] FG_IMAGES=images`, `[images] NORMAL=…`, placed by FG_RECT. */
   | { kind: "keys"; owner: string; images: string; rect?: number[] }
   /** phoneSkin.ini: `[owner] ICON=…`, centred on the key. */

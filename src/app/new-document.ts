@@ -10,7 +10,7 @@ import { loadBuiltInProjectTemplate } from "../operations.ts"
 import { showStatus, runFileOperation } from "./file-operations"
 import { exportName } from "../export.ts"
 
-export async function chooseProjectTemplate(): Promise<string | undefined> {
+async function chooseProjectTemplate(): Promise<string | undefined> {
   if (isAndroidTauri()) return chooseAndroidProjectTemplate()
   if (isTauri()) {
     const templateID = await chooseNativeProjectTemplate()
@@ -21,7 +21,7 @@ export async function chooseProjectTemplate(): Promise<string | undefined> {
   return chooseEmbeddedProjectTemplate()
 }
 
-export async function chooseAndroidProjectTemplate(): Promise<string | undefined> {
+async function chooseAndroidProjectTemplate(): Promise<string | undefined> {
   try {
     return await invoke<string>("choose_project_template")
   } catch (error) {
@@ -30,7 +30,7 @@ export async function chooseAndroidProjectTemplate(): Promise<string | undefined
   }
 }
 
-export function chooseEmbeddedProjectTemplate(): Promise<string | undefined> {
+function chooseEmbeddedProjectTemplate(): Promise<string | undefined> {
   if (!appState.projectChooserInitialized) {
     initializeProjectChooser(newProjectForm)
     newProjectForm.addEventListener("project-import", () => newProjectDialog.close("import"))
@@ -56,7 +56,7 @@ export function chooseEmbeddedProjectTemplate(): Promise<string | undefined> {
   })
 }
 
-export const EMBEDDED_PROJECT_FALLBACK = "__embedded-project-fallback__"
+const EMBEDDED_PROJECT_FALLBACK = "__embedded-project-fallback__"
 
 export function finishNativeProjectChoice(templateID?: string): void {
   if (!appState.resolveNativeProjectChoice) return
@@ -66,7 +66,7 @@ export function finishNativeProjectChoice(templateID?: string): void {
   resolve(templateID)
 }
 
-export async function chooseNativeProjectTemplate(): Promise<string | undefined> {
+async function chooseNativeProjectTemplate(): Promise<string | undefined> {
   if (appState.nativeProjectChoice) {
     void WebviewWindow.getByLabel("new-project").then((window) => window?.setFocus())
     return appState.nativeProjectChoice

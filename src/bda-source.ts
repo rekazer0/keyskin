@@ -3,14 +3,14 @@ import { bdaColorHex } from "./bda-resolver.ts"
 import { rawFields, rawString, replaceField, encodeVarint, join, encodedField, updateStringMapValue, colorValue, updateBdaDesignWidth, updateBdaStyle, updateBdaAnimationFrame, applyBdaAnimationEffects, updateBdaKeySound } from "./bda-encode.ts"
 import { decodeBdaAppearance, decodeBdaAnimation, decodeBdaSoundConfig } from "./bda-decode.ts"
 
-export function mapObject<K extends string | number, V>(
+function mapObject<K extends string | number, V>(
   values: Map<K, V>,
   encode: (value: V) => unknown = (value) => value,
 ): Record<string, unknown> {
   return Object.fromEntries([...values].map(([key, value]) => [String(key), encode(value)]))
 }
 
-export function decodedAppearanceSource(appearance: BdaAppearance, panelName?: string): Record<string, unknown> {
+function decodedAppearanceSource(appearance: BdaAppearance, panelName?: string): Record<string, unknown> {
   const styleRef = (value: BdaStyleRef | undefined) => value && { type: value.type, key: value.key }
   const imageAtomSource = (value: BdaImageAtom | undefined) => value && {
     resource: value.resource,
@@ -120,7 +120,7 @@ export function decodedAppearanceSource(appearance: BdaAppearance, panelName?: s
   }
 }
 
-export function genericBdaSource(bytes: Uint8Array, compact = false): unknown[] {
+function genericBdaSource(bytes: Uint8Array, compact = false): unknown[] {
   const hex = (value: Uint8Array) => Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join("")
   const decode = (value: Uint8Array, depth: number): unknown[] => rawFields(value).map((field) => {
     const source: Record<string, unknown> = {
@@ -162,7 +162,7 @@ export function bdaDecodedSourceEditable(path: string): boolean {
     /^\d*soundConfig$/i.test(name)
 }
 
-export function decodedBdaValue(path: string, bytes: Uint8Array, panelName?: string): unknown {
+function decodedBdaValue(path: string, bytes: Uint8Array, panelName?: string): unknown {
   const name = path.split("/").pop() ?? path
   if (/^\d*appearanceConfig$/i.test(name)) {
     return decodedAppearanceSource(decodeBdaAppearance(bytes), panelName)
@@ -192,7 +192,7 @@ export function decodedBdaEditorSource(path: string, bytes: Uint8Array, panelNam
   return JSON.stringify(decodedBdaValue(path, bytes, panelName), null, 2)
 }
 
-export function normalizedDecodedBdaObject(path: string, bytes: Uint8Array): JsonObject {
+function normalizedDecodedBdaObject(path: string, bytes: Uint8Array): JsonObject {
   return JSON.parse(decodedBdaEditorSource(path, bytes)) as JsonObject
 }
 
@@ -211,7 +211,7 @@ export function decodedBdaAppearancePart(bytes: Uint8Array, part: BdaAppearanceP
 
 export type JsonObject = Record<string, unknown>
 
-export function jsonObject(value: unknown): JsonObject | undefined {
+function jsonObject(value: unknown): JsonObject | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as JsonObject
     : undefined
@@ -232,51 +232,51 @@ export function sameJson(left: unknown, right: unknown): boolean {
     key === rightKeys[index] && sameJson(leftObject[key], rightObject[key]))
 }
 
-export type PanelPatchKind = "style" | "styleList" | "message" | "stringMap" | "boolean" | "number" | "color"
+type PanelPatchKind = "style" | "styleList" | "message" | "stringMap" | "boolean" | "number" | "color"
 
-export type PanelPatchField = { field: number; kind: PanelPatchKind; schema?: PanelPatchSchema }
+type PanelPatchField = { field: number; kind: PanelPatchKind; schema?: PanelPatchSchema }
 
-export type PanelPatchSchema = Record<string, PanelPatchField>
+type PanelPatchSchema = Record<string, PanelPatchField>
 
-export const keyPatchSchema: PanelPatchSchema = {
+const keyPatchSchema: PanelPatchSchema = {
   backStyle: { field: 1, kind: "style" },
   foreStyles: { field: 2, kind: "styleList" },
   backStyleState: { field: 4, kind: "style" },
 }
 
-export const hintPatchSchema: PanelPatchSchema = {
+const hintPatchSchema: PanelPatchSchema = {
   backStyle: { field: 2, kind: "style" },
   barStyle: { field: 3, kind: "style" },
   foreStyle: { field: 5, kind: "style" },
   cellStyle: { field: 6, kind: "style" },
 }
 
-export const listPatchSchema: PanelPatchSchema = {
+const listPatchSchema: PanelPatchSchema = {
   backStyle: { field: 1, kind: "style" },
   cellBackStyle: { field: 2, kind: "style" },
   cellForeStyle: { field: 3, kind: "style" },
   foreStyles: { field: 4, kind: "styleList" },
 }
 
-export const inputPatchSchema: PanelPatchSchema = {
+const inputPatchSchema: PanelPatchSchema = {
   backStyle: { field: 1, kind: "style" },
   textStyle: { field: 2, kind: "style" },
 }
 
-export const gridPatchSchema: PanelPatchSchema = {
+const gridPatchSchema: PanelPatchSchema = {
   backStyle: { field: 1, kind: "style" },
   cellForeStyle: { field: 2, kind: "style" },
   cellBackStyle: { field: 3, kind: "style" },
 }
 
-export const switchPatchSchema: PanelPatchSchema = {
+const switchPatchSchema: PanelPatchSchema = {
   normalBack: { field: 1, kind: "style" },
   selectBack: { field: 2, kind: "style" },
   normalFore: { field: 3, kind: "style" },
   selectFore: { field: 4, kind: "style" },
 }
 
-export const candPatchSchema: PanelPatchSchema = {
+const candPatchSchema: PanelPatchSchema = {
   candBarStyle: { field: 1, kind: "style" },
   candOnBarStyle: { field: 2, kind: "style" },
   cellBackStyle: { field: 3, kind: "style" },
@@ -295,7 +295,7 @@ export const candPatchSchema: PanelPatchSchema = {
   gridRightForeStyle: { field: 16, kind: "style" },
 }
 
-export const panelPatchSchema: PanelPatchSchema = {
+const panelPatchSchema: PanelPatchSchema = {
   hints: { field: 1, kind: "stringMap", schema: hintPatchSchema },
   lists: { field: 2, kind: "stringMap", schema: listPatchSchema },
   keys: { field: 3, kind: "stringMap", schema: keyPatchSchema },
@@ -310,7 +310,7 @@ export const panelPatchSchema: PanelPatchSchema = {
   inputRegionBackStyle: { field: 12, kind: "style" },
 }
 
-export function patchStyleRef(bytes: Uint8Array, value: unknown): Uint8Array {
+function patchStyleRef(bytes: Uint8Array, value: unknown): Uint8Array {
   const ref = jsonObject(value)
   const types = { image: 0, color: 1, text: 2 } as const
   const type = typeof ref?.type === "string" ? types[ref.type as keyof typeof types] : undefined
@@ -320,7 +320,7 @@ export function patchStyleRef(bytes: Uint8Array, value: unknown): Uint8Array {
   return replaceField(replaceField(bytes, 1, 0, encodeVarint(type)), 2, 0, encodeVarint(ref.key))
 }
 
-export function replaceRepeatedMessage(bytes: Uint8Array, fieldNumber: number, index: number, payload: Uint8Array): Uint8Array {
+function replaceRepeatedMessage(bytes: Uint8Array, fieldNumber: number, index: number, payload: Uint8Array): Uint8Array {
   const field = rawFields(bytes).filter((item) => item.number === fieldNumber)[index]
   if (!field) throw new Error(`BDA 重复字段不存在：${fieldNumber}[${index}]`)
   return join([bytes.slice(0, field.start), encodedField(fieldNumber, 2, payload), bytes.slice(field.end)])
@@ -340,7 +340,7 @@ function appendRepeatedMessage(bytes: Uint8Array, fieldNumber: number, payload: 
   return join([bytes.slice(0, at), encodedField(fieldNumber, 2, payload), bytes.slice(at)])
 }
 
-export function patchPanelMessage(bytes: Uint8Array, desired: JsonObject, current: JsonObject, schema: PanelPatchSchema): Uint8Array {
+function patchPanelMessage(bytes: Uint8Array, desired: JsonObject, current: JsonObject, schema: PanelPatchSchema): Uint8Array {
   let output = bytes
   for (const [property, spec] of Object.entries(schema)) {
     const wanted = desired[property]
@@ -408,7 +408,7 @@ export function patchPanelMessage(bytes: Uint8Array, desired: JsonObject, curren
   return output
 }
 
-export function updateBdaPanel(bytes: Uint8Array, name: string, desired: JsonObject, current: JsonObject): Uint8Array {
+function updateBdaPanel(bytes: Uint8Array, name: string, desired: JsonObject, current: JsonObject): Uint8Array {
   return updateStringMapValue(bytes, 4, name, (value) => patchPanelMessage(value, desired, current, panelPatchSchema))
 }
 

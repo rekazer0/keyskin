@@ -21,11 +21,11 @@ import { palmStyleIDs, palmStyleImage } from "./sxi-styles"
 import { palmTileSlices, removePalmTile, setPalmTile, setPalmTiles } from "../palm/palm-style-edit.ts"
 import { openPalmSkin } from "./sxi-documents"
 
-export function bdaTileUsageKey(usage: BdaTileUsage | undefined): string {
+function bdaTileUsageKey(usage: BdaTileUsage | undefined): string {
   return usage ? `${usage.ref.key}:${usage.highlighted ? "highlight" : "normal"}` : ""
 }
 
-export function selectedBdaTileUsage(): BdaTileUsage | undefined {
+function selectedBdaTileUsage(): BdaTileUsage | undefined {
   return appState.bdaTileUsages.find((usage) => usage.index === appState.selectedTileIndex)
 }
 
@@ -33,7 +33,7 @@ export function bdaImageResourceID(path: string): string {
   return (path.split("/").pop() ?? path).replace(/\.png$/i, "")
 }
 
-export function pngPixelSize(bytes: Uint8Array | undefined): readonly [number, number] | undefined {
+function pngPixelSize(bytes: Uint8Array | undefined): readonly [number, number] | undefined {
   if (!bytes || bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) return
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   return [view.getUint32(16), view.getUint32(20)]
@@ -52,7 +52,7 @@ export function bdaImageUsageCounts(): Map<string, number> {
   return counts
 }
 
-export function bdaImageTiles(path: string): { slices: TileSlice[]; usages: BdaTileUsage[] } {
+function bdaImageTiles(path: string): { slices: TileSlice[]; usages: BdaTileUsage[] } {
   const info = currentBdaAppearance()
   const size = pngPixelSize(appState.archive?.getBytes(path))
   if (!info || !size) return { slices: [], usages: [] }
@@ -228,7 +228,7 @@ export function drawAtlas(): void {
   }
 }
 
-export function drawTilePreview(): void {
+function drawTilePreview(): void {
   const slice = appState.movingTile?.index === appState.selectedTileIndex
     ? appState.movingTile
     : appState.slices.find((item) => item.index === appState.selectedTileIndex)
@@ -376,7 +376,7 @@ export function atlasPoint(event: Pick<PointerEvent, "clientX" | "clientY">): Ti
   }
 }
 
-export function commitBdaTileInnerRect(rect: TileRect): void {
+function commitBdaTileInnerRect(rect: TileRect): void {
   const info = currentBdaAppearance()
   const usage = selectedBdaTileUsage()
   const slice = appState.slices.find((item) => item.index === appState.selectedTileIndex)
@@ -455,7 +455,7 @@ export async function autoSliceSelectedImage(): Promise<void> {
   }
 }
 
-export function renderResourceInspectorMetadata(): void {
+function renderResourceInspectorMetadata(): void {
   for (const item of resourceGallery.querySelectorAll<HTMLElement>(".resource-item")) {
     if (item.dataset.path !== appState.selectedResourcePath) continue
     const meta = item.querySelector("small")

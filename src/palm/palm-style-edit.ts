@@ -7,7 +7,7 @@ import type { PalmOrientation, PalmTheme } from "./palm-board.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "./sxi-ini.ts"
 import { sxiFragment } from "./sxi-json.ts"
 
-export type PalmStyleKind = "image" | "color" | "anim" | "text" | "sound" | "empty"
+type PalmStyleKind = "image" | "color" | "anim" | "text" | "sound" | "empty"
 
 const THEME_KEYS: Record<string, PalmTheme> = { light: "default", dark: "night" }
 

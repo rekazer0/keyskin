@@ -47,7 +47,7 @@ export function effectiveKeySection(section: string): string {
   return effectivePanelSection(appState.layoutDocument, section, currentSkinState())
 }
 
-export function effectiveSelectedSections(): string[] {
+function effectiveSelectedSections(): string[] {
   return appState.selectedKeySections.map(effectiveKeySection)
 }
 
@@ -172,7 +172,7 @@ export function showsLayoutProperties(path: string): boolean {
   return appState.archive?.format !== "bda" && isConfigLayoutPath(path)
 }
 
-export function colorControlKey(field: HTMLInputElement): string {
+function colorControlKey(field: HTMLInputElement): string {
   return `${field.hasAttribute("data-keyboard-field") ? "keyboard" : "style"}-${field.dataset.keyboardField ?? field.dataset.styleField ?? ""}`
 }
 
@@ -242,12 +242,12 @@ export function toolbarConfigPath(): string | undefined {
     : found)
 }
 
-export function candidateCssLength(value: string | undefined, width: number): string | undefined {
+function candidateCssLength(value: string | undefined, width: number): string | undefined {
   const number = Number(value)
   return Number.isFinite(number) ? `${(number / width) * 100}cqw` : undefined
 }
 
-export function applyCandidateGeometry(
+function applyCandidateGeometry(
   document: IniDocument,
   width: number,
 ): void {

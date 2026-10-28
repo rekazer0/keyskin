@@ -21,7 +21,7 @@ export type LegacyHint = {
   cellStyle?: string
 }
 
-export function fixedNumberTuple(value: string | undefined, length: number): number[] | undefined {
+function fixedNumberTuple(value: string | undefined, length: number): number[] | undefined {
   const parts = value?.split(",").map((part) => Number(part.trim()))
   return parts?.length === length && parts.every(Number.isFinite) ? parts : undefined
 }

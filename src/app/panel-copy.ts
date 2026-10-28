@@ -52,7 +52,7 @@ function palmPanelSize(path: string): [number, number] | undefined {
   return board.width > 0 && board.height > 0 ? [board.width, board.height] : undefined
 }
 
-export function panelSizeForPath(path: string): [number, number] | undefined {
+function panelSizeForPath(path: string): [number, number] | undefined {
   if (appState.archive?.format === "ssf") return ssfPanelSize(path)
   if (appState.archive?.format === "sxi") return palmPanelSize(path)
   if (!appState.archive?.isText(path)) return
@@ -68,7 +68,7 @@ function panelCopyNames(): string[] {
   return archive.format === "sxi" && archive.isText(SXI_SKIN_PATH) ? [...archive.names(), ...sxiPartAddresses(archive.getText(SXI_SKIN_PATH))] : archive.names()
 }
 
-export function panelCopySourceSize(): [number, number] | undefined {
+function panelCopySourceSize(): [number, number] | undefined {
   if (!appState.archive) return
   const source = panelCopySource.value.trim().replace(/\\/g, "/").replace(/\/+$/, "")
   if (appState.archive.format === "ssf") return ssfPanelSize(source)
@@ -106,7 +106,7 @@ export function updatePanelCopyForm(): void {
   }
 }
 
-export function defaultPanelCopyTarget(source: string): string {
+function defaultPanelCopyTarget(source: string): string {
   if (source.endsWith("/")) return `${source.slice(0, -1)}_copy/`
   const slash = source.lastIndexOf("/") + 1
   const dot = source.lastIndexOf(".")

@@ -39,7 +39,7 @@ export function applyCandidateTextVisual(
     : ""
 }
 
-export function renderCandidateState(): boolean {
+function renderCandidateState(): boolean {
   const language = simulationLanguage()
   if (appState.lastSimulationLanguage !== undefined && appState.lastSimulationLanguage !== language) {
     setSimulatedComposition("")
@@ -332,7 +332,7 @@ export function refreshSimulationPreview(): void {
 }
 
 // 每次切换布局都会把全部布局文件重新解析（BDA 还要按当前布局逐个合成）来统计皮肤状态；内容不变时复用结果。
-export function currentSkinStates(): number[] {
+function currentSkinStates(): number[] {
   const key = [appState.archive, appState.archive?.revision, appState.bdaBase, appState.bdaBase?.revision, theme.value, orientation.value]
   if (!appState.cachedSkinStates?.key.every((value, index) => value === key[index])) appState.cachedSkinStates = { key, byLayout: new Map() }
   let states = appState.cachedSkinStates.byLayout.get(layout.value)
@@ -340,7 +340,7 @@ export function currentSkinStates(): number[] {
   return [...states]
 }
 
-export function skinStateDocuments(): IniDocument[] {
+function skinStateDocuments(): IniDocument[] {
   const layouts = layoutSource()
   if (!appState.archive || !layouts) return []
   const prefix = `${theme.value}/skin/${orientation.value}/`
@@ -398,7 +398,7 @@ export function fitCanvasPreview(): void {
   requestAnimationFrame(resizeKeyboardPreviews)
 }
 
-export function updateCanvasPanelStatus(renderedWidth: number): void {
+function updateCanvasPanelStatus(renderedWidth: number): void {
   if (!appState.canvasLogicalSize) return
   panelStatus.textContent = `面板：${Math.round(appState.canvasLogicalSize.width)} × ${Math.round(appState.canvasLogicalSize.layoutPanelHeight)} · 预览缩放：${Math.round(renderedWidth / appState.canvasLogicalSize.width * 100)}%`
 }
@@ -463,7 +463,7 @@ export function finishPreviewPan(): void {
   if (pointerId !== undefined && canvasWrap.hasPointerCapture(pointerId)) canvasWrap.releasePointerCapture(pointerId)
 }
 
-export function updateCanvasCandidateGeometry(candidateHeight: number): void {
+function updateCanvasCandidateGeometry(candidateHeight: number): void {
   if (!appState.canvasLogicalSize) return
   appState.canvasLogicalSize.height = appState.canvasLogicalSize.panelHeight + candidateHeight
   fitCanvasPreview()

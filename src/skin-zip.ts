@@ -12,7 +12,7 @@ export const CENTRAL_SIGNATURE = 0x02014b50
 
 export const END_SIGNATURE = 0x06054b50
 
-export type ZipEntry = {
+type ZipEntry = {
   name: string
   central: Uint8Array
   local: Uint8Array
@@ -24,7 +24,7 @@ export type ZipEntry = {
 export const view = (bytes: Uint8Array) =>
   new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 
-export function findEnd(bytes: Uint8Array): number {
+function findEnd(bytes: Uint8Array): number {
   const data = view(bytes)
   for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65_557); offset--) {
     if (data.getUint32(offset, true) === END_SIGNATURE) return offset
@@ -103,7 +103,7 @@ export function writeUint16(bytes: Uint8Array, offset: number, value: number): v
   view(bytes).setUint16(offset, value, true)
 }
 
-export function compressedPayload(data: Uint8Array, level: 0 | 6): {
+function compressedPayload(data: Uint8Array, level: 0 | 6): {
   crc: number
   compressed: Uint8Array
 } {
@@ -294,7 +294,7 @@ function clearMissingDataDescriptorFlags(bytes: Uint8Array): Uint8Array {
   return repaired
 }
 
-export async function unzipWithProgress(
+async function unzipWithProgress(
   input: Uint8Array,
   onProgress?: (value: number) => void,
 ): Promise<Record<string, Uint8Array>> {

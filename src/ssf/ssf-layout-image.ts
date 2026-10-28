@@ -10,7 +10,7 @@ import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground }
 /** Images that follow NORMAL / PRESSED when those are replaced and still showed the same file. */
 const LINKED_STATES: Record<string, string[]> = { NORMAL: ["DISABLED", "NORMAL_ON"], PRESSED: ["PRESSED_ON"] }
 
-export type SsfImageTarget = "key-normal" | "key-highlight" | "fore-normal" | "fore-highlight"
+type SsfImageTarget = "key-normal" | "key-highlight" | "fore-normal" | "fore-highlight"
 
 function setValue(document: IniDocument, section: string, key: string, value: string): void {
   if (document.sections().includes(section)) document.set(section, key, value)

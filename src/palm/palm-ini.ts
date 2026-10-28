@@ -84,14 +84,6 @@ export function toDouble(text: string | undefined): number | undefined {
   return Number.isFinite(value) ? value : undefined
 }
 
-// `Float` fields keep single-precision semantics, so narrow the parsed value first.
-export function toFloat(text: string | undefined): number | undefined {
-  const value = toDouble(text)
-  if (value === undefined) return undefined
-  const narrowed = Math.fround(value)
-  return Number.isFinite(narrowed) ? narrowed : undefined
-}
-
 export function toBool(text: string | undefined): boolean | undefined {
   if (text === undefined) return undefined
   if (text === "1") return true
@@ -124,10 +116,6 @@ export function toPoint(text: string | undefined): [number, number] | undefined 
   const x = toDouble(parts[0])
   const y = toDouble(parts[1])
   return x === undefined || y === undefined ? undefined : [x, y]
-}
-
-export function toSize(text: string | undefined): [number, number] | undefined {
-  return toPoint(text)
 }
 
 export function toRect(
@@ -164,27 +152,6 @@ export function toCharacters(text: string | undefined): string[] {
   if (text === undefined) return []
   if (!segmenter) return [...text]
   return [...segmenter.segment(text)].map((entry) => entry.segment)
-}
-
-export function toStateMap(text: string | undefined): Array<number | string> | undefined {
-  if (text === undefined) return undefined
-  const entries: Array<[number, number]> = []
-  for (const item of text.split("|")) {
-    const parts = item.split("_")
-    if (parts.length !== 2) continue
-    const state = toState(parts[0])
-    const tips = toInt(parts[1])
-    if (state === undefined || tips === undefined) continue
-    entries.push([state, tips])
-  }
-  entries.sort((a, b) => a[0] - b[0])
-  return entries.flatMap(([state, tips]) => [state, tips])
-}
-
-export function toState(text: string): number | undefined {
-  const match = text.match(/^state(\d+)$/i)
-  if (match) return Number(match[1])
-  return toInt(text)
 }
 
 export const ACTION_CODES: Record<string, string> = {
@@ -307,22 +274,6 @@ export function toPlaySpeedRates(text: string | undefined): number[] | undefined
   return rates.length === 3 && rates.every((rate) => rate > 0) ? rates : undefined
 }
 
-export type PalmBorderRange = { x: number; y: number }
-
-// BORDER_RANGE clamps x to [0, 1] and y to [-1, 2]; an unparsable list yields nil.
-export function toBoardBorderRanges(text: string | undefined): PalmBorderRange[] | undefined {
-  if (text === undefined) return undefined
-  const ranges = text.split(";").flatMap((item) => {
-    const parts = item.split(",")
-    if (parts.length !== 2) return []
-    const x = toDouble(parts[0].trim())
-    const y = toDouble(parts[1].trim())
-    if (x === undefined || y === undefined) return []
-    return [{ x: Math.min(Math.max(x, 0), 1), y: Math.min(Math.max(y, -1), 2) }]
-  })
-  return ranges.length === 0 ? undefined : ranges
-}
-
 // `SkinState` only accepts these raw values; `state<S>n` also drops the "S" prefix.
 const SKIN_STATES = new Set<number>([
   ...Array.from({ length: 48 }, (_, index) => index),
@@ -330,7 +281,7 @@ const SKIN_STATES = new Set<number>([
   ...Array.from({ length: 17 }, (_, index) => 200 + index),
 ])
 
-export function skinStateFrom(text: string): number | undefined {
+function skinStateFrom(text: string): number | undefined {
   const raw = toInt(text.replace(/S/g, ""))
   return raw !== undefined && SKIN_STATES.has(raw) ? raw : undefined
 }

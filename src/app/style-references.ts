@@ -28,7 +28,7 @@ export function isStyleReferenceKey(key: string): boolean {
   return key === "styleID" || /(?:^|\.)(?:[A-Z0-9_]*STYLE|FIRST_BACK|FIRST_FORE)$/i.test(key)
 }
 
-export function soundPathForStyle(styleID: string): string | undefined {
+function soundPathForStyle(styleID: string): string | undefined {
   if (!appState.archive) return
   const filename = styleSoundFile(styleID)
   return filename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, filename) : undefined
@@ -274,13 +274,13 @@ function scheduleStyleStateSizing(canvas: HTMLCanvasElement): void {
 
 export const styleStateVisuals = new WeakMap<HTMLCanvasElement, { visual: Visual | undefined; foreground: boolean }>()
 
-export const styleStateCanvasSizes = new WeakMap<HTMLCanvasElement, string>()
+const styleStateCanvasSizes = new WeakMap<HTMLCanvasElement, string>()
 
 /*
  * 缩略图按卡片的实际尺寸绘制：固定 152×76 的宽扁画布经过 object-fit: contain 后只剩卡片
  * 一半高度，图案显得又小又扁。改用卡片内容盒尺寸作为位图尺寸，样式图才能铺满卡片高度。
  */
-export function sizeStyleStateCanvas(canvas: HTMLCanvasElement, { width, height } = canvas.getBoundingClientRect()): boolean {
+function sizeStyleStateCanvas(canvas: HTMLCanvasElement, { width, height } = canvas.getBoundingClientRect()): boolean {
   if (width < 1 || height < 1) return false
   const size = `${Math.round(width)}x${Math.round(height)}`
   if (styleStateCanvasSizes.get(canvas) === size) return false
@@ -342,7 +342,7 @@ export function styleWriteTarget(
   return sections.length ? { source, property, document, path, sections } : { source, property }
 }
 
-export function pairedBackgroundStyleID(input: HTMLInputElement, key: string): string | undefined {
+function pairedBackgroundStyleID(input: HTMLInputElement, key: string): string | undefined {
   const backgroundKey = key.replace(/FORE_STYLE$/, "BACK_STYLE").replace(/FIRST_FORE$/, "FIRST_BACK")
   if (backgroundKey === key) return
   const fields = input.dataset.keyField !== undefined

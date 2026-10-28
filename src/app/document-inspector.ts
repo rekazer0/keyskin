@@ -153,7 +153,7 @@ export const documentPairFieldLabels: Record<string, [string, string]> = {
   FIX_SIZE: ["宽度", "高度"],
 }
 
-export const documentQuadFieldLabels: Record<string, [string, string, string, string]> = {
+const documentQuadFieldLabels: Record<string, [string, string, string, string]> = {
   VIEW_RECT: ["横向", "纵向", "宽度", "高度"],
   NON_SPLIT_PANEL_REGION: ["横向", "纵向", "宽度", "高度"],
   PADDING: ["左", "上", "右", "下"],
@@ -164,7 +164,7 @@ const documentPartAffixes: Record<string, string> = {
   横向: "X", 纵向: "Y", 宽度: "W", 高度: "H", 左: "←", 上: "↑", 右: "→", 下: "↓",
 }
 
-export const documentSwitchFields = new Set(["NO_BLUR"])
+const documentSwitchFields = new Set(["NO_BLUR"])
 
 export const documentNumericFields = new Set([
   "KEY_NUM", "TIP_NUM", "LIST_NUM", "OFFSET_NUM", "ANIM_NUM", "BUILD_NUM",
@@ -241,7 +241,7 @@ export function translatedConfigLabel(key: string): string {
   return key
 }
 
-export function translatedSectionLabel(section: string): string {
+function translatedSectionLabel(section: string): string {
   const offset = section.match(/^OFFSET(\d+)$/)
   const animation = section.match(/^ANIM(\d+)$/)
   const icon = section.match(/^ICON(\d+)$/i)
@@ -261,26 +261,26 @@ export function translatedSectionLabel(section: string): string {
   return `${label}（${section}）`
 }
 
-export function isHiddenConfigEntry(section: string, key: string, showTips = false): boolean {
+function isHiddenConfigEntry(section: string, key: string, showTips = false): boolean {
   if (/^OFFSET\d*$/i.test(section) || /^OFFSET(?:_|\d|$)/i.test(key)) return true
   return !showTips && (/^TIP\d*$/i.test(section) || /^TIP(?:_|\d|$)/i.test(key))
 }
 
-export const particleFieldGroups = [
+const particleFieldGroups = [
   ["发射", ["PARTICLE_IMAGE", "LIFE", "EMIT_REGION", "TOTAL_NUMBER", "BIRTH_RATE", "EMIT_TYPE"]],
   ["运动", ["VELOCITY", "VELOCITY_DIRECTION", "ACCELERATION", "ACCELERATION_DIRECTION"]],
   ["外观", ["INIT_SCALE", "SCALE_SPEED", "INIT_ROTATE", "ROTATE_SPEED", "INIT_ALPHA", "ALPHA_SPEED"]],
 ] as const
 
-export const particlePairFields = new Set<string>(particleFieldGroups.flatMap(([, keys]) => keys).filter((key) =>
+const particlePairFields = new Set<string>(particleFieldGroups.flatMap(([, keys]) => keys).filter((key) =>
   !["PARTICLE_IMAGE", "EMIT_REGION", "TOTAL_NUMBER", "BIRTH_RATE", "EMIT_TYPE"].includes(key),
 ))
 
-export function isParticleSection(document: IniDocument, section: string): boolean {
+function isParticleSection(document: IniDocument, section: string): boolean {
   return document.get(section, "CATEGORY")?.trim() === "3" || Boolean(document.get(section, "PARTICLE_IMAGE")?.trim())
 }
 
-export async function renderParticleImages(container: HTMLElement, value: string): Promise<void> {
+async function renderParticleImages(container: HTMLElement, value: string): Promise<void> {
   const resolver = visualResolver()
   const styleIDs = value.split(",").map((item) => item.trim()).filter(Boolean)
   const thumbnail = thumbnailRecycler(container)
@@ -300,7 +300,7 @@ export async function renderParticleImages(container: HTMLElement, value: string
   }))
 }
 
-export function particleNumberStep(key: string): string {
+function particleNumberStep(key: string): string {
   // 手册第 180 页：EMIT_REGION 与缩放/速度一样是相对坐标，允许小数。
   return key === "EMIT_REGION" || /SCALE|VELOCITY|ACCELERATION/.test(key) ? "0.1" : "1"
 }

@@ -14,7 +14,7 @@ export interface TourStep {
   leave?: () => void
 }
 
-export interface TourRect { x: number; y: number; width: number; height: number }
+interface TourRect { x: number; y: number; width: number; height: number }
 interface Size { width: number; height: number }
 
 const GAP = 12

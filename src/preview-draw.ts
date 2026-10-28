@@ -4,9 +4,9 @@ import { type Rect } from "./preview-items.ts"
 
 
 
-export type NineSliceCanvas = Pick<HTMLCanvasElement, "width" | "height" | "getContext">
+type NineSliceCanvas = Pick<HTMLCanvasElement, "width" | "height" | "getContext">
 
-export let nineSliceBuffer: HTMLCanvasElement | undefined
+let nineSliceBuffer: HTMLCanvasElement | undefined
 
 export function setCanvasSize(
   canvas: Pick<HTMLCanvasElement, "width" | "height">,
@@ -34,12 +34,12 @@ export function constrainedCanvasSize(
   }
 }
 
-export function sharedNineSliceBuffer(): HTMLCanvasElement {
+function sharedNineSliceBuffer(): HTMLCanvasElement {
   nineSliceBuffer ??= document.createElement("canvas")
   return nineSliceBuffer
 }
 
-export function nineSliceAxis(size: number, leading: number, trailing: number): [number, number, number, number] {
+function nineSliceAxis(size: number, leading: number, trailing: number): [number, number, number, number] {
   const fixed = leading + trailing
   const scale = fixed > size && fixed > 0 ? size / fixed : 1
   const first = Math.round(leading * scale)
@@ -177,7 +177,7 @@ export function phoneForegroundLayers(visuals: Array<Visual | undefined>): Array
   return visuals.map(phoneForegroundVisual)
 }
 
-export function drawNineSlice(    context: CanvasRenderingContext2D,
+function drawNineSlice(    context: CanvasRenderingContext2D,
   visual: Visual,
   destination: Rect,
 ): void {
@@ -272,17 +272,17 @@ export function drawInputBarBackground(
   context.stroke()
 }
 
-export function filterRgb(color: string): string {
+function filterRgb(color: string): string {
   const match = color.match(/^rgba\(([^,]+),([^,]+),([^,]+),/)
   return match ? `rgb(${match[1]}, ${match[2]}, ${match[3]})` : color
 }
 
-export function filterAlpha(color: string): number {
+function filterAlpha(color: string): number {
   const match = color.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/)
   return match ? Math.max(0, Math.min(1, Number(match[1]))) : 1
 }
 
-export function strokeBorder(
+function strokeBorder(
   context: CanvasRenderingContext2D,
   visual: Visual,
   destination: Rect,

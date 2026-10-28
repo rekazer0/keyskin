@@ -192,7 +192,7 @@ export function syncActionCodeSuggestions(field: HTMLInputElement): void {
   else field.removeAttribute("list")
 }
 
-export function syncBdaKeyFieldLabels(bdaSelected: boolean): void {
+function syncBdaKeyFieldLabels(bdaSelected: boolean): void {
   for (const field of [...keyFields, ...styleFields]) {
     const label = field.closest<HTMLElement>("label")
     const textNode = label && Array.from(label.childNodes).find(
@@ -207,7 +207,7 @@ export function syncBdaKeyFieldLabels(bdaSelected: boolean): void {
   }
 }
 
-export function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): void {
+function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): void {
   primaryCssFields.replaceChildren()
   if (!hasSelection || appState.archive?.format === "bda" || sections.length !== 1 || !appState.layoutDocument) return
   const path = styleConfigPath()

@@ -144,7 +144,7 @@ export function applyLayoutAction(action: string): void {
   updateDirty()
 }
 
-export function mergeSelectedKeys(): void {
+function mergeSelectedKeys(): void {
   if (!canvasEditable()) return
   if (!appState.archive || !appState.layoutDocument && !palmBoard()) return
   const rects = selectedRects().filter((rect) => !isListCell(rect.section))

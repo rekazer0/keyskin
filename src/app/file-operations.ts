@@ -91,7 +91,7 @@ export function exportTargetHidden(format: ExportFormat): boolean {
   return !canExport(source, format)
 }
 
-export function setFileOperationBusy(busy: boolean): void {
+function setFileOperationBusy(busy: boolean): void {
   appState.fileOperationRunning = busy
   newButton.disabled = busy
   openButton.disabled = busy
@@ -173,7 +173,7 @@ export function waitForInterfacePaint(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
 }
 
-export function ios26StylePath(genPath: string): string | undefined {
+function ios26StylePath(genPath: string): string | undefined {
   if (!appState.archive) return
   const directory = genPath.slice(0, genPath.lastIndexOf("/"))
   const themeRoot = genPath.split("/").slice(0, 2).join("/")

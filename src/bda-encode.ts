@@ -1,7 +1,7 @@
 import { type ProtoField, type BdaAnimationKind, type BdaResource, type BdaStyleRef } from "./bda.ts"
 import { decoder } from "./bda-decode.ts"
 
-export type RawField = ProtoField & { start: number; end: number; payloadStart: number; payloadEnd: number }
+type RawField = ProtoField & { start: number; end: number; payloadStart: number; payloadEnd: number }
 
 export function rawFields(bytes: Uint8Array): RawField[] {
   const result: RawField[] = []
@@ -86,7 +86,7 @@ export function removeFields(bytes: Uint8Array, numbers: Set<number>): Uint8Arra
   return join(fields.filter((field) => !numbers.has(field.number)).map((field) => bytes.slice(field.start, field.end)))
 }
 
-export function convertBdaPanelPlatform(bytes: Uint8Array, platform: "ios" | "android"): Uint8Array {
+function convertBdaPanelPlatform(bytes: Uint8Array, platform: "ios" | "android"): Uint8Array {
   const source = rawFields(bytes)
   const from = platform === "ios" ? 10 : 7
   const to = platform === "ios" ? 7 : 10
@@ -185,7 +185,7 @@ export function updateBdaKeySound(
   return join([bytes, encodedField(fieldNumber, 2, entry)])
 }
 
-export function updateMapValue(
+function updateMapValue(
   bytes: Uint8Array,
   fieldNumber: number,
   key: number,

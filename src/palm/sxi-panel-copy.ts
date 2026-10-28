@@ -94,7 +94,7 @@ function withMovedResources(value: Json, pointer: readonly string[], folders: { 
   return Object.fromEntries(Object.entries(object).map(([key, item]) => [key, /^r_/.test(key) ? movedResources(item, folders) : item]))
 }
 
-export type SxiCopy = { source: string[]; target: string[] }
+type SxiCopy = { source: string[]; target: string[] }
 
 /**
  * The skin.json parts a copy writes. `folders` (with a trailing slash) are given when a folder is copied:

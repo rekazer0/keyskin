@@ -46,7 +46,7 @@ function ranged(range: number[], share: number, reference: number, unit: number)
   return Math.abs(value) <= 1 ? value * reference : value * unit
 }
 
-export class SsfMotion {
+class SsfMotion {
   private readonly anim: IniDocument
   private readonly styles: SsfStyles
   private readonly images = new Map<string, Visual>()

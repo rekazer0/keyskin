@@ -6,7 +6,7 @@ import { cropImage, decodePng, encodePng } from "./ssf/ssf-png.ts"
 import { addZipEntry } from "./skin-zip.ts"
 
 type Slice = { bytes: Uint8Array; rect: number[] }
-export type SliceReader = (resource: string, tile: string) => Slice | undefined
+type SliceReader = (resource: string, tile: string) => Slice | undefined
 
 export const plist = (items: string[]) => `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><array>${items.join("\n")}</array></plist>\n`
 

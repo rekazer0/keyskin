@@ -4,7 +4,7 @@
 // then walks it with `FileManager`. Zip archives only give us a flat list of entries, so
 // this class rebuilds that tree (files plus directories) from the archive path list.
 
-export type PalmRootEntry = { path: string; bytes?: Uint8Array }
+type PalmRootEntry = { path: string; bytes?: Uint8Array }
 
 // The converter addresses every file through `URL`, and CFURL decomposes file paths to
 // NFD, so names that reach the exported JSON are always decomposed. Storing the tree in
@@ -12,12 +12,6 @@ export type PalmRootEntry = { path: string; bytes?: Uint8Array }
 export function normalizePalmPath(path: string): string {
   const parts = path.split("/").filter((part) => part !== "" && part !== ".")
   return parts.join("/").normalize("NFD")
-}
-
-export function palmParentPath(path: string): string {
-  const normalized = normalizePalmPath(path)
-  const separator = normalized.lastIndexOf("/")
-  return separator < 0 ? "" : normalized.slice(0, separator)
 }
 
 export function palmBaseName(path: string): string {

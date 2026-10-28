@@ -79,33 +79,13 @@ function formatPalmDecimal({ negative, digits, exponent }: PalmDecimal): string 
   return `${sign}${mantissa}e${exponent < 0 ? "-" : "+"}${padded}`
 }
 
-export function encodePalmNumber(value: number): string {
+function encodePalmNumber(value: number): string {
   if (value === PALM_INT_MAX) return PALM_INT_MAX_LITERAL
   if (!Number.isFinite(value)) {
     throw new Error(`皮肤数据包含无法编码的数值：${value}`)
   }
   if (value === 0) return Object.is(value, -0) ? "-0" : "0"
   return formatPalmDecimal(decomposeDecimal(value.toExponential()))
-}
-
-// `Float` fields round-trip through single precision first, then use the shortest
-// decimal that parses back to the same 32-bit value (Foundation prints those digits).
-export function encodePalmFloatNumber(value: number): string {
-  if (!Number.isFinite(value)) {
-    throw new Error(`皮肤数据包含无法编码的数值：${value}`)
-  }
-  const float = Math.fround(value)
-  if (float === 0) return Object.is(float, -0) ? "-0" : "0"
-  if (!Number.isFinite(float)) {
-    throw new Error(`皮肤数据包含无法编码的数值：${value}`)
-  }
-  for (let precision = 1; precision <= 9; precision += 1) {
-    const candidate = float.toPrecision(precision)
-    if (Math.fround(Number(candidate)) === float) {
-      return formatPalmDecimal(decomposeDecimal(candidate))
-    }
-  }
-  return formatPalmDecimal(decomposeDecimal(float.toPrecision(9)))
 }
 
 function encodeScalar(value: PalmJSONValue, indent: string): string | undefined {

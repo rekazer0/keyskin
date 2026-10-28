@@ -24,7 +24,7 @@ export function resourceRootPath(): string {
   return `${theme.value}/skin/res`
 }
 
-export function currentLayoutDocument(): IniDocument | undefined {
+function currentLayoutDocument(): IniDocument | undefined {
   if (!appState.archive || appState.archive.format === "bda") return
   if (appState.archive.isText(appState.layoutPath)) return IniDocument.parse(appState.archive.getText(appState.layoutPath))
   const path = currentConfigPath(layout.value)
@@ -158,7 +158,7 @@ export function showLayoutImageError(text: string): void {
   layoutImageError.hidden = false
 }
 
-export type SlicedLayoutImage = { source: Uint8Array; plan: LayoutImagePlan; width: number; height: number }
+type SlicedLayoutImage = { source: Uint8Array; plan: LayoutImagePlan; width: number; height: number }
 
 /**
  * The chosen picture sliced for the panel or the keys: fitted to the panel (无跟随), or cut along the
@@ -209,7 +209,7 @@ export async function sliceLayoutImage(
   return { source, plan: planLayoutImageSlices(target, matchedKeys, cells, IniDocument.parse("")), width: scan.width, height: scan.height }
 }
 
-export async function runLayoutImageReplace(): Promise<void> {
+async function runLayoutImageReplace(): Promise<void> {
   if (!appState.archive || !appState.layoutImageBytes || !appState.layoutImageTarget) return
   if (appState.layoutImageTarget === "panel" && appState.selectedKeySections.length) {
     return showLayoutImageError("键盘背景替换作用于整个布局，请先取消按键选择。")
@@ -311,7 +311,7 @@ export function acceptLayoutImageFile(file: File | undefined): boolean {
   return true
 }
 
-export const layoutImageConfigDescriptions: Record<LayoutImageConfig, string> = {
+const layoutImageConfigDescriptions: Record<LayoutImageConfig, string> = {
   none: "保持当前布局，图片按面板尺寸缩放后替换按键区域。",
   "image-follows-layout": "图片不按键盘布局切片，而是识别图片自身的按键区域并切片，再拉伸贴到按键上，不改布局。",
   "layout-follows-image": "识别图片的按键布局，把当前键盘布局的按键区域改为图片的布局，再导入切片。",

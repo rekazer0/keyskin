@@ -419,13 +419,13 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   return { bytes, converted: true, warnings: [...result.warnings, ...soundWarnings] }
 }
 
-export function reportSoundWarnings(warnings: string[]): void {
+function reportSoundWarnings(warnings: string[]): void {
   if (!warnings.length) return
   clientLog.info("export.sound-warnings", { count: warnings.length, detail: warnings.join("; ") })
   window.alert(`以下按键音未能转换为目标平台格式，导出包中仍引用原文件，目标平台可能没有声音：\n\n${warnings.join("\n")}`)
 }
 
-export async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: string): Promise<boolean> {
+async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: string): Promise<boolean> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   let exported: Awaited<ReturnType<typeof exportArchive>>
   let path = appState.currentPath
@@ -559,7 +559,7 @@ export async function writeToChosenFile(
   return file.name
 }
 
-export async function downloadArchive(format: ExportFormat, suggestedName: string): Promise<boolean> {
+async function downloadArchive(format: ExportFormat, suggestedName: string): Promise<boolean> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   let exported: Awaited<ReturnType<typeof exportArchive>>
   const path = await writeToChosenFile(suggestedName, async () => {

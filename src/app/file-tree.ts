@@ -21,7 +21,7 @@ import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
 
-export function addNavButton(
+function addNavButton(
   parent: HTMLElement,
   label: string,
   path: string,

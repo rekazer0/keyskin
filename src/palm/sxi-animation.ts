@@ -3,12 +3,12 @@
 // (ANIMATION_FIELDS); everything here is pure so the mapping stays testable.
 
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
-import { ANIMATION_FIELDS, FLOATER_FIELDS } from "./sxi-style.ts"
+import { FLOATER_FIELDS } from "./sxi-style.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
 
-export type AnimationFieldKind = "number" | "text" | "bool" | "point" | "rect" | "color" | "list" | "select"
+type AnimationFieldKind = "number" | "text" | "bool" | "point" | "rect" | "color" | "list" | "select"
 /** `value` is what goes into skin.json; `label` is what the inspector shows. */
-export type AnimationOption = [value: string, label: string]
+type AnimationOption = [value: string, label: string]
 export type AnimationField = {
   key: string
   label: string
@@ -22,10 +22,10 @@ export type AnimationField = {
   scope?: AnimationScope
 }
 /** Base fields (`b.*`) sit in the wrap's base model; the rest in the family model itself. */
-export type AnimationScope = "base" | "model"
-export type AnimationGroup = { title: string; fields: AnimationField[] }
+type AnimationScope = "base" | "model"
+type AnimationGroup = { title: string; fields: AnimationField[] }
 
-export type AnimationFamily = {
+type AnimationFamily = {
   id: string
   /** The family's category; the base model carries it as `b.c`. */
   category: number
@@ -304,17 +304,8 @@ export function animationGroups(kind: string, model: JsonObject): AnimationGroup
   return groups
 }
 
-export function animationFieldKeys(kind: string, model: JsonObject = {}): string[] {
-  return animationGroups(kind, model).flatMap((item) => item.fields.map((entry) => entry.key))
-}
-
-/** Every field key Palm reads for a family, for coverage tests. `a1` differs by its transform variant. */
-export function knownFieldKeys(kind: string): string[] {
-  return (ANIMATION_FIELDS[kind] ?? []).map(([key]) => key)
-}
-
 /* —— a1: one model, three spellings of "from/to" —— */
-export type A1Variant = "scalar" | "point" | "pixels"
+type A1Variant = "scalar" | "point" | "pixels"
 
 export function a1IsScale(model: JsonObject): boolean {
   const type = Number(animationBase(model).t ?? 0)
@@ -507,10 +498,6 @@ export function floaterFields(): AnimationField[] {
   })
 }
 
-export function floaterKeys(): string[] {
-  return FLOATER_FIELDS.map(([key]) => key)
-}
-
 /** The floater `SkinPhysicalWaterAnimationModel` creates when a skin lists one without a value. */
 export function floaterDefaults(): JsonObject {
   return {
@@ -524,7 +511,7 @@ export function floaterDefaults(): JsonObject {
 /* —— References (shown as context in the inspector) —— */
 const ANIMATION_EVENTS: Array<[string, string]> = [["1", "按下"], ["2", "松开"], ["3", "显示"], ["4", "隐藏"], ["5", "长按"]]
 
-export type AnimationReferences = { styles: Array<{ name: string; events: string[] }>; combos: number[]; contexts?: string[] }
+type AnimationReferences = { styles: Array<{ name: string; events: string[] }>; combos: number[]; contexts?: string[] }
 
 /** Which text styles play animation `id` (`ss_1.*.s_5`) and which combinations list it. */
 export function animationReferences(skin: JsonObject, tablePointer: ReadonlyArray<string | number>, id: string): AnimationReferences {

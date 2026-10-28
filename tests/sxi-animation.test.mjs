@@ -14,7 +14,6 @@ import {
   animationBase,
   animationFamily,
   animationFamilyInfo,
-  animationFieldKeys,
   animationGroups,
   animationHasBase,
   animationModel,
@@ -25,8 +24,6 @@ import {
   comboMethod,
   floaterDefaults,
   floaterFields,
-  floaterKeys,
-  knownFieldKeys,
   newAnimation,
 } from '../src/palm/sxi-animation.ts'
 import { ANIMATION_FIELDS, FLOATER_FIELDS } from '../src/palm/sxi-style.ts'
@@ -34,6 +31,7 @@ import { PALM_INT_MAX } from '../src/palm/palm-json.ts'
 import { sxiBaiduFiles } from '../src/palm/sxi-to-baidu.ts'
 
 const wrap = (kind, model = {}) => ({ id: `ANIM_${kind}`, [kind]: model })
+const animationFieldKeys = (kind, model = {}) => animationGroups(kind, model).flatMap((group) => group.fields.map((field) => field.key))
 
 /** The inspector applies a patch with exactly this algorithm; used to check the resulting model. */
 function applyPatch(model, patch) {
@@ -191,8 +189,7 @@ test('the known fields of every family are all covered by animationGroups, and n
   assert.deepEqual(Object.keys(ANIMATION_FIELDS).sort(), [...families].sort(), 'ANIMATION_FIELDS 应与 a1..a14 的 8 个有 base 的族一一对应')
 
   for (const kind of families) {
-    const known = knownFieldKeys(kind)
-    assert.deepEqual(known, ANIMATION_FIELDS[kind].map(([key]) => key), `${kind}: knownFieldKeys 应取自 ANIMATION_FIELDS`)
+    const known = ANIMATION_FIELDS[kind].map(([key]) => key)
     assert.ok(known.length > 0)
 
     const models = Array.isArray(FAMILY_MODELS[kind]) ? FAMILY_MODELS[kind] : [FAMILY_MODELS[kind]]
@@ -232,7 +229,6 @@ test('the known fields of every family are all covered by animationGroups, and n
 
 test('floater fields and defaults cover FLOATER_FIELDS completely', () => {
   const known = FLOATER_FIELDS.map(([key]) => key)
-  assert.deepEqual(floaterKeys(), known)
   const fields = floaterFields()
   assert.deepEqual(fields.map((field) => field.key), known, 'floaterFields 必须逐项覆盖 FLOATER_FIELDS')
   const kinds = { string: 'text', number: 'number', bool: 'bool', point: 'point' }

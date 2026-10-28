@@ -22,11 +22,11 @@ import { showError, showStatus } from "./file-operations"
 import { validateFont } from "./skin-fonts"
 import { fieldCaption, numberParts } from "./property-rows"
 
-export type SsfEntry = { key: string; value: string }
+type SsfEntry = { key: string; value: string }
 
 /** State images that follow NORMAL / PRESSED when those are replaced and still show the same file. */
 const LINKED_STATES: Record<string, string[]> = { NORMAL: ["DISABLED", "NORMAL_ON"], PRESSED: ["PRESSED_ON"] }
-export const IMAGE_STATES = ["NORMAL", "PRESSED", "DISABLED", "NORMAL_ON", "PRESSED_ON", "FOCUSED"]
+const IMAGE_STATES = ["NORMAL", "PRESSED", "DISABLED", "NORMAL_ON", "PRESSED_ON", "FOCUSED"]
 const QUADS: Record<string, string[]> = {
   FG_RECT: ["←", "↑", "→", "↓"],
   ICON_RECT: ["←", "↑", "→", "↓"],
@@ -49,7 +49,7 @@ export function editSsfFile(path: string, change: (document: IniDocument) => voi
 type TextChange = Extract<Change, { kind: "text" }>
 
 /** A section rows write to; `create` is what a missing section starts with (RootView needs BG_STYLE). */
-export type SsfLocation = { path: string; section: string; create?: SsfEntry[] }
+type SsfLocation = { path: string; section: string; create?: SsfEntry[] }
 
 function editTargets(targets: SsfLocation[], change: (document: IniDocument, target: SsfLocation) => void): void {
   const archive = appState.archive

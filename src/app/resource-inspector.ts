@@ -40,7 +40,7 @@ export function openImageResourceChooser(onSelect: (resourceID: string) => void)
   openImagePickerList()
 }
 
-export function openBdaStyleImageResourceChooser(ref: BdaStyleRef, highlighted: boolean): void {
+function openBdaStyleImageResourceChooser(ref: BdaStyleRef, highlighted: boolean): void {
   appState.pickerTarget = undefined
   appState.resourcePickerSelect = (resourceID) => {
     const property = highlighted ? "HL_IMG" : "NM_IMG"
@@ -49,12 +49,12 @@ export function openBdaStyleImageResourceChooser(ref: BdaStyleRef, highlighted: 
   openImagePickerList()
 }
 
-export function replaceBdaStyleImage(ref: BdaStyleRef, highlighted: boolean): void {
+function replaceBdaStyleImage(ref: BdaStyleRef, highlighted: boolean): void {
   if (ref.type !== "image" || !isEditing()) return
   openBdaStyleImageResourceChooser(ref, highlighted)
 }
 
-export function editBdaStyleImageSlice(ref: BdaStyleRef, highlighted: boolean): void {
+function editBdaStyleImageSlice(ref: BdaStyleRef, highlighted: boolean): void {
   const info = currentBdaAppearance()
   const style = ref.type === "image" ? info?.appearance.imageStyles.get(ref.key) : undefined
   const atom = highlighted ? style?.highlightImage : style?.normalImage
@@ -87,7 +87,7 @@ export function chooseStyleImageSlice(property: "NM_IMG" | "HL_IMG"): void {
   else if (target) openStyleImageResourceChooser(target)
 }
 
-export function styleSectionTarget(styleID: string, property: "NM_IMG" | "HL_IMG"): StyleImagePickerTarget | undefined {
+function styleSectionTarget(styleID: string, property: "NM_IMG" | "HL_IMG"): StyleImagePickerTarget | undefined {
   const path = styleConfigPath()
   // A Palm style's images are written in skin.json by its id (image-pickers.ts).
   if (appState.archive?.format === "sxi") return palmStylePointer(styleID) ? { source: "BACK_STYLE", property, path, sections: [`STYLE${styleID}`] } : undefined
@@ -108,7 +108,7 @@ export function parseStyleColor(value: string): { hex: string; alpha: number } |
   return { hex: normalized.slice(2), alpha: Number.parseInt(normalized.slice(0, 2), 16) / 255 }
 }
 
-export function bindStyleDetailColor(
+function bindStyleDetailColor(
   textInput: HTMLInputElement,
   picker: HTMLInputElement,
   alpha: HTMLInputElement,
@@ -328,13 +328,13 @@ export function selectResourceImage(path: string): void {
   resourceGallery.querySelector<HTMLElement>(`.resource-item[data-path="${CSS.escape(path)}"]`)?.scrollIntoView({ block: "nearest" })
 }
 
-export function releaseResourceURLs(): void {
+function releaseResourceURLs(): void {
   for (const url of appState.resourceURLs) URL.revokeObjectURL(url)
   appState.resourceURLs = []
 }
 
 /** galleryCanvas 复用上一轮列表的缩略图画布（每次编辑都会重建样式列表）。 */
-export async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumbnailRecycler>): Promise<void> {
+async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumbnailRecycler>): Promise<void> {
   if (appState.archive?.format === "bda") {
     await renderBdaStyleResourceGallery(galleryCanvas)
     return
@@ -416,7 +416,7 @@ export async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeo
   if (appState.selectedResourceGalleryPath) selectGalleryItem(appState.selectedResourceGalleryPath, resourceGallery)
 }
 
-export async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof thumbnailRecycler>): Promise<void> {
+async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof thumbnailRecycler>): Promise<void> {
   const info = currentBdaAppearance()
   const part = bdaAppearancePart(appState.selectedPath)
   if (!info || part?.kind !== "styles") return
@@ -490,7 +490,7 @@ export function currentSoundEntries(): SoundEntry[] {
   })
 }
 
-export function renderSoundResourceGallery(): void {
+function renderSoundResourceGallery(): void {
   if (!appState.archive) return
   const query = resourceSearch.value.trim().toLowerCase()
   const entries = currentSoundEntries().filter((entry) =>
@@ -673,7 +673,7 @@ export function updateResourceActionButtons(): void {
   syncAtlasWorkspace()
 }
 
-export function selectGalleryItem(path: string, container: HTMLElement): void {
+function selectGalleryItem(path: string, container: HTMLElement): void {
   appState.selectedResourceGalleryPath = path
   for (const item of container.querySelectorAll<HTMLElement>(".resource-item")) {
     item.classList.toggle("selected", item.dataset.path === path)

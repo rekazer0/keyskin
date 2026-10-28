@@ -1,5 +1,5 @@
 // Palm board identifiers (`SkinBoardType.rawValue`) mirrored from PalmSkin.
-export type PalmBoardType = string
+type PalmBoardType = string
 
 const BOARD_CODES: Record<string, PalmBoardType> = {
   "*.cnd": "candidateBar",
@@ -79,12 +79,4 @@ export function iniCodeFromBoardType(type: PalmBoardType): string | undefined {
 
 export function boardTypeFromIniFileName(fileName: string): PalmBoardType | undefined {
   return boardTypeFromIniCode(fileName.replace(/\.ini/g, ""))
-}
-
-export function boardTypeForFileName(fileName: string): PalmBoardType | undefined {
-  const mapped = boardTypeFromIniFileName(fileName)
-  if (mapped) return mapped
-  if (fileName.endsWith(".cnd")) return "candidateBar"
-  if (fileName.endsWith(".pop")) return "bubbleLayout"
-  return undefined
 }

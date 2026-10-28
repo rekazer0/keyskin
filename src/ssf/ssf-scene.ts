@@ -162,7 +162,7 @@ function scaled(visual: Visual, scale: number, x: number, y: number): SceneLayer
  * `template` is the same board in the official skeleton, whose styles hold the built-in labels and
  * glyphs, `scale` the skeleton's size against the skin's.
  */
-export type SsfSkeleton = { layout: IniDocument; template: IniDocument; resolver: AtlasResolver; offsets?: IniDocument; scale: number }
+type SsfSkeleton = { layout: IniDocument; template: IniDocument; resolver: AtlasResolver; offsets?: IniDocument; scale: number }
 
 /**
  * The FG_STYLE Sogou's own key definitions give a key, with its label and minor label TextStyles, for
@@ -274,7 +274,7 @@ async function listKeys(styles: SsfStyles, layout: IniDocument, scale: number): 
  * The keyboard background Sogou paints behind the candidate bar and the keys together, as layers for
  * a canvas whose top edge sits `top` below the bar's: a solid colour (BG_STYLE=2) or the stretched image.
  */
-export async function ssfBackdrop(styles: SsfStyles, width: number, top: number, height: number): Promise<SceneLayer[]> {
+async function ssfBackdrop(styles: SsfStyles, width: number, top: number, height: number): Promise<SceneLayer[]> {
   const skin = styles.skin
   const rect = { x: 0, y: -top, width, height }
   if (skin.get("RootView", "BG_STYLE")?.trim() === "2") {

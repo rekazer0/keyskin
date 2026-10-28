@@ -24,7 +24,7 @@ export type AnimationListItem = {
 
 export type AnimationUse = { icon: string; title: string; detail: string }
 
-export type AnimationResourceView = {
+type AnimationResourceView = {
   mode: AnimationMode
   /** The section class the inspector shell and the category rail pick up in this container. */
   sectionClass: string

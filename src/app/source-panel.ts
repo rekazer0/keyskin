@@ -119,7 +119,7 @@ export function closeSourceFind(): void {
   sourceFindToggle.focus()
 }
 
-export const SOURCE_SEARCH_HIGHLIGHT_LIMIT = 20_000
+const SOURCE_SEARCH_HIGHLIGHT_LIMIT = 20_000
 
 export function scheduleSourceInputHighlight(refreshInspector = false): void {
   appState.sourceInputRefreshPending ||= refreshInspector
@@ -179,7 +179,7 @@ export function updateSourceHighlight(): void {
   })
 }
 
-export function sourceSearchMatches(): number[] {
+function sourceSearchMatches(): number[] {
   return findTextMatches(source.value, sourceSearch.value.trim())
 }
 

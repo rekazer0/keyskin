@@ -95,13 +95,13 @@ export function styleKindBadge(kind: StyleKind, iconOnly = false): HTMLElement {
 }
 
 /** 由引用字段推断应优先展示的样式类型，打开样式库时据此预选筛选。 */
-export function styleKindForKey(key: string): StyleKind | "all" {
+function styleKindForKey(key: string): StyleKind | "all" {
   if (/ANIM_STYLE$/.test(key)) return "anim"
   if (key === "HW_FORE_STYLE") return "color"
   return "all"
 }
 
-export function styleLibraryCategories(styleID: string): Set<string> {
+function styleLibraryCategories(styleID: string): Set<string> {
   if (appState.archive?.format === "sxi") return palmStyleCategories(styleID)
   const categories = new Set<string>()
   for (const { section, key, value } of appState.layoutDocument?.entries() ?? []) {
@@ -140,7 +140,7 @@ export function applyStyleLibrarySelection(): void {
   }
 }
 
-export function closeStylePicker(): void {
+function closeStylePicker(): void {
   closePickerWindow()
 }
 
@@ -160,7 +160,7 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false): v
   void showPickerWindow("styles", "全部样式", 1100, 760)
 }
 
-export function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayload | undefined> {
+function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayload | undefined> {
   const target = appState.stylePickerTarget
   if (!appState.archive || !target) return Promise.resolve(undefined)
   const source = appState.archive

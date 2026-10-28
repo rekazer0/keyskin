@@ -140,7 +140,7 @@ const SYMBOL_ALIASES: Record<string, string> = {
 }
 
 /** 解析图标名：Lucide 名原样返回，旧平台符号名与 lucide- 前缀名转成 Lucide 名。 */
-export function iconName(name: string): string {
+function iconName(name: string): string {
   const plain = name.replace(/^lucide-/, "")
   return icons[plain] ? plain : SYMBOL_ALIASES[name] ?? "file"
 }
@@ -152,12 +152,6 @@ export function symbolSpan(name: string, size = 16): HTMLSpanElement {
   span.setAttribute("aria-hidden", "true")
   span.append(createIcon(iconName(name), size))
   return span
-}
-
-/** 平台符号名或 Lucide 名对应的图标；没有对应时返回 null。 */
-export function symbolIcon(symbol: string, size = 14): SVGElement | null {
-  const name = iconName(symbol)
-  return name === "file" && symbol !== "file" && symbol !== "doc" ? null : createIcon(name, size)
 }
 
 /** 需要 HTML 字符串的地方（如 deep-chat 的配置）用这个，图标仍来自同一张注册表。 */

@@ -34,7 +34,7 @@ export const mobileCommandButtons = Array.from(
   mobileCommandMenu.querySelectorAll<HTMLButtonElement>("[data-mobile-command], [data-mobile-export-format]"),
 )
 
-export const mobileShareMenuLabel = mobileCommandMenu.querySelector<HTMLElement>(
+const mobileShareMenuLabel = mobileCommandMenu.querySelector<HTMLElement>(
   '[data-mobile-command="mobile-share"] span:last-child',
 )!
 
@@ -303,7 +303,7 @@ export function setSimulatedComposition(value: string): void {
   if (next !== current) applySkinState(next)
 }
 
-export function skinStatePreviewMessage(state: number): string {
+function skinStatePreviewMessage(state: number): string {
   const impact = previewStateImpact(appState.layoutDocument, state)
   if (impact.resolved) return `皮肤状态：S${state}`
   if (impact.mapped) return `皮肤状态：S${state} · 当前布局的状态定义缺少 TIP 内容`
@@ -333,7 +333,7 @@ export function releaseKeySound(): void {
   appState.keySoundURL = ""
 }
 
-export async function playDecodedSound(path: string, bytes: Uint8Array): Promise<void> {
+async function playDecodedSound(path: string, bytes: Uint8Array): Promise<void> {
   appState.keySoundContext ??= new AudioContext()
   if (appState.keySoundContext.state === "suspended") await appState.keySoundContext.resume()
   let buffer = keySoundBuffers.get(path)
@@ -396,7 +396,7 @@ export function playSoundPath(path: string): void {
   })
 }
 
-export function keySoundForEvent(event: PreviewEvent): string | undefined {
+function keySoundForEvent(event: PreviewEvent): string | undefined {
   if (appState.archive?.format === "sxi") {
     const filename = palmKeySound(event.section)
     return filename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, filename) : undefined
@@ -430,7 +430,7 @@ export function keySoundForEvent(event: PreviewEvent): string | undefined {
   return filename ? soundPathForFilename(names, theme.value, orientation.value, filename) : undefined
 }
 
-export function handlePreviewEvent(event: PreviewEvent): void {
+function handlePreviewEvent(event: PreviewEvent): void {
   const soundPath = keySoundForEvent(event)
   if (soundPath) playSoundPath(soundPath)
   eventLog.textContent =
@@ -592,7 +592,7 @@ export function clearSimulatedOutput(): void {
   refreshSimulationPreview()
 }
 
-export function insertSimulatedText(text: string): void {
+function insertSimulatedText(text: string): void {
   const result = insertText(
     simulatedOutput.value,
     simulatedOutput.selectionStart ?? simulatedOutput.value.length,
@@ -622,7 +622,7 @@ export function isIOSWeb(): boolean {
     navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
 }
 
-export function mobileShareLabel(): string {
+function mobileShareLabel(): string {
   const format = appState.archive?.format
   return format === "ssf" ? "分享到搜狗输入法"
     : format === "sxi" ? "分享到手心输入法"
@@ -638,7 +638,7 @@ export function syncMobileShareLabel(): void {
 }
 // 源文件树缩略图按 PNG 字节缓存：文件被改写时换成新的字节对象，旧缓存随之回收。
 // 只保留 16px（按像素比放大）的小图，大图解码后立即释放。
-export const sourceThumbnails = new WeakMap<Uint8Array, Promise<string | undefined>>()
+const sourceThumbnails = new WeakMap<Uint8Array, Promise<string | undefined>>()
 
 export function sourceThumbnail(bytes: Uint8Array): Promise<string | undefined> {
   let thumbnail = sourceThumbnails.get(bytes)

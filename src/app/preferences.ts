@@ -64,7 +64,7 @@ export function applyCanvasBackground(background: CanvasBackground): void {
   canvasWrap.dataset.background = background
 }
 
-export const savedCanvasBackground = localStorage.getItem("canvas-background")
+const savedCanvasBackground = localStorage.getItem("canvas-background")
 
 export const initialCanvasBackground = savedCanvasBackground === "default"
   ? "glass"
@@ -135,7 +135,7 @@ export function applyWindowMaterialOpacity(): void {
   document.documentElement.style.setProperty("--window-material-floating", String(1 - (1 - fill) ** 2))
 }
 
-export async function applyWindowMaterial(): Promise<void> {
+async function applyWindowMaterial(): Promise<void> {
   const enabled = windowMaterial.checked
   document.documentElement.dataset.windowMaterial = enabled ? "on" : "off"
   applyWindowMaterialOpacity()

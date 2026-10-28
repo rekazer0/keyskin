@@ -22,7 +22,7 @@ export type LegacyAnimationEntry = {
   fields: ReadonlyArray<readonly [string, string]>
 }
 
-export type LegacyAnimationDocument = {
+type LegacyAnimationDocument = {
   /** [GLOBAL] ANIM_NUM 声明值。 */
   animNum: number | undefined
   entries: LegacyAnimationEntry[]
@@ -71,7 +71,7 @@ export const LEGACY_ANIMATION_INTPOL_OPTIONS: ReadonlyArray<readonly [string, st
   ["0", "匀速"], ["1", "加速"], ["2", "减速"], ["3", "加速减速"], ["4", "弹跳"],
 ]
 
-export type LegacyAnimationFieldSpec = {
+type LegacyAnimationFieldSpec = {
   label: string
   kind: "number" | "text" | "pair" | "quad" | "triple" | "select" | "switch"
   unit?: string
@@ -167,7 +167,7 @@ export function parseLegacyAnimationFile(text: string): LegacyAnimationDocument 
 }
 
 /* —— 字段分组：检查器按它渲染，写回按它清理 —— */
-export type LegacyAnimationFieldGroup = { title: string; keys: readonly string[] }
+type LegacyAnimationFieldGroup = { title: string; keys: readonly string[] }
 
 const BASIC_BASE_KEYS = ["CATEGORY", "TYPE", "FROM", "TO", "DURATION", "DELAY", "REPEAT_CNT", "REPEAT_MODE", "REMOVE", "INTPOL"]
 

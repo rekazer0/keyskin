@@ -182,14 +182,14 @@ export type BdaAnimationBinding = {
   condition?: string
   removeOnInteraction?: boolean
 }
-export type BdaPoint = [number, number]
-export type BdaAnimationPathElement = {
+type BdaPoint = [number, number]
+type BdaAnimationPathElement = {
   type: number
   point1?: BdaPoint
   point2?: BdaPoint
   point3?: BdaPoint
 }
-export type BdaAnimationPath = { elements: BdaAnimationPathElement[] }
+type BdaAnimationPath = { elements: BdaAnimationPathElement[] }
 export type BdaTransformAnimation = {
   kind: "alpha" | "scale" | "shift" | "rotate"
   key: string

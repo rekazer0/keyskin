@@ -61,7 +61,7 @@ export function first(items: ProtoField[], number: number): ProtoField | undefin
   return items.find((field) => field.number === number)
 }
 
-export function mapEntries(items: ProtoField[], number: number): ProtoField[][] {
+function mapEntries(items: ProtoField[], number: number): ProtoField[][] {
   return items
     .filter((field) => field.number === number && field.wire === 2)
     .map(message)
@@ -83,7 +83,7 @@ export function styleRef(field: ProtoField | undefined): BdaStyleRef | undefined
   return { type: types[first(value, 1)?.varint ?? 0] ?? "image", key: first(value, 2)?.varint ?? 0 }
 }
 
-export function styleRefs(value: ProtoField[], number: number): BdaStyleRef[] {
+function styleRefs(value: ProtoField[], number: number): BdaStyleRef[] {
   return value.filter((item) => item.number === number).flatMap((item) => {
     const style = styleRef(item)
     return style ? [style] : []
@@ -224,7 +224,7 @@ export function gamePanel(field: ProtoField | undefined): BdaGamePanel | undefin
   } : undefined
 }
 
-export function switchStyle(field: ProtoField | undefined): BdaSwitch | undefined {
+function switchStyle(field: ProtoField | undefined): BdaSwitch | undefined {
   const value = message(field)
   return value.length ? {
     normalBack: styleRef(first(value, 1)),
@@ -282,7 +282,7 @@ export function hint(field: ProtoField | undefined): BdaHint {
   }
 }
 
-export function inputTile(field: ProtoField | undefined): BdaInputTile | undefined {
+function inputTile(field: ProtoField | undefined): BdaInputTile | undefined {
   const value = message(field)
   return value.length ? {
     backStyle: styleRef(first(value, 1)),
@@ -317,7 +317,7 @@ export function panel(field: ProtoField | undefined): BdaPanel {
   }
 }
 
-export const paletteFields = [
+const paletteFields = [
   "labelColor", "secondaryLabelColor", "tertiaryLabelColor", "quaternaryLabelColor", "brandColor",
   "systemBackgroundColor", "secondarySystemBackgroundColor", "tertiarySystemBackgroundColor",
   "elevatedSystemBackgroundColor", "secondaryElevatedSystemBackgroundColor", "tertiaryElevatedSystemBackgroundColor",
@@ -338,7 +338,7 @@ export function colorPalette(field: ProtoField | undefined): BdaColorPalette | u
   return result
 }
 
-export function numericMap<T>(root: ProtoField[], number: number, decode: (field: ProtoField | undefined) => T): Map<number, T> {
+function numericMap<T>(root: ProtoField[], number: number, decode: (field: ProtoField | undefined) => T): Map<number, T> {
   return new Map(mapEntries(root, number).map((entry) => [
     first(entry, 1)?.varint ?? 0,
     decode(first(entry, 2)),
@@ -346,7 +346,7 @@ export function numericMap<T>(root: ProtoField[], number: number, decode: (field
 }
 
 // SkinArchive 未修改的文件返回同一个 Uint8Array，按实例缓存；结果是共享对象，调用方不得修改。
-export const decodedAppearances = new WeakMap<Uint8Array, BdaAppearance>()
+const decodedAppearances = new WeakMap<Uint8Array, BdaAppearance>()
 
 export function decodeBdaAppearance(bytes: Uint8Array): BdaAppearance {
   let appearance = decodedAppearances.get(bytes)

@@ -13,7 +13,7 @@ const LOOK_FILES = /^(\d+)\/(?:([^/]+)\/)?(phoneSkin|keys|anim)\.ini$/
 const PIXEL_KEYS = new Set(["MARGINS", "PADDINGS", "LABEL_FONT_SIZE", "MINOR_FONT_SIZE", "MIDDLE_FONT_SIZE", "POPUP_OFFSET_VERTICAL", "H_GAP", "W", "H"])
 
 /** How the copy being written differs: its width over the edited one's, and which images both share. */
-export type SsfTwin = { scale: number; sharedImage: (file: string) => boolean }
+type SsfTwin = { scale: number; sharedImage: (file: string) => boolean }
 
 /** `value` as the copy needs it; undefined when it cannot be carried over. */
 function twinValue(key: string, value: string, { scale, sharedImage }: SsfTwin): string | undefined {

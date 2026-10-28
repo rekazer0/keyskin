@@ -11,7 +11,7 @@ export function bdaColorHex(value: number): string {
   return (value >>> 0).toString(16).padStart(8, "0").toUpperCase()
 }
 
-export function bdaCssColor(value: number): string | undefined {
+function bdaCssColor(value: number): string | undefined {
   if (!value) return
   const hex = bdaColorHex(value)
   const alpha = Number.parseInt(hex.slice(0, 2), 16) / 255
@@ -23,7 +23,7 @@ export function bdaCssColor(value: number): string | undefined {
 
 // BDA filterColor 是叠加在图片之上的颜色滤镜（tint），不是背景填充。
 // 0 与 0xFFFFFFFF（不透明白）都表示「无滤镜」。
-export function bdaFilterColor(value: number): string | undefined {
+function bdaFilterColor(value: number): string | undefined {
   const unsigned = value >>> 0
   if (!unsigned || unsigned === 0xffffffff) return
   return bdaCssColor(unsigned)

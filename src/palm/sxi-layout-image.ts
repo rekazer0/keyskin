@@ -10,7 +10,7 @@ import { encodeSkinJson, parseSkinJson } from "./sxi-json.ts"
 
 const STYLE_TABLES = ["s_info", "s_port", "s_land"]
 
-export type SxiLayoutImage = {
+type SxiLayoutImage = {
   /** Tile map and picture name (`<name>.png`). */
   name: string
   /** The picture's package path for the theme's resource list (`r_info`), as the package spells paths. */

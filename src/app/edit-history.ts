@@ -41,7 +41,7 @@ export function hasUnsavedChanges(): boolean {
   return appState.unsavedNew || Boolean(appState.archive?.changed.size)
 }
 
-export function chooseUnsavedDecision(): Promise<UnsavedDecision> {
+function chooseUnsavedDecision(): Promise<UnsavedDecision> {
   unsavedDialog.returnValue = ""
   unsavedDialog.showModal()
   return new Promise((resolve) => {
@@ -145,7 +145,7 @@ export function commitTextChanges(changes: ReadonlyArray<{ path: string; before:
   updateDirty()
 }
 
-export function applyTextSnapshot(path: string, text: string): void {
+function applyTextSnapshot(path: string, text: string): void {
   if (!appState.archive) return
   if (path === appState.selectedPath) appState.sourceHistoryHighlight = insertedTextRange(appState.archive.getText(path), text)
   appState.archive.setText(path, text)
@@ -170,7 +170,7 @@ export function applyTextSnapshot(path: string, text: string): void {
   updateDirty()
 }
 
-export function refreshHistorySelection(): void {
+function refreshHistorySelection(): void {
   const path = appState.selectedResourcePath
   const index = appState.selectedTileIndex
   const resourceMode = appState.resourceConfigActive ? appState.resourceInspectorMode : "document"

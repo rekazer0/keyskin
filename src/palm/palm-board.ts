@@ -104,8 +104,8 @@ function item(section: string, rect: Rect, base: PalmBase, owner: JsonObject, ac
 
 /** `panelAnimation` is the style of the panel animation the key's press plays (`base_pa`). */
 export type PalmKey = { section: string; rect: Rect; base: PalmBase; panelAnimation?: Json }
-export type PalmCell = { section: string; rect: Rect; title: string }
-export type PalmIcon = { section: string; rect: Rect; base: PalmBase; switch: boolean; fixed?: [number, number] }
+type PalmCell = { section: string; rect: Rect; title: string }
+type PalmIcon = { section: string; rect: Rect; base: PalmBase; switch: boolean; fixed?: [number, number] }
 
 export class PalmBoard {
   readonly theme: PalmTheme

@@ -13,7 +13,7 @@ export const recentFilesKey = "recent-files"
 
 export const recentFilesLimit = 9
 
-export function readRecentFiles(): RecentFile[] {
+function readRecentFiles(): RecentFile[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(recentFilesKey) || "[]")
     if (!Array.isArray(parsed)) return []
@@ -38,7 +38,7 @@ export function recordRecentFile(path: string, name: string, source = ""): void 
   renderRecentFiles()
 }
 
-export function formatRecentTime(at: number): string {
+function formatRecentTime(at: number): string {
   const minute = 60_000
   const diff = Date.now() - at
   if (diff < minute) return "刚刚"
@@ -51,7 +51,7 @@ export function formatRecentTime(at: number): string {
   return new Date(at).toLocaleDateString("zh-CN")
 }
 
-export function openRecentFile(item: RecentFile): void {
+function openRecentFile(item: RecentFile): void {
   if (appState.fileOperationRunning) return
   // 从菜单回到启动页后再点当前皮肤，直接回到编辑，不重新读盘、不丢未保存修改。
   if (appState.archive && !appState.unsavedNew && item.path === appState.currentPath) {
@@ -70,18 +70,18 @@ export function openRecentFile(item: RecentFile): void {
   })
 }
 
-export function recentFolderLabel(path: string): string {
+function recentFolderLabel(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean)
   if (parts.length < 2) return ""
   const folder = parts.slice(0, -1)
   return folder.length > 2 ? `…/${folder.slice(-2).join("/")}` : folder.join("/")
 }
 
-export function recentFormatLabel(path: string): string {
+function recentFormatLabel(path: string): string {
   return path.match(/\.(bdi|bds|bda|m?ssf|sxi)$/i)?.[0]?.toLowerCase() ?? "皮肤"
 }
 
-export function recentCard(item: RecentFile): HTMLButtonElement {
+function recentCard(item: RecentFile): HTMLButtonElement {
   const card = document.createElement("button")
   card.type = "button"
   card.className = "template-card recent-card"
@@ -124,9 +124,9 @@ export function recentCard(item: RecentFile): HTMLButtonElement {
 export const recentPreviewCache = new Map<string, HTMLImageElement>()
 
 // 预览只取包里的 demo 图，不需要解整包；上限与后端可读的整包上限保持一致。
-export const recentPreviewMaxBytes = 64 * 1024 * 1024
+const recentPreviewMaxBytes = 64 * 1024 * 1024
 
-export async function readRecentPreviewBytes(path: string): Promise<Uint8Array> {
+async function readRecentPreviewBytes(path: string): Promise<Uint8Array> {
   if (!isTauri()) throw new Error("仅在桌面应用中生成本地预览")
   if (await invoke<number>("skin_file_size", { path }) > recentPreviewMaxBytes) {
     throw new Error("皮肤文件过大，暂不生成预览")
@@ -134,7 +134,7 @@ export async function readRecentPreviewBytes(path: string): Promise<Uint8Array> 
   return new Uint8Array(await invoke<ArrayBuffer>("read_file", { path }))
 }
 
-export function welcomeVisible(): boolean {
+function welcomeVisible(): boolean {
   return canvasWrap.classList.contains("empty")
 }
 
@@ -143,9 +143,9 @@ export function waitForPreviewFrame(): Promise<void> {
 }
 
 // 最近皮肤最多 9 张，逐个串行取图，避免同时读多份皮肤阻塞 UI。
-export const recentPreviewQueue: HTMLButtonElement[] = []
+const recentPreviewQueue: HTMLButtonElement[] = []
 
-export const recentPreviewQueued = new Set<HTMLButtonElement>()
+const recentPreviewQueued = new Set<HTMLButtonElement>()
 
 export function recentThumbRequest<T>(
   mode: IDBTransactionMode,
@@ -164,7 +164,7 @@ export function recentThumbRequest<T>(
   }))
 }
 
-export async function renderRecentPreview(path: string, host: HTMLElement): Promise<HTMLImageElement> {
+async function renderRecentPreview(path: string, host: HTMLElement): Promise<HTMLImageElement> {
   const stamp = (await invoke<number[]>("skin_file_stamp", { path })).join(":")
   const stored = await recentThumbRequest<RecentThumb | undefined>("readonly", (store) => store.get(path))
     .catch(() => undefined)
@@ -198,7 +198,7 @@ async function readDemoImageWithRetry(path: string): Promise<Blob> {
   throw lastError
 }
 
-export async function drainRecentPreviews(): Promise<void> {
+async function drainRecentPreviews(): Promise<void> {
   if (appState.recentPreviewRunning) return
   appState.recentPreviewRunning = true
   try {
@@ -238,14 +238,14 @@ export async function drainRecentPreviews(): Promise<void> {
   }
 }
 
-export function queueRecentPreview(card: HTMLButtonElement): void {
+function queueRecentPreview(card: HTMLButtonElement): void {
   if (recentPreviewQueued.has(card)) return
   recentPreviewQueued.add(card)
   recentPreviewQueue.push(card)
   void drainRecentPreviews()
 }
 
-export const recentPreviewObserver = welcomeScroller && "IntersectionObserver" in window
+const recentPreviewObserver = welcomeScroller && "IntersectionObserver" in window
   ? new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue
@@ -255,7 +255,7 @@ export const recentPreviewObserver = welcomeScroller && "IntersectionObserver" i
   }, { root: welcomeScroller, rootMargin: "240px 0px" })
   : undefined
 
-export function observeRecentPreviews(): void {
+function observeRecentPreviews(): void {
   if (!welcomeVisible()) return
   recentPreviewObserver?.disconnect()
   const pending = [...document.querySelectorAll<HTMLButtonElement>(".recent-card[data-recent]")].filter((card) => {
