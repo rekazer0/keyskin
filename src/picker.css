@@ -1,20 +1,18 @@
 .picker-window {
   --_toolbar-h: 58px;
   color: var(--text);
-  background: var(--material-content);
   font-family: var(--font-ui);
 }
 .picker-window { background: inherit; }
 .picker-toolbar {
   height: var(--_toolbar-h);
-  display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 12px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
-.picker-heading { min-width: 0; display: grid; gap: 2px; margin-right: auto; line-height: 1.25; }
+.picker-heading { min-width: 0; display: grid; gap: 2px; line-height: 1.25; }
 .picker-heading strong, .picker-heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-heading strong { font-size: var(--font-size-lg); font-weight: 600; }
 .picker-heading span { color: var(--tertiary); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }

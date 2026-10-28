@@ -253,26 +253,6 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
   padding: 0 var(--space-lg);
 }
 .ui-section > header > h3 { flex: 1; margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-.ui-section > header > .ui-section-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex: 1;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  text-align: left;
-}
-.ui-section-toggle > .ui-icon { color: var(--tertiary); transition: transform var(--duration-base) var(--ease-standard); }
-.ui-section[data-collapsed] .ui-section-toggle > .ui-icon { transform: rotate(-90deg); }
-.ui-section > .ui-section-body { display: grid; gap: var(--space-sm); padding: 0 var(--space-lg) var(--space-lg); }
-.ui-section[data-collapsed] > .ui-section-body { display: none; }
 .ui-subsection { display: grid; gap: var(--space-sm); }
 .ui-subsection + .ui-subsection { margin-top: var(--space-sm); }
 .ui-subsection > h4 { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
@@ -298,20 +278,6 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 @media (hover: hover) { .ui-list-item:hover { background: var(--hover); } }
 .ui-list-item[aria-selected="true"], .ui-list-item[aria-current="true"] { background: var(--accent-soft); color: var(--accent); }
 
-/* —— 缩略图 —— */
-.ui-thumb {
-  display: inline-block;
-  flex: none;
-  width: var(--_size, 32px);
-  height: var(--_size, 32px);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--checker-image), var(--checker-light);
-  background-position: 0 0, 4px 4px;
-  background-size: 8px 8px;
-  object-fit: contain;
-}
-
 /* —— 角标 —— */
 .ui-badge {
   display: inline-flex;
@@ -326,18 +292,6 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
   font-size: var(--font-size-xs);
 }
 .ui-badge[data-variant="accent"] { background: var(--accent-soft); color: var(--accent); }
-
-/* —— 菜单 —— */
-.ui-menu {
-  display: grid;
-  min-width: 180px;
-  padding: var(--space-xs);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--menu);
-  box-shadow: var(--shadow-md);
-}
-.ui-menu[hidden] { display: none; }
 
 /* —— 新手引导：遮罩挖空高亮目标，旁边是说明卡片；几何位置由 src/tour.ts 写入 —— */
 .ui-tour { position: fixed; inset: 0; z-index: 200; pointer-events: none; animation: ui-tour-in var(--duration-base) var(--ease-emphasized); }
@@ -369,7 +323,7 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 @keyframes ui-tour-in { from { opacity: 0; } }
 
 /* —— 统一的焦点与禁用 —— */
-:where(.ui-button, .ui-icon-button, .ui-segmented > button, .ui-switch, .ui-list-item, .ui-section-toggle):focus-visible {
+:where(.ui-button, .ui-icon-button, .ui-segmented > button, .ui-switch, .ui-list-item):focus-visible {
   outline: 0;
   box-shadow: var(--focus-ring);
 }
@@ -466,8 +420,6 @@ body {
 }
 /* 文本框的焦点由边框 + 贴边光晕表示，不再叠一圈有间隙的 outline */
 :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):focus-visible { outline: 0; }
-
-/* —— 动画预览：舞台、播放控制、可定位时间轴 —— */
 /* —— 动画播放器：舞台 + 时间轴（每条轨道一行，播放头贯穿）+ 走带控件；只改变预览，不写配置 —— */
 .ui-animation-player { display: grid; gap: var(--space-sm); min-width: 0; }
 .ui-animation-stage { position: relative; display: grid; place-items: center; overflow: hidden; border-radius: var(--radius-md); background: var(--checker-image), var(--checker-light); background-position: 0 0, calc(var(--checker-size) / 2) calc(var(--checker-size) / 2); background-size: var(--checker-size) var(--checker-size); }

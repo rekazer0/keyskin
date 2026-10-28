@@ -36,7 +36,7 @@
 .atlas-workspace .tile-toolbar button { width: 26px; height: 28px; min-width: 26px; }
 .atlas-workspace #delete-tile { margin-left: 0; }
 .atlas-selection { margin-left: auto; font: var(--font-size-xs) var(--font-mono); padding: 4px 6px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
-.atlas-workspace .canvas-wrap { flex: 1; min-height: 0; padding: 0; overflow: hidden; display: grid; background: var(--canvas-surface); }
+.atlas-workspace .canvas-wrap { flex: 1; min-height: 0; padding: 0; overflow: hidden; display: grid; }
 .atlas-workspace #workspace-image-figure { width: 100%; height: 100%; max-height: none; padding: 32px; box-sizing: border-box; overflow: visible; }
 .atlas-workspace #atlas-canvas { max-width: none; max-height: none; touch-action: none; box-shadow: var(--shadow-sm); background: transparent; }
 .atlas-workspace .atlas-zoom { position: absolute; right: 20px; bottom: 42px; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-xl); background: var(--material-panel); box-shadow: var(--shadow-sm); }

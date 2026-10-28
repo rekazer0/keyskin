@@ -1,6 +1,4 @@
 .new-project-window {
-  color: var(--text);
-  background: var(--material-content);
   font-family: var(--font-ui);
 }
 

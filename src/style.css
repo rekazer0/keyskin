@@ -1,5 +1,4 @@
 /* ===================== 原 style-performance.css ===================== */
-/* CSS 性能优化 */
 
 /* 优化滚动性能（侧栏自身不滚动，由 #files 承担滚动） */
 .resource-gallery,
@@ -14,30 +13,17 @@
   contain: layout style paint;
 }
 
-/* 字体渲染优化 */
-
 /* 避免布局抖动 */
 .empty-state,
 .resource-detail-heading {
   contain: layout;
 }
 
-/* 延迟动画直到需要时 */
-
 /* 优化重排 */
 .glass-module,
 .toolbar-menu {
   contain: layout style;
 }
-
-/* ===================== 原 source-files-redesign.css ===================== */
-/*
- * 源文件视图：只剩文件树自身的结构语义。
- *
- * 行高、内距、圆角、图标栏、hover / 选中态都由 pen-design-application.css 统一
- * 提供，概览与源文件共用同一套度量；这里不再重复定义，避免两套规则互相覆盖后
- * 两个视图长得不一样。
- */
 
 /* 文件树结构 */
 .raw-folder {
@@ -176,10 +162,6 @@
   }
 }
 
-.app-window {
-  background: transparent;
-}
-
 :root[data-window-material="off"] body {
   background: var(--window);
 }
@@ -235,47 +217,13 @@
   color: inherit;
 }
 
-.system-symbol-fallback {
-  width: 100%;
-  height: 100%;
-  display: block;
-  overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .titlebar {
   position: relative;
   z-index: 20;
-  height: var(--titlebar-height);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: calc(6px + var(--safe-area-top)) max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
-  border-bottom: 1px solid var(--line);
-  background: var(--toolbar);
-  box-shadow: inset 0 1px var(--glass-highlight), var(--shadow-sm);
-  -webkit-backdrop-filter: saturate(170%) blur(28px);
-  backdrop-filter: saturate(170%) blur(28px);
 }
 
 :root.macos .titlebar {
   padding-top: calc(40px + var(--safe-area-top));
-}
-
-.toolbar-button {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  transition: all var(--duration-base) var(--ease-standard);
 }
 
 .toolbar-button > span:not(.icon):not(.system-symbol) {
@@ -283,18 +231,12 @@
 }
 
 .toolbar-button .icon {
-  color: var(--text);
-  font-size: var(--font-size-xl);
   font-weight: 400;
-  line-height: 1;
 }
 
 .toolbar-button .icon svg,
 .toolbar-button .system-symbol,
 .toolbar-button .system-symbol svg {
-  width: 18px;
-  height: 18px;
-  display: block;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -315,7 +257,6 @@
 .toolbar-button:hover:not(:disabled),
 .toolbar-more summary:hover,
 .toolbar-menu button:hover:not(:disabled) {
-  background: var(--hover);
   transform: none;
   transition: all var(--duration-base) var(--ease-standard);
 }
@@ -330,7 +271,6 @@
 
 .toolbar-button:disabled,
 .toolbar-menu button:disabled {
-  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -338,19 +278,12 @@
   position: absolute;
   left: 50%;
   right: auto;
-  display: grid;
   justify-items: center;
-  bottom: 9px;
-  transform: translateX(-50%);
-  pointer-events: none;
 }
 
 .document-title strong {
   display: block;
-  max-width: 330px;
   overflow: hidden;
-  font-size: var(--font-size-lg);
-  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: auto;
@@ -376,8 +309,6 @@
 
 #dirty {
   flex: none;
-  color: var(--secondary);
-  font-size: var(--font-size-xs);
   white-space: nowrap;
 }
 
@@ -389,37 +320,6 @@
 .preview-choice,
 .sidebar-view-control {
   display: flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-surface);
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: saturate(180%) blur(14px);
-  backdrop-filter: saturate(180%) blur(14px);
-}
-
-.mode-control button,
-.preview-choice button,
-.sidebar-view-control button {
-  transition: color var(--duration-base) var(--ease-standard), background-color var(--duration-base) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard), transform var(--duration-base) var(--ease-standard);
-}
-
-.mode-control button,
-.preview-choice button {
-  height: 25px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm);
-  color: var(--secondary);
-  background: transparent;
-  font-size: var(--font-size-xs);
-}
-
-.mode-control button.active,
-.preview-choice button.active {
-  color: var(--text);
-  background: color-mix(in srgb, var(--material-control) 90%, transparent);
-  box-shadow: var(--shadow-sm);
 }
 
 .preview-choice > button .system-symbol {
@@ -430,14 +330,6 @@
 
 .mode-control > span,
 .field-control > span {
-  display: none;
-}
-
-.mobile-choice-toggle {
-  display: none;
-}
-
-.mobile-title-choices {
   display: none;
 }
 
@@ -494,15 +386,9 @@ select option {
   height: 32px;
   display: grid;
   place-items: center;
-  border-radius: var(--radius-sm);
   cursor: default;
   font-size: var(--font-size-xl);
   list-style: none;
-}
-
-.system-symbol-fallback .fallback-dot {
-  fill: currentColor;
-  stroke: none;
 }
 
 .toolbar-more summary::-webkit-details-marker {
@@ -515,35 +401,12 @@ select option {
   top: 37px;
   right: 0;
   width: 214px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--menu);
-  box-shadow: var(--shadow-sm), inset 0 1px var(--glass-highlight);
-  -webkit-backdrop-filter: saturate(180%) blur(28px);
-  backdrop-filter: saturate(180%) blur(28px);
   transform-origin: top right;
-  animation: glass-menu-in var(--duration-fast) var(--ease-standard);
-}
-
-.file-menu {
-  z-index: 101;
-}
-
-.file-menu .toolbar-menu {
-  width: 260px;
-  right: auto;
-  left: 0;
 }
 
 .toolbar-menu button {
   width: 100%;
-  height: 29px;
-  padding: 0 8px;
-  border-radius: var(--radius-sm);
-  background: transparent;
   text-align: left;
-  font-size: var(--font-size-md);
 }
 
 .file-actions button {
@@ -563,11 +426,6 @@ select option {
   margin-left: auto;
 }
 
-.app-actions {
-  display: grid;
-  gap: 2px;
-}
-
 .file-actions {
   display: grid;
   gap: 2px;
@@ -576,7 +434,6 @@ select option {
 .toolbar-menu-separator {
   height: 1px;
   margin: 4px 8px;
-  background: var(--line);
 }
 
 .file-actions button {
@@ -606,19 +463,6 @@ main {
   height: calc(100vh - var(--titlebar-height));
   display: grid;
   grid-template-columns: 220px minmax(500px, 1fr) 4px var(--inspector-width, 340px);
-  background: transparent;
-}
-
-.mobile-workspace-tabs {
-  display: none;
-}
-
-.mobile-command-menu {
-  display: none;
-}
-
-.mobile-quick-actions {
-  display: none;
 }
 
 aside {
@@ -664,20 +508,13 @@ aside {
 }
 
 .pane-heading {
-  min-height: 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px var(--space-md);
-  border-bottom: 1px solid var(--line-soft);
 }
 
 .sidebar-view-control {
-  width: 100%;
   display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-md);
 }
 
 .sidebar > .pane-heading[hidden] {
@@ -685,24 +522,7 @@ aside {
 }
 
 .sidebar-view-control button {
-  height: 25px;
   flex: 1;
-  border-radius: var(--radius-sm);
-  color: var(--secondary);
-  background: transparent;
-  font-size: var(--font-size-xs);
-}
-
-.sidebar-view-control button.active {
-  color: var(--text);
-  background: color-mix(in srgb, var(--material-control) 90%, transparent);
-  box-shadow: var(--shadow-sm);
-}
-
-h2 {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: 600;
 }
 
 h2 {
@@ -719,7 +539,6 @@ h2 {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 6px 8px 16px;
 }
 
 /* 旧的源文件样式已移至 source-files-redesign.css */
@@ -846,17 +665,11 @@ h2 {
   color: color-mix(in srgb, var(--on-accent) 78%, transparent);
 }
 
-#files button:disabled {
-  opacity: 0.4;
-}
-
 .workspace {
   height: 100%;
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr) 29px;
-  background: var(--content);
   overflow: hidden;
   position: relative;
 }
@@ -865,13 +678,7 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
   position: relative;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--toolbar);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
 }
 
 .preview-toolbar .spacer {
@@ -898,7 +705,6 @@ h2 {
 #skin-state {
   width: 100%;
   min-width: 0;
-  color: transparent;
   color-scheme: light;
 }
 
@@ -908,29 +714,14 @@ h2 {
   left: 9px;
   right: 26px;
   overflow: hidden;
-  color: var(--text);
-  font-size: var(--font-size-md);
-  line-height: 28px;
   pointer-events: none;
   white-space: nowrap;
   text-overflow: clip;
 }
 
 .preview-tool-toggle {
-  width: 27px;
-  height: 27px;
   margin-right: auto;
-  padding: 0;
-  border-radius: var(--radius-sm);
-  color: var(--secondary);
-  font-size: var(--font-size-lg);
   transition: color var(--duration-base) var(--ease-standard), background-color var(--duration-base) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard);
-}
-
-.preview-tool-toggle.active {
-  color: var(--on-accent);
-  background: var(--accent);
-  box-shadow: 0 1px 5px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .canvas-wrap {
@@ -939,10 +730,8 @@ h2 {
   place-items: center;
   justify-items: center;
   position: relative;
-  padding: 20px;
   overflow-x: auto;
   overflow-y: auto;
-  background: var(--canvas);
   --_canvas-text: var(--text);
   --_canvas-secondary: var(--secondary);
   --_canvas-tertiary: var(--tertiary);
@@ -1452,10 +1241,8 @@ body:has(.canvas-wrap.empty) .workspace {
 .welcome-main {
   display: flex;
   flex-direction: column;
-  gap: 24px;
   min-width: 0;
   min-height: 0;
-  padding: 40px 48px;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -1463,59 +1250,33 @@ body:has(.canvas-wrap.empty) .workspace {
 .welcome-hero {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .welcome-hero h1 {
   margin: 0;
-  font-size: var(--font-size-xl);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
 }
 
 .welcome-hero p {
   margin: 0;
-  max-width: 720px;
-  font-size: var(--font-size-md);
-  line-height: 1.6;
-  color: var(--secondary);
 }
 
 .welcome-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
 .welcome-section-head {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
 .welcome-section-head h2 {
   margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--text);
-}
-
-.welcome-section-head span {
-  font-size: var(--font-size-sm);
-  color: var(--tertiary);
 }
 
 /* 「最近打开」与「新建皮肤」是同级区块，标题字号对齐 hero，计数与按钮按基线对齐。 */
 .welcome-recent .welcome-section-head {
   align-items: baseline;
-  gap: 12px;
-}
-
-.welcome-recent .welcome-section-head h2 {
-  font-size: var(--font-size-xl);
-  font-weight: 600;
-  letter-spacing: -0.01em;
 }
 
 .welcome-recent .welcome-head-action {
@@ -1531,7 +1292,6 @@ body:has(.canvas-wrap.empty) .workspace {
 .recent-card-folder {
   min-width: 0;
   overflow: hidden;
-  font-size: var(--font-size-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1541,13 +1301,7 @@ body:has(.canvas-wrap.empty) .workspace {
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--panel);
-  color: var(--secondary);
   font: inherit;
-  font-size: var(--font-size-sm);
   cursor: pointer;
   transition: border-color var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
@@ -1556,7 +1310,6 @@ body:has(.canvas-wrap.empty) .workspace {
 
 .welcome-head-action:hover {
   border-color: var(--accent);
-  color: var(--accent);
 }
 }
 
@@ -1567,8 +1320,6 @@ body:has(.canvas-wrap.empty) .workspace {
 
 .recent-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
 }
 
 .recent-grid[hidden] {
@@ -1576,18 +1327,12 @@ body:has(.canvas-wrap.empty) .workspace {
 }
 
 /* 最近打开的皮肤与“新建皮肤”模板卡共用卡片外观，只把预览底色改为随主题变化。 */
-.recent-grid .template-preview {
-  background: var(--content);
-}
 
 .recent-grid-empty {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border: 1px dashed var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
 }
 
 .recent-grid-empty[hidden] {
@@ -1609,26 +1354,9 @@ body:has(.canvas-wrap.empty) .workspace {
   min-width: 0;
 }
 
-.recent-grid-empty-copy strong {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text);
-}
-
-.recent-grid-empty-copy span {
-  font-size: var(--font-size-xs);
-  color: var(--tertiary);
-}
-
 .recent-grid-empty button {
   flex: none;
-  padding: 8px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--panel);
-  color: var(--text);
   font: inherit;
-  font-size: var(--font-size-sm);
   cursor: pointer;
   transition: border-color var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
@@ -1637,18 +1365,14 @@ body:has(.canvas-wrap.empty) .workspace {
 
 .recent-grid-empty button:hover {
   border-color: var(--accent);
-  color: var(--accent);
 }
 }
 
 .template-grid {
-  display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
 .template-grid-row {
-  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
@@ -1656,22 +1380,8 @@ body:has(.canvas-wrap.empty) .workspace {
 .template-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--duration-base) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard);
-}
-
-@media (hover: hover) {
-
-.template-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-}
 }
 
 .template-preview {
@@ -1682,7 +1392,6 @@ body:has(.canvas-wrap.empty) .workspace {
   height: 104px;
   padding: 12px;
   overflow: hidden;
-  border-radius: var(--radius-md);
   background: var(--_tone-bg, var(--material-content));
 }
 
@@ -1701,9 +1410,6 @@ body:has(.canvas-wrap.empty) .workspace {
 }
 
 .template-name {
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1713,49 +1419,34 @@ body:has(.canvas-wrap.empty) .workspace {
   flex: none;
   width: 14px;
   height: 14px;
-  color: var(--tertiary);
 }
 
 .template-meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-size-xs);
-  color: var(--tertiary);
   white-space: nowrap;
 }
 
 .template-meta em {
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--content);
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
   font-style: normal;
-  color: var(--secondary);
 }
 .welcome-note {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 12px;
-  border-radius: var(--radius-md);
-  background: var(--content);
 }
 
 .welcome-note .system-symbol {
   flex: none;
   width: 14px;
   height: 14px;
-  color: var(--tertiary);
 }
 
 .welcome-note p {
   flex: 1;
   margin: 0;
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-  color: var(--secondary);
 }
 @media (max-width: 1080px) {
   .template-grid-row {
@@ -1768,7 +1459,6 @@ body:has(.canvas-wrap.empty) .workspace {
   padding: 8px 0;
   overflow: hidden;
   background: transparent;
-  color: inherit;
   font: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1794,10 +1484,8 @@ body:has(.canvas-wrap.empty) .workspace {
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 50%;
   color: var(--on-accent);
   background: var(--accent);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 38%, transparent), var(--shadow-sm);
   cursor: pointer;
   transition: bottom var(--duration-base) var(--ease-emphasized), transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
 }
@@ -1843,15 +1531,6 @@ body:has(.canvas-wrap.empty) .workspace {
 
 #source-find-toggle[aria-pressed="true"] .source-find-fab-close {
   display: block;
-}
-
-.mode-control button.active,
-.preview-choice button.active,
-.sidebar-view-control button.active {
-  color: var(--text);
-  background: var(--glass-highlight);
-  box-shadow: var(--shadow-sm), inset 0 1px var(--glass-highlight);
-  animation: glass-select var(--duration-base) var(--ease-standard);
 }
 
 @keyframes glass-select {
@@ -2046,8 +1725,7 @@ body:has(.canvas-wrap.empty) .workspace {
   cursor: pointer;
 }
 
-.style-detail-sound-play:disabled,
-.style-picker-sound-play:disabled {
+.style-detail-sound-play:disabled {
   opacity: 0.35;
   cursor: default;
 }
@@ -2089,7 +1767,6 @@ body:has(.canvas-wrap.empty) .workspace {
 }
 
 .tile-heading {
-  display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
@@ -2152,15 +1829,6 @@ body:has(.canvas-wrap.empty) .workspace {
   display: inline-flex;
   gap: 2px;
 }
-
-.tile-mode-control button.active {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-/* 按键操作工具栏：与布局面板的卡片容器保持一致，而不是旧版“输入框”样式。 */
-
-/* 删除是破坏性操作，推到工具栏最右侧，和其余按键操作拉开距离。 */
 
 /* 选中态跟随检查器的选中语言（浅蓝底 + 强调色），避免白底在浅色卡片上失去对比。 */
 
@@ -2245,36 +1913,6 @@ body:has(.canvas-wrap.empty) .workspace {
   white-space: nowrap;
 }
 
-.bda-frame-resource-button {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  color: var(--secondary);
-  background: transparent;
-  font: inherit;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-
-.bda-frame-resource-button:not(:disabled):focus-visible canvas {
-  box-shadow: 0 0 0 2px var(--accent);
-}
-
-@media (hover: hover) {
-
-.bda-frame-resource-button:not(:disabled):hover canvas {
-  box-shadow: 0 0 0 2px var(--accent);
-}
-}
-
-.bda-frame-resource-button:disabled {
-  cursor: default;
-}
-
-/* 隐藏卡片标题 - 扁平设计不需要 */
-
 /* 响应式调整 - 移动端检查器组 */
 
 #style-detail-fields {
@@ -2338,10 +1976,6 @@ body:has(.canvas-wrap.empty) .workspace {
   border-bottom: 0;
 }
 
-.primary-actions {
-  grid-template-columns: 1fr 1fr;
-}
-
 .picker-dialog {
   width: min(1100px, calc(100vw - 40px));
   height: min(760px, calc(100vh - 40px));
@@ -2379,16 +2013,6 @@ body:has(.canvas-wrap.empty) .workspace {
   width: min(420px, calc(100vw - 32px));
   padding: 16px;
   font-size: var(--font-size-md);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
-  background: var(--panel);
-  box-shadow: var(--shadow-sm);
-}
-
-.app-dialog::backdrop {
-  background: var(--backdrop);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
 }
 
 .app-dialog form {
@@ -2398,7 +2022,6 @@ body:has(.canvas-wrap.empty) .workspace {
 
 .app-dialog header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
 }
 
@@ -2410,12 +2033,6 @@ body:has(.canvas-wrap.empty) .workspace {
 }
 
 .app-dialog header button {
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--control);
-  font-size: var(--font-size-sm);
   line-height: 1.2;
 }
 
@@ -2429,13 +2046,6 @@ body:has(.canvas-wrap.empty) .workspace {
 
 .app-dialog select,
 .app-dialog input[type="number"] {
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--control);
-  color: var(--text);
-  font-size: var(--font-size-md);
   line-height: 1.2;
 }
 
@@ -2491,18 +2101,6 @@ body:has(.canvas-wrap.empty) .workspace {
   transform: translateY(-1px);
 }
 }
-
-/* 对齐与分布部分样式 */
-
-/* 响应式设计 - 移动端 */
-
-/* PC端优化 */
-
-/* 检查器工具按钮 */
-
-/* 自动保存指示器 */
-
-/* 检查器组标题 */
 
 /* 检查器提示文本 */
 
@@ -2822,17 +2420,7 @@ body:has(.canvas-wrap.empty) .workspace {
 .project-dialog {
   width: min(440px, calc(100% - 32px));
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
   color: var(--text);
-  background: var(--panel);
-  box-shadow: var(--shadow-sm);
-}
-
-.project-dialog::backdrop {
-  background: var(--backdrop);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
 }
 
 .project-dialog form {
@@ -2902,13 +2490,6 @@ body:has(.canvas-wrap.empty) .workspace {
   min-width: 0;
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  padding: 0 12px;
-  border-top: 1px solid var(--line);
-  color: var(--secondary);
-  background: var(--toolbar);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
 }
@@ -2916,7 +2497,6 @@ body:has(.canvas-wrap.empty) .workspace {
 #panel-status {
   flex: none;
   padding: 8px 0;
-  color: inherit;
   font: inherit;
   font-variant-numeric: tabular-nums;
 }
@@ -2958,13 +2538,9 @@ body:has(.canvas-wrap.empty) .workspace {
   gap: 12px;
   align-items: center;
   padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--control);
 }
 
 .project-template-option:has(input:checked) {
-  border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
@@ -3050,51 +2626,6 @@ input[type="search"]:focus {
   box-shadow: var(--focus-ring);
 }
 
-.search-control {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-full);
-  color: var(--secondary);
-  background: color-mix(in srgb, var(--secondary) 12%, transparent);
-}
-
-.search-control:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--focus-ring);
-}
-
-.search-control .system-symbol {
-  width: 15px;
-  height: 15px;
-}
-
-.search-control > input {
-  width: 100%;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  font-size: var(--font-size-md);
-}
-
-.search-control > input:focus {
-  border-color: transparent;
-  outline: none;
-  box-shadow: none;
-}
-
-.search-control input[type="search"]::-webkit-search-decoration,
-.search-control input[type="search"]::-webkit-search-results-button,
-.search-control input[type="search"]::-webkit-search-results-decoration {
-  display: none;
-}
-
 @media (max-width: 1060px) {
   main {
     grid-template-columns: 190px minmax(0, 1fr) 4px min(var(--inspector-width, 340px), 40vw);
@@ -3118,18 +2649,11 @@ input[type="search"]:focus {
 @media (max-width: 600px) {
 
   .titlebar {
-    gap: 6px;
     overflow: visible;
   }
 
   .titlebar > .spacer {
     display: none;
-  }
-
-  .file-menu .toolbar-menu {
-    position: fixed;
-    top: var(--titlebar-height);
-    left: max(8px, env(safe-area-inset-left));
   }
 
   .document-title {
@@ -3151,7 +2675,6 @@ input[type="search"]:focus {
   }
 
   .preview-toolbar {
-    gap: 6px;
     padding-inline: 8px;
   }
 
@@ -3169,31 +2692,22 @@ input[type="search"]:focus {
 }
 
 @media (max-width: 760px) and (orientation: portrait) {
-  .app-window {
-    background: var(--material-content);
-  }
 
   .app-window {
     background: var(--toolbar);
   }
 
   .titlebar {
-    height: var(--titlebar-height);
-    gap: 4px;
     padding-top: calc(6px + var(--safe-area-top));
     padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right));
-    border-bottom: 0;
-    box-shadow: var(--shadow-sm);
   }
 
   .mobile-command-menu {
-    display: block;
     flex: none;
     position: static;
   }
 
   .mobile-quick-actions {
-    display: flex;
     flex: none;
     gap: 2px;
   }
@@ -3267,12 +2781,10 @@ input[type="search"]:focus {
     left: 50%;
     z-index: 1;
     flex: none;
-    padding: 2px;
     transform: translateX(-50%);
   }
 
   .mobile-title-choices {
-    display: flex;
     flex: none;
     gap: 4px;
     margin-left: auto;
@@ -3333,14 +2845,11 @@ input[type="search"]:focus {
   }
 
   .mobile-workspace-tabs {
-    height: 18px;
     display: flex;
-    gap: 0;
     position: absolute;
     z-index: 12;
     right: 0;
     left: 0;
-    padding: 0 8px;
     border-bottom: 1px solid var(--line);
     background: var(--toolbar);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -3348,20 +2857,15 @@ input[type="search"]:focus {
   }
 
   .mobile-split-handle {
-    width: 44px;
-    height: 18px;
     position: absolute;
-    z-index: 2;
     top: 0;
     left: 50%;
     display: grid;
     place-items: center;
     padding: 0;
     border: 0;
-    border-radius: 0;
     background: transparent;
     box-shadow: none;
-    transform: translateX(-50%);
     touch-action: none;
     cursor: row-resize;
   }
@@ -3411,17 +2915,6 @@ input[type="search"]:focus {
   .mobile-split-handle.dragging,
   .mobile-split-handle:focus-visible {
     color: var(--accent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent);
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane] {
-    height: 18px;
-    flex: 1;
-    position: relative;
-    border-radius: 0;
-    color: transparent;
-    background: transparent;
-    font-size: 0;
   }
 
   .mobile-workspace-tabs button[data-mobile-pane]::before {
@@ -3437,7 +2930,6 @@ input[type="search"]:focus {
   }
 
   .mobile-workspace-tabs button[data-mobile-pane].active {
-    background: transparent;
     box-shadow: none;
   }
 
@@ -3566,7 +3058,6 @@ input[type="search"]:focus {
 
   .preview-choice {
     min-width: 0;
-    padding: 2px;
   }
 
   .preview-toolbar select,
@@ -3578,16 +3069,11 @@ input[type="search"]:focus {
     font-size: var(--font-size-md);
   }
 
-  .canvas-wrap {
-    padding: 6px;
-  }
-
   #preview-coordinates {
     display: none;
   }
 
   .workspace-status {
-    gap: 8px;
     padding-inline: 8px;
   }
 
@@ -3711,10 +3197,6 @@ input[type="search"]:focus {
     font-size: var(--font-size-xl);
   }
 
-  .app-dialog button {
-    min-height: 32px;
-  }
-
   #resource-inspector,
   #source-editor {
     touch-action: pan-y;
@@ -3735,12 +3217,6 @@ input[type="search"]:focus {
 
 @media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
 
-  .titlebar {
-    height: var(--titlebar-height);
-    gap: 4px;
-    padding: calc(4px + var(--safe-area-top)) max(6px, env(safe-area-inset-right)) 4px max(6px, env(safe-area-inset-left));
-  }
-
   .titlebar .toolbar-button,
   .titlebar .toolbar-more summary {
     width: 34px;
@@ -3757,7 +3233,6 @@ input[type="search"]:focus {
   }
 
   .mode-control button {
-    height: 30px;
     padding-inline: 8px;
   }
 
@@ -3805,7 +3280,6 @@ input[type="search"]:focus {
   }
 
   .workspace-status {
-    gap: 6px;
     padding-inline: 6px;
   }
 
@@ -3824,19 +3298,8 @@ input[type="search"]:focus {
   display: none;
 }
 
-/* BDA 前景样式：每个引用独立成卡片，避免多个前景被压缩成一条预览。 */
-
-/* 背景等单个样式引用也提高输入字号与点击区域，保持视觉层级一致。 */
-
 /* Shared inspector surfaces and keyboard focus in both themes. */
 .source #source-editor { background: var(--inspector); }
-/* One object summary and category navigation for both layout and key editing. */
-
-/* Inspector surfaces share the window glass material used by the left overview. */
-
-/* Inspector: object summary, category navigation, then one scrolling editor. */
-
-/* ===== 深色模式增强 ===== */
 
 /* ===== 聚焦指示器优化 ===== */
 *:focus-visible:not(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea) {
@@ -3873,156 +3336,6 @@ input[type="search"]:focus {
     grid-template-columns: 260px minmax(600px, 1fr) 4px var(--inspector-width, 380px);
   }
 }
-
-/* ==========================================================================
-   检查器属性界面卡片化重构
-   目标：用“对象摘要 + 分组卡片 + 字段行”替代密集的平铺表单，
-   让分组、字段含义和编辑状态更容易被扫描和理解。
-   ========================================================================== */
-
-/* 顶部对象摘要 */
-
-/* 分类导航：桌面端为右侧卡片式导航，窄屏为底部胶囊导航 */
-
-/* 文档属性：外层只负责滚动，具体分组各自成卡片 */
-
-/* 卡片头：图标 + 中文名称 + 源码字段 + 字段数量 */
-
-/* 卡片内容：自适应两列，长字段自动占满一行 */
-
-/* 文本 / 数字输入：统一为轻量卡片内控件 */
-
-/* 成对数值：尺寸 / 位置 / 单元格尺寸 */
-
-/* 四元数值：显示区域 / 内边距 */
-
-/* 开关字段：精确输入模式等 0/1 配置 */
-
-/* 样式引用：保留预览，但压缩为卡片内的行级控件 */
-
-/* 其他简单属性分组也使用同一张卡片语言 */
-
-/* 保持分组导航与卡片语言一致：使用 data 属性提升选择器权重，覆盖历史样式。 */
-
-/* 顶部横向分类（默认“全部”模式）：卡片式分段控件 */
-
-/* 侧边纵向分类（“分组”模式）：与检查器内容形成双栏卡片布局 */
-
-/* “分组”模式：把分类导航悬浮到检查器右侧，内容区保持完整宽度。 */
-
-/* 顶部横向分类必须严格限制在检查器宽度内，避免按钮文字把导航撑出面板。 */
-
-/* 最终统一分类导航的选中态：浅色卡片 + 蓝色强调，避免大面积高饱和色块。 */
-
-/* 分类导航统一为“图标卡片 + 标签”的样式：取消左侧强调条和整块选中底色，
-   用图标底色区分选中状态，视觉更干净、对比更明确。 */
-
-/* ============================================================
-   右侧分类导航：更精致的玻璃卡片与图标状态
-   ============================================================ */
-
-/* ============================================================
-   右侧分类导航最终精修：玻璃浮层、图标底座、悬浮与选中反馈
-   ============================================================ */
-
-/* ============================================================
-   右侧分类导航：图标 + 文字一体式胶囊项
-   说明：不再使用独立图标底座，让图标与标签处于同一个圆角项内。
-   ============================================================ */
-
-/* 一体式导航项：保持 120px 窄栏时也不截断“扩展区域”等长标签。 */
-
-/* ============================================================
-   右侧分类导航：图标在上、文字在下的一体式窄栏
-   图标与文字共用同一个按钮背景，不再有独立图标底座。
-   ============================================================ */
-
-/* 分类导航继续收窄：保持“图标在上、文字在下”的一体式结构，减少横向占用。 */
-
-/* 按需求将右侧分类侧栏宽度固定为 70px。 */
-
-/* 按需求将右侧分类侧栏宽度固定为 75px。 */
-
-/* 让右侧分类栏与左侧属性卡片顶部对齐。 */
-
-/* 取消分类侧栏中的渐变，统一使用纯色/半透明色。 */
-
-/* ============================================================
-   布局属性面板：位置与尺寸、间距、对齐与分布的精简卡片化
-   ============================================================ */
-/* ============================================================
-   检查器全局精简：减少卡片、边框和分割线，用间距与文字层级建立结构
-   ============================================================ */
-/* ============================================================
-   检查器属性 UI 全量重构
-   原则：少卡片、少线条、统一行式布局、紧凑控件、清晰层级
-   ============================================================ */
-
-/* 1. 基础容器 */
-
-/* 2. 统一标题层级 */
-
-/* 3. 去掉 section 卡片、边框和阴影 */
-
-/* 4. 统一属性行：标签左、控件右 */
-
-/* 5. 输入控件统一为轻填充 */
-
-/* 6. 按钮统一为轻填充 */
-
-/* 7. 布局面板：短标签 + 两列紧凑排列 */
-
-/* 8. 其他属性面板：尽量使用两列紧凑排列 */
-
-/* 9. 样式引用：轻量行，不做成大卡片 */
-
-/* 10. 窄屏单列 */
-/* 特殊控件修复：不要让通用按钮规则影响图片/样式预览和方向编辑器。 */
-
-/* ==========================================================================
-   布局面板：按任务分组的卡片，输入与操作保持清晰的两列结构。
-   ========================================================================== */
-
-/* 外层容器无边框 */
-
-/* 1. 工具栏：一条轻量填充，不做成第二层卡片 */
-
-/* 2. 位置与尺寸卡片 */
-
-/* 卡片标题不带下划线 */
-
-/* 输入框：轻填充，仅聚焦时出现描边 */
-
-/* 批量布局标题与可用状态，内部每个任务独立成卡片。 */
-
-/* 间距卡片 */
-
-/* 操作卡片根据面板可用宽度自动排列。 */
-
-/* 状态只弱化控件，保留标题可读性。 */
-
-/* ============================================================
-   检查器：对象摘要合并进顶部标题栏
-   合并后对象信息只占用标题栏空间，主体直接从属性分组开始。
-   ============================================================ */
-@media (min-width: 761px) {
-
-  /* 属性视图用对象名称与完整路径组成一份摘要。 */
-}
-
-/* Keep all view tabs reachable when the inspector is resized narrowly. */
-
-/* AI 设计视图只保留标题与视图切换，不显示对象摘要。 */
-
-/* 摘要移出后，检查器主体不再为它预留一行。 */
-
-/* 文档属性分组沿用布局面板的卡片容器。 */
-
-/* 文档卡片使用上下布局，避免横排标签挤占尺寸和样式控件。 */
-
-/* Desktop category rail fills its column and meets the window edge. */
-
-/* Appearance cards own their sizing; compact property-row rules must not clip media. */
 
 /* ═══════════════════════════════════════════════════════════════
    动效层 · Motion（对应画布上的「动效规范 · Motion」）
@@ -4115,27 +3428,14 @@ dialog[open]::backdrop {
   animation: ui-draft-pulse var(--duration-slow) var(--ease-standard);
 }
 
-/* 可访问性：系统开启「减弱动态效果」时全部退化为瞬时淡入 */
-
-/* ══════════════════════════════════════════════════════════════
-   设计层 · Design layer
-   覆盖下方所有面板的外观，使其统一到设计稿的语言：
-   扁平表面 + 1px 细线 + 8/12px 圆角 + 11/12/13px 字号层级。
-   ══════════════════════════════════════════════════════════════ */
-
 /* ── 面板与分栏 ── */
 .sidebar {
   border-right: 1px solid var(--line);
-  background: var(--sidebar);
 }
 
 .pane-heading {
   height: 46px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--line);
 }
-
-/* ── 左侧导航 ── */
 /* 左侧栏列表（概览 / 源文件）的行、图标、分组标题与状态样式统一由
    pen-design-application.css 的 "Sidebar lists" 段落定义，这里不再重复声明，
    否则两个视图会被两套特异性不同的规则分别命中。 */
@@ -4150,19 +3450,9 @@ dialog[open]::backdrop {
   color: var(--tertiary);
 }
 
-.sidebar-view-control button {
-  height: 26px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-}
-
 /* ── 画布工具条 ── */
 .preview-toolbar {
   height: 44px;
-  padding: 0 12px;
-  gap: 8px;
-  border-bottom: 1px solid var(--line);
-  background: var(--toolbar);
 }
 
 .preview-toolbar select,
@@ -4172,14 +3462,6 @@ dialog[open]::backdrop {
   height: 28px;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
-}
-
-.workspace-status {
-  padding: 0 12px;
-  border-top: 1px solid var(--line);
-  background: var(--toolbar);
-  font-size: var(--font-size-xs);
-  color: var(--tertiary);
 }
 
 /* ── 右侧检查器 ── */
@@ -4201,65 +3483,16 @@ dialog[open]::backdrop {
 }
 
 /* ── 源代码面板 ── */
-.search-control {
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--control);
-}
-
-.search-control input {
-  font-size: var(--font-size-sm);
-}
 
 .source-find-fab {
   border-radius: var(--radius-full);
   box-shadow: var(--shadow-md);
 }
 
-/* ── AI 设计面板 ── */
-
 /* ── 弹层：设置 / 关于 / 新建 / 未保存 ── */
-.project-dialog,
-.app-dialog {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
-  background: var(--panel);
-  box-shadow: var(--shadow-lg);
-}
-
-.project-dialog header,
-.app-dialog header {
-  border-bottom: 1px solid var(--line);
-}
-
-.project-dialog header h2,
-.app-dialog header h2 {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--text);
-}
 
 .project-dialog footer {
   border-top: 1px solid var(--line);
-}
-
-.project-dialog button,
-.app-dialog button {
-  height: 32px;
-  padding: 0 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--control);
-  font-size: var(--font-size-sm);
-}
-
-.project-dialog button.primary,
-.app-dialog button.primary {
-  border-color: transparent;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 500;
 }
 
 .project-template-option {
@@ -4287,12 +3520,6 @@ dialog[open]::backdrop {
   background: var(--hover);
   color: var(--text);
 }
-}
-
-.document-title strong {
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  color: var(--text);
 }
 
 .document-title span {
@@ -4474,8 +3701,6 @@ dialog[open]::backdrop {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-
-/* ===================== 原 pen-design-application.css ===================== */
 /*
  * Pen design application layer.
  *
@@ -4492,25 +3717,8 @@ dialog[open]::backdrop {
  * Title bar
  * ------------------------------------------------------------------------------------------------- */
 
-.titlebar {
-  height: var(--titlebar-height);
-  gap: 12px;
-  padding: calc(6px + var(--safe-area-top)) max(16px, env(safe-area-inset-right)) 6px max(16px, env(safe-area-inset-left));
-  border-bottom: 1px solid var(--line);
-  background: var(--material-panel);
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
 .toolbar-button,
 .toolbar-more > summary {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
-  background: var(--material-content);
-  color: var(--secondary);
-  box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
@@ -4522,40 +3730,17 @@ dialog[open]::backdrop {
   height: 16px;
 }
 
-@media (hover: hover) {
-
-.toolbar-button:hover:not(:disabled),
-.toolbar-more > summary:hover {
-  background: color-mix(in srgb, var(--material-content) 82%, var(--line));
-  color: var(--text);
-}
-}
-
-.toolbar-button:active:not(:disabled),
-.toolbar-more > summary:active {
-  background: color-mix(in srgb, var(--material-content) 72%, var(--line));
-}
-
 .toolbar-button:disabled,
 .toolbar-menu button:disabled {
   opacity: 0.38;
 }
 
-.file-menu > summary,
-.toolbar-more > summary {
-  width: auto;
-  min-width: 28px;
-  padding: 0 8px;
-}
-
-.file-menu > summary::after,
 .toolbar-more > summary::after {
   display: none;
 }
 
 .toolbar-menu,
 .file-actions,
-.app-actions,
 .mobile-command-actions {
   padding: 6px;
   border: 1px solid var(--line);
@@ -4564,20 +3749,6 @@ dialog[open]::backdrop {
   box-shadow: var(--shadow-sm);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-}
-
-.toolbar-menu button {
-  min-height: 32px;
-  border-radius: var(--radius-md);
-  color: var(--text);
-  font-size: var(--font-size-sm);
-}
-
-@media (hover: hover) {
-
-.toolbar-menu button:hover:not(:disabled) {
-  background: var(--material-content);
-}
 }
 
 .toolbar-menu-separator,
@@ -4590,33 +3761,17 @@ dialog[open]::backdrop {
   transform: translate(-50%, 50%);
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  background: var(--material-content);
   pointer-events: auto;
 }
 
 .document-title strong {
   max-width: 330px;
-  color: var(--text);
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  line-height: 18px;
 }
 
 #dirty {
   display: none;
   align-items: center;
-  gap: 6px;
-  min-height: 22px;
   margin: 0;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: var(--material-panel);
-  color: var(--secondary);
-  font-size: var(--font-size-xs);
 }
 
 #dirty:not([hidden]) {
@@ -4632,34 +3787,14 @@ dialog[open]::backdrop {
   content: "";
 }
 
-.mode-control,
-.preview-choice,
-.sidebar-view-control {
-  gap: 2px;
-  padding: 4px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--material-content);
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
 .mode-control button,
 .preview-choice button {
-  height: 28px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm);
-  color: var(--secondary);
   font-size: var(--font-size-sm);
   font-weight: 400;
 }
 
 .mode-control button.active,
 .preview-choice button.active {
-  color: var(--text);
-  background: var(--material-panel);
-  box-shadow: none;
   animation: none;
 }
 
@@ -4723,19 +3858,6 @@ main {
 .sidebar-view-control {
   width: 100%;
   min-height: 34px;
-}
-
-.sidebar-view-control button {
-  height: 28px;
-  border-radius: var(--radius-sm);
-  color: var(--secondary);
-  font-size: var(--font-size-sm);
-}
-
-.sidebar-view-control button.active {
-  color: var(--text);
-  background: var(--material-panel);
-  box-shadow: none;
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -4837,8 +3959,6 @@ main {
   opacity: 0.45;
 }
 
-/* Rows ------------------------------------------------------------------------------------------ */
-
 /* 源文件树保持原有的扁平行；概览条目使用下面的卡片样式。 */
 #files .raw-files .source-tree-row {
   width: 100%;
@@ -4850,11 +3970,9 @@ main {
   /* 3px keeps a two-line row inside the same 34px box as a one-line tree row. */
   padding: 4px 8px;
   border: 0;
-  border-radius: var(--radius-md);
   color: var(--secondary);
   background: transparent;
   box-shadow: none;
-  font-size: var(--font-size-sm);
   font-weight: 500;
   line-height: 1.25;
   text-align: left;
@@ -4864,13 +3982,6 @@ main {
   transform: none;
 }
 
-/* -------------------------------------------------------------------------------------------------
- * 概览列表 — 与「源文件」树同一套行语言。
- *
- * 每个条目只有两件事：名字（左，可截断）与技术文件名（右，等宽、次要色）。行高、圆角、
- * 图标尺寸与源文件树一致，状态只换颜色不换几何；列表是平铺的行，不再是叠起来的卡片。
- * ------------------------------------------------------------------------------------------------- */
-
 /* 1px 行距即列表本身的分隔节奏，分组标题负责分段。 */
 #files .sidebar-overview .nav-group-body {
   gap: 1px;
@@ -4878,20 +3989,14 @@ main {
 
 #files .sidebar-overview button.nav-item {
   width: 100%;
-  min-height: 30px;
-  height: 30px;
-  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 8px;
   border: 0;
-  border-radius: var(--radius-md);
   /* 描边只留给键盘焦点，列表因此不再是一叠卡片。 */
   outline: none;
   color: var(--secondary);
   background: transparent;
   box-shadow: none;
-  font-size: var(--font-size-sm);
   font-weight: 500;
   line-height: 1.2;
   text-align: left;
@@ -4922,7 +4027,6 @@ main {
 #files .sidebar-overview button.nav-item > .nav-label {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--font-size-sm);
   font-weight: 500;
   line-height: 1.2;
 }
@@ -4930,10 +4034,7 @@ main {
 #files .sidebar-overview button.nav-item > .nav-meta {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 46%;
-  margin-left: auto;
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
   font-weight: 400;
   line-height: 1.2;
 }
@@ -4980,7 +4081,6 @@ main {
   min-width: 0;
   overflow: hidden;
   color: inherit;
-  font-size: var(--font-size-sm);
   font-weight: 600;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -5009,15 +4109,12 @@ main {
   gap: 8px;
   margin: 0;
   padding: 4px 8px;
-  border-radius: var(--radius-md);
   color: var(--tertiary);
-  font-size: var(--font-size-sm);
   font-weight: 600;
 }
 
 /* 分组标题：列表段落的分隔行 —— 上间距 + 数量胶囊，行高比条目略矮。 */
 #files .sidebar-overview > .nav-group > .nav-section {
-  min-height: 26px;
   margin-top: 12px;
   padding: 4px 8px;
   border-radius: var(--radius-md);
@@ -5063,8 +4160,6 @@ main {
   border-radius: var(--radius-sm);
   object-fit: contain;
 }
-
-/* States ---------------------------------------------------------------------------------------- */
 
 /* 三种状态只换颜色，不换几何：平铺行 → 悬停下沉色 → 选中品牌色浅底。 */
 @media (hover: hover) {
@@ -5168,30 +4263,6 @@ main {
   background: var(--canvas-surface);
 }
 
-.preview-toolbar {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--material-panel);
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-.preview-tool-toggle {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
-  color: var(--secondary);
-  background: var(--material-content);
-  box-shadow: none;
-}
-
-.preview-tool-toggle.active {
-  color: var(--on-accent);
-  background: var(--accent);
-  box-shadow: none;
-}
-
 .field-control select,
 #device,
 #orientation,
@@ -5205,21 +4276,9 @@ main {
   font-size: var(--font-size-sm);
 }
 
-#skin-state-control .skin-state-value {
-  line-height: 30px;
-}
-
 .canvas-wrap {
   padding: 24px;
   background: var(--canvas-surface);
-}
-
-.workspace-status {
-  min-height: 30px;
-  border-top: 1px solid var(--line);
-  background: var(--material-panel);
-  color: var(--secondary);
-  font-size: var(--font-size-xs);
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -5227,8 +4286,7 @@ main {
  * ------------------------------------------------------------------------------------------------- */
 
 .field-control input,
-.field-control select,
-.search-control input {
+.field-control select {
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -5238,8 +4296,7 @@ main {
 }
 
 .field-control input:focus,
-.field-control select:focus,
-.search-control input:focus {
+.field-control select:focus {
   border-color: var(--accent);
   outline: 0;
   box-shadow: var(--focus-ring);
@@ -5256,37 +4313,8 @@ main {
 .preview-tool-toggle,
 .preview-choice {
   gap: 2px;
-  padding: 2px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: var(--material-content);
-  box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-}
-
-.preview-tool-toggle {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-md);
-}
-
-.preview-tool-toggle .system-symbol,
-.preview-tool-toggle .system-symbol svg,
-.preview-choice button .system-symbol,
-.preview-choice button .system-symbol svg {
-  width: 15px;
-  height: 15px;
-}
-
-.preview-choice button {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border-radius: var(--radius-sm);
-  color: var(--tertiary);
-  background: transparent;
-  box-shadow: none;
 }
 
 @media (hover: hover) {
@@ -5296,31 +4324,10 @@ main {
 }
 }
 
-.preview-choice button.active,
-.preview-tool-toggle.active {
-  color: var(--accent);
-  background: var(--material-panel);
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-
 /* The device pill carries the model name next to a leading glyph. */
 
 #device-control > span {
   display: none;
-}
-
-#device-control select,
-#device {
-  height: 28px;
-  min-height: 28px;
-  padding: 0 24px 0 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
 }
 
 #device-control select:focus,
@@ -5344,12 +4351,6 @@ main {
   z-index: 6;
   display: none;
   align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--material-panel);
-  box-shadow: var(--shadow-sm);
   transform: translateX(-50%);
 }
 
@@ -5362,63 +4363,16 @@ main {
   display: none;
 }
 
-.canvas-multi-count {
-  padding: 0 8px;
-  color: var(--secondary);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.canvas-multi-divider {
-  width: 1px;
-  height: 16px;
-  margin: 0 4px;
-  background: var(--line);
-}
-
 .canvas-multi-toolbar button {
-  width: 28px;
-  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--secondary);
   cursor: pointer;
 }
 
-@media (hover: hover) {
-
-.canvas-multi-toolbar button:hover:not(:disabled) {
-  background: var(--material-content);
-  color: var(--text);
-}
-}
-
 .canvas-multi-toolbar button:disabled {
-  opacity: 0.34;
   cursor: default;
 }
-
-.canvas-multi-toolbar button .system-symbol,
-.canvas-multi-toolbar button .system-symbol svg {
-  width: 15px;
-  height: 15px;
-  display: block;
-}
-
-/* -------------------------------------------------------------------------------------------------
- * Gesture hot zones
- *
- * Shown over the selected key so 点击 / 上下左右滑动 / 长按 are visible and
- * directly pickable instead of living only in a dropdown.
- * ------------------------------------------------------------------------------------------------- */
-
-/* Zones are revealed by the canvas hit test, not by CSS hover, because the
- * overlay itself is click-through until a zone is live. */
 
 /* -------------------------------------------------------------------------------------------------
  * Dialogs / overlays
@@ -5441,36 +4395,14 @@ main {
   backdrop-filter: none;
 }
 
-.project-dialog header,
-.app-dialog header {
-  border-bottom: 1px solid var(--line);
-}
-
-.project-dialog header h2,
-.app-dialog header h2 {
-  color: var(--text);
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-}
-
 /* -------------------------------------------------------------------------------------------------
  * Mobile frames
  * ------------------------------------------------------------------------------------------------- */
 
 @media (max-width: 760px) {
-  .titlebar {
-    height: var(--titlebar-height);
-    padding: calc(4px + var(--safe-area-top)) 12px 4px;
-    background: var(--material-panel);
-    box-shadow: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 
   .mobile-workspace-tabs {
     display: flex;
-    background: var(--material-panel);
-    border-bottom: 1px solid var(--line);
   }
 
   .mobile-workspace-tabs button {
@@ -5489,20 +4421,10 @@ main {
     border-color: var(--line);
   }
 
-  .preview-toolbar {
-    padding: 6px 12px;
-    background: var(--material-panel);
-  }
-
   .canvas-multi-toolbar {
     bottom: 10px;
     max-width: calc(100% - 16px);
     overflow-x: auto;
-  }
-
-  .canvas-multi-count {
-    padding: 0 6px;
-    font-size: var(--font-size-xs);
   }
 }
 
@@ -5580,23 +4502,6 @@ main {
   }
 }
 
-/* -------------------------------------------------------------------------------------------------
- * Window material
- *
- * This layer paints flat, fully opaque surfaces, which hides the native macOS sidebar / Windows Mica
- * material behind the window. While the window material is on, drop the window-level Pen tokens to
- * translucent fills so the system material stays visible; the opacity slider is the fill strength and
- * reaches fully opaque at 100%.
- *
- * 填充按层角色取自 style.css 的 --window-material-layer / -sunken / -floating（数值由材质滑杆换算）：
- * 大块区域（工作区/画布/内容）用下沉系数 1-√(1-f)，浮层用 1-(1-f)²，这样它们会随滑杆一起走到完全
- * 不透明，不会再出现「100% 仍然透」的情况。
- *
- * 控件块面（按钮、分段控件、输入框、列表行）和分隔线不参与这套系数：设计稿里它们是「比容器暗一档」
- * 的绝对色，乘上下沉系数后色差只剩 1/255，滑杆一拉低控件就消失在玻璃里。玻璃下改成同一色差的半透明
- * 中性色，100% 时合成结果与设计稿一致，20% 时也仍然保留同样的块面对比。
- * ------------------------------------------------------------------------------------------------- */
-
 /* 未打开皮肤时画布承载的是应用级欢迎页，而不是文档画布；此时不能沿用「画布背景」那张
    不透明的纸，否则欢迎页整片盖住系统材质，看起来和没有玻璃一样。 */
 :root[data-window-material-kind="glass"][data-window-material="on"] .canvas-wrap.empty {
@@ -5620,30 +4525,6 @@ main {
 ) {
   background: var(--floating);
 }
-
-/* ===================== 原 pen-components.css ===================== */
-/*
- * Pen design system — component lock.
- *
- * Every rule in this file pins one *basic control* or *design component* to the
- * value the Pen document defines for it, so the editor cannot drift away from
- * the design system again. It deliberately:
- *
- *   • loads last (after style.css, pen-design-application.css, pen-sidebar.css);
- *   • writes each selector with a `:root body` prefix, which outranks every
- *     older layer without needing `!important` — earlier layers specify the
- *     same controls down to the pixel and are still in the cascade;
- *   • restates the component, never the page layout. Screens may rearrange
- *     components; a component may not change shape.
- *
- * Sources in the Pen document:
- *   设计系统 · Design System   button / segmented control / field / tabs / key cap
- *   组件 / 标题栏               title bar, document pill, mode switch
- *   组件 / 画布工具条            canvas toolbar pills, device select, zoom group
- *   多选对齐工具条 (桌面 · 编辑模式)
- *   弹层 · 设置                 settings sheet, switches, rows
- *   组件 / 左侧导航              navigation rows, group headings
- */
 
 /* =================================================================================================
  * 1 · Icon button  (设计系统: Icon Button 30×30 · r8 · $bg-sunken · icon 15 · $ink-muted)
@@ -5844,11 +4725,6 @@ main {
 }
 
 /* =================================================================================================
- * 3 · Tabs  (组件 / 属性检查器: 42px row · gap 18 · padding 0 12 · 1px $line bottom;
- *     active 12.5/600 $ink + 2px $brand, idle 12.5/400 $ink-faint)
- * ================================================================================================= */
-
-/* =================================================================================================
  * 4 · Field / input  (设计系统: label 11/400 $ink-faint · gap 5;
  *     box 30px · padding 0 9 · r8 · $bg-sunken · 1px $line · value 12 $ink)
  * ================================================================================================= */
@@ -5873,44 +4749,6 @@ main {
   outline: 0;
   box-shadow: var(--focus-ring);
 }
-
-/* Search box: one sunken capsule, the inner input is bare. */
-:root body .search-control {
-  height: 30px;
-  padding: 0 12px;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--material-content);
-  color: var(--secondary);
-  box-shadow: none;
-}
-
-:root body .search-control .system-symbol,
-:root body .search-control .system-symbol svg {
-  width: 13px;
-  height: 13px;
-  color: var(--tertiary);
-}
-
-:root body .search-control input {
-  height: 100%;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: var(--font-size-sm);
-  box-shadow: none;
-}
-
-:root body .search-control input:focus {
-  outline: 0;
-  box-shadow: none;
-}
-
-/* Stepper (设计系统: 28px sunken capsule, 12px glyphs, 11.5px mono value) */
 
 /* =================================================================================================
  * 5 · Switch  (组件 / 开关: 36×20 · padding 2 · $radius-pill · 16px thumb $on-brand)
@@ -6168,8 +5006,6 @@ main {
   font-size: var(--font-size-sm);
   line-height: 1.6;
 }
-
-/* 172px is the pen's category rail; narrow sheets keep their stacked layout. */
 
 /* =================================================================================================
  * 9 · Floating multi-select toolbar  (多选对齐工具条: raised bar · r12 · 1px $line ·
@@ -6483,30 +5319,6 @@ main {
 }
 
 /* =================================================================================================
- * 14 · Source panel chrome
- * ================================================================================================= */
-
-
-
-/* =================================================================================================
- * 16 · Inspector sub-controls that older layers styled with the retired card palette
- *     ($card-control / $card-border) instead of the design-system tokens.
- * ================================================================================================= */
-
-/* 按下 / 正常 state switch — the design-system segmented control.
-   Segment metrics (26px, 0/12 padding, r5) already come from the pen layer in
-   style.css; only the container still carried the retired card chrome. */
-
-/* The selected segment keeps the design-system 1px $line hairline. */
-
-/* Property fields — the design-system Field box. */
-
-/* Colour swatch input. */
-
-/* Toggle label colour and the inline style-preview surface — both still carried
-   the retired card palette ($card-tertiary / $card-control / $card-border). */
-
-/* =================================================================================================
  * 15 · Mobile — 组件 / 移动 · 底部导航 rendered as the pane switcher.
  *
  * The pen draws a labelled dock (56px raised bar, 40px tabs, $brand-soft ground
@@ -6666,60 +5478,6 @@ main {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-:root body .titlebar .titlebar-actions .titlebar-action {
-  display: inline-flex;
-  height: auto;
-  width: auto;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--secondary);
-  font-family: var(--font-ui);
-  font-size: var(--font-size-sm);
-  font-weight: 400;
-  line-height: 1.2;
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-@media (hover: hover) {
-
-:root body .titlebar .titlebar-actions .titlebar-action:hover:not(:disabled) {
-  background: var(--material-content);
-  color: var(--text);
-}
-}
-
-:root body .titlebar .titlebar-actions .titlebar-action:active:not(:disabled) {
-  background: color-mix(in srgb, var(--material-content) 72%, var(--line));
-}
-
-:root body .titlebar .titlebar-actions .titlebar-action:disabled {
-  opacity: 0.42;
-  color: var(--secondary);
-}
-
-:root body .titlebar .titlebar-action .icon,
-:root body .titlebar .titlebar-action .system-symbol,
-:root body .titlebar .titlebar-action .system-symbol svg,
-:root body .titlebar .titlebar-action .icon svg {
-  width: 14px;
-  height: 14px;
-  min-width: 14px;
-  display: block;
-  color: currentColor;
-  font-size: var(--font-size-lg);
-  line-height: 1;
 }
 
 :root body .titlebar-icon-button,
@@ -7415,22 +6173,6 @@ main {
   }
 }
 
-/* ===================== 原 mobile.css ===================== */
-/* =================================================================================================
- * Mobile adaptation layer
- *
- * The Pen redesign layers (pen-*.css, inspector-fidelity.css, settings.css …) restate many
- * desktop rules without a media query. Because they load after style.css, they silently
- * override its phone rules: the title pill sits on top of the mode switch, the canvas row
- * collapses to 48px, the welcome page renders inside half of the split view, and the
- * settings sheet clips its navigation. This file is imported last and restates the phone
- * layout on top of the Pen visual language.
- *
- *  - (max-width: 760px)                         every narrow viewport
- *  - (max-width: 760px) and (orientation: portrait)  the split editor (mirrors
- *                                               `mobilePortraitQuery` in main.ts)
- * ================================================================================================= */
-
 /* -------------------------------------------------------------------------------------------------
  * 1 · Title bar
  *     ☰ actions · undo/redo · document name (truncates) · mode pill · more
@@ -7546,7 +6288,7 @@ main {
   :root body .titlebar .document-title input {
     width: 100%;
     min-width: 0;
-    font-size: var(--font-size-lg); /* ≥16px keeps iOS Safari from zooming on focus */
+    font-size: var(--font-size-lg);
   }
 
   /* Mode switch: a labelled pill that turns accent while editing. */
@@ -7916,7 +6658,6 @@ main {
   }
 
   :root body .preview-toolbar #skin-state-control {
-    width: auto;
     flex: none;
   }
 
@@ -7940,7 +6681,6 @@ main {
   }
 
   :root body .preview-toolbar #skin-state-control {
-    max-width: 72px;
     align-items: center;
   }
 
@@ -8103,18 +6843,6 @@ main {
   :root body .canvas-wrap.empty .empty-state {
     overflow-y: auto;
   }
-}
-
-/* -------------------------------------------------------------------------------------------------
- * 6 · Settings sheet
- *     Full-screen on phones: one scrolling row of category chips (a 3-column grid from an
- *     older rule clipped 「安全区与辅助线」), rows that stack long labels, and a footer that
- *     clears the home indicator.
- * ------------------------------------------------------------------------------------------------- */
-
-@media (max-width: 760px) {
-
-  /* Labels with a hint stack the hint underneath instead of running into it. */
 }
 
 /* -------------------------------------------------------------------------------------------------

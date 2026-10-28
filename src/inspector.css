@@ -11,10 +11,8 @@
   --_rail: 56px;
   display: flex;
   flex-direction: column;
-  min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--inspector);
   color: var(--text);
   font-size: var(--font-size-sm);
 }
@@ -434,7 +432,7 @@
 .source .bda-selected-style-heading { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-md) var(--_gutter) 0; }
 .source .bda-selected-style-heading[hidden] { display: none; }
 .source .bda-selected-style-heading > h3 { flex: 1; margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-.source :is(.bda-style-card, .bda-metadata-card, .bda-frame-card, .bda-key-style-block) {
+.source :is(.bda-style-card, .bda-metadata-card, .bda-key-style-block) {
   display: grid;
   gap: var(--space-sm);
   margin: 0;
@@ -444,13 +442,12 @@
   background: none;
   box-shadow: none;
 }
-.source :is(.bda-style-card, .bda-frame-card) + :is(.bda-style-card, .bda-frame-card) { border-top: 1px solid var(--line-soft); padding-top: var(--space-md); }
+.source .bda-style-card + .bda-style-card { border-top: 1px solid var(--line-soft); padding-top: var(--space-md); }
 .source .bda-card-heading { display: flex; align-items: center; gap: var(--space-sm); color: var(--text); font-weight: var(--font-weight-medium); }
-.source :is(.bda-style-controls, .bda-fore-styles-grid, .bda-sound-list, .bda-panel-list, .bda-frame-controls) { display: grid; gap: var(--space-sm); min-width: 0; }
+.source :is(.bda-style-controls, .bda-fore-styles-grid, .bda-sound-list, .bda-panel-list) { display: grid; gap: var(--space-sm); min-width: 0; }
 .source :is(.bda-editor-empty, .bda-advanced-note, .bda-editor-summary) { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
 .source .bda-inspector-context { display: flex; align-items: center; gap: var(--space-sm); color: var(--secondary); }
-.source :is(.bda-frame-strip, .bda-frame-row) { display: flex; gap: var(--space-xs); overflow-x: auto; }
-.source :is(.bda-style-preview, .bda-frame-resource-button) {
+.source .bda-style-preview {
   min-height: 48px;
   padding: 0;
   overflow: hidden;
@@ -462,7 +459,6 @@
 }
 .source .bda-style-resource-name { overflow: hidden; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 .source .bda-boolean-field { grid-template-columns: minmax(0, 1fr) auto; }
-
 
 /* —— 粒子 —— */
 .source .particle-preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); color: var(--tertiary); font-size: var(--font-size-xs); }
@@ -605,7 +601,7 @@
 
 /* 手机竖屏：侧栏与检查器叠在同一区域，检查器必须不透明，不能让下面的侧栏透出来。 */
 @media (max-width: 760px) and (orientation: portrait) {
-  .source { background: var(--material-panel); transition: transform var(--duration-slow) var(--ease-emphasized); }
+  .source { background: var(--material-panel); }
   /* 两个面板左右滑动切换：不在当前页时滑出屏幕并且不接收点击 */
   :root[data-mobile-pane="inspector"] .source { transform: translateX(0); }
   :root:not([data-mobile-pane="inspector"]) .source { pointer-events: none; transform: translateX(100%); }
