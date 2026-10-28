@@ -1,6 +1,7 @@
 // Baidu draws the candidate bar's function icons in a native F14 container, not in arbitrary CND ICON slots.
 // iOS (BDI) reads their images from res/logo plists; Android (BDS) from the res/logo/pop_menu_icons atlas.
 import { IniDocument } from "../ini.ts"
+import { logoImageConfig, logoLayout, plist, solidColorStyle } from "../ios-toolbar.ts"
 import type { SkinArchive } from "../skin.ts"
 import { cropImage, decodePng, encodePng, placeImage, type RgbaImage } from "./ssf-png.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
@@ -30,7 +31,6 @@ const ANDROID_ICONS: Array<[source: string, index: number]> = [
   ["ime_function_textedit", 25], ["ime_function_clipboard", 50],
 ]
 
-const plist = (items: string[]) => `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><array>${items.join("\n")}</array></plist>\n`
 const images = (normal: string, pressed: string) => {
   const states = `<dict><key>Normal</key><string>${normal}</string><key>Highlight</key><string>${pressed}</string><key>Selected</key><string>${normal}</string></dict>`
   return `<key>Images</key><dict><key>Normal</key>${states}<key>Theme</key>${states}</dict>`
@@ -74,9 +74,9 @@ export function adaptSsfNativeToolbar(archive: SkinArchive, source: SsfPackage, 
       if (!gen.sections().includes("LOGO")) gen.appendSection("LOGO", [])
       gen.set("LOGO", "LAYOUT_NAME", "logo")
       archive.setText(genPath, gen.toString())
-      // V6 p160: logo.ini declares the LOGO menu's colours; ICON_NUM=1 needs the [ICON1] it counts (native skins write both).
+      // V6 p160: logo.ini declares the LOGO menu's colours.
       // Android reads [GLOBAL] VERSION (LogoLoader) and loads the skin's pop_menu_icons only when it is 1.
-      archive.setText(`${prefix}${orientation}/logo.ini`, `[GLOBAL]\nICON_NUM=1\nVERSION=1\n\n[PANEL]\nBACK_STYLE=${logoMenu.back}\nICON_INDEX=1\n\n[ICON1]\nFORE_STYLE=${logoMenu.text}\nTEXT_STYLE=${logoMenu.text}\n`)
+      archive.setText(`${prefix}${orientation}/logo.ini`, logoLayout(logoMenu.back, logoMenu.text))
       const [,, width, height] = gen.get("CAND", "VIEW_RECT")!.split(",").map(Number)
       const side = Math.round(width / 7)
       const logoEntries = document.entries(icon(document, "F31"))
@@ -132,9 +132,7 @@ function writeIosLogo(archive: SkinArchive, prefix: string, source: SsfPackage, 
     archive.setText(`${prefix}res/logo/${name}`, plist(entries))
   }
   const logo = "ssf-toolbar-logo"
-  const logoNormal = write("F31", "NM_IMG", `${logo}_Normal`)
-  const logoStates = `<dict><key>Normal</key><string>${logoNormal}</string><key>Highlight</key><string>${write("F31", "HL_IMG", `${logo}_Highlight`)}</string><key>Selected</key><string>${logoNormal}</string></dict>`
-  archive.setText(`${prefix}res/logo/customImageConfig.plist`, plist([`<dict><key>Name</key><string>0</string><key>Images</key><dict><key>Normal</key>${logoStates}<key>Theme</key>${logoStates}</dict></dict>`]))
+  archive.setText(`${prefix}res/logo/customImageConfig.plist`, logoImageConfig(write("F31", "NM_IMG", `${logo}_Normal`), write("F31", "HL_IMG", `${logo}_Highlight`)))
 }
 
 /**
@@ -165,20 +163,13 @@ function writeAndroidMenuIcons(archive: SkinArchive, prefix: string, source: Ssf
 /** The LOGO menu takes the candidate bar's text colour and a solid colour sampled from its background. */
 function logoMenuStyles(archive: SkinArchive, prefix: string, css: IniDocument, candidates: IniDocument): { back: string; text: string } {
   const text = candidates.get("CAND", "FORE_STYLE")?.trim() ?? ""
-  const back = candidates.get("CAND", "BACK_STYLE")?.trim() ?? ""
-  if (css.get(`STYLE${back}`, "NM_COLOR")) return { back, text }
-  const [resource, tile] = css.get(`STYLE${back}`, "NM_IMG")?.split(",") ?? []
-  const bytes = resource ? archive.getBytes(`${prefix}res/${resource}.png`) : undefined
-  const rect = resource && archive.isText(`${prefix}res/${resource}.til`)
-    ? IniDocument.parse(archive.getText(`${prefix}res/${resource}.til`)).get(`IMG${tile}`, "SOURCE_RECT")?.split(",").map(Number)
-    : undefined
-  if (!bytes || !rect || rect.length !== 4) return { back, text }
-  const image = decodePng(bytes)
-  const offset = ((rect[1] + Math.floor(rect[3] / 2)) * image.width + rect[0] + Math.floor(rect[2] / 2)) * 4
-  const color = [...image.data.subarray(offset, offset + 3)].map((value) => value.toString(16).padStart(2, "0")).join("").toUpperCase()
-  const id = String(Number(css.get("GLOBAL", "STYLE_NUM") ?? 0) + 1)
-  css.appendSection(`STYLE${id}`, [{ key: "NM_COLOR", value: color }, { key: "HL_COLOR", value: color }])
-  css.set("GLOBAL", "STYLE_NUM", id)
+  const back = solidColorStyle(css, candidates.get("CAND", "BACK_STYLE")?.trim() ?? "", (resource, tile) => {
+    const bytes = archive.getBytes(`${prefix}res/${resource}.png`)
+    const rect = archive.isText(`${prefix}res/${resource}.til`)
+      ? IniDocument.parse(archive.getText(`${prefix}res/${resource}.til`)).get(`IMG${tile}`, "SOURCE_RECT")?.split(",").map(Number)
+      : undefined
+    return bytes && rect?.length === 4 ? { bytes, rect } : undefined
+  })
   archive.setText(`${prefix}res/default.css`, css.toString())
-  return { back: id, text }
+  return { back, text }
 }

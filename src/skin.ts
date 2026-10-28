@@ -2,6 +2,8 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import type { ExportFormat } from "./export.ts"
 import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
+import { adaptIosToolbar } from "./ios-toolbar.ts"
+import { adaptIosPanelBackground } from "./ios-panel-background.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
 
@@ -470,15 +472,21 @@ export class SkinArchive {
     // Avoid fflate's one-worker-per-large-file async ZIP path, which can exhaust WebView workers.
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     if ((format === "bdi" || format === "bds") && (format !== this.format || this.layout === "legacy-ios")) {
-      return this.platformBytesAsync(format, warnings)
+      return this.platformBytesAsync(format, warnings, format === "bdi" && this.layout.startsWith("bds"))
     }
     return this.toBytes(format)
   }
 
   /** Packages for a BDI/BDS platform, pointing key sounds at a format that platform plays (AIFF / OGG). */
-  async platformBytesAsync(format: "bdi" | "bds", warnings?: string[]): Promise<Uint8Array> {
+  async platformBytesAsync(format: "bdi" | "bds", warnings?: string[], fromAndroid = false): Promise<Uint8Array> {
     assertRepackable(this.format, format)
     const files = new Map(Object.entries(this.packagedFiles(format)))
+    // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons, and it stretches panel
+    // backgrounds behind the toolbar. The toolbar samples the bar's background before it is cleared.
+    if (fromAndroid) {
+      adaptIosToolbar(files, warnings)
+      adaptIosPanelBackground(files, warnings)
+    }
     const adapted = await adaptPackageSounds(files, format)
     warnings?.push(...adapted.warnings)
     return zipSync(Object.fromEntries(files), { level: 6 })
