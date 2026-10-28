@@ -22,16 +22,19 @@ export function palmStyleIDList(skin: JsonObject, theme: PalmTheme, orientation:
   return [...ids].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
 }
 
-/** What a style draws, the way the style library sorts it: an image, an animation, a fill, a sound or text. */
+/**
+ * What a style draws, sorted by the style library's rule for Baidu styles (style-picker.ts): an image,
+ * an animation, a colour (`c_normal` / `c_hl`, Baidu's NM_COLOR / HL_COLOR), a sound, else text.
+ */
 export function palmStyleKindOf(style: JsonObject | undefined): PalmStyleKind {
   if (!style) return "empty"
   const image = asObject(style.s_2)
   const text = asObject(style.s_1)
   if (image?.normal !== undefined || image?.hl !== undefined) return "image"
   if (Object.keys(asObject(style.s_5) ?? {}).length) return "anim"
-  if (text?.for_back === true || asObject(style.s_3)) return "color"
+  if (text?.c_normal !== undefined || text?.c_hl !== undefined) return "color"
   if (typeof asObject(style.s_4)?.path_1 === "string") return "sound"
-  return text ? "text" : "empty"
+  return text || asObject(style.s_3) ? "text" : "empty"
 }
 
 /**

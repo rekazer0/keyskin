@@ -82,8 +82,11 @@ test('Palm style kinds follow what the style draws', () => {
   assert.equal(palmStyleKindOf({ s_2: { normal: 'btn,1' }, s_1: { text: 'a' } }), 'image')
   assert.equal(palmStyleKindOf({ s_5: { 1: 3 } }), 'anim')
   assert.equal(palmStyleKindOf({ s_1: { for_back: true, c_normal: 'FF000000' } }), 'color')
+  // A label's colour counts too, as NM_COLOR does in a Baidu style.
+  assert.equal(palmStyleKindOf({ s_1: { text: 'a', f_s: 32, c_normal: 'FF000000', for_back: false } }), 'color')
   assert.equal(palmStyleKindOf({ s_4: { path_1: 'click.wav' } }), 'sound')
   assert.equal(palmStyleKindOf({ s_1: { text: 'a' } }), 'text')
+  assert.equal(palmStyleKindOf({ s_3: { size: 1 } }), 'text')
   assert.equal(palmStyleKindOf({ f: 0 }), 'empty')
   assert.equal(palmStyleKindOf(undefined), 'empty')
 })
