@@ -10,7 +10,7 @@ import { refreshPreview } from "./preview-render"
 import { updateSourceFileActions } from "./source-files"
 import { exportButtons, isTauri, LARGE_SKIN_BYTES } from "./canvas-interaction"
 import { canExport, type ExportFormat } from "../export.ts"
-import { operationError } from "../operations.ts"
+import { operationError, operationErrorDetail } from "../operations.ts"
 import { clientLog, flushClientLogs } from "../client-log.ts"
 import { message } from "@tauri-apps/plugin-dialog"
 import { invoke, Channel } from "@tauri-apps/api/core"
@@ -294,7 +294,7 @@ export async function runFileOperation(
       fileOperationIcon.replaceChildren(createIcon("circle-alert", 20))
       fileOperationTitle.textContent = `${action}失败`
       fileOperationDetail.textContent = "处理已停止"
-      fileOperationResult.textContent = operationError(action, error)
+      fileOperationResult.textContent = operationErrorDetail(error)
       fileOperationResult.hidden = false
     }
   } finally {

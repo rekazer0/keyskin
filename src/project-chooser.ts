@@ -19,7 +19,7 @@ export function initializeProjectChooser(form: HTMLFormElement): void {
   heading.textContent = "新建项目"
   const header = form.querySelector("header")!
   const hint = document.createElement("small")
-  hint.textContent = "支持 .bdi · .bds · .bda"
+  hint.textContent = "支持 .bdi · .bds · .bda · .ssf · .sxi"
   const title = document.createElement("div")
   title.className = "project-chooser-title"
   title.append(heading, hint)
