@@ -14,7 +14,7 @@ import { showError } from "./file-operations"
 import { fieldCaption, numberParts } from "./property-rows"
 import { appState } from "./state"
 import { decorateStyleReferenceInput } from "./style-references"
-import { refreshSxiDocument } from "./sxi-documents"
+import { openPalmSkin, refreshSxiDocument } from "./sxi-documents"
 
 /** Where a model lives in skin.json: object keys and array indexes from the root. */
 export type SxiPointer = Array<string | number>
@@ -53,16 +53,6 @@ const CROSS: Array<[number, string, string, string]> = [
   [3, "RIGHT", "右滑", "arrow-right"],
 ]
 const OTHER_BUTTONS: Array<[number, string]> = [[5, "显示"], [7, "长按符号"], [8, "符号栏"], [9, "符号栏选中"]]
-
-export function sxiSkin(): JsonObject | undefined {
-  const archive = appState.archive
-  if (archive?.format !== "sxi" || !archive.isText(SXI_SKIN_PATH)) return
-  try {
-    return parseSkinJson(archive.getText(SXI_SKIN_PATH))
-  } catch {
-    return
-  }
-}
 
 export function sxiValue(root: Json, path: readonly (string | number)[]): Json {
   let current = root
@@ -482,7 +472,8 @@ function palmBlockHeading(title: string, code?: string): HTMLElement {
 
 /** One inspector group (a rail entry): blocks under one title, nested models as further subsections. */
 export function renderSxiGroup(label: string, blocks: SxiBlock[], options: { code?: string; extra?: HTMLElement[] } = {}): HTMLElement | undefined {
-  const skin = sxiSkin()
+  // Reading only: the parse is shared with the canvas (edits go through editSxi on their own copy).
+  const skin = openPalmSkin()
   if (!skin) return
   const section = element("section", "ui-section document-property-section")
   section.dataset.inspectorGroupLabel = label

@@ -42,9 +42,9 @@ import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
-import { editSxi, sxiSkin, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
+import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
 import { rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
-import { sxiPointer } from "./sxi-documents"
+import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
 
 type AnimationEntry = { id: string; kind: string; model: JsonObject; wrap: JsonObject }
@@ -81,7 +81,7 @@ function fieldRow(field: AnimationField, saved: Json, target: SxiPointer, path: 
   row.dataset.inspectorValue = JSON.stringify([saved ?? null])
   row.addEventListener("inspector-reset", (event) => {
     if (target.at(-1) === "a1" && /^(from|to)(?:_p|_px)?$/.test(path[0])) {
-      const model = asObject(sxiValue(sxiSkin(), target))
+      const model = asObject(sxiValue(openPalmSkin(), target))
       if (model && !animationGroups("a1", model).some((group) => group.fields.some((entry) => entry.key === path[0]))) return
     }
     event.preventDefault()
@@ -644,7 +644,7 @@ function appendAnimation(skin: JsonObject, pointer: SxiPointer, create: (id: str
 /* —— entry points —— */
 export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   const pointer = animationPointer()
-  const skin = pointer && sxiSkin()
+  const skin = pointer && openPalmSkin()
   const table = skin && pointer ? asObject(sxiValue(skin, pointer)) : undefined
   if (!pointer || !skin || !table) return false
   const entries = animationEntries(table).filter((entry) => shownInAnimationView(entry.kind === "a4"))

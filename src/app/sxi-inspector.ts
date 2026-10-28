@@ -8,8 +8,8 @@ import { asObject, type Json, type JsonObject } from "../palm/sxi-ini.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
-import { gestureRows, renderSxiGroup, sxiSkin, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
-import { sxiPointer } from "./sxi-documents"
+import { gestureRows, renderSxiGroup, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
+import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { palmStylePointer } from "./sxi-styles"
 import { populateSxiAnimationInspector, sxiAnimationInspectorTitle } from "./sxi-animation-inspector"
 
@@ -133,7 +133,7 @@ function palmKeyGroups(skin: JsonObject, models: SxiPointer[]): Array<HTMLElemen
 export function populateSxiInspector(container: HTMLElement): boolean {
   container.replaceChildren()
   if (populateSxiAnimationInspector(container)) return true
-  const skin = sxiSkin()
+  const skin = openPalmSkin()
   const selected = skin && palmSelection(skin)
   if (!skin || !selected) return false
   const groups = selected.kind === "keys"
@@ -155,7 +155,7 @@ function partTitle(pointer: SxiPointer): string {
 export function sxiInspectorTitle(): { name: string; context: string } | undefined {
   const animation = sxiAnimationInspectorTitle()
   if (animation) return animation
-  const skin = sxiSkin()
+  const skin = openPalmSkin()
   const selected = skin && palmSelection(skin)
   if (!skin || !selected) return
   if (selected.kind === "part") return { name: partTitle(selected.pointer), context: `${SXI_SKIN_PATH} · ${selected.pointer.join(".")}` }
