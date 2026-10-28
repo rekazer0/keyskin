@@ -244,7 +244,7 @@ export function animationWarning(text: string, fix?: { label: string; run(): voi
   return warning
 }
 
-export type ComboChild = { title: string; detail: string; missing?: boolean }
+type ComboChild = { title: string; detail: string; missing?: boolean }
 
 /** Children of a combination in play order; reordering and removal write back through the callbacks. */
 export function comboList(options: {

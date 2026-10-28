@@ -51,19 +51,6 @@ const PARTICLE_TYPE_LABELS: ReadonlyArray<readonly [number, string]> = [
   [1, "复杂粒子"],
 ]
 
-/** 检查器分组图标：只用 src/icons.ts 里登记过的 Lucide 名。 */
-export const LEGACY_ANIMATION_KIND_ICONS: Record<LegacyAnimationKind, string> = {
-  basic: "zap",
-  combination: "layers",
-  frame: "film",
-  particle: "sparkles",
-}
-
-/** 会改变时间轴条或组合结构的字段：检查器提交后重建分组，让条与子动效说明保持同步。 */
-export const LEGACY_ANIMATION_TIMELINE_KEYS: readonly string[] = [
-  "DELAY", "DURATION", "REPEAT_CNT", "REPEAT_MODE", "REMOVE", "BUILD_LIST", "BUILD_NUM", "BUILD_METHOD",
-]
-
 export function legacyAnimationKindLabel(kind: LegacyAnimationKind): string {
   return LEGACY_ANIMATION_KINDS.find((item) => item.kind === kind)?.label ?? kind
 }
@@ -507,11 +494,4 @@ export function legacyAnimationReferences(
     }
   }
   return references
-}
-
-export function legacyAnimationReferenceText(reference: LegacyAnimationReference): string {
-  const style = `${reference.styleSection} · ${reference.field}`
-  return reference.layoutSection && reference.layoutField
-    ? `${reference.layoutSection}.${reference.layoutField} → ${style}`
-    : style
 }

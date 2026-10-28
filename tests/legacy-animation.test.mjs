@@ -8,7 +8,6 @@ import {
   legacyAnimationFieldGroups,
   legacyAnimationKindLabel,
   appendLegacyAnimation,
-  legacyAnimationReferenceText,
   legacyAnimationReferences,
   legacyAnimationTimeline,
   legacyAnimationTypeLabel,
@@ -378,16 +377,16 @@ FORE_ANIM_STYLE=335,336
 `)
   const references = legacyAnimationReferences(styles, layout)
   assert.deepEqual(
-    references.map((reference) => [reference.animation, legacyAnimationReferenceText(reference)]),
+    references.map((reference) => [reference.animation, reference.layoutSection, reference.layoutField, reference.styleSection, reference.field]),
     [
-      [1, "STYLE335 · PRESS_ANIM"],
-      [2, "STYLE335 · SHOW_ANIM"],
-      [3, "STYLE336 · PRESS_ANIM"],
-      [1, "KEY1.ANIM_STYLE → STYLE335 · PRESS_ANIM"],
-      [2, "KEY1.ANIM_STYLE → STYLE335 · SHOW_ANIM"],
-      [1, "KEY1.FORE_ANIM_STYLE → STYLE335 · PRESS_ANIM"],
-      [2, "KEY1.FORE_ANIM_STYLE → STYLE335 · SHOW_ANIM"],
-      [3, "KEY1.FORE_ANIM_STYLE → STYLE336 · PRESS_ANIM"],
+      [1, undefined, undefined, "STYLE335", "PRESS_ANIM"],
+      [2, undefined, undefined, "STYLE335", "SHOW_ANIM"],
+      [3, undefined, undefined, "STYLE336", "PRESS_ANIM"],
+      [1, "KEY1", "ANIM_STYLE", "STYLE335", "PRESS_ANIM"],
+      [2, "KEY1", "ANIM_STYLE", "STYLE335", "SHOW_ANIM"],
+      [1, "KEY1", "FORE_ANIM_STYLE", "STYLE335", "PRESS_ANIM"],
+      [2, "KEY1", "FORE_ANIM_STYLE", "STYLE335", "SHOW_ANIM"],
+      [3, "KEY1", "FORE_ANIM_STYLE", "STYLE336", "PRESS_ANIM"],
     ],
   )
   assert.deepEqual(legacyAnimationReferences(undefined, layout), [])

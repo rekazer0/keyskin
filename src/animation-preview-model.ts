@@ -4,7 +4,7 @@ import { animationEasing, bdaParticleEmitter, numberRange, parseLegacyParticleEm
 import { trackEnd, type Pair, type Track } from "./native-motion.ts"
 
 /** One row of the player's timeline: where a track, emitter or frame clip plays, in ms. */
-export type PreviewLane = { label: string; start: number; duration: number; passes: number; unbounded?: boolean }
+type PreviewLane = { label: string; start: number; duration: number; passes: number; unbounded?: boolean }
 
 export type PreviewClip = {
   tracks: Track[]
