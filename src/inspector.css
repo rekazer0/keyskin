@@ -108,7 +108,8 @@
   font-size: var(--font-size-xs);
   transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
-.source .inspector-group-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 汉字之间不断行，只在名称里预留的 <wbr> 处换成两行 */
+.source .inspector-group-label { max-width: 100%; overflow: hidden; text-align: center; text-overflow: ellipsis; word-break: keep-all; }
 .source :is(#mobile-inspector-groups > button, .inspector-reset):focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 @media (hover: hover) { .source :is(#mobile-inspector-groups > button, .inspector-reset):hover { background: var(--hover); color: var(--text); } }
 .source :is(#mobile-inspector-groups > button, .inspector-reset):active { background: color-mix(in srgb, var(--text) 10%, transparent); }

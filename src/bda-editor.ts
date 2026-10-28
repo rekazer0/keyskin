@@ -462,7 +462,7 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
           collection.push(next)
           index += 1
         }
-        const field = element("div", "document-property-field wide style-reference-field fore-styles-reference-field")
+        const field = element("div", "document-property-field wide fore-styles-reference-field")
         const strip = element("div", "bda-fore-styles-grid")
         strip.append(...collection.map((entry, itemIndex) => {
           const row = styleReferenceField(entry)

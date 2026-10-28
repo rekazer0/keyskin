@@ -216,7 +216,9 @@ export function syncMobileInspectorGroups(): void {
     const label = railLabels.get(group) ?? mobileInspectorGroupLabel(group)
     const text = document.createElement("span")
     text.className = "inspector-group-label"
-    text.textContent = label
+    // 分类栏一行放得下 4 个字：「时间与循环」这类长名只在「与」之后换行，不截成「时间与…」。
+    const [head, tail] = label.length > 4 ? label.split(/(?<=与)/) : [label]
+    text.append(head, ...tail ? [document.createElement("wbr"), tail] : [])
     button.append(groupIcon(label), text)
     button.title = railCodes.has(group) ? `${label}（${railCodes.get(group)}）` : label
     button.dataset.mobileInspectorGroup = group.dataset.mobileInspectorGroup

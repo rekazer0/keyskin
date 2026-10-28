@@ -160,6 +160,8 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 }
 .ui-color > input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 .ui-color > input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--radius-sm); }
+/* 未设置（或多选时混合）的颜色没有色值：色块留空，不冒充黑色 */
+.ui-color:has(> input:not([type="color"], [type="number"]):placeholder-shown) > input[type="color"]::-webkit-color-swatch { opacity: 0; }
 
 /* —— 分段控件 —— */
 .ui-segmented {

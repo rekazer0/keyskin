@@ -364,8 +364,8 @@ export function populateKeyInspector(): void {
     const name = field.dataset.keyField ?? ""
     // BDA 样式引用由源码结构控件编辑，旧格式按键字段只负责非 BDA 皮肤。
     field.disabled = !hasSelection || appState.archive?.format === "bda"
-    // 手势格子没配置时显示「+」（十字布局，DESIGN.md §10）。
-    field.placeholder = name === "HOLD" ? "未设置（默认弹字符）" : actionFieldNames.has(name) ? "+" : ""
+    // 手势格子没配置时显示「+」（十字布局，DESIGN.md §10）；其余空字段与文字分组一样写「未设置」。
+    field.placeholder = name === "HOLD" ? "未设置（默认弹字符）" : actionFieldNames.has(name) ? "+" : hasSelection ? "未设置" : ""
     // A Palm key's fields are skin.json's own (sxi-inspector.ts); these Baidu fields stay empty.
     if (!hasSelection || bdaSelected || sxiSelected) {
       field.value = ""

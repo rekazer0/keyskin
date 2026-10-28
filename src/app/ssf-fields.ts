@@ -318,14 +318,15 @@ function switchField(key: string, value: string, targets: SsfLocation[]): HTMLEl
 function valueInput(key: string, value: string, targets: SsfLocation[]): HTMLInputElement {
   const input = element("input", "document-property-input")
   input.value = value
-  input.title = `${ssfFieldLabel(key)}：${value}`
+  // 字号不带单位时是屏宽比例：完整说明放进提示，占位文字只留输入框放得下的长度。
+  input.title = !value && key === "TEXT_SIZE" ? `${ssfFieldLabel(key)}：屏宽比例，如 0.045` : `${ssfFieldLabel(key)}：${value}`
   input.disabled = !isEditing()
   if (NUMERIC_FIELDS.has(key) && /^-?\d+(?:\.\d+)?$/.test(value) || !value && key === "TEXT_SIZE") {
     input.type = "number"
     // TEXT_SIZE up to 1 is a fraction of the screen width (0.045) and steps by 0.001; above 1 it is pixels.
     input.step = key === "TEXT_SIZE" ? (Number(value || 0) <= 1 ? "0.001" : "1") : value.includes(".") ? "any" : "1"
   }
-  if (!value) input.placeholder = key === "TEXT_SIZE" ? "未设置（屏宽比例，如 0.045）" : "未设置"
+  if (!value) input.placeholder = key === "TEXT_SIZE" ? "未设置（屏宽比例）" : "未设置"
   input.setAttribute("aria-label", ssfFieldLabel(key))
   input.addEventListener("change", () => {
     if (input.type !== "number" || input.value !== "" && Number.isFinite(input.valueAsNumber)) writeValue(targets, key, input.value)
