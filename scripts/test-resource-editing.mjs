@@ -48,7 +48,7 @@ test('panel and candidate image replacement retain the referenced background sty
 
 test('undoing image and sound creation removes new files; redo restores their bytes', async () => {
   const source = combinedSource()
-  const names = new Set(['commitBytes', 'commitBatch', 'applyChangeSnapshot', 'applyBytesSnapshot', 'uploadKeySound'])
+  const names = new Set(['commitBytes', 'commitBatch', 'applyChangeSnapshot', 'applyBytesSnapshot', 'historyLeaves', 'refreshBinaryViews', 'refreshSnapshotViews', 'uploadKeySound'])
   const code = source.statements.filter(node => ts.isFunctionDeclaration(node) && names.has(node.name?.text)).map(node => node.getText(source)).join('\n')
   const archive = SkinArchive.fromSourceFiles([{ path: 'port/main.ini', data: new TextEncoder().encode('[PANEL]\n') }])
   const originalNames = archive.names()
@@ -137,7 +137,7 @@ test('asset replacement uses history and autosave, keeps its target, and rejects
   let listener
   const find = (node) => { if (!listener && ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) && node.expression.expression.getText(source) === 'imageOpen.addEventListener') listener = node; ts.forEachChild(node, find) }
   find(source)
-  const functions = source.statements.filter(node => ts.isFunctionDeclaration(node) && ['commitBytes', 'applyChangeSnapshot', 'applyBytesSnapshot'].includes(node.name?.text)).map(node => node.getText(source)).join('\n')
+  const functions = source.statements.filter(node => ts.isFunctionDeclaration(node) && ['commitBytes', 'applyChangeSnapshot', 'applyBytesSnapshot', 'historyLeaves', 'refreshBinaryViews', 'refreshSnapshotViews'].includes(node.name?.text)).map(node => node.getText(source)).join('\n')
   for (const invalid of [false, true]) {
     const archive = SkinArchive.fromSourceFiles([{ path: 'light/skin/res/a.png', data: new Uint8Array([1]) }])
     let handler

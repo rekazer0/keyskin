@@ -145,7 +145,7 @@ export function commitTextChanges(changes: ReadonlyArray<{ path: string; before:
   updateDirty()
 }
 
-function applyTextSnapshot(path: string, text: string): void {
+function applyTextSnapshot(path: string, text: string, refresh = true): void {
   if (!appState.archive) return
   if (path === appState.selectedPath) appState.sourceHistoryHighlight = insertedTextRange(appState.archive.getText(path), text)
   appState.archive.setText(path, text)
@@ -165,6 +165,11 @@ function applyTextSnapshot(path: string, text: string): void {
     populateTileInspector()
     drawAtlas()
   }
+  if (refresh) refreshSnapshotViews()
+}
+
+/** The canvas, the inspector and the unsaved mark after a history step has been written into the archive. */
+function refreshSnapshotViews(): void {
   refreshPreview()
   populateKeyInspector()
   updateDirty()
@@ -213,28 +218,44 @@ export function redo(): void {
   refreshHistorySelection()
 }
 
-export function applyChangeSnapshot(change: Change, side: "before" | "after"): void {
-  if (change.kind === "batch") {
-    const changes = side === "before" ? [...change.changes].reverse() : change.changes
-    for (const child of changes) applyChangeSnapshot(child, side)
-  } else if (change.kind === "text") applyTextSnapshot(change.path, change[side])
-  else applyBytesSnapshot(change.path, change[side])
+function historyLeaves(change: Change): Change[] {
+  return change.kind === "batch" ? change.changes.flatMap(historyLeaves) : [change]
 }
 
-export function applyBytesSnapshot(path: string, bytes?: Uint8Array): void {
+export function applyChangeSnapshot(change: Change, side: "before" | "after"): void {
+  if (change.kind === "text") return applyTextSnapshot(change.path, change[side])
+  if (change.kind === "bytes") return applyBytesSnapshot(change.path, change[side])
+  // A batch (panel copy, iOS 26 adaptation…) writes every file first and redraws once, not once per file.
+  const leaves = historyLeaves(change)
+  for (const leaf of side === "before" ? [...leaves].reverse() : leaves) {
+    if (leaf.kind === "text") applyTextSnapshot(leaf.path, leaf[side], false)
+    else if (leaf.kind === "bytes") applyBytesSnapshot(leaf.path, leaf[side], false)
+  }
+  if (leaves.some((leaf) => leaf.kind === "bytes")) {
+    const selected = leaves.some((leaf) => leaf.kind === "bytes" && leaf.path === appState.selectedPath) ? appState.selectedPath : undefined
+    refreshBinaryViews(selected, selected ? appState.archive?.getBytes(selected) : undefined)
+  }
+  refreshSnapshotViews()
+}
+
+export function applyBytesSnapshot(path: string, bytes?: Uint8Array, refresh = true): void {
   if (!appState.archive) return
   if (bytes) appState.archive.setBytes(path, bytes)
   else appState.archive.delete(path)
   scheduleSourceAutosave([path])
+  if (!refresh) return
+  refreshBinaryViews(path, bytes)
+  refreshSnapshotViews()
+}
+
+/** Views decoded from binary files: the BDA layout, the selected decoded source and the open BDA resources. */
+function refreshBinaryViews(path?: string, bytes?: Uint8Array): void {
   refreshBdaLayout(appState.layoutPath || undefined)
-  if (appState.selectedPath === path && bytes && appState.archive.isBdaConfig(path)) setSourceValue(decodedBdaEditorSource(path, bytes))
+  if (path && appState.selectedPath === path && bytes && appState.archive?.isBdaConfig(path)) setSourceValue(decodedBdaEditorSource(path, bytes))
   // A BDA panel or style table is a view of appearanceConfig: re-read it, or a later source edit re-applies the undone value.
   else refreshSelectedBdaSource()
-  if (appState.resourceConfigActive && appState.archive.format === "bda" && appState.selectedResourcePath) {
+  if (appState.resourceConfigActive && appState.archive?.format === "bda" && appState.selectedResourcePath) {
     loadTiles(appState.selectedResourcePath)
     renderResourceInspector()
   }
-  refreshPreview()
-  populateKeyInspector()
-  updateDirty()
 }
