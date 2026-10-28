@@ -108,10 +108,10 @@ try {
 
   // Palm: the harmony template's keyboard image is transparent, so the Palm backdrop shows through.
   await open('palm-harmony.sxi', readFileSync(new URL('../public/templates/palm-harmony.sxi', import.meta.url)))
-  await selectLayout('light/skin/port/py_9.ini')
+  await selectLayout('skin.json/default/port_layout/b/t9Pinyin')
   const palm = await scene(undefined, [3, 300])
   assert.deepEqual(palm.unknown, [], 'every Palm scene key is a canvas key section')
-  // The canvas lists skin.json's own keys and reads no projected layout.
+  // The canvas lists skin.json's own keys; there is no Baidu layout behind it.
   const listed = await page.evaluate(async () => {
     const { preview } = await import('/src/app/canvas-interaction.ts')
     const { appState } = await import('/src/app/state.ts')
@@ -126,7 +126,7 @@ try {
   assert.deepEqual(listed.keys, listed.skin)
   assert.deepEqual(palm.pixel.slice(0, 3), [208, 211, 217], 'transparent board shows the Palm backdrop')
   assert.deepEqual(palm.texts.KEY2.map(({ text }) => text), ['ABC', '2'])
-  // `f_w` is Palm-only: the Baidu projection drops it, the scene keeps the skin's light weight.
+  // `f_w` is Palm-only (Baidu export drops it); the scene keeps the skin's light weight.
   assert.equal(palm.texts.KEY2[0].weight, 300)
   assert.deepEqual(palm.texts.KEY12.map(({ text }) => text), ['清空'])
   const palmToolbar = await page.evaluate(async () => {
@@ -190,7 +190,7 @@ try {
 
   // Palm presses play skin.json's own `ss_2`; bubbles come from its `h` model.
   await open('animated.sxi', animatedPalm())
-  await selectLayout('light/skin/port/py_9.ini')
+  await selectLayout('skin.json/default/port_layout/b/t9Pinyin')
   const palmPress = await page.evaluate(async () => {
     const { preview } = await import('/src/app/canvas-interaction.ts')
     const effects = (await preview.sceneForState()).effects

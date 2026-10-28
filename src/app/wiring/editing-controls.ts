@@ -11,17 +11,18 @@ import { syncCandidateSelection, updateDevicePreview, refreshPreview, setGuidesV
 import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode } from "../mobile-layout"
 import { ensureAiChat, aiDesignErrorMessage } from "../ai-panel"
 import { switchSsfPreviewLayout } from "../ssf-preview"
+import { switchPalmLayout } from "../sxi-documents"
 import { preferredPath, createMissingVariant, bdaAvailableLayoutPaths, bdaAppearanceStyleGroups, bdaAppearanceStylePath } from "../bda-documents"
 import { renderFiles } from "../file-tree"
 import { selectFile } from "../navigation"
 import { IniDocument } from "../../ini.ts"
 import { importFontFile, removeSelectedFont, setGlobalFont } from "../skin-fonts"
-import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, updateSelectedTile } from "../tile-editing"
+import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, updateSelectedTile, nextSliceIndex } from "../tile-editing"
 import { canvasEditable, isEditing } from "../edit-history"
 import { selectStyleResource, showResourceList, renderResourceInspector } from "../resource-inspector"
 import { revealSourceFile } from "../source-files"
 import { type BdaAppearanceStyleGroup } from "../../bda.ts"
-import { tileSliceAt, boundedTileRect, moveTileRect, nextTileIndex } from "../../tiles.ts"
+import { tileSliceAt, boundedTileRect, moveTileRect } from "../../tiles.ts"
 import { resizeTileSlice } from "../../tiles"
 import { runFileOperation, adaptArchiveForIos26 } from "../file-operations"
 import { openPanelCopyDialog, updatePanelCopyForm, copyPanel } from "../panel-copy"
@@ -179,6 +180,7 @@ export function wireEditingControls(): void {
       if (appState.archive?.format === "ssf") {
         return switchSsfPreviewLayout(path.replace(/[^/]+$/, appState.layoutPath.split("/").pop()!))
       }
+      if (appState.archive?.format === "sxi") return switchPalmLayout()
       if (!createMissingVariant(path)) return
       let selected = false
       if (appState.archive?.format === "bda") {
@@ -363,7 +365,7 @@ export function wireEditingControls(): void {
       appState.tileDraft = boundedTileRect(appState.tileDragStart, atlasPoint(event), workspaceImage.naturalWidth, workspaceImage.naturalHeight)
       const source = appState.tileDraft
       setDrawingTile(false)
-      if (source) commitTile({ index: nextTileIndex(appState.tileDocument), source })
+      if (source) commitTile({ index: nextSliceIndex(), source })
       return
     }
     if (appState.movingTile) {

@@ -5,6 +5,7 @@ import { iniPreviewClip } from '../src/animation-preview-model.ts'
 import { motionAt } from '../src/native-motion.ts'
 import { animationTable } from './helpers/sxi-animation-fixture.mjs'
 import { animationsIni } from '../src/palm/sxi-style.ts'
+import { palmPreviewClip } from '../src/palm/palm-preview-clip.ts'
 
 const size = { width: 100, height: 50 }
 const document = IniDocument.parse('[ANIM1]\nCATEGORY=0\nTYPE=2\nDURATION=100\nDELAY=20\nFROM=0,0\nTO=100,100\nREPEAT_CNT=2\nREPEAT_MODE=1\n[ANIM2]\nCATEGORY=0\nTYPE=0\nDURATION=80\nFROM=255\nTO=0\n[ANIM3]\nCATEGORY=1\nBUILD_LIST=1,2\nBUILD_METHOD=1\n')
@@ -33,15 +34,30 @@ test('nested sequential combinations shift tracks by full child duration; simult
   assert.match(invalid.notes.join(' '), /循环.*不存在/)
 })
 
-test('Palm projection previews native geometry and keeps unsupported special effects explicit', () => {
-  const projected = IniDocument.parse(animationsIni(animationTable()).toString())
-  const scale = iniPreviewClip(projected, 'ANIM100')
+test('Palm animations preview from skin.json and keep unsupported special effects explicit', () => {
+  const table = animationTable()
+  const scale = palmPreviewClip(table, '100')
   assert.equal(scale.duration, 320)
   assert.deepEqual(motionAt(scale.tracks, 160, size).scale, [0.92, 0.92])
-  assert.equal(iniPreviewClip(projected, 'ANIM104').particles[0].emitter.totalNumber, 12)
-  const special = iniPreviewClip(projected, 'ANIM107')
+  assert.equal(palmPreviewClip(table, '104').particles[0].emitter.totalNumber, 12)
+  const special = palmPreviewClip(table, '107')
   assert.equal(special.tracks.length, 0)
   assert.match(special.notes.join(' '), /暂不支持/)
+  assert.match(palmPreviewClip(table, '999').notes.join(' '), /不存在/)
+})
+
+test('a Palm animation plays the same from skin.json as from the anim.ini it exports as', () => {
+  const table = animationTable()
+  const exported = IniDocument.parse(animationsIni(table).toString())
+  for (const id of Object.keys(table)) {
+    const native = palmPreviewClip(table, id)
+    const ini = iniPreviewClip(exported, `ANIM${id}`)
+    assert.equal(native.duration, ini.duration, `${id} duration`)
+    assert.deepEqual(native.tracks.map((track) => [track.kind, track.start, track.duration, track.passes]), ini.tracks.map((track) => [track.kind, track.start, track.duration, track.passes]), `${id} tracks`)
+    for (const at of [0, 50, 160, 300]) assert.deepEqual(motionAt(native.tracks, at, size), motionAt(ini.tracks, at, size), `${id} at ${at}ms`)
+    assert.deepEqual(native.particles.map((item) => item.emitter), ini.particles.map((item) => item.emitter), `${id} particles`)
+    assert.deepEqual(native.images, ini.images, `${id} images`)
+  }
 })
 
 test('pixels, opacity, pivots and infinite clips retain their semantics', () => {

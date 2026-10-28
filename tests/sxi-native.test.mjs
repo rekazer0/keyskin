@@ -5,7 +5,8 @@ import { SkinArchive } from "../src/skin.ts"
 import { buildSxiZip } from "../src/palm/palm-export.ts"
 import { canExport, exportFormatFromPath } from "../src/export.ts"
 import { compactPalmJSON } from "../src/palm/palm-json.ts"
-import { applySxiFragments, encodeSkinJson, parseSkinJson, setSxiFragment, sxiDerivedFiles, sxiFragmentPath } from "../src/palm/sxi-projection.ts"
+import { applySxiFragments, encodeSkinJson, parseSkinJson, setSxiFragment, sxiFragmentPath } from "../src/palm/sxi-json.ts"
+import { sxiBaiduFiles } from "../src/palm/sxi-to-baidu.ts"
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -33,29 +34,30 @@ function sxiArchive() {
   return SkinArchive.open(buildSxiZip(sourceBds()).bytes, "sxi")
 }
 
-test("an .sxi opens natively with read-only INI views derived from skin.json", () => {
+test("an .sxi opens natively: its own files, skin.json the only configuration", () => {
   const archive = sxiArchive()
   assert.equal(archive.format, "sxi")
-  assert.ok(archive.names().includes("light/skin/port/gen.ini"))
   assert.ok(archive.names().includes("light/skin/res/bg.png"))
-  const keyboard = archive.getText("light/skin/port/py_26.ini")
+  assert.ok(archive.isText("skin.json"))
+  // Nothing is generated from skin.json: no layouts, style sheets, tile maps or Info.txt.
+  assert.ok(!archive.names().some((name) => /\.(?:ini|css|til|cnd|pop)$|(^|\/)Info\.txt$/.test(name)))
+  assert.equal(archive.getBytes("light/skin/port/py_26.ini"), undefined)
+  // Only the Baidu export writes them.
+  const baidu = sxiBaiduFiles(parseSkinJson(archive.getText("skin.json")))
+  const keyboard = baidu.get("light/skin/port/py_26.ini")
   assert.match(keyboard, /\[KEY1\][^[]*VIEW_RECT=10,0,100,120/)
   assert.match(keyboard, /UP=F38/)
   assert.match(keyboard, /STAT_STYLE=S1_1/)
-  assert.match(archive.getText("light/skin/res/default.css"), /\[STYLE3\][^[]*SHOW=中/)
-  assert.match(archive.getText("light/skin/res/bg.til"), /INNER_RECT=2,2,6,6/)
-  assert.match(archive.getText("Info.txt"), /Name=测试皮肤/)
-  assert.deepEqual(archive.derivedPointer("light/skin/port/py_26.ini"), ["default", "port_layout", "b", "full26Pinyin"])
-  assert.equal(archive.derivedPointer("skin.json"), undefined)
-  assert.ok(archive.isText("skin.json"))
-  assert.throws(() => archive.setText("light/skin/port/py_26.ini", "[PANEL]\n"), /skin\.json/)
+  assert.match(baidu.get("light/skin/res/default.css"), /\[STYLE3\][^[]*SHOW=中/)
+  assert.match(baidu.get("light/skin/res/bg.til"), /INNER_RECT=2,2,6,6/)
+  assert.match(baidu.get("Info.txt"), /Name=测试皮肤/)
 })
 
-test("re-exporting the derived views reproduces every layout and style model", () => {
+test("the Baidu files a .sxi exports as reproduce every layout and style model", () => {
   const files = unzipSync(buildSxiZip(sourceBds()).bytes)
   const skin = parseSkinJson(strFromU8(files["skin.json"]))
   const tree = { "light/res/bg.png": PNG }
-  for (const [path, file] of sxiDerivedFiles(skin)) tree[path.replace(/^light\/skin\//, "light/")] = strToU8(file.text)
+  for (const [path, text] of sxiBaiduFiles(skin)) tree[path.replace(/^light\/skin\//, "light/")] = strToU8(text)
   const again = parseSkinJson(strFromU8(unzipSync(buildSxiZip(SkinArchive.open(zipSync(tree))).bytes)["skin.json"]))
   for (const group of ["b", "c", "h"]) {
     assert.equal(compactPalmJSON(again.default.port_layout[group]), compactPalmJSON(skin.default.port_layout[group]), group)
@@ -66,20 +68,20 @@ test("re-exporting the derived views reproduces every layout and style model", (
   assert.equal(compactPalmJSON(again.info), compactPalmJSON(skin.info))
 })
 
-test("candidate cell background and icons survive export and projection", () => {
+test("candidate cell background and icons survive the round trip to Baidu", () => {
   const files = unzipSync(buildSxiZip(sourceBds()).bytes)
   const skin = parseSkinJson(strFromU8(files["skin.json"]))
   const candidate = skin.default.port_layout.c.cand1
   assert.equal(candidate.i_cell, 5)
   assert.equal(candidate.icon_list.length, 2)
-  const cnd = sxiDerivedFiles(skin).get("light/skin/port/cand1.cnd").text
+  const cnd = sxiBaiduFiles(skin).get("light/skin/port/cand1.cnd")
   assert.match(cnd, /CELL_STYLE=5/)
   assert.match(cnd, /\[ICON1\]/)
   assert.match(cnd, /\[ICON2\]/)
   assert.doesNotMatch(cnd, /STAT_STYLE=\n/)
 })
 
-test("editing a skin.json fragment updates the views and saves only skin.json and info.json", () => {
+test("editing a skin.json fragment saves only skin.json and info.json", () => {
   const archive = sxiArchive()
   const original = archive.toBytes()
   const before = archive.getText("skin.json")
@@ -91,8 +93,7 @@ test("editing a skin.json fragment updates the views and saves only skin.json an
   key.rect = [[10, 0], [90, 120]]
   archive.setText("skin.json", encodeSkinJson(skin))
 
-  assert.match(archive.getText("light/skin/port/py_26.ini"), /VIEW_RECT=10,0,90,120/)
-  assert.match(archive.getText("Info.txt"), /Name=改名/)
+  assert.deepEqual(parseSkinJson(archive.getText("skin.json")).default.port_layout.b.full26Pinyin.keys.find((item) => item.id === "1").rect, [[10, 0], [90, 120]])
   assert.equal(parseSkinJson(archive.getText("info.json")).name, "改名")
   assert.deepEqual([...archive.changed].sort(), ["info.json", "skin.json"])
 
@@ -161,8 +162,10 @@ test("AI fragment drafts merge back into one skin.json edit", () => {
     { path: sxiFragmentPath(["info", "name"]), text: '"新名字"' },
   ])
   archive.setText("skin.json", after)
-  assert.match(archive.getText("light/skin/port/py_26.ini"), /\[KEY1\]\nBACK_STYLE=7/)
-  assert.match(archive.getText("Info.txt"), /Name=新名字/)
+  const merged = parseSkinJson(archive.getText("skin.json"))
+  assert.equal(merged.default.port_layout.b.full26Pinyin.keys[0].b.base_b, 7)
+  assert.equal(merged.info.name, "新名字")
+  assert.deepEqual([...archive.changed].sort(), ["info.json", "skin.json"])
 })
 
 test("orientation-only styles are also published in s_info, and MORE keeps its grid orientation", () => {
@@ -181,6 +184,6 @@ test("orientation-only styles are also published in s_info, and MORE keeps its g
   assert.equal(skin.default.s_info.ss_1["2"].s_2.normal, "btn,0")
   assert.equal(skin.default.s_port.ss_1["2"].s_2.normal, "btn,0")
   assert.deepEqual([skin.default.port_layout.b.defaultGlobal.more.row, skin.default.port_layout.b.defaultGlobal.more.col], [4, 5])
-  const gen = sxiDerivedFiles(skin).get("light/skin/port/gen.ini").text
+  const gen = sxiBaiduFiles(skin).get("light/skin/port/gen.ini")
   assert.match(gen, /GRID=5,4/)
 })

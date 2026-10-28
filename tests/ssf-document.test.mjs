@@ -1,5 +1,5 @@
-// A Sogou skin opened as an editor document: its own files, saved in place, laid over the official
-// skeleton for the canvas, and converted to Baidu only on export.
+// A Sogou skin opened as an editor document: its own files, saved in place, drawn on the official
+// skeleton (a package of its own, never part of the document), and converted to Baidu only on export.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -8,7 +8,7 @@ import { IniDocument } from '../src/ini.ts'
 import { SkinArchive } from '../src/skin.ts'
 import { AtlasResolver } from '../src/atlas.ts'
 import { parseZip } from '../src/skin-zip.ts'
-import { documentPackage, ssfDocumentBytes, ssfPreviewFiles } from '../src/ssf/ssf-convert.ts'
+import { documentPackage, ssfDocumentBytes, ssfSkeleton } from '../src/ssf/ssf-convert.ts'
 import { ssfToBaiduFiles } from '../src/ssf/ssf-to-baidu.ts'
 import { exportFormatFromPath } from '../src/export.ts'
 import { decodePng, encodePng } from '../src/ssf/ssf-png.ts'
@@ -22,7 +22,8 @@ const converted = (archive, base) => {
   const pkg = documentPackage(archive)
   return ssfToBaiduFiles(pkg, base, Number(pkg.resolution))
 }
-const skeleton = (archive, base) => ssfPreviewFiles(documentPackage(archive), base)
+const skeleton = (archive, base) => ssfSkeleton(documentPackage(archive), base)
+const ini = (archive, path) => IniDocument.parse(archive.getText(path))
 
 test('ssf document: opens as its own format with the package paths as they are', async () => {
   const archive = await open(ssfFixture())
@@ -65,26 +66,21 @@ test('ssf document: saving rewrites only the edited entry', async () => {
   assert.equal(archive.format, 'ssf')
 })
 
-test('ssf document: the preview overlay is readable, read-only, unsaved and not a change', async () => {
+test('ssf document: the skeleton is a package of its own; the document holds only the skin\'s files', async () => {
   const archive = await open(ssfFixture())
-  const files = skeleton(archive, template)
+  const names = archive.names()
+  const boards = skeleton(archive, template)
   // The canvas reads the skeleton only; the skin's styles stay in its own files.
-  assert.ok(![...files.keys()].some((path) => /\/res\/ssf\d+\.png$/.test(path)))
-  const gen = IniDocument.parse(strFromU8(files.get('light/skin/port/gen.ini')))
-  assert.equal(gen.get('PANEL', 'SIZE'), '1080,702')
-  const land = IniDocument.parse(strFromU8(files.get('light/skin/land/gen.ini')))
+  assert.ok(!boards.names().some((path) => /\/res\/ssf\d+\.png$/.test(path)))
+  assert.equal(ini(boards, 'light/skin/port/gen.ini').get('PANEL', 'SIZE'), '1080,702')
+  const land = ini(boards, 'light/skin/land/gen.ini')
   assert.equal(land.get('PANEL', 'SIZE'), '1920,570')
   assert.equal(land.get('CAND', 'VIEW_RECT'), '0,0,1920,128')
-  const landKeys = IniDocument.parse(strFromU8(files.get('light/skin/land/py_9.ini')))
-  assert.equal(landKeys.get('KEY1', 'VIEW_RECT'), '305,12,398,137')
-  const revision = archive.revision
-  archive.setOverlay(files)
-  assert.ok(archive.revision > revision)
-  const layout = 'light/skin/port/py_26.ini'
-  assert.ok(archive.isOverlay(layout) && archive.isText(layout))
-  assert.ok(archive.names().includes(layout) && archive.names().includes('dark/skin/port/py_26.ini'))
-  assert.ok(!archive.isOverlay('1080/status1/phoneSkin.ini'))
-  assert.throws(() => archive.setText(layout, ''), /不能修改/)
+  assert.equal(ini(boards, 'light/skin/land/py_9.ini').get('KEY1', 'VIEW_RECT'), '305,12,398,137')
+  assert.ok(boards.isText('light/skin/port/py_26.ini') && boards.isText('dark/skin/port/py_26.ini'))
+  // Nothing of the skeleton reaches the document: not its file list, its sources or its saved bytes.
+  assert.deepEqual(archive.names(), names)
+  assert.ok(!names.some((name) => name.startsWith('light/') || name.startsWith('dark/')))
   assert.equal(archive.changed.size, 0)
   assert.ok(!Object.keys(unzipSync(archive.toBytes('ssf'))).some((name) => name.startsWith('light/')))
   assert.ok(!archive.sourceFiles().some((file) => file.path.startsWith('light/')))
@@ -164,8 +160,8 @@ test('ssf document: legacy toolbar logo, symbol text and double-pinyin function 
       assert.ok(keys.some((key) => layout.get(key, 'CENTER') === "'"))
     }
   }
-  archive.setOverlay(preview)
-  const resolver = new AtlasResolver(archive, 'light', 'port')
+  const baidu = SkinArchive.fromSourceFiles([...preview].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, '$1/'), data })))
+  const resolver = new AtlasResolver(baidu, 'light', 'port')
   await resolver.ready()
   const py9 = read('light/skin/port/py_9.ini')
   assert.match(resolver.resolveText(py9.get('LIST', 'FORE_STYLE'), false).fontName, /^BdiEmbeddedFont/)
@@ -183,10 +179,9 @@ for (const [resolution, portSize, landSize, candRect] of [
     if (path.startsWith('1080/')) files[path.replace('1080/', `${resolution}/`)] = bytes
   }
   const archive = await open(zipSync(files))
-  const preview = skeleton(archive, template)
-  const gen = IniDocument.parse(strFromU8(preview.get('light/skin/port/gen.ini')))
-  assert.equal(gen.get('PANEL', 'SIZE'), portSize)
-  const land = IniDocument.parse(strFromU8(preview.get('light/skin/land/gen.ini')))
+  const boards = skeleton(archive, template)
+  assert.equal(ini(boards, 'light/skin/port/gen.ini').get('PANEL', 'SIZE'), portSize)
+  const land = ini(boards, 'light/skin/land/gen.ini')
   assert.equal(land.get('PANEL', 'SIZE'), landSize)
   assert.equal(land.get('CAND', 'VIEW_RECT'), candRect)
 })

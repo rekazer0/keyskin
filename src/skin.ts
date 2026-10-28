@@ -2,7 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import type { ExportFormat } from "./export.ts"
 import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
-import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson, sxiDerivedFiles } from "./palm/sxi-projection.ts"
+import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
 
 const TEXT_EXTENSIONS = new Set(["ini", "css", "til", "cnd", "pop", "txt", "plist"])
@@ -194,9 +194,6 @@ export class SkinArchive {
   private canonicalToRaw = new Map<string, string>()
   private cachedNames?: string[]
   private changedRaw = new Set<string>()
-  /** Read-only files listed and read next to the package but never saved (an SSF skin's converted Baidu tree). */
-  private overlay = new Map<string, Uint8Array>()
-  private derived?: { source: Uint8Array; files: Map<string, { bytes: Uint8Array; pointer: string[] }>; base?: string[]; names: string[] }
   readonly changed = new Set<string>()
   /** Bumped whenever file contents or paths change, so callers can skip redundant redraws. */
   revision = 0
@@ -283,49 +280,8 @@ export class SkinArchive {
   }
 
   names(): string[] {
-    this.cachedNames ??= [...new Set([...this.canonicalToRaw.keys(), ...this.overlay.keys()])].sort()
-    const derived = this.derivedFiles()
-    if (!derived) return this.cachedNames.slice()
-    if (derived.base !== this.cachedNames) {
-      derived.base = this.cachedNames
-      derived.names = [...new Set([...this.cachedNames, ...derived.files.keys()])].sort()
-    }
-    return derived.names.slice()
-  }
-
-  // `.sxi` layouts, styles and tiles are read-only INI views of `skin.json`, rebuilt whenever
-  // `skin.json` changes. An unparsable `skin.json` simply derives nothing.
-  private derivedFiles(): SkinArchive["derived"] {
-    if (this.layout !== "sxi") return
-    const source = this.files.get(SXI_SKIN_PATH)
-    if (!source) return
-    if (this.derived?.source === source) return this.derived
-    const files = new Map<string, { bytes: Uint8Array; pointer: string[] }>()
-    try {
-      for (const [path, file] of sxiDerivedFiles(parseSkinJson(strFromU8(source)))) {
-        if (!this.canonicalToRaw.has(path)) files.set(path, { bytes: strToU8(file.text), pointer: file.pointer })
-      }
-    } catch {
-      files.clear()
-    }
-    this.derived = { source, files, names: [] }
-    return this.derived
-  }
-
-  /** The `skin.json` pointer a derived `.sxi` view comes from; undefined for stored files. */
-  derivedPointer(path: string): string[] | undefined {
-    return this.derivedFiles()?.files.get(path)?.pointer
-  }
-
-  /** Replaces the read-only overlay; package files of the same path still win. */
-  setOverlay(files: Map<string, Uint8Array>): void {
-    this.overlay = files
-    this.cachedNames = undefined
-    this.revision++
-  }
-
-  isOverlay(path: string): boolean {
-    return !this.canonicalToRaw.has(path) && this.overlay.has(path)
+    this.cachedNames ??= [...this.canonicalToRaw.keys()].sort()
+    return this.cachedNames.slice()
   }
 
   sourceFiles(): Array<{ path: string; data: Uint8Array }> {
@@ -368,7 +324,7 @@ export class SkinArchive {
   }
 
   getBytes(path: string): Uint8Array | undefined {
-    return this.files.get(this.canonicalToRaw.get(path) ?? path) ?? this.derivedFiles()?.files.get(path)?.bytes ?? this.overlay.get(path)
+    return this.files.get(this.canonicalToRaw.get(path) ?? path)
   }
 
   /** The name the skin declares for itself: Info.txt `Name`, or phoneTheme.ini `skin_name` for Sogou. */
@@ -394,8 +350,6 @@ export class SkinArchive {
   }
 
   setBytes(path: string, bytes: Uint8Array): void {
-    if (this.isOverlay(path)) throw new Error(`${path} 是预览用的转换结果，不能修改`)
-    if (this.derivedPointer(path)) throw new Error(`${path} 由 skin.json 生成，请在源码中修改 skin.json`)
     const raw = this.canonicalToRaw.get(path) ?? rawPath(path, this.layout, this.bdaRoots, this.sxiNested)
     const current = this.files.get(raw)
     if (current && current.length === bytes.length && current.every((byte, index) => byte === bytes[index])) {

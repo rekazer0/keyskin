@@ -6,9 +6,7 @@
 import { element } from "../dom-element.ts"
 import { createIcon } from "../icons"
 import { animationPlayer } from "../animation-player.ts"
-import { iniPreviewClip } from "../animation-preview-model.ts"
-import { IniDocument } from "../ini.ts"
-import { animationsIni } from "../palm/sxi-style.ts"
+import { palmPreviewClip } from "../palm/palm-preview-clip.ts"
 import { PalmStyles } from "../palm/palm-styles.ts"
 import { visualResolver } from "./bda-documents"
 import {
@@ -34,19 +32,19 @@ import {
 import { asObject, listText, numberText, numberValue, type Json, type JsonObject } from "../palm/sxi-ini.ts"
 import { toPlaySpeedRates } from "../palm/palm-ini.ts"
 import { compactPalmJSON } from "../palm/palm-json.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
 import { editSxi, sxiSkin, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
 import { animationActions, animationCreateControl } from "./sxi-animation-actions"
+import { sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
 
 type AnimationEntry = { id: string; kind: string; model: JsonObject; wrap: JsonObject }
 
 function animationPointer(): SxiPointer | undefined {
-  const archive = appState.archive
-  const pointer = archive?.format === "sxi" ? archive.derivedPointer(appState.selectedPath) : undefined
+  const pointer = sxiPointer(appState.selectedPath)
   return pointer?.[2] === "ss_2" ? pointer : undefined
 }
 
@@ -63,8 +61,7 @@ function animationEntries(table: JsonObject): AnimationEntry[] {
 /* —— rows —— */
 function fieldRow(field: AnimationField, saved: Json, target: SxiPointer, path: string[], suffix: string, onReset?: (baseline: Json) => void, label = field.label): HTMLLabelElement {
   const row = element("label", "ui-field document-property-field")
-  // anim.ini key first (what skin authors see in the INI view), skin.json key second.
-  fieldCaption(row, [field.iniKey, field.key].filter(Boolean).join(" "), label)
+  fieldCaption(row, field.key, label)
   row.dataset.inspectorRowKey = JSON.stringify([target, path, suffix])
   // The shell compares this render's value with the first render's for the change mark, and hands
   // the first value back on reset (same contract as sxi-fields' rows).
@@ -334,9 +331,9 @@ function fieldRows(target: SxiPointer, field: AnimationField, value: Json): HTML
 
 
 /* —— a1-specific rows: type, unit and the values it changes —— */
-function segmentedRow(label: string, options: Array<[value: string, text: string]>, current: string, onSelect: (value: string) => void, title?: string, identity = label, iniKey?: string): HTMLElement {
+function segmentedRow(label: string, options: Array<[value: string, text: string]>, current: string, onSelect: (value: string) => void, title?: string, identity = label, key?: string): HTMLElement {
   const row = element("div", "ui-field document-property-field")
-  if (iniKey) row.dataset.documentKey = iniKey
+  if (key) row.dataset.documentKey = key
   row.dataset.inspectorRowKey = JSON.stringify(["segmented", identity])
   row.dataset.inspectorValue = JSON.stringify([current])
   const caption = element("span", "document-field-caption")
@@ -491,7 +488,7 @@ function comboEditor(pointer: SxiPointer, entry: AnimationEntry, table: JsonObje
       target.a_method = value
       target.method = { [value === "simultaneous" ? "simultaneous" : "sequential"]: {} }
     })
-  }, "顺序播放会按列表依次衔接", `${[...pointer, entry.id, "a3"].join(".")}|组合方式`, "BUILD_METHOD"))
+  }, "顺序播放会按列表依次衔接", `${[...pointer, entry.id, "a3"].join(".")}|组合方式`, "a_method"))
   const list = element("ol", "sxi-combo-list")
   list.setAttribute("aria-label", "子动画")
   for (const [index, id] of children.entries()) {
@@ -639,7 +636,7 @@ function referenceNote(skin: JsonObject, pointer: SxiPointer, entry: AnimationEn
   return note
 }
 
-function renderSection(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, table: JsonObject, document: IniDocument): HTMLElement {
+function renderSection(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, table: JsonObject): HTMLElement {
   const family = animationFamilyInfo(entry.kind)
   const section = element("section", "ui-section document-property-section sxi-animation-section")
   section.dataset.inspectorGroupLabel = `动画 ${entry.id}`
@@ -651,7 +648,7 @@ function renderSection(skin: JsonObject, pointer: SxiPointer, entry: AnimationEn
   heading.append(title, code, animationActions(pointer, entry.id, skin))
   section.append(heading)
   const resolver = visualResolver()
-  section.append(animationPlayer({ clip: iniPreviewClip(document, `ANIM${entry.id}`), resolver,
+  section.append(animationPlayer({ clip: palmPreviewClip(table, entry.id), resolver,
     readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined }))
   const summary = element("p", "inspector-group-subtitle sxi-animation-summary")
   summary.textContent = family?.summary ?? ""
@@ -719,7 +716,6 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   container.append(create)
   const entries = animationEntries(table).filter((entry) => appState.animationDesignMode === "all"
     || (entry.kind === "a4") === (appState.animationDesignMode === "particle"))
-  const document = IniDocument.parse(animationsIni(table).toString())
   if (!entries.length) {
     const section = element("section", "ui-section document-property-section")
     section.dataset.inspectorGroupLabel = "动画"
@@ -732,7 +728,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
     section.append(heading, empty)
     container.append(section)
   } else {
-    container.append(...entries.map((entry) => renderSection(skin, pointer, entry, table, document)))
+    container.append(...entries.map((entry) => renderSection(skin, pointer, entry, table)))
   }
   container.dataset.path = appState.selectedPath
   return true

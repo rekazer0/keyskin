@@ -2,7 +2,7 @@
 
 import { zipSync } from "fflate"
 import { convertBdaArchive } from "../bda-convert.ts"
-import type { SkinArchive } from "../skin.ts"
+import { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
 import { convertBaiduToSsf } from "./baidu-to-ssf.ts"
 import { isSkinContainer } from "./ssf-container.ts"
@@ -20,7 +20,7 @@ type Converted = { bytes: Uint8Array; warnings: string[] }
 /** The document's own files, not copies: derived images are cached by the arrays they come from. */
 export function documentPackage(archive: SkinArchive): SsfPackage {
   return SsfPackage.fromFiles(new Map(archive.names().flatMap((path) => {
-    const bytes = path.endsWith("/") || archive.isOverlay(path) ? undefined : archive.getBytes(path)
+    const bytes = path.endsWith("/") ? undefined : archive.getBytes(path)
     return bytes ? [[path, bytes] as const] : []
   })))
 }
@@ -36,13 +36,15 @@ export async function ssfDocumentBytes(bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 /**
- * Sogou's official skeleton for each look of the skin, for `SkinArchive.setOverlay`: the canvas takes
- * its boards (key sections, geometry, built-in labels) from here and paints the skin itself.
+ * Sogou's official skeleton for each look of the skin, a read-only package of its own (a Sogou skin has
+ * no layouts): the canvas takes its boards (key sections, geometry, built-in labels) from here and paints
+ * the skin's own files onto them. It is never part of the document.
  */
-export function ssfPreviewFiles(pkg: SsfPackage, template: SkinArchive): Map<string, Uint8Array> {
+export function ssfSkeleton(pkg: SsfPackage, template: SkinArchive): SkinArchive {
   const files = new Map<string, Uint8Array>()
   for (const theme of pkg.themes.keys()) copySsfSkeleton(template, theme, files, Number(pkg.resolution))
-  return files
+  // Stored the way a two-look BDS package keeps them (`light/port/…`), which reads back as `light/skin/port/…`.
+  return SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
 }
 
 /** Converts an SSF document into a Baidu package of `format`. */

@@ -13,7 +13,7 @@ import { moveSelectedKeys } from "./key-editing"
 import { isEditing } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
 import { updateSourceHighlight } from "./source-panel"
-import { scrollSelectedSource, styleConfigPath, genConfigPath, currentConfigPath } from "./config-context"
+import { scrollSelectedSource, styleConfigPath, genConfigPath, currentConfigPath, layoutSource } from "./config-context"
 import { compositionSkinState, deleteBackward, deleteForward, moveCaretVertical, moveCaret, insertText } from "../simulation.ts"
 import { decodeAiffPcm, soundMimeType, soundPathForFilename, soundFilenameForKey } from "../sounds.ts"
 import { bdaConfigPath, bdaPanelKeyName } from "../bda.ts"
@@ -22,6 +22,10 @@ import { bdaPlatform } from "../bda-platform.ts"
 import { IniDocument } from "../ini.ts"
 import { previewStateFromAction, previewToggleStateFromAction, previewStateTransitionFromAction, previewPageTransition } from "../actions.ts"
 import { bdaAvailableLayoutPaths, isBdaLayoutPath } from "./bda-documents"
+import { palmKeySound } from "./sxi-styles"
+import { isSxiBoardAddress, palmBoardTypes, sxiBoardAddress, sxiPointer } from "./sxi-documents"
+import { boardFileName } from "../palm/sxi-layout.ts"
+import { boardTypeFromIniFileName } from "../palm/palm-board-types.ts"
 import { createIcon } from "../icons"
 
 export const scrollbarIdleTimers = new WeakMap<HTMLElement, number>()
@@ -393,6 +397,10 @@ export function playSoundPath(path: string): void {
 }
 
 export function keySoundForEvent(event: PreviewEvent): string | undefined {
+  if (appState.archive?.format === "sxi") {
+    const filename = palmKeySound(event.section)
+    return filename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, filename) : undefined
+  }
   if (!appState.archive || !appState.layoutDocument) return
   const names = appState.archive.names()
   if (appState.archive.format === "bda") {
@@ -408,14 +416,15 @@ export function keySoundForEvent(event: PreviewEvent): string | undefined {
       ? soundPathForFilename(names, theme.value, orientation.value, resource.resourceID)
       : undefined
   }
+  const layouts = layoutSource()
   const stylesPath = styleConfigPath()
-  if (!appState.archive.isText(stylesPath)) return
+  if (!layouts?.isText(stylesPath)) return
   const generalPath = genConfigPath()
-  const general = appState.archive.isText(generalPath) ? IniDocument.parse(appState.archive.getText(generalPath)) : undefined
+  const general = layouts.isText(generalPath) ? IniDocument.parse(layouts.getText(generalPath)) : undefined
   const filename = soundFilenameForKey(
     appState.layoutDocument,
     event.section,
-    IniDocument.parse(appState.archive.getText(stylesPath)),
+    IniDocument.parse(layouts.getText(stylesPath)),
     general,
   )
   return filename ? soundPathForFilename(names, theme.value, orientation.value, filename) : undefined
@@ -458,24 +467,28 @@ export function handlePreviewEvent(event: PreviewEvent): void {
     )
     return
   }
-  const currentName = appState.layoutPath.split("/").pop() ?? ""
+  // A Palm board is named by its type; page switching speaks the layout names Palm's types stand for.
+  const palmBoard = sxiPointer(appState.layoutPath)
+  const currentName = palmBoard ? boardFileName(palmBoard[3]) : appState.layoutPath.split("/").pop() ?? ""
   const currentDirectory = appState.layoutPath.slice(0, appState.layoutPath.lastIndexOf("/") + 1)
-  const availableNames = appState.archive
+  const layouts = layoutSource()
+  const availableNames = appState.archive && layouts
     ? appState.archive.format === "bda"
       ? bdaAvailableLayoutPaths().map((path) => path.slice(path.lastIndexOf("/") + 1))
-      : appState.archive.names()
+      : palmBoard ? palmBoardTypes().map(boardFileName)
+      : layouts.names()
         .filter((path) => path.startsWith(currentDirectory) && path.slice(currentDirectory.length).includes("/") === false)
         .map((path) => path.slice(currentDirectory.length))
     : undefined
-  const general = appState.archive && appState.archive.isText(genConfigPath())
-    ? IniDocument.parse(appState.archive.getText(genConfigPath()))
+  const general = layouts?.isText(genConfigPath())
+    ? IniDocument.parse(layouts.getText(genConfigPath()))
     : undefined
   const symbolLayout = general?.get("MORE", "SYM_LAYOUT")?.trim()?.replace(/\.ini$/i, "") || "symbol"
   const transition = previewPageTransition(code, currentName, appState.previewReturnName, availableNames, symbolLayout)
   const target = transition.target
   if (target) {
-    const path = currentConfigPath(target)
-    if (appState.archive?.isText(path) || isBdaLayoutPath(path)) {
+    const path = palmBoard ? sxiBoardAddress(boardTypeFromIniFileName(target) ?? target.replace(/\.ini$/i, "")) : currentConfigPath(target)
+    if (layouts?.isText(path) || isBdaLayoutPath(path) || isSxiBoardAddress(path)) {
       appState.previewReturnName = transition.returnName
       if (code === "F15" || code === "F16") setSimulatedComposition("")
       if (skinState.value === "38") activateSkinState(undefined)

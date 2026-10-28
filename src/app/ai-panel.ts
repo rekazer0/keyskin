@@ -22,7 +22,11 @@ import { type ModelConfiguration, groupModelConfigurations, modelHost, modelConf
 import { modelProviderPreset } from "../model-providers.ts"
 import { symbolSpan } from "../icons"
 import { ssfSelectedBindings, ssfSkinPath, ssfThemeFolder, SSF_SOUNDS_PATH } from "./ssf-documents"
-import { SXI_SKIN_PATH, applySxiFragments, parseSkinJson, sxiFragment, sxiFragmentPath } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH, applySxiFragments, parseSkinJson, sxiAddressPointer, sxiFragment, sxiFragmentPath } from "../palm/sxi-json.ts"
+import { sxiPartAddresses } from "../palm/sxi-panel-copy.ts"
+import { palmOrientation, palmTheme, PALM_SHARED_BOARD, sxiBoardAddress, sxiPointer } from "./sxi-documents"
+import { palmTileSlices } from "../palm/palm-style-edit.ts"
+import { tileSlices } from "../tiles.ts"
 
 /** Files a panel-scoped request may change: a Sogou look keeps every key class in its own folder. */
 function aiPanelFiles(target: SkinArchive): Set<string | undefined> {
@@ -38,11 +42,10 @@ function aiPanelFiles(target: SkinArchive): Set<string | undefined> {
 }
 
 export function aiEditableProjectFiles(target: SkinArchive, scope: "panel" | "project" = "project"): AiSkinEditableFile[] {
+  if (target.format === "sxi") return sxiEditableFragments(target, scope)
   const panelFiles = aiPanelFiles(target)
-  if (target.format === "sxi") return sxiEditableFragments(target, scope === "panel" ? panelFiles : undefined)
   return target.names().flatMap((path) => {
-    // A Sogou skin's preview overlay is a conversion, never part of the skin.
-    if (target.isOverlay(path) || scope === "panel" && !panelFiles.has(path)) return []
+    if (scope === "panel" && !panelFiles.has(path)) return []
     if (target.format === "bda") {
       if (!target.isBdaConfig(path) || !bdaDecodedSourceEditable(path)) return []
       const bytes = target.getBytes(path)
@@ -58,30 +61,45 @@ export function aiEditableProjectFiles(target: SkinArchive, scope: "panel" | "pr
   })
 }
 
-// SXI is granted as skin.json fragments, one per derived layout or style; the project scope
-// stays within the current theme and orientation so it fits the workspace limits.
-function sxiEditableFragments(target: SkinArchive, panelFiles?: ReadonlySet<string | undefined>): AiSkinEditableFile[] {
-  const skin = parseSkinJson(target.getText(SXI_SKIN_PATH))
-  const roots = [`${theme.value}/skin/${orientation.value}/`, `${theme.value}/skin/res/`]
-  const pointers = new Map<string, string[]>()
-  for (const path of target.names()) {
-    const pointer = target.derivedPointer(path)
-    if (!pointer || (panelFiles ? !panelFiles.has(path) : !roots.some((root) => path.startsWith(root)))) continue
-    pointers.set(sxiFragmentPath(pointer), pointer)
-  }
-  return [...pointers].map(([path, pointer]) => ({ path, syntax: "json" as const, text: JSON.stringify(sxiFragment(skin, pointer), null, 2) }))
+// SXI is granted as skin.json parts (boards, bars, bubbles, style and animation tables, tile maps). The
+// panel scope is the open board, the boards' shared settings and the style tables they draw with; the
+// project scope stays within the current theme and orientation so it fits the workspace limits.
+function sxiEditableFragments(target: SkinArchive, scope: "panel" | "project"): AiSkinEditableFile[] {
+  const text = target.getText(SXI_SKIN_PATH)
+  const skin = parseSkinJson(text)
+  const themeKey = palmTheme()
+  const tables = ["s_info", `s_${palmOrientation()}`]
+  const board = sxiPointer(appState.layoutPath)
+  const panel = new Set([board && sxiFragmentPath(board), sxiBoardAddress(PALM_SHARED_BOARD), ...tables.map((table) => sxiFragmentPath([themeKey, table, "ss_1"]))])
+  return sxiPartAddresses(text).flatMap((path) => {
+    const pointer = sxiAddressPointer(path)!
+    const granted = scope === "panel" ? panel.has(path) : pointer[0] === themeKey && [`${palmOrientation()}_layout`, ...tables].includes(pointer[1])
+    return granted ? [{ path, syntax: "json" as const, text: JSON.stringify(sxiFragment(skin, pointer), null, 2) }] : []
+  })
 }
 
-/** PNGs beside the panel's style sheet (or every PNG for project scope), with their .til slices. */
+/** A Palm package's skin.json, or nothing when it does not parse. */
+function skinOf(target: SkinArchive) {
+  try {
+    return parseSkinJson(target.getText(SXI_SKIN_PATH))
+  } catch {
+    return undefined
+  }
+}
+
+/** PNGs beside the panel's style sheet (or every PNG for project scope), with their slices. */
 export function aiEditableProjectImages(target: SkinArchive, scope: "panel" | "project" = "project"): AiSkinImageFile[] {
   if (target.format === "bda") return []
-  const folders = target.format === "ssf"
-    ? [ssfThemeFolder() ?? ""]
+  const folders = target.format === "ssf" ? [ssfThemeFolder() ?? ""]
+    : target.format === "sxi" ? [`${theme.value}/skin/${orientation.value}/res/`, `${theme.value}/skin/res/`]
     : [styleConfigPath().replace(/[^/]*$/, ""), `${theme.value}/skin/res/`]
+  const skin = target.format === "sxi" ? skinOf(target) : undefined
   return target.names().flatMap((path) => {
-    if (!target.isImage(path) || target.isOverlay(path) || !/\.png$/i.test(path) || scope === "panel" && !folders.some((folder) => path.startsWith(folder) && !path.slice(folder.length).includes("/"))) return []
+    if (!target.isImage(path) || !/\.png$/i.test(path) || scope === "panel" && !folders.some((folder) => path.startsWith(folder) && !path.slice(folder.length).includes("/"))) return []
     const tilPath = path.replace(/\.png$/i, ".til")
-    return [{ path, bytes: target.getBytes(path)!, tiles: target.isText(tilPath) ? target.getText(tilPath) : undefined }]
+    const slices = skin ? palmTileSlices(skin, path)
+      : target.isText(tilPath) ? tileSlices(IniDocument.parse(target.getText(tilPath))) : undefined
+    return [{ path, bytes: target.getBytes(path)!, slices }]
   })
 }
 
@@ -133,7 +151,7 @@ export function aiPreviewImage(): { type: "image"; data: string; mimeType: strin
 
 export function aiSelectedKeyContext(): { label: string; sections: string[]; values: Record<string, string> } {
   if (appState.archive?.format === "ssf") {
-    // A Sogou key is styled by its classes; the canvas key sections belong to the preview overlay.
+    // A Sogou key is styled by its classes; the canvas key sections belong to the skeleton board.
     const sections = ssfSelectedBindings().flatMap(({ binding }) => binding.sections)
     return { label: selectedKeyName.textContent?.trim() ?? "", sections: [...new Set(sections)], values: {} }
   }
@@ -249,7 +267,7 @@ export async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, 
     const panelScope = aiDesignScope.getAttribute("aria-pressed") === "true" ? "project" as const : "panel" as const
     const mode = aiDesignIntensity.value
     const variantCount = mode === "variants" || aiWantsVariants(prompt) ? 3 : 1
-    const sxiPanel = target.derivedPointer(appState.layoutPath)
+    const sxiPanel = sxiPointer(appState.layoutPath)
     const panelPath = target.format === "bda"
       ? bdaConfigPath(target, theme.value, orientation.value, "appearance") ?? appState.layoutPath
       : target.format === "ssf" ? ssfSkinPath() ?? appState.selectedPath

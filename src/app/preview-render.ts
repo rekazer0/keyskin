@@ -6,7 +6,7 @@ import { simulatedOutput, skinState, candidateComposition, candidateInput, candi
 import { candidatePreview } from "../simulation.ts"
 import { isConfiguredSymbolLayout, knownSkinStates, skinStateLabel } from "../actions.ts"
 import { textDocument, visualResolver, currentBdaAppearance, bdaBasePath, bdaAvailableLayoutPaths } from "./bda-documents"
-import { genConfigPath, keyboardContext, refreshToolbarPreview, legacyAnimationConfigPath, styleConfigPath, toolbarConfigPath, isToolbarPath } from "./config-context"
+import { genConfigPath, keyboardContext, refreshToolbarPreview, legacyAnimationConfigPath, styleConfigPath, toolbarConfigPath, isToolbarPath, layoutSource } from "./config-context"
 import { deviceSpec, keyboardPreviewGeometry, showsKeyboardAccessories } from "../devices.ts"
 import { skinPlatform } from "../bda-platform.ts"
 import { bdaConfigPath, bdaLayoutDocument, bdaStyleID } from "../bda.ts"
@@ -151,12 +151,13 @@ export function refreshPreview(): void {
     : undefined
   const animationBytes = animationPath && appState.archive.getBytes(animationPath)
   preview.setAnimation(animationBytes ? decodeBdaAnimation(animationBytes) : undefined)
+  const layouts = layoutSource()
   const legacyAnimationPath = legacyAnimationConfigPath()
   const legacyAnimation =
-    appState.archive.format !== "bda" && appState.archive.isText(styleConfigPath()) && legacyAnimationPath
+    appState.archive.format !== "bda" && layouts?.isText(styleConfigPath()) && legacyAnimationPath
       ? parseLegacyAnimation(
-          IniDocument.parse(appState.archive.getText(styleConfigPath())),
-          IniDocument.parse(appState.archive.getText(legacyAnimationPath)),
+          IniDocument.parse(layouts.getText(styleConfigPath())),
+          IniDocument.parse(layouts.getText(legacyAnimationPath)),
         )
       : undefined
   preview.setLegacyAnimation(legacyAnimation)
@@ -166,7 +167,7 @@ export function refreshPreview(): void {
   const bdaInfo = currentBdaAppearance()
   const bdaHintPanel = bdaInfo?.appearance.panels.get(layout.value.replace(/\.ini$/i, ""))
   const hasBdaHints = Boolean(bdaHintPanel?.hints.size)
-  const hintSource = currentArchive.format === "bda" ? appState.bdaBase : currentArchive
+  const hintSource = currentArchive.format === "bda" ? appState.bdaBase : layouts
   const hintDocument = (name: string) => {
     if (currentArchive.format === "bda" && !hasBdaHints) return
     const path = currentArchive.format === "bda" ? bdaBasePath(hintPath(name)) : hintPath(name)
@@ -195,8 +196,8 @@ export function refreshPreview(): void {
   if (context && appState.layoutDocument && resolver) {
     const symbolPanel = candidateArea.hidden
     const candidatePath = toolbarConfigPath()
-    const candidateLayout = candidatePath && appState.archive.isText(candidatePath)
-      ? IniDocument.parse(appState.archive.getText(candidatePath))
+    const candidateLayout = candidatePath && layouts?.isText(candidatePath)
+      ? IniDocument.parse(layouts.getText(candidatePath))
       : undefined
     const config = resolvePanelConfig(
       appState.layoutDocument,
@@ -340,11 +341,12 @@ export function currentSkinStates(): number[] {
 }
 
 export function skinStateDocuments(): IniDocument[] {
-  if (!appState.archive) return []
+  const layouts = layoutSource()
+  if (!appState.archive || !layouts) return []
   const prefix = `${theme.value}/skin/${orientation.value}/`
   const paths = appState.archive.format === "bda"
     ? bdaAvailableLayoutPaths()
-    : appState.archive.names().filter((path) => path.startsWith(prefix) && path.endsWith(".ini") && appState.archive?.isText(path))
+    : layouts.names().filter((path) => path.startsWith(prefix) && path.endsWith(".ini") && layouts.isText(path))
   return paths.flatMap((path) => {
     const document = textDocument(path)
     return document ? [document] : []

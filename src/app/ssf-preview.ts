@@ -1,10 +1,9 @@
 // An SSF document is edited as its own files; the canvas takes its boards from the official Sogou
-// skeleton, laid over the document read-only, and paints the skin's own files onto them.
+// skeleton, a read-only package kept next to the document, and paints the skin's own files onto them.
 
-import { IniDocument } from "../ini.ts"
 import { loadBuiltInProjectTemplate } from "../operations.ts"
 import { SkinArchive } from "../skin.ts"
-import { documentPackage, ssfPreviewFiles, type SsfTemplates } from "../ssf/ssf-convert.ts"
+import { documentPackage, ssfSkeleton, type SsfTemplates } from "../ssf/ssf-convert.ts"
 import type { SsfPackage } from "../ssf/ssf-package.ts"
 import { selectedVariant } from "./bda-documents"
 import { layout, orientation, theme } from "./dom"
@@ -15,7 +14,7 @@ import { appState } from "./state"
 import { preview } from "./canvas-interaction"
 import { renderFiles } from "./file-tree"
 import { selectFile } from "./navigation"
-import { isSsfBoardPath } from "./ssf-documents"
+import { isSsfBoardPath, ssfBoardDocument } from "./ssf-documents"
 
 /** The open SSF document's own files as a package, read again only when the document changes. */
 export function ssfDocumentPackage(archive: SkinArchive): SsfPackage {
@@ -42,19 +41,19 @@ export async function ssfTemplates(): Promise<SsfTemplates> {
 }
 
 /**
- * Lays the official skeleton over the open SSF document for the looks and resolution it has; the
- * skeleton does not change with the skin's styles, so it is rebuilt only when those do. Returns the
- * package's warnings (looks it cannot show).
+ * Lays out the official skeleton for the looks and resolution the open SSF document has; the skeleton
+ * does not change with the skin's styles, so it is rebuilt only when those do. Returns the package's
+ * warnings (looks it cannot show).
  */
 export function rebuildSsfPreview(): string[] {
   const archive = appState.archive
   if (archive?.format !== "ssf" || !appState.ssfTemplates) return []
   const pkg = ssfDocumentPackage(archive)
   const key = `${pkg.resolution}|${[...pkg.themes.keys()].join(",")}`
-  if (appState.ssfPreviewKey?.archive !== archive || appState.ssfPreviewKey.key !== key) {
-    archive.setOverlay(ssfPreviewFiles(pkg, appState.ssfTemplates.sogou))
-    appState.ssfPreviewKey = { archive, key }
-    if (archive.isText(appState.layoutPath)) appState.layoutDocument = IniDocument.parse(archive.getText(appState.layoutPath))
+  if (appState.ssfSkeleton?.archive !== archive || appState.ssfSkeleton.key !== key) {
+    appState.ssfSkeleton = { archive, key, boards: ssfSkeleton(pkg, appState.ssfTemplates.sogou) }
+    const board = ssfBoardDocument(appState.layoutPath)
+    if (board) appState.layoutDocument = board
   }
   return pkg.warnings
 }
@@ -64,10 +63,11 @@ export function rebuildSsfPreview(): string[] {
  * file selection stays, and a look the skin lacks is not created (that would add Baidu files to it).
  */
 export function switchSsfPreviewLayout(path: string): void {
-  if (appState.archive?.isText(path)) {
+  const board = ssfBoardDocument(path)
+  if (board) {
     const boardSelected = isSsfBoardPath(appState.selectedPath) || appState.selectedPath === appState.layoutPath
     appState.layoutPath = path
-    appState.layoutDocument = IniDocument.parse(appState.archive.getText(path))
+    appState.layoutDocument = board
     appState.selectedKeySections = []
     preview.setSelected([])
     // 外观切换后，概览显示当前搜狗外观的原始配置文件。

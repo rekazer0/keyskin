@@ -1,11 +1,12 @@
 // 手心 (.sxi) 动画检查器：打开一份带全部 9 类动画的皮肤，从侧栏进入「动画与动效」，
-// 像用户一样读写时间轴、分组字段、组合轨道与浮动物体；检查 skin.json / 派生 anim.ini、撤销重做、
+// 像用户一样读写时间轴、分组字段、组合轨道与浮动物体；检查 skin.json、撤销重做、
 // 改动标记与重置、筛选、只读模式，并确认没有页面错误。
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 import { SkinArchive } from "../src/skin.ts"
+import { sxiBaiduFiles } from "../src/palm/sxi-to-baidu.ts"
 
 const fixture = sxiAnimationFixture()
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41835, strictPort: false, host: "127.0.0.1", hmr: false } })
@@ -17,7 +18,7 @@ page.on("pageerror", (error) => errors.push(error.message))
 page.on("dialog", (dialog) => dialog.accept())
 
 const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
-const animationPath = "light/skin/res/anim.ini"
+const animationPath = "skin.json/default/s_info/ss_2"
 
 async function open(readonly = false) {
   await page.goto(baseURL)
@@ -41,10 +42,12 @@ const captionOf = (label) => page.locator(".document-field-caption").filter({ ha
 const row = (id, label) => section(id).locator(".document-property-field").filter({ has: captionOf(label) })
 const input = (id, label) => row(id, label).locator("input").first()
 const captions = (id) => section(id).locator(".document-field-caption").allTextContents()
-const read = () => page.evaluate(async (path) => {
+const read = () => page.evaluate(async () => {
   const { appState } = await import("/src/app/state.ts")
-  return { skin: JSON.parse(appState.archive.getText("skin.json")), anim: appState.archive.getText(path) }
-}, animationPath)
+  return { skin: JSON.parse(appState.archive.getText("skin.json")) }
+})
+/** The anim.ini the edited skin.json exports as to Baidu. */
+const exportedAnim = async () => sxiBaiduFiles((await read()).skin).get("light/skin/res/anim.ini")
 const animation = async (id) => (await read()).skin.default.s_info.ss_2[String(id)]
 const change = async (locator, value) => {
   await locator.fill(value)
@@ -123,11 +126,11 @@ try {
   assert.equal(await input(109, "掉落物模板").inputValue(), "falling_element_%d.png")
   assert.equal(await input(109, "掉落时长").inputValue(), "1000")
 
-  // 数值编辑：写回 skin.json、刷新派生 anim.ini、进入撤销栈，并出现改动标记
+  // 数值编辑：写回 skin.json、进入撤销栈，并出现改动标记；不生成 anim.ini
   await change(input(100, "持续时间"), "320")
   await waitFor("100", "a1.duration", 320)
   let state = await read()
-  assert.match(state.anim, /\[ANIM100\][\s\S]*DURATION=320/)
+  assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.getBytes("light/skin/res/anim.ini")), undefined)
   assert.equal(await page.locator(".inspector-changes").textContent(), "已改 1")
   assert.ok(await section(100).locator("h3[data-modified]").count())
   await page.evaluate(async () => { const history = await import("/src/app/edit-history.ts"); history.undo() })
@@ -141,7 +144,7 @@ try {
   let a1 = (await animation(100)).a1
   assert.deepEqual([a1.from, a1.to], [255, 0])
   assert.equal(a1.from_p, undefined, "scalar type drops the percent points")
-  assert.match((await read()).anim, /\[ANIM100\][\s\S]*FROM=255[\s\S]*TO=0/)
+  assert.match(await exportedAnim(), /\[ANIM100\][\s\S]*FROM=255[\s\S]*TO=0/)
   await row(100, "变化属性").locator("select").selectOption("2")
   await waitFor("100", "a1.b.t", 2)
   a1 = (await animation(100)).a1
@@ -159,10 +162,10 @@ try {
   // 开关、成对数值、颜色
   await row(101, "自动往返").locator("input").uncheck()
   await waitFor("101", "a1.b.back", false)
-  assert.doesNotMatch((await read()).anim, /\[ANIM101\][\s\S]*REPEAT_MODE=1/)
+  assert.doesNotMatch(await exportedAnim(), /\[ANIM101\][\s\S]*REPEAT_MODE=1/)
   await change(row(103, "画面偏移").locator("input").first(), "4")
   await waitFor("103", "af2.pos", [4, 3])
-  assert.match((await read()).anim, /\[ANIM103\][\s\S]*OFFSET=4,3/)
+  assert.match(await exportedAnim(), /\[ANIM103\][\s\S]*OFFSET=4,3/)
   await change(page.locator('input[aria-label="液体颜色色值"]'), "#FF8800")
   await waitFor("107", "a12.surface_color", "#FF8800")
   await row(105, "显示层级").locator("select").selectOption("0")
@@ -180,7 +183,7 @@ try {
   await waitFor("104", "a4.rate", 8)
   await change(row(106, "碰撞区域尺寸").locator("input").nth(0), "60")
   await waitFor("106", "a11.collision_rect", [[1, 2], [60, 40]])
-  assert.match((await read()).anim, /COLLISION_RECT=1,2,61,42/)
+  assert.match(await exportedAnim(), /COLLISION_RECT=1,2,61,42/)
   await change(input(108, "跳跃时长"), "800")
   await waitFor("108", "a13.jumpDurationMs", 800)
   await change(input(109, "掉落起点偏移"), "-20")
@@ -278,7 +281,7 @@ try {
   await page.locator('.inspector-reset').click()
   assert.deepEqual((await read()).skin.default.s_info.ss_2, original)
 
-  // 筛选：标签文字、分组名（内层 h4）与 anim.ini 键都能命中，未命中的分组整组收起
+  // 筛选：标签文字、分组名（内层 h4）与 skin.json 键都能命中，未命中的分组整组收起
   const filter = page.locator("#inspector-filter")
   await page.locator(".inspector-filter-open").click()
   await filter.fill("颜色")
@@ -290,10 +293,10 @@ try {
   await filter.fill("播放控制")
   await page.waitForFunction(() => document.querySelectorAll("#document-fields > .sxi-animation-section[data-filter-miss]").length === 1)
   assert.equal(await section(102).getAttribute("data-filter-miss"), "", "a3 has no playback group")
-  await filter.fill("SOURCE_FILE")
+  await filter.fill("file")
   await page.waitForFunction(() => !document.querySelectorAll('#document-fields > .sxi-animation-section')[3]?.hasAttribute('data-filter-miss'))
   assert.equal(await section(103).getAttribute("data-filter-miss"), null)
-  await filter.fill("PARTICLE_IMAGE")
+  await filter.fill("i_p")
   assert.equal(await section(104).getAttribute("data-filter-miss"), null)
   await filter.press("Escape")
   await filter.press("Escape")

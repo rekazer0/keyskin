@@ -1,7 +1,9 @@
-// Where an open Sogou skin keeps what the editor shows. The canvas draws boards from the preview
-// overlay (`<theme>/skin/<orientation>/py_9.ini`, never saved); everything the user edits is a Sogou file.
+// Where an open Sogou skin keeps what the editor shows. A Sogou skin has no layouts: the canvas lists
+// the boards of Sogou's official skeleton (`<theme>/skin/<orientation>/py_9.ini`, held apart from the
+// document and never saved); everything the user sees as source or edits is one of the skin's own files.
 
 import { IniDocument } from "../ini.ts"
+import type { SkinArchive } from "../skin.ts"
 import { documentPackage } from "../ssf/ssf-convert.ts"
 import { ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "../ssf/ssf-keymap.ts"
 import type { SsfPackage, SsfTheme } from "../ssf/ssf-package.ts"
@@ -52,11 +54,23 @@ export function ssfDocument(path: string): IniDocument {
   return IniDocument.parse(appState.archive?.isText(path) ? appState.archive.getText(path) : "")
 }
 
-/** A board of the current look and orientation, as the preview overlay lays it out. */
+/** Sogou's official skeleton laid out for the open skin (ssf-preview.ts); undefined for other documents. */
+export function ssfSkeleton(): SkinArchive | undefined {
+  const skeleton = appState.ssfSkeleton
+  return appState.archive?.format === "ssf" && skeleton?.archive === appState.archive ? skeleton.boards : undefined
+}
+
+/** A skeleton board of the current look and orientation. */
 export function isSsfBoardPath(path: string): boolean {
-  const archive = appState.archive
-  return archive?.format === "ssf" && archive.isOverlay(path) && path.startsWith(`${theme.value}/skin/${orientation.value}/`)
-    && /\.ini$/i.test(path) && !/\/gen\.ini$/i.test(path) && !path.slice(`${theme.value}/skin/${orientation.value}/`.length).includes("/")
+  const folder = `${theme.value}/skin/${orientation.value}/`
+  return Boolean(ssfSkeleton()?.isText(path)) && path.startsWith(folder)
+    && /\.ini$/i.test(path) && !/\/gen\.ini$/i.test(path) && !path.slice(folder.length).includes("/")
+}
+
+/** A skeleton board as the canvas lays it out. */
+export function ssfBoardDocument(path: string): IniDocument | undefined {
+  const skeleton = ssfSkeleton()
+  return skeleton?.isText(path) ? IniDocument.parse(skeleton.getText(path)) : undefined
 }
 
 /** The Sogou classes the selected canvas key is drawn from. */
@@ -77,7 +91,7 @@ export function ssfQwertyBoard(path = appState.layoutPath): boolean {
 
 /**
  * The file the source editor shows for a selection: a board's look lives in phoneSkin.ini, so selecting
- * a board (or a key on it) opens that instead of the overlay layout, which is never edited.
+ * a board (or a key on it) opens that; the skeleton board is not the skin's.
  */
 export function sourceEditPath(path = appState.selectedPath): string {
   return isSsfBoardPath(path) ? ssfSkinPath() ?? path : path

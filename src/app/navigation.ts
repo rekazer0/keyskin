@@ -13,8 +13,8 @@ import { isListCell } from "../layout.ts"
 import { updateInspectorView, updateSourceSearchStatus } from "./source-panel"
 import { pickableImagePaths } from "./image-pickers"
 import { populateKeyInspector } from "./key-inspector"
-import { sourceEditPath } from "./ssf-documents"
-import { isSxiSourcePath, showSxiSource } from "./sxi-documents"
+import { isSsfBoardPath, sourceEditPath, ssfBoardDocument } from "./ssf-documents"
+import { isSxiBoardAddress, isSxiSourcePath, showSxiSource, sxiPointer } from "./sxi-documents"
 import { ensureSourcePathRendered, setSidebarView, updateSourceFileActions } from "./source-files"
 
 export function currentNavigationMode(): string {
@@ -112,15 +112,31 @@ export function selectFile(
     source.disabled = true
     sourceName.textContent = info ? `${info.path} · ${panelName} · 解码源码` : panelName
     appState.inspectorTab = "properties"
+  } else if (sxiPointer(path)) {
+    // A part of a Palm skin.json: the source editor shows skin.json, the inspector the part itself.
+    hideImageWorkspace()
+    appState.selectedDocument = undefined
+    showSxiSource(path)
+    if (isSxiBoardAddress(path)) {
+      // Undo / redo reselect the same board: the key selection stays.
+      const kept = path === appState.layoutPath ? appState.selectedKeySections : []
+      appState.layoutPath = path
+      appState.layoutDocument = undefined
+      appState.selectedKeySections = kept
+      preview.setSelected(kept)
+      refreshPreview()
+    }
+    appState.inspectorTab = "properties"
   } else if (appState.archive?.isImage(path)) {
     appState.inspectorTab = "properties"
     appState.selectedDocument = undefined
     showImage(path)
-  } else if (appState.archive?.isText(path)) {
+  } else if (appState.archive?.isText(path) || isSsfBoardPath(path)) {
     hideImageWorkspace()
-    appState.selectedDocument = IniDocument.parse(appState.archive.getText(path))
+    // A Sogou board is a skeleton layout, not a file of the skin; its source is the skin's phoneSkin.ini.
+    appState.selectedDocument = ssfBoardDocument(path) ?? IniDocument.parse(appState.archive!.getText(path))
     const sourcePath = sourceEditPath(path)
-    setSourceValue(appState.archive.getText(sourcePath))
+    setSourceValue(appState.archive!.getText(sourcePath))
     source.disabled = false
     sourceName.textContent = sourcePath
     const previewLayout =

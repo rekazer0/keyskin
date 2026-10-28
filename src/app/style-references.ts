@@ -5,7 +5,8 @@ import { soundPathForFilename } from "../sounds.ts"
 import { theme, orientation, keyFields, toolbarFields, quickInspector } from "./dom"
 import { createIcon } from "../icons"
 import { playSoundPath, keyboardFields } from "./canvas-interaction"
-import { openStylePicker, styleConfigDocument, styleKindBadge, styleKind, styleReferenceThumbnailInputs, availableStyleIDs } from "./style-picker"
+import { openStylePicker, styleConfigDocument, styleKindBadge, styleKind, styleReferenceThumbnailInputs, availableStyleIDs, styleSoundFile } from "./style-picker"
+import { sxiPointer } from "./sxi-documents"
 import { retinaThumbnail, drawVisualPreview, type Visual } from "../atlas.ts"
 import { visualResolver, bdaAppearanceStylePath } from "./bda-documents"
 import { type StyleImagePickerTarget } from "./types"
@@ -29,9 +30,7 @@ export function isStyleReferenceKey(key: string): boolean {
 
 export function soundPathForStyle(styleID: string): string | undefined {
   if (!appState.archive) return
-  const path = styleConfigPath()
-  if (!appState.archive.isText(path)) return
-  const filename = IniDocument.parse(appState.archive.getText(path)).get(`STYLE${styleID}`, "PRESS_SOUND_PATH")?.trim()
+  const filename = styleSoundFile(styleID)
   return filename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, filename) : undefined
 }
 
@@ -329,6 +328,12 @@ export function styleWriteTarget(
 ): StyleImagePickerTarget {
   if (appState.archive?.format === "bda") return { source, property }
   const path = styleConfigPath()
+  // A Palm style is written in skin.json (image-pickers.ts) by its id.
+  if (appState.archive?.format === "sxi") {
+    const ids = new Set(availableStyleIDs())
+    const sections = [...new Set(styleIDs.map((token) => token.trim()).filter((id) => ids.has(id)).map((id) => `STYLE${id}`))]
+    return sections.length ? { source, property, path, sections } : { source, property }
+  }
   if (!appState.archive?.isText(path)) return { source, property }
   const document = IniDocument.parse(appState.archive.getText(path))
   // Images are read from STYLE<id> only (atlas.ts resolveVisualSpec); STYLE<id/100> is a text fallback
@@ -404,7 +409,7 @@ export function openStyleReferenceEditor(styleID: string): void {
     return
   }
   const path = styleConfigPath()
-  if (!appState.archive.isText(path)) return
+  if (!appState.archive.isText(path) && !sxiPointer(path)) return
   selectFile(path, "overview", "style")
   appState.styleReturnPath = returnPath === path ? "" : returnPath
   appState.styleReturnSelection = returnSelection

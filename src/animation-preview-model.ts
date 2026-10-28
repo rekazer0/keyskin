@@ -10,14 +10,14 @@ export type PreviewClip = {
   notes: string[]
 }
 
-const empty = (): PreviewClip => ({ tracks: [], particles: [], images: [], duration: 0, notes: [] })
+export const emptyClip = (): PreviewClip => ({ tracks: [], particles: [], images: [], duration: 0, notes: [] })
 const finite = (value: string | undefined, fallback = 0): number => value?.trim() && Number.isFinite(Number(value)) ? Number(value) : fallback
 const pair = (value: string | undefined, fallback: Pair): Pair => {
   const values = value?.split(",").map(Number)
   return values?.length === 2 && values.every(Number.isFinite) ? [values[0], values[1]] : fallback
 }
 
-function merge(target: PreviewClip, child: PreviewClip, offset: number): void {
+export function mergeClip(target: PreviewClip, child: PreviewClip, offset: number): void {
   target.tracks.push(...child.tracks.map((track) => ({ ...track, start: track.start + offset })))
   target.particles.push(...child.particles.map((item) => ({ ...item, start: item.start + offset })))
   target.images.push(...child.images.map((item) => ({ ...item, start: item.start + offset })))
@@ -25,7 +25,8 @@ function merge(target: PreviewClip, child: PreviewClip, offset: number): void {
   target.notes.push(...child.notes)
 }
 
-function passes(count: number, reverse: boolean, clip: PreviewClip): number {
+/** How often a clip plays (twice per pass when it reverses); a looping one is previewed for one period. */
+export function clipPasses(count: number, reverse: boolean, clip: PreviewClip): number {
   if (count < 0 || count >= 2 ** 31 || !Number.isFinite(count)) {
     clip.notes.push("循环动画：预览一个观察周期")
     return reverse ? 2 : 1
@@ -35,7 +36,7 @@ function passes(count: number, reverse: boolean, clip: PreviewClip): number {
 
 /** The inspector previews a clip directly; it does not need a style binding to trigger it. */
 export function iniPreviewClip(document: IniDocument, section: string, ancestors: string[] = []): PreviewClip {
-  const clip = empty()
+  const clip = emptyClip()
   if (ancestors.includes(section) || ancestors.length >= 16) {
     clip.notes.push("组合引用循环或层级过深，已跳过")
     return clip
@@ -49,7 +50,7 @@ export function iniPreviewClip(document: IniDocument, section: string, ancestors
   const delay = Math.max(0, finite(get("DELAY")))
   const duration = Math.max(0, finite(get("DURATION")))
   const reverse = get("REPEAT_MODE") === "1"
-  const repeats = passes(finite(get("REPEAT_CNT"), 1), reverse, clip)
+  const repeats = clipPasses(finite(get("REPEAT_CNT"), 1), reverse, clip)
   if (kind === 1) {
     const ids = (get("BUILD_LIST") ?? "").split(",").map((id) => id.trim()).filter(Boolean)
     const method = get("BUILD_METHOD") ?? "0"
@@ -57,7 +58,7 @@ export function iniPreviewClip(document: IniDocument, section: string, ancestors
     if (method === "2") clip.notes.push("随机组合：本次预览第一个子动画")
     for (const id of selected) {
       const child = iniPreviewClip(document, `ANIM${id}`, [...ancestors, section])
-      merge(clip, child, method === "1" ? clip.duration : 0)
+      mergeClip(clip, child, method === "1" ? clip.duration : 0)
     }
     if (!ids.length) clip.notes.push("请先添加子动画")
   } else if (kind === 3) {

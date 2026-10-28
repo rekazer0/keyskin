@@ -1,10 +1,10 @@
-import { isSxiSourcePath } from "./sxi-documents"
+import { isSxiSourcePath, sxiPointer } from "./sxi-documents"
 import { sxiSectionRanges } from "../palm/sxi-edit.ts"
-import { sourceEditPath } from "./ssf-documents"
+import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { syncAtlasWorkspace } from "./tile-editing"
 import { files, sourceName, quickInspector, asset, resourceInspector, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
 import { appState } from "./state"
-import { showsLayoutProperties, selectedSourceSections, styleConfigPath } from "./config-context"
+import { showsLayoutProperties, selectedSourceSections, styleConfigPath, sxiSourceRanges } from "./config-context"
 import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, visualResolver, bdaAppearanceStylePath } from "./bda-documents"
 import { inspectorTabButtons, source, mobilePortraitQuery, preview } from "./canvas-interaction"
 import { loadVisibleSourceEditor } from "./resource-inspector"
@@ -35,6 +35,7 @@ export function updateInspectorView(): void {
   const propertiesAvailable = Boolean(
     appState.selectedPath && (
       appState.archive?.isText(appState.selectedPath) || appState.archive?.isBdaConfig(appState.selectedPath) || isBdaLayoutPath(appState.selectedPath) ||
+      isSsfBoardPath(appState.selectedPath) || Boolean(sxiPointer(appState.selectedPath)) ||
       bdaAppearancePart(appState.selectedPath)
     ) && (configLayoutSelected || overviewSelected || layoutSelected) && !imageSelected,
   )
@@ -58,10 +59,7 @@ export function updateInspectorView(): void {
     sourceName.textContent = appState.inspectorTab === "source" && appState.selectedResourcePath
       ? appState.archive?.format === "bda" ? "BDA 切片由 appearanceConfig 管理" : appState.tilePath
       : appState.selectedResourcePath || appState.selectedPath
-    if (appState.archive?.format === "sxi" && appState.archive.derivedPointer(appState.selectedPath)) {
-      source.value = appState.archive.getText("skin.json")
-      sourceName.textContent = "skin.json"
-    }
+    if (sxiPointer(appState.selectedPath)) sourceName.textContent = "skin.json"
     quickInspector.hidden = true
     asset.hidden = true
     resourceInspector.hidden = appState.inspectorTab !== "properties"
@@ -161,7 +159,7 @@ export function updateSourceHighlight(): void {
   const matches = sourceSearchMatches()
   updateSourceSearchStatus(matches)
   const selectedRanges = sxiSource
-    ? sxiSectionRanges(source.value, sections, appState.archive?.derivedPointer(appState.selectedPath))
+    ? sxiSourceRanges(source.value)
     : bdaSource
     ? jsonPropertyRanges(source.value, selectedBdaSourceKeys())
     : sections.length ? iniSectionRanges(source.value, sections) : appState.sourceHistoryHighlight ? [appState.sourceHistoryHighlight] : []
@@ -308,14 +306,15 @@ export function selectKeyFromSourceOffset(offset: number): void {
     appState.archive.isBdaConfig(appState.selectedPath) || isBdaVirtualTextPath(appState.selectedPath) || isBdaAppearancePartPath(appState.selectedPath)
   )
   const property = bdaSource ? jsonPropertyAtOffset(source.value, offset) : undefined
-  const sxiSection = appState.archive.format === "sxi"
-    ? appState.layoutDocument?.sections().find((name) => sxiSectionRanges(source.value, [name], appState.archive?.derivedPointer(appState.selectedPath)).some(([a, b]) => offset >= a && offset < b))
+  // A Palm board's keys are the canvas's own items, read from skin.json.
+  const palmBoard = sxiPointer(appState.selectedPath)
+  const sxiSection = palmBoard
+    ? preview.keys.map((item) => item.section).find((name) => sxiSectionRanges(source.value, [name], palmBoard).some(([a, b]) => offset >= a && offset < b))
     : undefined
-  const section = sxiSection ?? (bdaSource ? undefined : iniSectionAtOffset(source.value, offset))
+  const section = sxiSection ?? (bdaSource || palmBoard ? undefined : iniSectionAtOffset(source.value, offset))
   const panelKey = property && property !== "cand" ? property : undefined
   if (!section && !panelKey) return
-  if (!appState.layoutDocument) return
-  const items = previewItems(appState.layoutDocument)
+  const items = palmBoard ? preview.keys : appState.layoutDocument ? previewItems(appState.layoutDocument) : []
   const match = items.find((item) => item.editable && (
     section !== undefined
       ? item.section === section || item.sections.includes(section)

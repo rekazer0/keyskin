@@ -68,7 +68,7 @@ export function inputBarBox(
     : { width, paddingStart: metrics.textLeft, paddingEnd: metrics.inset * 2 }
 }
 
-/** Candidate words: the bar's .cnd [CAND], then gen.ini [CAND] (Palm projections keep it there), then SCAND. */
+/** Candidate words: the bar's .cnd [CAND], then gen.ini [CAND] (Palm-exported skins keep it there), then SCAND. */
 export function candidateWordsForeground(candidate: IniDocument | undefined, general: IniDocument | undefined): string {
   return candidate?.get("CAND", "FORE_STYLE") ?? general?.get("CAND", "FORE_STYLE") ?? general?.get("SCAND", "SCAND_STYLE") ?? ""
 }

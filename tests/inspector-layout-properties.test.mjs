@@ -9,8 +9,8 @@ test("every selected INI layout can open its property inspector", () => {
   // ini / cnd / pop 都是属性面板能描述并回写的布局配置文档。
   assert.match(main, /function isConfigLayoutPath\(path: string\): boolean \{\s*return \/\\\.\(ini\|cnd\|pop\)\$\/i\.test\(path\)/)
   // BDA 容器里的同名遗留文件由 bda 解析器处理，不能按普通布局文档放行；
-  // 搜狗皮肤的 INI 由搜狗检查器解析，预览用的转换布局不算皮肤文件。
-  assert.match(main, /function showsLayoutProperties\(path: string\): boolean \{\s*if \(appState\.archive\?\.format === "ssf"\) return \/\\\.ini\$\/i\.test\(path\) && !appState\.archive\.isOverlay\(path\)\s*return appState\.archive\?\.format !== "bda" && isConfigLayoutPath\(path\)/)
+  // 搜狗皮肤自己的 INI 由搜狗检查器解析；画布用的官方骨架不属于皮肤，不是皮肤里的文件。
+  assert.match(main, /function showsLayoutProperties\(path: string\): boolean \{\s*if \(appState\.archive\?\.format === "ssf"\) return \/\\\.ini\$\/i\.test\(path\) && appState\.archive\.isText\(path\)\s*return appState\.archive\?\.format !== "bda" && isConfigLayoutPath\(path\)/)
   // 搜狗皮肤的属性由 ssf-inspector.ts 填进文档分区，不走百度的文档解释。
   assert.match(main, /if \(appState\.archive\?\.format === "ssf"\) \{\s*documentFieldsGroup\.hidden = !populateSsfInspector\(documentFields\)/)
   // 手心皮肤同样由自己的检查器（sxi-inspector.ts）读写 skin.json。

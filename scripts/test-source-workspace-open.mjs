@@ -38,7 +38,8 @@ try {
         path: appState.currentPath,
         format: archive.format,
         dirty: archive.changed.size,
-        hasPreview: archive.names().some((path) => archive.isOverlay(path)),
+        hasPreview: appState.ssfSkeleton !== undefined,
+        names: archive.names(),
         files: saved.sourceFiles().map((file) => ({ path: file.path, data: encodeBase64(file.data) })),
       }
     } finally {
@@ -51,6 +52,8 @@ try {
   assert.equal(result.format, 'ssf')
   assert.equal(result.dirty, 0)
   assert.equal(result.hasPreview, true)
+  // The skeleton the canvas draws is a separate package; the skin holds only its own files.
+  assert.deepEqual(result.names, payload.map((file) => file.path).sort())
   assert.deepEqual(result.files.sort((a, b) => a.path.localeCompare(b.path)), payload.sort((a, b) => a.path.localeCompare(b.path)))
   assert.deepEqual(errors, [])
   console.log('Source workspace: native Base64 payload opens with SSF preview, preserves edits and saves every original resource')

@@ -153,7 +153,7 @@ const near = (actual, expected, tolerance = 3) => expected.every((value, index) 
 try {
   // ---------- Palm: iOS 26 on Palm's own template ----------
   await open('palm-harmony.sxi', palmTemplate)
-  await selectLayout('light/skin/port/py_26.ini')
+  await selectLayout('skin.json/default/port_layout/b/full26Pinyin')
   const palmOriginal = await skinJson()
   await adaptIos26()
   let skin = await skinJson()
@@ -178,9 +178,9 @@ try {
   await history('redo')
   assert.deepEqual(await skinJson(), skin, 'redo applies it again')
 
-  // ---------- Palm: panel copy (orientation folder, scaled) ----------
+  // ---------- Palm: panel copy (a whole layout part of skin.json, scaled) ----------
   const beforeCopy = await skinJson()
-  await copyPanel('light/skin/port/', 'light/skin/land/', ([width, height]) => [width * 2, height])
+  await copyPanel('skin.json/default/port_layout/', 'skin.json/default/land_layout/', ([width, height]) => [width * 2, height])
   skin = await skinJson()
   const port = skin.default.port_layout.b.full26Pinyin.keys[0]
   const land = skin.default.land_layout.b.full26Pinyin.keys[0]
@@ -195,11 +195,12 @@ try {
   assert.deepEqual(await skinJson(), beforeCopy, 'undo restores the target')
 
   // ---------- Palm: panel copy of a single board to the other theme ----------
-  await selectLayout('light/skin/port/py_26.ini')
-  await copyPanel('light/skin/port/py_26.ini', 'dark/skin/port/py_26_copy.ini')
+  await selectLayout('skin.json/default/port_layout/b/full26Pinyin')
+  await copyPanel('skin.json/default/port_layout/b/full26Pinyin', 'skin.json/night/port_layout/b/py_26_copy')
   skin = await skinJson()
   assert.deepEqual(skin.night.port_layout.b.py_26_copy, skin.default.port_layout.b.full26Pinyin, 'a board copies to a new board of the other theme')
-  assert.ok((await names()).includes('dark/skin/port/py_26_copy.ini'))
+  assert.equal(await page.evaluate(async () => (await import('/src/app/state.ts')).appState.layoutPath), 'skin.json/night/port_layout/b/py_26_copy', 'the canvas shows the copy')
+  assert.ok(!(await names()).some((name) => /\.(?:ini|css|til|cnd|pop)$/.test(name)), 'nothing but skin.json changes')
   await history('undo')
 
   // ---------- Palm: panel copy of a whole theme with its images ----------
@@ -222,7 +223,7 @@ try {
 
   // ---------- Palm: replace keyboard style ----------
   await open('fixture.sxi', palmFixture)
-  await selectLayout('light/skin/port/py_26.ini')
+  await selectLayout('skin.json/default/port_layout/b/full26Pinyin')
   const board = fixtureSkin.default.port_layout.b.full26Pinyin
   const panelSize = board.board?.size ?? fixtureSkin.default.port_layout.b.defaultGlobal.board.size
   await replaceStyle('panel', png(...panelSize, RED))
@@ -320,7 +321,7 @@ try {
   assert.equal(scaledLook('KeyBg_Default_Latin', 'NORMAL'), '26key.png,1,65,1,94', 'stretch bands follow the resized images')
   assert.deepEqual(await pngSize('480/status1/26key.png'), [65, 95])
   const copiedSsf = await names()
-  assert.ok(!copiedSsf.some((path) => /^480\/.*\b(?:gen|py_26)\.ini$/.test(path)), 'the preview overlay is not copied')
+  assert.ok(!copiedSsf.some((path) => /^480\/.*\b(?:gen|py_26)\.ini$/.test(path)), 'the preview skeleton is not copied')
   const resolutions = SsfPackage.fromFiles(new Map(Object.entries(await savedFiles()))).files
   assert.ok(resolutions.has('480/status1/phoneSkin.ini'), 'the saved skin carries the new resolution')
   await history('undo')

@@ -5,7 +5,7 @@
 import { IOS26_RGB, isIos26KeyboardLayout } from "../ios26.ts"
 import { boardFileName } from "./sxi-layout.ts"
 import { asObject, type JsonObject } from "./sxi-ini.ts"
-import { encodeSkinJson, parseSkinJson } from "./sxi-projection.ts"
+import { encodeSkinJson, parseSkinJson } from "./sxi-json.ts"
 
 const THEMES = ["default", "night"]
 const LAYOUTS = ["port_layout", "land_layout"]

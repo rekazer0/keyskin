@@ -15,6 +15,11 @@ import { populateKeyInspector } from "./key-inspector"
 import { decodePngMask, showStatus } from "./file-operations"
 import { detectGridCells } from "../layout-scan.ts"
 import { type Change } from "../history.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
+import { editSxi } from "./sxi-fields"
+import { palmStyleIDs, palmStyleImage } from "./sxi-styles"
+import { palmTileSlices, removePalmTile, setPalmTile, setPalmTiles } from "../palm/palm-style-edit.ts"
+import { openPalmSkin } from "./sxi-documents"
 
 export function bdaTileUsageKey(usage: BdaTileUsage | undefined): string {
   return usage ? `${usage.ref.key}:${usage.highlighted ? "highlight" : "normal"}` : ""
@@ -73,20 +78,62 @@ export function bdaImageTiles(path: string): { slices: TileSlice[]; usages: BdaT
   return { slices, usages }
 }
 
+/**
+ * Where the open document keeps an image's slices: Baidu BDI/BDS in the `.til` beside it, BDA in its
+ * appearanceConfig, a Palm skin in skin.json's tile maps (`info.<image>`); a Sogou skin has none (its
+ * styles use whole images and stretch them themselves).
+ */
+function sliceStore(): "til" | "bda" | "palm" | "none" {
+  const format = appState.archive?.format
+  return format === "bda" ? "bda" : format === "ssf" ? "none" : format === "sxi" ? "palm" : "til"
+}
+
+/** Slices that can be drawn, moved and deleted. */
+function slicesEditable(): boolean {
+  return sliceStore() === "til" || sliceStore() === "palm"
+}
+
+/** The first slice number the image does not use yet. */
+export function nextSliceIndex(): number {
+  if (sliceStore() !== "palm") return nextTileIndex(appState.tileDocument)
+  const used = new Set(appState.slices.map((slice) => slice.index))
+  let index = 1
+  while (used.has(index)) index += 1
+  return index
+}
+
+/** Shows the image's Palm slices as skin.json has them after an edit. */
+function reloadPalmSlices(selected = appState.selectedTileIndex, path = appState.selectedResourcePath): void {
+  appState.slices = palmTileSlices(openPalmSkin(), path)
+  appState.selectedTileIndex = appState.slices.some((slice) => slice.index === selected) ? selected : undefined
+  setSourceValue(appState.archive?.getText(SXI_SKIN_PATH) ?? "")
+  updateSourceHighlight()
+  populateTileInspector()
+  drawAtlas()
+  updateDirty()
+}
+
+/** Styles that draw slice `index` of image `name`: default.css NM_IMG / HL_IMG, a Palm style's `s_2`. */
+function sliceReferences(name: string, index: number): string[] {
+  const matches = (value: string | undefined) => {
+    const [image, slice] = value?.split(",").map((item) => item.trim()) ?? []
+    return image === name && Number(slice) === index
+  }
+  if (sliceStore() === "palm") {
+    return palmStyleIDs().flatMap((id) => [false, true].flatMap((pressed) => {
+      const image = palmStyleImage(id, pressed)
+      return matches(image) && (!pressed || image !== palmStyleImage(id, false)) ? [`STYLE${id} · ${pressed ? "hl" : "normal"}`] : []
+    }))
+  }
+  if (!appState.archive?.isText(styleConfigPath())) return []
+  const styles = IniDocument.parse(appState.archive.getText(styleConfigPath()))
+  return styles.sections().flatMap((section) => ["NM_IMG", "HL_IMG"].flatMap((key) => matches(styles.get(section, key)) ? [`${section} · ${key}`] : []))
+}
+
 export function syncAtlasWorkspace(): void {
   if (appState.resourceConfigActive && appState.resourceInspectorMode === "image" && appState.inspectorTab === "properties" && appState.selectedResourcePath) sourceName.textContent = appState.selectedResourcePath
   const slice = appState.movingTile ?? appState.slices.find(item => item.index === appState.selectedTileIndex)
-  const references: string[] = []
-  if (slice && appState.archive?.isText(styleConfigPath())) {
-    const styles = IniDocument.parse(appState.archive.getText(styleConfigPath()))
-    const name = appState.selectedResourcePath.split("/").pop()?.replace(/\.png$/i, "")
-    for (const section of styles.sections()) {
-      for (const key of ["NM_IMG", "HL_IMG"]) {
-        const value = styles.get(section, key)?.split(",").map(item => item.trim())
-        if (value && value[0] === name && Number(value[1]) === slice.index) references.push(`${section} · ${key}`)
-      }
-    }
-  }
+  const references = slice ? sliceReferences(appState.selectedResourcePath.split("/").pop()?.replace(/\.png$/i, "") ?? "", slice.index) : []
   appState.atlasWorkspace?.update({
     active: appState.resourceConfigActive && appState.resourceInspectorMode === "image",
     path: appState.selectedResourcePath,
@@ -131,7 +178,7 @@ export function drawAtlas(): void {
   if (!appState.resourceConfigActive || !appState.guidesVisible) return
 
   const allVisible = appState.tileDraft
-    ? [...appState.slices, { index: nextTileIndex(appState.tileDocument), source: appState.tileDraft }]
+    ? [...appState.slices, { index: nextSliceIndex(), source: appState.tileDraft }]
     : appState.movingTile
       ? appState.slices.map((slice) => slice.index === appState.movingTile?.index ? appState.movingTile : slice)
       : appState.slices
@@ -219,10 +266,11 @@ export function drawTilePreview(): void {
 export function populateTileInspector(): void {
   const slice = appState.slices.find((item) => item.index === appState.selectedTileIndex)
   const bdaSelected = appState.archive?.format === "bda"
+  const fixed = !slicesEditable()
   const usage = selectedBdaTileUsage()
   tileInspector.hidden = !appState.selectedResourcePath
   bdaTileUsage.hidden = !bdaSelected || !appState.bdaTileUsages.length
-  tileSourceFieldsGroup.hidden = bdaSelected
+  tileSourceFieldsGroup.hidden = fixed
   tileInnerTitle.textContent = bdaSelected ? "切片区域" : "拉伸边距"
   tileInspector.dataset.empty = String(!slice)
   bdaTileUsage.replaceChildren(...appState.bdaTileUsages.map((item) => {
@@ -230,14 +278,17 @@ export function populateTileInspector(): void {
     option.selected = item.index === appState.selectedTileIndex
     return option
   }))
-  newTileButton.hidden = Boolean(bdaSelected)
-  duplicateTileButton.hidden = Boolean(bdaSelected)
-  deleteTileButton.hidden = Boolean(bdaSelected)
-  moveTileButton.hidden = Boolean(bdaSelected)
-  newTileButton.disabled = !appState.selectedResourcePath || !isEditing() || bdaSelected
-  duplicateTileButton.disabled = !slice || !isEditing() || bdaSelected
-  deleteTileButton.disabled = !slice || !isEditing() || bdaSelected
-  tileTitle.textContent = usage ? "图片样式切片" : (slice ? `切片 #${slice.index}` : bdaSelected ? "未被当前 BDA 外观引用" : "未选择切片 · 点击图片中的切片进行编辑")
+  newTileButton.hidden = fixed
+  duplicateTileButton.hidden = fixed
+  deleteTileButton.hidden = fixed
+  moveTileButton.hidden = fixed
+  newTileButton.disabled = !appState.selectedResourcePath || !isEditing() || fixed
+  duplicateTileButton.disabled = !slice || !isEditing() || fixed
+  deleteTileButton.disabled = !slice || !isEditing() || fixed
+  tileTitle.textContent = usage ? "图片样式切片" : slice ? `切片 #${slice.index}`
+    : bdaSelected ? "未被当前 BDA 外观引用"
+    : sliceStore() === "none" ? "搜狗皮肤直接使用整张图片，没有切片"
+    : "未选择切片 · 点击图片中的切片进行编辑"
   for (const field of tileSourceFields) {
     const index = Number(field.dataset.tileSource)
     if (field.parentElement?.firstChild?.nodeType === Node.TEXT_NODE) field.parentElement.firstChild.textContent = `${["X", "Y", "宽", "高"][index]} `
@@ -277,6 +328,30 @@ export function loadTiles(path: string): void {
     return
   }
   appState.bdaTileUsages = []
+  if (sliceStore() === "palm") {
+    // Palm slices live in skin.json, which the source editor shows.
+    appState.tilePath = ""
+    appState.tileDocument = IniDocument.parse("")
+    source.disabled = false
+    sourceName.textContent = SXI_SKIN_PATH
+    appState.tileDraft = undefined
+    appState.movingTile = undefined
+    appState.moveStart = undefined
+    appState.moveSource = undefined
+    reloadPalmSlices(undefined, path)
+    return
+  }
+  if (sliceStore() === "none") {
+    appState.tilePath = ""
+    appState.tileDocument = IniDocument.parse("")
+    appState.slices = []
+    appState.selectedTileIndex = undefined
+    setSourceValue("")
+    source.disabled = true
+    populateTileInspector()
+    drawAtlas()
+    return
+  }
   appState.tilePath = path.replace(/\.png$/i, ".til")
   appState.tileDocument = appState.archive?.isText(appState.tilePath) ? IniDocument.parse(appState.archive.getText(appState.tilePath)) : IniDocument.parse("")
   appState.slices = tileSlices(appState.tileDocument)
@@ -318,13 +393,18 @@ export function commitBdaTileInnerRect(rect: TileRect): void {
 }
 
 export function commitTile(slice: TileSlice, coalesce = false): void {
-  if (!appState.archive || appState.archive.format === "bda" || !appState.selectedResourcePath || !isEditing()) return
+  if (!appState.archive || !slicesEditable() || !appState.selectedResourcePath || !isEditing()) return
   const [x, y, width, height] = slice.source
   if (
     slice.source.some(value => !Number.isInteger(value)) ||
     width <= 0 || height <= 0 || x < 0 || y < 0 ||
     x + width > workspaceImage.naturalWidth || y + height > workspaceImage.naturalHeight
   ) return
+  if (sliceStore() === "palm") {
+    const path = appState.selectedResourcePath
+    editSxi((skin) => setPalmTile(skin, path, slice), coalesce)
+    return reloadPalmSlices(slice.index)
+  }
   const before = appState.tileDocument.toString()
   updateTileSlice(appState.tileDocument, slice)
   commitText(appState.tilePath, before, appState.tileDocument.toString(), coalesce)
@@ -341,7 +421,7 @@ export function commitTile(slice: TileSlice, coalesce = false): void {
 export async function autoSliceSelectedImage(): Promise<void> {
   const currentArchive = appState.archive
   const path = appState.selectedResourcePath
-  if (!currentArchive || currentArchive.format === "bda" || !path || !appState.tilePath || !isEditing()) return
+  if (!currentArchive || !slicesEditable() || !path || !appState.tilePath && sliceStore() === "til" || !isEditing()) return
   const bytes = currentArchive.getBytes(path)
   if (!bytes) return
   try {
@@ -353,6 +433,12 @@ export async function autoSliceSelectedImage(): Promise<void> {
     }
     if (appState.slices.length && !window.confirm(`自动切片将替换当前 ${appState.slices.length} 个切片，是否继续？`)) return
     if (appState.archive !== currentArchive || appState.selectedResourcePath !== path || !isEditing()) return
+    if (sliceStore() === "palm") {
+      editSxi((skin) => setPalmTiles(skin, path, cells.map((source, index) => ({ index: index + 1, source }))))
+      reloadPalmSlices(1)
+      showStatus(`已自动切片 ${cells.length} 个区域`)
+      return
+    }
     const before = appState.tileDocument.toString()
     for (const slice of appState.slices) removeTileSlice(appState.tileDocument, slice.index)
     cells.forEach((source, index) => updateTileSlice(appState.tileDocument, { index: index + 1, source }))
@@ -407,7 +493,13 @@ export function moveSelectedTile(deltaX: number, deltaY: number, coalesce = fals
 }
 
 export function deleteSelectedTile(): void {
-  if (!appState.archive || appState.archive.format === "bda" || !appState.selectedResourcePath || !isEditing() || appState.selectedTileIndex === undefined) return
+  if (!appState.archive || !slicesEditable() || !appState.selectedResourcePath || !isEditing() || appState.selectedTileIndex === undefined) return
+  if (sliceStore() === "palm") {
+    // Palm styles find a slice by its IMG id, so the others keep their numbers.
+    const [path, index] = [appState.selectedResourcePath, appState.selectedTileIndex]
+    editSxi((skin) => removePalmTile(skin, path, index))
+    return reloadPalmSlices(undefined)
+  }
   const before = appState.tileDocument.toString()
   if (!removeTileSlice(appState.tileDocument, appState.selectedTileIndex)) return
   // 工具书 V6 p43：切片序号禁止跳号；删中间切片后顺延重排，并同步同目录 css 中 *_IMG=素材名,序号 的引用。
@@ -435,7 +527,7 @@ export function deleteSelectedTile(): void {
 export function duplicateSelectedTile(): void {
   const existing = appState.slices.find((slice) => slice.index === appState.selectedTileIndex)
   if (!existing || !isEditing()) return
-  commitTile(duplicateTileSlice(existing, nextTileIndex(appState.tileDocument)))
+  commitTile(duplicateTileSlice(existing, nextSliceIndex()))
 }
 
 export function updateSelectedTile(): void {

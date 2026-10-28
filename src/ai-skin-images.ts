@@ -1,11 +1,10 @@
-import { IniDocument } from "./ini.ts"
-import { tileSlices, type TileRect } from "./tiles.ts"
+import type { TileRect, TileSlice } from "./tiles.ts"
 
 export type AiSkinImageFile = {
   path: string
   bytes: Uint8Array
-  /** Companion .til text; its [IMGn] SOURCE_RECT entries name the slices. */
-  tiles?: string
+  /** The image's slices, as the skin keeps them (a Baidu .til, a Palm tile map in skin.json). */
+  slices?: readonly TileSlice[]
 }
 
 export type AiSkinImageDraft = { path: string; syntax: "png"; before: Uint8Array; after: Uint8Array }
@@ -118,8 +117,7 @@ export class AiSkinImages {
 
   slices(path: string): Array<{ index: number; rect: TileRect }> {
     this.bytes(path)
-    const tiles = this.files.get(path)!.tiles
-    return tiles ? tileSlices(IniDocument.parse(tiles)).map((slice) => ({ index: slice.index, rect: slice.source })) : []
+    return (this.files.get(path)!.slices ?? []).map((slice) => ({ index: slice.index, rect: slice.source }))
   }
 
   private rect(path: string, image: ImageBitmap, slice?: number): TileRect {

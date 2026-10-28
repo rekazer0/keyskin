@@ -18,6 +18,8 @@ import { resourceImagePaths } from "../resources.ts"
 import { soundPathForFilename } from "../sounds.ts"
 import { type StyleLibraryPayload, type StyleLibraryVisual } from "../picker-window.ts"
 import { SkinArchive } from "../skin.ts"
+import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
+import { palmStyleCategories, palmStyleIDs, palmStyleKind, palmStyleSound } from "./sxi-styles"
 
 export function stylePickerLabel(styleID: string): string {
   return appState.archive?.format === "bda" ? String(bdaStyleRef(styleID)?.key ?? styleID) : styleID
@@ -34,6 +36,7 @@ export function availableStyleIDs(): string[] {
       ...[...appearance.textStyles.keys()].map((key) => bdaStyleID({ type: "text", key })),
     ]
   }
+  if (appState.archive.format === "sxi") return palmStyleIDs()
   const path = styleConfigPath()
   if (!appState.archive.isText(path)) return []
   return IniDocument.parse(appState.archive.getText(path)).sections()
@@ -53,6 +56,7 @@ export const styleKinds: Record<StyleKind, { label: string; icon: string }> = {
 /** 按样式内容判定类型：有图即图片样式，其次动画、颜色、声音，只剩文字属性的归为文字样式；INFO 只是备注，不算属性。 */
 export function styleKind(styleID: string, styles = styleConfigDocument()): StyleKind {
   if (appState.archive?.format === "bda") return bdaStyleRef(styleID)?.type ?? "empty"
+  if (appState.archive?.format === "sxi") return palmStyleKind(styleID)
   const keys = new Set(styles?.entries(`STYLE${styleID}`).filter((entry) => entry.key !== "INFO" && entry.value.trim()).map((entry) => entry.key) ?? [])
   const has = (pattern: RegExp) => [...keys].some((key) => pattern.test(key))
   if (has(/^(?:NM|HL)_IMG$/)) return "image"
@@ -60,6 +64,18 @@ export function styleKind(styleID: string, styles = styleConfigDocument()): Styl
   if (has(/^(?:NM|HL)_COLOR$/)) return "color"
   if (keys.has("PRESS_SOUND_PATH")) return "sound"
   return keys.size ? "text" : "empty"
+}
+
+/** The press sound file a style plays: default.css PRESS_SOUND_PATH, or a Palm style's `s_4.path_1`. */
+export function styleSoundFile(styleID: string, styles = styleConfigDocument()): string | undefined {
+  if (appState.archive?.format === "sxi") return palmStyleSound(styleID)
+  return styles?.get(`STYLE${styleID}`, "PRESS_SOUND_PATH")?.trim() || undefined
+}
+
+/** Whether new styles can be added: BDI/BDS to their default.css, Palm to skin.json; BDA styles are typed. */
+export function canAddStyle(): boolean {
+  const archive = appState.archive
+  return archive?.format === "sxi" ? Boolean(palmStyleIDs().length) : Boolean(archive?.isText(styleConfigPath()) && archive.format !== "bda")
 }
 
 export function styleConfigDocument(): IniDocument | undefined {
@@ -86,6 +102,7 @@ export function styleKindForKey(key: string): StyleKind | "all" {
 }
 
 export function styleLibraryCategories(styleID: string): Set<string> {
+  if (appState.archive?.format === "sxi") return palmStyleCategories(styleID)
   const categories = new Set<string>()
   for (const { section, key, value } of appState.layoutDocument?.entries() ?? []) {
     if (!isStyleReferenceKey(key) || !value.split(",").map((value) => value.trim()).includes(styleID)) continue
@@ -177,14 +194,14 @@ export function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibr
   const payload = {
     sliceBack,
     editable: isEditing() && !target.disabled,
-    canAdd: Boolean(appState.archive.isText(styleConfigPath()) && appState.archive.format !== "bda"),
+    canAdd: canAddStyle(),
     soundOnly,
     foreground: styleReferenceForeground(key),
     bda: appState.archive.format === "bda",
     kind: styleKindForKey(key),
     currentID,
     currentLabel: currentID ? stylePickerLabel(currentID) : "",
-    source: (soundOnly ? styleConfigPath() : appState.layoutPath).split("/").pop() || "当前皮肤",
+    source: appState.archive.format === "sxi" ? SXI_SKIN_PATH : (soundOnly ? styleConfigPath() : appState.layoutPath).split("/").pop() || "当前皮肤",
     imagesCompatible: !targetType || bdaStyleRef(currentID)?.type === "image",
     bitmaps,
     styles: [] as StyleLibraryPayload["styles"],
@@ -193,7 +210,7 @@ export function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibr
   }
   if (soundOnly) {
     payload.sounds = availableStyleIDs().flatMap((styleID) => {
-      const filename = styles?.get(`STYLE${styleID}`, "PRESS_SOUND_PATH")?.trim() ?? ""
+      const filename = styleSoundFile(styleID, styles) ?? ""
       if (!filename) return []
       const playable = Boolean(soundPathForFilename(source.names(), theme.value, orientation.value, filename))
       return [{ styleID, filename, playable }]

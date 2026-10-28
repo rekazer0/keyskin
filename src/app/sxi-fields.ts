@@ -8,7 +8,7 @@ import { createIcon } from "../icons"
 import { ACTION_CODES } from "../palm/palm-ini.ts"
 import { palmFieldLabel, palmStyleReference } from "../palm/palm-labels.ts"
 import { actionText, actionValue, asObject, numberText, numberValue, type Json, type JsonObject } from "../palm/sxi-ini.ts"
-import { SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "../palm/sxi-projection.ts"
+import { SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "../palm/sxi-json.ts"
 import { commitText, isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption, numberParts } from "./property-rows"
@@ -73,15 +73,15 @@ export function sxiValue(root: Json, path: readonly (string | number)[]): Json {
   return current
 }
 
-/** Applies `change` to skin.json as one undo step and rebuilds everything shown from it. */
-export function editSxi(change: (skin: JsonObject) => void): void {
+/** Applies `change` to skin.json as one undo step (`coalesce` joins a drag's steps) and rebuilds everything shown from it. */
+export function editSxi(change: (skin: JsonObject) => void, coalesce = false): void {
   const archive = appState.archive
   if (archive?.format !== "sxi" || !isEditing()) return
   const before = archive.getText(SXI_SKIN_PATH)
   try {
     const skin = parseSkinJson(before)
     change(skin)
-    commitText(SXI_SKIN_PATH, before, encodeSkinJson(skin))
+    commitText(SXI_SKIN_PATH, before, encodeSkinJson(skin), coalesce)
   } catch (error) {
     showError(error, "修改 skin.json")
   }

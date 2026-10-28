@@ -5,7 +5,8 @@ import { createServer } from "vite"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 
 const fixtures = [
-  { format: "sxi", bytes: sxiAnimationFixture(), paths: ["light/skin/res/anim.ini"] },
+  // A Palm skin's animation table is a part of skin.json, addressed by its pointer.
+  { format: "sxi", bytes: sxiAnimationFixture(), paths: ["skin.json/default/s_info/ss_2"], files: ["skin.json"] },
 ]
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41839, strictPort: false, host: "127.0.0.1", hmr: false } })
 await server.listen()
@@ -56,7 +57,7 @@ try {
     const archiveBefore = await page.evaluate(async (paths) => {
       const { appState } = await import("/src/app/state.ts")
       return { names: appState.archive.names(), bytes: paths.map((path) => Array.from(appState.archive.getBytes(path))) }
-    }, fixture.paths)
+    }, fixture.files)
 
     for (const path of fixture.paths) {
       assert.equal(await page.locator(`.sidebar-overview button[data-path="${path}"]`).count(), 2)
@@ -79,7 +80,7 @@ try {
     assert.deepEqual(await page.evaluate(async (paths) => {
       const { appState } = await import("/src/app/state.ts")
       return { names: appState.archive.names(), bytes: paths.map((path) => Array.from(appState.archive.getBytes(path))) }
-    }, fixture.paths), archiveBefore, "navigation never rewrites or relocates source data")
+    }, fixture.files), archiveBefore, "navigation never rewrites or relocates source data")
 
     const path = fixture.paths[0]
     for (const mode of ["motion", "particle"]) {
