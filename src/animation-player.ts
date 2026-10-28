@@ -1,6 +1,6 @@
 import type { Visual, VisualResolver } from "./atlas.ts"
 import { PREVIEW_KEY_SIZE, type PreviewClip } from "./animation-preview-model.ts"
-import { element } from "./dom-element.ts"
+import { element, iconButton } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 import { decodeFrames, frameAt, motionAt, withMotion, type Frame, type Track } from "./native-motion.ts"
 import { legacyParticleFrames } from "./preview-animation.ts"
@@ -30,15 +30,6 @@ const KEY: Rect = { x: 128, y: 48, width: 64, height: 64 }
 /** Device pixels (pixel translations, particle speeds and images) to stage units. */
 const PIXEL = KEY.width / PREVIEW_KEY_SIZE
 const SAMPLES = 48
-
-function iconButton(icon: string, label: string): HTMLButtonElement {
-  const button = element("button", "ui-icon-button")
-  button.type = "button"
-  button.setAttribute("aria-label", label)
-  button.title = label
-  button.append(createIcon(icon, 14))
-  return button
-}
 
 /** Pixel translations are in device pixels; relative ones already scale with the sample key. */
 function stageTracks(tracks: readonly Track[]): Track[] {

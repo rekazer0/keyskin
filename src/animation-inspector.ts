@@ -3,7 +3,7 @@
  * 共用同一套分组——列表（选一个动画）→ 预览（播放器）→ 参数分组 → 引用。
  * 这里只负责呈现与交互；读写配置、撤销与选择状态都由各格式的适配器通过回调完成。
  */
-import { element } from "./dom-element.ts"
+import { element, iconButton } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 import { animationPlayer, type AnimationPlayerOptions } from "./animation-player.ts"
 
@@ -70,14 +70,9 @@ export function animationSection(title: string, className: string, code = ""): H
   return section
 }
 
-function iconButton(icon: string, label: string, onClick: () => void, disabled: boolean): HTMLButtonElement {
-  const button = element("button", "ui-icon-button")
-  button.type = "button"
-  button.setAttribute("aria-label", label)
-  button.title = label
+function actionButton(icon: string, label: string, onClick: () => void, disabled: boolean): HTMLButtonElement {
+  const button = iconButton(icon, label, onClick)
   button.disabled = disabled
-  button.append(createIcon(icon, 14))
-  button.addEventListener("click", onClick)
   return button
 }
 
@@ -178,9 +173,9 @@ function listActions(view: AnimationResourceView): HTMLElement | undefined {
     bar.append(control)
   }
   const current = view.items.find((item) => item.id === view.selected)
-  if (view.duplicate) bar.append(iconButton("copy", current ? `复制${current.title}` : `复制${noun}`, view.duplicate, !view.editable || !current))
+  if (view.duplicate) bar.append(actionButton("copy", current ? `复制${current.title}` : `复制${noun}`, view.duplicate, !view.editable || !current))
   if (view.remove) {
-    const remove = iconButton("trash-2", current ? `删除${current.title}` : `删除${noun}`, view.remove.run, !view.editable || !current || Boolean(view.remove.blocked))
+    const remove = actionButton("trash-2", current ? `删除${current.title}` : `删除${noun}`, view.remove.run, !view.editable || !current || Boolean(view.remove.blocked))
     if (view.remove.blocked) remove.title = view.remove.blocked
     bar.append(remove)
   }
@@ -275,10 +270,10 @@ export function comboList(options: {
         const actions = element("span", "animation-combo-actions")
         const disabled = !options.editable
         if (options.move) actions.append(
-          iconButton("arrow-up", `上移${child.title}`, () => options.move!(index, -1), disabled || index === 0),
-          iconButton("arrow-down", `下移${child.title}`, () => options.move!(index, 1), disabled || index === options.children.length - 1),
+          actionButton("arrow-up", `上移${child.title}`, () => options.move!(index, -1), disabled || index === 0),
+          actionButton("arrow-down", `下移${child.title}`, () => options.move!(index, 1), disabled || index === options.children.length - 1),
         )
-        if (options.remove) actions.append(iconButton("x", `移除${child.title}`, () => options.remove!(index), disabled))
+        if (options.remove) actions.append(actionButton("x", `移除${child.title}`, () => options.remove!(index), disabled))
         for (const button of actions.children) (button as HTMLElement).dataset.size = "sm"
         row.append(actions)
       }

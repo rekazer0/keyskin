@@ -1,4 +1,5 @@
 import { createIcon } from "./icons.ts"
+import { iconButton } from "./dom-element.ts"
 
 /** 引导里的一步。 */
 export interface TourStep {
@@ -82,12 +83,8 @@ export function runTour(steps: TourStep[], options: { busy: () => boolean; onEnd
   card.setAttribute("aria-describedby", "ui-tour-body")
   card.tabIndex = -1
   const counter = element("span", "ui-tour-step")
-  const close = element("button", "ui-icon-button")
-  close.type = "button"
+  const close = iconButton("x", "退出教程")
   close.dataset.size = "sm"
-  close.title = "退出教程"
-  close.setAttribute("aria-label", "退出教程")
-  close.append(createIcon("x"))
   const header = element("header")
   header.append(counter, close)
   const title = element("h2")

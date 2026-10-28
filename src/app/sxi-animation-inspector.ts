@@ -3,8 +3,7 @@
 // editors for combination tracks and liquid floaters, and where it is played. Every edit is written
 // into skin.json as one undo step through the same helpers the rest of the Palm inspector uses.
 
-import { element } from "../dom-element.ts"
-import { createIcon } from "../icons"
+import { element, iconButton } from "../dom-element.ts"
 import { iniPreviewClip } from "../animation-preview-model.ts"
 import {
   animationModeTitle, animationSection, animationWarning, comboList, renderAnimationResource,
@@ -469,15 +468,10 @@ function trackedControl(identity: unknown[], value: Json, restore: (baseline: Js
 }
 
 
-function iconButton(icon: string, label: string, onClick: () => void): HTMLButtonElement {
-  const button = element("button", "ui-icon-button")
-  button.type = "button"
+function editButton(icon: string, label: string, onClick: () => void): HTMLButtonElement {
+  const button = iconButton(icon, label, onClick)
   button.dataset.size = "sm"
-  button.setAttribute("aria-label", label)
-  button.title = label
   button.disabled = !isEditing()
-  button.append(createIcon(icon, 14))
-  button.addEventListener("click", onClick)
   return button
 }
 
@@ -545,7 +539,7 @@ function floatersSection(pointer: SxiPointer, entry: AnimationEntry): HTMLElemen
     if (!model) throw new Error("skin.json 中缺少液体动画")
     change(model)
   })
-  section.querySelector("h3")!.append(iconButton("plus", "添加浮动物体", () => edit((model) => {
+  section.querySelector("h3")!.append(editButton("plus", "添加浮动物体", () => edit((model) => {
     model.floaters = [...Array.isArray(model.floaters) ? model.floaters : [], floaterDefaults()]
   })))
   section.append(trackedControl([...target, "floaters"], entry.model.floaters, (baseline) => edit((model) => {
@@ -565,7 +559,7 @@ function floatersSection(pointer: SxiPointer, entry: AnimationEntry): HTMLElemen
     const block = element("div", "ui-subsection animation-floater")
     const heading = element("h4")
     heading.textContent = `物体 ${index + 1}`
-    heading.append(iconButton("trash-2", `删除物体 ${index + 1}`, () => edit((model) => {
+    heading.append(editButton("trash-2", `删除物体 ${index + 1}`, () => edit((model) => {
       model.floaters = (Array.isArray(model.floaters) ? model.floaters : []).filter((_, position) => position !== index)
     })))
     block.append(heading)

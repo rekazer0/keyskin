@@ -6,6 +6,7 @@ import { buildLegacyMotion, legacyMotionIni, legacyStyleProp, type LegacyMotionB
 import { IniDocument } from "./ini.ts"
 import { SkinArchive } from "./skin.ts"
 import { soundPathForFilename } from "./sounds.ts"
+import { pngSize } from "./ssf/ssf-png.ts"
 
 /** Sound styles sit above the image/color/text ranges used by bdaStyleID. */
 const SOUND_STYLE_BASE = 4_000_000
@@ -16,16 +17,6 @@ const HINT_TARGETS = ["HINT", "BUBBLE", "POPUP", "HINT_BG"]
 const LIST_TARGETS = ["LIST", "CAND_LIST", "LIST_BG"]
 
 type BdaConversion = { archive: SkinArchive; warnings: string[] }
-
-function pngSize(bytes: Uint8Array): [number, number] {
-  if (
-    bytes.length < 24 ||
-    ![137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => bytes[index] === byte) ||
-    new TextDecoder().decode(bytes.slice(12, 16)) !== "IHDR"
-  ) throw new Error("BDA 资源不是有效的 PNG")
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  return [view.getUint32(16), view.getUint32(20)]
-}
 
 function staticResourceID(resourceID: string, animation: BdaAnimation): string {
   return animation.sequences.get(resourceID)?.frames.find((frame) => frame.resourceID)?.resourceID ?? resourceID
@@ -213,7 +204,9 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
         const image = sourceImage(source, theme, orientation, resourceID)
         if (!image) return
         if (!copied.has(image.id)) {
-          const [width, height] = pngSize(image.bytes)
+          const size = pngSize(image.bytes)
+          if (!size) throw new Error("BDA 资源不是有效的 PNG")
+          const [width, height] = size
           output.set(`${theme}/skin/res/${image.id}.png`, image.bytes)
           output.set(`${theme}/skin/res/${image.id}.til`, tile(width, height, atom?.innerRect))
           copied.add(image.id)

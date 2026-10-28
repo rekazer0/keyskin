@@ -2,6 +2,7 @@ import { decodeBdaAppearance } from "./bda-decode.ts"
 import { type VisualResolver, type Visual, type TextVisual, type StyleTextVisual, pngBitmap } from "./atlas.ts"
 import { type BdaAppearance, bdaStyleRef } from "./bda.ts"
 import { SkinArchive } from "./skin.ts"
+import { pngSize } from "./ssf/ssf-png.ts"
 
 export function bdaLayoutNames(bytes: Uint8Array): string[] {
   return [...decodeBdaAppearance(bytes).panels.keys()]
@@ -27,12 +28,6 @@ function bdaFilterColor(value: number): string | undefined {
   const unsigned = value >>> 0
   if (!unsigned || unsigned === 0xffffffff) return
   return bdaCssColor(unsigned)
-}
-
-export function pngSize(bytes: Uint8Array): { width: number; height: number } | undefined {
-  if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) return
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  return { width: view.getUint32(16), height: view.getUint32(20) }
 }
 
 export class BdaResolver implements VisualResolver {
@@ -85,7 +80,8 @@ export class BdaResolver implements VisualResolver {
     const style = this.appearance.imageStyles.get(ref.key)
     const atom = highlighted ? style?.highlightImage ?? style?.normalImage : style?.normalImage
     const found = atom?.resource?.resourceID ? this.resource(atom.resource.resourceID) : undefined
-    return found ? pngSize(found.archive.getBytes(found.path)!) : undefined
+    const size = found && pngSize(found.archive.getBytes(found.path)!)
+    return size && { width: size[0], height: size[1] }
   }
 
   async resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined> {
