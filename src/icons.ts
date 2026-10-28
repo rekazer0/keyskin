@@ -18,7 +18,8 @@ import {
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
-  Shirt, Pause,
+  Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
+  SkipBack, Rotate3d,
 } from "lucide"
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
@@ -69,6 +70,10 @@ const icons: Record<string, IconNode> = {
   pointer: Pointer, timer: Timer, frame: Frame, "layout-panel-top": LayoutPanelTop,
   // 手心内置工具栏（皮肤没有工具栏图标时画布代画）
   shirt: Shirt,
+  // 动画：每种变化一个图标，播放器的回到开头、循环与慢放
+  blend: Blend, scaling: Scaling, "list-video": ListVideo, route: Route, orbit: Orbit, waves: Waves,
+  "party-popper": PartyPopper, rabbit: Rabbit, "rotate-3d": Rotate3d, repeat: Repeat, snail: Snail,
+  "skip-back": SkipBack,
 }
 
 export function createIcon(name: string, size = 14): SVGElement {
@@ -81,6 +86,14 @@ export function createIcon(name: string, size = 14): SVGElement {
 
 export function groupIcon(label: string): SVGElement {
   const name = label === "布局" ? "frame"
+    : label === "预览" ? "play"
+    : /时间|循环/.test(label) ? "timer"
+    : label === "引用" ? "link"
+    : label === "组合" ? "layers"
+    : label === "变化" ? "spline"
+    : label === "变换中心" ? "crosshair"
+    : label === "运动" ? "move"
+    : label === "发射" ? "sparkles"
     : /资源|图片/.test(label) ? "images"
     : /动画|动效|粒子/.test(label) ? "clapperboard"
     : /声音|音效/.test(label) ? "volume-2"

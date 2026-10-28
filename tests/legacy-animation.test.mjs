@@ -1,4 +1,4 @@
-// anim.ini 的结构化模型：解析、按类型清理字段的写回、时间轴/几何预览，以及与现有预览解析器的语义一致性。
+// anim.ini 的结构化模型：解析、按类型清理字段的写回、时间轴、检查器播放预览，以及与画布预览解析器的语义一致性。
 import assert from "node:assert/strict"
 import test from "node:test"
 import { IniDocument } from "../src/ini.ts"
@@ -7,7 +7,7 @@ import {
   LEGACY_ANIMATION_KINDS,
   legacyAnimationFieldGroups,
   legacyAnimationKindLabel,
-  legacyAnimationPreviewState,
+  appendLegacyAnimation,
   legacyAnimationReferenceText,
   legacyAnimationReferences,
   legacyAnimationTimeline,
@@ -24,6 +24,8 @@ import {
   legacyAnimationTranslation,
   parseLegacyAnimation,
 } from "../src/preview-animation.ts"
+import { iniPreviewClip } from "../src/animation-preview-model.ts"
+import { motionAt } from "../src/native-motion.ts"
 
 const ANIM_INI = `[GLOBAL]
 ANIM_NUM=4
@@ -147,17 +149,19 @@ test("动效类型与 TYPE 的中文标签覆盖手册定义", () => {
   assert.equal(legacyAnimationKindLabel("combination"), "组合动效")
 })
 
-test("字段分组跟随 TYPE 选择 FROM/TO 的写法，未知键进高级参数", () => {
+test("字段分组按检查器顺序：变化 → 时间与循环 → 变换中心，未知键进其他参数", () => {
   const map = entriesByName()
-  assert.deepEqual(legacyAnimationFieldGroups(map.get("1")).map((group) => group.title), ["数值", "插值", "时间轴"])
+  assert.deepEqual(legacyAnimationFieldGroups(map.get("1")).map((group) => group.title), ["变化", "时间与循环"])
   assert.deepEqual(legacyAnimationFieldGroups(map.get("2"))[0], {
-    title: "数值",
-    keys: ["FROM", "TO", "FROM_PX", "TO_PX"],
+    title: "变化",
+    keys: ["TYPE", "FROM", "TO", "FROM_PX", "TO_PX"],
   })
-  assert.deepEqual(legacyAnimationFieldGroups(map.get("2")).at(-1), { title: "高级参数（1）", keys: ["CUSTOM"] })
-  assert.deepEqual(legacyAnimationFieldGroups(map.get("3")).map((group) => group.title), ["组合", "时间轴"])
+  assert.deepEqual(legacyAnimationFieldGroups(map.get("2")).at(-1), { title: "其他参数", keys: ["CUSTOM"] })
+  assert.deepEqual(legacyAnimationFieldGroups(map.get("3")).map((group) => group.title), ["组合", "时间与循环"])
   assert.deepEqual(legacyAnimationFieldGroups(map.get("4")).map((group) => group.title), ["帧动效"])
-  assert.deepEqual(legacyAnimationFieldGroups(map.get("5")).map((group) => group.title), ["发射", "运动", "外观", "时间轴"])
+  assert.deepEqual(legacyAnimationFieldGroups(map.get("5")).map((group) => group.title), ["发射", "运动", "外观", "时间与循环"])
+  const rotate = entriesByName(ANIM_INI.replace("TYPE=2\nDURATION=300", "TYPE=1\nDURATION=300"))
+  assert.deepEqual(legacyAnimationFieldGroups(rotate.get("2")).map((group) => group.title), ["变化", "时间与循环", "变换中心", "其他参数"])
   assert.equal(LEGACY_ANIMATION_FIELDS.FROM_PX.unit, "px")
   assert.equal(LEGACY_ANIMATION_FIELDS.BUILD_METHOD.label, "组合方式")
 })
@@ -265,59 +269,59 @@ test("组合动效：接续取子动效总和，同时取最大值", () => {
   assert.equal(legacyAnimationTimeline(map.get("5"), map).duration, 2000, "粒子动效未写 DURATION 时按 10 个 / 5 个每秒估算")
 })
 
-test("几何预览按 TYPE 解释 FROM/TO，并支持 rand() 随机区间取中点", () => {
-  const map = entriesByName()
-  assert.equal(legacyAnimationPreviewState(map.get("1"), map, 0).opacity, 0)
-  assert.equal(legacyAnimationPreviewState(map.get("1"), map, 100).opacity, 0, "延迟期间保持起始值")
-  assert.equal(legacyAnimationPreviewState(map.get("1"), map, 200).opacity, 0.5)
-  assert.equal(legacyAnimationPreviewState(map.get("1"), map, 300).opacity, 1)
-  assert.equal(legacyAnimationPreviewState(map.get("1"), map, 999).opacity, 1, "播完停在终止值")
+const SIZE = { width: 100, height: 100 }
+const near = (actual, expected, message) => assert.ok(actual.every((value, index) => Math.abs(value - expected[index]) < 1e-9), `${message ?? ""} ${actual} ≠ ${expected}`)
+const sample = (text, section, elapsed) => motionAt(iniPreviewClip(IniDocument.parse(text), section, { fillBefore: true }).tracks, elapsed, SIZE)
 
-  assert.deepEqual(legacyAnimationPreviewState(map.get("2"), map, 0).translate, [10, 20])
-  assert.deepEqual(legacyAnimationPreviewState(map.get("2"), map, 150).translate, [60, 45])
-  assert.deepEqual(legacyAnimationPreviewState(map.get("2"), map, 300).translate, [110, 70])
+test("播放预览按 TYPE 解释 FROM/TO：延迟期间停在起始值、播完停在终止值，rand() 取中点", () => {
+  assert.equal(sample(ANIM_INI, "ANIM1", 0).opacity, 0)
+  assert.equal(sample(ANIM_INI, "ANIM1", 100).opacity, 0, "延迟期间保持起始值")
+  assert.equal(sample(ANIM_INI, "ANIM1", 200).opacity, 0.5)
+  assert.equal(sample(ANIM_INI, "ANIM1", 300).opacity, 1)
+  assert.equal(sample(ANIM_INI, "ANIM1", 999).opacity, 1, "播完停在终止值")
 
-  assert.equal(legacyAnimationPreviewState(map.get("4"), map, 100).active, false, "帧动效不做几何示意")
+  near(sample(ANIM_INI, "ANIM2", 0).translation, [10, 20], "平移按按键尺寸的百分比")
+  near(sample(ANIM_INI, "ANIM2", 150).translation, [60, 45])
+  near(sample(ANIM_INI, "ANIM2", 300).translation, [110, 70])
 
-  const randomized = parseLegacyAnimationFile(`[GLOBAL]
-ANIM_NUM=1
+  const frame = iniPreviewClip(IniDocument.parse(ANIM_INI), "ANIM4")
+  assert.equal(frame.images[0].file, "test.gif", "帧动效按 gif 自身的帧时长播放")
+  assert.equal(frame.tracks.length, 0)
 
-[ANIM1]
-CATEGORY=0
-TYPE=0
-FROM=0
-TO=rand(100,200)
-DURATION=100
-`)
-  assert.equal(legacyAnimationPreviewState(randomized.entries[0], new Map([["1", randomized.entries[0]]]), 50).opacity, 75 / 255)
+  const randomized = "[ANIM1]\nCATEGORY=0\nTYPE=0\nFROM=0\nTO=rand(100,200)\nDURATION=100\n"
+  assert.equal(sample(randomized, "ANIM1", 50).opacity, 75 / 255)
+  assert.match(iniPreviewClip(IniDocument.parse(randomized), "ANIM1").notes.join(" "), /rand/)
 })
 
 test("插值器按 INTPOL 加速或减速", () => {
-  const accelerated = parseLegacyAnimationFile(`[GLOBAL]
-ANIM_NUM=1
-
-[ANIM1]
-CATEGORY=0
-TYPE=0
-FROM=0
-TO=255
-DURATION=100
-INTPOL=1
-`)
-  const state = legacyAnimationPreviewState(accelerated.entries[0], new Map([["1", accelerated.entries[0]]]), 50)
-  assert.equal(state.opacity, 0.25, "加速插值器 progress²")
+  const accelerated = "[ANIM1]\nCATEGORY=0\nTYPE=0\nFROM=0\nTO=255\nDURATION=100\nINTPOL=1\n"
+  assert.equal(sample(accelerated, "ANIM1", 50).opacity, 0.25, "加速插值器 progress²")
 })
 
-test("组合动效的几何状态：接续时依次生效，同时时叠加", () => {
-  const map = entriesByName()
-  const sequential = legacyAnimationPreviewState(map.get("3"), map, 450)
+test("组合动效的预览：接续时依次生效，同时时叠加", () => {
+  const sequential = sample(ANIM_INI, "ANIM3", 450)
   assert.equal(sequential.opacity, 1, "第一个子动效已播完，透明度停在终止值")
-  assert.deepEqual(sequential.translate, [60, 45], "第二个子动效从 300ms 开始，450ms 时走到一半")
-  const parallelText = ANIM_INI.replace("BUILD_METHOD=1", "BUILD_METHOD=0")
-  const parallelMap = entriesByName(parallelText)
-  const parallel = legacyAnimationPreviewState(parallelMap.get("3"), parallelMap, 300)
-  assert.deepEqual(parallel.translate, [110, 70], "同时播放时第二个子动效从自己的起点独立播放")
-  assert.equal(parallel.opacity, 1, "透明度按乘积累加，第一个子动效结束后为 1")
+  near(sequential.translation, [60, 45], "第二个子动效从 300ms 开始，450ms 时走到一半")
+  const parallel = sample(ANIM_INI.replace("BUILD_METHOD=1", "BUILD_METHOD=0"), "ANIM3", 300)
+  near(parallel.translation, [110, 70], "同时播放时第二个子动效从自己的起点独立播放")
+  assert.equal(parallel.opacity, 1)
+  const clip = iniPreviewClip(IniDocument.parse(ANIM_INI), "ANIM3")
+  assert.deepEqual(clip.lanes.map((lane) => [lane.label, lane.start]), [["动画 1 · 透明度", 100], ["动画 2 · 位移", 300]], "时间轴每个子动效一行")
+})
+
+test("3D 旋转按正交投影预览，并说明透视以真机为准", () => {
+  const clip = iniPreviewClip(IniDocument.parse("[ANIM1]\nCATEGORY=0\nTYPE=5\nFROM=0,0,0\nTO=0,60,90\nDURATION=100\n"), "ANIM1")
+  const end = motionAt(clip.tracks, 100, SIZE)
+  assert.equal(end.rotation, 90)
+  assert.ok(Math.abs(end.scale[0] - 0.5) < 1e-9, "绕 Y 轴 60° 横向投影为一半")
+  assert.match(clip.notes.join(" "), /透视/)
+})
+
+test("REPEAT_CNT=inf 按一个观察周期预览并标注循环", () => {
+  const clip = iniPreviewClip(IniDocument.parse("[ANIM1]\nCATEGORY=0\nTYPE=1\nFROM=0\nTO=360\nDURATION=400\nREPEAT_CNT=inf\nREPEAT_MODE=1\n"), "ANIM1")
+  assert.equal(clip.duration, 800)
+  assert.equal(clip.lanes[0].unbounded, true)
+  assert.match(clip.notes.join(" "), /循环/)
 })
 
 test("与 preview-animation 的 parseLegacyAnimation 语义一致（透明度 / 平移）", () => {
@@ -330,23 +334,27 @@ PRESS_ANIM=1
 [STYLE2]
 PRESS_ANIM=2
 `)
-  const animations = IniDocument.parse(ANIM_INI)
-  const legacy = parseLegacyAnimation(styles, animations)
-  const map = entriesByName()
-  // 播完之后本模块按「停在终止值」处理（画布需要保持末帧），preview-animation 则返回 undefined，比较窗口内的采样。
+  const legacy = parseLegacyAnimation(styles, IniDocument.parse(ANIM_INI))
   for (const elapsed of [0, 50, 100, 150, 200, 250, 300]) {
-    assert.equal(
-      legacyAnimationPreviewState(map.get("1"), map, elapsed).opacity,
-      legacyAnimationOpacity(legacy, "1", elapsed),
-      `透明度在 ${elapsed}ms 应该一致`,
-    )
-    const expected = legacyAnimationTranslation(legacy, "2", elapsed, { width: 100, height: 100 }) ?? [10, 20]
-    const actual = legacyAnimationPreviewState(map.get("2"), map, elapsed).translate
+    assert.equal(sample(ANIM_INI, "ANIM1", elapsed).opacity, legacyAnimationOpacity(legacy, "1", elapsed), `透明度在 ${elapsed}ms 应该一致`)
+    const expected = legacyAnimationTranslation(legacy, "2", elapsed, SIZE) ?? [10, 20]
+    const actual = sample(ANIM_INI, "ANIM2", elapsed).translation
     assert.ok(
       Math.abs(actual[0] - expected[0]) < 1e-9 && Math.abs(actual[1] - expected[1]) < 1e-9,
       `平移到 ${elapsed}ms 应该一致（${actual} vs ${expected}）`,
     )
   }
+})
+
+test("新建与复制动效追加在末尾，序号接续并同步 ANIM_NUM", () => {
+  const created = appendLegacyAnimation(ANIM_INI, "basic")
+  assert.equal(created.section, "ANIM6")
+  assert.match(created.text, /ANIM_NUM=6/)
+  assert.match(sectionText(created.text, "ANIM6"), /CATEGORY=0[\s\S]*TYPE=0/)
+  assert.match(created.text, /\[PATH1\][\s\S]*MOVE_TO_POINT=0,0/, "其他段原样保留")
+  const copied = appendLegacyAnimation(created.text, "basic", "ANIM2")
+  assert.equal(copied.section, "ANIM7")
+  assert.equal(sectionText(copied.text, "ANIM7").trim(), sectionText(ANIM_INI, "ANIM2").trim(), "复制带上全部字段，包括未知键")
 })
 
 /* —— default.css / 布局引用 —— */

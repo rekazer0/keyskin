@@ -26,6 +26,8 @@ export type Track = {
   relative?: boolean
   /** Scale and rotation origin, as a share of the target's size (the centre without one). */
   pivot?: Pair
+  /** Show the starting value before `start` (Android's fillBefore, as Baidu's anim.ini plays). */
+  fillBefore?: boolean
 }
 
 /** Opacity 0..1, rotation in degrees, translation in scene units, pivot as a share of the target. */
@@ -53,7 +55,7 @@ export function trackEnd(track: Track): number {
 
 function trackValue(track: Track, elapsed: number): Pair | undefined {
   const local = elapsed - track.start
-  if (local < 0) return
+  if (local < 0) return track.fillBefore ? track.value(0) : undefined
   if (local >= track.duration * track.passes) {
     if (!track.hold) return
     return track.value(track.alternate && track.passes % 2 === 0 ? 0 : 1)

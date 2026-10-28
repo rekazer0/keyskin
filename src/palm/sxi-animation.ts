@@ -20,9 +20,12 @@ export type AnimationField = {
   defaultValue?: string
   unit?: string
   axes?: [string, string]
+  /** `base` for the playback fields every family shares in `b`. */
+  scope?: AnimationScope
 }
+/** Base fields (`b.*`) sit in the wrap's base model; the rest in the family model itself. */
 export type AnimationScope = "base" | "model"
-export type AnimationGroup = { title: string; scope: AnimationScope; fields: AnimationField[] }
+export type AnimationGroup = { title: string; fields: AnimationField[] }
 
 export type AnimationFamily = {
   id: string
@@ -178,11 +181,26 @@ function field(key: string, kind: AnimationFieldKind, overrides: Partial<Animati
 }
 
 /** A group entry; its keys are taken from the projection's field order so nothing can silently drop. */
-function group(title: string, scope: AnimationScope, keys: Array<[key: string, kind: AnimationFieldKind]>): AnimationGroup {
-  return { title, scope, fields: keys.map(([key, kind]) => field(key, kind)) }
+function group(title: string, keys: Array<[key: string, kind: AnimationFieldKind]>): AnimationGroup {
+  return { title, fields: keys.map(([key, kind]) => field(key, kind)) }
 }
 
-const BASE_FIELDS: Array<[string, AnimationFieldKind]> = [["count", "number"], ["back", "bool"], ["clear", "bool"]]
+const BASE_INI_KEYS: Record<string, string> = { t: "TYPE", count: "REPEAT_CNT", back: "REPEAT_MODE", clear: "REMOVE" }
+
+function baseField(key: string, kind: AnimationFieldKind): AnimationField {
+  return field(key, kind, { scope: "base", iniKey: BASE_INI_KEYS[key] })
+}
+
+/** 时间与循环: the family's own timing first, then the repeat / reverse / remove every base model owns. */
+function timing(keys: Array<[key: string, kind: AnimationFieldKind]> = []): AnimationGroup {
+  return { title: "时间与循环", fields: [...keys.map(([key, kind]) => field(key, kind)), baseField("count", "number"), baseField("back", "bool"), baseField("clear", "bool")] }
+}
+
+/** Pivots only move rotations and scales; a translation or fade keeps them only when already set. */
+function usesPivot(model: JsonObject): boolean {
+  const type = Number(animationBase(model).t ?? 0)
+  return type === 1 || a1IsScale(model) || model.pp !== undefined || model.pxp !== undefined
+}
 
 const FAMILY_GROUPS: Record<string, (model: JsonObject) => AnimationGroup[]> = {
   a1: (model) => {
@@ -196,74 +214,72 @@ const FAMILY_GROUPS: Record<string, (model: JsonObject) => AnimationGroup[]> = {
       ? { from_px: "起始位移（px）", to_px: "结束位移（px）" }
       : a1IsScale(model) ? { from_p: "起始缩放（%）", to_p: "结束缩放（%）" } : {}
     return [
-      group("时间与曲线", "model", [["style", "select"], ["duration", "number"], ["delay", "number"]]),
-      {
-        title: "变化范围",
-        scope: "model",
-        fields: pair.map(([key, kind]) => field(key, kind, labels[key] ? { label: labels[key] } : {})),
-      },
-      group("变换中心", "model", [["pp", "point"], ["pxp", "point"]]),
+      { title: "变化", fields: [baseField("t", "select"), ...pair.map(([key, kind]) => field(key, kind, labels[key] ? { label: labels[key] } : {}))] },
+      timing([["duration", "number"], ["delay", "number"], ["style", "select"]]),
+      ...usesPivot(model) ? [group("变换中心", [["pp", "point"], ["pxp", "point"]])] : [],
     ]
   },
   a3: () => [],
   af2: () => [
-    group("帧资源", "model", [["type", "select"], ["file", "text"], ["psr", "list"]]),
-    group("时间与层级", "model", [["d", "number"], ["delay", "number"], ["l", "select"]]),
-    group("画面位置", "model", [["r", "select"], ["pos", "point"]]),
+    group("帧资源", [["type", "select"], ["file", "text"], ["psr", "list"]]),
+    timing([["d", "number"], ["delay", "number"]]),
+    group("位置与层级", [["r", "select"], ["pos", "point"], ["l", "select"]]),
   ],
   a4: () => [
-    group("发射", "model", [["rate", "number"], ["duration", "number"], ["delay", "number"], ["count", "number"],
-      ["aera", "rect"], ["i_p", "list"], ["paths", "list"], ["use_touch", "bool"], ["m_up", "select"],
-      ["clean", "bool"], ["remove", "bool"]]),
-    group("运动", "model", [["life", "point"], ["velocity", "point"], ["v_direction", "point"],
+    group("发射", [["rate", "number"], ["count", "number"], ["aera", "rect"], ["i_p", "list"], ["paths", "list"],
+      ["use_touch", "bool"], ["m_up", "select"]]),
+    group("运动", [["life", "point"], ["velocity", "point"], ["v_direction", "point"],
       ["acceleration", "point"], ["a_direction", "point"]]),
-    group("外观", "model", [["rotation", "point"], ["spin", "point"], ["scale", "point"],
+    group("外观", [["rotation", "point"], ["spin", "point"], ["scale", "point"],
       ["s_scale", "point"], ["alpha", "point"], ["s_alpha", "point"]]),
+    timing([["duration", "number"], ["delay", "number"], ["clean", "bool"], ["remove", "bool"]]),
   ],
   a10: () => [
-    group("路径资源", "model", [["file", "text"], ["d", "number"], ["l", "select"], ["r", "select"]]),
-    group("路径控制", "model", [["rr", "bool"], ["pm", "select"], ["rm", "select"], ["sd", "number"],
-      ["iri", "number"], ["fs", "number"]]),
-    group("路径位置", "model", [["sp", "point"], ["rp", "point"]]),
+    group("路径", [["file", "text"], ["sp", "point"], ["rp", "point"], ["pm", "select"], ["rm", "select"], ["fs", "number"]]),
+    timing([["d", "number"], ["sd", "number"], ["iri", "number"], ["rr", "bool"]]),
+    group("层级", [["l", "select"], ["r", "select"]]),
   ],
   a11: () => [
-    group("物理参数", "model", [["g", "number"], ["v", "point"], ["a_vel", "number"], ["dir", "point"],
+    group("物理参数", [["g", "number"], ["v", "point"], ["a_vel", "number"], ["dir", "point"],
       ["rest", "number"], ["fric", "number"], ["resist", "number"], ["a_resist", "number"],
       ["use_touch", "bool"], ["region", "number"]]),
-    group("碰撞区域", "model", [["collision_rect", "rect"]]),
-    group("播放范围", "model", [["duration", "number"], ["delay", "number"], ["file", "text"],
-      ["launch_point", "point"], ["l", "select"]]),
+    group("碰撞区域", [["collision_rect", "rect"]]),
+    group("资源与位置", [["file", "text"], ["launch_point", "point"], ["l", "select"]]),
+    timing([["duration", "number"], ["delay", "number"]]),
   ],
   a12: () => [
-    group("液体外观", "model", [["surface_color", "color"], ["wave_color", "color"],
+    group("液体外观", [["surface_color", "color"], ["wave_color", "color"],
       ["highlight_color", "color"], ["body_alpha", "number"], ["fill", "number"]]),
-    group("传感器", "model", [["tilt_enabled", "bool"], ["tilt_sensitivity", "number"],
+    group("传感器", [["tilt_enabled", "bool"], ["tilt_sensitivity", "number"],
       ["sensor_filter_ms", "number"], ["dead_zone_deg", "number"], ["hysteresis_deg", "number"],
       ["max_angle_deg", "number"], ["tilt_response_ms", "number"]]),
-    group("波浪物理", "model", [["samples", "number"], ["spring", "number"], ["damping", "number"],
+    group("波浪物理", [["samples", "number"], ["spring", "number"], ["damping", "number"],
       ["coupling", "number"], ["max_wave", "number"], ["impulse", "number"],
       ["tilt_slosh_gain", "number"], ["gravity", "number"]]),
-    group("层级", "model", [["l", "select"]]),
+    group("层级", [["l", "select"]]),
+    timing(),
   ],
   a13: () => [
-    group("资源与节奏", "model", [["count", "number"], ["assetDir", "text"], ["loopPattern", "text"],
+    group("资源", [["count", "number"], ["assetDir", "text"], ["loopPattern", "text"],
       ["jumpStartPattern", "text"], ["jumpApexPattern", "text"], ["jumpFallPattern", "text"]]),
-    group("跳跃布局", "model", [["waveDelayMs", "number"], ["jumpDurationMs", "number"],
+    group("跳跃布局", [["waveDelayMs", "number"], ["jumpDurationMs", "number"],
       ["jumpHeightRatio", "number"], ["itemSizeDp", "number"], ["rowWidthRatio", "number"],
       ["bottomMarginDp", "number"]]),
-    group("层级", "model", [["l", "select"]]),
+    group("层级", [["l", "select"]]),
+    timing(),
   ],
   a14: () => [
-    group("资源", "model", [["backgroundPath", "text"], ["backgroundAnimationPath", "text"],
+    group("资源", [["backgroundPath", "text"], ["backgroundAnimationPath", "text"],
       ["idleRabbitPath", "text"], ["runningRabbitPath", "text"], ["crazyRabbitPath", "text"],
       ["brakingRabbitPath", "text"], ["fallingPattern", "text"], ["fallingCount", "number"]]),
-    group("布局与节奏", "model", [["backgroundHeightPx", "number"], ["rabbitSizePx", "number"],
+    group("布局与节奏", [["backgroundHeightPx", "number"], ["rabbitSizePx", "number"],
       ["rabbitCenterXRatio", "number"], ["rabbitBottomMarginPx", "number"]]),
-    group("状态节奏", "model", [["typingWindowMs", "number"], ["crazyThreshold", "number"],
+    group("状态节奏", [["typingWindowMs", "number"], ["crazyThreshold", "number"],
       ["stopToBrakeDelayMs", "number"], ["brakeDurationMs", "number"]]),
-    group("掉落物", "model", [["backgroundFlashMs", "number"], ["fallDurationMs", "number"],
+    group("掉落物", [["backgroundFlashMs", "number"], ["fallDurationMs", "number"],
       ["fallDistancePx", "number"], ["fallStartOffsetPx", "number"], ["fallSpreadPx", "number"],
       ["fallSizePx", "number"]]),
+    timing(),
   ],
 }
 
@@ -274,27 +290,24 @@ const FAMILY_LABELS: Record<string, Record<string, string>> = {
   a13: { count: "物件数量" },
 }
 
-const BASE_INI_KEYS: Record<string, string> = { t: "TYPE", count: "REPEAT_CNT", back: "REPEAT_MODE", clear: "REMOVE" }
-
-/** The groups of one animation, starting with the playback controls the base model owns. */
+/**
+ * The parameter sections of one animation, in the inspector's order: what changes, then timing and
+ * repetition (with the base model's playback fields), then where and how it is drawn.
+ */
 export function animationGroups(kind: string, model: JsonObject): AnimationGroup[] {
-  const own = FAMILY_GROUPS[kind]?.(model) ?? []
+  const groups = FAMILY_GROUPS[kind]?.(model) ?? []
   const labels = FAMILY_LABELS[kind] ?? {}
   const iniKeys = new Map((ANIMATION_FIELDS[kind] ?? []).map(([key, iniKey]) => [key, iniKey]))
-  for (const item of own) {
+  for (const item of groups) {
     for (const entry of item.fields) {
+      if (entry.scope === "base") continue
       entry.label = labels[entry.key] ?? entry.label
       entry.iniKey ??= iniKeys.get(entry.key)
       if (kind === "a4" && entry.kind === "point") entry.axes = ["最小", "最大"]
     }
   }
-  if (!animationHasBase(kind)) return own
-  const base: AnimationField[] = kind === "a1"
-    ? [field("t", "select", { label: "变化属性" }), ...BASE_FIELDS.map(([key, fieldKind]) => field(key, fieldKind))]
-    : BASE_FIELDS.map(([key, fieldKind]) => field(key, fieldKind))
-  for (const entry of base) entry.iniKey = BASE_INI_KEYS[entry.key]
-  if (kind === "a4") base.find((entry) => entry.key === "clear")!.defaultValue = "true"
-  return [{ title: "播放控制", scope: "base", fields: base }, ...own]
+  if (kind === "a4") groups.flatMap((item) => item.fields).find((entry) => entry.scope === "base" && entry.key === "clear")!.defaultValue = "true"
+  return groups
 }
 
 export function animationFieldKeys(kind: string, model: JsonObject = {}): string[] {

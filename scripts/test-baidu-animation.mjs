@@ -49,19 +49,25 @@ try {
   })
 
   const bdaConfig = bda.locator("#bda-config-fields")
-  await bdaConfig.locator(".bda-animation-section").first().waitFor()
-  const groupLabels = await bdaConfig.locator(".bda-animation-section").evaluateAll((sections) =>
-    sections.map((section) => section.dataset.inspectorGroupLabel))
-  for (const label of ["概览", "目标绑定", "透明度", "位移", "粒子", "图片序列"]) {
-    assert.ok(groupLabels.includes(label), `BDA 检查器缺少「${label}」分组：${groupLabels.join("、")}`)
+  await bdaConfig.locator(".ui-listbox").waitFor()
+  // 原始文件视图列出全部效果；选中一个后是 预览 → 参数 → 引用。
+  const listed = await bdaConfig.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
+  for (const id of ["group:combo", "alpha:press", "shift:slide", "emitter:spark", "image:seq", "lottie:lottie", "video:video"]) {
+    assert.ok(listed.includes(id), `BDA 列表缺少 ${id}：${listed.join("、")}`)
   }
-  const targetsText = await bdaConfig.locator('[data-inspector-group-label="目标绑定"]').innerText()
-  for (const event of ["按键按下", "按键抬起", "元素显示", "元素隐藏"]) {
-    assert.ok(targetsText.includes(event), `目标绑定缺少事件「${event}」`)
+  await bdaConfig.locator('[data-animation-id="alpha:press"]').click()
+  await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-animation-id="alpha:press"]')?.getAttribute("aria-selected") === "true")
+  const groupLabels = await bdaConfig.locator(":scope > section").evaluateAll((sections) => sections.map((section) => section.dataset.inspectorGroupLabel))
+  assert.deepEqual(groupLabels, ["动画", "预览", "变化", "时间与循环", "引用"])
+  const uses = await bdaConfig.locator('[data-inspector-group-label="引用"]').innerText()
+  for (const event of ["按键按下", "元素显示", "元素隐藏", "经组合 combo"]) {
+    assert.ok(uses.includes(event), `引用缺少「${event}」：${uses}`)
   }
-  // 时间轴、预览、字段都在。
-  assert.ok(await bdaConfig.locator(".bda-animation-player").count() > 0, "图片序列缺少播放器")
-  assert.ok(await bdaConfig.locator('input[aria-label="时长（毫秒）"]').count() > 0)
+  assert.equal(await bdaConfig.locator(".ui-animation-player").count(), 1, "选中的效果有播放器")
+  await bdaConfig.locator('[data-animation-id="shift:slide"]').click()
+  await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-inspector-group-label="引用"]')?.textContent.includes("按键抬起"))
+  await bdaConfig.locator('[data-animation-id="alpha:press"]').click()
+  await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-animation-id="alpha:press"]')?.getAttribute("aria-selected") === "true")
   await bdaConfig.locator('input[aria-label="时长（毫秒）"]').first().fill("700")
   await bdaConfig.locator('input[aria-label="时长（毫秒）"]').first().press("Tab")
   await bda.waitForFunction(async () => {
@@ -158,17 +164,18 @@ try {
     selectFile("light/skin/port/res/anim.ini")
   })
   const legacyFields = legacy.locator("#document-fields")
-  await legacyFields.locator(".ui-section").first().waitFor()
-  const legacyGroups = await legacyFields.locator(".ui-section, .document-property-section").evaluateAll((sections) =>
-    sections.map((section) => section.dataset.inspectorGroupLabel).filter(Boolean))
-  assert.ok(legacyGroups.some((label) => /动画概览/.test(label)), `旧版检查器缺少动画概览：${legacyGroups.join("、")}`)
-  assert.ok(legacyGroups.some((label) => /动效/.test(label)), "旧版检查器没有列出动效")
-  assert.ok(await legacyFields.locator('[aria-label$="时间轴"]').count() > 0, "旧版检查器缺少时间轴")
-  assert.ok(await legacyFields.locator("canvas").count() > 0, "旧版检查器缺少内联预览")
+  await legacyFields.locator(".ui-listbox").waitFor()
+  const legacyItems = await legacyFields.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
+  assert.ok(legacyItems.length >= 7 && legacyItems[0] === "ANIM1", `旧版检查器没有列出动效：${legacyItems.join("、")}`)
+  const legacyGroups = await legacyFields.locator(":scope > section").evaluateAll((sections) => sections.map((section) => section.dataset.inspectorGroupLabel))
+  assert.deepEqual(legacyGroups, ["动画", "预览", "变化", "时间与循环", "引用"])
+  assert.ok(await legacyFields.locator(".ui-animation-player canvas").count() > 0, "旧版检查器缺少播放预览")
+  assert.ok(await legacyFields.locator(".ui-animation-lane").count() > 0, "旧版检查器缺少时间轴")
+  assert.match(await legacyFields.locator('[data-inspector-group-label="引用"]').innerText(), /按下 · PRESS_ANIM/)
 
-  const duration = legacyFields.locator('[aria-label="ANIM1 时间轴"]').locator("xpath=ancestor::*[contains(@class,'ui-section')]").locator('input[aria-label="时长"]')
-  await duration.first().fill("999")
-  await duration.first().press("Tab")
+  const duration = legacyFields.locator('[data-inspector-group-label="时间与循环"] input[aria-label="时长"]')
+  await duration.fill("999")
+  await duration.press("Tab")
   await legacy.waitForFunction(async () => {
     const { appState } = await import("/src/app/state.ts")
     return appState.selectedDocument.get("ANIM1", "DURATION") === "999"
@@ -178,9 +185,35 @@ try {
     const { appState } = await import("/src/app/state.ts")
     return appState.selectedDocument.get("ANIM1", "DURATION") !== "999"
   })
+  assert.equal(await legacyFields.locator('[data-animation-id="ANIM1"]').getAttribute("aria-selected"), "true", "撤销后仍选中同一个动效")
+
+  // 组合动效：子动效列表移除一项，BUILD_LIST 与 BUILD_NUM 一起写回。
+  const combination = legacyFields.locator("[data-animation-id]").filter({ hasText: "组合" }).first()
+  const comboSection = await combination.getAttribute("data-animation-id")
+  await combination.click()
+  await legacyFields.locator(".animation-combo-item").first().waitFor()
+  const before = await legacy.evaluate(async (section) => (await import("/src/app/state.ts")).appState.selectedDocument.get(section, "BUILD_LIST"), comboSection)
+  await legacyFields.locator(".animation-combo-item").last().getByRole("button", { name: /^移除/ }).click()
+  await legacy.waitForFunction(async ({ section, before }) => {
+    const { appState } = await import("/src/app/state.ts")
+    const list = appState.selectedDocument.get(section, "BUILD_LIST")
+    return list !== before && appState.selectedDocument.get(section, "BUILD_NUM") === String(list.split(",").filter(Boolean).length)
+  }, { section: comboSection, before })
+
+  // 新建与复制：追加 [ANIM n+1]，同步 ANIM_NUM，并直接选中新的动效。
+  const count = legacyItems.length + 1
+  await legacyFields.getByLabel("新建动画", { exact: true }).selectOption("basic")
+  await legacy.waitForFunction(async (count) => {
+    const { appState } = await import("/src/app/state.ts")
+    const document = appState.selectedDocument
+    return document.get("GLOBAL", "ANIM_NUM") === String(count) && document.sections().includes(`ANIM${count}`)
+  }, count)
+  assert.equal(await legacyFields.locator(`[data-animation-id="ANIM${count}"]`).getAttribute("aria-selected"), "true")
+  await legacyFields.getByRole("button", { name: `复制动画 ${count}`, exact: true }).click()
+  await legacy.waitForFunction(async (count) => (await import("/src/app/state.ts")).appState.selectedDocument.get("GLOBAL", "ANIM_NUM") === String(count + 1), count)
 
   assert.deepEqual(errors, [], `页面报错：${errors.join("；")}`)
-  console.log("baidu animation: BDA/BDS 检查器可编辑，动效在编辑/导出/源码回写链路中完整保留")
+  console.log("baidu animation: BDA/BDS 检查器按列表选择编辑，动效在编辑/导出/源码回写链路中完整保留")
 } finally {
   await browser.close()
   await server.close()

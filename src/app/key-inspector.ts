@@ -32,6 +32,8 @@ import { populateDocumentInspector, populateBdaConfigInspector } from "./documen
 import { populateFontControls } from "./skin-fonts"
 import { populateTextStyleGroup, selectedKeyTextRefs, textRefValues, writeTextRefs, type TextProperty } from "./text-styles"
 import { canCreateBdaKeyText, createBdaKeyText, renderBdaTextLayerSwitch, selectedBdaTextRefs } from "./bda-key-text"
+import { animationSelectionContext } from "./animation-resource"
+import { animationModeTitle } from "../animation-inspector.ts"
 
 export function selectedBdaRefs(
   source: "BACK_STYLE" | "FORE_STYLE",
@@ -292,7 +294,9 @@ export function populateKeyInspector(): void {
     : appState.selectedPath !== appState.layoutPath
       ? appState.selectedPath.split("/").pop() ?? "文档配置"
       : "整体布局"
-  selectedKeyPreview.replaceChildren(createIcon(hasSelection ? bdaSelected ? "component" : sections.length > 1 ? "layers" : "key-round" : "layout-panel-top", 16))
+  const animationView = !hasSelection && appState.animationDesignMode !== "all"
+  selectedKeyPreview.replaceChildren(createIcon(hasSelection ? bdaSelected ? "component" : sections.length > 1 ? "layers" : "key-round"
+    : animationView ? appState.animationDesignMode === "particle" ? "wand-sparkles" : "film" : "layout-panel-top", 16))
   selectedKeyPreview.hidden = false
   selectedKeyContext.textContent = hasSelection
     ? `${appState.selectedPath.split("/").pop()} · ${sections.length > 1 ? "keys.*" : sections[0]}`
@@ -302,7 +306,9 @@ export function populateKeyInspector(): void {
     ? ssfInspectorTitle()
     : sxiSelected
       ? sxiInspectorTitle()
-      : legacyAnimationInspectorTitle()
+      : bdaConfigSelected && /animationConfig$/i.test(appState.selectedPath)
+        ? { name: animationModeTitle(appState.animationDesignMode), context: appState.selectedPath }
+        : legacyAnimationInspectorTitle()
   if (nativeTitle) {
     selectedKeyName.textContent = nativeTitle.name
     selectedKeyContext.textContent = nativeTitle.context
@@ -551,7 +557,7 @@ export function populateKeyInspector(): void {
   syncMobileInspectorGroups()
   revealSinglePageInspectorGroup(JSON.stringify([appState.selectedPath, appState.selectedKeySections, appState.selectedCandidate]))
   applyModeState()
-  syncInspectorRows(JSON.stringify([appState.selectedPath, appState.selectedKeySections, mode.value]))
+  syncInspectorRows(JSON.stringify([appState.selectedPath, appState.selectedKeySections, mode.value, animationSelectionContext()]))
 }
 
 export function updateSkinInfo(field: HTMLInputElement): void {

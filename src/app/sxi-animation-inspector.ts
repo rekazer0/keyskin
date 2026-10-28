@@ -1,17 +1,21 @@
-// Visual property inspector for a Palm skin's `ss_2` animation table. One section per animation: a
-// timeline, the playback controls its base model owns, the family's fields in purpose groups, and
-// dedicated editors for combination tracks and liquid floaters. Every edit is written into skin.json
-// as one undo step through the same helpers the rest of the Palm inspector uses.
+// Palm skin.json `ss_2` in the shared animation inspector (DESIGN.md §10「动画资源」): the list of
+// animations in the current view, then the selected one's player, parameter sections, dedicated
+// editors for combination tracks and liquid floaters, and where it is played. Every edit is written
+// into skin.json as one undo step through the same helpers the rest of the Palm inspector uses.
 
 import { element } from "../dom-element.ts"
 import { createIcon } from "../icons"
-import { animationPlayer } from "../animation-player.ts"
 import { iniPreviewClip } from "../animation-preview-model.ts"
+import {
+  animationModeTitle, animationSection, animationWarning, comboList, renderAnimationResource,
+  type AnimationListItem, type AnimationUse,
+} from "../animation-inspector.ts"
 import { IniDocument } from "../ini.ts"
 import { animationsIni } from "../palm/sxi-style.ts"
 import { PalmStyles } from "../palm/palm-styles.ts"
 import { visualResolver } from "./bda-documents"
 import {
+  ANIMATION_FAMILIES,
   animationBase,
   animationFamilyInfo,
   animationGroups,
@@ -27,6 +31,7 @@ import {
   comboMethod,
   floaterDefaults,
   floaterFields,
+  newAnimation,
   type AnimationField,
   type AnimationPatch,
   type AnimationTimeline,
@@ -39,10 +44,17 @@ import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
 import { editSxi, sxiSkin, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
-import { animationActions, animationCreateControl } from "./sxi-animation-actions"
+import { rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
 import { appState } from "./state"
 
 type AnimationEntry = { id: string; kind: string; model: JsonObject; wrap: JsonObject }
+
+const SECTION = "document-property-section"
+const A1_TYPES = ["透明度", "旋转", "位移", "缩放"]
+const A1_ICONS = ["blend", "rotate-cw", "move", "scaling"]
+const FAMILY_ICONS: Record<string, string> = {
+  a3: "layers", af2: "list-video", a4: "sparkles", a10: "route", a11: "orbit", a12: "waves", a13: "party-popper", a14: "rabbit",
+}
 
 function animationPointer(): SxiPointer | undefined {
   const archive = appState.archive
@@ -333,8 +345,8 @@ function fieldRows(target: SxiPointer, field: AnimationField, value: Json): HTML
 }
 
 
-/* —— a1-specific rows: type, unit and the values it changes —— */
-function segmentedRow(label: string, options: Array<[value: string, text: string]>, current: string, onSelect: (value: string) => void, title?: string, identity = label, iniKey?: string): HTMLElement {
+/* —— segmented rows: a1 type and unit, combination method —— */
+function segmentedRow(label: string, options: Array<[value: string, text: string]>, current: string, onSelect: (value: string) => void, title?: string, identity = label, iniKey?: string, reset?: (baseline: Json) => void): HTMLElement {
   const row = element("div", "ui-field document-property-field")
   if (iniKey) row.dataset.documentKey = iniKey
   row.dataset.inspectorRowKey = JSON.stringify(["segmented", identity])
@@ -346,7 +358,7 @@ function segmentedRow(label: string, options: Array<[value: string, text: string
   group.setAttribute("role", "group")
   group.setAttribute("aria-label", label)
   // A hidden select carries the value so the inspector's change marks and 重置 cover this row too.
-  const proxy = element("select", "sxi-animation-proxy") as HTMLSelectElement
+  const proxy = element("select", "animation-proxy") as HTMLSelectElement
   proxy.tabIndex = -1
   proxy.setAttribute("aria-hidden", "true")
   for (const [value, text] of options) {
@@ -366,34 +378,33 @@ function segmentedRow(label: string, options: Array<[value: string, text: string
   proxy.addEventListener("change", () => onSelect(proxy.value))
   row.addEventListener("inspector-reset", (event) => {
     event.preventDefault()
-    const baseline = String((JSON.parse((event as CustomEvent<string>).detail) as Json[])[0])
-    if (baseline !== proxy.value) onSelect(baseline)
+    const baseline = (JSON.parse((event as CustomEvent<string>).detail) as Json[])[0]
+    if (reset) reset(baseline)
+    else if (String(baseline) !== proxy.value) onSelect(String(baseline))
   })
   row.append(caption, group, proxy)
   return row
 }
 
-function a1TypeRow(basePointer: SxiPointer, entry: AnimationEntry): HTMLElement {
-  const field = animationGroups("a1", entry.model)
-    .flatMap((group) => group.fields)
-    .find((item) => item.key === "t")!
+
+function a1TypeRow(target: SxiPointer, entry: AnimationEntry): HTMLElement {
   const type = Number(animationBase(entry.model).t ?? 0)
-  const patchType = (next: number) => {
-    if (!Number.isFinite(next) || next === type) return
-    editSxi((skin) => {
-      const model = asObject(sxiValue(skin, [...basePointer.slice(0, -1)]))
-      if (!model) throw new Error("skin.json 中缺少动画")
-      applyPatch(model, a1TypePatch(model, next))
-    })
-  }
+  const modelPointer = target.slice(0, -1)
   const ends = ["from", "to", "from_p", "to_p", "from_px", "to_px"]
   const snapshot: JsonObject = { type: animationBase(entry.model).t }
   for (const key of ends) if (entry.model[key] !== undefined) snapshot[key] = entry.model[key]
-  const row = selectRow(basePointer, ["t"], field, type, (next) => patchType(Number(next)), (baseline) => {
+  const row = segmentedRow("变化属性", A1_TYPES.map((label, index) => [String(index), label]), String(type), (next) => {
+    editSxi((skin) => {
+      const model = asObject(sxiValue(skin, modelPointer))
+      if (!model) throw new Error("skin.json 中缺少动画")
+      applyPatch(model, a1TypePatch(model, Number(next)))
+    })
+  }, "透明度、旋转、位移或缩放；切换后起止值换成新属性的写法", `${modelPointer.join(".")}|变化属性`, "TYPE t", (baseline) => {
+    // The type decides how from/to are spelled, so a reset puts both back together.
     const saved = asObject(baseline)
     if (!saved) return
     editSxi((skin) => {
-      const model = asObject(sxiValue(skin, basePointer.slice(0, -1)))
+      const model = asObject(sxiValue(skin, modelPointer))
       if (!model) throw new Error("skin.json 中缺少动画")
       const base = asObject(model.b) ?? {}
       model.b = base
@@ -433,13 +444,13 @@ function applyPatch(model: JsonObject, patch: AnimationPatch): void {
   }
 }
 
-/* —— a3: combination tracks —— */
+
 /**
  * Structural editors (the combination list, the floater list) are not single value rows, so a hidden
  * row carries their value: the shell can mark the section and 重置 can put the list back.
  */
 function trackedControl(identity: unknown[], value: Json, restore: (baseline: Json) => void): HTMLElement {
-  const row = element("div", "document-property-field sxi-animation-tracker")
+  const row = element("div", "document-property-field animation-tracker")
   row.hidden = true
   row.dataset.inspectorRowKey = JSON.stringify(["list", identity])
   // Key order changes when skin.json is re-encoded, so compare the canonical Palm JSON instead.
@@ -458,97 +469,58 @@ function trackedControl(identity: unknown[], value: Json, restore: (baseline: Js
   return row
 }
 
-function iconButton(icon: string, label: string, onClick: () => void, disabled = false): HTMLButtonElement {
+
+function iconButton(icon: string, label: string, onClick: () => void): HTMLButtonElement {
   const button = element("button", "ui-icon-button")
   button.type = "button"
   button.dataset.size = "sm"
   button.setAttribute("aria-label", label)
   button.title = label
-  button.disabled = disabled || !isEditing()
+  button.disabled = !isEditing()
   button.append(createIcon(icon, 14))
   button.addEventListener("click", onClick)
   return button
 }
 
-function comboEditor(pointer: SxiPointer, entry: AnimationEntry, table: JsonObject): HTMLElement {
-  const block = element("div", "ui-subsection sxi-animation-block")
-  const heading = element("h4")
-  heading.textContent = "组合轨道"
-  block.append(heading)
-  const model = entry.model
-  const children = comboAnimations(model)
-  const write = (mutate: (list: number[]) => number[]) => {
+/* —— a3: combination tracks —— */
+function comboSection(pointer: SxiPointer, entry: AnimationEntry, table: JsonObject): HTMLElement {
+  const section = animationSection("组合", SECTION)
+  const target = [...pointer, entry.id, "a3"]
+  const children = comboAnimations(entry.model)
+  const write = (mutate: (list: number[]) => number[]) => editSxi((skin) => {
+    const model = asObject(sxiValue(skin, target))
+    if (!model) throw new Error("skin.json 中缺少组合动画")
+    model.animations = mutate(comboAnimations(model))
+  })
+  section.append(segmentedRow("组合方式", [["simultaneous", "同时"], ["sequential", "顺序"], ["random", "随机"]], comboMethod(entry.model), (value) => {
     editSxi((skin) => {
-      const target = asObject(sxiValue(skin, [...pointer, entry.id, "a3"]))
-      if (!target) throw new Error("skin.json 中缺少组合动画")
-      target.animations = mutate(comboAnimations(target))
+      const model = asObject(sxiValue(skin, target))
+      if (!model) throw new Error("skin.json 中缺少组合动画")
+      model.a_method = value
+      model.method = { [value === "simultaneous" ? "simultaneous" : "sequential"]: {} }
     })
-  }
-  block.append(segmentedRow("组合方式", [["simultaneous", "同时"], ["sequential", "顺序"], ["random", "随机"]], comboMethod(model), (value) => {
-    editSxi((skin) => {
-      const target = asObject(sxiValue(skin, [...pointer, entry.id, "a3"]))
-      if (!target) throw new Error("skin.json 中缺少组合动画")
-      target.a_method = value
-      target.method = { [value === "simultaneous" ? "simultaneous" : "sequential"]: {} }
-    })
-  }, "顺序播放会按列表依次衔接", `${[...pointer, entry.id, "a3"].join(".")}|组合方式`, "BUILD_METHOD"))
-  const list = element("ol", "sxi-combo-list")
-  list.setAttribute("aria-label", "子动画")
-  for (const [index, id] of children.entries()) {
-    const child = asObject(table[String(id)])
-    const info = child && animationModel(child)
-    const item = element("li", "sxi-combo-item")
-    const order = element("span", "sxi-combo-order")
-    order.textContent = String(index + 1)
-    const name = element("span", "sxi-combo-name")
-    name.textContent = info ? `动画 ${id}` : `动画 ${id}（未找到）`
-    if (!info) item.dataset.missing = ""
-    const detail = element("small")
-    detail.textContent = info
-      ? `${animationFamilyInfo(info.kind)?.label ?? info.kind} · ${timelineText(animationTimeline(info.kind, info.model, table))}`
-      : "子动画不存在，请替换或移除这个引用"
-    name.append(detail)
-    const actions = element("span", "sxi-combo-actions")
-    actions.append(
-      iconButton("arrow-up", `上移动画 ${id}`, () => write((items) => swap(items, index, index - 1)), index === 0),
-      iconButton("arrow-down", `下移动画 ${id}`, () => write((items) => swap(items, index, index + 1)), index === children.length - 1),
-      iconButton("x", `移除动画 ${id}`, () => write((items) => items.filter((_, position) => position !== index))),
-    )
-    item.append(order, name, actions)
-    list.append(item)
-  }
-  if (children.length) block.append(list)
-  else {
-    const empty = element("p", "inspector-group-subtitle")
-    empty.textContent = "还没有子动画；顺序播放需要至少两个。"
-    block.append(empty)
-  }
-  block.append(trackedControl([...pointer, entry.id, "a3", "animations"], children, (baseline) => {
-    editSxi((skin) => {
-      const target = asObject(sxiValue(skin, [...pointer, entry.id, "a3"]))
-      if (!target) throw new Error("skin.json 中缺少组合动画")
-      target.animations = Array.isArray(baseline) ? baseline : []
-    })
+  }, "顺序播放会按列表依次衔接", `${target.join(".")}|组合方式`, "BUILD_METHOD"))
+  section.append(comboList({
+    editable: isEditing(),
+    empty: "还没有子动画；顺序播放需要至少两个。",
+    children: children.map((id) => {
+      const child = asObject(table[String(id)])
+      const info = child && animationModel(child)
+      return info
+        ? { title: `动画 ${id}`, detail: `${kindLabel(info.kind, info.model)} · ${timelineText(animationTimeline(info.kind, info.model, table))}` }
+        : { title: `动画 ${id}`, detail: "子动画不存在，请移除这个引用", missing: true }
+    }),
+    move: (index, offset) => write((items) => swap(items, index, index + offset)),
+    remove: (index) => write((items) => items.filter((_, position) => position !== index)),
+    add: {
+      options: addableComboIds(table, entry.id).filter((id) => !children.some((child) => String(child) === id)).map((id) => [id, `动画 ${id}`]),
+      run: (id) => write((items) => [...items, Number(id)]),
+    },
   }))
-  const remaining = addableComboIds(table, entry.id).filter((id) => !children.some((child) => String(child) === id))
-  if (remaining.length) {
-    const add = element("div", "sxi-combo-add")
-    const control = element("span", "ui-input ui-select")
-    const select = element("select")
-    select.setAttribute("aria-label", "添加子动画")
-    select.disabled = !isEditing()
-    select.append(new Option("添加子动画…", ""))
-    for (const id of remaining) select.append(new Option(`动画 ${id}`, id))
-    select.addEventListener("change", () => {
-      if (!select.value) return
-      const next = Number(select.value)
-      write((items) => [...items, next])
-    })
-    control.append(select)
-    add.append(control)
-    block.append(add)
-  }
-  return block
+  section.append(trackedControl(target.concat("animations"), children, (baseline) => {
+    write(() => Array.isArray(baseline) ? baseline.filter((item): item is number => typeof item === "number") : [])
+  }))
+  return section
 }
 
 function swap<T>(items: T[], left: number, right: number): T[] {
@@ -561,151 +533,119 @@ function swap<T>(items: T[], left: number, right: number): T[] {
 function timelineText(timeline: AnimationTimeline): string {
   if (timeline.continuous) return timeline.repeatText
   if (timeline.unknown) return "时长待定"
-  return `${timeline.duration ?? 0} ms`
+  return `${timeline.totalDuration ?? timeline.duration ?? 0} ms`
 }
 
 /* —— a12: floaters —— */
-function floatersBlock(pointer: SxiPointer, entry: AnimationEntry): HTMLElement | undefined {
+function floatersSection(pointer: SxiPointer, entry: AnimationEntry): HTMLElement {
   const floaters = Array.isArray(entry.model.floaters) ? entry.model.floaters : []
-  const block = element("div", "ui-subsection sxi-animation-block")
-  const heading = element("div", "sxi-animation-block-heading")
-  const title = element("h4")
-  title.textContent = `浮动物体（${floaters.length}）`
-  const addButton = element("button", "ui-button sxi-animation-add") as HTMLButtonElement
-  addButton.type = "button"
-  addButton.dataset.variant = "quiet"
-  addButton.dataset.size = "sm"
-  addButton.append(createIcon("plus", 14), Object.assign(element("span"), { textContent: "添加" }))
-  addButton.setAttribute("aria-label", "添加浮动物体")
-  addButton.disabled = !isEditing()
-  heading.append(title, addButton)
-  addButton.addEventListener("click", () => {
-    editSxi((skin) => {
-      const model = asObject(sxiValue(skin, [...pointer, entry.id, "a12"]))
-      if (!model) throw new Error("skin.json 中缺少液体动画")
-      model.floaters = [...Array.isArray(model.floaters) ? model.floaters : [], floaterDefaults()]
-    })
+  const target = [...pointer, entry.id, "a12"]
+  const section = animationSection("浮动物体", SECTION, `${floaters.length} 个`)
+  const edit = (change: (model: JsonObject) => void) => editSxi((skin) => {
+    const model = asObject(sxiValue(skin, target))
+    if (!model) throw new Error("skin.json 中缺少液体动画")
+    change(model)
   })
-  block.append(heading)
-  block.append(trackedControl([...pointer, entry.id, "a12", "floaters"], entry.model.floaters, (baseline) => {
-    editSxi((skin) => {
-      const model = asObject(sxiValue(skin, [...pointer, entry.id, "a12"]))
-      if (!model) throw new Error("skin.json 中缺少液体动画")
-      if (baseline === undefined) delete model.floaters
-      else model.floaters = baseline
-    })
-  }))
+  section.querySelector("h3")!.append(iconButton("plus", "添加浮动物体", () => edit((model) => {
+    model.floaters = [...Array.isArray(model.floaters) ? model.floaters : [], floaterDefaults()]
+  })))
+  section.append(trackedControl([...target, "floaters"], entry.model.floaters, (baseline) => edit((model) => {
+    if (baseline === undefined) delete model.floaters
+    else model.floaters = baseline
+  })))
   if (!floaters.length) {
     const empty = element("p", "inspector-group-subtitle")
     empty.textContent = "还没有浮动物体；添加后液体表面会出现可漂浮的图片。"
-    block.append(empty)
-    return block
+    section.append(empty)
+    return section
   }
   const fields = floaterFields()
   for (const [index, value] of floaters.entries()) {
     const floater = asObject(value)
     if (!floater) continue
-    const card = element("div", "sxi-animation-floater")
-    const header = element("div", "sxi-animation-floater-heading")
-    const name = element("h5")
-    name.textContent = `物体 ${index + 1}`
-    header.append(name)
-    header.append(iconButton("trash-2", `删除物体 ${index + 1}`, () => {
-      editSxi((skin) => {
-        const model = asObject(sxiValue(skin, [...pointer, entry.id, "a12"]))
-        if (!model) throw new Error("skin.json 中缺少液体动画")
-        model.floaters = (Array.isArray(model.floaters) ? model.floaters : []).filter((_, position) => position !== index)
-      })
-    }))
-    card.append(header)
-    const grid = element("div", "document-property-grid")
-    const target: SxiPointer = [...pointer, entry.id, "a12", "floaters", index]
-    for (const field of fields) grid.append(...fieldRows(target, field, floater[field.key]))
-    card.append(grid)
-    block.append(card)
-  }
-  return block
-}
-
-/* —— section —— */
-function referenceNote(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry): HTMLElement {
-  const references = animationReferences(skin, pointer, entry.id)
-  const sections = references.styles.map((style) => `${style.name}（${style.events.join("、")}）`)
-  const combos = [...references.combos.map((id) => `动画 ${id}`), ...references.contexts ?? []]
-  const note = element("p", "inspector-group-subtitle sxi-animation-references")
-  note.textContent = sections.length || combos.length
-    ? [sections.length ? `播放：${sections.join("、")}` : "", combos.length ? `被 ${combos.join("、")} 组合` : ""].filter(Boolean).join(" · ")
-    : "还没有样式播放这个动画。"
-  return note
-}
-
-function renderSection(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, table: JsonObject, document: IniDocument): HTMLElement {
-  const family = animationFamilyInfo(entry.kind)
-  const section = element("section", "ui-section document-property-section sxi-animation-section")
-  section.dataset.inspectorGroupLabel = `动画 ${entry.id}`
-  const heading = element("h3", "document-section-heading")
-  const title = element("span", "document-section-title")
-  title.textContent = `动画 ${entry.id}`
-  const code = element("span", "document-section-code")
-  code.textContent = family?.label ?? entry.kind
-  heading.append(title, code, animationActions(pointer, entry.id, skin))
-  section.append(heading)
-  const resolver = visualResolver()
-  section.append(animationPlayer({ clip: iniPreviewClip(document, `ANIM${entry.id}`), resolver,
-    readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined }))
-  const summary = element("p", "inspector-group-subtitle sxi-animation-summary")
-  summary.textContent = family?.summary ?? ""
-  section.append(summary)
-  section.append(referenceNote(skin, pointer, entry))
-  if (baseNeedsFix(entry.kind, entry.model)) {
-    const warning = element("div", "sxi-animation-warning")
-    const text = element("span")
-    text.textContent = `分类值 ${String(animationBase(entry.model).c)} 与动画类型不一致，导出后可能无法识别。`
-    const fix = element("button", "ui-button")
-    fix.type = "button"
-    fix.dataset.variant = "quiet"
-    fix.dataset.size = "sm"
-    fix.textContent = "修正"
-    fix.disabled = !isEditing()
-    fix.addEventListener("click", () => commit([...pointer, entry.id, entry.kind, "b"], ["c"], family?.category ?? 0, "修正动画分类"))
-    warning.append(text, fix)
-    section.append(warning)
-  }
-  if (entry.kind === "a3") {
-    section.append(comboEditor(pointer, entry, table))
-    return section
-  }
-  const target: SxiPointer = [...pointer, entry.id, entry.kind]
-  for (const group of animationGroups(entry.kind, entry.model)) {
-    const block = element("div", "ui-subsection sxi-animation-block")
-    const blockTitle = element("h4")
-    blockTitle.textContent = group.title
-    block.append(blockTitle)
-    const grid = element("div", "document-property-grid")
-    const scoped = group.scope === "base" ? [...target, "b"] : target
-    for (const field of group.fields) {
-      const value = group.scope === "base" ? sxiValue(entry.model, ["b", field.key]) : entry.model[field.key]
-      const rows = group.scope === "base" && entry.kind === "a1" && field.key === "t"
-        ? [a1TypeRow([...target, "b"], entry)]
-        : fieldRows(scoped, field, value)
-      grid.append(...rows)
-    }
-    block.append(grid)
-    // Only 位移 has a percent / pixel spelling; 旋转 and 缩放 always use percent.
-    if (entry.kind === "a1" && group.title === "时间与曲线"
-      && Number(animationBase(entry.model).t) === 2 && (a1Variant(entry.model) === "point" || a1Variant(entry.model) === "pixels")) {
-      block.append(a1UnitRow(target, entry))
-      const unitNote = element("p", "ui-field-note")
-      unitNote.textContent = "切换单位只保留数值，不会按画布尺寸换算。"
-      block.append(unitNote)
-    }
+    const block = element("div", "ui-subsection animation-floater")
+    const heading = element("h4")
+    heading.textContent = `物体 ${index + 1}`
+    heading.append(iconButton("trash-2", `删除物体 ${index + 1}`, () => edit((model) => {
+      model.floaters = (Array.isArray(model.floaters) ? model.floaters : []).filter((_, position) => position !== index)
+    })))
+    block.append(heading)
+    for (const field of fields) block.append(...fieldRows([...target, "floaters", index], field, floater[field.key]))
     section.append(block)
   }
-  if (entry.kind === "a12") {
-    const floaters = floatersBlock(pointer, entry)
-    if (floaters) section.append(floaters)
-  }
   return section
+}
+
+/* —— list, sections and uses —— */
+function kindLabel(kind: string, model: JsonObject): string {
+  return kind === "a1" ? A1_TYPES[Number(animationBase(model).t ?? 0)] ?? "属性变化" : animationFamilyInfo(kind)?.label ?? kind
+}
+
+function listItem(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, table: JsonObject): AnimationListItem {
+  const timeline = animationTimeline(entry.kind, entry.model, table)
+  const references = animationReferences(skin, pointer, entry.id)
+  const detail = entry.kind === "a3"
+    ? [{ simultaneous: "同时", sequential: "顺序", random: "随机" }[comboMethod(entry.model)], `${comboAnimations(entry.model).length} 个子动画`, timelineText(timeline)]
+    : entry.kind === "a4"
+      ? [`${Number(entry.model.count ?? 0)} 个粒子`, timelineText(timeline)]
+      : [timelineText(timeline), timeline.reverse ? "往返" : "", !timeline.continuous && timeline.repeatText !== "播放一次" ? timeline.repeatText : ""]
+  const missing = entry.kind === "a3" && comboAnimations(entry.model).some((id) => !asObject(table[String(id)]))
+  return {
+    id: entry.id,
+    title: `动画 ${entry.id}`,
+    kind: kindLabel(entry.kind, entry.model),
+    icon: entry.kind === "a1" ? A1_ICONS[Number(animationBase(entry.model).t ?? 0)] ?? "blend" : FAMILY_ICONS[entry.kind] ?? "clapperboard",
+    detail: detail.filter(Boolean).join(" · "),
+    uses: references.styles.length + references.combos.length,
+    problem: baseNeedsFix(entry.kind, entry.model) ? "分类值与动画类型不一致" : missing ? "组合里有不存在的子动画" : undefined,
+  }
+}
+
+function uses(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry): AnimationUse[] {
+  const references = animationReferences(skin, pointer, entry.id)
+  return [
+    ...references.styles.map((style) => ({ icon: "palette", title: style.name, detail: `${style.events.join("、")}时播放` })),
+    ...references.combos.map((id) => ({ icon: "layers", title: `动画 ${id}`, detail: "作为组合动画的一部分播放" })),
+    ...(references.contexts ?? []).map((context) => ({ icon: "layers", title: context, detail: "另一方向的组合动画" })),
+  ]
+}
+
+function parameterSections(pointer: SxiPointer, entry: AnimationEntry, table: JsonObject): HTMLElement[] {
+  if (entry.kind === "a3") return [comboSection(pointer, entry, table)]
+  const target: SxiPointer = [...pointer, entry.id, entry.kind]
+  const sections = animationGroups(entry.kind, entry.model).map((group) => {
+    const section = animationSection(group.title, SECTION)
+    for (const field of group.fields) {
+      if (entry.kind === "a1" && field.key === "t") {
+        section.append(a1TypeRow([...target, "b"], entry))
+        continue
+      }
+      const scoped = field.scope === "base" ? [...target, "b"] : target
+      section.append(...fieldRows(scoped, field, field.scope === "base" ? sxiValue(entry.model, ["b", field.key]) : entry.model[field.key]))
+    }
+    // Only 位移 has a percent / pixel spelling; 旋转 and 缩放 always use percent.
+    if (entry.kind === "a1" && group.title === "变化" && Number(animationBase(entry.model).t) === 2) {
+      section.append(a1UnitRow(target, entry))
+      const note = element("p", "ui-field-note")
+      note.textContent = "切换单位只保留数值，不会按画布尺寸换算。"
+      section.append(note)
+    }
+    return section
+  })
+  if (entry.kind === "a12") sections.push(floatersSection(pointer, entry))
+  return sections
+}
+
+// IDs are shared by inherited animations as well as orientation-specific overrides.
+function appendAnimation(skin: JsonObject, pointer: SxiPointer, create: (id: string) => JsonObject): void {
+  const theme = asObject(skin[String(pointer[0])]) ?? {}
+  const ids = new Set(["s_info", "s_port", "s_land"].flatMap((key) => Object.keys(asObject(asObject(theme[key])?.ss_2) ?? {})))
+  let id = 1
+  while (ids.has(String(id))) id += 1
+  const table = asObject(sxiValue(skin, pointer))
+  if (!table) throw new Error("skin.json 中缺少动画表")
+  table[String(id)] = create(String(id))
+  rememberAnimation(String(id))
 }
 
 /* —— entry points —— */
@@ -714,26 +654,56 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   const skin = pointer && sxiSkin()
   const table = skin && pointer ? asObject(sxiValue(skin, pointer)) : undefined
   if (!pointer || !skin || !table) return false
-  const create = element("div", "ui-section")
-  create.append(animationCreateControl(pointer))
-  container.append(create)
-  const entries = animationEntries(table).filter((entry) => appState.animationDesignMode === "all"
-    || (entry.kind === "a4") === (appState.animationDesignMode === "particle"))
+  const entries = animationEntries(table).filter((entry) => shownInAnimationView(entry.kind === "a4"))
+  const items = entries.map((entry) => listItem(skin, pointer, entry, table))
+  const selected = selectedAnimation(items)
+  const entry = entries.find((candidate) => candidate.id === selected)
+  const resolver = visualResolver()
   const document = IniDocument.parse(animationsIni(table).toString())
-  if (!entries.length) {
-    const section = element("section", "ui-section document-property-section")
-    section.dataset.inspectorGroupLabel = "动画"
-    const heading = element("h3", "document-section-heading")
-    const title = element("span", "document-section-title")
-    title.textContent = appState.animationDesignMode === "particle" ? "粒子设计" : "动效设计"
-    heading.append(title)
-    const empty = element("p", "inspector-group-subtitle")
-    empty.textContent = "当前分类还没有动画。从上方选择类型即可创建，再在样式的动画事件中绑定编号。"
-    section.append(heading, empty)
-    container.append(section)
-  } else {
-    container.append(...entries.map((entry) => renderSection(skin, pointer, entry, table, document)))
-  }
+  const references = entry && animationReferences(skin, pointer, entry.id)
+  const family = entry && animationFamilyInfo(entry.kind)
+  renderAnimationResource(container, {
+    mode: appState.animationDesignMode,
+    sectionClass: SECTION,
+    items,
+    selected,
+    editable: isEditing(),
+    onSelect: selectAnimation,
+    create: {
+      options: ANIMATION_FAMILIES.filter((candidate) => shownInAnimationView(candidate.id === "a4"))
+        .map((candidate) => [candidate.id, candidate.id === "a4" ? "粒子" : candidate.label]),
+      run: (kind) => editSxi((current) => appendAnimation(current, pointer, (id) => newAnimation(kind, id))),
+    },
+    duplicate: () => entry && editSxi((current) => appendAnimation(current, pointer, (next) => {
+      const wrap = structuredClone(asObject(sxiValue(current, [...pointer, entry.id])) ?? {})
+      wrap.id = `ANIM${next}`
+      return wrap
+    })),
+    remove: {
+      blocked: references && (references.styles.length || references.combos.length) ? "请先解除样式和组合引用" : undefined,
+      run: () => entry && editSxi((current) => {
+        const latest = animationReferences(current, pointer, entry.id)
+        if (latest.styles.length || latest.combos.length) return
+        const neighbour = entries[entries.indexOf(entry) + 1] ?? entries[entries.indexOf(entry) - 1]
+        delete asObject(sxiValue(current, pointer))?.[entry.id]
+        if (neighbour) rememberAnimation(neighbour.id)
+      }),
+    },
+    player: entry && {
+      clip: iniPreviewClip(document, `ANIM${entry.id}`),
+      key: `${SXI_SKIN_PATH}|${pointer.join(".")}|${entry.id}`,
+      resolver,
+      readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined,
+    },
+    warnings: entry && baseNeedsFix(entry.kind, entry.model)
+      ? [animationWarning(`分类值 ${String(animationBase(entry.model).c)} 与${family?.label ?? "动画"}不一致，导出后可能无法识别。`, {
+          label: "修正", disabled: !isEditing(),
+          run: () => commit([...pointer, entry.id, entry.kind, "b"], ["c"], family?.category ?? 0, "修正动画分类"),
+        })]
+      : [],
+    sections: entry ? parameterSections(pointer, entry, table) : [],
+    uses: entry ? uses(skin, pointer, entry) : [],
+  })
   container.dataset.path = appState.selectedPath
   return true
 }
@@ -741,5 +711,5 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
 export function sxiAnimationInspectorTitle(): { name: string; context: string } | undefined {
   const pointer = animationPointer()
   if (!pointer) return
-  return { name: appState.animationDesignMode === "particle" ? "粒子设计" : appState.animationDesignMode === "motion" ? "动效设计" : "动画与动效", context: `${SXI_SKIN_PATH} · ${pointer.slice(1).join(".")}` }
+  return { name: animationModeTitle(appState.animationDesignMode), context: `${SXI_SKIN_PATH} · ${pointer.slice(1).join(".")}` }
 }

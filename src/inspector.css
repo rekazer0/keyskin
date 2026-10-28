@@ -434,7 +434,7 @@
 .source .bda-selected-style-heading { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-md) var(--_gutter) 0; }
 .source .bda-selected-style-heading[hidden] { display: none; }
 .source .bda-selected-style-heading > h3 { flex: 1; margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-.source :is(.bda-style-card, .bda-metadata-card, .bda-animation-card, .bda-frame-card, .bda-key-style-block) {
+.source :is(.bda-style-card, .bda-metadata-card, .bda-frame-card, .bda-key-style-block) {
   display: grid;
   gap: var(--space-sm);
   margin: 0;
@@ -444,7 +444,7 @@
   background: none;
   box-shadow: none;
 }
-.source :is(.bda-style-card, .bda-animation-card, .bda-frame-card) + :is(.bda-style-card, .bda-animation-card, .bda-frame-card) { border-top: 1px solid var(--line-soft); padding-top: var(--space-md); }
+.source :is(.bda-style-card, .bda-frame-card) + :is(.bda-style-card, .bda-frame-card) { border-top: 1px solid var(--line-soft); padding-top: var(--space-md); }
 .source .bda-card-heading { display: flex; align-items: center; gap: var(--space-sm); color: var(--text); font-weight: var(--font-weight-medium); }
 .source :is(.bda-style-controls, .bda-fore-styles-grid, .bda-sound-list, .bda-panel-list, .bda-frame-controls) { display: grid; gap: var(--space-sm); min-width: 0; }
 .source :is(.bda-editor-empty, .bda-advanced-note, .bda-editor-summary) { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
@@ -667,10 +667,11 @@
 .source .ssf-image-card .style-picker-states:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
 .source .ssf-image-card .style-picker-state:not([data-state-label]) { grid-template-rows: minmax(0, 1fr); }
 .source .ssf-image-card .style-picker-state:not([data-state-label])::before { display: none; }
-.source .sxi-animation-summary { margin: calc(-1 * var(--space-xs)) 0 0; }
-.source .sxi-animation-references { margin: 0; }
-.source .sxi-animation-block { gap: var(--space-xs); }
-.source .sxi-animation-warning {
+/* —— 动画资源（animation-inspector.ts）：列表下的新建 / 复制 / 删除、预览下的警告、组合子动画、浮动物体、引用 —— */
+.source .animation-list-actions { display: flex; align-items: center; gap: var(--space-2xs); }
+.source .animation-list-actions > .ui-select { flex: 1; min-width: 0; }
+.source .animation-list-actions > .ui-button { margin-right: auto; }
+.source .animation-warning {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -680,69 +681,30 @@
   color: var(--secondary);
   font-size: var(--font-size-xs);
 }
-.source .sxi-animation-warning > span { flex: 1; min-width: 0; }
+.source .animation-warning > .ui-icon { color: var(--state-warn); }
+.source .animation-warning > span { flex: 1; min-width: 0; }
 /* 隐藏的下拉只承载分段控件的值，让改动标记与重置复用检查器现有逻辑 */
-.source .sxi-animation-proxy { display: none; }
-.source .sxi-animation-block-heading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.source .sxi-animation-block-heading > h4 { margin: 0; }
-.source .sxi-animation-block-heading > .ui-button { margin-left: auto; }
-.source .sxi-animation-floater {
-  display: grid;
-  gap: var(--space-xs);
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--line-soft);
-}
-.source .sxi-animation-floater-heading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.source .sxi-animation-floater-heading > h5 {
-  margin: 0;
-  color: var(--secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-.source .sxi-animation-floater-heading > .ui-icon-button { margin-left: auto; }
-.source .sxi-combo-list {
-  display: grid;
-  gap: var(--space-2xs);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.source .sxi-combo-item {
+.source .animation-proxy { display: none; }
+.source .animation-floater { padding-top: var(--space-sm); border-top: 1px solid var(--line-soft); }
+.source .animation-floater > h4 { display: flex; align-items: center; justify-content: space-between; }
+.source .animation-combo { display: grid; gap: var(--space-sm); }
+.source .animation-combo-list { display: grid; gap: var(--space-2xs); margin: 0; padding: 0; list-style: none; }
+.source .animation-combo-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-sm);
+  min-height: var(--control-height-lg);
+  padding: var(--space-2xs) var(--space-2xs) var(--space-2xs) var(--space-sm);
+  border-radius: var(--radius-md);
   background: var(--material-content);
 }
-.source .sxi-combo-item[data-missing] { color: var(--state-warn); }
-.source .sxi-combo-order {
-  color: var(--tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-}
-.source .sxi-combo-name {
-  display: grid;
-  gap: var(--space-2xs);
-  min-width: 0;
-  font-size: var(--font-size-sm);
-}
-.source .sxi-combo-name > small {
-  overflow: hidden;
-  color: var(--tertiary);
-  font-size: var(--font-size-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.source .sxi-combo-actions { display: flex; gap: var(--space-2xs); }
-.source .sxi-combo-add { display: flex; }
-.source .sxi-combo-add .ui-select { flex: 1; min-width: 0; }
+.source .animation-combo-item[data-missing] { color: var(--state-warn); }
+.source .animation-combo-order { color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); }
+.source .animation-combo-item > .ui-list-item-text { display: grid; min-width: 0; }
+.source .animation-combo-item .ui-list-item-text > strong { overflow: hidden; font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.source .animation-combo-actions { display: flex; }
+.source .animation-use-list { display: grid; gap: var(--space-2xs); }
+.source .animation-use-list > .ui-list-item { min-height: var(--control-height-md); padding-left: 0; }
+.source .animation-use-list .ui-list-item-text > strong { font-weight: var(--font-weight-medium); }
+.source .animation-use-list > .ui-list-item > .ui-icon { color: var(--tertiary); }

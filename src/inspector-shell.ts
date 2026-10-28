@@ -1,7 +1,7 @@
 /*
  * 检查器的通用交互（结构规范见 DESIGN.md §10）：
  *   · 分组标题悬停时提示对应的配置字段；
- *   · 筛选框按标签、属性名过滤属性行，换选择对象后仍然生效；
+ *   · 筛选框按标签、属性名过滤属性行，换选择对象后仍然生效（带 data-filter-keep 的对象列表不参与筛选）；
  *   · 本次选择后改过的属性行带标记，点标记恢复这一行，对象头里的「重置」一次恢复全部；
  *   · 数值的标签与单位前缀可以左右拖动调整（交互在 number-input-wheel.ts，这里只标出把手）；
  *   · 未选对象时的空状态、手势行的「已配置」状态。
@@ -110,7 +110,8 @@ function applyFilter(): void {
       block.toggleAttribute("data-filter-miss", Boolean(query) && !sectionHit && ![...hits].some((row) => block.contains(row)))
     }
     const visibleHits = [...hits].filter((row) => !isHidden(row, section)).length
-    section.toggleAttribute("data-filter-miss", Boolean(query) && !sectionHit && visibleHits === 0)
+    // 对象选择器（动画列表）不是属性：筛选时留着，才能换一个对象继续筛。
+    section.toggleAttribute("data-filter-miss", Boolean(query) && !sectionHit && visibleHits === 0 && !section.hasAttribute("data-filter-keep"))
     if (!isHidden(section, root)) matches += visibleHits
   }
   const empty = root.querySelector<HTMLElement>(".inspector-filter-empty")

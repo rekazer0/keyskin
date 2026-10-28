@@ -2,7 +2,7 @@ import { drawVisualText, type Visual, type VisualResolver } from "./atlas.ts"
 import { bdaStyleID, type BdaAppearance, type BdaKey, type BdaStyleRef } from "./bda.ts"
 import { bdaColorHex } from "./bda-resolver.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
-import { renderBdaAnimationEditor } from "./bda-animation-editor.ts"
+import { renderBdaAnimationEditor, type BdaAnimationView } from "./bda-animation-editor.ts"
 import { bdaLayoutStyleGroups, type BdaLayoutStyleItem } from "./bda-layout-styles.ts"
 import { element } from "./dom-element.ts"
 
@@ -46,6 +46,7 @@ type ConfigEditorOptions = {
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
+  animationView: BdaAnimationView
 }
 
 type MetadataEditorOptions = {
@@ -567,6 +568,8 @@ export function renderBdaConfigEditor(container: HTMLElement, options: ConfigEdi
   if (/animationConfig$/i.test(name)) {
     renderBdaAnimationEditor(container, {
       animation: decodeBdaAnimation(options.bytes),
+      path: options.path,
+      view: options.animationView,
       resolver: options.resolver,
       editable: options.editable,
       onDesignWidth: options.onDesignWidth,

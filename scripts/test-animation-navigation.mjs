@@ -3,9 +3,16 @@ import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
+import { bdaAnimatedSkinBytes, bdsBaseArchive } from "../tests/helpers/bda-animation-fixture.mjs"
+import { SkinArchive } from "../src/skin.ts"
+import { convertBdaArchive } from "../src/bda-convert.ts"
 
+const bda = bdaAnimatedSkinBytes()
+const bds = await convertBdaArchive(SkinArchive.open(bda, "bda"), bdsBaseArchive()).archive.platformBytesAsync("bds")
 const fixtures = [
   { format: "sxi", bytes: sxiAnimationFixture(), paths: ["light/skin/res/anim.ini"] },
+  { format: "bds", bytes: bds, paths: ["light/skin/port/res/anim.ini"] },
+  { format: "bda", bytes: bda, paths: ["light/skin/port/animationConfig"] },
 ]
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41839, strictPort: false, host: "127.0.0.1", hmr: false } })
 await server.listen()
@@ -88,7 +95,7 @@ try {
       await page.evaluate(async (format) => {
         const { appState } = await import("/src/app/state.ts")
         const { commitText } = await import("/src/app/edit-history.ts")
-        const historyPath = format === "sxi" ? "skin.json" : "Info.txt"
+        const historyPath = format === "sxi" ? "skin.json" : appState.archive.names().find((name) => /Info\.txt$/.test(name))
         const before = appState.archive.getText(historyPath)
         commitText(historyPath, before, `${before}\n`)
       }, fixture.format)
@@ -114,6 +121,17 @@ try {
     assert.equal((await state()).resource, false)
     await page.evaluate(async (path) => (await import("/src/app/navigation.ts")).selectFile(path, "overview"), path)
     assert.equal((await state()).mode, "all")
+    // The same file under two entries remembers one animation per entry.
+    await page.locator('[data-inspector-tab="properties"]').click()
+    await entry(path, "motion").click()
+    const motionItems = await page.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
+    await page.locator(`[data-animation-id="${motionItems[1]}"]`).click()
+    await entry(path, "particle").click()
+    const particleItems = await page.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
+    assert.ok(particleItems.length >= 1 && particleItems.every((id) => !motionItems.includes(id)), "动效与粒子互不重叠")
+    await entry(path, "motion").click()
+    assert.equal(await page.locator('[data-animation-id][aria-selected="true"]').getAttribute("data-animation-id"), motionItems[1])
+    assert.equal(await page.locator("#selected-key").textContent(), "动效设计")
     console.log(`${fixture.format}: resource grouping, two shared-path entries, selection, mode, rebuild, undo/redo, raw source and no image workspace passed`)
   }
   assert.deepEqual(errors, [])

@@ -468,10 +468,33 @@ body {
 :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):focus-visible { outline: 0; }
 
 /* —— 动画预览：舞台、播放控制、可定位时间轴 —— */
+/* —— 动画播放器：舞台 + 时间轴（每条轨道一行，播放头贯穿）+ 走带控件；只改变预览，不写配置 —— */
 .ui-animation-player { display: grid; gap: var(--space-sm); min-width: 0; }
-.ui-animation-stage { display: grid; place-items: center; min-height: 144px; overflow: hidden; border-radius: var(--radius-md); background: var(--checker-image), var(--checker-light); }
+.ui-animation-stage { position: relative; display: grid; place-items: center; overflow: hidden; border-radius: var(--radius-md); background: var(--checker-image), var(--checker-light); background-position: 0 0, calc(var(--checker-size) / 2) calc(var(--checker-size) / 2); background-size: var(--checker-size) var(--checker-size); }
 .ui-animation-stage > canvas { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
-.ui-animation-transport { display: flex; align-items: center; gap: var(--space-xs); }
-.ui-animation-transport > .ui-slider { flex: 1; width: 0; min-width: 0; }
-.ui-animation-time { flex: none; color: var(--secondary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+.ui-animation-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--space-xs); margin: 0; padding: var(--space-md); color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.6; text-align: center; }
+.ui-animation-empty[hidden] { display: none; }
+.ui-animation-timeline { display: grid; gap: var(--space-2xs); min-width: 0; }
+/* 轨道与滑块的拇指中心对齐：两侧各让出半个拇指 */
+.ui-animation-lanes { position: relative; display: grid; gap: var(--space-2xs); margin: 0 var(--space-sm); }
+.ui-animation-lanes[hidden] { display: none; }
+.ui-animation-lane { position: relative; height: 16px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--text) 4%, transparent); }
+.ui-animation-bar { position: absolute; top: 0; bottom: 0; display: flex; min-width: 2px; overflow: hidden; border-radius: var(--radius-sm); background: var(--accent-soft); }
+.ui-animation-bar > i { flex: 1; min-width: 0; }
+.ui-animation-bar > i + i { border-left: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.ui-animation-bar > span { position: absolute; inset: 0 var(--space-xs); overflow: hidden; color: var(--accent); font-size: var(--font-size-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.ui-animation-lane[data-unbounded] > .ui-animation-bar { border-right: 1px dashed var(--accent); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.ui-animation-playhead { position: absolute; top: calc(-1 * var(--space-2xs)); bottom: calc(-1 * var(--space-2xs)); width: 1px; background: var(--accent); pointer-events: none; }
+.ui-animation-transport { display: flex; align-items: center; gap: var(--space-2xs); min-width: 0; }
+.ui-animation-time { flex: 1; min-width: 0; margin-left: var(--space-xs); overflow: hidden; color: var(--secondary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .ui-animation-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.6; overflow-wrap: anywhere; }
+.ui-animation-note:empty { display: none; }
+
+/* —— 列表框：可滚动的单选列表（role="listbox"），行用 .ui-list-item，方向键切换 —— */
+.ui-listbox { position: relative; display: grid; align-content: start; gap: var(--space-2xs); max-height: calc(var(--control-height-lg) * 7); margin: 0; padding: var(--space-2xs); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line-soft); border-radius: var(--radius-md); list-style: none; }
+.ui-listbox > .ui-list-item { min-width: 0; }
+.ui-listbox .ui-list-item-text > strong { overflow: hidden; font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.ui-listbox .ui-list-item > .ui-badge { flex: none; }
+.ui-listbox .ui-list-item[aria-selected="true"] .ui-list-item-text > small { color: color-mix(in srgb, var(--accent) 70%, var(--tertiary)); }
+.ui-listbox .ui-list-item[data-problem] > .ui-icon:last-child { color: var(--state-warn); }
+.ui-listbox-empty { margin: 0; padding: var(--space-md); color: var(--tertiary); font-size: var(--font-size-xs); text-align: center; }

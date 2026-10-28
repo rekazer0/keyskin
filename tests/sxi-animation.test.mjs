@@ -153,21 +153,33 @@ test('animationModel/animationBase/animationHasBase follow the wrap shape', () =
   for (const family of ANIMATION_FAMILIES) assert.equal(animationHasBase(family.id), family.id !== 'a3')
 })
 
-test('every family with a base starts with the playback-control group', () => {
+test('every family with a base ends its timing group with the shared playback fields', () => {
   for (const family of ANIMATION_FAMILIES) {
     const groups = animationGroups(family.id, {})
     if (family.id === 'a3') {
       assert.deepEqual(groups, [], 'a3 没有 base，也没有属性分组')
       continue
     }
-    const [playback, ...rest] = groups
-    assert.equal(playback.title, '播放控制', `${family.id} 缺少播放控制分组`)
-    assert.equal(playback.scope, 'base')
-    const keys = playback.fields.map((field) => field.key)
-    assert.deepEqual(keys, family.id === 'a1' ? ['t', 'count', 'back', 'clear'] : ['count', 'back', 'clear'])
-    assert.ok(rest.length > 0, `${family.id} 应有自己的属性分组`)
-    for (const field of playback.fields) assert.equal(field.scope, undefined)
+    const timing = groups.find((group) => group.title === '时间与循环')
+    assert.ok(timing, `${family.id} 缺少时间与循环分组`)
+    const base = timing.fields.filter((field) => field.scope === 'base')
+    assert.deepEqual(base.map((field) => field.key), ['count', 'back', 'clear'])
+    assert.deepEqual(base.map((field) => field.iniKey), ['REPEAT_CNT', 'REPEAT_MODE', 'REMOVE'])
+    assert.deepEqual(timing.fields.slice(-3), base, `${family.id}: 重复、往返、移除排在时间字段之后`)
+    assert.ok(groups.some((group) => group !== timing), `${family.id} 应有自己的属性分组`)
   }
+})
+
+test('a1 sections follow the inspector order: 变化 (type first), 时间与循环, then the pivot when it matters', () => {
+  const [scalar, point, pixels] = FAMILY_MODELS.a1
+  assert.deepEqual(animationGroups('a1', point).map((group) => group.title), ['变化', '时间与循环', '变换中心'])
+  const change = animationGroups('a1', scalar)[0]
+  assert.equal(change.fields[0].key, 't')
+  assert.equal(change.fields[0].scope, 'base')
+  assert.deepEqual(animationGroups('a1', { b: { t: 0 } }).map((group) => group.title), ['变化', '时间与循环'], '透明度不用变换中心')
+  assert.deepEqual(animationGroups('a1', { b: { t: 1 } }).map((group) => group.title), ['变化', '时间与循环', '变换中心'])
+  assert.ok(animationGroups('a1', pixels).some((group) => group.title === '变换中心'), '已设置的中心不能被藏起来')
+  assert.deepEqual(animationGroups('a4', {}).map((group) => group.title), ['发射', '运动', '外观', '时间与循环'])
 })
 
 test('the projection fields of every family are all covered by animationGroups, and nothing else leaks', () => {
@@ -211,13 +223,12 @@ test('the projection fields of every family are all covered by animationGroups, 
   assert.ok(!pixelKeys.has('from') && !pixelKeys.has('from_p'))
 
   // The same key means different things in different families; the labels must not collide.
-  const modelLabel = (kind, key) => animationGroups(kind, {})
-    .filter((group) => group.scope === 'model')
+  const fieldOf = (kind, key, scope) => animationGroups(kind, {})
     .flatMap((group) => group.fields)
-    .find((field) => field.key === key)?.label
-  assert.equal(modelLabel('a4', 'count'), '粒子总数')
-  assert.equal(modelLabel('a13', 'count'), '物件数量')
-  assert.equal(animationGroups('a4', {})[0].fields.find((field) => field.key === 'count').label, '重复次数')
+    .find((field) => field.key === key && field.scope === scope)
+  assert.equal(fieldOf('a4', 'count', undefined).label, '粒子总数')
+  assert.equal(fieldOf('a13', 'count', undefined).label, '物件数量')
+  assert.equal(fieldOf('a4', 'count', 'base').label, '重复次数')
 })
 
 test('floater fields and defaults cover FLOATER_FIELDS completely', () => {

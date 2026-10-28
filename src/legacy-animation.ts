@@ -2,10 +2,9 @@
  * 旧版百度（BDI/BDS）anim.ini 的结构化模型。语义取自《百度手机输入法皮肤教程 V6》第 169–185 页：
  * [GLOBAL] ANIM_NUM 声明动效数量；每个 [ANIM*] 是基础动效 / 组合动效 / 帧动效 / 粒子动效之一，
  * 组合动效只由 BUILD_NUM / BUILD_LIST / BUILD_METHOD 描述，基础动效按 TYPE 复用 FROM、TO、PIVOT。
- * 这里只做纯数据：解析、按类型清理字段的写回、时间轴、几何预览与 default.css / 布局的引用关系。
+ * 这里只做纯数据：解析、按类型清理字段的写回、时间轴与 default.css / 布局的引用关系；播放预览见 animation-preview-model.ts。
  */
 import { IniDocument } from "./ini.ts"
-import { animationEasing } from "./preview-animation.ts"
 
 export type LegacyAnimationKind = "basic" | "combination" | "frame" | "particle"
 
@@ -195,13 +194,11 @@ const BASIC_TYPE_KEYS: Record<number, readonly string[]> = {
   5: ["PIVOT"],
 }
 
-const TIME_KEYS = ["DELAY", "DURATION", "REPEAT_CNT", "REPEAT_MODE", "REMOVE"] as const
-
 const PARTICLE_GROUPS: ReadonlyArray<LegacyAnimationFieldGroup> = [
-  { title: "发射", keys: ["PARTICLE_IMAGE", "LIFE", "EMIT_REGION", "TOTAL_NUMBER", "BIRTH_RATE", "EMIT_TYPE"] },
-  { title: "运动", keys: ["VELOCITY", "VELOCITY_DIRECTION", "ACCELERATION", "ACCELERATION_DIRECTION"] },
+  { title: "发射", keys: ["TYPE", "PARTICLE_IMAGE", "TOTAL_NUMBER", "BIRTH_RATE", "EMIT_TYPE", "EMIT_REGION"] },
+  { title: "运动", keys: ["LIFE", "VELOCITY", "VELOCITY_DIRECTION", "ACCELERATION", "ACCELERATION_DIRECTION"] },
   { title: "外观", keys: ["INIT_SCALE", "SCALE_SPEED", "INIT_ROTATE", "ROTATE_SPEED", "INIT_ALPHA", "ALPHA_SPEED"] },
-  { title: "时间轴", keys: ["DURATION", "REPEAT_CNT", "FINISH_AFTER_PRACTICES", "REMOVE_INCLUDE_PRACTICES", "MIRROR_UP", "PARTICLE_PATH"] },
+  { title: "时间与循环", keys: ["DURATION", "REPEAT_CNT", "FINISH_AFTER_PRACTICES", "REMOVE_INCLUDE_PRACTICES", "MIRROR_UP", "PARTICLE_PATH"] },
 ]
 
 const KIND_KEYS: Record<LegacyAnimationKind, readonly string[]> = {
@@ -221,6 +218,10 @@ function advancedKeys(entry: LegacyAnimationEntry, known: ReadonlySet<string>): 
     !known.has(key) && !STRUCTURAL_KEYS.has(key) && !TYPE_REQUIRED_KEYS.has(key))
 }
 
+/**
+ * 检查器的参数分组（DESIGN.md §10）：先是变化或组合本身，再是时间与循环，最后是变换中心；
+ * 粒子按发射、运动、外观、时间与循环。CATEGORY 由「动效类型」管理，未知键收进「其他参数」。
+ */
 export function legacyAnimationFieldGroups(entry: LegacyAnimationEntry): LegacyAnimationFieldGroup[] {
   const groups: LegacyAnimationFieldGroup[] = []
   const known = new Set<string>()
@@ -230,19 +231,20 @@ export function legacyAnimationFieldGroups(entry: LegacyAnimationEntry): LegacyA
   }
   if (entry.kind === "basic") {
     const type = entry.type ?? 0
-    push("数值", ["FROM", "TO", ...BASIC_TYPE_KEYS[type] ?? []])
-    push("插值", ["INTPOL"])
-    push("时间轴", TIME_KEYS)
+    const pivot = (BASIC_TYPE_KEYS[type] ?? []).filter((key) => key.startsWith("PIVOT"))
+    push("变化", ["TYPE", "FROM", "TO", ...(BASIC_TYPE_KEYS[type] ?? []).filter((key) => !key.startsWith("PIVOT"))])
+    push("时间与循环", ["DURATION", "DELAY", "INTPOL", "REPEAT_CNT", "REPEAT_MODE", "REMOVE"])
+    if (pivot.length) push("变换中心", pivot)
   } else if (entry.kind === "combination") {
-    push("组合", ["BUILD_LIST", "BUILD_NUM", "BUILD_METHOD"])
-    push("时间轴", ["DELAY", "REPEAT_CNT", "REPEAT_MODE", "REMOVE"])
+    push("组合", ["BUILD_METHOD", "BUILD_LIST", "BUILD_NUM"])
+    push("时间与循环", ["DELAY", "REPEAT_CNT", "REPEAT_MODE", "REMOVE"])
   } else if (entry.kind === "frame") {
     push("帧动效", ["ANIM_PATH"])
   } else {
     for (const group of PARTICLE_GROUPS) push(group.title, group.keys)
   }
   const advanced = advancedKeys(entry, known)
-  if (advanced.length) groups.push({ title: `高级参数（${advanced.length}）`, keys: advanced })
+  if (advanced.length) groups.push({ title: "其他参数", keys: advanced })
   return groups
 }
 
@@ -345,6 +347,19 @@ function basicTypeDefaults(type: number): readonly [string, string] {
   return ["100,100", "100,100"]
 }
 
+/** 在末尾追加 [ANIM n+1]：新建时写入该家族的默认字段，复制时照抄 `copyOf` 的全部键；同步 ANIM_NUM。 */
+export function appendLegacyAnimation(text: string, kind: LegacyAnimationKind, copyOf?: string): { text: string; section: string } {
+  const document = IniDocument.parse(text)
+  const next = Math.max(0, ...document.sections().map((section) => sectionIndex(section) ?? 0)) + 1
+  const section = `ANIM${next}`
+  const entries = copyOf && document.sections().includes(copyOf)
+    ? document.entries(copyOf).map(({ key, value }) => ({ key, value }))
+    : kindDefaults(kind).map(([key, value]) => ({ key, value }))
+  document.appendSection(section, entries)
+  updateAnimNum(document)
+  return { text: document.toString(), section }
+}
+
 /* —— 时间轴 —— */
 export type LegacyAnimationTimeline = {
   delay: number
@@ -422,32 +437,6 @@ function fieldValue(entry: LegacyAnimationEntry, key: string): string | undefine
   return entry.fields.find(([name]) => name === key)?.[1]
 }
 
-/* —— 几何预览 —— */
-export type LegacyAnimationPreviewState = {
-  opacity: number
-  scale: readonly [number, number]
-  /** 平移量：百分比动效按 100×100 的示意框折算成像素，像素动效原样。 */
-  translate: readonly [number, number]
-  rotation: number
-  /** 从开始到当前时刻是否还在播放窗口内。 */
-  active: boolean
-}
-
-const IDENTITY_PREVIEW: LegacyAnimationPreviewState = {
-  opacity: 1,
-  scale: [1, 1],
-  translate: [0, 0],
-  rotation: 0,
-  active: false,
-}
-
-type PartialState = {
-  opacity?: number
-  scale?: readonly [number, number]
-  translate?: readonly [number, number]
-  rotation?: number
-}
-
 /** 顶层逗号切分，`rand(-5,5)` 里的逗号不拆开。 */
 export function legacyAnimationValueParts(value: string): string[] {
   const parts: string[] = []
@@ -464,154 +453,6 @@ export function legacyAnimationValueParts(value: string): string[] {
   }
   parts.push(value.slice(start).trim())
   return parts
-}
-
-/** 手册第 182 页：基础动效的数值可以写成 `rand(a,b)`，随机化取区间中点用于稳定的示意。 */
-function numericValue(part: string | undefined): number | undefined {
-  if (!part) return undefined
-  const random = /^rand\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)$/i.exec(part.trim())
-  if (random) return (Number(random[1]) + Number(random[2])) / 2
-  return numberField(part)
-}
-
-function numericPair(value: string | undefined, fallback: readonly [number, number]): [number, number] {
-  if (!value) return [fallback[0], fallback[1]]
-  const parts = legacyAnimationValueParts(value)
-  return [numericValue(parts[0]) ?? fallback[0], numericValue(parts[1]) ?? numericValue(parts[0]) ?? fallback[1]]
-}
-
-function numericTriple(value: string | undefined): [number, number, number] {
-  const parts = value ? legacyAnimationValueParts(value) : []
-  return [numericValue(parts[0]) ?? 0, numericValue(parts[1]) ?? 0, numericValue(parts[2]) ?? 0]
-}
-
-function interpolation(entry: LegacyAnimationEntry): [number, number] {
-  const parts = legacyAnimationValueParts(fieldValue(entry, "INTPOL") ?? "0")
-  const first = Number(parts[0] ?? 0)
-  const second = Number(parts[1] ?? first)
-  return [Number.isFinite(first) ? first : 0, Number.isFinite(second) ? second : 0]
-}
-
-/** 当前时刻在一个周期里的进度（0–1，往返时折回）。 */
-function playbackProgress(elapsed: number, duration: number, repeat: number, reverse: boolean): number {
-  if (elapsed <= 0) return 0
-  if (duration <= 0) return 1
-  const cycles = reverse ? 2 : 1
-  const fold = (value: number) => reverse && value > 1 ? 2 - value : value
-  if (repeat === 0) return fold((elapsed / duration) % cycles)
-  if (elapsed >= duration * repeat * cycles) return reverse ? 0 : 1
-  const raw = elapsed / duration
-  return fold(repeat > 1 ? raw % cycles : Math.min(1, raw))
-}
-
-function basicState(entry: LegacyAnimationEntry, elapsed: number): PartialState {
-  const type = entry.type ?? 0
-  const timeline = { duration: Math.max(0, numberField(fieldValue(entry, "DURATION")) ?? 0), repeat: repeatField(fieldValue(entry, "REPEAT_CNT")), reverse: fieldValue(entry, "REPEAT_MODE")?.trim() === "1" }
-  const delay = Math.max(0, numberField(fieldValue(entry, "DELAY")) ?? 0)
-  const progress = playbackProgress(elapsed - delay, timeline.duration, timeline.repeat, timeline.reverse)
-  const [firstInterpolation, secondInterpolation] = interpolation(entry)
-  const eased = (axis: 0 | 1) => animationEasing(axis === 0 ? firstInterpolation : secondInterpolation, progress)
-  if (type === 0) {
-    const from = numericValue(fieldValue(entry, "FROM")) ?? 0
-    const to = numericValue(fieldValue(entry, "TO")) ?? 255
-    return { opacity: Math.max(0, Math.min(1, (from + (to - from) * eased(0)) / 255)) }
-  }
-  if (type === 1) {
-    const from = numericValue(fieldValue(entry, "FROM")) ?? 0
-    const to = numericValue(fieldValue(entry, "TO")) ?? 360
-    return { rotation: from + (to - from) * eased(0) }
-  }
-  if (type === 2) {
-    const from = numericPair(fieldValue(entry, "FROM_PX") ?? fieldValue(entry, "FROM"), [0, 0])
-    const to = numericPair(fieldValue(entry, "TO_PX") ?? fieldValue(entry, "TO"), [0, 0])
-    return { translate: [from[0] + (to[0] - from[0]) * eased(0), from[1] + (to[1] - from[1]) * eased(1)] }
-  }
-  if (type === 5) {
-    const from = numericTriple(fieldValue(entry, "FROM"))
-    const to = numericTriple(fieldValue(entry, "TO"))
-    return { rotation: from[2] + (to[2] - from[2]) * eased(0) }
-  }
-  const from = numericPair(fieldValue(entry, "FROM"), [100, 100])
-  const to = numericPair(fieldValue(entry, "TO"), [100, 100])
-  return {
-    scale: [
-      (from[0] + (to[0] - from[0]) * eased(0)) / 100,
-      (from[1] + (to[1] - from[1]) * eased(1)) / 100,
-    ],
-  }
-}
-
-function combine(states: readonly PartialState[]): LegacyAnimationPreviewState {
-  let opacity = 1
-  let scaleX = 1
-  let scaleY = 1
-  let translateX = 0
-  let translateY = 0
-  let rotation = 0
-  for (const state of states) {
-    if (state.opacity !== undefined) opacity *= state.opacity
-    if (state.scale) {
-      scaleX *= state.scale[0]
-      scaleY *= state.scale[1]
-    }
-    if (state.translate) {
-      translateX += state.translate[0]
-      translateY += state.translate[1]
-    }
-    if (state.rotation !== undefined) rotation += state.rotation
-  }
-  return { opacity, scale: [scaleX, scaleY], translate: [translateX, translateY], rotation, active: true }
-}
-
-/** 组合动效在 `elapsed` 时的几何状态；子动效按手册只支持基础动效，缺失或类型不符的直接跳过。 */
-export function legacyAnimationPreviewState(
-  entry: LegacyAnimationEntry,
-  entries: ReadonlyMap<string, LegacyAnimationEntry>,
-  elapsed: number,
-): LegacyAnimationPreviewState {
-  if (entry.kind === "basic") return { ...IDENTITY_PREVIEW, ...basicState(entry, elapsed), active: elapsed >= 0 }
-  if (entry.kind !== "combination") return IDENTITY_PREVIEW
-  const children = childrenOf(entry, entries)
-  if (!children.length) return IDENTITY_PREVIEW
-  const timeline = legacyAnimationTimeline(entry, entries)
-  if (!Number.isFinite(timeline.duration) || timeline.duration <= 0) return IDENTITY_PREVIEW
-  const progress = playbackProgress(elapsed - timeline.delay, timeline.duration, timeline.repeat, timeline.reverse)
-  const localElapsed = progress * timeline.duration
-  if (fieldValue(entry, "BUILD_METHOD")?.trim() === "0") {
-    return combine(children.map((child) => basicState(child, localElapsed)))
-  }
-  let start = 0
-  const stages = children.map((child) => {
-    const stage = { child, start, timeline: legacyAnimationTimeline(child, entries) }
-    start += stage.timeline.total
-    return stage
-  })
-  // 接续组合：同一类数值只在接在它后面的那一个基础动效里取值，和 preview-animation 的取帧顺序一致。
-  const opacity = sequentialValue(stages, localElapsed, (state) => state.opacity)
-  const scale = sequentialValue(stages, localElapsed, (state) => state.scale)
-  const rotation = sequentialValue(stages, localElapsed, (state) => state.rotation)
-  const translate = sequentialValue(stages, localElapsed, (state) => state.translate)
-  return {
-    opacity: opacity ?? 1,
-    scale: scale ?? [1, 1],
-    rotation: rotation ?? 0,
-    translate: translate ?? [0, 0],
-    active: true,
-  }
-}
-
-type Stage = { child: LegacyAnimationEntry; start: number; timeline: LegacyAnimationTimeline }
-
-function sequentialValue<T>(stages: readonly Stage[], elapsed: number, pick: (state: PartialState) => T | undefined): T | undefined {
-  let previous: T | undefined
-  for (const stage of stages) {
-    const value = pick(basicState(stage.child, elapsed - stage.start))
-    if (value === undefined) continue
-    if (elapsed < stage.start) return previous ?? value
-    if (elapsed <= stage.start + stage.timeline.total) return value
-    previous = value
-  }
-  return previous
 }
 
 /* —— default.css / 布局对动效序号的引用 —— */

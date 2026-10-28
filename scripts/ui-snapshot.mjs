@@ -10,6 +10,7 @@ import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
 import { SkinArchive } from "../src/skin.ts"
 import { convertBdaArchive } from "../src/bda-convert.ts"
 import { bdaAnimatedSkinBytes, bdsBaseArchive } from "../tests/helpers/bda-animation-fixture.mjs"
+import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 
 const mode = process.argv[2] ?? "compare"
 // 动效检查器的界面快照样例：一个带 animationConfig 的 BDA，以及它转换出的旧版 anim.ini。
@@ -173,14 +174,26 @@ await withPage(async (page) => {
 })
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await openSkinFile(page, "动效.bda", animatedBda, "light/skin/port/animationConfig")
-  await page.waitForSelector("#bda-config-fields .bda-animation-section")
+  await page.locator('.sidebar-overview button[data-nav-mode="motion"]').click()
+  await page.waitForSelector("#bda-config-fields .ui-listbox")
   await capture(page, `${colorScheme}-bda-animation`)
 }, { colorScheme })
 await withPage(async (page) => {
   await openSkinFile(page, "动效.bds", animatedBds, "light/skin/port/res/anim.ini")
-  await page.waitForSelector("#document-fields .legacy-animation-section")
+  await page.locator('.sidebar-overview button[data-nav-mode="motion"]').click()
+  await page.waitForSelector("#document-fields .ui-listbox")
   await capture(page, "legacy-animation")
 })
+for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
+  // 手心动画：资源配置里的动效设计与粒子设计
+  await openSkinFile(page, "动效.sxi", sxiAnimationFixture(), "light/skin/res/anim.ini")
+  for (const mode of ["motion", "particle"]) {
+    await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).click()
+    await page.waitForSelector('#document-fields .ui-listbox [aria-selected="true"]')
+    await page.waitForFunction(() => !document.querySelector(".ui-animation-transport button")?.disabled)
+    await capture(page, `${colorScheme}-sxi-animation-${mode}`)
+  }
+}, { colorScheme })
 await withPage(async (page) => {
   await openTemplate(page, "palm-harmony")
   await page.getByRole("button", { name: "编辑模式", exact: true }).click()

@@ -1,22 +1,22 @@
 /*
- * 旧版百度（BDI/BDS）anim.ini 的可视化属性检查器（DESIGN.md §10）。
- * 继承器只负责呈现与写回：解析、类型清理、时间轴和引用关系都在 src/legacy-animation.ts 里，
- * 每次编辑通过 commitText 写回一个撤销步骤，画布与顶部示意预览立即刷新。
+ * 旧版百度（BDI/BDS）anim.ini 的动画检查器（DESIGN.md §10「动画资源」）：资源配置里的「动效设计」与「粒子设计」
+ * 共用这一份文件，按类型筛选。列表选中一个动效，下面是它的播放器、参数分组和被哪些样式引用。
+ * 解析、类型清理、时间轴和引用关系都在 src/legacy-animation.ts；每次编辑通过 commitText 写回一个撤销步骤。
  */
-import "../legacy-animation.css"
 import { IniDocument } from "../ini.ts"
 import { element } from "../dom-element.ts"
-import { createIcon } from "../icons"
-import { parseLegacyParticleEmitter } from "../preview-animation.ts"
+import { iniPreviewClip } from "../animation-preview-model.ts"
+import {
+  animationModeTitle, animationSection, animationWarning, comboList, renderAnimationResource,
+  type AnimationListItem, type AnimationUse,
+} from "../animation-inspector.ts"
 import {
   LEGACY_ANIMATION_KINDS,
   LEGACY_ANIMATION_FIELDS,
-  LEGACY_ANIMATION_KIND_ICONS,
-  LEGACY_ANIMATION_TIMELINE_KEYS,
   LEGACY_ANIMATION_INTPOL_OPTIONS,
+  appendLegacyAnimation,
   legacyAnimationFieldGroups,
   legacyAnimationKindLabel,
-  legacyAnimationReferenceText,
   legacyAnimationReferences,
   legacyAnimationTimeline,
   legacyAnimationTypeLabel,
@@ -26,18 +26,26 @@ import {
   writeLegacyAnimationFields,
   writeLegacyAnimationKind,
   writeLegacyAnimationType,
-  type LegacyAnimationDocument,
   type LegacyAnimationEntry,
   type LegacyAnimationKind,
   type LegacyAnimationReference,
+  type LegacyAnimationTimeline,
 } from "../legacy-animation.ts"
-import { legacyAnimationPreviewBlock } from "../legacy-animation-preview.ts"
+import { visualResolver } from "./bda-documents"
 import { preview } from "./canvas-interaction"
 import { setSourceValue, styleConfigPath } from "./config-context"
 import { commitText, isEditing, updateDirty } from "./edit-history"
-import { syncMobileInspectorGroups } from "./mobile-layout"
+import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
+import { rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
 import { appState } from "./state"
+
+const SECTION = "document-property-section"
+const KIND_ICONS: Record<LegacyAnimationKind, string> = { basic: "blend", combination: "layers", frame: "list-video", particle: "sparkles" }
+const TYPE_ICONS = ["blend", "rotate-cw", "move", "scaling", "scaling", "rotate-3d"]
+const EVENT_LABELS: Record<string, string> = {
+  PRESS_ANIM: "按下", RELEASE_ANIM: "抬起", SHOW_ANIM: "显示", HIDE_ANIM: "隐藏", FIRST_PRESS_PANEL_ANIM: "面板首次按下",
+}
 
 /* —— 选中对象与文档 —— */
 function isLegacyAnimationDocument(): boolean {
@@ -59,53 +67,27 @@ function layoutDocument(): IniDocument | undefined {
   return IniDocument.parse(archive.getText(appState.layoutPath))
 }
 
-function indexEntries(model: LegacyAnimationDocument): Map<string, LegacyAnimationEntry> {
-  return new Map(model.entries.flatMap((entry) => entry.index === undefined ? [] : [[String(entry.index), entry] as const]))
-}
-
 function fieldValue(entry: LegacyAnimationEntry, key: string): string | undefined {
   return entry.fields.find(([name]) => name === key)?.[1]
 }
 
-/* —— 写回：一次编辑 = 一个撤销步骤 —— */
-type EditOptions = { rebuild?: boolean; refresh?: () => void }
-
-function edit(container: HTMLElement, update: (text: string) => string, options: EditOptions = {}): void {
+/* —— 写回：一次编辑 = 一个撤销步骤，检查器、源码与画布一起刷新 —— */
+function edit(update: (text: string) => string): void {
   if (!isEditing() || !appState.selectedDocument) return
   const before = appState.selectedDocument.toString()
   const after = update(before)
   if (before === after) return
   appState.selectedDocument = IniDocument.parse(after)
   commitText(appState.selectedPath, before, after)
-  // 检查器与源码面板共用同一个文档：写回后同步源码与画布。
   setSourceValue(after)
   refreshPreview()
   updateDirty()
-  if (options.rebuild) {
-    populateLegacyAnimationInspector(container)
-    syncMobileInspectorGroups()
-  } else {
-    options.refresh?.()
-  }
+  populateKeyInspector()
 }
 
-/* —— 分组与属性行 —— */
-function sectionShell(title: string, code: string, icon: string): { section: HTMLElement; body: HTMLElement } {
-  const section = element("section", "ui-section document-property-section legacy-animation-section")
-  section.dataset.inspectorGroupLabel = title
-  const heading = element("h3", "document-section-heading")
-  const titleNode = element("span", "document-section-title")
-  titleNode.textContent = title
-  const codeNode = element("span", "document-section-code")
-  codeNode.textContent = code
-  heading.append(createIcon(icon, 14), titleNode, codeNode)
-  const body = element("div", "legacy-animation-body")
-  section.append(heading, body)
-  return { section, body }
-}
-
+/* —— 属性行 —— */
 function fieldRow(section: string, key: string, label: string, control: HTMLElement): HTMLElement {
-  const row = element("label", "ui-field legacy-animation-field")
+  const row = element("label", "ui-field document-property-field")
   row.dataset.documentKey = key
   row.dataset.inspectorRowKey = JSON.stringify([appState.selectedPath, section, key])
   const caption = element("span", "document-field-caption")
@@ -136,11 +118,6 @@ function inputControl(
   input.disabled = !isEditing()
   input.setAttribute("aria-label", label)
   if (numeric) input.step = step ?? "any"
-  if (unit) {
-    const affix = element("span", "ui-input-affix")
-    affix.textContent = unit
-    wrap.append(affix)
-  }
   input.addEventListener("change", () => {
     const text = input.value.trim()
     if (text && numeric && !validAnimationValue(text)) {
@@ -150,6 +127,7 @@ function inputControl(
     commit(text || undefined)
   })
   wrap.append(input)
+  if (unit) wrap.append(Object.assign(element("span", "ui-input-affix"), { textContent: unit }))
   return wrap
 }
 
@@ -171,12 +149,8 @@ function valueControl(value: string | undefined, label: string, commit: (value: 
     }
     commit(text || undefined)
   })
-  if (unit) {
-    const affix = element("span", "ui-input-affix")
-    affix.textContent = unit
-    wrap.append(affix)
-  }
   wrap.append(input)
+  if (unit) wrap.append(Object.assign(element("span", "ui-input-affix"), { textContent: unit }))
   return wrap
 }
 
@@ -185,10 +159,11 @@ function pairControl(
   label: string,
   parts: readonly string[],
   commit: (value: string | undefined) => void,
-  { unit, step }: { unit?: string; step?: string } = {},
+  step?: string,
 ): HTMLElement {
   const values = value ? legacyAnimationValueParts(value) : []
-  const wrap = element("span", `legacy-animation-pair legacy-animation-${parts.length}`)
+  const wrap = element("span", "ui-field-pair")
+  if (parts.length > 2) wrap.dataset.columns = String(parts.length)
   const inputs = parts.map((part, index) => {
     const box = element("span", "ui-input")
     const affix = element("span", "ui-input-affix")
@@ -218,11 +193,6 @@ function pairControl(
     commit(next.map((text) => text || "0").join(","))
   }
   for (const input of inputs) input.addEventListener("change", write)
-  if (unit) {
-    const suffix = element("span", "ui-input-affix")
-    suffix.textContent = unit
-    wrap.append(suffix)
-  }
   return wrap
 }
 
@@ -263,10 +233,10 @@ function basicValueLabel(entry: LegacyAnimationEntry, key: string): string {
   switch (entry.type ?? 0) {
     case 0: return `${prefix}透明度`
     case 1: return `${prefix}角度`
-    case 2: return `${prefix}位置`
+    case 2: return `${prefix}位置（%）`
     case 3:
-    case 4: return `${prefix}缩放`
-    default: return `${prefix}3D 角度`
+    case 4: return `${prefix}缩放（%）`
+    default: return `${prefix}3D 角度（°）`
   }
 }
 
@@ -275,8 +245,8 @@ function basicValueControl(entry: LegacyAnimationEntry, key: string, value: stri
   switch (entry.type ?? 0) {
     case 0: return valueControl(value, label, commit, "0–255")
     case 1: return valueControl(value, label, commit, "°")
-    case 5: return pairControl(value, label, ["X", "Y", "Z"], commit, { unit: "°" })
-    default: return pairControl(value, label, ["X", "Y"], commit, { unit: "%" })
+    case 5: return pairControl(value, label, ["X", "Y", "Z"], commit)
+    default: return pairControl(value, label, ["X", "Y"], commit)
   }
 }
 
@@ -284,7 +254,7 @@ function intpolControl(entry: LegacyAnimationEntry, value: string | undefined, c
   const values = legacyAnimationValueParts(value ?? "0")
   const count = entry.kind === "basic" && [2, 3, 4].includes(entry.type ?? 0) ? 2 : 1
   if (count === 1) return selectControl(values[0] ?? "0", "插值器", LEGACY_ANIMATION_INTPOL_OPTIONS, (next) => commit(next ?? "0"))
-  const wrap = element("span", "legacy-animation-pair legacy-animation-2")
+  const wrap = element("span", "ui-field-pair")
   const selects = ["X", "Y"].map((axis, index) => {
     const box = element("span", "ui-input ui-select")
     const select = element("select")
@@ -301,167 +271,32 @@ function intpolControl(entry: LegacyAnimationEntry, value: string | undefined, c
   return wrap
 }
 
-function fieldControl(container: HTMLElement, entry: LegacyAnimationEntry, key: string, refresh: () => void): HTMLElement {
+function fieldControl(entry: LegacyAnimationEntry, key: string): HTMLElement {
   const value = fieldValue(entry, key)
   const spec = LEGACY_ANIMATION_FIELDS[key]
-  const commit = (next: string | undefined, rebuild = false) => {
-    if (!isEditing()) return
-    edit(container, (text) => {
-      if (key === "BUILD_LIST") {
-        const count = (next ?? "").split(",").map((part) => part.trim()).filter(Boolean).length
-        return writeLegacyAnimationFields(text, entry.section, { BUILD_LIST: next, BUILD_NUM: String(count) })
-      }
-      return writeLegacyAnimationFields(text, entry.section, { [key]: next })
-    }, { rebuild: rebuild || entry.kind === "particle", refresh })
-  }
+  const commit = (next: string | undefined) => edit((text) => writeLegacyAnimationFields(text, entry.section, { [key]: next }))
   if (key === "INTPOL") return intpolControl(entry, value, (next) => commit(next))
   if (key === "FROM" || key === "TO") {
     return basicValueControl(entry, key, value, (next) => commit(next))
   }
   if (!spec) return inputControl(value, key, (next) => commit(next), { numeric: false })
-  if (spec.kind === "number") return inputControl(value, spec.label, (next) => commit(next, LEGACY_ANIMATION_TIMELINE_KEYS.includes(key)), { unit: spec.unit, step: spec.step })
-  if (spec.kind === "text") return inputControl(value, spec.label, (next) => commit(next, LEGACY_ANIMATION_TIMELINE_KEYS.includes(key)), { numeric: false })
-  if (spec.kind === "select") return selectControl(value, spec.label, spec.options ?? [], (next) => commit(next, LEGACY_ANIMATION_TIMELINE_KEYS.includes(key)), spec.optional)
+  if (spec.kind === "number") return inputControl(value, spec.label, (next) => commit(next), { unit: spec.unit, step: spec.step })
+  if (spec.kind === "text") return inputControl(value, spec.label, (next) => commit(next), { numeric: false })
+  if (spec.kind === "select") return selectControl(value, spec.label, spec.options ?? [], (next) => commit(next), spec.optional)
   if (spec.kind === "switch") return switchControl(value, spec.label, (next) => commit(next))
   const parts = spec.kind === "quad"
     ? ["左", "上", "右", "下"]
     : spec.kind === "triple" ? ["X", "Y", "Z"]
       : spec.kind === "pair" && /PIVOT|_PX$/.test(key) ? ["X", "Y"] : ["最小", "最大"]
-  const rebuild = LEGACY_ANIMATION_TIMELINE_KEYS.includes(key)
-  return pairControl(value, spec.label, parts, (next) => commit(next, rebuild), { unit: spec.unit, step: spec.step })
+  return pairControl(value, spec.label, parts, (next) => commit(next), spec.step)
 }
 
-/* —— 时间轴条 —— */
-function timelineElement(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>): HTMLElement {
-  const timeline = legacyAnimationTimeline(entry, byIndex)
-  const root = element("div", "legacy-animation-timeline")
-  root.setAttribute("aria-label", `${entry.section} 时间轴`)
-  const header = element("div", "legacy-animation-timeline-header")
-  const title = element("span", "legacy-animation-timeline-title")
-  title.textContent = "时间轴"
-  const detail = element("span", "legacy-animation-timeline-detail")
-  if (entry.kind === "frame") detail.textContent = "按 gif 自身时长播放"
-  else if (timeline.repeat === 0) detail.textContent = "无限重复"
-  else detail.textContent = [timeline.delay > 0 ? `延迟 ${timeline.delay} ms` : "", `持续 ${timeline.duration} ms`].filter(Boolean).join(" · ")
-  header.append(createIcon("timer", 14), title, detail)
-  const track = element("div", "legacy-animation-timeline-track")
-  if (entry.kind === "basic" || entry.kind === "combination") {
-    if (timeline.delay > 0) {
-      const delay = element("span", "legacy-animation-timeline-delay")
-      delay.textContent = `${timeline.delay} ms`
-      delay.style.flexGrow = String(timeline.delay)
-      track.append(delay)
-    }
-    const active = element("span", "legacy-animation-timeline-active")
-    active.textContent = entry.kind === "combination"
-      ? `${legacyAnimationKindLabel(entry.kind)}（${fieldValue(entry, "BUILD_METHOD") === "0" ? "同时" : "接续"}）`
-      : legacyAnimationTypeLabel(entry.kind, entry.type)
-    active.style.flexGrow = String(Math.max(timeline.duration, 1))
-    track.append(active)
-  } else {
-    const active = element("span", "legacy-animation-timeline-active")
-    active.textContent = legacyAnimationKindLabel(entry.kind)
-    active.style.flexGrow = "1"
-    track.append(active)
-  }
-  const chips = element("div", "legacy-animation-chips")
-  const chip = (text: string) => Object.assign(element("span", "ui-badge"), { textContent: text })
-  chips.append(...[
-    entry.kind !== "frame" ? chip(timeline.repeat === 0 ? "无限重复" : `重复 ${timeline.repeat} 次`) : null,
-    timeline.reverse ? chip("自动往返") : null,
-    timeline.remove ? chip("结束移除") : null,
-    timeline.total === Infinity ? null : chip(`总计 ${timeline.total} ms`),
-  ].filter((node): node is HTMLElement => Boolean(node)))
-  root.append(header, track, chips)
-  return root
-}
-
-/* —— 组合动效的子动效说明 —— */
-function combinationSummary(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>): HTMLElement {
-  const ids = (fieldValue(entry, "BUILD_LIST") ?? "").split(",").map((part) => part.trim()).filter(Boolean)
-  const missing = ids.filter((id) => !byIndex.has(String(Number(id))))
-  const children = ids.flatMap((id) => {
-    const child = byIndex.get(String(Number(id)))
-    return child ? [child] : []
-  })
-  const nonBasic = children.filter((child) => child.kind !== "basic")
-  const note = element("p", missing.length || nonBasic.length ? "legacy-animation-warning" : "inspector-group-subtitle")
-  if (missing.length) {
-    note.textContent = `找不到子动效 ${missing.map((id) => `ANIM${id}`).join("、")}；组合动效只支持引用基础动效。`
-  } else if (nonBasic.length) {
-    note.textContent = `组合动效只支持基础动效，${nonBasic.map((child) => child.section).join("、")} 不会被播放。`
-  } else if (children.length) {
-    note.textContent = children
-      .map((child) => `${child.section}（${legacyAnimationTypeLabel(child.kind, child.type)}）`)
-      .join(" · ")
-  } else {
-    note.textContent = "BUILD_LIST 为空：组合动效暂时不会播放。"
-  }
-  return note
-}
-
-/* —— 单个动效分组 —— */
-function animationSection(
-  container: HTMLElement,
-  entry: LegacyAnimationEntry,
-  byIndex: ReadonlyMap<string, LegacyAnimationEntry>,
-  refresh: () => void,
-): HTMLElement {
-  const { section, body } = sectionShell(
-    `动效 ${entry.index ?? entry.section}`,
-    `${entry.section} · ${legacyAnimationKindLabel(entry.kind)}`,
-    LEGACY_ANIMATION_KIND_ICONS[entry.kind],
-  )
-  const categoryValue = entry.category === undefined ? undefined : String(entry.category)
-  if (categoryValue !== undefined && Number(categoryValue) !== kindCategory(entry.kind)) {
-    const warning = element("p", "legacy-animation-warning")
-    warning.textContent = `CATEGORY=${categoryValue} 与识别出的${legacyAnimationKindLabel(entry.kind)}不一致，已按内容编辑；切一次动效类型可写回一致的值。`
-    body.append(warning)
-  }
-  const kindControl = selectControl(
-    entry.kind,
-    "动效类型",
-    LEGACY_ANIMATION_KINDS.map(({ kind, label }) => [kind, label] as const),
-    (next) => {
-      if (!next || next === entry.kind) return
-      edit(container, (text) => writeLegacyAnimationKind(text, entry.section, next as LegacyAnimationKind), { rebuild: true })
-    },
-  )
-  body.append(fieldRow(entry.section, "CATEGORY", "动效类型", kindControl))
-  if (entry.kind === "basic" || entry.kind === "particle") {
-    const typeLabel = entry.kind === "particle" ? "粒子类型" : "动画类型"
-    const typeControl = selectControl(
-      entry.type === undefined ? undefined : String(entry.type),
-      typeLabel,
-      legacyAnimationTypeOptions(entry.kind).map(([value, label]) => [String(value), label] as const),
-      (next) => {
-        if (next === undefined) return
-        edit(container, (text) => writeLegacyAnimationType(text, entry.section, Number(next)), { rebuild: true })
-      },
-    )
-    body.append(fieldRow(entry.section, "TYPE", typeLabel, typeControl))
-  }
-  body.append(timelineElement(entry, byIndex))
-  if (entry.kind === "particle") body.append(particlePreviewBar(entry))
-  for (const group of legacyAnimationFieldGroups(entry)) {
-    const block = element("div", "ui-subsection legacy-animation-block")
-    const heading = element("h4")
-    heading.textContent = group.title
-    block.append(heading)
-    const grid = element("div", "document-property-grid")
-    for (const key of group.keys) {
-      grid.append(fieldRow(entry.section, key, fieldLabel(entry, key), fieldControl(container, entry, key, refresh)))
-    }
-    block.append(grid)
-    body.append(block)
-  }
-  if (entry.kind === "combination") body.append(combinationSummary(entry, byIndex))
-  return section
-}
 
 function fieldLabel(entry: LegacyAnimationEntry, key: string): string {
   if (key === "FROM" || key === "TO") return basicValueLabel(entry, key)
-  return LEGACY_ANIMATION_FIELDS[key]?.label ?? key
+  const spec = LEGACY_ANIMATION_FIELDS[key]
+  if (!spec) return key
+  return spec.unit && ["pair", "quad", "triple"].includes(spec.kind) ? `${spec.label}（${spec.unit}）` : spec.label
 }
 
 /** 手册第 180 页的 CATEGORY：0 基础 / 1 组合 / 2 帧 / 3 粒子。 */
@@ -469,132 +304,214 @@ function kindCategory(kind: LegacyAnimationKind): number {
   return kind === "basic" ? 0 : kind === "combination" ? 1 : kind === "frame" ? 2 : 3
 }
 
-/* —— 粒子动效：保留画布预览入口 —— */
-function particlePreviewBar(entry: LegacyAnimationEntry): HTMLElement {
-  const bar = element("div", "legacy-animation-particle-bar")
-  const status = element("span")
-  const button = element("button", "ui-button")
-  button.type = "button"
-  button.dataset.variant = "quiet"
-  button.dataset.size = "sm"
-  const render = () => {
-    const active = appState.particlePreviewSection === entry.section
-    status.textContent = active ? "正在键盘画布中预览" : "可在键盘画布中预览"
-    button.textContent = active ? "重新播放" : "在画布预览"
-    button.disabled = !isEditing() || !appState.selectedDocument
-  }
-  button.addEventListener("click", () => {
-    if (!appState.selectedDocument) return
-    appState.particlePreviewSection = entry.section
-    preview.setParticlePreview(parseLegacyParticleEmitter(appState.selectedDocument, entry.section))
-    render()
+/** 动效类型：动效设计里在基础 / 组合 / 帧之间切换，粒子设计只放粒子，原始文件视图四类都有。 */
+function kindRow(entry: LegacyAnimationEntry): HTMLElement | undefined {
+  const kinds = LEGACY_ANIMATION_KINDS.filter(({ kind }) => shownInAnimationView(kind === "particle"))
+  if (kinds.length < 2) return
+  const control = selectControl(entry.kind, "动效类型", kinds.map(({ kind, label }) => [kind, label] as const), (next) => {
+    if (next && next !== entry.kind) edit((text) => writeLegacyAnimationKind(text, entry.section, next as LegacyAnimationKind))
   })
-  render()
-  bar.append(status, button)
-  return bar
+  return fieldRow(entry.section, "CATEGORY", "动效类型", control)
 }
 
-/* —— 概览：数量、类型分布与 default.css / 布局的引用 —— */
-function overviewSection(
-  model: LegacyAnimationDocument,
-  byIndex: ReadonlyMap<string, LegacyAnimationEntry>,
-  references: readonly LegacyAnimationReference[],
-  previewElement: HTMLElement,
-): HTMLElement {
-  const { section, body } = sectionShell("动画概览", `${model.entries.length} 个`, "wand-sparkles")
-  body.append(previewElement)
-  const summary = element("p", "inspector-group-subtitle")
-  const declared = model.animNum === undefined ? "未声明" : String(model.animNum)
-  summary.textContent = `共 ${model.entries.length} 个动效，[GLOBAL] ANIM_NUM=${declared}。类型按 CATEGORY 与内容自动识别。`
-  body.append(summary)
-  if (model.animNum !== undefined && model.animNum !== model.entries.length) {
-    const warning = element("p", "legacy-animation-warning")
-    warning.textContent = `ANIM_NUM=${model.animNum} 与实际的 ${model.entries.length} 个 [ANIM*] 不一致，写回任意字段时会自动修正。`
-    body.append(warning)
-  }
-  const chips = element("div", "legacy-animation-chips")
-  for (const { kind, label } of LEGACY_ANIMATION_KINDS) {
-    const count = model.entries.filter((entry) => entry.kind === kind).length
-    if (count) chips.append(Object.assign(element("span", "ui-badge"), { textContent: `${label} ${count}` }))
-  }
-  const inferred = model.entries.filter((entry) => entry.category === undefined).length
-  if (inferred) chips.append(Object.assign(element("span", "ui-badge"), { textContent: `自动识别 ${inferred}` }))
-  if (chips.childElementCount) body.append(chips)
-
-  const block = element("div", "ui-subsection legacy-animation-block")
-  const heading = element("h4")
-  heading.textContent = `被引用的动效（${references.length} 处指针）`
-  block.append(heading)
-  const detail = element("p", "legacy-animation-reference-detail")
-  detail.textContent = "引用来自 default.css 的 [STYLE*]；布局的 ANIM_STYLE 系列先指向样式，再由样式指向动效。"
-  const grouped = new Map<number, LegacyAnimationReference[]>()
-  for (const reference of references) {
-    grouped.set(reference.animation, [...grouped.get(reference.animation) ?? [], reference])
-  }
-  const list = element("div", "legacy-animation-reference-list")
-  for (const [animation, items] of [...grouped].sort(([left], [right]) => left - right)) {
-    const entry = byIndex.get(String(animation))
-    const button = element("button", "ui-list-item")
-    button.type = "button"
-    button.append(createIcon(entry ? LEGACY_ANIMATION_KIND_ICONS[entry.kind] : "circle-alert", 14))
-    const text = element("span", "ui-list-item-text")
-    const name = element("strong")
-    name.textContent = `动效 ${animation}${entry ? ` · ${legacyAnimationKindLabel(entry.kind)}` : "（anim.ini 中不存在）"}`
-    const meta = element("small")
-    meta.textContent = `${items.length} 处引用 · ${items.map((item) => legacyAnimationReferenceText(item)).join("；")}`
-    text.append(name, meta)
-    button.append(text)
-    button.addEventListener("click", () => {
-      for (const other of list.querySelectorAll("button")) other.setAttribute("aria-pressed", "false")
-      button.setAttribute("aria-pressed", "true")
-      detail.textContent = items.map((item) =>
-        `${item.layoutSection ? `布局 [${item.layoutSection}] ${item.layoutField}=${item.styleSection.replace(/^STYLE/i, "")} → ` : ""}default.css [${item.styleSection}] ${item.field}=${animation}`,
-      ).join("；")
-      if (!entry) detail.textContent += "（该动效在 anim.ini 中不存在）"
-    })
-    list.append(button)
-  }
-  if (grouped.size) block.append(list, detail)
-  else block.append(Object.assign(element("p", "inspector-group-subtitle"), { textContent: "default.css 与当前布局都没有引用 anim.ini 的动效。" }))
-  const unreferenced = model.entries.filter((entry) => entry.index !== undefined && !grouped.has(entry.index))
-  if (unreferenced.length) {
-    const note = element("p", "inspector-group-subtitle")
-    note.textContent = `${unreferenced.length} 个动效没有被引用：${unreferenced.map((entry) => entry.section).join("、")}。`
-    block.append(note)
-  }
-  body.append(block)
-  return section
-}
-
-function syncParticlePreview(model: LegacyAnimationDocument): void {
-  if (!appState.selectedDocument) return
-  const particleSections = model.entries.filter((entry) => entry.kind === "particle").map((entry) => entry.section)
-  if (!particleSections.includes(appState.particlePreviewSection)) appState.particlePreviewSection = particleSections[0] ?? ""
-  preview.setParticlePreview(
-    appState.particlePreviewSection
-      ? parseLegacyParticleEmitter(appState.selectedDocument, appState.particlePreviewSection)
-      : undefined,
+function typeRow(entry: LegacyAnimationEntry): HTMLElement {
+  const label = entry.kind === "particle" ? "粒子类型" : "动画类型"
+  const control = selectControl(
+    entry.type === undefined ? undefined : String(entry.type),
+    label,
+    legacyAnimationTypeOptions(entry.kind).map(([value, text]) => [String(value), text] as const),
+    (next) => { if (next !== undefined) edit((text) => writeLegacyAnimationType(text, entry.section, Number(next))) },
   )
+  return fieldRow(entry.section, "TYPE", label, control)
+}
+
+/* —— 组合动效：子动效按播放顺序排成列表，增删排序写回 BUILD_LIST / BUILD_NUM —— */
+function buildList(entry: LegacyAnimationEntry): string[] {
+  return (fieldValue(entry, "BUILD_LIST") ?? "").split(",").map((part) => part.trim()).filter(Boolean)
+}
+
+function writeBuildList(entry: LegacyAnimationEntry, ids: string[]): void {
+  edit((text) => writeLegacyAnimationFields(text, entry.section, { BUILD_LIST: ids.join(","), BUILD_NUM: String(ids.length) }))
+}
+
+function comboRows(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>): HTMLElement[] {
+  const ids = buildList(entry)
+  const method = fieldValue(entry, "BUILD_METHOD")
+  const methodRow = fieldRow(entry.section, "BUILD_METHOD", "组合方式",
+    selectControl(method, "组合方式", LEGACY_ANIMATION_FIELDS.BUILD_METHOD.options ?? [], (next) =>
+      edit((text) => writeLegacyAnimationFields(text, entry.section, { BUILD_METHOD: next }))))
+  // 隐藏的 BUILD_LIST 行承载改动标记与重置；列表本身是下面的子动效编辑器。
+  const listRow = fieldRow(entry.section, "BUILD_LIST", "子动效列表", inputControl(fieldValue(entry, "BUILD_LIST"), "子动效列表", (next) =>
+    writeBuildList(entry, (next ?? "").split(",").map((part) => part.trim()).filter(Boolean)), { numeric: false }))
+  listRow.hidden = true
+  const basics = [...byIndex.values()].filter((child) => child.kind === "basic" && child.index !== undefined && child.section !== entry.section)
+  return [methodRow, comboList({
+    editable: isEditing(),
+    empty: "还没有子动效；组合动效只能引用基础动效。",
+    children: ids.map((id) => {
+      const child = byIndex.get(String(Number(id)))
+      if (!child) return { title: `动画 ${id}`, detail: "anim.ini 里没有这个动效，请移除", missing: true }
+      if (child.kind !== "basic") return { title: `动画 ${id}`, detail: `${legacyAnimationKindLabel(child.kind)}不能放进组合，不会播放`, missing: true }
+      return { title: `动画 ${id}`, detail: `${legacyAnimationTypeLabel(child.kind, child.type)} · ${timelineText(legacyAnimationTimeline(child, byIndex))}` }
+    }),
+    move: (index, offset) => {
+      const next = [...ids]
+      ;[next[index], next[index + offset]] = [next[index + offset], next[index]]
+      writeBuildList(entry, next)
+    },
+    remove: (index) => writeBuildList(entry, ids.filter((_, position) => position !== index)),
+    add: {
+      options: basics.filter((child) => !ids.some((id) => Number(id) === child.index))
+        .map((child) => [String(child.index), `动画 ${child.index} · ${legacyAnimationTypeLabel(child.kind, child.type)}`]),
+      run: (id) => writeBuildList(entry, [...ids, id]),
+    },
+  }), listRow]
+}
+
+function parameterSections(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>): HTMLElement[] {
+  return legacyAnimationFieldGroups(entry).map((group, index) => {
+    const section = animationSection(group.title, SECTION)
+    if (index === 0) {
+      const kind = kindRow(entry)
+      if (kind) section.append(kind)
+    }
+    for (const key of group.keys) {
+      if (key === "TYPE") section.append(typeRow(entry))
+      else if (key === "BUILD_METHOD") section.append(...comboRows(entry, byIndex))
+      else if (key === "BUILD_LIST" || key === "BUILD_NUM") continue
+      else section.append(fieldRow(entry.section, key, fieldLabel(entry, key), fieldControl(entry, key)))
+    }
+    return section
+  })
+}
+
+/* —— 列表与引用 —— */
+function timelineText(timeline: LegacyAnimationTimeline): string {
+  if (timeline.repeat === 0) return "循环"
+  return [`${timeline.total} ms`, timeline.repeat > 1 ? `重复 ${timeline.repeat} 次` : "", timeline.reverse ? "往返" : ""].filter(Boolean).join(" · ")
+}
+
+function kindLabel(entry: LegacyAnimationEntry): string {
+  if (entry.kind === "basic") return legacyAnimationTypeLabel(entry.kind, entry.type ?? 0)
+  return entry.kind === "particle" ? "粒子" : entry.kind === "frame" ? "GIF 帧动画" : "组合"
+}
+
+function problem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>): string | undefined {
+  if (entry.category !== undefined && entry.category !== kindCategory(entry.kind)) return `CATEGORY=${entry.category} 与${legacyAnimationKindLabel(entry.kind)}不一致`
+  if (entry.kind === "combination" && buildList(entry).some((id) => byIndex.get(String(Number(id)))?.kind !== "basic")) return "组合里有找不到或不能播放的子动效"
+  if (entry.kind === "frame" && !fieldValue(entry, "ANIM_PATH")) return "还没有设置 gif 路径"
+  if (entry.kind === "particle" && !fieldValue(entry, "PARTICLE_IMAGE")) return "还没有设置粒子图片"
+}
+
+function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>, uses: number): AnimationListItem {
+  const timeline = legacyAnimationTimeline(entry, byIndex)
+  const detail = entry.kind === "frame" ? fieldValue(entry, "ANIM_PATH") || "未设置 gif"
+    : entry.kind === "particle" ? `${fieldValue(entry, "TOTAL_NUMBER") ?? "?"} 个粒子 · ${timelineText(timeline)}`
+      : entry.kind === "combination" ? `${fieldValue(entry, "BUILD_METHOD") === "0" ? "同时" : "接续"} · ${buildList(entry).length} 个子动效 · ${timelineText(timeline)}`
+        : timelineText(timeline)
+  return {
+    id: entry.section,
+    title: `动画 ${entry.index ?? entry.section}`,
+    kind: kindLabel(entry),
+    icon: entry.kind === "basic" ? TYPE_ICONS[entry.type ?? 0] ?? "blend" : KIND_ICONS[entry.kind],
+    detail,
+    uses,
+    problem: problem(entry, byIndex),
+  }
+}
+
+/** default.css 的指针按事件归组；布局的 ANIM_STYLE 先指向样式，单独成行。 */
+function uses(references: readonly LegacyAnimationReference[]): AnimationUse[] {
+  const groups = new Map<string, LegacyAnimationReference[]>()
+  for (const reference of references) {
+    const key = reference.layoutField ? `${reference.layoutField}|${reference.field}` : reference.field
+    groups.set(key, [...groups.get(key) ?? [], reference])
+  }
+  return [...groups.values()].map((items) => {
+    const [first] = items
+    const event = EVENT_LABELS[first.field] ?? first.field
+    const names = [...new Set(items.map((item) => item.layoutSection ? `[${item.layoutSection}] → ${item.styleSection}` : item.styleSection))]
+    return {
+      icon: first.layoutField ? "layout-grid" : "palette",
+      title: first.layoutField ? `布局 ${first.layoutField} · ${event}` : `${event} · ${first.field}`,
+      detail: `${names.length} 处：${names.slice(0, 6).join("、")}${names.length > 6 ? " 等" : ""}`,
+    }
+  })
+}
+
+/** ANIM_PATH 相对 anim.ini 所在目录；找不到时再试皮肤的 res 目录。 */
+function readSkinFile(path: string): Uint8Array | undefined {
+  const archive = appState.archive
+  if (!archive) return
+  const folder = appState.selectedPath.replace(/[^/]*$/, "")
+  const res = styleConfigPath().replace(/[^/]*$/, "")
+  for (const candidate of [`${folder}${path}`, `${res}${path}`, path]) {
+    const bytes = archive.getBytes(candidate.replace(/\/\.\//g, "/"))
+    if (bytes) return bytes
+  }
 }
 
 /* —— 对外入口 —— */
 export function populateLegacyAnimationInspector(container: HTMLElement): boolean {
   if (!isLegacyAnimationDocument()) return false
-  const model = parseLegacyAnimationFile(appState.selectedDocument!.toString())
-  const byIndex = indexEntries(model)
-  const previewBlock = legacyAnimationPreviewBlock(model, byIndex)
-  container.replaceChildren(overviewSection(model, byIndex, legacyAnimationReferences(styleDocument(), layoutDocument()), previewBlock.element))
-  for (const entry of model.entries) {
-    container.append(animationSection(container, entry, byIndex, previewBlock.refresh))
+  const text = appState.selectedDocument!.toString()
+  const model = parseLegacyAnimationFile(text)
+  const byIndex = new Map(model.entries.flatMap((entry) => entry.index === undefined ? [] : [[String(entry.index), entry] as const]))
+  const references = legacyAnimationReferences(styleDocument(), layoutDocument())
+  const referencesOf = (entry: LegacyAnimationEntry) => references.filter((reference) => reference.animation === entry.index)
+  const entries = model.entries.filter((entry) => shownInAnimationView(entry.kind === "particle"))
+  const items = entries.map((entry) => listItem(entry, byIndex, referencesOf(entry).length))
+  const selected = selectedAnimation(items)
+  const entry = entries.find((candidate) => candidate.section === selected)
+  const listRows: HTMLElement[] = []
+  if (model.animNum !== undefined && model.animNum !== model.entries.length) {
+    listRows.push(animationWarning(`[GLOBAL] ANIM_NUM=${model.animNum}，实际有 ${model.entries.length} 个动效；写回任意字段时自动修正。`))
   }
-  syncParticlePreview(model)
+  // 键盘画布上的粒子预览由播放器取代。
+  appState.particlePreviewSection = ""
+  preview.setParticlePreview()
+  const create = (kind: LegacyAnimationKind, copyOf?: string) => edit((current) => {
+    const next = appendLegacyAnimation(current, kind, copyOf)
+    rememberAnimation(next.section)
+    return next.text
+  })
+  renderAnimationResource(container, {
+    mode: appState.animationDesignMode,
+    sectionClass: SECTION,
+    items,
+    selected,
+    editable: isEditing(),
+    onSelect: selectAnimation,
+    create: {
+      options: LEGACY_ANIMATION_KINDS.filter(({ kind }) => shownInAnimationView(kind === "particle"))
+        .map(({ kind, label }) => [kind, kind === "particle" ? "粒子" : label]),
+      run: (kind) => create(kind as LegacyAnimationKind),
+    },
+    duplicate: () => { if (entry) create(entry.kind, entry.section) },
+    listRows,
+    player: entry && {
+      clip: iniPreviewClip(appState.selectedDocument!, entry.section, { fillBefore: true }),
+      key: `${appState.selectedPath}|${entry.section}`,
+      resolver: visualResolver(),
+      readFile: readSkinFile,
+    },
+    warnings: entry?.category !== undefined && entry.category !== kindCategory(entry.kind)
+      ? [animationWarning(`CATEGORY=${entry.category} 与识别出的${legacyAnimationKindLabel(entry.kind)}不一致，已按内容编辑。`, {
+          label: "修正", disabled: !isEditing(),
+          run: () => edit((current) => writeLegacyAnimationFields(current, entry.section, { CATEGORY: String(kindCategory(entry.kind)) })),
+        })]
+      : [],
+    sections: entry ? parameterSections(entry, byIndex) : [],
+    uses: entry ? uses(referencesOf(entry)) : [],
+  })
   container.dataset.path = appState.selectedPath
   return true
 }
 
-/** 对象头：动画数量与文件位置。 */
+/** 对象头：动效设计 / 粒子设计与文件位置。 */
 export function legacyAnimationInspectorTitle(): { name: string; context: string } | undefined {
   if (!isLegacyAnimationDocument()) return undefined
   const model = parseLegacyAnimationFile(appState.selectedDocument!.toString())
-  return { name: "按键动画", context: `${appState.selectedPath} · ${model.entries.length} 个动效` }
+  const count = model.entries.filter((entry) => shownInAnimationView(entry.kind === "particle")).length
+  return { name: animationModeTitle(appState.animationDesignMode), context: `${appState.selectedPath} · ${count} 个${appState.animationDesignMode === "particle" ? "粒子" : "动效"}` }
 }

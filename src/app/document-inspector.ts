@@ -20,6 +20,7 @@ import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
+import { selectAnimation, selectedAnimation } from "./animation-resource"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -692,5 +693,6 @@ export function populateBdaConfigInspector(): void {
     onPickAnimationResource: (sequence, frame) => openImageResourceChooser((resourceID) => update(
       updateBdaAnimationFrame(bytes, sequence, frame, "resourceID", resourceID),
     )),
+    animationView: { mode: appState.animationDesignMode, select: selectedAnimation, onSelect: selectAnimation },
   })
 }
