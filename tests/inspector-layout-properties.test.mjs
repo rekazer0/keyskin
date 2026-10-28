@@ -74,7 +74,9 @@ test("document sections and category rail stay readable", () => {
   // 面板重绘会重建分区元素，当前分组要用稳定键记住，否则高亮会跳回同名的第一个分组。
   assert.match(main, /inspectorGroupKey: ""/)
   assert.match(main, /function mobileInspectorGroupKey\(group: HTMLElement\): string \{/)
-  assert.match(main, /const active = groups\.find\(\(group\) => mobileInspectorGroupKey\(group\) === appState\.inspectorGroupKey\)/)
+  assert.match(main, /const remembered = groups\.find\(\(group\) => mobileInspectorGroupKey\(group\) === chosen\)/)
+  // 落到第一个分区只是默认值，不能顶掉用户选过的分区（否则选中按键时会跳到上一个对象的默认分区）。
+  assert.match(main, /if \(!remembered\) appState\.inspectorGroupKey = chosen/)
   assert.match(main, /const seen = usedRailLabels\.get\(label\) \?\? 0/)
   assert.match(main, /label = `\$\{label\} \$\{seen \+ 1\}`\s*\n\s*group\.dataset\.inspectorGroupLabel = label/)
 })

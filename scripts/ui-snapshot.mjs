@@ -186,7 +186,7 @@ await withPage(async (page) => {
 })
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   // 手心动画：资源配置里的动效设计与粒子设计
-  await openSkinFile(page, "动效.sxi", sxiAnimationFixture(), "light/skin/res/anim.ini")
+  await openSkinFile(page, "动效.sxi", sxiAnimationFixture(), "skin.json/default/s_info/ss_2")
   for (const mode of ["motion", "particle"]) {
     await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).click()
     await page.waitForSelector('#document-fields .ui-listbox [aria-selected="true"]')

@@ -52,7 +52,7 @@ export function syncMobileInspectorHeader(): void {
   sourceHeading.dataset.mobileKeyTools = appState.selectedKeySections.length ? "on" : "off"
 }
 
-export function mobileInspectorGroupLabel(group: HTMLElement): string {
+function mobileInspectorGroupLabel(group: HTMLElement): string {
   // 导航标签不带计数之类的括注（「已选按键（3）」→「已选按键」）。
   const explicitLabel = group.dataset.inspectorGroupLabel?.trim().replace(/\s*[（(][^）)]*[）)]\s*$/, "")
   if (explicitLabel) return explicitLabel
@@ -112,7 +112,7 @@ function revealActiveRailButton(): void {
 }
 
 /** 一页显示时把当前分区滚到检查器顶部；第一个分区保留顶部留白。 */
-export function scrollToSinglePageInspectorGroup(): void {
+function scrollToSinglePageInspectorGroup(): void {
   const groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .filter((group) => group.getClientRects().length > 0)
   const current = groups.find((group) => group.dataset.mobileInspectorGroup === quickInspector.dataset.mobileInspectorGroup)
@@ -201,8 +201,9 @@ export function syncMobileInspectorGroups(): void {
     railLabels.set(group, label)
     if (code) railCodes.set(group, code)
   }
-  const active = groups.find((group) => mobileInspectorGroupKey(group) === appState.inspectorGroupKey)
-    ?? groups[0]
+  const chosen = appState.inspectorGroupKey
+  const remembered = groups.find((group) => mobileInspectorGroupKey(group) === chosen)
+  const active = remembered ?? groups[0]
   // 分类轨只在检查器没有任何分组时隐藏。单分区文档（例如只有 [PANEL] 的 help.ini）
   // 此前也会被当成「没有可切换的分组」而整条收起，属性检查器于是少了一侧导航。
   mobileInspectorGroups.hidden = groups.length === 0
@@ -223,6 +224,8 @@ export function syncMobileInspectorGroups(): void {
     return button
   }))
   setMobileInspectorGroup(active?.dataset.mobileInspectorGroup ?? "", false)
+  // 落到第一个分区只是默认值：保留用户选过的分区，换到有这个分区的对象时再回到它。
+  if (!remembered) appState.inspectorGroupKey = chosen
   if (appState.archive && appState.selectedKeySections.length) {
     const addDestination = (label: string, action: () => void) => {
       const button = document.createElement("button")
