@@ -4,6 +4,7 @@ import { strFromU8, strToU8 } from "fflate"
 import { IniDocument } from "./ini.ts"
 import { cropImage, decodePng, encodePng } from "./ssf/ssf-png.ts"
 import { addZipEntry } from "./skin-zip.ts"
+import type { SkinArchive } from "./skin.ts"
 
 type Slice = { bytes: Uint8Array; rect: number[] }
 type SliceReader = (resource: string, tile: string) => Slice | undefined
@@ -66,17 +67,8 @@ export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: strin
     if (gen.sections().includes("LOGO") || !candText || !cssText) continue
     const cand = IniDocument.parse(candText)
     const css = IniDocument.parse(cssText)
-    const slice: SliceReader = (resource, tile) => {
-      const bytes = files.get(`${root}res/${resource}.png`)
-      const til = text(`${root}res/${resource}.til`)
-      const rect = til ? IniDocument.parse(til).get(`IMG${tile}`, "SOURCE_RECT")?.split(",").map(Number) : undefined
-      return bytes && rect?.length === 4 && rect.every(Number.isFinite) ? { bytes, rect } : undefined
-    }
-    const icon = (action: string) => cand.sections().find((name) => /^ICON\d+$/.test(name) && cand.get(name, "KEY")?.trim() === action)
-    const fore = (action: string) => {
-      const section = icon(action)
-      return section ? cand.get(section, "FORE_STYLE")?.split(",")[0].trim() : undefined
-    }
+    const slice = sliceReader(root, (path) => files.get(path))
+    const fore = (action: string) => foreStyle(cand, action)
     const isText = (style?: string) => !!style && !!css.get(`STYLE${style}`, "NM_COLOR") && !css.get(`STYLE${style}`, "NM_IMG")
     const logo = fore("F31")
     textKeys ||= [logo, fore("F8")].some((style) => isText(style) && css.get(`STYLE${style}`, "SHOW"))
@@ -92,16 +84,59 @@ export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: strin
 
     const configPath = `${root}res/logo/customImageConfig.plist`
     if (!logo || files.has(configPath)) continue
-    const image = (state: "NM_IMG" | "HL_IMG") => {
-      const [resource, tile] = css.get(`STYLE${logo}`, state)?.split(",") ?? []
-      const found = resource ? slice(resource, tile) : undefined
-      if (!found) return
-      const name = `toolbar-logo_${state === "NM_IMG" ? "Normal" : "Highlight"}`
-      addZipEntry(files, `${root}res/logo/${name}_iphone@3x.png`, encodePng(cropImage(decodePng(found.bytes), ...found.rect as [number, number, number, number])))
-      return name
-    }
-    const normal = image("NM_IMG")
-    if (normal) addZipEntry(files, configPath, strToU8(logoImageConfig(normal, image("HL_IMG") ?? normal)))
+    for (const [path, bytes] of logoFiles(root, css, logo, slice)) addZipEntry(files, path, bytes)
   }
   if (textKeys) warnings?.push("iOS 百度输入法用原生图标绘制工具栏 Logo 和收起键，文字按钮（如“百度”“收回”）不会显示")
+}
+
+/**
+ * iOS draws the logo from res/logo, not the CND logo key's FORE_STYLE the editor shows and edits. Saving a BDI re-cuts
+ * the artwork adaptIosToolbar wrote so a restyled logo key reaches the phone; hand-made res/logo files are left alone.
+ */
+export function refreshIosLogo(archive: SkinArchive): void {
+  for (const configPath of archive.names().filter((path) => path.endsWith("res/logo/customImageConfig.plist"))) {
+    if (!archive.getText(configPath).includes(`${LOGO_IMAGE}_Normal`)) continue
+    const root = configPath.slice(0, -"res/logo/customImageConfig.plist".length)
+    const read = (path: string) => archive.getBytes(path)
+    const text = (path: string) => archive.isText(path) ? archive.getText(path) : undefined
+    const gen = text(`${root}port/gen.ini`)
+    const cand = gen && text(`${root}port/${IniDocument.parse(gen).get("CAND", "LAYOUT_NAME")?.trim()}.cnd`)
+    const css = text(`${root}res/default.css`)
+    const logo = cand && foreStyle(IniDocument.parse(cand), "F31")
+    if (!css || !logo) continue
+    for (const [path, bytes] of logoFiles(root, IniDocument.parse(css), logo, sliceReader(root, read))) archive.setBytes(path, bytes)
+  }
+}
+
+const LOGO_IMAGE = "toolbar-logo"
+
+function foreStyle(cand: IniDocument, action: string): string | undefined {
+  const section = cand.sections().find((name) => /^ICON\d+$/.test(name) && cand.get(name, "KEY")?.trim() === action)
+  return section ? cand.get(section, "FORE_STYLE")?.split(",")[0].trim() : undefined
+}
+
+function sliceReader(root: string, read: (path: string) => Uint8Array | undefined): SliceReader {
+  return (resource, tile) => {
+    const bytes = read(`${root}res/${resource}.png`)
+    const til = read(`${root}res/${resource}.til`)
+    const rect = til ? IniDocument.parse(strFromU8(til)).get(`IMG${tile}`, "SOURCE_RECT")?.split(",").map(Number) : undefined
+    return bytes && rect?.length === 4 && rect.every(Number.isFinite) ? { bytes, rect } : undefined
+  }
+}
+
+/** The logo key's image style cut into res/logo artwork plus the customImageConfig.plist naming it; none for a text logo. */
+function logoFiles(root: string, css: IniDocument, logo: string, slice: SliceReader): Array<[string, Uint8Array]> {
+  const files: Array<[string, Uint8Array]> = []
+  const image = (state: "NM_IMG" | "HL_IMG") => {
+    const [resource, tile] = css.get(`STYLE${logo}`, state)?.split(",") ?? []
+    const found = resource ? slice(resource, tile) : undefined
+    if (!found) return
+    const name = `${LOGO_IMAGE}_${state === "NM_IMG" ? "Normal" : "Highlight"}`
+    files.push([`${root}res/logo/${name}_iphone@3x.png`, encodePng(cropImage(decodePng(found.bytes), ...found.rect as [number, number, number, number]))])
+    return name
+  }
+  const normal = image("NM_IMG")
+  if (!normal) return []
+  files.push([`${root}res/logo/customImageConfig.plist`, strToU8(logoImageConfig(normal, image("HL_IMG") ?? normal))])
+  return files
 }

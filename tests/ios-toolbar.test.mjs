@@ -63,6 +63,26 @@ test('BDS → BDI hands iOS an image logo key through customImageConfig', async 
   assert.equal(IniDocument.parse(converted.getText('light/skin/port/logo.ini')).get('ICON1', 'TEXT_STYLE'), '129')
 })
 
+test('saving a converted BDI re-cuts the logo artwork from the restyled logo key', async () => {
+  const source = androidSkin()
+  for (const orientation of ['port', 'land']) {
+    source.setText(`light/skin/${orientation}/cand1.cnd`, source.getText(`light/skin/${orientation}/cand1.cnd`).replace('FORE_STYLE=115', 'FORE_STYLE=530'))
+  }
+  // Red normal tile, blue pressed tile, so re-cutting the wrong one shows.
+  source.setBytes('light/skin/res/logo.png', encodePng({ width: 6, height: 3, data: new Uint8Array(72).map((_, index) => (index >> 2) % 6 < 3 ? [0xff, 0, 0, 0xff][index % 4] : [0, 0, 0xff, 0xff][index % 4]) }))
+  const bdi = SkinArchive.open(await source.toBytesAsync('bdi'), 'bdi')
+  // The user swaps the normal logo for the pressed tile in the editor, then saves the BDI again.
+  bdi.setText('light/skin/res/default.css', bdi.getText('light/skin/res/default.css').replace('NM_IMG=logo,1', 'NM_IMG=logo,2'))
+  const saved = SkinArchive.open(await bdi.toBytesAsync('bdi'), 'bdi')
+  const atlas = decodePng(source.getBytes('light/skin/res/logo.png'))
+  assert.deepEqual(decodePng(saved.getBytes('light/skin/res/logo/toolbar-logo_Normal_iphone@3x.png')), cropImage(atlas, 3, 0, 3, 3))
+  // A hand-made customImageConfig is not ours to rewrite.
+  saved.setText('light/skin/res/logo/customImageConfig.plist', '<plist><array><dict><key>Name</key><string>0</string></dict></array></plist>')
+  saved.setText('light/skin/res/default.css', saved.getText('light/skin/res/default.css').replace('NM_IMG=logo,2', 'NM_IMG=logo,1'))
+  const handMade = SkinArchive.open(await saved.toBytesAsync('bdi'), 'bdi')
+  assert.deepEqual(decodePng(handMade.getBytes('light/skin/res/logo/toolbar-logo_Normal_iphone@3x.png')), cropImage(atlas, 3, 0, 3, 3))
+})
+
 test('BDS export and skins that already declare [LOGO] keep their toolbar files', async () => {
   const bds = SkinArchive.open(await androidSkin().toBytesAsync('bds'), 'bds')
   assert.equal(bds.getBytes('light/skin/port/logo.ini'), undefined)

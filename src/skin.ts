@@ -2,7 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import type { ExportFormat } from "./export.ts"
 import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
-import { adaptIosToolbar } from "./ios-toolbar.ts"
+import { adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
 import { adaptIosPanelBackground } from "./ios-panel-background.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
@@ -495,6 +495,7 @@ export class SkinArchive {
 
   toBytes(format?: ExportFormat): Uint8Array {
     assertRepackable(this.format, format)
+    if (this.format === "bdi" && (!format || format === "bdi")) refreshIosLogo(this)
     if (format && (format !== this.format || this.layout === "legacy-ios")) {
       return this.packagedBytes(format)
     }
