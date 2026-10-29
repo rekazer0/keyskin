@@ -201,6 +201,8 @@ export async function importFontFile(file: File): Promise<void> {
     if (!isFontFile(file.name)) throw new Error("只支持 .ttf / .otf / .ttc 字体文件")
     const bytes = new Uint8Array(await file.arrayBuffer())
     await validateFont(bytes)
+    // 读文件和校验期间换了皮肤或离开编辑模式：改动是按原来的皮肤算的，不能写进现在的皮肤。
+    if (appState.archive !== archive || !isEditing()) return
     const fileName = uniqueFontFileName(sanitizeFontFileName(file.name), archive.names())
     const changes: Change[] = []
     const themeFonts = new Map<string, string>()

@@ -448,6 +448,7 @@ async function importSsfFont(file: File, targets: SsfLocation[]): Promise<void> 
     if (!/\.(?:ttf|otf)$/i.test(file.name)) throw new Error("搜狗皮肤只支持 .ttf / .otf 字体文件")
     const bytes = new Uint8Array(await file.arrayBuffer())
     await validateFont(bytes)
+    if (appState.archive !== archive || !isEditing()) return
     const name = uniqueFontFileName(sanitizeFontFileName(file.name), archive.names())
     const changes: Change[] = [{ kind: "bytes", path: `default/${name}`, before: undefined, after: bytes }]
     for (const path of new Set(targets.map((target) => target.path))) {
