@@ -417,7 +417,7 @@ body {
   user-select: none;
 }
 :where(button, input, select, textarea) { font: inherit; color: inherit; }
-:where(input, textarea) { -webkit-user-select: text; user-select: text; }
+:where(input, textarea, [contenteditable]) { -webkit-user-select: text; user-select: text; }
 :where(button, select, textarea, input, summary):focus-visible {
   outline: 3px solid color-mix(in srgb, var(--accent) 25%, transparent);
   outline-offset: 1px;

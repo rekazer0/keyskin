@@ -616,10 +616,13 @@ export class SourceCodeEditor extends EventTarget {
     const readOnly = this.isDisabled || this.isReadOnly
     return [
       EditorState.readOnly.of(readOnly),
-      EditorView.editable.of(!readOnly),
+      // Read-only text stays focusable so it can be selected and copied; only a disabled editor leaves the tab order.
+      EditorView.editable.of(!this.isDisabled),
       EditorView.contentAttributes.of({
         "aria-disabled": String(this.isDisabled),
         "aria-readonly": String(readOnly),
+        // Focusing read-only text on a phone must not bring up the keyboard.
+        ...readOnly ? { inputmode: "none" } : {},
       }),
     ]
   }
