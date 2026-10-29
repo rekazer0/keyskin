@@ -13,7 +13,7 @@ import { updateSourceHighlight } from "./source-panel"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
 import { decodePngMask, showStatus } from "./file-operations"
-import { detectGridCells } from "../layout-scan.ts"
+import { detectGridCells, detectLineCells } from "../layout-scan.ts"
 import { type Change } from "../history.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { editSxi } from "./sxi-fields"
@@ -426,7 +426,12 @@ export async function autoSliceSelectedImage(): Promise<void> {
   if (!bytes) return
   try {
     const scan = await decodePngMask(bytes)
-    const cells = detectGridCells(scan.mask, scan.width, scan.height)
+    let cells = detectGridCells(scan.mask, scan.width, scan.height)
+    // 没有透明间隔时整张图只有一块，改按分隔线切
+    if (cells.length <= 1) {
+      const lineCells = detectLineCells(scan.pixels, scan.width, scan.height)
+      if (lineCells.length > 1) cells = lineCells
+    }
     if (!cells.length) {
       showStatus("未识别到可切片的透明图块")
       return

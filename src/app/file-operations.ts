@@ -69,7 +69,7 @@ export async function fitPngTo(bytes: Uint8Array, width: number, height: number)
 }
 
 // 复用 fitPngTo 的解码方式，读取像素后只保留 alpha 掩码用于按键网格检测
-export async function decodePngMask(bytes: Uint8Array): Promise<{ width: number; height: number; mask: Uint8Array }> {
+export async function decodePngMask(bytes: Uint8Array): Promise<{ width: number; height: number; mask: Uint8Array; pixels: Uint8ClampedArray }> {
   const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes).buffer], { type: "image/png" }))
   const canvas = document.createElement("canvas")
   canvas.width = bitmap.width
@@ -78,7 +78,8 @@ export async function decodePngMask(bytes: Uint8Array): Promise<{ width: number;
   context?.drawImage(bitmap, 0, 0)
   bitmap.close()
   if (!context) throw new Error("无法读取图片像素")
-  return { width: canvas.width, height: canvas.height, mask: alphaMask(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height) }
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+  return { width: canvas.width, height: canvas.height, mask: alphaMask(pixels, canvas.width, canvas.height), pixels }
 }
 
 /**
