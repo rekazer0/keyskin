@@ -6,6 +6,10 @@ import { $ } from "./dom"
 export function wireWindowControls(): void {
   if (!document.documentElement.classList.contains("windows")) return
   const appWindow = getCurrentWindow()
+  // 默认的拖动区域只认直接点在元素本身；Windows 没有系统标题栏，整条顶栏除按钮外都要能拖。
+  $(".titlebar").dataset.tauriDragRegion = "deep"
+  // 展开的下拉菜单也在顶栏里，菜单空白处不能变成拖窗口。
+  for (const menu of document.querySelectorAll<HTMLElement>(".titlebar .toolbar-menu")) menu.dataset.tauriDragRegion = "false"
   const maximize = $<HTMLButtonElement>("#window-maximize")
   const syncMaximized = async () => {
     const maximized = await appWindow.isMaximized()
