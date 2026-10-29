@@ -175,21 +175,24 @@ await withPage(async (page) => {
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await openSkinFile(page, "动效.bda", animatedBda, "light/skin/port/animationConfig")
   await page.locator('.sidebar-overview button[data-nav-mode="motion"]').click()
-  await page.waitForSelector("#bda-config-fields .ui-listbox")
+  // 桌面宽度下动画列表在左侧栏，播放器在画布上（animation-workspace.ts）。
+  await page.waitForSelector("#animation-library .ui-listbox")
   await capture(page, `${colorScheme}-bda-animation`)
 }, { colorScheme })
 await withPage(async (page) => {
   await openSkinFile(page, "动效.bds", animatedBds, "light/skin/port/res/anim.ini")
   await page.locator('.sidebar-overview button[data-nav-mode="motion"]').click()
-  await page.waitForSelector("#document-fields .ui-listbox")
+  await page.waitForSelector("#animation-library .ui-listbox")
   await capture(page, "legacy-animation")
 })
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   // 手心动画：资源配置里的动效设计与粒子设计
   await openSkinFile(page, "动效.sxi", sxiAnimationFixture(), "skin.json/default/s_info/ss_2")
   for (const mode of ["motion", "particle"]) {
+    // 进入后概览让位给动画列表，先点列表顶部的返回再从概览切换。
+    if (mode === "particle") await page.locator('#animation-library button[aria-label="返回布局"]').click()
     await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).click()
-    await page.waitForSelector('#document-fields .ui-listbox [aria-selected="true"]')
+    await page.waitForSelector('#animation-library .ui-listbox [aria-selected="true"]')
     await page.waitForFunction(() => !document.querySelector(".ui-animation-transport button")?.disabled)
     await capture(page, `${colorScheme}-sxi-animation-${mode}`)
   }

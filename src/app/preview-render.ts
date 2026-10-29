@@ -2,7 +2,7 @@ import { appState } from "./state"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
 import { setSimulatedComposition, toolbarPreview, currentDeviceValue, deviceGeometryProperties, preview, resizeKeyboardPreviews, schedulePreviewInteractionFrame, paintPreviewInteraction, applySkinState, REFERENCE_PHONE_WIDTH_SCALE, deviceFrameProperties } from "./canvas-interaction"
-import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, toggleGuides, mobileToggleGuides } from "./dom"
+import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, candidateBackgroundCanvas, previewCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, toggleGuides, mobileToggleGuides } from "./dom"
 import { candidatePreview } from "../simulation.ts"
 import { isConfiguredSymbolLayout, knownSkinStates, skinStateLabel } from "../actions.ts"
 import { textDocument, visualResolver, currentBdaAppearance, bdaBasePath, bdaAvailableLayoutPaths } from "./bda-documents"
@@ -583,4 +583,26 @@ export function syncCandidateSelection(): void {
     || appState.archive?.format !== "bda" && isToolbarPath(appState.selectedPath) && !appState.selectedToolbarSections.length
   candidateArea.classList.toggle("candidate-selected", selected)
   candidateArea.setAttribute("aria-selected", String(selected))
+}
+
+/** The keyboard as drawn on the canvas at canvas resolution: the candidate bar layers (which overlap) over the panel; transparent unless a background is given. */
+export function keyboardSnapshot(background?: string): HTMLCanvasElement | undefined {
+  if (!previewCanvas.width || !previewCanvas.height) return
+  const bars = [
+    !candidateBackgroundCanvas.hidden ? candidateBackgroundCanvas : undefined,
+    !toolbarCanvas.hidden && !toolbarStrip.hidden ? toolbarCanvas : undefined,
+  ].filter((canvas): canvas is HTMLCanvasElement => Boolean(!candidateArea.hidden && canvas?.width && canvas.height))
+  const barHeight = Math.max(0, ...bars.map((canvas) => canvas.height))
+  const snapshot = document.createElement("canvas")
+  snapshot.width = Math.max(previewCanvas.width, ...bars.map((canvas) => canvas.width))
+  snapshot.height = barHeight + previewCanvas.height
+  const context = snapshot.getContext("2d")
+  if (!context) return
+  if (background) {
+    context.fillStyle = background
+    context.fillRect(0, 0, snapshot.width, snapshot.height)
+  }
+  for (const canvas of bars) context.drawImage(canvas, 0, 0)
+  context.drawImage(previewCanvas, 0, barHeight)
+  return snapshot
 }

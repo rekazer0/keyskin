@@ -2,7 +2,7 @@ import { SkinArchive } from "../skin.ts"
 import { type AiSkinEditableFile, type AiSkinDraftChange } from "../ai-skin-workspace.ts"
 import { bdaConfigPath } from "../bda.ts"
 import { bdaDecodedSourceEditable, decodedBdaEditorSource, applyDecodedBdaSource } from "../bda-source.ts"
-import { theme, orientation, previewCanvas, candidateBackgroundCanvas, toolbarCanvas, toolbarStrip, selectedKeyName, aiContextKey, aiContextPreview, aiDesignModel, aiDesignPanel, aiDesignStatus, documentName, layout, device, aiDesignThinking, aiDraftPanel, aiDesignChat, aiDraftFiles, aiDraftSummary, aiNewSession, aiDraftApply, aiDraftCancel, aiModelSettings, aiDesignIntensity, aiDesignScope, $ } from "./dom"
+import { theme, orientation, previewCanvas, selectedKeyName, aiContextKey, aiContextPreview, aiDesignModel, aiDesignPanel, aiDesignStatus, documentName, layout, device, aiDesignThinking, aiDraftPanel, aiDesignChat, aiDraftFiles, aiDraftSummary, aiNewSession, aiDraftApply, aiDraftCancel, aiModelSettings, aiDesignIntensity, aiDesignScope, $ } from "./dom"
 import { appState } from "./state"
 import { preferredPath, refreshBdaLayout } from "./bda-documents"
 import { genConfigPath, styleConfigPath, effectiveKeyValue } from "./config-context"
@@ -16,7 +16,7 @@ import { changedJsonSections, createDraftReview } from "../ai-draft-review"
 import { IniDocument } from "../ini.ts"
 import { renderFiles } from "./file-tree"
 import { selectFile } from "./navigation"
-import { refreshPreview } from "./preview-render"
+import { keyboardSnapshot, refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
 import { type ModelConfiguration, groupModelConfigurations, modelHost, modelConfigurationKey, initializeModelSettings } from "../model-settings.ts"
 import { modelProviderPreset } from "../model-providers.ts"
@@ -119,30 +119,10 @@ export function setAiDesignScope(project: boolean): void {
 }
 
 function aiPreviewImage(): { type: "image"; data: string; mimeType: string } | undefined {
-  if (!previewCanvas.width || !previewCanvas.height) return
   try {
-    const layers = [
-      !candidateBackgroundCanvas.hidden ? candidateBackgroundCanvas : undefined,
-      !toolbarCanvas.hidden && !toolbarStrip.hidden ? toolbarCanvas : undefined,
-      previewCanvas,
-    ].filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas && canvas.width && canvas.height))
-    const width = Math.max(...layers.map((canvas) => canvas.width))
-    const height = layers.reduce((sum, canvas) => sum + canvas.height, 0)
-    const snapshot = document.createElement("canvas")
-    snapshot.width = width
-    snapshot.height = height
-    const context = snapshot.getContext("2d")
-    if (!context) return
-    context.fillStyle = theme.value === "dark" ? "#17191f" : "#f6f7f9"
-    context.fillRect(0, 0, width, height)
-    let y = 0
-    for (const canvas of layers) {
-      context.drawImage(canvas, 0, y)
-      y += canvas.height
-    }
-    const url = snapshot.toDataURL("image/png")
-    const comma = url.indexOf(",")
-    if (comma < 0) return
+    const url = keyboardSnapshot(theme.value === "dark" ? "#17191f" : "#f6f7f9")?.toDataURL("image/png")
+    const comma = url?.indexOf(",") ?? -1
+    if (!url || comma < 0) return
     return { type: "image", mimeType: "image/png", data: url.slice(comma + 1) }
   } catch {
     return

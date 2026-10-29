@@ -20,7 +20,8 @@ import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
-import { selectAnimation, selectedAnimation } from "./animation-resource"
+import { keyboardPlayback, selectAnimation, selectedAnimation } from "./animation-resource"
+import { bdaAnimationBindingsForKey, bdaBindingEffects } from "../preview-animation.ts"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -694,5 +695,8 @@ export function populateBdaConfigInspector(): void {
       updateBdaAnimationFrame(bytes, sequence, frame, "resourceID", resourceID),
     )),
     animationView: { mode: appState.animationDesignMode, select: selectedAnimation, onSelect: selectAnimation },
+    // Bound directly or through a group holding the effect, on press.
+    keyboardPlayback: (id) => keyboardPlayback((key) => bdaAnimationBindingsForKey(preview.animation, key).some((binding) =>
+      `${binding.kind}:${binding.key}` === id || bdaBindingEffects(preview.animation!, binding).some((effect) => `${effect.kind}:${effect.key}` === id))),
   })
 }

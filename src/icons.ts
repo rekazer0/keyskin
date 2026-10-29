@@ -19,7 +19,7 @@ import {
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
   Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
-  SkipBack, Rotate3d,
+  SkipBack, Rotate3d, ArrowUpRight, Square,
 } from "lucide"
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
@@ -73,6 +73,8 @@ const icons: Record<string, IconNode> = {
   // 动画：每种变化一个图标，播放器的回到开头、循环与慢放
   blend: Blend, scaling: Scaling, "list-video": ListVideo, route: Route, orbit: Orbit, waves: Waves,
   "party-popper": PartyPopper, rabbit: Rabbit, "rotate-3d": Rotate3d, repeat: Repeat, snail: Snail,
+  // 跳到引用的样式或动画
+  "arrow-up-right": ArrowUpRight, square: Square,
   "skip-back": SkipBack,
 }
 

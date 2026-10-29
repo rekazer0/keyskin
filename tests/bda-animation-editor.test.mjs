@@ -271,14 +271,14 @@ test("点击或方向键切换选中效果，选择交给调用方保存", () =>
   assert.deepEqual(events.selected, ["scale:pop", "scale:pop", "group:g1"])
 })
 
-test("选中的效果按 列表 → 预览 → 参数 → 引用 分组，标题与分类栏标签一致", () => {
-  assert.deepEqual(sectionLabels(render({ selected: "alpha:press" }).container), ["动效", "预览", "变化", "时间与循环", "引用"])
-  assert.deepEqual(sectionLabels(render({ selected: "scale:pop" }).container), ["动效", "预览", "变化", "时间与循环", "变换中心", "引用"])
-  assert.deepEqual(sectionLabels(render({ selected: "group:g1" }).container), ["动效", "预览", "组合", "时间与循环", "引用"])
-  assert.deepEqual(sectionLabels(render({ selected: "image:seq" }).container), ["动效", "预览", "帧序列", "时间与循环", "引用"])
-  assert.deepEqual(sectionLabels(render({ selected: "video:vid" }).container), ["动效", "预览", "资源", "时间与循环", "引用"])
+test("选中的效果按 列表 → 预览 → 引用 → 参数 分组，标题与分类栏标签一致", () => {
+  assert.deepEqual(sectionLabels(render({ selected: "alpha:press" }).container), ["动效", "预览", "引用", "变化", "时间与循环"])
+  assert.deepEqual(sectionLabels(render({ selected: "scale:pop" }).container), ["动效", "预览", "引用", "变化", "时间与循环", "变换中心"])
+  assert.deepEqual(sectionLabels(render({ selected: "group:g1" }).container), ["动效", "预览", "引用", "组合", "时间与循环"])
+  assert.deepEqual(sectionLabels(render({ selected: "image:seq" }).container), ["动效", "预览", "引用", "帧序列", "时间与循环"])
+  assert.deepEqual(sectionLabels(render({ selected: "video:vid" }).container), ["动效", "预览", "引用", "资源", "时间与循环"])
   const { container } = render({ mode: "particle" })
-  assert.deepEqual(sectionLabels(container), ["粒子", "预览", "发射", "运动", "外观", "时间与循环", "引用"])
+  assert.deepEqual(sectionLabels(container), ["粒子", "预览", "引用", "发射", "运动", "外观", "时间与循环"])
   for (const node of sections(container)) assert.ok(node.children[0].textContent.startsWith(node.dataset.inspectorGroupLabel))
   assert.equal(byClass(container, "ui-animation-player").length, 1, "预览分组里是播放器")
 })
@@ -316,7 +316,9 @@ test("字段修改立即通过 onAnimationEffect 写回，属性名与 encoder �
     ["emitter:spark", "lifeMax", 20],
     ["emitter:spark", "finishAfterPractices", 1],
   ])
-  assert.match(rowValue(emitter.container, "粒子资源"), /particle\.png/)
+  // 粒子资源是只读的图片卡片
+  assert.match(inputByLabel(emitter.container, "粒子资源").value, /particle\.png/)
+  assert.equal(inputByLabel(emitter.container, "粒子资源").disabled, true)
   assert.match(rowValue(emitter.container, "运动路径"), /1 条（只读）/)
 
   const frame = render({ selected: "frame:f1" })
@@ -352,15 +354,14 @@ test("引用分组列出触发目标、事件中文名、作用域、条件与�
   assert.match(uses("lottie:lo"), /还没有样式播放/)
 })
 
-test("图片序列帧：预览按钮选资源、资源编号与每帧时长写回", () => {
+test("图片序列帧：图片卡片选资源、资源编号与每帧时长写回", () => {
   const { container, events } = render({ selected: "image:seq" })
-  const frames = byClass(container, "bda-animation-frame")
+  const frames = byClass(container, "bda-animation-frame-card")
   assert.equal(frames.length, 2)
-  const frameCards = byClass(container, "bda-animation-frame-card")
-  assert.deepEqual(frameCards.map((node) => firstByTag(node, "strong").textContent), ["第 1 帧", "第 2 帧"])
-  buttonByLabel(container, "更换第 1 帧图片资源").dispatch("click")
+  assert.deepEqual(frames.map((node) => firstByTag(node, "span").textContent), ["第 1 帧", "第 2 帧"])
+  buttonByLabel(container, "选择第 1 帧").dispatch("click")
   assert.deepEqual(events.resources, [["seq", 0]])
-  change(inputByLabel(frames[1], "图片资源"), "b2.png")
+  change(inputByLabel(frames[1], "第 2 帧"), "b2.png")
   change(inputByLabel(frames[1], "时长（毫秒）"), 240)
   assert.deepEqual(events.frames, [
     ["seq", 1, "resourceID", "b2.png"],
@@ -382,7 +383,7 @@ test("不可编辑时所有字段禁用，预览播放不需要编辑权限", as
   for (const select of byTag(container, "select")) assert.equal(select.disabled, true)
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.equal(buttonByLabel(container, "播放预览").disabled, false)
-  assert.equal(buttonByLabel(render({ selected: "image:seq", editable: false }).container, "更换第 1 帧图片资源").disabled, true)
+  assert.equal(buttonByLabel(render({ selected: "image:seq", editable: false }).container, "选择第 1 帧").disabled, true)
 })
 
 test("没有效果时列表显示空状态，不渲染预览与参数", () => {

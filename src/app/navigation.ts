@@ -43,6 +43,8 @@ export function selectFile(
   // A document refresh (undo, source sync, tree rebuild) keeps the selected animation view.
   if (resourceMode === "motion" || resourceMode === "particle") appState.animationDesignMode = resourceMode
   else if (path !== appState.selectedPath) appState.animationDesignMode = "all"
+  appState.animationWorkspace?.update(appState.animationDesignMode !== "all")
+  preview.animationView = appState.animationDesignMode !== "all"
   appState.resourceConfigActive = resourceMode === "image" || resourceMode === "style" || resourceMode === "sound"
   appState.resourceInspectorMode = resourceMode === "style" ? "style" : resourceMode === "sound" ? "sound" : "image"
   const guideLabel = appState.resourceInspectorMode === "image" && appState.resourceConfigActive ? "切片网格" : "辅助线"

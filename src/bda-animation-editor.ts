@@ -3,7 +3,7 @@
  * Lottie 与视频效果，「粒子设计」列出粒子发射器。列表选中一个效果，下面是播放器、参数分组和触发它的目标绑定。
  * 每个字段经 onAnimationEffect / onAnimationFrame 定点写回 protobuf（bda-encode.ts），一次编辑一步撤销。
  */
-import { type Visual, type VisualResolver } from "./atlas.ts"
+import { type VisualResolver } from "./atlas.ts"
 import type {
   BdaAnimation,
   BdaAnimationEffect,
@@ -17,7 +17,7 @@ import type {
 import { element } from "./dom-element.ts"
 import { bdaPreviewClip } from "./animation-preview-model.ts"
 import {
-  animationSection, comboList, renderAnimationResource,
+  animationSection, comboList, imageCard, renderAnimationResource, sliderField,
   type AnimationListItem, type AnimationMode, type AnimationUse,
 } from "./animation-inspector.ts"
 
@@ -38,11 +38,14 @@ type BdaAnimationEditorOptions = {
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
+  /** The player's `onPlay` for an effect: plays it on a keyboard key bound to it. */
+  keyboardPlayback?: (effectID: string) => () => void
 }
 
 type EffectValue = string | number | boolean
 type EffectUpdate = (property: string, value: EffectValue) => void
-type FieldOption = { step?: number; min?: number }
+/** `slider` puts a slider beside the number for values with a natural range. */
+type FieldOption = { step?: number; min?: number; slider?: { min: number; max: number; step?: number } }
 
 const SECTION = "bda-inspector-section"
 
@@ -138,8 +141,9 @@ function numberInput(label: string, value: number, editable: boolean, onChange: 
 
 function numberRow(label: string, value: number, editable: boolean, onChange: (value: number) => void, options: FieldOption = {}): HTMLElement {
   const wrapper = element("span", "ui-input")
-  wrapper.append(numberInput(label, value, editable, onChange, options))
-  return row(label, wrapper)
+  const input = numberInput(label, value, editable, onChange, options)
+  wrapper.append(input)
+  return row(label, options.slider ? sliderField(wrapper, input, options.slider) : wrapper)
 }
 
 function affixedNumber(label: string, affix: string, value: number, editable: boolean, onChange: (value: number) => void, options: FieldOption = {}): HTMLElement {
@@ -249,66 +253,31 @@ function textRow(label: string, value: string, editable: boolean, onChange: (val
 
 /* —— 帧序列 —— */
 
-function drawVisual(canvas: HTMLCanvasElement, visual: Visual | undefined): void {
-  if (!visual) return
-  const bounds = canvas.getBoundingClientRect()
-  const width = Math.max(1, Math.round(bounds.width || 128))
-  const height = Math.max(1, Math.round(bounds.height || 76))
-  const scale = Math.max(1, window.devicePixelRatio || 1)
-  canvas.width = width * scale
-  canvas.height = height * scale
-  const context = canvas.getContext("2d")
-  if (!context) return
-  context.setTransform(scale, 0, 0, scale, 0, 0)
-  context.clearRect(0, 0, width, height)
-  if (visual.color) {
-    context.fillStyle = visual.color
-    context.fillRect(0, 0, width, height)
-  }
-  if (visual.image) {
-    const source = visual.source ?? [0, 0, visual.image.width, visual.image.height]
-    const ratio = Math.min(width / source[2], height / source[3])
-    const imageWidth = source[2] * ratio
-    const imageHeight = source[3] * ratio
-    context.drawImage(
-      visual.image,
-      source[0], source[1], source[2], source[3],
-      (width - imageWidth) / 2, (height - imageHeight) / 2, imageWidth, imageHeight,
-    )
-  }
+function resourceCard(label: string, resourceID: string | undefined, options: BdaAnimationEditorOptions, edit?: { onChange(value: string): void; pick(): void }): HTMLElement {
+  const node = element("div", "ui-field bda-animation-field style-reference-field")
+  const caption = element("span")
+  caption.textContent = label
+  node.append(caption, imageCard({
+    label,
+    value: resourceID ?? "",
+    editable: options.editable && Boolean(edit),
+    placeholder: "未设置资源",
+    load: () => resourceID ? options.resolver?.resolveResource?.(resourceID) : undefined,
+    onChange: (value) => edit?.onChange(value),
+    pick: edit?.pick,
+  }))
+  return node
 }
 
 function frameCard(sequence: BdaAnimationSequence, frame: BdaAnimationFrame, index: number, options: BdaAnimationEditorOptions): HTMLElement {
   const node = element("article", "bda-animation-frame-card")
-  const header = element("header", "bda-card-heading")
-  const strong = element("strong")
-  strong.textContent = `第 ${index + 1} 帧`
-  const small = element("small")
-  small.textContent = frame.resourceID ?? "未设置资源"
-  header.append(strong, small)
-  const content = element("div", "bda-animation-frame")
-  if (frame.resourceID !== undefined) {
-    const preview = element("button", "bda-animation-frame-preview")
-    preview.type = "button"
-    preview.disabled = !options.editable
-    preview.setAttribute("aria-label", `更换第 ${index + 1} 帧图片资源`)
-    const canvas = element("canvas", "bda-animation-frame-canvas")
-    preview.append(canvas)
-    preview.addEventListener("click", () => options.onPickAnimationResource(sequence.name, index))
-    if (options.resolver) {
-      void options.resolver.resolveResource?.(frame.resourceID)
-        .then((visual) => { if (canvas.isConnected) drawVisual(canvas, visual) })
-        .catch(() => {})
-    }
-    content.append(preview)
-  }
-  const fields = element("div", "bda-animation-frame-fields")
-  fields.append(textRow("图片资源", frame.resourceID ?? "", options.editable, (value) => options.onAnimationFrame(sequence.name, index, "resourceID", value)))
+  node.append(resourceCard(`第 ${index + 1} 帧`, frame.resourceID, options, {
+    onChange: (value) => options.onAnimationFrame(sequence.name, index, "resourceID", value),
+    pick: () => options.onPickAnimationResource(sequence.name, index),
+  }))
   if (frame.duration !== undefined) {
-    fields.append(numberRow("时长（毫秒）", frame.duration, options.editable, (value) => options.onAnimationFrame(sequence.name, index, "duration", value), { min: 0 }))
+    node.append(numberRow("时长（毫秒）", frame.duration, options.editable, (value) => options.onAnimationFrame(sequence.name, index, "duration", value), { min: 0 }))
   }
-  content.append(fields)
-  node.append(header, content)
   return node
 }
 
@@ -382,8 +351,8 @@ function timingSection(effect: BdaAnimationEffect, editable: boolean, update: Ef
   const section = animationSection("时间与循环", SECTION)
   if (effect.kind === "alpha" || effect.kind === "scale" || effect.kind === "shift" || effect.kind === "rotate") {
     section.append(
-      numberRow("时长（毫秒）", effect.duration, editable, (value) => update("duration", value), { min: 0 }),
-      numberRow("延迟（毫秒）", effect.delay, editable, (value) => update("delay", value), { min: 0 }),
+      numberRow("时长（毫秒）", effect.duration, editable, (value) => update("duration", value), { min: 0, slider: { min: 0, max: 2000, step: 10 } }),
+      numberRow("延迟（毫秒）", effect.delay, editable, (value) => update("delay", value), { min: 0, slider: { min: 0, max: 2000, step: 10 } }),
       selectRow("插值方式", INTERPOLATION_LABELS, effect.interpolation, editable, (value) => update("interpolation", value)),
     )
     if ((effect.kind === "scale" || effect.kind === "shift") && effect.interpolationXY) {
@@ -437,14 +406,18 @@ function transformSections(effect: BdaTransformAnimation, editable: boolean, upd
   return sections
 }
 
-function emitterSections(effect: BdaEmitterAnimation, editable: boolean, update: EffectUpdate): HTMLElement[] {
+function emitterSections(effect: BdaEmitterAnimation, options: BdaAnimationEditorOptions, update: EffectUpdate): HTMLElement[] {
+  const editable = options.editable
   const emit = animationSection("发射", SECTION)
   emit.append(
-    numberRow("出生率（个/秒）", effect.birthRate, editable, (value) => update("birthRate", value), { min: 0, step: 0.5 }),
-    numberRow("粒子总数", effect.totalNumber, editable, (value) => update("totalNumber", value), { min: 0 }),
+    numberRow("出生率（个/秒）", effect.birthRate, editable, (value) => update("birthRate", value), { min: 0, step: 0.5, slider: { min: 0, max: 50, step: 0.5 } }),
+    numberRow("粒子总数", effect.totalNumber, editable, (value) => update("totalNumber", value), { min: 0, slider: { min: 0, max: 200 } }),
     quadRow("发射区域", effect.emitRegion, editable, (index, value) => update(["emitRegionLeft", "emitRegionTop", "emitRegionRight", "emitRegionBottom"][index], value), ["左", "上", "右", "下"]),
     numberRow("发射器类型", effect.emitterType, editable, (value) => update("emitterType", value), { min: 0 }),
-    valueRow("粒子资源", effect.resources.length ? effect.resources.map((item) => item.resourceID).join("、") : "无"),
+    // 粒子资源只能查看：BDA 只定点写回已有字段，不增删资源。
+    ...effect.resources.length
+      ? effect.resources.map((item, index) => resourceCard(effect.resources.length > 1 ? `粒子资源 ${index + 1}` : "粒子资源", item.resourceID, options))
+      : [valueRow("粒子资源", "无")],
     valueRow("运动路径", effect.paths.length ? `${effect.paths.length} 条（只读）` : "无"),
   )
   const groups = EMITTER_GROUPS.map(([title, ranges]) => {
@@ -468,7 +441,7 @@ function effectSections(effect: BdaAnimationEffect, animation: BdaAnimation, opt
     case "rotate":
       return transformSections(effect, editable, update)
     case "emitter":
-      return emitterSections(effect, editable, update)
+      return emitterSections(effect, options, update)
     case "group": {
       const group = animationSection("组合", SECTION)
       group.append(
@@ -557,6 +530,7 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
       key: `${options.path}|${effectID(effect)}`,
       resolver: options.resolver,
       resourceParticles: true,
+      onPlay: options.keyboardPlayback?.(effectID(effect)),
     },
     sections,
     uses: effect ? effectUses(animation, effect) : [],

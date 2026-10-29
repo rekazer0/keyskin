@@ -7,9 +7,11 @@ import { IniDocument } from "../ini.ts"
 import { element } from "../dom-element.ts"
 import { iniPreviewClip } from "../animation-preview-model.ts"
 import {
-  animationModeTitle, animationSection, animationWarning, comboList, renderAnimationResource,
+  animationModeTitle, animationSection, animationWarning, comboList, imageCard, renderAnimationResource, sliderField,
   type AnimationListItem, type AnimationUse,
 } from "../animation-inspector.ts"
+import { decodeFrames } from "../native-motion.ts"
+import { createIcon } from "../icons.ts"
 import {
   LEGACY_ANIMATION_KINDS,
   LEGACY_ANIMATION_FIELDS,
@@ -23,6 +25,7 @@ import {
   legacyAnimationTypeOptions,
   legacyAnimationValueParts,
   parseLegacyAnimationFile,
+  STYLE_ANIM_FIELDS,
   writeLegacyAnimationFields,
   writeLegacyAnimationKind,
   writeLegacyAnimationType,
@@ -33,11 +36,12 @@ import {
 } from "../legacy-animation.ts"
 import { visualResolver } from "./bda-documents"
 import { preview } from "./canvas-interaction"
-import { setSourceValue, styleConfigPath } from "./config-context"
+import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./config-context"
 import { commitText, isEditing, updateDirty } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
-import { rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { decorateStyleReferenceInput, openStyleReferenceEditor } from "./style-references"
 import { appState } from "./state"
 
 const SECTION = "document-property-section"
@@ -271,16 +275,69 @@ function intpolControl(entry: LegacyAnimationEntry, value: string | undefined, c
   return wrap
 }
 
+/** Values with a natural range get a slider beside the number (DESIGN.md §10). */
+const SLIDERS: Record<string, { min: number; max: number; step?: number }> = {
+  DURATION: { min: 0, max: 2000, step: 10 },
+  DELAY: { min: 0, max: 2000, step: 10 },
+  TOTAL_NUMBER: { min: 1, max: 200 },
+  BIRTH_RATE: { min: 0.1, max: 50, step: 0.1 },
+}
+
+function withSlider(control: HTMLElement, bounds: { min: number; max: number; step?: number }): HTMLElement {
+  return sliderField(control, control.querySelector("input")!, bounds)
+}
+
+/** PARTICLE_IMAGE lists style IDs: a bare input that the style card decorates once it is in its row. */
+function particleImageInput(value: string | undefined, commit: (value: string | undefined) => void): HTMLInputElement {
+  const input = element("input")
+  input.value = value ?? ""
+  input.disabled = !isEditing()
+  input.setAttribute("aria-label", "粒子图片样式")
+  input.addEventListener("change", () => commit(input.value.trim() || undefined))
+  return input
+}
+
+/** ANIM_PATH is a gif / webp / png next to anim.ini (or in res): a picture card with the files on offer. */
+function animPathCard(value: string | undefined, commit: (value: string | undefined) => void): HTMLElement {
+  const folder = appState.selectedPath.replace(/[^/]*$/, "")
+  const files = element("datalist")
+  files.id = "anim-path-files"
+  for (const path of appState.archive?.names() ?? []) {
+    if (path.startsWith(folder) && /\.(gif|webp|png)$/i.test(path)) files.append(new Option(path.slice(folder.length)))
+  }
+  const card = imageCard({
+    label: "gif 路径",
+    value: value ?? "",
+    editable: isEditing(),
+    placeholder: "选择或输入文件",
+    list: files.id,
+    load: () => {
+      const bytes = value ? readSkinFile(value) : undefined
+      return bytes && decodeFrames(bytes, /\.gif$/i.test(value!) ? "image/gif" : /\.png$/i.test(value!) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual)
+    },
+    onChange: (next) => commit(next || undefined),
+  })
+  card.append(files)
+  return card
+}
+
 function fieldControl(entry: LegacyAnimationEntry, key: string): HTMLElement {
   const value = fieldValue(entry, key)
   const spec = LEGACY_ANIMATION_FIELDS[key]
   const commit = (next: string | undefined) => edit((text) => writeLegacyAnimationFields(text, entry.section, { [key]: next }))
   if (key === "INTPOL") return intpolControl(entry, value, (next) => commit(next))
   if (key === "FROM" || key === "TO") {
-    return basicValueControl(entry, key, value, (next) => commit(next))
+    const control = basicValueControl(entry, key, value, (next) => commit(next))
+    const type = entry.type ?? 0
+    return type === 0 ? withSlider(control, { min: 0, max: 255 }) : type === 1 ? withSlider(control, { min: -360, max: 360 }) : control
   }
+  if (key === "PARTICLE_IMAGE") return particleImageInput(value, commit)
+  if (key === "ANIM_PATH") return animPathCard(value, commit)
   if (!spec) return inputControl(value, key, (next) => commit(next), { numeric: false })
-  if (spec.kind === "number") return inputControl(value, spec.label, (next) => commit(next), { unit: spec.unit, step: spec.step })
+  if (spec.kind === "number") {
+    const control = inputControl(value, spec.label, (next) => commit(next), { unit: spec.unit, step: spec.step })
+    return SLIDERS[key] ? withSlider(control, SLIDERS[key]) : control
+  }
   if (spec.kind === "text") return inputControl(value, spec.label, (next) => commit(next), { numeric: false })
   if (spec.kind === "select") return selectControl(value, spec.label, spec.options ?? [], (next) => commit(next), spec.optional)
   if (spec.kind === "switch") return switchControl(value, spec.label, (next) => commit(next))
@@ -379,7 +436,12 @@ function parameterSections(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<str
       if (key === "TYPE") section.append(typeRow(entry))
       else if (key === "BUILD_METHOD") section.append(...comboRows(entry, byIndex))
       else if (key === "BUILD_LIST" || key === "BUILD_NUM") continue
-      else section.append(fieldRow(entry.section, key, fieldLabel(entry, key), fieldControl(entry, key)))
+      else {
+        const row = fieldRow(entry.section, key, fieldLabel(entry, key), fieldControl(entry, key))
+        section.append(row)
+        if (key === "PARTICLE_IMAGE") decorateStyleReferenceInput(row.querySelector("input")!, key)
+        if (key === "ANIM_PATH") row.classList.add("style-reference-field")
+      }
     }
     return section
   })
@@ -431,10 +493,12 @@ function uses(references: readonly LegacyAnimationReference[]): AnimationUse[] {
     const [first] = items
     const event = EVENT_LABELS[first.field] ?? first.field
     const names = [...new Set(items.map((item) => item.layoutSection ? `[${item.layoutSection}] → ${item.styleSection}` : item.styleSection))]
+    const styles = [...new Set(items.map((item) => item.styleSection))]
     return {
       icon: first.layoutField ? "layout-grid" : "palette",
       title: first.layoutField ? `布局 ${first.layoutField} · ${event}` : `${event} · ${first.field}`,
       detail: `${names.length} 处：${names.slice(0, 6).join("、")}${names.length > 6 ? " 等" : ""}`,
+      targets: styles.map((style) => ({ label: style, open: () => openStyleReferenceEditor(style.replace(/^STYLE/i, "")) })),
     }
   })
 }
@@ -449,6 +513,14 @@ function readSkinFile(path: string): Uint8Array | undefined {
     const bytes = archive.getBytes(candidate.replace(/\/\.\//g, "/"))
     if (bytes) return bytes
   }
+}
+
+/** Styles whose PRESS_ANIM plays `entry`, directly or through a combination that lists it: the keyboard canvas plays these. */
+function pressStyles(entry: LegacyAnimationEntry, entries: readonly LegacyAnimationEntry[], references: readonly LegacyAnimationReference[]): Set<string> {
+  const players = new Set([entry.index, ...entries.filter((candidate) => candidate.kind === "combination"
+    && buildList(candidate).some((id) => Number(id) === entry.index)).map((candidate) => candidate.index)])
+  return new Set(references.filter((reference) => reference.field === "PRESS_ANIM" && players.has(reference.animation))
+    .map((reference) => reference.styleSection.replace(/^STYLE/i, "")))
 }
 
 /* —— 对外入口 —— */
@@ -494,6 +566,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
       key: `${appState.selectedPath}|${entry.section}`,
       resolver: visualResolver(),
       readFile: readSkinFile,
+      onPlay: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(entry, model.entries, references))),
     },
     warnings: entry?.category !== undefined && entry.category !== kindCategory(entry.kind)
       ? [animationWarning(`CATEGORY=${entry.category} 与识别出的${legacyAnimationKindLabel(entry.kind)}不一致，已按内容编辑。`, {
@@ -506,6 +579,29 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   })
   container.dataset.path = appState.selectedPath
   return true
+}
+
+/** 样式里 PRESS_ANIM 等字段引用的动画：每个编号一个按钮，点一下打开动效设计 / 粒子设计并选中它。 */
+export function styleAnimationLinks(key: string, value: string): HTMLElement | undefined {
+  const path = legacyAnimationConfigPath()
+  if (!STYLE_ANIM_FIELDS.some((field) => field === key) || !path || !appState.archive?.isText(path)) return
+  const entries = parseLegacyAnimationFile(appState.archive.getText(path)).entries
+  const ids = value.split(",").map((part) => part.trim()).filter((part) => /^\d+$/.test(part))
+  if (!ids.length) return
+  const links = element("span", "style-animation-links")
+  for (const id of ids) {
+    const entry = entries.find((candidate) => candidate.index === Number(id))
+    const button = element("button", "ui-button")
+    button.type = "button"
+    button.dataset.size = "sm"
+    button.dataset.variant = "quiet"
+    button.disabled = !entry
+    button.title = entry ? `在${entry.kind === "particle" ? "粒子" : "动效"}设计中打开动画 ${id}` : `anim.ini 里没有动画 ${id}`
+    button.append(createIcon(entry?.kind === "particle" ? "wand-sparkles" : "film", 12), entry ? `动画 ${id} · ${kindLabel(entry)}` : `动画 ${id}（缺失）`)
+    if (entry) button.addEventListener("click", () => openAnimation(path, entry.kind === "particle", entry.section))
+    links.append(button)
+  }
+  return links
 }
 
 /** 对象头：动效设计 / 粒子设计与文件位置。 */

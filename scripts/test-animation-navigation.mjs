@@ -24,6 +24,14 @@ page.on("pageerror", (error) => errors.push(error.message))
 page.on("dialog", (dialog) => dialog.accept())
 const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
 const entry = (path, mode) => page.locator(`.sidebar-overview button[data-path="${path}"][data-nav-mode="${mode}"]`)
+// 动效设计 / 粒子设计占用左侧栏（动画列表）；回到概览要先点列表顶部的返回。
+const back = async () => {
+  if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library button[aria-label="返回布局"]').click()
+}
+const open = async (path, mode) => {
+  await back()
+  await entry(path, mode).click()
+}
 const state = () => page.evaluate(async () => {
   const { appState } = await import("/src/app/state.ts")
   return {
@@ -74,8 +82,11 @@ try {
         assert.equal(await button.locator(".nav-label").textContent(), `${mode === "motion" ? "动效设计" : "粒子设计"}${fixture.paths.length > 1 ? ` · ${path.split("/").pop()}` : ""}`)
         assert.equal(await button.evaluate((node) => node.closest(".nav-group").dataset.overviewGroup), "资源配置")
         if (fixture.format === "sxi") assert.equal(await button.locator(".nav-meta").textContent(), "skin.json")
+        await back()
         await button.click()
         await check(path, mode)
+        assert.equal(await page.locator("body.animation-workspace #animation-library .ui-listbox").count(), 1, "动画列表在左侧栏")
+        assert.equal(await page.locator("#animation-stage .ui-animation-player").count(), 1, "播放器在画布上")
         // Tree rebuilding alone must restore both the mode and its connected selected button.
         await page.evaluate(async () => (await import("/src/app/file-tree.ts")).renderFiles())
         await check(path, mode)
@@ -91,7 +102,7 @@ try {
 
     const path = fixture.paths[0]
     for (const mode of ["motion", "particle"]) {
-      await entry(path, mode).click()
+      await open(path, mode)
       // A real history entry, then real undo/redo (including renderFiles + document reselection).
       await page.evaluate(async (format) => {
         const { appState } = await import("/src/app/state.ts")
@@ -108,12 +119,14 @@ try {
 
     // Raw-source entry explicitly opts into the unfiltered view, including on the same path.
     const rawPath = fixture.format === "sxi" ? "skin.json" : path
+    await back()
     await page.locator('[data-sidebar-view="source"]').click()
     await page.evaluate(async (path) => (await import("/src/app/source-files.ts")).ensureSourcePathRendered(path), rawPath)
     await page.locator(`.raw-files button[data-path="${rawPath}"]`).click()
     await check(rawPath, "all", true)
     await page.locator('[data-sidebar-view="overview"]').click()
     await entry(path, "particle").click()
+    await back()
     // A different ordinary document resets to all rather than carrying the animation filter.
     const documentGroup = page.locator('.nav-group').filter({ has: page.locator('button[data-nav-mode="document"]') }).first()
     if (!await documentGroup.evaluate((node) => node.open)) await documentGroup.locator(':scope > summary').click()
@@ -124,13 +137,13 @@ try {
     assert.equal((await state()).mode, "all")
     // The same file under two entries remembers one animation per entry.
     await page.locator('[data-inspector-tab="properties"]').click()
-    await entry(path, "motion").click()
+    await open(path, "motion")
     const motionItems = await page.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
     await page.locator(`[data-animation-id="${motionItems[1]}"]`).click()
-    await entry(path, "particle").click()
+    await open(path, "particle")
     const particleItems = await page.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
     assert.ok(particleItems.length >= 1 && particleItems.every((id) => !motionItems.includes(id)), "动效与粒子互不重叠")
-    await entry(path, "motion").click()
+    await open(path, "motion")
     assert.equal(await page.locator('[data-animation-id][aria-selected="true"]').getAttribute("data-animation-id"), motionItems[1])
     assert.equal(await page.locator("#selected-key").textContent(), "动效设计")
     console.log(`${fixture.format}: resource grouping, two shared-path entries, selection, mode, rebuild, undo/redo, raw source and no image workspace passed`)

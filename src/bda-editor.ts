@@ -46,6 +46,7 @@ type ConfigEditorOptions = {
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
+  keyboardPlayback?: (effectID: string) => () => void
   animationView: BdaAnimationView
 }
 
@@ -576,6 +577,7 @@ export function renderBdaConfigEditor(container: HTMLElement, options: ConfigEdi
       onAnimationFrame: options.onAnimationFrame,
       onAnimationEffect: options.onAnimationEffect,
       onPickAnimationResource: options.onPickAnimationResource,
+      keyboardPlayback: options.keyboardPlayback,
     })
     return
   }

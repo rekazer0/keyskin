@@ -10,6 +10,10 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
   if (self.pointerInteractionLocked) return
   const point = self.point(event)
   const key = self.hit(point)
+  if (self.animationView) {
+    if (key) void self.playAnimation(key)
+    return
+  }
   if (!key) {
     if (self.mode === "edit") {
       self.selected.clear()

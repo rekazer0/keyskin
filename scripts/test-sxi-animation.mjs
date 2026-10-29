@@ -48,7 +48,8 @@ const section = (label) => fields.locator(`:scope > section[data-inspector-group
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const captionOf = (label) => page.locator(".document-field-caption").filter({ hasText: new RegExp(`^${escapeRegExp(label)}$`) })
 const row = (label) => fields.locator(".document-property-field").filter({ has: captionOf(label) })
-const input = (label) => row(label).locator("input").first()
+// 有自然范围的数值行左边是滑块，右边才是数值输入框。
+const input = (label) => row(label).locator('input:not([type="range"])').first()
 const pressed = (label) => row(label).locator(".ui-segmented button[aria-pressed='true']")
 const captions = () => fields.locator(".document-field-caption").allTextContents()
 const read = () => page.evaluate(async () => {
@@ -83,13 +84,16 @@ try {
   assert.deepEqual(await page.locator(`.sidebar-overview button[data-path="${animationPath}"] .nav-label`).allTextContents(), ["动效设计", "粒子设计"])
   assert.equal(await page.locator("#selected-key").textContent(), "动画与动效")
   assert.match(await page.locator("#selected-key-context").textContent(), /skin\.json · s_info\.ss_2/)
+  // 行里第一行是名称，第二行是类型、引用次数两个标签和时间摘要。
   assert.deepEqual(await fields.locator("[data-animation-id] strong").allTextContents(), [
-    "动画 100 · 缩放", "动画 101 · 位移", "动画 102 · 组合动画", "动画 103 · 帧序列", "动画 104 · 粒子发射",
-    "动画 105 · 路径跟踪", "动画 106 · 碰撞物理", "动画 107 · 液体与浮动物", "动画 108 · 底部嘉年华", "动画 109 · 太空兔",
+    "动画 100", "动画 101", "动画 102", "动画 103", "动画 104", "动画 105", "动画 106", "动画 107", "动画 108", "动画 109",
+  ])
+  assert.deepEqual(await fields.locator("[data-animation-id] .ui-list-item-meta > .ui-badge:first-child").allTextContents(), [
+    "缩放", "位移", "组合动画", "帧序列", "粒子发射", "路径跟踪", "碰撞物理", "液体与浮动物", "底部嘉年华", "太空兔",
   ])
   assert.equal(await fields.locator('[data-animation-id="100"] small').textContent(), "320 ms · 往返")
-  assert.equal(await fields.locator('[data-animation-id="100"] .ui-badge').textContent(), "2", "被一个样式和一个组合使用")
-  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "变化", "时间与循环", "变换中心", "引用"])
+  assert.equal(await fields.locator('[data-animation-id="100"] [data-uses]').textContent(), "2", "被一个样式和一个组合使用")
+  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "引用", "变化", "时间与循环", "变换中心"])
 
   // 每类动画的字段都按手心自己的名字出现
   await show("100")
@@ -122,10 +126,12 @@ try {
   assert.match(await section("预览").locator(".ui-animation-time").textContent(), /1500 ms/)
 
   await show("104")
-  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "发射", "运动", "外观", "时间与循环", "引用"])
+  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "引用", "发射", "运动", "外观", "时间与循环"])
   assert.ok((await captions()).includes("发射区域位置"))
   assert.equal(await input("粒子总数").inputValue(), "12")
-  assert.equal(await input("粒子图片").inputValue(), "7,8")
+  // 粒子图片是样式卡片（每张图一张卡，标签旁有「+ 添加」），值仍是样式编号列表。
+  assert.equal(await fields.locator('input[aria-label="粒子图片"]').first().inputValue(), "7,8")
+  assert.equal(await row("粒子图片添加").locator(".style-reference-row").count(), 2)
 
   await show("105")
   assert.equal(await row("路径模式").locator("select").inputValue(), "3")
@@ -315,7 +321,12 @@ try {
   await page.waitForFunction(() => !document.querySelector('#document-fields [data-inspector-group-label="时间与循环"]')?.hasAttribute("data-filter-miss"))
   await filter.fill("psr")
   await show("103")
-  await page.waitForFunction(() => !document.querySelector('#document-fields [data-inspector-group-label="帧资源"]')?.hasAttribute("data-filter-miss"))
+  // 等新对象的分组渲染出来并应用筛选（旧对象没有「帧资源」，不能只看它没有 data-filter-miss）。
+  await page.waitForFunction(() => {
+    const frames = document.querySelector('#document-fields [data-inspector-group-label="帧资源"]')
+    return frames && !frames.hasAttribute("data-filter-miss")
+      && document.querySelector('#document-fields [data-inspector-group-label="位置与层级"]')?.hasAttribute("data-filter-miss")
+  })
   assert.equal(await section("位置与层级").getAttribute("data-filter-miss"), "", "换对象后筛选仍然生效")
   await filter.press("Escape")
   await filter.press("Escape")

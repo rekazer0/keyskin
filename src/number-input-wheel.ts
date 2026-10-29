@@ -27,25 +27,30 @@ export function deferNumberInputRefresh(key: unknown, refresh: () => void): bool
   return true
 }
 
+/** Number fields, and decimal text fields (values that may also be `rand(a,b)` or `inf`) while they hold a plain number. */
+function isNumberField(input: HTMLInputElement): boolean {
+  return input.type === "number" || input.type === "text" && input.inputMode === "decimal" && /^-?\d*\.?\d*$/.test(input.value.trim())
+}
+
 function isEditableNumberInput(target: EventTarget | null): target is HTMLInputElement {
-  return target instanceof HTMLInputElement && target.type === "number" && !target.disabled && !target.readOnly
+  return target instanceof HTMLInputElement && isNumberField(target) && !target.disabled && !target.readOnly
 }
 
 function stepNumber(input: HTMLInputElement, steps: number): void {
-  if (input.step !== "any") {
+  if (input.type === "number" && input.step !== "any") {
     input.stepUp(steps)
     return
   }
-  const value = Number(input.value || 0) + steps
+  const value = Number(input.value || 0) + steps * (Number(input.step) || 1)
   const min = input.min === "" ? -Infinity : Number(input.min)
   const max = input.max === "" ? Infinity : Number(input.max)
-  input.value = String(Math.min(max, Math.max(min, value)))
+  input.value = String(Math.round(Math.min(max, Math.max(min, value)) * 1e6) / 1e6)
 }
 
 /** 可拖动调整数值的把手（单位前缀、行标签）对应的那一个数值输入框；有多个或不可编辑时不能拖。 */
 export function scrubbableField(handle: Element): HTMLInputElement | undefined {
   const scope = handle.parentElement
-  const fields = scope ? Array.from(scope.querySelectorAll("input")).filter((input) => input.type === "number") : []
+  const fields = scope ? Array.from(scope.querySelectorAll("input")).filter(isNumberField) : []
   return fields.length === 1 && isEditableNumberInput(fields[0]) ? fields[0] : undefined
 }
 

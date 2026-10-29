@@ -25,7 +25,7 @@ export function styleReferenceKey(input: HTMLInputElement): string {
 
 export function isStyleReferenceKey(key: string): boolean {
   if (key === "STAT_STYLE") return false
-  return key === "styleID" || /(?:^|\.)(?:[A-Z0-9_]*STYLE|FIRST_BACK|FIRST_FORE)$/i.test(key)
+  return key === "styleID" || /(?:^|\.)(?:[A-Z0-9_]*STYLE|FIRST_BACK|FIRST_FORE|PARTICLE_IMAGE)$/i.test(key)
 }
 
 function soundPathForStyle(styleID: string): string | undefined {
@@ -98,8 +98,8 @@ export function decorateStyleReferenceInput(input: HTMLInputElement, key = style
   void refreshStyleReferenceThumbnail(button, input, key)
   wrapper.append(button)
   if (soundStyle) void refreshStyleReferenceThumbnail(button, input, key)
-  // 按键可以叠多层前景：标签行尾部「+ 添加」选一个样式追加为新的一张卡片。
-  const caption = input.dataset.keyField === "FORE_STYLE" ? input.closest(".ui-field")?.querySelector(":scope > span:first-child") : null
+  // 按键可以叠多层前景、粒子可以用多张图片：标签行尾部「+ 添加」选一个样式追加为新的一张卡片。
+  const caption = input.dataset.keyField === "FORE_STYLE" || key === "PARTICLE_IMAGE" ? input.closest(".ui-field")?.querySelector(":scope > span:first-child") : null
   if (caption) {
     const add = document.createElement("button")
     add.type = "button"

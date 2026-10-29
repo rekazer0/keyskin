@@ -22,7 +22,11 @@ const fingerprint = () => page.evaluate(async () => {
   const { appState } = await import('/src/app/state.ts')
   return { undo: appState.undoStack.length, revision: appState.archive.revision, dirty: [...appState.dirtyPaths ?? []] }
 })
-const choose = (mode) => page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).first().click()
+// 进入后概览让位给动画列表，先点列表顶部的返回再从概览切换。
+const choose = async (mode) => {
+  if (await page.locator('body.animation-workspace').count()) await page.locator('#animation-library button[aria-label="返回布局"]').click()
+  await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).first().click()
+}
 const player = page.locator('.ui-animation-player').first()
 const slider = player.getByRole('slider', { name: '预览时间' })
 const seek = (value) => slider.evaluate((node, value) => {
@@ -49,6 +53,7 @@ try {
     if (await close.isVisible()) await close.click()
     await choose('motion')
     await pick(motionID)
+    assert.equal(await page.locator('#animation-stage .ui-animation-player').count(), 1, `${format}: 播放器在画布上`)
     const editable = page.getByRole('spinbutton', { name: field, exact: true })
     assert.equal(await editable.isDisabled(), true, `${format}: 交互预览里参数只读，播放仍可用`)
     const before = await fingerprint()

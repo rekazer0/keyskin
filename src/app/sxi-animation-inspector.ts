@@ -5,9 +5,10 @@
 
 import { element, iconButton } from "../dom-element.ts"
 import {
-  animationModeTitle, animationSection, animationWarning, comboList, renderAnimationResource,
+  animationModeTitle, animationSection, animationWarning, comboList, imageCard, renderAnimationResource, sliderField,
   type AnimationListItem, type AnimationUse,
 } from "../animation-inspector.ts"
+import { decodeFrames } from "../native-motion.ts"
 import { palmPreviewClip } from "../palm/palm-preview-clip.ts"
 import { PalmStyles } from "../palm/palm-styles.ts"
 import { visualResolver } from "./bda-documents"
@@ -41,7 +42,8 @@ import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
 import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
-import { rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { decorateStyleReferenceInput, openStyleReferenceEditor } from "./style-references"
 import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
 
@@ -110,6 +112,24 @@ function numberInput(value: Json, label: string, disabled: boolean): HTMLInputEl
   return input
 }
 
+type Bounds = { min: number; max: number; step?: number }
+
+/** Values with a natural range get a slider beside the number (DESIGN.md §10). */
+const SLIDERS: Record<string, Bounds> = {
+  duration: { min: 0, max: 2000, step: 10 }, delay: { min: 0, max: 2000, step: 10 }, d: { min: 0, max: 2000, step: 10 },
+  rate: { min: 0, max: 50, step: 0.1 },
+}
+
+function sliderBounds(target: SxiPointer, field: AnimationField): Bounds | undefined {
+  const kind = target.at(-1)
+  if (kind === "a4" && field.key === "count") return { min: 1, max: 200 }
+  if (kind === "a1" && (field.key === "from" || field.key === "to")) {
+    const type = Number(animationBase(asObject(sxiValue(openPalmSkin(), target)) ?? {}).t ?? 0)
+    return type === 0 ? { min: 0, max: 255 } : type === 1 ? { min: -360, max: 360 } : undefined
+  }
+  return field.scope === "base" ? undefined : SLIDERS[field.key]
+}
+
 function numberRow(target: SxiPointer, path: string[], field: AnimationField, value: Json, rowKey = ""): HTMLElement {
   const row = fieldRow(field, value, target, path, rowKey)
   const control = element("span", "ui-input")
@@ -129,7 +149,43 @@ function numberRow(target: SxiPointer, path: string[], field: AnimationField, va
     suffix.textContent = field.unit
     control.append(suffix)
   }
-  row.append(control)
+  const bounds = input.type === "number" ? sliderBounds(target, field) : undefined
+  row.append(bounds ? sliderField(control, input, bounds) : control)
+  return row
+}
+
+/** `i_p` lists style IDs: the same style cards as a key's foreground, one per image. */
+function particleImageRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
+  const row = fieldRow(field, value, target, path, "")
+  const input = element("input")
+  input.value = listText(value) ?? ""
+  input.disabled = !isEditing()
+  input.setAttribute("aria-label", field.label)
+  input.addEventListener("change", () => {
+    const ids = input.value.split(",").map((part) => part.trim()).filter(Boolean)
+    commit(target, path, ids.length ? ids.map((id) => /^\d+$/.test(id) ? Number(id) : id) : undefined)
+  })
+  row.append(input)
+  decorateStyleReferenceInput(input, "PARTICLE_IMAGE")
+  return row
+}
+
+/** An image sequence file (af2, a11) as a picture card. */
+function fileRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
+  const row = fieldRow(field, value, target, path, "")
+  row.classList.add("style-reference-field")
+  const file = typeof value === "string" ? value : ""
+  const resolver = visualResolver()
+  row.append(imageCard({
+    label: field.label,
+    value: file,
+    editable: isEditing(),
+    load: () => {
+      const bytes = file && resolver instanceof PalmStyles ? resolver.bytes(file) : undefined
+      return bytes && decodeFrames(bytes, /\.gif$/i.test(file) ? "image/gif" : /\.png$/i.test(file) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual)
+    },
+    onChange: (next) => commit(target, path, next || undefined),
+  }))
   return row
 }
 
@@ -328,6 +384,8 @@ function listRow(target: SxiPointer, path: string[], field: AnimationField, valu
 }
 
 function fieldRows(target: SxiPointer, field: AnimationField, value: Json): HTMLElement[] {
+  if (field.key === "i_p") return [particleImageRow(target, [field.key], field, value)]
+  if (field.key === "file" && ["af2", "a11"].includes(String(target.at(-1)))) return [fileRow(target, [field.key], field, value)]
   switch (field.kind) {
     case "number": return [numberRow(target, [field.key], field, value)]
     case "bool": return [switchRow(target, [field.key], field, value)]
@@ -595,8 +653,18 @@ function listItem(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, 
 function uses(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry): AnimationUse[] {
   const references = animationReferences(skin, pointer, entry.id)
   return [
-    ...references.styles.map((style) => ({ icon: "palette", title: style.name, detail: `${style.events.join("、")}时播放` })),
-    ...references.combos.map((id) => ({ icon: "layers", title: `动画 ${id}`, detail: "作为组合动画的一部分播放" })),
+    ...references.styles.map((style) => {
+      const styleID = style.name.match(/(\d+)$/)?.[1]
+      return {
+        icon: "palette", title: style.name, detail: `${style.events.join("、")}时播放`,
+        targets: styleID ? [{ label: `样式 ${styleID}`, open: () => openStyleReferenceEditor(styleID) }] : [],
+      }
+    }),
+    ...references.combos.map((id) => ({
+      icon: "layers", title: `动画 ${id}`, detail: "作为组合动画的一部分播放",
+      // Combinations live in 动效设计, also when a particle is part of one.
+      targets: [{ label: `动画 ${id}`, open: () => openAnimation(appState.selectedPath, false, String(id)) }],
+    })),
     ...(references.contexts ?? []).map((context) => ({ icon: "layers", title: context, detail: "另一方向的组合动画" })),
   ]
 }
@@ -625,6 +693,14 @@ function parameterSections(pointer: SxiPointer, entry: AnimationEntry, table: Js
   })
   if (entry.kind === "a12") sections.push(floatersSection(pointer, entry))
   return sections
+}
+
+/** Styles that play `id` on press, directly or through a combination: the keyboard canvas plays these. */
+function pressStyles(skin: JsonObject, pointer: SxiPointer, id: string): Set<string> {
+  const direct = animationReferences(skin, pointer, id)
+  return new Set([direct, ...direct.combos.map((combo) => animationReferences(skin, pointer, String(combo)))]
+    .flatMap((references) => references.styles.filter((style) => style.events.includes("按下")))
+    .flatMap((style) => style.name.match(/(\d+)$/)?.[1] ?? []))
 }
 
 // IDs are shared by inherited animations as well as orientation-specific overrides.
@@ -684,6 +760,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
       key: `${SXI_SKIN_PATH}|${pointer.join(".")}|${entry.id}`,
       resolver,
       readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined,
+      onPlay: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(skin, pointer, entry.id))),
     },
     warnings: entry && baseNeedsFix(entry.kind, entry.model)
       ? [animationWarning(`分类值 ${String(animationBase(entry.model).c)} 与${family?.label ?? "动画"}不一致，导出后可能无法识别。`, {

@@ -1,11 +1,14 @@
 /*
  * 动画资源检查器的公共骨架（DESIGN.md §10「动画资源」）：手心 skin.json、百度 anim.ini 与 BDA animationConfig
- * 共用同一套分组——列表（选一个动画）→ 预览（播放器）→ 参数分组 → 引用。
+ * 共用同一套分组——列表（选一个动画）→ 预览（播放器）→ 引用 → 参数分组。桌面宽度下列表放进左侧栏、
+ * 播放器放到画布上（animation-workspace.ts），检查器只留引用与参数。
  * 这里只负责呈现与交互；读写配置、撤销与选择状态都由各格式的适配器通过回调完成。
  */
 import { element, iconButton } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 import { animationPlayer, type AnimationPlayerOptions } from "./animation-player.ts"
+import { animationWorkspaceHosts } from "./animation-workspace.ts"
+import { drawVisualPreview, type Visual } from "./atlas.ts"
 
 export type AnimationMode = "all" | "motion" | "particle"
 
@@ -22,7 +25,8 @@ export type AnimationListItem = {
   problem?: string
 }
 
-export type AnimationUse = { icon: string; title: string; detail: string }
+/** Where an animation is played; each target opens that style or animation. */
+export type AnimationUse = { icon: string; title: string; detail: string; targets?: Array<{ label: string; open(): void }> }
 
 type AnimationResourceView = {
   mode: AnimationMode
@@ -84,18 +88,26 @@ function listOption(item: AnimationListItem, selected: boolean): HTMLButtonEleme
   option.tabIndex = selected ? 0 : -1
   option.dataset.animationId = item.id
   const text = element("span", "ui-list-item-text")
+  // 第一行只有名称；第二行是类型、引用次数两个标签和时间摘要。
   const title = element("strong")
-  title.textContent = `${item.title} · ${item.kind}`
+  title.textContent = item.title
+  const meta = element("span", "ui-list-item-meta")
+  const kind = element("span", "ui-badge")
+  kind.textContent = item.kind
+  meta.append(kind)
+  if (item.uses) {
+    const uses = element("span", "ui-badge")
+    uses.dataset.uses = String(item.uses)
+    uses.append(createIcon("link", 12), String(item.uses))
+    uses.title = `${item.uses} 处引用`
+    meta.append(uses)
+  }
   const detail = element("small")
   detail.textContent = item.detail
-  text.append(title, detail)
+  meta.append(detail)
+  text.append(title, meta)
+  option.title = `${item.title} · ${item.kind} · ${item.uses ? `${item.uses} 处引用` : "未使用"}\n${item.detail}`
   option.append(createIcon(item.icon, 14), text)
-  if (item.uses) {
-    const badge = element("span", "ui-badge")
-    badge.textContent = String(item.uses)
-    badge.title = `${item.uses} 处使用`
-    option.append(badge)
-  }
   if (item.problem) {
     option.dataset.problem = ""
     option.title = item.problem
@@ -104,18 +116,17 @@ function listOption(item: AnimationListItem, selected: boolean): HTMLButtonEleme
   return option
 }
 
-function listSection(view: AnimationResourceView): HTMLElement {
+function listBox(view: AnimationResourceView, fill = false): HTMLElement {
   const noun = MODE_NOUN[view.mode]
-  const section = animationSection(noun, view.sectionClass, `${view.items.length} 个`)
-  section.toggleAttribute("data-filter-keep", true)
   const list = element("div", "ui-listbox")
+  if (fill) list.dataset.size = "fill"
   list.setAttribute("role", "listbox")
   list.setAttribute("aria-label", `${noun}列表`)
   const options = view.items.map((item) => listOption(item, item.id === view.selected))
   if (options.length) list.append(...options)
   else {
     const empty = element("p", "ui-listbox-empty")
-    empty.textContent = view.create ? `还没有${noun}，用下方的「新建」添加一个。` : `这份配置里没有${noun}。`
+    empty.textContent = view.create ? `还没有${noun}，用「新建」添加一个。` : `这份配置里没有${noun}。`
     list.append(empty)
   }
   list.addEventListener("click", (event) => {
@@ -123,20 +134,18 @@ function listSection(view: AnimationResourceView): HTMLElement {
     if (option && option.getAttribute("aria-selected") !== "true") view.onSelect(option.dataset.animationId!)
   })
   list.addEventListener("keydown", (event) => {
-    const index = view.items.findIndex((item) => item.id === view.selected)
+    // Rows hidden by the sidebar search are skipped.
+    const visible = view.items.filter((_, position) => !options[position]?.hidden)
+    const index = visible.findIndex((item) => item.id === view.selected)
     const next = event.key === "ArrowDown" ? index + 1 : event.key === "ArrowUp" ? index - 1
-      : event.key === "Home" ? 0 : event.key === "End" ? view.items.length - 1 : undefined
+      : event.key === "Home" ? 0 : event.key === "End" ? visible.length - 1 : undefined
     if (next === undefined) return
     event.preventDefault()
-    const item = view.items[Math.max(0, Math.min(view.items.length - 1, next))]
+    const item = visible[Math.max(0, Math.min(visible.length - 1, next))]
     if (!item || item.id === view.selected) return
     focus.list = true
     view.onSelect(item.id)
   })
-  section.append(list)
-  const actions = listActions(view)
-  if (actions) section.append(actions)
-  section.append(...view.listRows ?? [])
   // Keep the selected row in view inside the list without scrolling the inspector itself.
   requestAnimationFrame(() => {
     const selected = list.querySelector<HTMLElement>('[aria-selected="true"]')
@@ -146,6 +155,16 @@ function listSection(view: AnimationResourceView): HTMLElement {
     if (focus.list) selected.focus()
     focus.list = false
   })
+  return list
+}
+
+function listSection(view: AnimationResourceView): HTMLElement {
+  const section = animationSection(MODE_NOUN[view.mode], view.sectionClass, `${view.items.length} 个`)
+  section.toggleAttribute("data-filter-keep", true)
+  section.append(listBox(view))
+  const actions = listActions(view)
+  if (actions) section.append(actions)
+  section.append(...view.listRows ?? [])
   return section
 }
 
@@ -190,7 +209,7 @@ function previewSection(view: AnimationResourceView, item: AnimationListItem): H
 }
 
 function usesSection(view: AnimationResourceView): HTMLElement {
-  const section = animationSection("引用", view.sectionClass, view.uses.length ? `${view.uses.length} 处` : "")
+  const section = animationSection("引用", view.sectionClass, view.uses.length ? `${view.uses.length} 处` : "未使用")
   if (!view.uses.length) {
     const empty = element("p", "inspector-group-subtitle")
     empty.textContent = view.mode === "particle" ? "还没有样式播放这个粒子。" : "还没有样式播放这个动画；在样式的动画事件里填入它的编号即可使用。"
@@ -209,17 +228,129 @@ function usesSection(view: AnimationResourceView): HTMLElement {
     text.append(title, detail)
     row.append(createIcon(use.icon, 14), text)
     list.append(row)
+    if (!use.targets?.length) continue
+    const targets = element("div", "animation-use-targets")
+    for (const target of use.targets) {
+      const button = element("button", "ui-button")
+      button.type = "button"
+      button.dataset.size = "sm"
+      button.dataset.variant = "quiet"
+      button.title = `打开 ${target.label}`
+      button.append(createIcon("arrow-up-right", 12), target.label)
+      button.addEventListener("click", target.open)
+      targets.append(button)
+    }
+    list.append(targets)
   }
   section.append(list)
   return section
 }
 
-/** Fills `container` with the list, and the selected animation's preview, parameters and uses. */
+/** The strip under the keyboard canvas on desktop: what is playing, the player and its warnings. */
+function stageContent(view: AnimationResourceView, item: AnimationListItem | undefined): HTMLElement[] {
+  if (!item) {
+    const empty = element("p", "animation-stage-empty")
+    empty.textContent = `选择左侧的${MODE_NOUN[view.mode]}即可在这里播放预览。`
+    return [empty]
+  }
+  const heading = element("div", "animation-stage-heading")
+  const title = element("strong")
+  title.textContent = `${item.title} · ${item.kind}`
+  const detail = element("small")
+  detail.textContent = `${item.detail} · ${item.uses ? `${item.uses} 处引用` : "未使用"}`
+  heading.append(title, detail)
+  const player = view.player && animationPlayer(view.player)
+  if (player) player.dataset.layout = "row"
+  return [heading, ...player ? [player] : [], ...view.warnings ?? []]
+}
+
+/** Fills `container` with the list, and the selected animation's preview, uses and parameters. */
 export function renderAnimationResource(container: HTMLElement, view: AnimationResourceView): void {
-  container.replaceChildren(listSection(view))
   const item = view.items.find((candidate) => candidate.id === view.selected)
+  const hosts = animationWorkspaceHosts()
+  if (hosts && view.mode !== "all") {
+    hosts.setMode(view.mode === "particle", `${view.items.length} 个`)
+    hosts.library.replaceChildren(...[listActions(view)].filter((node) => node !== undefined), listBox(view, true))
+    hosts.filter()
+    hosts.stage.replaceChildren(...stageContent(view, item))
+    const rows = view.listRows?.length ? [animationSection("配置", view.sectionClass)] : []
+    rows[0]?.append(...view.listRows!)
+    container.replaceChildren(...rows)
+    if (item) container.append(usesSection(view), ...view.sections)
+    return
+  }
+  container.replaceChildren(listSection(view))
   if (!item) return
-  container.append(previewSection(view, item), ...view.sections, usesSection(view))
+  container.append(previewSection(view, item), usesSection(view), ...view.sections)
+}
+
+/** A slider beside a number field for values with a natural range; dragging previews, release commits once. */
+export function sliderField(control: HTMLElement, input: HTMLInputElement, bounds: { min: number; max: number; step?: number }): HTMLElement {
+  const field = element("span", "ui-slider-field")
+  const range = element("input", "ui-slider")
+  range.type = "range"
+  range.min = String(bounds.min)
+  range.step = String(bounds.step ?? 1)
+  range.disabled = input.disabled
+  range.setAttribute("aria-label", `${input.getAttribute("aria-label") ?? ""}滑块`)
+  const sync = () => {
+    const value = Number(input.value)
+    range.max = String(Math.max(bounds.max, Number.isFinite(value) ? value : bounds.min))
+    range.value = String(Number.isFinite(value) && input.value.trim() ? value : bounds.min)
+  }
+  sync()
+  range.addEventListener("input", () => { input.value = range.value })
+  range.addEventListener("change", () => input.dispatchEvent(new Event("change", { bubbles: true })))
+  input.addEventListener("input", sync)
+  field.append(range, control)
+  return field
+}
+
+/**
+ * An image reference drawn as the style card (DESIGN.md §10): the file or resource name on the left,
+ * the picture on the right. Clicking the picture picks another one; the name stays editable.
+ */
+export function imageCard(options: {
+  label: string
+  value: string
+  editable: boolean
+  placeholder?: string
+  load(): Promise<Visual | undefined> | undefined
+  onChange(value: string): void
+  pick?(): void
+  /** A `<datalist>` id offering the files that fit. */
+  list?: string
+}): HTMLElement {
+  const card = element("span", "style-reference-input image-reference-card")
+  const row = element("span", "style-reference-row")
+  const meta = element("span", "style-reference-meta")
+  const name = element("input", "style-reference-number style-reference-name")
+  name.value = options.value
+  name.placeholder = options.placeholder ?? "未设置"
+  name.disabled = !options.editable
+  name.spellcheck = false
+  name.setAttribute("aria-label", options.label)
+  if (options.list) name.setAttribute("list", options.list)
+  name.addEventListener("change", () => options.onChange(name.value.trim()))
+  meta.append(name)
+  const states = element("span", "style-picker-states")
+  const picture = element("button", "style-picker-state")
+  picture.type = "button"
+  picture.disabled = !options.editable || !options.pick
+  picture.title = options.pick ? `选择${options.label}` : options.label
+  picture.setAttribute("aria-label", picture.title)
+  // Twice the card's picture size, sharp on retina screens.
+  const canvas = element("canvas")
+  canvas.width = 304
+  canvas.height = 152
+  canvas.setAttribute("aria-hidden", "true")
+  picture.append(canvas)
+  if (options.pick) picture.addEventListener("click", options.pick)
+  states.append(picture)
+  row.append(meta, states)
+  card.append(row)
+  void options.load()?.then((visual) => { if (visual) drawVisualPreview(canvas, [visual], false) }).catch(() => {})
+  return card
 }
 
 /** A warning line under the player, with an optional fix. */

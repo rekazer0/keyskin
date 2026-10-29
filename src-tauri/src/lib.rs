@@ -959,6 +959,42 @@ fn set_window_material(
     }
 }
 
+/// Windows 去掉系统标题栏后，悬停自绘最大化按钮时用 Win+Z 唤出 Windows 11 的贴靠布局。
+#[tauri::command]
+fn show_snap_layouts() {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+            KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_LWIN, VK_Z,
+        };
+
+        let key = |vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: 0,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        let inputs = [
+            key(VK_LWIN, 0),
+            key(VK_Z, 0),
+            key(VK_Z, KEYEVENTF_KEYUP),
+            key(VK_LWIN, KEYEVENTF_KEYUP),
+        ];
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            std::mem::size_of::<INPUT>() as i32,
+        );
+    }
+}
+
 #[tauri::command]
 async fn wait_for_left_mouse_release() -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -1674,6 +1710,7 @@ pub fn run() {
         window_material_kind,
         set_window_material,
         wait_for_left_mouse_release,
+        show_snap_layouts,
         fetch_release_page,
         load_model_configuration,
         save_model_configuration,
@@ -1707,6 +1744,7 @@ pub fn run() {
         window_material_kind,
         set_window_material,
         wait_for_left_mouse_release,
+        show_snap_layouts,
         fetch_release_page,
         load_model_configuration,
         save_model_configuration,

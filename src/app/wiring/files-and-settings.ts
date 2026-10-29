@@ -1,6 +1,6 @@
 import { sourceEditPath } from "../ssf-documents"
 import { requestEditMode } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiNewSession, aiDesignStatus, aiDesignPanel, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, mobilePreviewPosition, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiNewSession, aiDesignStatus, aiDesignPanel, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, mobilePreviewPosition, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
 import { sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelection, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
@@ -394,6 +394,12 @@ export function wireFilesAndSettings(): void {
   inspectorTabsVisible.addEventListener("change", () => {
     localStorage.setItem("inspector-tabs-visible", inspectorTabsVisible.checked ? "on" : "off")
     applyInspectorTabsVisibility()
+  })
+  overviewMetaVisible.checked = localStorage.getItem("overview-meta-visible") === "on"
+  files.toggleAttribute("data-overview-meta", overviewMetaVisible.checked)
+  overviewMetaVisible.addEventListener("change", () => {
+    localStorage.setItem("overview-meta-visible", overviewMetaVisible.checked ? "on" : "off")
+    files.toggleAttribute("data-overview-meta", overviewMetaVisible.checked)
   })
   sourceCompletionEnabled.checked = localStorage.getItem("source-completion-enabled") === "on"
   sourceValueHintsEnabled.checked = localStorage.getItem("source-value-hints-enabled") === "on"

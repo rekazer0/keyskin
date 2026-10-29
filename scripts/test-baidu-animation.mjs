@@ -50,7 +50,7 @@ try {
 
   const bdaConfig = bda.locator("#bda-config-fields")
   await bdaConfig.locator(".ui-listbox").waitFor()
-  // 原始文件视图列出全部效果；选中一个后是 预览 → 参数 → 引用。
+  // 原始文件视图列出全部效果；选中一个后是 预览 → 引用 → 参数。
   const listed = await bdaConfig.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
   for (const id of ["group:combo", "alpha:press", "shift:slide", "emitter:spark", "image:seq", "lottie:lottie", "video:video"]) {
     assert.ok(listed.includes(id), `BDA 列表缺少 ${id}：${listed.join("、")}`)
@@ -58,7 +58,7 @@ try {
   await bdaConfig.locator('[data-animation-id="alpha:press"]').click()
   await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-animation-id="alpha:press"]')?.getAttribute("aria-selected") === "true")
   const groupLabels = await bdaConfig.locator(":scope > section").evaluateAll((sections) => sections.map((section) => section.dataset.inspectorGroupLabel))
-  assert.deepEqual(groupLabels, ["动画", "预览", "变化", "时间与循环", "引用"])
+  assert.deepEqual(groupLabels, ["动画", "预览", "引用", "变化", "时间与循环"])
   const uses = await bdaConfig.locator('[data-inspector-group-label="引用"]').innerText()
   for (const event of ["按键按下", "元素显示", "元素隐藏", "经组合 combo"]) {
     assert.ok(uses.includes(event), `引用缺少「${event}」：${uses}`)
@@ -168,7 +168,7 @@ try {
   const legacyItems = await legacyFields.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
   assert.ok(legacyItems.length >= 7 && legacyItems[0] === "ANIM1", `旧版检查器没有列出动效：${legacyItems.join("、")}`)
   const legacyGroups = await legacyFields.locator(":scope > section").evaluateAll((sections) => sections.map((section) => section.dataset.inspectorGroupLabel))
-  assert.deepEqual(legacyGroups, ["动画", "预览", "变化", "时间与循环", "引用"])
+  assert.deepEqual(legacyGroups, ["动画", "预览", "引用", "变化", "时间与循环"])
   assert.ok(await legacyFields.locator(".ui-animation-player canvas").count() > 0, "旧版检查器缺少播放预览")
   assert.ok(await legacyFields.locator(".ui-animation-lane").count() > 0, "旧版检查器缺少时间轴")
   assert.match(await legacyFields.locator('[data-inspector-group-label="引用"]').innerText(), /按下 · PRESS_ANIM/)

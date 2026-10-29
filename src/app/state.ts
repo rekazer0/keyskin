@@ -21,6 +21,7 @@ import { type BdaAppearanceStyleGroup } from "../bda.ts"
 import { type BdaTileUsage } from "./types"
 import { type TileRect } from "../tiles.ts"
 import { createAtlasWorkspace } from "../atlas-workspace"
+import { type createAnimationWorkspace } from "../animation-workspace"
 import { type VisualResolver } from "../atlas.ts"
 import { type SourceEditorValueRange } from "../lazy-source-editor.ts"
 import { type ProjectChoice } from "../project-chooser"
@@ -148,6 +149,7 @@ export const appState = {
   movingTile: undefined as TileSlice | undefined,
   moveStart: undefined as TilePoint | undefined,
   atlasWorkspace: undefined as ReturnType<typeof createAtlasWorkspace> | undefined,
+  animationWorkspace: undefined as ReturnType<typeof createAnimationWorkspace> | undefined,
   tileResizeCorner: undefined as number | undefined,
   tileDragOriginal: undefined as TileSlice | undefined,
   moveSource: undefined as TileRect | undefined,
@@ -190,6 +192,35 @@ export const appState = {
   fitCanvasDebounce: undefined as ReturnType<typeof setTimeout> | undefined,
   canvasFitFrozen: false,
   previewZoom: 1,
+  /** 全局预览：网格的缩放与平移、当前格子（放着真正的画布）、打开前的模式与画布位置。 */
+  layoutOverview: undefined as {
+    index: number
+    columns: number
+    zoom: number
+    x: number
+    y: number
+    /** 截图原生分辨率对应的倍数，再放大会变糊。 */
+    maxZoom: number
+    /** 用户缩放或拖动过网格，截图全部到位后不再自动适配。 */
+    touched: boolean
+    /** 正在逐个切换布局截图：检查器暂不重建。 */
+    capturing: boolean
+    /** 手势结束前（时间戳）暂停截图，拖动和缩放优先。 */
+    idleAt: number
+    settleTimer?: ReturnType<typeof setTimeout>
+    closing: boolean
+    pan?: { pointerId: number; x: number; y: number; panX: number; panY: number; moved: boolean }
+    mode: string
+    previewPan: { x: number; y: number }
+    /** #device-shell 在画布里原来的下一个兄弟节点，进入布局时放回原处。 */
+    home: Node | null
+    /** 当前格子里包着 #device-shell 的缩放层。 */
+    live: HTMLElement
+  } | undefined,
+  /** 从全局预览进入了某个布局：Esc 回到全局预览。 */
+  layoutOverviewReturn: false,
+  /** 全局预览截图，皮肤修订号与外观等没变时下次打开直接复用。 */
+  layoutOverviewCache: undefined as { archive: SkinArchive; key: string; snapshots: Map<string, HTMLCanvasElement> } | undefined,
   previewPanLocked: true,
   previewPanX: 0,
   previewPanY: 0,

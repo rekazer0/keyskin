@@ -20,7 +20,9 @@ import { openStyleReferenceEditor } from "../style-references"
 import { refreshPreview, setGuidesVisible, updateDevicePreview, refreshSimulationPreview, fitCanvasPreview } from "../preview-render"
 import { selectStyleResource, renderResourceInspector, selectResourceImage, uploadKeySound, currentSoundEntries, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
 import { createAtlasWorkspace } from "../../atlas-workspace"
+import { createAnimationWorkspace } from "../../animation-workspace"
 import { selectFile } from "../navigation"
+import { populateKeyInspector } from "../key-inspector"
 import { autoSliceSelectedImage, drawAtlas, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector, nextSliceIndex } from "../tile-editing"
 import { type TileRect, duplicateTileSlice } from "../../tiles.ts"
 import { type Change } from "../../history.ts"
@@ -138,6 +140,10 @@ export function wireResourcesAndStartup(): void {
     selectStyleResource(styleID)
     refreshPreview()
     updateDirty()
+  })
+  appState.animationWorkspace = createAnimationWorkspace({
+    back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),
+    relayout: () => populateKeyInspector(),
   })
   appState.atlasWorkspace = createAtlasWorkspace({
     back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),

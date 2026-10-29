@@ -455,7 +455,7 @@ export type LegacyAnimationReference = {
   layoutField?: string
 }
 
-const STYLE_ANIM_FIELDS = ["PRESS_ANIM", "RELEASE_ANIM", "SHOW_ANIM", "HIDE_ANIM", "FIRST_PRESS_PANEL_ANIM"] as const
+export const STYLE_ANIM_FIELDS = ["PRESS_ANIM", "RELEASE_ANIM", "SHOW_ANIM", "HIDE_ANIM", "FIRST_PRESS_PANEL_ANIM"] as const
 const LAYOUT_ANIM_STYLE_FIELDS = ["ANIM_STYLE", "FORE_ANIM_STYLE", "BACK_ANIM_STYLE"] as const
 
 function referenceIDs(value: string | undefined): number[] {

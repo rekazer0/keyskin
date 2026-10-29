@@ -1,0 +1,21 @@
+/* —— 动效设计 / 粒子设计的桌面布局（animation-workspace.ts）：左侧栏是动画列表，画布照常显示键盘，播放器停靠在画布下方 —— */
+.animation-library, .animation-stage { display: none; }
+/* :not(#id) 的优先级压过 #files 等带 id 的子元素 */
+.animation-workspace .sidebar > :not(#animation-library, #sidebar-resize-handle) { display: none; }
+.animation-workspace .sidebar { padding: 0; overflow: hidden; }
+.animation-workspace .animation-library { display: flex; flex-direction: column; gap: var(--space-sm); height: 100%; min-height: 0; padding: var(--space-md); box-sizing: border-box; }
+.animation-library-header { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
+.animation-library-header > strong { flex: 1; min-width: 0; overflow: hidden; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+.animation-library-count { flex: none; color: var(--tertiary); font-size: var(--font-size-xs); }
+.animation-library-body { display: flex; flex: 1; flex-direction: column; gap: var(--space-sm); min-height: 0; }
+.animation-library-body > .ui-listbox { flex: 1; }
+
+/* 播放条是画布下方固定高度的一行，缩放控件随之上移 */
+.animation-workspace .workspace { grid-template-rows: 48px minmax(0, 1fr) 184px 30px; }
+.animation-workspace .workspace > .workspace-status { grid-row: 4; }
+.animation-workspace .preview-zoom-control { bottom: calc(184px + 42px); }
+.animation-workspace .animation-stage { display: flex; flex-direction: column; grid-row: 3; gap: var(--space-sm); min-height: 0; padding: var(--space-md) var(--space-lg); overflow: auto; box-sizing: border-box; border-top: 1px solid var(--line); background: var(--material-panel); }
+.animation-stage-heading { display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0; }
+.animation-stage-heading > strong { flex: none; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
+.animation-stage-heading > small { min-width: 0; overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+.animation-stage-empty { margin: auto; color: var(--tertiary); font-size: var(--font-size-sm); text-align: center; }

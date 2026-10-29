@@ -79,6 +79,8 @@ export const sidebarViewVisible = $("#sidebar-view-visible") as HTMLInputElement
 
 export const inspectorTabsVisible = $("#inspector-tabs-visible") as HTMLInputElement
 
+export const overviewMetaVisible = $("#overview-meta-visible") as HTMLInputElement
+
 export const sourceCompletionEnabled = $("#source-completion-enabled") as HTMLInputElement
 
 export const sourceValueHintsEnabled = $("#source-value-hints-enabled") as HTMLInputElement
@@ -222,12 +224,17 @@ export const previewZoomOut = $("#preview-zoom-out") as HTMLButtonElement
 export const previewZoomFit = $("#preview-zoom-fit") as HTMLButtonElement
 
 export const previewZoomIn = $("#preview-zoom-in") as HTMLButtonElement
+export const layoutOverview = $("#layout-overview")
+export const layoutOverviewGrid = $("#layout-overview-grid")
+export const layoutOverviewToggle = $("#layout-overview-toggle") as HTMLButtonElement
 
 export const panelScaleButton = $("#panel-scale") as HTMLButtonElement
 
 export const adaptIos26Button = $("#adapt-ios26") as HTMLButtonElement
 
 export const editModeDialog = $("#edit-mode-dialog") as HTMLDialogElement
+export const createAnimationDialog = $("#create-animation-dialog") as HTMLDialogElement
+export const createAnimationDetail = $("#create-animation-detail")
 
 export const ios26Dialog = $("#ios26-dialog") as HTMLDialogElement
 

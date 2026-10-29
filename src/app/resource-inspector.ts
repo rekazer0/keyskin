@@ -27,6 +27,7 @@ import { palmTileSlices } from "../palm/palm-style-edit.ts"
 import { openPalmSkin } from "./sxi-documents"
 import { showImage, showError, showStatus } from "./file-operations"
 import { updateSourceHighlight } from "./source-panel"
+import { styleAnimationLinks } from "./legacy-animation-inspector"
 
 export function openStyleImageResourceChooser(target: StyleImagePickerTarget): void {
   appState.resourcePickerSelect = undefined
@@ -268,6 +269,8 @@ export async function renderStyleResourceDetail(): Promise<void> {
       input.disabled = !isEditing()
       input.addEventListener("change", () => updateField(input.value))
       row.append(input)
+      const links = styleAnimationLinks(key, input.value)
+      if (links) row.append(links)
     }
     label.append(caption, row)
     const group = groups.find(([, , matches]) => matches(key))!

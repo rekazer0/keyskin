@@ -56,6 +56,8 @@ export class Preview {
   editTool: "select" | "move" = "select"
   crosshair = false
   pointerInteractionLocked = false
+  /** 动效设计 / 粒子设计：点按键只在画布上播放它的动画，不选中、不切换文件。 */
+  animationView = false
   private renderDeferred = false
   editDrag?: {
     pointerId: number

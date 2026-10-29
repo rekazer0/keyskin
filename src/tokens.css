@@ -11,7 +11,7 @@
   --font-display: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 
   /* 字号：6 档，正文 12；10 只给概览文件名注脚，其余最小 11 */
-  --font-size-xxs: 10px; /* 概览列表的文件名注脚 */
+  --font-size-xxs: 10px; /* 概览列表的文件名注脚、列表框行的第二行 */
   --font-size-xs: 11px;  /* 辅助说明、角标、单位 */
   --font-size-sm: 12px;  /* 正文、控件、列表行 */
   --font-size-md: 13px;  /* 分组标题、强调、搜索框 */

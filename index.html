@@ -119,6 +119,14 @@
             </span>
           </button>
         </div>
+        <div class="window-controls" aria-label="窗口">
+          <button id="window-minimize" type="button" title="最小化" aria-label="最小化"><span class="system-symbol" data-icon="minus" aria-hidden="true"></span></button>
+          <button id="window-maximize" type="button" title="最大化" aria-label="最大化">
+            <span class="system-symbol window-maximize-icon" data-icon="square" aria-hidden="true"></span>
+            <span class="system-symbol window-restore-icon" data-icon="copy" aria-hidden="true"></span>
+          </button>
+          <button id="window-close" type="button" title="关闭" aria-label="关闭"><span class="system-symbol" data-icon="x" aria-hidden="true"></span></button>
+        </div>
       </div>
     </header>
 
@@ -379,11 +387,15 @@
             <button data-layout-action="horizontal-gap" title="水平等间距" aria-label="水平等间距"><span class="system-symbol" data-icon="fold-horizontal" aria-hidden="true"></span></button>
             <button data-layout-action="vertical-gap" title="垂直等间距" aria-label="垂直等间距"><span class="system-symbol" data-icon="fold-vertical" aria-hidden="true"></span></button>
           </div>
+          <div id="layout-overview" class="layout-overview" hidden><div id="layout-overview-grid" class="layout-overview-grid" role="group" aria-label="全部布局"></div></div>
         </div>
         <div class="preview-zoom-control glass-module" aria-label="画布缩放">
           <button id="preview-zoom-out" type="button" aria-label="缩小画布" title="缩小" data-icon="minus" data-icon-size="16"></button>
           <button id="preview-zoom-fit" type="button" aria-label="适配窗口，画布已锁定，双击解锁" title="画布已锁定（双击解锁）" aria-pressed="true" data-icon="scan" data-icon-size="16"></button>
           <button id="preview-zoom-in" type="button" aria-label="放大画布" title="放大" data-icon="plus" data-icon-size="16"></button>
+        </div>
+        <div class="preview-zoom-control preview-overview-control glass-module" aria-label="全局预览">
+          <button id="layout-overview-toggle" type="button" aria-label="全局预览全部布局" title="全局预览（⌘/Ctrl + 方向键切换布局）" aria-pressed="false" data-icon="maximize" data-icon-size="16"></button>
         </div>
         <div class="workspace-status" hidden aria-hidden="true"><div id="event-log" aria-live="polite">打开皮肤后可预览按键。</div><div id="panel-status">面板：-- × -- · 预览缩放：--%</div></div>
       </section>
@@ -765,6 +777,19 @@
       </form>
     </dialog>
 
+    <dialog id="create-animation-dialog" class="project-dialog" aria-labelledby="create-animation-title" aria-describedby="create-animation-detail">
+      <form method="dialog">
+        <header>
+          <h2 id="create-animation-title">皮肤还没有动画配置</h2>
+          <p id="create-animation-detail"></p>
+        </header>
+        <footer>
+          <button value="cancel">取消</button>
+          <button class="primary" value="create" autofocus>自动创建</button>
+        </footer>
+      </form>
+    </dialog>
+
     <dialog id="file-operation-dialog" class="ui-operation-dialog" aria-labelledby="file-operation-title" aria-describedby="file-operation-detail">
       <form method="dialog">
         <header>
@@ -885,6 +910,7 @@
             <section class="settings-group" aria-labelledby="settings-chrome-title">
               <h3 id="settings-chrome-title">界面元素</h3>
               <label class="settings-row"><span>概览与源文件切换<small>左侧栏顶部的切换按钮</small></span><input id="sidebar-view-visible" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span>显示概览源文件<small>概览条目下方的文件名</small></span><input id="overview-meta-visible" type="checkbox" role="switch"></label>
               <label class="settings-row"><span>属性与源代码切换<small>检查器顶部的模式切换</small></span><input id="inspector-tabs-visible" type="checkbox" role="switch" checked></label>
             </section>
           </section>

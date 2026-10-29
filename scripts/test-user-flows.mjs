@@ -449,6 +449,9 @@ await check("overview: every sidebar item, image slices, sounds and info", () =>
     await page.waitForTimeout(120)
     // Image pages replace the overview list; come back to keep walking it.
     if (await page.locator("#atlas-back").isVisible()) await page.locator("#atlas-back").click()
+    // So do 动效设计 / 粒子设计; without an anim.ini they first offer to create one.
+    if (await page.locator("#create-animation-dialog[open]").isVisible()) await page.locator('#create-animation-dialog button[value="cancel"]').click()
+    if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library button[aria-label="返回布局"]').click()
   }
   await page.locator(".sidebar-overview button[data-path]", { hasText: "图片资源" }).first().click()
   const image = page.locator("#resource-gallery > *").first()

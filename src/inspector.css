@@ -665,10 +665,10 @@
 .source .ssf-image-card .style-picker-state:not([data-state-label]) { grid-template-rows: minmax(0, 1fr); }
 .source .ssf-image-card .style-picker-state:not([data-state-label])::before { display: none; }
 /* —— 动画资源（animation-inspector.ts）：列表下的新建 / 复制 / 删除、预览下的警告、组合子动画、浮动物体、引用 —— */
-.source .animation-list-actions { display: flex; align-items: center; gap: var(--space-2xs); }
-.source .animation-list-actions > .ui-select { flex: 1; min-width: 0; }
-.source .animation-list-actions > .ui-button { margin-right: auto; }
-.source .animation-warning {
+.animation-list-actions { display: flex; align-items: center; gap: var(--space-2xs); }
+.animation-list-actions > .ui-select { flex: 1; min-width: 0; }
+.animation-list-actions > .ui-button { margin-right: auto; }
+.animation-warning {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -678,8 +678,8 @@
   color: var(--secondary);
   font-size: var(--font-size-xs);
 }
-.source .animation-warning > .ui-icon { color: var(--state-warn); }
-.source .animation-warning > span { flex: 1; min-width: 0; }
+.animation-warning > .ui-icon { color: var(--state-warn); }
+.animation-warning > span { flex: 1; min-width: 0; }
 /* 隐藏的下拉只承载分段控件的值，让改动标记与重置复用检查器现有逻辑 */
 .source .animation-proxy { display: none; }
 .source .animation-floater { padding-top: var(--space-sm); border-top: 1px solid var(--line-soft); }
@@ -705,3 +705,12 @@
 .source .animation-use-list > .ui-list-item { min-height: var(--control-height-md); padding-left: 0; }
 .source .animation-use-list .ui-list-item-text > strong { font-weight: var(--font-weight-medium); }
 .source .animation-use-list > .ui-list-item > .ui-icon { color: var(--tertiary); }
+/* 引用行下的跳转目标：点一下打开那个样式或动画 */
+.source .animation-use-targets { display: flex; flex-wrap: wrap; gap: var(--space-xs); padding: 0 0 var(--space-xs) calc(var(--icon-size-sm) + var(--space-sm)); }
+.source .animation-use-targets > .ui-button { font-family: var(--font-mono); }
+/* 样式详情里动画事件（PRESS_ANIM…）引用的动画：每个编号一个按钮，打开动效设计 / 粒子设计 */
+.source .style-animation-links { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: var(--space-xs); }
+/* 图片卡片（gif 路径、帧资源、粒子资源）：只有一个预览，不带状态名 */
+.source .image-reference-card .style-picker-states { grid-template-columns: minmax(0, 1fr); }
+.source .image-reference-card .style-picker-state { grid-template-rows: minmax(0, 1fr); }
+.source .image-reference-card .style-picker-state::before { display: none; }

@@ -11,7 +11,7 @@ import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
 import { insertedTextRange } from "../highlight.ts"
 import { IniDocument } from "../ini.ts"
-import { setSourceValue } from "./config-context"
+import { legacyAnimationConfigPath, setSourceValue } from "./config-context"
 import { tileSlices } from "../tiles.ts"
 import { updateSourceHighlight } from "./source-panel"
 import { populateTileInspector, drawAtlas, loadTiles } from "./tile-editing"
@@ -187,6 +187,9 @@ function refreshHistorySelection(): void {
     appState.selectedTileIndex = appState.slices.some(slice => slice.index === index) ? index : undefined
     populateTileInspector()
     drawAtlas()
+  } else if (appState.animationDesignMode !== "all" && appState.archive?.format !== "bda" && !legacyAnimationConfigPath() && appState.layoutPath) {
+    // Undoing 「自动创建」 removes the animation configuration being shown.
+    selectFile(appState.layoutPath, appState.sidebarView)
   } else if (appState.selectedPath && (
     appState.archive?.getBytes(appState.selectedPath) || isBdaAppearancePartPath(appState.selectedPath) ||
     sxiPointer(appState.selectedPath) || isSsfBoardPath(appState.selectedPath)

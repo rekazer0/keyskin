@@ -954,6 +954,141 @@ h2 {
   stroke-linejoin: round;
 }
 
+.preview-overview-control {
+  right: auto;
+  left: 14px;
+}
+
+/* 全局预览：盖在画布上的布局网格，缩放平移由脚本写 transform，画布本身的键盘同时淡出 */
+.layout-overview {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+
+.canvas-wrap[data-layout-overview] .layout-overview {
+  opacity: 1;
+}
+
+.canvas-wrap[data-layout-overview] > .device-shell {
+  opacity: 0;
+  transition: none;
+}
+
+.canvas-wrap[data-layout-overview] > :is(#preview-coordinates, .canvas-multi-toolbar) {
+  visibility: hidden;
+}
+
+.layout-overview-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--_columns), 280px);
+  grid-template-rows: repeat(var(--_columns), 1fr);
+  gap: var(--space-lg);
+  transform-origin: 0 0;
+  transition: transform var(--duration-slow) var(--ease-emphasized);
+}
+
+.layout-overview-grid[data-instant] {
+  transition: none;
+  will-change: transform;
+}
+
+/* 键盘贴着格子底边，矮的面板（符号面板没有候选栏）与同一行底边、标签对齐 */
+.layout-overview-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-lg);
+  color: var(--secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition:
+    opacity var(--duration-base) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+@media (hover: hover) {
+  .layout-overview-cell:not([aria-selected="true"]):hover {
+    background: var(--hover);
+  }
+}
+
+.layout-overview-cell[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.layout-overview-frame {
+  position: relative;
+  display: block;
+  border-radius: var(--radius-md);
+  outline: 2px solid transparent;
+  outline-offset: var(--space-xs);
+  transition: outline-color var(--duration-fast) var(--ease-standard);
+}
+
+.layout-overview-cell[aria-selected="true"] .layout-overview-frame {
+  outline-color: var(--accent);
+}
+
+.layout-overview-frame:not(:has(> canvas)) {
+  aspect-ratio: var(--_aspect, 2);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.layout-overview-frame > canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  animation: ui-pop var(--duration-slow) var(--ease-emphasized);
+}
+
+/* 当前格子里是真正的画布：画好之前先显示截图 */
+.layout-overview-live {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.layout-overview-live > .device-shell {
+  max-width: none;
+}
+
+.layout-overview-frame[data-live="ready"] > .layout-overview-live {
+  opacity: 1;
+}
+
+.layout-overview-frame[data-live="ready"] > canvas {
+  visibility: hidden;
+}
+
+.layout-overview-label {
+  text-align: center;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+
+/* 进入布局时只留当前格子，随网格放大到画布上的键盘位置 */
+.layout-overview[data-closing] :is(.layout-overview-cell:not([aria-selected="true"]), .layout-overview-label) {
+  opacity: 0;
+}
+
+.layout-overview[data-closing] .layout-overview-cell[aria-selected="true"] .layout-overview-frame {
+  outline-color: transparent;
+}
+
 .workspace:has(.canvas-wrap.empty) .preview-zoom-control,
 .workspace:has(#workspace-image-figure:not([hidden])) .preview-zoom-control {
   display: none;
@@ -4120,7 +4255,8 @@ main {
   border-radius: var(--radius-md);
 }
 
-#files .sidebar-overview > .nav-group:first-child > .nav-section {
+/* 第一个子元素是手机端的分组导航，桌面端第一个分组要按 first-of-type 取。 */
+#files .sidebar-overview > .nav-group:first-of-type > .nav-section {
   margin-top: 0;
 }
 
@@ -5255,6 +5391,11 @@ main {
   letter-spacing: 0.04em;
 }
 
+/* 条目名字的 .nav-label 规则也命中标题里的名字，这里压回小一档。 */
+:root body #files .sidebar-overview > .nav-group > .nav-section > .nav-label {
+  font-size: var(--font-size-xs);
+}
+
 :root body #files .sidebar-overview > .nav-group[open] > .nav-section > .source-disclosure {
   color: var(--tertiary);
 }
@@ -5265,7 +5406,7 @@ main {
   min-height: 44px;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
-  column-gap: 12px;
+  column-gap: var(--space-lg);
   row-gap: 2px;
   align-content: center;
   padding: 6px 8px;
@@ -5280,6 +5421,130 @@ main {
   max-width: none;
   margin-left: 0;
   font-size: var(--font-size-xxs);
+}
+
+/* 「显示概览源文件」关闭时只留名字一行，行高不变，名字在行内居中。 */
+:root body #files:not([data-overview-meta]) .sidebar-overview button.nav-item > .nav-meta {
+  display: none;
+}
+
+:root body #files:not([data-overview-meta]) .sidebar-overview button.nav-item > .system-symbol {
+  grid-row: auto;
+}
+
+/* 概览条目比切换按钮两侧各收窄一点，列表不顶满侧栏。 */
+@media (min-width: 761px) {
+  :root body #files .sidebar-overview {
+    padding: 0 6px;
+  }
+}
+
+/* 资源配置条目少且各自独立，无论是否显示源文件都排成三列 52px 高的磁贴，左右贴齐列表行的边缘：图标在上、名字在下。 */
+:root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] > .nav-group-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+:root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] button.nav-item {
+  height: 52px;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  row-gap: 4px;
+  padding: 4px;
+  background: var(--hover);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+:root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] button.nav-item > .system-symbol {
+  grid-row: auto;
+}
+
+:root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] button.nav-item > .nav-label {
+  max-width: 100%;
+  font-size: var(--font-size-xs);
+}
+
+/* 磁贴放不下第二行，源文件名留在悬停提示里。 */
+:root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] button.nav-item > .nav-meta {
+  display: none;
+}
+
+@media (hover: hover) {
+  :root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] button.nav-item:hover {
+    background: var(--material-content);
+  }
+}
+
+:root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] button.nav-item.selected {
+  background: var(--accent-soft);
+}
+
+/* 皮肤卡片：左边效果预览图，右边皮肤名与作者，两半各自是可选中的条目；不加底色和描边。 */
+:root body #files .sidebar-overview .skin-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+  padding: var(--space-xs);
+  border-radius: var(--radius-lg);
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-preview {
+  height: 72px;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  background: var(--material-content);
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-preview > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-preview > :is(.nav-label, .nav-meta) {
+  display: none;
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-preview.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-info {
+  grid-column: 2;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-preview:only-child {
+  grid-column: 1 / -1;
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-info:only-child {
+  grid-column: 1 / -1;
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-info > .system-symbol {
+  display: none;
+}
+
+:root body #files .sidebar-overview .skin-card > button.skin-card-info > .nav-label {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* 卡片第二行是作者与「皮肤信息」，不是文件名，「显示概览源文件」关掉时也保留。 */
+:root body #files .sidebar-overview .skin-card > button.skin-card-info > .nav-meta {
+  display: block;
+  grid-column: 1;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-xs);
 }
 
 :root body #files .raw-files .source-folder-row {
@@ -5510,6 +5775,72 @@ main {
   width: 14px;
   height: 14px;
   display: block;
+}
+
+/* Windows 窗口按钮：系统标题栏已去掉，三个按钮贴在标题栏最右侧、撑满高度，和系统按钮同宽 */
+.window-controls {
+  display: none;
+}
+
+:root.windows body .titlebar {
+  padding-right: 0;
+}
+
+:root.windows body .titlebar-right {
+  align-self: stretch;
+}
+
+:root.windows body .titlebar .window-controls {
+  display: flex;
+  align-self: stretch;
+  margin-left: 6px;
+}
+
+:root body .window-controls button {
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  background: transparent;
+  color: var(--secondary);
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+:root body .window-controls .system-symbol,
+:root body .window-controls .system-symbol svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+:root body .window-controls .window-maximize-icon,
+:root body .window-controls .window-maximize-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+:root body #window-maximize .window-restore-icon,
+:root body #window-maximize[data-maximized="true"] .window-maximize-icon {
+  display: none;
+}
+
+:root body #window-maximize[data-maximized="true"] .window-restore-icon {
+  display: block;
+}
+
+@media (hover: hover) {
+  :root body .window-controls button:hover {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+    color: var(--text);
+  }
+
+  :root body .window-controls #window-close:hover {
+    background: var(--state-danger);
+    color: var(--on-accent);
+  }
 }
 
 /* Document pill — 组件 / 标题栏 文档 */

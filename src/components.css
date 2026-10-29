@@ -230,6 +230,8 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 
 /* —— 滑块 —— */
 .ui-slider { width: 100%; height: var(--control-height-sm); margin: 0; accent-color: var(--accent); }
+/* 滑块 + 数值：有自然范围的数值（透明度、时长、数量）左边拖、右边输入 */
+.ui-slider-field { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: var(--space-sm); min-width: 0; }
 
 /* —— 属性行：左标签右控件 —— */
 .ui-field {
@@ -443,12 +445,26 @@ body {
 .ui-animation-time { flex: 1; min-width: 0; margin-left: var(--space-xs); overflow: hidden; color: var(--secondary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .ui-animation-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.6; overflow-wrap: anywhere; }
 .ui-animation-note:empty { display: none; }
+/* 横排（画布下方的播放条）：左边舞台，右边时间轴、走带与说明 */
+.ui-animation-player[data-layout="row"] { grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: var(--space-lg); align-items: start; }
+.ui-animation-player[data-layout="row"] > .ui-animation-stage { grid-row: 1 / span 3; }
 
 /* —— 列表框：可滚动的单选列表（role="listbox"），行用 .ui-list-item，方向键切换 —— */
-.ui-listbox { position: relative; display: grid; align-content: start; gap: var(--space-2xs); max-height: calc(var(--control-height-lg) * 7); margin: 0; padding: var(--space-2xs); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line-soft); border-radius: var(--radius-md); list-style: none; }
+.ui-listbox { position: relative; display: grid; align-content: start; gap: var(--space-xs); max-height: calc(var(--control-height-lg) * 7); margin: 0; padding: var(--space-2xs); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line-soft); border-radius: var(--radius-md); list-style: none; }
+.ui-listbox[data-size="fill"] { max-height: none; min-height: 0; }
 .ui-listbox > .ui-list-item { min-width: 0; }
+.ui-listbox > .ui-list-item[hidden] { display: none; }
 .ui-listbox .ui-list-item-text > strong { overflow: hidden; font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
-.ui-listbox .ui-list-item > .ui-badge { flex: none; }
-.ui-listbox .ui-list-item[aria-selected="true"] .ui-list-item-text > small { color: color-mix(in srgb, var(--accent) 70%, var(--tertiary)); }
+/* 列表框里的行：字号小一档（标题靠字重区分），四周与行间多留白 */
+.ui-listbox .ui-list-item { gap: var(--space-md); min-height: 52px; padding: var(--space-sm) var(--space-md); font-size: var(--font-size-xs); }
+.ui-listbox .ui-list-item-text { gap: var(--space-xs); }
+.ui-listbox .ui-list-item > .ui-icon:first-child { flex: none; color: var(--tertiary); }
+.ui-listbox .ui-list-item[aria-selected="true"] > .ui-icon:first-child { color: var(--accent); }
+/* 行的第二行：类型、引用等标签各自独立，比标题弱一级；剩余空间给摘要，放不下时省略摘要 */
+.ui-list-item-meta { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; color: var(--tertiary); font-size: var(--font-size-xxs); }
+.ui-list-item-meta > .ui-badge { flex: none; gap: var(--space-2xs); height: 14px; font-size: inherit; background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--tertiary); font-family: var(--font-ui); }
+.ui-list-item-meta > small { min-width: 0; overflow: hidden; font-size: inherit; text-overflow: ellipsis; white-space: nowrap; }
+.ui-listbox .ui-list-item[aria-selected="true"] .ui-list-item-meta { color: color-mix(in srgb, var(--accent) 70%, var(--tertiary)); }
+.ui-listbox .ui-list-item[aria-selected="true"] .ui-list-item-meta > .ui-badge { background: color-mix(in srgb, var(--accent) 10%, transparent); color: inherit; }
 .ui-listbox .ui-list-item[data-problem] > .ui-icon:last-child { color: var(--state-warn); }
 .ui-listbox-empty { margin: 0; padding: var(--space-md); color: var(--tertiary); font-size: var(--font-size-xs); text-align: center; }

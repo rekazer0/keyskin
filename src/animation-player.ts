@@ -15,6 +15,8 @@ export type AnimationPlayerOptions = {
   /** Particle images are resource IDs (BDA) rather than style IDs. */
   resourceParticles?: boolean
   readFile?: (path: string) => Uint8Array | undefined
+  /** Called whenever playback starts from the beginning, to play the same animation on the keyboard canvas. */
+  onPlay?: () => void
 }
 
 /**
@@ -24,8 +26,9 @@ export type AnimationPlayerOptions = {
 const session = { loop: false, slow: false, looping: "" }
 const SLOW_RATE = 0.25
 const MAX_DURATION = 60_000
-// Stage units: the canvas is drawn at twice this size. The sample key sits in the middle.
+// Stage units: the canvas is drawn at RESOLUTION times this size, sharp on the large canvas-area stage too.
 const STAGE = { width: 320, height: 160 }
+const RESOLUTION = 4
 const KEY: Rect = { x: 128, y: 48, width: 64, height: 64 }
 /** Device pixels (pixel translations, particle speeds and images) to stage units. */
 const PIXEL = KEY.width / PREVIEW_KEY_SIZE
@@ -39,12 +42,12 @@ function stageTracks(tracks: readonly Track[]): Track[] {
 }
 
 /** Local playback state belongs to the generated component, never to the skin document. */
-export function animationPlayer({ clip, key, resolver, resourceParticles, readFile }: AnimationPlayerOptions): HTMLElement {
+export function animationPlayer({ clip, key, resolver, resourceParticles, readFile, onPlay }: AnimationPlayerOptions): HTMLElement {
   const root = element("div", "ui-animation-player")
   const stage = element("div", "ui-animation-stage")
   const canvas = element("canvas")
-  canvas.width = STAGE.width * 2
-  canvas.height = STAGE.height * 2
+  canvas.width = STAGE.width * RESOLUTION
+  canvas.height = STAGE.height * RESOLUTION
   canvas.setAttribute("aria-label", "动画播放预览")
   const emptyState = element("p", "ui-animation-empty")
   stage.append(canvas, emptyState)
@@ -183,7 +186,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const draw = () => {
     const style = getComputedStyle(root)
     const token = (name: string) => style.getPropertyValue(name).trim()
-    context.setTransform(2, 0, 0, 2, 0, 0)
+    context.setTransform(RESOLUTION, 0, 0, RESOLUTION, 0, 0)
     context.clearRect(0, 0, STAGE.width, STAGE.height)
     context.translate(STAGE.width / 2, STAGE.height / 2)
     context.scale(fit, fit)
@@ -256,6 +259,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     if (elapsed >= duration && session.loop) {
       elapsed = 0
       startedAt = now
+      onPlay?.()
     }
     elapsed = Math.min(duration, elapsed)
     draw()
@@ -268,6 +272,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const start = () => {
     if (loading || !hasContent || duration <= 0) return
     if (elapsed >= duration) elapsed = 0
+    if (elapsed === 0) onPlay?.()
     startedAt = performance.now() - elapsed / rate()
     cancelAnimationFrame(timer)
     timer = requestAnimationFrame(tick)

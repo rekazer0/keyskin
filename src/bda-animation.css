@@ -1,5 +1,5 @@
 /*
- * BDA 动画检查器（src/bda-animation-editor.ts）自己的样式：只读值与图片序列的帧卡片。
+ * BDA 动画检查器（src/bda-animation-editor.ts）自己的样式：只读值与图片序列的帧列表。
  * 列表、播放器与分组来自 components.css / inspector.css，全部只引用 tokens.css 的 token。
  */
 
@@ -13,57 +13,13 @@
   white-space: nowrap;
 }
 
-/* 图片序列：每帧一张卡片，横向滚动。 */
+/* 图片序列：每帧一张图片卡片（同样式卡片）加时长，竖向排列。 */
 .source .bda-animation-frames {
-  display: flex;
-  gap: var(--space-sm);
-  padding-bottom: var(--space-xs);
-  overflow-x: auto;
+  display: grid;
+  gap: var(--space-md);
 }
 
 .source .bda-animation-frame-card {
   display: grid;
   gap: var(--space-sm);
-  min-width: 220px;
-}
-
-.source .bda-animation-frame {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  align-items: start;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.source .bda-animation-frame-fields {
-  display: grid;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-
-.source .bda-animation-frame-preview {
-  width: 88px;
-  height: 64px;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--checker-image), var(--checker-light);
-  background-position: 0 0, 4px 4px;
-  background-size: 8px 8px;
-}
-
-@media (hover: hover) {
-  .source .bda-animation-frame-preview:not(:disabled):hover { border-color: var(--line-strong); }
-}
-
-.source .bda-animation-frame-preview:focus-visible {
-  outline: 0;
-  box-shadow: var(--focus-ring);
-}
-
-.source .bda-animation-frame-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
 }

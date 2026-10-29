@@ -20,6 +20,7 @@ import { isSoundPath, soundMimeType } from "../sounds.ts"
 import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
+import { askToCreateAnimationConfig, canCreateAnimationConfig } from "./animation-resource"
 
 function addNavButton(
   parent: HTMLElement,
@@ -29,8 +30,10 @@ function addNavButton(
   icon?: string,
   navMode = className === "nav-resource" ? "resource" : "document",
   meta = path.split("/").pop() ?? path,
-): void {
-  if (!appState.archive?.names().includes(path) && !isBdaVirtualTextPath(path) && !isBdaAppearancePartPath(path) && !isSsfBoardPath(path) && !sxiPointer(path)) return
+): HTMLButtonElement | undefined {
+  // 没有动画配置时仍列出动效设计 / 粒子设计，点击时询问是否自动创建。
+  const missingAnimation = !path && (navMode === "motion" || navMode === "particle")
+  if (!missingAnimation && !appState.archive?.names().includes(path) && !isBdaVirtualTextPath(path) && !isBdaAppearancePartPath(path) && !isSsfBoardPath(path) && !sxiPointer(path)) return undefined
   const button = document.createElement("button")
   button.className = `nav-item ${className}`
   button.dataset.path = path
@@ -57,6 +60,7 @@ function addNavButton(
   button.append(metaNode)
   button.title = `${label} · ${metaNode.textContent}`
   button.addEventListener("click", () => {
+    if (missingAnimation) return askToCreateAnimationConfig(navMode === "particle")
     if (path.endsWith("py_9.ini") || path.endsWith("py_26.ini")) {
       layout.value = path.endsWith("_9.ini") ? "py_9.ini" : "py_26.ini"
       appState.previewReturnName = path.split("/").pop() ?? layout.value
@@ -69,6 +73,17 @@ function addNavButton(
     button.classList.add("selected")
     appState.selectedFileButton = button
   }
+  return button
+}
+
+// 效果预览图的 blob URL 只留一份，文件树重建时同一张图复用，换图时释放旧的。
+let skinPreview: { bytes: Uint8Array; url: string } | undefined
+function skinPreviewURL(bytes: Uint8Array): string {
+  if (skinPreview?.bytes !== bytes) {
+    if (skinPreview) URL.revokeObjectURL(skinPreview.url)
+    skinPreview = { bytes, url: URL.createObjectURL(new Blob([bytes as BlobPart])) }
+  }
+  return skinPreview.url
 }
 
 type NavEntry = {
@@ -167,6 +182,8 @@ export function renderFiles(): void {
   mobileGroups.className = "mobile-overview-groups"
   mobileGroups.setAttribute("aria-label", "布局分组")
   overview.append(mobileGroups)
+  const skinCard = document.createElement("div")
+  skinCard.className = "skin-card"
 
   const setMobileOverviewGroup = (title: string): void => {
     appState.mobileOverviewGroup = title
@@ -387,6 +404,12 @@ export function renderFiles(): void {
       { group: "资源配置", label: `粒子设计${suffix}`, path, className: "nav-style", icon: "wand-sparkles", navMode: "particle" },
     )
   }
+  if (!animationPaths.length && canCreateAnimationConfig()) {
+    entries.push(
+      { group: "资源配置", label: "动效设计", path: "", className: "nav-style", icon: "film", navMode: "motion", meta: "未创建" },
+      { group: "资源配置", label: "粒子设计", path: "", className: "nav-style", icon: "wand-sparkles", navMode: "particle", meta: "未创建" },
+    )
+  }
   if (appState.archive.format === "bda") {
     for (const [kind, group, label, icon] of bdaConfigGroups) {
       const paths = bdaConfigPaths(appState.archive, theme.value, orientation.value, kind)
@@ -420,12 +443,36 @@ export function renderFiles(): void {
     entry.icon = [...family, ...spareIcons].find((icon) => !iconOwners.has(icon)) ?? (entry.icon || "keyboard")
     iconOwners.set(entry.icon, entry)
   }
+  // 皮肤信息与效果预览合成顶部的皮肤卡片：左边预览图，右边皮肤名与作者，点击仍各自打开原来的页面。
+  const skinEntries = entries.filter((entry) => entry.className === "nav-overview" && ["皮肤信息", "效果预览"].includes(entry.label))
+  for (const entry of skinEntries) {
+    const button = addNavButton(skinCard, entry.label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
+    if (!button) continue
+    if (entry.label === "效果预览") {
+      button.classList.add("skin-card-preview")
+      button.setAttribute("aria-label", "效果预览")
+      skinCard.prepend(button)
+      const bytes = appState.archive.getBytes(entry.path)
+      if (!bytes) continue
+      const image = document.createElement("img")
+      image.alt = ""
+      image.addEventListener("load", () => button.querySelector(".system-symbol")?.replaceWith(image), { once: true })
+      image.src = skinPreviewURL(bytes)
+      continue
+    }
+    const name = appState.archive.infoField("Name") || "未命名皮肤"
+    const author = appState.archive.infoField("Author")
+    button.classList.add("skin-card-info")
+    button.querySelector(".nav-label")!.textContent = name
+    button.querySelector(".nav-meta")!.textContent = author ? `${author} · 皮肤信息` : "皮肤信息"
+    button.title = `皮肤信息 · ${name}`
+  }
   const groups = appState.archive.format === "bda"
     ? ["皮肤信息", "资源配置", "面板样式", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
     : ["皮肤", "资源配置", "键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局"]
   for (const group of groups) {
-    const grouped = entries.filter((entry) => entry.group === group && (
-      appState.archive?.names().includes(entry.path) || isSsfBoardPath(entry.path) || Boolean(sxiPointer(entry.path)) ||
+    const grouped = entries.filter((entry) => entry.group === group && !skinEntries.includes(entry) && (
+      !entry.path && entry.meta === "未创建" || appState.archive?.names().includes(entry.path) || isSsfBoardPath(entry.path) || Boolean(sxiPointer(entry.path)) ||
       appState.archive?.format === "bda" && (isBdaAppearancePartPath(entry.path) || Boolean(appState.bdaBase?.isText(bdaBasePath(entry.path))))
     ))
     if (group === "键盘布局" && appState.archive.format !== "ssf") {
@@ -462,8 +509,11 @@ export function renderFiles(): void {
         return (bdaLayoutRank[aName] ?? 100) - (bdaLayoutRank[bName] ?? 100) || aName.localeCompare(bName)
       })
     }
-    if (!grouped.length) continue
-    const body = section(group, grouped.length)
+    // 皮肤卡片放在它原来所在的分组（「皮肤」/ BDA 的「皮肤信息」）里，分组照常可折叠。
+    const card = skinCard.childElementCount && group === skinEntries[0]?.group ? skinCard : undefined
+    if (!grouped.length && !card) continue
+    const body = section(group, grouped.length + (card?.childElementCount ?? 0))
+    if (card) body.append(card)
     for (const entry of grouped) {
       addNavButton(body, entry.label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
     }

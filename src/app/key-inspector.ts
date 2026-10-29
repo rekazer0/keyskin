@@ -247,6 +247,8 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
 }
 
 export function populateKeyInspector(): void {
+  // 全局预览逐个切换布局截图时不重建检查器，截完切回原布局再重建。
+  if (appState.layoutOverview?.capturing) return
   if (deferNumberInputRefresh(populateKeyInspector, populateKeyInspector)) return
   if (appState.selectedPath !== appState.layoutPath && appState.selectedKeySections.length) {
     appState.selectedKeySections = []
@@ -256,6 +258,9 @@ export function populateKeyInspector(): void {
   const sections = appState.selectedKeySections
   // A Palm board has no layout document; its keys are read from skin.json.
   const hasSelection = Boolean((document || appState.archive?.format === "sxi") && sections.length && appState.selectedPath === appState.layoutPath)
+  // 动效设计 / 粒子设计：列表进左侧栏、播放器上画布（animation-workspace.ts）。
+  appState.animationWorkspace?.update(!hasSelection && appState.animationDesignMode !== "all")
+  preview.animationView = appState.animationDesignMode !== "all"
   const skinSelected = isSkinInfoPath(appState.selectedPath)
   const toolbarSelected = isToolbarPath(appState.selectedPath)
   const toolbarSections = toolbarSelected ? effectiveToolbarSections() : []
