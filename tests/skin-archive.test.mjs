@@ -256,3 +256,14 @@ test('sxi thumbnails use the root preview.png over per-appearance demo images', 
   }, { level: 0 })
   assert.equal(await (await archiveDemoImage(bytes)).text(), 'sxi-preview')
 })
+
+test('BDS → BDI writes .til slices in IMG order, since iOS numbers them by position', async () => {
+  const source = await SkinArchive.openAsync(zipSync({
+    'Info.txt': strToU8('AtomSkinName=test'),
+    'light/port/gen.ini': strToU8('[PANEL]\nSIZE=480,320'),
+    'light/res/back.til': strToU8('[GLOBAL]\nTILE_NUM=3\n\n[IMG3]\nSOURCE_RECT=0,2,1,1\n\n[IMG10]\nSOURCE_RECT=0,9,1,1\n\n[IMG1]\nSOURCE_RECT=0,0,1,1'),
+  }))
+  const bdi = SkinArchive.open(await source.toBytesAsync('bdi'), 'bdi')
+  assert.equal(bdi.getText('light/skin/res/back.til'),
+    '[GLOBAL]\nTILE_NUM=3\n\n[IMG1]\nSOURCE_RECT=0,0,1,1\n[IMG3]\nSOURCE_RECT=0,2,1,1\n\n[IMG10]\nSOURCE_RECT=0,9,1,1\n\n')
+})

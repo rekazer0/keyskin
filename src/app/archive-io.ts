@@ -459,7 +459,7 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
 // Android hands out content:// URIs whose last segment is an encoded document id, not a file name.
 export function documentNameForPath(path: string, archive: SkinArchive): string {
   return path.startsWith("content://")
-    ? skinFileName(archive.skinName(), archive.format)
+    ? skinFileName(archive.infoField("Name"), archive.format)
     : path.split(/[\\/]/).pop() || "未命名皮肤"
 }
 

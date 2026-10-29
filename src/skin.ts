@@ -177,6 +177,21 @@ function targetPath(path: string, format: ExportFormat, single: boolean): string
   return themed ? `${themed[1]}/${themed[2]}` : path
 }
 
+/** Android finds a .til slice by its [IMGn] name, iOS numbers slices in the order they appear: write them as IMG1, IMG2, … */
+function sortIosTiles(files: Map<string, Uint8Array>): void {
+  for (const [path, bytes] of files) {
+    if (!path.endsWith(".til")) continue
+    const text = strFromU8(bytes)
+    const sections = text.split(/(?=^\[)/m).map((section) => section.endsWith("\n") ? section : `${section}\n`)
+    const index = (section: string) => Number(section.match(/^\[IMG(\d+)\]/i)?.[1] ?? NaN)
+    const tiles = sections.filter((section) => index(section) >= 0)
+    const sorted = [...tiles].sort((a, b) => index(a) - index(b))
+    if (sorted.every((section, i) => section === tiles[i])) continue
+    let next = 0
+    files.set(path, strToU8(sections.map((section) => index(section) >= 0 ? sorted[next++] : section).join("")))
+  }
+}
+
 /** BDA and SSF each have their own configuration format; only BDI and BDS repackage into each other. */
 function assertRepackable(from: ExportFormat, to: ExportFormat | undefined): void {
   if (!to || to === from) return
@@ -329,11 +344,11 @@ export class SkinArchive {
     return this.files.get(this.canonicalToRaw.get(path) ?? path)
   }
 
-  /** The name the skin declares for itself: Info.txt `Name`, or phoneTheme.ini `skin_name` for Sogou. */
-  skinName(): string | undefined {
+  /** A field the skin declares about itself: Info.txt `Name` / `Author`, or phoneTheme.ini `skin_name` / `skin_author` for Sogou. */
+  infoField(field: "Name" | "Author"): string | undefined {
     const [paths, section, key] = this.format === "ssf"
-      ? [["phoneTheme.ini"], "General", "skin_name"]
-      : [["Info.txt", "light/skin/Info.txt", "dark/skin/Info.txt"], "", "Name"]
+      ? [["phoneTheme.ini"], "General", `skin_${field.toLowerCase()}`]
+      : [["Info.txt", "light/skin/Info.txt", "dark/skin/Info.txt"], "", field]
     for (const path of paths) {
       const bytes = this.getBytes(path)
       const name = bytes && IniDocument.parse(strFromU8(bytes)).get(section, key)?.trim()
@@ -487,6 +502,7 @@ export class SkinArchive {
     if (fromAndroid) {
       adaptIosToolbar(files, notes)
       adaptIosPanelBackground(files, notes)
+      sortIosTiles(files)
     }
     const adapted = await adaptPackageSounds(files, format)
     warnings?.push(...adapted.warnings)
