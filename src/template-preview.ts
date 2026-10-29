@@ -67,7 +67,7 @@ async function showPreviewImage(host: HTMLElement, image: HTMLImageElement): Pro
     throw error
   }
   host.replaceChildren(image)
-  host.classList.add("is-rendered")
+  host.dataset.preview = "rendered"
   return image
 }
 
@@ -143,7 +143,7 @@ export async function hydrateTemplateCardPreviews(
 async function hydrateTemplateCard(card: HTMLButtonElement): Promise<void> {
   const id = card.dataset.template
   const host = card.querySelector<HTMLElement>(".template-preview")
-  if (!id || !host || host.classList.contains("is-rendered")) return
+  if (!id || !host || host.dataset.preview === "rendered") return
   await yieldPreviewTask()
   try {
     await renderTemplatePreview(id, host)

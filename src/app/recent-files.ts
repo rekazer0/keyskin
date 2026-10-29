@@ -216,11 +216,12 @@ async function drainRecentPreviews(): Promise<void> {
       if (!card.isConnected) continue
       const path = card.dataset.recent
       const host = card.querySelector<HTMLElement>(".template-preview")
-      if (!path || !host || host.classList.contains("is-rendered") || host.dataset.preview === "failed") continue
+      // data-preview：rendered 已画好，failed 已放弃，两种都不再重画。
+      if (!path || !host || host.dataset.preview) continue
       const cached = recentPreviewCache.get(path)
       if (cached) {
         host.replaceChildren(cached)
-        host.classList.add("is-rendered")
+        host.dataset.preview = "rendered"
         continue
       }
       try {
@@ -228,7 +229,6 @@ async function drainRecentPreviews(): Promise<void> {
         if (readRecentFiles().some((item) => item.path === path)) recentPreviewCache.set(path, image)
       } catch {
         host.dataset.preview = "failed"
-        host.classList.remove("is-rendered")
         host.textContent = "暂无预览图"
       }
     }
@@ -260,7 +260,7 @@ function observeRecentPreviews(): void {
   recentPreviewObserver?.disconnect()
   const pending = [...document.querySelectorAll<HTMLButtonElement>(".recent-card[data-recent]")].filter((card) => {
     const host = card.querySelector<HTMLElement>(".template-preview")
-    return Boolean(host) && !host!.classList.contains("is-rendered") && host!.dataset.preview !== "failed"
+    return Boolean(host) && !host!.dataset.preview
   })
   for (const card of pending) {
     if (recentPreviewObserver) recentPreviewObserver.observe(card)
