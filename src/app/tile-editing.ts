@@ -431,7 +431,6 @@ export async function autoSliceSelectedImage(): Promise<void> {
       showStatus("未识别到可切片的透明图块")
       return
     }
-    if (appState.slices.length && !window.confirm(`自动切片将替换当前 ${appState.slices.length} 个切片，是否继续？`)) return
     if (appState.archive !== currentArchive || appState.selectedResourcePath !== path || !isEditing()) return
     if (sliceStore() === "palm") {
       editSxi((skin) => setPalmTiles(skin, path, cells.map((source, index) => ({ index: index + 1, source }))))

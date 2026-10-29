@@ -7,7 +7,7 @@ import { sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSour
 import { type Change } from "../../history.ts"
 import { preview, source, scheduleSelectionInspectorSync, isTauri, exportButtons, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
 import { startNewDocument, newDocument } from "../new-document"
-import { runFileOperation, readBrowserSkinFile, showImage } from "../file-operations"
+import { runFileOperation, readBrowserSkinFile, showImage, showStatus } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
 import { recentFilesKey, recentPreviewCache, recentThumbRequest, renderRecentFiles } from "../recent-files"
 import { releaseArchivePreview, hydrateTemplateCardPreviews } from "../../template-preview"
@@ -69,11 +69,8 @@ export function wireFilesAndSettings(): void {
           : copy)
       }
     }
+    // 覆盖同名文件和删除一样进撤销栈，不再弹确认框（DESIGN.md §7）。
     const sources = new Set(appState.sourceTransfer.files.map(({ source }) => source))
-    const conflicts = copies
-      .filter(({ path }) => appState.archive?.getBytes(path) && (appState.sourceTransfer?.mode !== "move" || !sources.has(path)))
-      .map(({ path }) => path)
-    if (conflicts.length && !window.confirm(`以下文件已存在，是否替换？\n\n${conflicts.join("\n")}`)) return
     const changes: Change[] = copies.map(({ path, bytes }) => ({
       kind: "bytes",
       path,
@@ -98,13 +95,14 @@ export function wireFilesAndSettings(): void {
     const selection = sourceSelection()
     if (!appState.archive || !selection || !isEditing()) return
     const paths = sourcePaths(selection)
-    if (!paths.length || !window.confirm(`确定要删除${selection.folder ? "文件夹" : "文件"} ${selection.path} 吗？此操作可撤销。`)) return
+    if (!paths.length) return
     commitBatch(paths.map((path) => ({
       kind: "bytes",
       path,
       before: appState.archive!.getBytes(path)?.slice(),
     })))
     refreshAfterSourceMutation()
+    showStatus(`已删除${selection.folder ? "文件夹" : "文件"} ${selection.path}，可撤销。`)
   })
   for (const menu of toolbarMenus) {
     menu.addEventListener("click", (event) => {

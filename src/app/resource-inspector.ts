@@ -693,7 +693,6 @@ export async function uploadKeySound(file: File): Promise<boolean> {
     ?? (appState.archive.format === "ssf" ? "default" : `${theme.value}/skin/res`)
   const targetPath = `${base}/${filename}`
   const beforeResource = appState.archive.getBytes(targetPath)?.slice()
-  if (beforeResource && targetPath !== selected?.path && !window.confirm(`音效 ${filename} 已存在，是否替换？`)) return false
   const resourceBytes = new Uint8Array(await file.arrayBuffer())
   if (appState.archive !== targetArchive || !isEditing()) return false
   keySoundBuffers.delete(targetPath)

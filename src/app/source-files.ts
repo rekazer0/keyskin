@@ -123,8 +123,6 @@ export function commitSourceUploads(uploads: SourceUpload[], folder: string): bo
     const path = folder ? `${folder}/${filename}` : filename
     return { path, bytes }
   })
-  const conflicts = changes.filter(({ path }) => appState.archive?.getBytes(path)).map(({ path }) => path)
-  if (conflicts.length && !window.confirm(`以下文件已存在，是否替换？\n\n${conflicts.join("\n")}`)) return false
   commitBatch(changes.map(({ path, bytes }) => ({
     kind: "bytes",
     path,

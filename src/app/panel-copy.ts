@@ -197,8 +197,6 @@ export async function copyPanel(): Promise<boolean> {
   if (!appState.archive) return false
   const currentArchive = appState.archive
   const copies = archiveCopyPaths(panelCopyNames(), panelCopySource.value, panelCopyTarget.value)
-  const existingTargets = copies.filter(({ target }) => currentArchive.getBytes(target))
-  if (existingTargets.length && !window.confirm(`目标中已有 ${existingTargets.length} 个文件，是否覆盖？`)) return false
 
   let xRatio = 1
   let yRatio = 1

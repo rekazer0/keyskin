@@ -105,10 +105,11 @@ test('undoing image and sound creation removes new files; redo restores their by
   assert.deepEqual(archive.getBytes(emptyPath), new Uint8Array(), 'an existing empty file must remain present')
 })
 
-test('sound upload reports cancellation and does not commit after the editing context changes', async () => {
+test('sound upload does not commit after the editing context changes', async () => {
   const source = combinedSource()
   const fn = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'uploadKeySound')
-  for (const scenario of ['cancel', 'switch archive', 'leave edit mode', 'success']) {
+  // 替换同名音效进撤销栈，不再弹确认框（DESIGN.md §7）；上传途中换了皮肤或离开编辑模式则不写入。
+  for (const scenario of ['switch archive', 'leave edit mode', 'success']) {
     let editing = true
     let commits = 0
     const context = withAppState(vm.createContext({ acceptAiDraftPreview: () => {}, recordChange: (stack, change) => stack.push(change), numberInputGesture: () => undefined,
@@ -116,7 +117,7 @@ test('sound upload reports cancellation and does not commit after the editing co
       isSoundPath: () => true, isEditing: () => editing,
       currentSoundEntries: () => [], selectedSoundID: '', soundResourcePaths: () => [],
       theme: { value: 'light' }, orientation: { value: 'port' },
-      window: { confirm: () => scenario !== 'cancel' }, Uint8Array,
+      Uint8Array,
       keySoundBuffers: new Map(), releaseKeySound: () => {}, commitBytes: () => { commits++ },
       renderResourceInspector: () => {}, updateDirty: () => {}, showStatus: () => {},
     }))

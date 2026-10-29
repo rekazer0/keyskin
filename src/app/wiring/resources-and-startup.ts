@@ -210,7 +210,6 @@ export function wireResourcesAndStartup(): void {
           changes.push({ kind: "bytes", path, before: targetArchive.getBytes(path)?.slice(), after: bytes })
         }
         if (appState.archive !== targetArchive || !isEditing()) return false
-        if (changes.some(change => change.kind === "bytes" && change.before) && !window.confirm("目录包含已有资源，是否替换？")) return false
         commitBatch(changes)
         renderResourceInspector()
         const image = changes.find(change => /\.png$/i.test(change.path))
@@ -242,9 +241,6 @@ export function wireResourcesAndStartup(): void {
       const base = paths[0]?.split("/").slice(0, -1).join("/") ?? `${theme.value}/skin/${orientation.value}/res`
       const targetPath = `${base}/${file.name}`
       const before = appState.archive.getBytes(targetPath)
-      if (before) {
-        if (!window.confirm(`图片 ${file.name} 已存在，是否替换？`)) return false
-      }
       commitBatch([{ kind: "bytes", path: targetPath, before: before?.slice(), after: bytes }])
       renderResourceInspector()
       updateDirty()
@@ -272,7 +268,6 @@ export function wireResourcesAndStartup(): void {
   resourceDeleteButton.addEventListener("click", () => {
     if (!appState.archive || !appState.selectedResourceGalleryPath || !isEditing()) return
     const name = appState.selectedResourceGalleryPath.split("/").pop() ?? appState.selectedResourceGalleryPath
-    if (!window.confirm(`确定要删除图片 ${name} 吗？此操作可撤销。`)) return
     const before = appState.archive.getBytes(appState.selectedResourceGalleryPath)
     if (!before) return
     commitBatch([{ kind: "bytes", path: appState.selectedResourceGalleryPath, before }])
@@ -287,6 +282,7 @@ export function wireResourcesAndStartup(): void {
     updateResourceActionButtons()
     renderResourceInspector()
     updateDirty()
+    showStatus(`已删除图片 ${name}，可撤销。`)
   })
   device.addEventListener("change", () => {
     const background = canvasBackgroundFromDevice(device.value)
