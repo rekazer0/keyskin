@@ -297,6 +297,45 @@ export class SsfLook {
     return result
   }
 
+  /**
+   * The pinyin bar Sogou shows above the candidate bar (`VPA_Bar`), at the panel's width. Baidu iOS
+   * types into a row of its own above the candidates and paints it with `[SCAND] BACK_STYLE`, whose
+   * full-width image sets the row's height.
+   */
+  inputBar(): LookImage | undefined {
+    const name = firstValue(this.skin.get("VPA_Bar", "BG_IMAGE"))
+    const ref = parseSsfImage(name && this.skin.sections().includes(name) ? this.skin.get(name, "NORMAL") : name)
+    const bytes = ref && this.file(ref.file)
+    const size = bytes && pngSize(bytes)
+    if (!ref || !bytes || !size) return
+    const width = Math.round(this.sogouWidth * (this.scale ?? 1))
+    return this.resized({ id: `${ref.file}|`, bytes }, width, Math.max(1, Math.round(size[1] * width / size[0])))
+  }
+
+  /** The size of one of the skin's images in Sogou pixels. */
+  imageSize(file: string): [number, number] | undefined {
+    const bytes = this.file(file)
+    return bytes && pngSize(bytes)
+  }
+
+  /** One of the skin's images at `width`×`height` target units. */
+  sized(file: string, width: number, height: number): LookImage | undefined {
+    const bytes = this.file(file)
+    return bytes && this.resized({ id: `${file}|`, bytes }, Math.max(1, Math.round(width)), Math.max(1, Math.round(height)))
+  }
+
+  /** `cand` with `input` stacked above it: iOS stretches the candidate background over both rows. */
+  stackedCandidate(input: LookImage, cand: LookImage): LookImage | undefined {
+    return this.derive("stacked-cand", [input.bytes, cand.bytes], () => {
+      const bar = this.decode(cand.id, cand.bytes)
+      const top = this.decode(input.id, input.bytes)
+      if (!bar || !top) return
+      const height = Math.max(1, Math.round(top.height * bar.width / top.width))
+      const total = height + bar.height
+      return compositeImage(placeImage(resizeImage(top, bar.width, height), bar.width, total, 0, 0), placeImage(bar, bar.width, total, 0, height))
+    })
+  }
+
   /** The skin's replacement for one of Sogou's built-in toolbar icons, if it ships that file. */
   toolbarIcon(name: string): LookPair | undefined {
     // Legacy skins draw the S logo with the multimedia slot (the APK's IME_Function_Multimedia).

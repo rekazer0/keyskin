@@ -31,7 +31,7 @@ export class SsfStyles {
   readonly pkg: SsfPackage
   readonly theme: SsfTheme
   readonly skin: IniDocument
-  private readonly keys: IniDocument
+  readonly keys: IniDocument
   private readonly archive: SkinArchive
   private readonly fonts: Promise<void>[] = []
 

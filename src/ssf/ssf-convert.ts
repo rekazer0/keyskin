@@ -55,7 +55,7 @@ export async function convertSsfDocument(archive: SkinArchive, format: "bdi" | "
     return { bytes: converted.toBytes(), warnings }
   }
   // Keep the SSF canvas geometry and artwork; the toolbar moves into Baidu's native F14 container and logo icons.
-  const { archive: converted, warnings } = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution))
+  const { archive: converted, warnings } = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution), format)
   syncKeyStateTips(converted)
   adaptSsfNativeToolbar(converted, pkg, format, warnings)
   // Platform packaging also re-encodes the Sogou WAV key sounds into what the target IME plays.

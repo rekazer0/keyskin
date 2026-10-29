@@ -7,6 +7,7 @@
 import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
+import { SsfBaiduMotion } from "./ssf-anim-to-baidu.ts"
 import { cached, fingerprint } from "./ssf-cache.ts"
 import { SsfLook, type LookColors, type LookImage, type LookPair, type LookText } from "./ssf-look.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
@@ -34,6 +35,7 @@ class ThemeResources {
   private nextStyle: number
   private nextImage = 1
   private readonly images = new Map<string, string>()
+  private readonly animations = new Map<number, string>()
 
   constructor(theme: SsfTheme, output: Map<string, Uint8Array>, css: string, scale = 1) {
     this.theme = theme
@@ -80,6 +82,16 @@ class ThemeResources {
     return this.addStyle([{ key: "NM_COLOR", value: normal }, { key: "HL_COLOR", value: pressed }])
   }
 
+  /** A style that plays anim.ini's `animation` on press, for a key's BACK_ANIM_STYLE / FORE_ANIM_STYLE. */
+  animationStyle(animation: number): string {
+    let style = this.animations.get(animation)
+    if (!style) {
+      style = this.addStyle([{ key: "PRESS_ANIM", value: String(animation) }])
+      this.animations.set(animation, style)
+    }
+    return style
+  }
+
   soundStyle(filename: string): string {
     return this.addStyle([{ key: "PRESS_SOUND_PATH", value: filename }])
   }
@@ -107,21 +119,29 @@ class ThemeConverter {
   private readonly theme: SsfTheme
   private readonly output: Map<string, Uint8Array>
   private readonly resources: ThemeResources
+  private readonly motion?: SsfBaiduMotion
+  private readonly warnings: string[]
   private readonly panelWidth?: number
   private readonly soundStyles = new Map<string, string>()
   private readonly glyphs = new Map<string, RgbaImage>()
-  private keyboardStyles?: { panel?: string; cand?: string }
+  private keyboardStyles?: { panel?: string; cand?: string; input?: string }
+  /** BDI: iOS types into a row inside the keyboard, which takes Sogou's pinyin bar. */
+  private readonly inlineInput: boolean
   /** Style of the Sogou keyboard background for the orientation being written, if the skin has one. */
   private panelStyle?: string
 
-  constructor(pkg: SsfPackage, base: SkinArchive, theme: SsfTheme, output: Map<string, Uint8Array>, warnings: string[], panelWidth?: number) {
+  constructor(pkg: SsfPackage, base: SkinArchive, theme: SsfTheme, output: Map<string, Uint8Array>, warnings: string[], panelWidth?: number, inlineInput = false) {
     this.panelWidth = panelWidth
+    this.inlineInput = inlineInput
     const panel = base.isText("light/skin/port/gen.ini") ? IniDocument.parse(base.getText("light/skin/port/gen.ini")).get("PANEL", "SIZE") : undefined
-    this.look = new SsfLook(pkg, theme, warnings, panelWidth || numbers(panel)[0] || 480)
+    const width = panelWidth || numbers(panel)[0] || 480
+    this.look = new SsfLook(pkg, theme, warnings, width)
     this.base = base
     this.theme = theme
     this.output = output
+    this.warnings = warnings
     this.resources = new ThemeResources(theme, output, base.getText("light/skin/res/default.css"), ssfSkeletonScale(base, panelWidth).text)
+    this.motion = SsfBaiduMotion.of(pkg, theme, this.look, width / (Number(pkg.resolution) || 1080), (image) => this.resources.imageStyle({ normal: image, pressed: image }))
   }
 
   /**
@@ -185,7 +205,11 @@ class ThemeConverter {
     return style
   }
 
-  private convertKeys(layout: IniDocument, layoutName: string, landscape: boolean): void {
+  /** `panel` is gen.ini's keyboard size, for boards that do not set their own. */
+  private convertKeys(layout: IniDocument, layoutName: string, landscape: boolean, panel: number[]): void {
+    const own = numbers(layout.get("PANEL", "SIZE"))
+    const [boardWidth, boardHeight] = own.length === 2 ? own : panel
+    const board = { width: boardWidth, height: boardHeight }
     for (const section of layout.sections().filter((name) => /^KEY\d+$/.test(name))) {
       const action = layout.get(section, "CENTER")?.trim()
       if (!action) continue
@@ -204,6 +228,9 @@ class ThemeConverter {
       }
       const sound = this.soundStyle(this.look.sound(look.binding))
       if (sound) layout.set(section, "SOUND_STYLE", sound)
+      const press = this.motion && width > 0 && height > 0 && boardWidth > 0 && boardHeight > 0 ? this.motion.press(look.binding, { width, height }, board) : {}
+      if (press.back) layout.set(section, "BACK_ANIM_STYLE", this.resources.animationStyle(press.back))
+      if (press.fore) layout.set(section, "FORE_ANIM_STYLE", this.resources.animationStyle(press.fore))
     }
   }
 
@@ -222,27 +249,33 @@ class ThemeConverter {
     }
   }
 
-  private keyboard(): { panel?: string; cand?: string } {
+  private keyboard(): { panel?: string; cand?: string; input?: string } {
     if (!this.keyboardStyles) {
       const { panel, cand, panelColor } = this.look.keyboard()
+      const input = this.inlineInput ? this.look.inputBar() : undefined
+      const bar = input && cand ? this.look.stackedCandidate(input, cand) ?? cand : cand
       this.keyboardStyles = {
         panel: panel ? this.resources.imageStyle({ normal: panel, pressed: panel }) : panelColor ? this.resources.colorStyle(panelColor) : undefined,
-        cand: cand ? this.resources.imageStyle({ normal: cand, pressed: cand }) : undefined,
+        cand: bar ? this.resources.imageStyle({ normal: bar, pressed: bar }) : undefined,
+        input: input ? this.resources.imageStyle({ normal: input, pressed: input }) : undefined,
       }
     }
     return this.keyboardStyles
   }
 
   private convertGeneral(gen: IniDocument, orientation: string): void {
-    const { panel, cand } = this.keyboard()
+    const { panel, cand, input } = this.keyboard()
     this.panelStyle = panel
     if (panel) gen.set("PANEL", "BACK_STYLE", panel)
+    if (input && gen.sections().includes("SCAND")) gen.set("SCAND", "BACK_STYLE", input)
+    else if (input) gen.appendSection("SCAND", [{ key: "BACK_STYLE", value: input }])
     const defaultSound = this.soundStyle(this.look.sound(undefined))
     if (defaultSound) gen.set("PANEL", "SOUND_STYLE", defaultSound)
 
     const composing = this.look.color("ComposingView", "BG_COLOR")
     if (composing && gen.get("INPUT", "BACK_STYLE")) gen.set("INPUT", "BACK_STYLE", this.resources.colorStyle(composing))
-    const composingText = this.look.color("TextStyle_Composing")
+    // Sogou colours the code it shows in the pinyin bar with the bar's own colour.
+    const composingText = (this.inlineInput ? this.look.color("VPA_Bar", "COMPOSING_TEXT_COLOR") : undefined) ?? this.look.color("TextStyle_Composing")
     const inputFore = gen.get("INPUT", "FORE_STYLE")?.trim()
     const inputFields = {
       ...composingText ? { NM_COLOR: composingText, HL_COLOR: composingText } : {},
@@ -295,13 +328,16 @@ class ThemeConverter {
         const match = path.match(new RegExp(`^${this.theme}/skin/${orientation}/([^/]+)\\.ini$`))
         if (!match || match[1] === "gen") continue
         const layout = IniDocument.parse(new TextDecoder().decode(this.output.get(path)!))
-        this.convertKeys(layout, match[1], orientation === "land")
+        this.convertKeys(layout, match[1], orientation === "land", numbers(gen.get("PANEL", "SIZE")))
         this.convertLists(layout)
         // Sogou paints one background behind every board, while the Baidu skeleton gives each board its own.
         if (this.panelStyle && layout.sections().includes("PANEL")) layout.set("PANEL", "BACK_STYLE", this.panelStyle)
         this.output.set(path, strToU8(layout.toString()))
       }
     }
+    const animations = this.motion?.ini()
+    if (animations) this.output.set(`${this.theme}/skin/res/anim.ini`, strToU8(animations))
+    if (this.motion?.throwsDecorations) this.warnings.push("按键动画中飞出的装饰图已转为百度粒子动效，随机位置与抛物轨迹为近似效果")
     this.output.set(`${this.theme}/skin/res/default.css`, this.resources.css())
   }
 }
@@ -319,11 +355,7 @@ function infoText(base: SkinArchive, pkg: SsfPackage): Uint8Array {
 
 /** Warnings for Sogou features no Baidu format has; shared with the BDA writer. */
 export function ssfUnsupportedWarnings(pkg: SsfPackage): string[] {
-  const names = [...pkg.files.keys()]
-  return [
-    ...(names.some((name) => /(^|\/)anim\.ini$/i.test(name)) ? ["按键动画（anim.ini）在百度皮肤中没有对应，已忽略"] : []),
-    ...(names.some((name) => /\.webp$/i.test(name)) ? ["开屏动画和动态背景（webp）在百度皮肤中没有对应，已忽略"] : []),
-  ]
+  return [...pkg.files.keys()].some((name) => /\.webp$/i.test(name)) ? ["开屏动画和动态背景（webp）在百度皮肤中没有对应，已忽略"] : []
 }
 
 export function ssfPreview(pkg: SsfPackage): Uint8Array | undefined {
@@ -335,12 +367,12 @@ export function ssfPreview(pkg: SsfPackage): Uint8Array | undefined {
  * A Sogou skin laid out on `base` (the Sogou BDS skeleton), as canonical package paths
  * (`light/skin/…`, `Info.txt`) before packaging; the editor previews an SSF document from these.
  */
-export function ssfToBaiduFiles(pkg: SsfPackage, base: SkinArchive, panelWidth?: number): { files: Map<string, Uint8Array>; warnings: string[] } {
+export function ssfToBaiduFiles(pkg: SsfPackage, base: SkinArchive, panelWidth?: number, format: "bdi" | "bds" = "bds"): { files: Map<string, Uint8Array>; warnings: string[] } {
   if (base.format === "bda") throw new Error("搜狗皮肤只能套用 BDS/BDI 模板")
   if (!base.isText("light/skin/res/default.css")) throw new Error("模板缺少 res/default.css")
   const warnings = [...pkg.warnings]
   const files = new Map<string, Uint8Array>()
-  for (const theme of pkg.themes.keys()) new ThemeConverter(pkg, base, theme, files, warnings, panelWidth).convert()
+  for (const theme of pkg.themes.keys()) new ThemeConverter(pkg, base, theme, files, warnings, panelWidth, format === "bdi").convert()
   files.set("Info.txt", infoText(base, pkg))
   const preview = ssfPreview(pkg)
   if (preview) files.set("demo.png", preview)
@@ -348,9 +380,9 @@ export function ssfToBaiduFiles(pkg: SsfPackage, base: SkinArchive, panelWidth?:
   return { files, warnings: [...new Set(warnings)] }
 }
 
-/** Converts a Sogou skin to a Baidu BDS archive laid out on `base` (the Sogou BDS skeleton). */
-export function convertSsfToBaidu(pkg: SsfPackage, base: SkinArchive, panelWidth?: number): SsfConversion {
-  const { files, warnings } = ssfToBaiduFiles(pkg, base, panelWidth)
+/** Converts a Sogou skin to a Baidu BDS archive laid out on `base` (the Sogou BDS skeleton); `bdi` lays it out for iOS. */
+export function convertSsfToBaidu(pkg: SsfPackage, base: SkinArchive, panelWidth?: number, format: "bdi" | "bds" = "bds"): SsfConversion {
+  const { files, warnings } = ssfToBaiduFiles(pkg, base, panelWidth, format)
   const dual = pkg.themes.size > 1
   const raw = Object.fromEntries([...files].map(([path, bytes]) => {
     if (path === "Info.txt" || path === "demo.png") return [path, bytes]

@@ -20,7 +20,7 @@ import { androidInterpolation, motionAt, seededShare, trackEnd, type KeyMotion, 
 import type { NativeScene, SceneKey, SceneLayer } from "../native-scene.ts"
 import { parseRect, type Rect } from "../preview-items.ts"
 import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
-import { firstValue } from "./ssf-parts.ts"
+import { firstValue, ssfAnimStyle } from "./ssf-parts.ts"
 import { NINE_KEY_DIGITS, box, centre, fitText, type SsfStyles } from "./ssf-scene.ts"
 
 type Size = { width: number; height: number }
@@ -192,8 +192,7 @@ class SsfMotion {
 
   /** The press animations of a board's `keys`. */
   effects(keys: Array<{ section: string; rect: Rect; binding: SsfKeyBinding }>): SceneEffects | undefined {
-    const fallback = this.anim.sections().includes("Anim_Style_Key") ? "Anim_Style_Key" : undefined
-    const styleOf = (binding: SsfKeyBinding) => binding.sections.map((section) => firstValue(this.styles.skin.get(section, "ANIM_STYLE"))).find(Boolean) ?? fallback
+    const styleOf = (binding: SsfKeyBinding) => ssfAnimStyle(this.anim, this.styles.skin, this.styles.keys, binding)
     const bySection = new Map(keys.map((key) => [key.section, key]))
     const press = (section: string, seed: number) => {
       const key = bySection.get(section)

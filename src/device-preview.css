@@ -465,6 +465,11 @@
   height: 100%;
 }
 
+/* The iPhone stretches the candidate background over the input row too; SCAND paints over it. */
+.device-shell[data-input-bar="keyboard"]:not(.canvas-only) #candidate-background {
+  grid-row: 2 / 4;
+}
+
 .keyboard-accessories {
   display: flex;
   align-items: center;

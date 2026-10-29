@@ -5,6 +5,7 @@ import { strToU8, unzipSync, zipSync } from 'fflate'
 import { IniDocument } from '../src/ini.ts'
 import { SkinArchive } from '../src/skin.ts'
 import { offsetFromSection } from '../src/preview-items.ts'
+import { parseLegacyAnimation } from '../src/preview-animation.ts'
 import { convertBaiduToSsf } from '../src/ssf/baidu-to-ssf.ts'
 import { convertSsfToBaidu } from '../src/ssf/ssf-to-baidu.ts'
 import { convertSsfToBda } from '../src/ssf/ssf-to-bda.ts'
@@ -145,4 +146,110 @@ test('SSF RootView BG_STYLE=2 uses BG_COLOR ahead of an inactive BG_IMAGE', asyn
     assert.equal(ref.type, 'color')
     assert.equal(appearance.colorStyles.get(ref.key).normalColor, 0xFF123456)
   }
+})
+
+const SOGOU_ANIM = `[Anim_Style_Key_Qwertys]
+BG_ANIM=Animation_fun
+DECO_ANIM=Animation_1
+DECO_ANIM_NUMBER=-1
+[Animation_fun]
+DOWN_ANIM_OBJ=Anim_Obj_fun
+[Anim_Obj_fun]
+ANIM=Anim_fun_scale
+[Anim_fun_scale]
+TYPE=2
+DURATION=260
+KEYFRAME=Keyframe_fun,Keyframe_fun
+[Keyframe_fun]
+TIME=0,0.5,1
+VALUE=1,0.9,1
+[Animation_1]
+DOWN_ANIM_OBJ=Anim_Obj_1
+[Anim_Obj_1]
+IMG=01.png
+POS_ANCHOR=0
+NEW_POS_X=0,0
+NEW_POS_Y=-0.15,-0.15
+RATE_KEY_W=0.5
+RATE_KEY_H=0.5
+RELATETO=1,1
+ANIM=Anim_1
+[Anim_1]
+ANIM_SET=Anim_throw,Anim_fade
+PLAY_METHOD=0
+[Anim_throw]
+TYPE=1
+DURATION=600
+START_VALUE=0,0
+VELOCITY=0,-500
+ACCELERATION=0,1500
+[Anim_fade]
+TYPE=4
+DURATION=600
+KEYFRAME=Keyframe_fade
+[Keyframe_fade]
+TIME=0,1
+VALUE=255,150
+`
+
+test('SSF key animations become Baidu press animations: key layer bounce and thrown decorations', async () => {
+  const files = unzipSync(ssfFixture())
+  files['1080/status1/anim.ini'] = strToU8(SOGOU_ANIM)
+  files['1080/status1/01.png'] = encodePng(solid(40, 40, [9, 8, 7]))
+  const { archive, warnings } = convertSsfToBaidu(await SsfPackage.open(zipSync(files)), template)
+  assert.ok(!warnings.some((warning) => /anim\.ini/.test(warning)))
+  const layout = IniDocument.parse(archive.getText('light/skin/port/py_26.ini'))
+  const css = IniDocument.parse(archive.getText('light/skin/res/default.css'))
+  const anim = IniDocument.parse(archive.getText('light/skin/res/anim.ini'))
+  const q = keySection(layout, 'q')
+  const press = css.get(`STYLE${layout.get(q, 'BACK_ANIM_STYLE')}`, 'PRESS_ANIM')
+  const parts = anim.get(`ANIM${press}`, 'BUILD_LIST').split(',').map((id) => `ANIM${id.trim()}`)
+  // 1 → 0.9 → 1 plays as two scale segments in turn.
+  const bounce = parts.find((part) => anim.get(part, 'BUILD_METHOD') === '1')
+  const segments = anim.get(bounce, 'BUILD_LIST').split(',').map((id) => `ANIM${id.trim()}`)
+  assert.deepEqual(segments.map((part) => [anim.get(part, 'TYPE'), anim.get(part, 'FROM'), anim.get(part, 'TO'), anim.get(part, 'DURATION')]),
+    [['4', '100,100', '90,90', '130'], ['4', '90,90', '100,100', '130']])
+  // The decoration flies up from above the key centre and fades from 255 to 150 in 0.6 s.
+  const particle = parts.find((part) => anim.get(part, 'CATEGORY') === '3')
+  assert.equal(anim.get(particle, 'EMIT_REGION'), '0.5,0.35,0,0')
+  assert.equal(anim.get(particle, 'VELOCITY_DIRECTION'), '-90,-90')
+  assert.equal(anim.get(particle, 'ACCELERATION_DIRECTION'), '90,90')
+  assert.equal(anim.get(particle, 'ALPHA_SPEED'), '-175,-175')
+  assert.equal(anim.get(particle, 'LIFE'), '600,600')
+  assert.ok(css.get(`STYLE${anim.get(particle, 'PARTICLE_IMAGE')}`, 'NM_IMG'))
+  // The 9-key board has no ANIM_STYLE of its own and plays nothing (the fixture has no Anim_Style_Key).
+  const nine = IniDocument.parse(archive.getText('light/skin/port/py_9.ini'))
+  assert.ok(keySection(nine, 'b'))
+  assert.equal(nine.get(keySection(nine, 'b'), 'BACK_ANIM_STYLE'), undefined)
+  // The editor previews what it wrote.
+  const preview = parseLegacyAnimation(css, anim).get(layout.get(q, 'BACK_ANIM_STYLE'))
+  assert.equal(preview.particles.length, 1)
+})
+
+test('SSF → BDI puts the Sogou pinyin bar in the iOS input row above the candidate bar', async () => {
+  const files = unzipSync(ssfFixture())
+  const skin = parse(files, '1080/status1/phoneSkin.ini')
+  skin.appendSection('VPA_Bar', [{ key: 'BG_IMAGE', value: 'vpabg.png' }, { key: 'COMPOSING_TEXT_COLOR', value: '0xFF123456' }])
+  files['1080/status1/phoneSkin.ini'] = strToU8(skin.toString())
+  files['1080/status1/vpabg.png'] = encodePng(solid(1080, 84, [200, 10, 10]))
+  const pkg = await SsfPackage.open(zipSync(files))
+  const bds = convertSsfToBaidu(pkg, template).archive
+  assert.ok(!IniDocument.parse(bds.getText('light/skin/port/gen.ini')).sections().includes('SCAND'))
+
+  const { archive } = convertSsfToBaidu(pkg, template, undefined, 'bdi')
+  const gen = IniDocument.parse(archive.getText('light/skin/port/gen.ini'))
+  // Full panel width (480 here), so iOS takes the row height from it: 84 Sogou pixels × 480/1080.
+  const row = styleImage(archive, gen.get('SCAND', 'BACK_STYLE'))
+  assert.deepEqual([row.width, row.height], [480, 37])
+  assert.deepEqual(pixel(row, 10, 10), [200, 10, 10, 255])
+  const candidates = IniDocument.parse(archive.getText(`light/skin/port/${gen.get('CAND', 'LAYOUT_NAME')}.cnd`))
+  const bar = styleImage(archive, candidates.get('CAND', 'BACK_STYLE'))
+  const bdsBar = styleImage(bds, IniDocument.parse(bds.getText(`light/skin/port/${gen.get('CAND', 'LAYOUT_NAME')}.cnd`)).get('CAND', 'BACK_STYLE'))
+  // iOS stretches the candidate background over both rows: the pinyin bar sits on top of the Sogou bar.
+  assert.equal(bar.width, bdsBar.width)
+  assert.equal(bar.height, bdsBar.height + Math.round(37 * bar.width / 480))
+  assert.deepEqual(pixel(bar, 10, 2), [200, 10, 10, 255])
+  assert.deepEqual(pixel(bar, 10, bar.height - 2), pixel(bdsBar, 10, bdsBar.height - 2))
+  const css = IniDocument.parse(archive.getText('light/skin/res/default.css'))
+  assert.equal(css.get(`STYLE${gen.get('INPUT', 'FORE_STYLE')}`, 'NM_COLOR'), 'FF123456')
 })

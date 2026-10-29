@@ -256,7 +256,7 @@ test('ssf → BDS: per-key and shared backgrounds keep their stretch band, per t
   assert.match(info, /^Author=测试作者$/m)
   assert.match(info, /^SupportDarkMode=1$/m)
   assert.ok(archive.getBytes('demo.png'))
-  assert.ok(warnings.some((warning) => /anim\.ini/.test(warning)))
+  assert.ok(!warnings.some((warning) => /anim\.ini/.test(warning)))
   assert.ok(warnings.some((warning) => /webp/.test(warning)))
 })
 
