@@ -499,11 +499,8 @@ async fn create_source_workspace(
     }
     fs::create_dir(&workspace).map_err(|error| error.to_string())?;
     let result = (|| {
-        fs::write(
-            workspace.join(SOURCE_MARKER),
-            b"KeySkin source workspace\n",
-        )
-        .map_err(|error| error.to_string())?;
+        fs::write(workspace.join(SOURCE_MARKER), b"KeySkin source workspace\n")
+            .map_err(|error| error.to_string())?;
         write_source_files(&workspace, &files)?;
         if uses_builtin_directory {
             prune_source_workspaces(&root)?;
@@ -1547,8 +1544,7 @@ mod tests {
     fn source_workspace_sync_rejects_symlinked_parent_paths() {
         use std::os::unix::fs::symlink;
 
-        let root =
-            std::env::temp_dir().join(format!("keyskin-source-link-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("keyskin-source-link-{}", std::process::id()));
         let outside =
             std::env::temp_dir().join(format!("keyskin-source-outside-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
