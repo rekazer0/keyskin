@@ -77,6 +77,31 @@ export function bindSlicePickerZoom(stage: HTMLElement, canvas: HTMLCanvasElemen
     event.preventDefault()
     zoomAt(wheelZoomFactor(event), event.clientX, event.clientY)
   }, { passive: false })
+  // 触屏：单指拖动平移，双指捏合缩放（同时跟随两指中点平移）
+  const touches = new Map<number, { x: number; y: number }>()
+  const pinch = () => {
+    const [a, b] = [...touches.values()]
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(a.x - b.x, a.y - b.y) }
+  }
+  stage.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch") touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+  })
+  stage.addEventListener("pointermove", (event) => {
+    const last = touches.get(event.pointerId)
+    if (!last) return
+    const before = touches.size === 2 ? pinch() : undefined
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (before) {
+      const after = pinch()
+      stage.scrollLeft -= after.x - before.x
+      stage.scrollTop -= after.y - before.y
+      if (before.distance) zoomAt(after.distance / before.distance, after.x, after.y)
+    } else if (touches.size === 1) {
+      stage.scrollLeft -= event.clientX - last.x
+      stage.scrollTop -= event.clientY - last.y
+    }
+  })
+  for (const type of ["pointerup", "pointercancel"]) stage.addEventListener(type, (event) => touches.delete((event as PointerEvent).pointerId))
   let gestureScale = 1
   type GestureEvent = UIEvent & { scale: number; clientX: number; clientY: number }
   stage.addEventListener("gesturestart", (event) => {
@@ -85,6 +110,7 @@ export function bindSlicePickerZoom(stage: HTMLElement, canvas: HTMLCanvasElemen
   })
   stage.addEventListener("gesturechange", (event) => {
     event.preventDefault()
+    if (touches.size > 1) return
     const gesture = event as GestureEvent
     zoomAt(gesture.scale / gestureScale, gesture.clientX, gesture.clientY)
     gestureScale = gesture.scale

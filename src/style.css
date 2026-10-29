@@ -2139,6 +2139,10 @@ body:has(.canvas-wrap.empty) .workspace {
     max-width: none;
     height: 100dvh;
     max-height: none;
+    box-sizing: border-box;
+    /* 全屏时避开系统状态栏和底部手势条 */
+    padding-top: var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
     border: 0;
     border-radius: 0;
   }

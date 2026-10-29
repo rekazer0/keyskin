@@ -72,7 +72,8 @@
   overflow: auto;
 }
 /* 放大后可滚动：auto margin 居中，溢出时不裁掉左上角 */
-.picker-canvas-stage { height: calc(100dvh - var(--_toolbar-h)); display: flex; padding: 16px; overflow: auto; }
+/* 触屏平移和捏合由脚本处理，避免浏览器按方向锁定滚动导致斜划时横向不动 */
+.picker-canvas-stage { height: calc(100dvh - var(--_toolbar-h)); display: flex; padding: 16px; overflow: auto; touch-action: none; }
 #picker-canvas {
   flex: none;
   margin: auto;
