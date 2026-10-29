@@ -169,8 +169,11 @@
               <option value="galaxy-s25-ultra">Galaxy S25 Ultra · 1440×3120</option>
               <option value="canvas-glass">画布 · 玻璃</option>
               <option value="canvas-checkerboard" selected>画布 · 棋盘格</option>
-              <option value="canvas-white">画布 · 浅色</option>
-              <option value="canvas-gray">画布 · 灰色</option>
+              <option value="canvas-checkerboard-soft">画布 · 棋盘格（柔和）</option>
+              <option value="canvas-checkerboard-panel">画布 · 棋盘格（仅面板）</option>
+              <option value="canvas-light-gray">画布 · 浅灰</option>
+              <option value="canvas-white">画布 · 白色</option>
+              <option value="canvas-gray">画布 · 中灰</option>
               <option value="canvas-dark">画布 · 深色</option>
             </select>
           </label>
@@ -890,7 +893,7 @@
             <section class="settings-group" aria-labelledby="settings-preview-title">
               <h3 id="settings-preview-title">预览</h3>
               <label class="settings-row"><span>默认设备<small>打开皮肤时使用</small></span><span class="ui-input ui-select"><select id="default-device"><option value="canvas">画布</option><option value="iphone-17-pro">iPhone 17 Pro</option><option value="iphone-17-pro-max">iPhone 17 Pro Max</option><option value="xiaomi-17">Xiaomi 17</option><option value="pixel-10-pro">Pixel 10 Pro</option><option value="galaxy-s25-ultra">Galaxy S25 Ultra</option></select></span></label>
-              <label class="settings-row"><span>画布背景</span><span class="ui-input ui-select"><select id="canvas-background"><option value="glass">玻璃</option><option value="checkerboard" selected>棋盘格</option><option value="white">浅色</option><option value="gray">灰色</option><option value="dark">深色</option></select></span></label>
+              <label class="settings-row"><span>画布背景</span><span class="ui-input ui-select"><select id="canvas-background"><option value="glass">玻璃</option><option value="checkerboard" selected>棋盘格</option><option value="checkerboard-soft">棋盘格（柔和）</option><option value="checkerboard-panel">棋盘格（仅面板）</option><option value="light-gray">浅灰</option><option value="white">白色</option><option value="gray">中灰</option><option value="dark">深色</option></select></span></label>
               <label class="settings-row"><span>深色画布降低对比</span><input id="dark-canvas-soften" type="checkbox" role="switch" checked></label>
               <label class="settings-row"><span><span>气泡预览<span class="ui-badge" data-variant="accent">实验</span></span><small>按住按键时显示按键气泡</small></span><input id="hint-preview-enabled" type="checkbox" role="switch" checked></label>
             </section>

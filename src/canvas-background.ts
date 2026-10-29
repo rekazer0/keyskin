@@ -1,4 +1,4 @@
-export const canvasBackgroundValues = ["glass", "checkerboard", "white", "gray", "dark"] as const
+export const canvasBackgroundValues = ["glass", "checkerboard", "checkerboard-soft", "checkerboard-panel", "light-gray", "white", "gray", "dark"] as const
 
 export type CanvasBackground = typeof canvasBackgroundValues[number]
 

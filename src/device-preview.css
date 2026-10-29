@@ -25,6 +25,34 @@
   --_canvas-tertiary: #74747b;
 }
 
+/* 仅面板：外围纯色，透明格只铺在键盘面板范围内，像 Figma 的画板 */
+.canvas-wrap[data-background="checkerboard-panel"] {
+  background: #f4f5f8;
+  --_canvas-text: #202124;
+  --_canvas-secondary: #5f6368;
+  --_canvas-tertiary: #74747b;
+}
+
+.canvas-wrap[data-background="checkerboard-soft"] {
+  background: var(--checker-soft-image), var(--checker-soft-light);
+  background-size: var(--checker-soft-size) var(--checker-soft-size);
+  --_canvas-text: #202124;
+  --_canvas-secondary: #5f6368;
+  --_canvas-tertiary: #74747b;
+}
+
+.canvas-wrap[data-background="checkerboard-panel"] .device-shell.canvas-only {
+  background: var(--checker-soft-image), var(--checker-soft-light);
+  background-size: var(--checker-soft-size) var(--checker-soft-size);
+}
+
+.canvas-wrap[data-background="light-gray"] {
+  background: #e6e7ea;
+  --_canvas-text: #202124;
+  --_canvas-secondary: #5f6368;
+  --_canvas-tertiary: #74747b;
+}
+
 .canvas-wrap[data-background="white"] {
   background: #fff;
   --_canvas-text: #202124;
@@ -68,7 +96,10 @@
 
 .canvas-wrap[data-background="white"] .preview-coordinate-label,
 .canvas-wrap[data-background="gray"] .preview-coordinate-label,
-.canvas-wrap[data-background="checkerboard"] .preview-coordinate-label {
+.canvas-wrap[data-background="checkerboard"] .preview-coordinate-label,
+.canvas-wrap[data-background="checkerboard-soft"] .preview-coordinate-label,
+.canvas-wrap[data-background="checkerboard-panel"] .preview-coordinate-label,
+.canvas-wrap[data-background="light-gray"] .preview-coordinate-label {
   border-color: rgb(32 33 36 / 22%);
   background: rgb(255 255 255 / 88%);
   color: #202124;

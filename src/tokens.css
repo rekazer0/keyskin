@@ -146,6 +146,11 @@
   --checker-dark: #e2e2e2;
   --checker-size: 24px;
   --checker-image: repeating-conic-gradient(var(--checker-dark) 0 25%, transparent 0 50%);
+  /* 柔和棋盘格：画布「柔和 / 仅面板」选项用，低对比大格，看素材不晃眼 */
+  --checker-soft-light: #f4f4f4;
+  --checker-soft-dark: #ececec;
+  --checker-soft-size: 32px;
+  --checker-soft-image: repeating-conic-gradient(var(--checker-soft-dark) 0 25%, transparent 0 50%);
 }
 
 :root.macos {
