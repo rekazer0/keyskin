@@ -25,6 +25,7 @@ import { phoneForegroundLayers } from "./preview-draw.ts"
 import { shouldDrawItemBackground } from "./preview-items.ts"
 import { withTransform } from "./preview-draw.ts"
 import { offsetFromSection } from "./preview-items.ts"
+import { paddedRect } from "./preview-items.ts"
 import { foregroundLayerRect } from "./preview-draw.ts"
 import { foregroundTextPoint } from "./preview-draw.ts"
 import { drawStyleText } from "./preview-draw.ts"
@@ -241,12 +242,13 @@ export async function paintPreview(self: Preview): Promise<void> {
       strokeSelection(self, context, key)
       continue
     }
+    const area = paddedRect(key)
     const styleTexts = visuals[index].styleTexts
     const foregrounds = phoneForegroundLayers(visuals[index].fore)
     const hasForeground = foregrounds.some(Boolean) || styleTexts.some(Boolean)
     if (shouldDrawItemBackground(key, self.panelStyle, self.panelWidth, self.panelHeight)) {
-      withTransform(context, key.rect, backScale, backTranslation, backRotation, backOpacity, () => {
-        drawVisual(context, visuals[index].back, key.rect, true)
+      withTransform(context, area, backScale, backTranslation, backRotation, backOpacity, () => {
+        drawVisual(context, visuals[index].back, area, true)
       })
     }
     for (const [layer, fore] of foregrounds.entries()) {
@@ -255,7 +257,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.scale
       const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, key.rect)
+        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
         : bdaFore.translation
       const foreRotation = animationElapsed >= 0
         ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
@@ -266,10 +268,10 @@ export async function paintPreview(self: Preview): Promise<void> {
       const offset = key.foreOffsets[layer] ?? offsetFromSection(
         self.offsets,
         `OFFSET${key.positionTypes[layer] ?? ""}`,
-        key.rect,
+        area,
       )
-      const destination = key.foreRect ?? foregroundLayerRect(key.rect, fore?.source, offset)
-      withTransform(context, key.rect, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
+      const destination = key.foreRect ?? foregroundLayerRect(area, fore?.source, offset)
+      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
         drawVisual(context, fore, destination, false)
       })
     }
@@ -281,7 +283,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.scale
       const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, key.rect)
+        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
         : bdaFore.translation
       const foreRotation = animationElapsed >= 0
         ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
@@ -292,10 +294,10 @@ export async function paintPreview(self: Preview): Promise<void> {
       const offset = key.foreOffsets[layer] ?? offsetFromSection(
         self.offsets,
         `OFFSET${key.positionTypes[layer] ?? ""}`,
-        key.rect,
+        area,
       )
-      const point = foregroundTextPoint(key.foreRect ?? key.rect, offset)
-      withTransform(context, key.rect, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
+      const point = foregroundTextPoint(key.foreRect ?? area, offset)
+      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
         drawStyleText(context, styleText, point, self.theme)
       })
     }
@@ -304,7 +306,7 @@ export async function paintPreview(self: Preview): Promise<void> {
 
     const textVisual: TextVisual | undefined = visuals[index].text
     context.fillStyle = textVisual?.color ?? (self.theme === "dark" ? "#f5f5f7" : "#17191c")
-    const fontSize = textVisual?.fontSize ?? Math.max(18, Math.min(42, key.rect.height * 0.25))
+    const fontSize = textVisual?.fontSize ?? Math.max(18, Math.min(42, area.height * 0.25))
     context.font = canvasFont(fontSize, textVisual)
     context.textAlign = "center"
     context.textBaseline = "middle"
@@ -315,7 +317,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.scale
       const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, key.rect)
+        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
         : bdaFore.translation
       const foreRotation = animationElapsed >= 0
         ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
@@ -323,9 +325,9 @@ export async function paintPreview(self: Preview): Promise<void> {
       const foreOpacity = animationElapsed >= 0
         ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.opacity
-      withTransform(context, key.rect, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
-        const centerX = key.rect.x + key.rect.width / 2
-        const centerY = key.rect.y + key.rect.height / 2
+      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
+        const centerX = area.x + area.width / 2
+        const centerY = area.y + area.height / 2
         if (key.section.startsWith("LIST:")) drawListText(context, fallbackText, centerX, centerY)
         else context.fillText(fallbackText, centerX, centerY)
       })

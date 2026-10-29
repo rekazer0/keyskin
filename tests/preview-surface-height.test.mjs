@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IniDocument } from '../src/ini.ts'
-import { previewItems, previewSurfaceHeight } from "../src/preview-items.ts"
+import { paddedRect, previewItems, previewSurfaceHeight } from "../src/preview-items.ts"
 
 test('keys below PANEL.SIZE extend the preview surface (Xiaomi bottom bar)', () => {
   const document = IniDocument.parse([
@@ -24,4 +24,12 @@ test('iOS FIX_SIZE uses points while its touch rectangle uses skin pixels', () =
   const icon = previewItems(document, 1125, 115).find(({ section }) => section === 'ICON1')
   assert.deepEqual(icon.rect, { x: 30, y: 0, width: 130, height: 130 })
   assert.deepEqual(icon.foreRect, { x: 45.5, y: 15.5, width: 99, height: 99 })
+})
+
+test('key PADDING (left,top,right,bottom) insets where the key is painted, never below zero', () => {
+  const document = IniDocument.parse('[KEY1]\nVIEW_RECT=688,155,250,143\nPADDING=10,20,30,40\nCENTER=a\n[KEY2]\nVIEW_RECT=0,0,250,143\nPADDING=0,230,0,0\nCENTER=b\n')
+  const [first, second] = previewItems(document, 1125, 595)
+  assert.deepEqual(first.rect, { x: 688, y: 155, width: 250, height: 143 })
+  assert.deepEqual(paddedRect(first), { x: 698, y: 175, width: 210, height: 83 })
+  assert.equal(paddedRect(second).height, 0)
 })

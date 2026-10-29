@@ -11,6 +11,8 @@ export type PreviewItem = {
   rect: Rect
   touchRect?: Rect | null
   foreRect?: Rect
+  // PADDING 左,上,右,下：背景和前景画在 rect 往里缩后的区域，选中和触摸仍按 rect
+  padding?: readonly [number, number, number, number]
   editable: boolean
   show: string
   center: string
@@ -285,6 +287,24 @@ function parseTouchRect(value: string | undefined): Rect | null | undefined {
   return width <= 0 || height <= 0 ? null : { x, y, width, height }
 }
 
+function parsePadding(value: string | undefined): [number, number, number, number] | undefined {
+  const parts = value?.split(",").map(Number)
+  if (parts?.length !== 4 || parts.some((part) => !Number.isFinite(part))) return
+  return parts as [number, number, number, number]
+}
+
+export function paddedRect(item: PreviewItem): Rect {
+  const { rect, padding } = item
+  if (!padding) return rect
+  const [left, top, right, bottom] = padding
+  return {
+    x: rect.x + left,
+    y: rect.y + top,
+    width: Math.max(0, rect.width - left - right),
+    height: Math.max(0, rect.height - top - bottom),
+  }
+}
+
 export function parseOffset(value: string | undefined): [number, number] | undefined {
   const parts = value?.split(",").map(Number)
   if (!parts || parts.length !== 2 || parts.some((part) => !Number.isFinite(part))) return
@@ -324,6 +344,7 @@ function itemFromSection(document: IniDocument, section: string): PreviewItem | 
     sections: previewItemSections(document, section),
     rect,
     touchRect: parseTouchRect(document.get(section, "TOUCH_RECT")),
+    padding: parsePadding(document.get(section, "PADDING")),
     editable: true,
     show: value("SHOW"),
     center,
