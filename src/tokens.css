@@ -141,13 +141,11 @@
   --search-match: #ffd60a;
   --search-match-ink: #2c2100;
   --canvas-surface: #f4f5f8;   /* 画布区底色 */
-  /* 透明棋盘格：画布与各预览缩略图共用同一套方格，避免两处样式漂移 */
-  --checker-light: #f7f7f8;
-  --checker-dark: #dfe1e5;
+  /* 透明棋盘格：画布与各预览缩略图共用；纯中性灰不带色偏，不随深色模式变 */
+  --checker-light: #f7f7f7;
+  --checker-dark: #e2e2e2;
   --checker-size: 24px;
-  --checker-image:
-    linear-gradient(45deg, var(--checker-dark) 25%, transparent 25%, transparent 75%, var(--checker-dark) 75%),
-    linear-gradient(45deg, var(--checker-dark) 25%, transparent 25%, transparent 75%, var(--checker-dark) 75%);
+  --checker-image: repeating-conic-gradient(var(--checker-dark) 0 25%, transparent 0 50%);
 }
 
 :root.macos {
