@@ -358,6 +358,7 @@ export function convertSsfToBda(pkg: SsfPackage, template: SkinArchive): SsfConv
   const canonical = new Map<string, Uint8Array>()
   for (const theme of pkg.themes.keys()) new BdaThemeConverter(pkg, template, theme, canonical, warnings).convert()
   warnings.push(...ssfUnsupportedWarnings(pkg))
+  if ([...pkg.files.keys()].some((name) => /(^|\/)anim\.ini$/i.test(name))) warnings.push("按键动画（anim.ini）暂不转换为 BDA 动效，已忽略；转为 BDS/BDI 可保留")
 
   const info = new TextDecoder().decode(template.getBytes("Info.txt") ?? new Uint8Array())
     .split(/\r?\n/).filter((line) => line && !/^(Name|Author|AtomSkinName)=/i.test(line))

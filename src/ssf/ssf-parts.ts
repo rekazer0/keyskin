@@ -27,6 +27,12 @@ export function firstValue(value: string | undefined): string | undefined {
 
 const anyImage: SsfImageCheck = () => true
 
+/** The `Anim_Style_*` a key plays on press: keys.ini names it (phoneSkin.ini in older skins), else `Anim_Style_Key`. */
+export function ssfAnimStyle(anim: IniDocument, skin: IniDocument, keys: IniDocument, binding: SsfKeyBinding): string | undefined {
+  const named = binding.sections.map((section) => firstValue(keys.get(section, "ANIM_STYLE")) ?? firstValue(skin.get(section, "ANIM_STYLE"))).find(Boolean)
+  return named ?? (anim.sections().includes("Anim_Style_Key") ? "Anim_Style_Key" : undefined)
+}
+
 /** A section name not used in `document`, derived from `base`. */
 export function freeSectionName(document: IniDocument, base: string): string {
   const taken = new Set(document.sections())
