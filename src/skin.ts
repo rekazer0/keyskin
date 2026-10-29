@@ -53,7 +53,7 @@ function bdaThemeRoots(files: Map<string, Uint8Array>): Map<BdaTheme, string> | 
   }
 
   const used = new Set(result.values())
-  // ponytail: undeclared theme semantics use stable path order; add a theme picker if such packages appear.
+  // undeclared theme semantics use stable path order; add a theme picker if such packages appear.
   const remaining = candidates.filter((root) => !used.has(root)).sort()
   for (const theme of ["light", "dark"] as const) {
     if (!result.has(theme) && remaining.length) result.set(theme, remaining.shift()!)

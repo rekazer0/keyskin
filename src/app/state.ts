@@ -80,7 +80,7 @@ export const appState = {
   aiDesignBusy: false,
   savedModels: [] as ModelConfiguration[],
   savedImageModel: undefined as ModelConfiguration | undefined,
-  // ponytail: keep three exchanges in memory; persist sessions only if cross-restart chat is needed.
+  // keep three exchanges in memory; persist sessions only if cross-restart chat is needed.
   aiDesignConversation: [] as AiDesignConversation,
   aiChatController: undefined as AiChatController | undefined,
   aiChatInitialization: undefined as Promise<AiChatController> | undefined,

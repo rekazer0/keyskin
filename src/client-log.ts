@@ -37,7 +37,7 @@ function record(level: LogLevel, event: string, details: LogDetails = {}, error?
     details,
     ...(error === undefined ? {} : { error: diagnosticError(error) }),
   }))
-  // ponytail: cap memory while native logging is unavailable; disk logs remain the source of truth.
+  // cap memory while native logging is unavailable; disk logs remain the source of truth.
   if (queue.length > 1_000) queue.splice(0, queue.length - 1_000)
 }
 

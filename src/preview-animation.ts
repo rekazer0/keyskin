@@ -153,7 +153,7 @@ export function legacyParticleFrames(
   panelWidth: number,
   panelHeight: number,
 ): LegacyParticleFrame[] {
-  // ponytail: deterministic ballistic preview; add EMIT_TYPE modes when a real skin needs distinct emitters.
+  // deterministic ballistic preview; add EMIT_TYPE modes when a real skin needs distinct emitters.
   const interval = 1000 / emitter.birthRate
   const emitted = Math.min(emitter.totalNumber, Math.max(0, Math.floor(elapsed / interval)))
   const maxLife = Math.max(...emitter.life)
@@ -440,7 +440,7 @@ export function bdaTransforms(
       let progress = raw >= cycles ? (transform.repeatMode === 1 ? 0 : 1) : raw % (transform.repeatMode === 1 ? 2 : 1)
       if (transform.repeatMode === 1 && progress > 1) progress = 2 - progress
       progress = animationEasing(transform.interpolation, Math.max(0, Math.min(1, progress)))
-      // ponytail: random protobuf ranges use their midpoint for a stable editor preview.
+      // random protobuf ranges use their midpoint for a stable editor preview.
       const midpoint = (range: readonly [number, number]) => (range[0] + range[1]) / 2
       const value = (axis: 0 | 1) => midpoint(transform.from[axis]) + (midpoint(transform.to[axis]) - midpoint(transform.from[axis])) * progress
       if (transform.kind === "alpha") result.opacity = value(0) / 255

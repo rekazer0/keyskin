@@ -522,7 +522,7 @@ export async function runAiSkinDesign(
   if (!project.files.length) throw new Error("当前皮肤没有可供 AI 编辑的配置文件")
 
   const webviewFetch = globalThis.fetch
-  // ponytail: one AI run is allowed at a time; replace fetch only for that run so every provider avoids WebView CORS.
+  // one AI run is allowed at a time; replace fetch only for that run so every provider avoids WebView CORS.
   globalThis.fetch = nativeModelFetch
   try {
     const variantCount = Math.max(1, Math.min(AI_DESIGN_DIRECTIONS.length, Math.trunc(options.variantCount ?? 1)))
