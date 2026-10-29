@@ -1,11 +1,11 @@
 [package]
-name = "bdi-edit"
+name = "keyskin"
 version = "2.0.0-beta6"
 description = "百度、搜狗与手心输入法皮肤编辑器"
 edition = "2021"
 
 [lib]
-name = "bdi_edit_lib"
+name = "keyskin_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [profile.release]

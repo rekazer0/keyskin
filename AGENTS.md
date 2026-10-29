@@ -1,4 +1,4 @@
-# 键设（bdi-edit）开发约定
+# 键设（KeySkin）开发约定
 
 所有开发者和 AI agent 动手前都必须读完 [DESIGN.md](DESIGN.md)，并严格遵守。
 

@@ -47,7 +47,7 @@ jobs:
           ' CHANGELOG.md > release-notes.md
           gh release create "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
-            --title "键设-bdiEditor ${{ github.ref_name }}" \
+            --title "键设 KeySkin ${{ github.ref_name }}" \
             --notes-file release-notes.md
 
   build-tauri:
@@ -102,7 +102,7 @@ jobs:
             DMGS=(dmg/*.dmg)
             test "${#DMGS[@]}" -gt 0
             ARCH="${TARGET%%-*}"
-            OUTPUT="Jianshe-bdiEditor-${GITHUB_REF_NAME}-${ARCH}.dmg"
+            OUTPUT="KeySkin-${GITHUB_REF_NAME}-${ARCH}.dmg"
             cp "${DMGS[0]}" "$OUTPUT"
             gh release upload "${{ github.ref_name }}" \
               "$OUTPUT" \
@@ -110,7 +110,7 @@ jobs:
           else
             EXES=(nsis/*.exe)
             test "${#EXES[@]}" -gt 0
-            OUTPUT="Jianshe-bdiEditor-${GITHUB_REF_NAME}-x64-setup.exe"
+            OUTPUT="KeySkin-${GITHUB_REF_NAME}-x64-setup.exe"
             cp "${EXES[0]}" "$OUTPUT"
             gh release upload "${{ github.ref_name }}" \
               "$OUTPUT" \
@@ -189,7 +189,7 @@ jobs:
           test "${#APKS[@]}" -gt 0
           for APK in "${APKS[@]}"; do
             ABI=$(basename "$APK" | sed -E 's/^app-(.*)-release\.apk$/\1/')
-            OUTPUT="Jianshe-bdiEditor-${GITHUB_REF_NAME}-${ABI}.apk"
+            OUTPUT="KeySkin-${GITHUB_REF_NAME}-${ABI}.apk"
             cp "$APK" "$OUTPUT"
             gh release upload "$GITHUB_REF_NAME" "$OUTPUT" \
               --repo "$GITHUB_REPOSITORY" --clobber

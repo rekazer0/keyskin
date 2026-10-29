@@ -34,7 +34,7 @@ write("README.md", read("README.md").replace(`## v${previous} 更新`, `## v${ne
 write("src-tauri/Cargo.toml", read("src-tauri/Cargo.toml").replace(/^(version = ")[^"]+("$)/m, `$1${next}$2`))
 write(
   "src-tauri/Cargo.lock",
-  read("src-tauri/Cargo.lock").replace(/(\[\[package\]\]\nname = "bdi-edit"\nversion = ")[^"]+/, `$1${next}`),
+  read("src-tauri/Cargo.lock").replace(/(\[\[package\]\]\nname = "keyskin"\nversion = ")[^"]+/, `$1${next}`),
 )
 
 console.log(`${previous} -> ${next}`)

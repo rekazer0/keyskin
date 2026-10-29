@@ -1,4 +1,4 @@
-# 键设-bdiEditor
+# 键设 KeySkin
 
 一个面向百度输入法 iOS `.bdi` / Android `.bds`、`.bda`，搜狗手机输入法 `.ssf` / `.mssf` 与手心输入法 `.sxi` 皮肤的可视化编辑器，支持 macOS、Windows 与 Android，并提供可在手机浏览器中使用的在线版本。它将皮肤文件、键盘布局、按键样式和图片资源集中到同一个实时预览工作流中，并提供新建、编辑、撤销/重做、保存、跨格式转换与分享能力。
 
@@ -7,7 +7,7 @@
 ## 在线版本
 
 - 国内：[https://bdieditor-bdieditor-d4gdhm3ir22dcc04c.webapps.tcloudbase.com/](https://bdieditor-bdieditor-d4gdhm3ir22dcc04c.webapps.tcloudbase.com/)
-- 海外：[https://rekazer0.github.io/BdiEditor/](https://rekazer0.github.io/BdiEditor/)
+- 海外：[https://rekazer0.github.io/keyskin/](https://rekazer0.github.io/keyskin/)
 
 ## 界面预览
 
@@ -41,7 +41,7 @@
 - `2.0.0-beta6`：手心与搜狗皮肤的画布改为原生渲染，按键动画和气泡按各自输入法的规则播放；手心皮肤有了自己的属性检查器；修复 Android 端选择器、返回键与搜狗皮肤的文件关联。
 - `2.0.0-beta5`：属性检查器支持修改文字（字体、字号、颜色），配置项始终显示；手心皮肤可在检查器里编辑并写回 `skin.json`；BDA 按键可新增前景层和文字层；搜狗修改同步到所有分辨率，并修复百度转搜狗的按键文字颜色。
 - `2.0.0-beta4`：完善保存 / 导出结果反馈，修复 Android 皮肤文件选择过滤，并补充 SSF → 百度候选栏与 iOS 工具栏兼容配置。
-- SSF → 百度工具栏转换仍在修复中，iOS 最新调整未通过真机验收，Android 对应适配尚未完成，详见 [#15](https://github.com/rekazer0/BdiEditor/issues/15)。
+- SSF → 百度工具栏转换仍在修复中，iOS 最新调整未通过真机验收，Android 对应适配尚未完成，详见 [#15](https://github.com/rekazer0/keyskin/issues/15)。
 - 新增搜狗手机输入法皮肤（`.ssf` / `.mssf`）支持：可打开普通 ZIP 或官方加密容器，按搜狗语义原生编辑并保存，并可转换为 BDI/BDS/BDA。
 - 新增手心输入法皮肤（`.sxi`）支持：从 `skin.json` 实时生成布局、样式与切图预览，可编辑源码片段、按键前景样式和图片，并可导出为 BDI/BDS/BDA。
 - 继续对齐百度官方皮肤预览：输入码、候选栏、按键状态、字体与横竖屏布局更接近真机效果。

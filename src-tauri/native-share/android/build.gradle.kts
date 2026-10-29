@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "io.github.rekazer0.bdiedit.share"
+    namespace = "io.github.rekazer0.keyskin.share"
     compileSdk = 36
 
     defaultConfig {

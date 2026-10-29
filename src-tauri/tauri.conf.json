@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "键设-bdiEditor",
+  "productName": "键设 KeySkin",
   "version": "2.0.0-beta6",
-  "identifier": "io.github.rekazer0.bdiedit",
+  "identifier": "io.github.rekazer0.keyskin",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -16,7 +16,7 @@
     },
     "windows": [
       {
-        "title": "键设-bdiEditor v2.0.0-beta6",
+        "title": "键设 KeySkin v2.0.0-beta6",
         "width": 1440,
         "height": 900,
         "minWidth": 900,
@@ -54,7 +54,7 @@
         "role": "Editor",
         "rank": "Owner",
         "exportedType": {
-          "identifier": "io.github.rekazer0.bdiedit.bdi",
+          "identifier": "io.github.rekazer0.keyskin.bdi",
           "conformsTo": ["public.data"]
         }
       },
@@ -65,7 +65,7 @@
         "role": "Editor",
         "rank": "Owner",
         "exportedType": {
-          "identifier": "io.github.rekazer0.bdiedit.bds",
+          "identifier": "io.github.rekazer0.keyskin.bds",
           "conformsTo": ["public.data"]
         }
       },
@@ -76,7 +76,7 @@
         "role": "Editor",
         "rank": "Owner",
         "exportedType": {
-          "identifier": "io.github.rekazer0.bdiedit.bda",
+          "identifier": "io.github.rekazer0.keyskin.bda",
           "conformsTo": ["public.data"]
         }
       },
@@ -87,7 +87,7 @@
         "role": "Editor",
         "rank": "Alternate",
         "exportedType": {
-          "identifier": "io.github.rekazer0.bdiedit.ssf",
+          "identifier": "io.github.rekazer0.keyskin.ssf",
           "conformsTo": ["public.data"]
         }
       },
@@ -98,7 +98,7 @@
         "role": "Editor",
         "rank": "Alternate",
         "exportedType": {
-          "identifier": "io.github.rekazer0.bdiedit.sxi",
+          "identifier": "io.github.rekazer0.keyskin.sxi",
           "conformsTo": ["public.data"]
         }
       }

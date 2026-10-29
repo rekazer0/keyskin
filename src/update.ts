@@ -2,7 +2,7 @@ type UpdateResult =
   | { status: "latest"; currentVersion: string; latestVersion: string }
   | { status: "available"; currentVersion: string; latestVersion: string; url: string }
 
-const releaseApiUrl = "https://api.github.com/repos/rekazer0/BdiEditor/releases/latest"
+const releaseApiUrl = "https://api.github.com/repos/rekazer0/keyskin/releases/latest"
 
 /** `2.0.0-beta6` as its numbers and its pre-release label (`beta6`; empty for a release). */
 function versionParts(value: string): { core: number[]; pre: string } | undefined {
@@ -35,14 +35,14 @@ export async function checkForUpdate(currentVersion: string, fetcher = fetch): P
   }
   const versions = [
     ...(apiVersion ? [apiVersion] : []),
-    ...[...body.matchAll(/\/rekazer0\/BdiEditor\/releases\/tag\/(v?\d+\.\d+\.\d+(?:-?[0-9A-Za-z.]+)?)(?=["'/?#])/gi)]
+    ...[...body.matchAll(/\/rekazer0\/keyskin\/releases\/tag\/(v?\d+\.\d+\.\d+(?:-?[0-9A-Za-z.]+)?)(?=["'/?#])/gi)]
       .map((match) => match[1].replace(/^v/i, "")),
   ]
     .map((version) => version.replace(/^v/i, ""))
     .filter((version, index, values) => values.indexOf(version) === index && Boolean(versionParts(version)))
   const latestVersion = versions.sort((left, right) => compareVersions(right, left))[0]
   if (!latestVersion) throw new Error("GitHub Release 数据无效")
-  const release = `https://github.com/rekazer0/BdiEditor/releases/tag/v${latestVersion}`
+  const release = `https://github.com/rekazer0/keyskin/releases/tag/v${latestVersion}`
   if (compareVersions(latestVersion, currentVersion) <= 0) {
     return { status: "latest", currentVersion, latestVersion }
   }

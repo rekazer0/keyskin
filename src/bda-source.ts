@@ -415,7 +415,7 @@ function updateBdaPanel(bytes: Uint8Array, name: string, desired: JsonObject, cu
 export function applyDecodedBdaSource(path: string, bytes: Uint8Array, text: string): Uint8Array {
   const desired = jsonObject(JSON.parse(text))
   if (!desired) throw new Error("BDA 解码源码必须是 JSON 对象")
-  delete desired.$bdiEditorRaw
+  delete desired.$keyskinRaw
   delete desired.$protobuf
   const current = normalizedDecodedBdaObject(path, bytes)
   const name = path.split("/").pop() ?? path

@@ -1,4 +1,4 @@
-package io.github.rekazer0.bdiedit.share
+package io.github.rekazer0.keyskin.share
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -231,7 +231,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       )
       putExtra(
         DocumentsContract.EXTRA_INITIAL_URI,
-        Uri.parse("content://com.android.externalstorage.documents/document/primary%3ABdiEditor"),
+        Uri.parse("content://com.android.externalstorage.documents/document/primary%3AKeySkin"),
       )
     }
     startActivityForResult(invoke, intent, "sourceDirectoryResult")
@@ -417,7 +417,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       val relative = if (path.isEmpty()) name else "$path/$name"
       if (entry.isDirectory) {
         readFiles(entry, relative, output)
-      } else if (entry.isFile && name !in setOf(".bdi-editor-source", ".bdi-editor-files.json", ".DS_Store")) {
+      } else if (entry.isFile && name !in setOf(".keyskin-source", ".keyskin-files.json", ".DS_Store")) {
         val bytes = activity.contentResolver.openInputStream(entry.uri)!!.use { it.readBytes() }
         output.add(mapOf("path" to relative, "data" to bytes.map { it.toInt() and 0xff }))
       }
@@ -438,7 +438,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
           val relative = if (path.isEmpty()) name else "$path/$name"
           if (entry.isDirectory) {
             add(entry, relative)
-          } else if (entry.isFile && name !in setOf(".bdi-editor-source", ".bdi-editor-files.json", ".DS_Store")) {
+          } else if (entry.isFile && name !in setOf(".keyskin-source", ".keyskin-files.json", ".DS_Store")) {
             safeParts(relative)
             fileCount += 1
             if (fileCount > MAX_SOURCE_FILES) throw IllegalArgumentException("Skin source contains too many files")

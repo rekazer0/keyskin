@@ -74,7 +74,7 @@ export function decodeBase64Archive(value: string): Uint8Array {
 
 function bdaWorkspaceData(path: string, bytes: Uint8Array): Uint8Array {
   const source = JSON.parse(decodedBdaSource(path, bytes)) as Record<string, unknown>
-  source.$bdiEditorRaw = encodeBase64(bytes)
+  source.$keyskinRaw = encodeBase64(bytes)
   return new TextEncoder().encode(JSON.stringify(source, null, 2))
 }
 
@@ -84,8 +84,8 @@ export function sourceArchiveFromFiles(files: Array<{ path: string; data: Uint8A
     if (!/\/\d*(?:appearance|animation|lightAnimation|sound|switch|sticker|scene)Config$/i.test(`/${file.path}`)) return file
     const text = decoder.decode(file.data)
     if (!/^\s*\{/.test(text)) return file
-    const raw = (JSON.parse(text) as Record<string, unknown>).$bdiEditorRaw
-    if (typeof raw !== "string") throw new Error(`BDA 解码源码缺少 $bdiEditorRaw：${file.path}`)
+    const raw = (JSON.parse(text) as Record<string, unknown>).$keyskinRaw
+    if (typeof raw !== "string") throw new Error(`BDA 解码源码缺少 $keyskinRaw：${file.path}`)
     return { path: file.path, data: applyDecodedBdaSource(file.path, decodeBase64Archive(raw), text) }
   }))
 }
@@ -296,7 +296,7 @@ export async function initializeSourceDirectory(): Promise<void> {
   resetSourceDirectory.disabled = !enabled
   if (isAndroidTauri()) {
     sourceDirectory.readOnly = true
-    sourceDirectory.placeholder = "/storage/emulated/0/BdiEditor"
+    sourceDirectory.placeholder = "/storage/emulated/0/KeySkin"
     resetSourceDirectory.hidden = true
     if (!enabled) {
       localStorage.removeItem("source-directory-enabled")
@@ -314,7 +314,7 @@ export async function initializeSourceDirectory(): Promise<void> {
 
 export async function chooseAndroidSourceDirectory(): Promise<boolean> {
   try {
-    await message("开启后，编辑器会把皮肤源码保存到你授权的文件夹。下一步请在系统文件选择器中选择或新建 BdiEditor 文件夹。", {
+    await message("开启后，编辑器会把皮肤源码保存到你授权的文件夹。下一步请在系统文件选择器中选择或新建 KeySkin 文件夹。", {
       title: "授权皮肤源码目录",
       kind: "info",
     })

@@ -170,7 +170,7 @@ export function wireFilesAndSettings(): void {
     exportLogsStatus.textContent = "正在整理日志…"
     try {
       const date = new Date().toISOString().slice(0, 10)
-      const path = await writeToChosenFile(`bdi-editor-logs-${date}.zip`, await clientLogZip(), "诊断日志")
+      const path = await writeToChosenFile(`keyskin-logs-${date}.zip`, await clientLogZip(), "诊断日志")
       exportLogsStatus.textContent = path ? "日志已导出。" : "已取消导出。"
       return Boolean(path)
     } catch (error) {

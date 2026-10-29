@@ -2,6 +2,12 @@
 
 ## 未发布
 
+### 改名为「键设 KeySkin」
+
+- 项目仓库改为 [rekazer0/keyskin](https://github.com/rekazer0/keyskin)，海外在线版改为 <https://rekazer0.github.io/keyskin/>。
+- 应用标识改为 `io.github.rekazer0.keyskin`，新版会作为一个新应用安装：请手动卸载旧版「键设-bdiEditor」；偏好设置、最近文件和 AI 模型配置需要重新设置。
+- Android 源码文件夹默认改为 `KeySkin`，需要重新选择授权；旧的 `BdiEditor` 源码文件夹不再识别。
+
 ### 新增功能
 
 - 手心与百度的动画检查器重做：手心 `skin.json`、百度旧版 `anim.ini` 和新版 BDA `animationConfig` 在“资源配置”里都分成“动效设计”与“粒子设计”两个入口（同一个文件，只按类型筛选，不改编号和路径）。检查器先列出全部动画（类型、时间、被几处使用），选中一个后才展开它：播放器在最上面，按真实参数播放示例按键、粒子或图片序列，可播放/暂停、回到开头、拖动时间轴、循环预览和 ¼× 慢放，组合动画每个子动画一条轨道，整段运动超出舞台时自动缩小；循环预览打开时改参数会按新值继续播放，便于边调边看。参数按“变化 → 时间与循环 → 变换中心”（粒子按“发射 → 运动 → 外观 → 时间与循环”）排列，最后列出哪些样式、绑定或组合在播放它。手心与旧版 `anim.ini` 可以新建、复制动画，组合动画用列表增删和排序子动画；BDA 只定点写回 `animationConfig` 里对应的 protobuf 字段，未识别的字段原样保留。每次修改一步撤销。
@@ -38,7 +44,7 @@
 
 ### 已知问题
 
-- BDA 还不能为没有提示条或列表的面板新建 hint / list 项，见 [#26](https://github.com/rekazer0/BdiEditor/issues/26)。
+- BDA 还不能为没有提示条或列表的面板新建 hint / list 项，见 [#26](https://github.com/rekazer0/keyskin/issues/26)。
 - 搜狗皮肤里直接替换某个分辨率文件夹的图片文件，不会同步到其他分辨率。
 - Android 端从最近任务里划掉应用时无法拦截，未保存的修改会丢失。
 
@@ -69,8 +75,8 @@
 
 ### 已知问题
 
-- **SSF → 百度皮肤工具栏转换仍未完成真机验收。** iOS 与 Android 的工具栏图标位置、数量和顺序仍需核验，进度见 [#15](https://github.com/rekazer0/BdiEditor/issues/15)。
-- BDA 还不能为没有提示条或列表的面板新建 hint / list 项，见 [#26](https://github.com/rekazer0/BdiEditor/issues/26)。
+- **SSF → 百度皮肤工具栏转换仍未完成真机验收。** iOS 与 Android 的工具栏图标位置、数量和顺序仍需核验，进度见 [#15](https://github.com/rekazer0/keyskin/issues/15)。
+- BDA 还不能为没有提示条或列表的面板新建 hint / list 项，见 [#26](https://github.com/rekazer0/keyskin/issues/26)。
 - 搜狗皮肤里直接替换某个分辨率文件夹的图片文件，不会同步到其他分辨率。
 
 ## 2.0.0-beta4 - 2026-10-20
@@ -90,7 +96,7 @@
 
 ### 已知问题
 
-- **SSF → 百度皮肤工具栏转换仍未完成。** iOS 真机此前仅部分图标生效，最新调整尚未通过真机验收；图标位置、数量和顺序仍需核验。Android BDS / BDA 的对应工具栏适配尚未完成，进度见 [#15](https://github.com/rekazer0/BdiEditor/issues/15)。请勿将编辑器预览或自动化通过视为真机转换效果已验证。
+- **SSF → 百度皮肤工具栏转换仍未完成。** iOS 真机此前仅部分图标生效，最新调整尚未通过真机验收；图标位置、数量和顺序仍需核验。Android BDS / BDA 的对应工具栏适配尚未完成，进度见 [#15](https://github.com/rekazer0/keyskin/issues/15)。请勿将编辑器预览或自动化通过视为真机转换效果已验证。
 
 ## 2.0.0-beta3 - 2026-10-20
 

@@ -9,7 +9,7 @@
 // - `i` (the Info.txt URL) uses the archive's canonical relative path instead of the
 //   exporter's absolute temporary path, so the output is machine independent.
 // - `dir`/`root` stay empty, `platform` is always "ia", `tool_version` is 3 and
-//   `layoutSupport` is true (BdiEditor ships no converter config).
+//   `layoutSupport` is true (KeySkin ships no converter config).
 // - "B<x>" button shorthands resolve in `SkinButtonType` order; the Swift build depends on
 //   dictionary ordering there and is not reproducible.
 // - Zip entries are written in sorted converter-relative order and emptied directories keep

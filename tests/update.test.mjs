@@ -6,14 +6,14 @@ import { checkForUpdate } from '../src/update.ts'
 const api = (tag) => async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ tag_name: tag }) })
 const html = (...tags) => async () => ({
   ok: true, status: 200,
-  text: async () => tags.map((tag) => `<a href="/rekazer0/BdiEditor/releases/tag/${tag}">${tag}</a>`).join('\n'),
+  text: async () => tags.map((tag) => `<a href="/rekazer0/keyskin/releases/tag/${tag}">${tag}</a>`).join('\n'),
 })
 
 test('a newer beta, and the release a beta leads to, are offered as updates', async () => {
   assert.equal((await checkForUpdate('2.0.0-beta6', api('v2.0.0-beta7'))).status, 'available')
   assert.equal((await checkForUpdate('2.0.0-beta9', api('v2.0.0-beta10'))).status, 'available')
   const release = await checkForUpdate('2.0.0-beta6', api('v2.0.0'))
-  assert.deepEqual([release.status, release.latestVersion, release.url], ['available', '2.0.0', 'https://github.com/rekazer0/BdiEditor/releases/tag/v2.0.0'])
+  assert.deepEqual([release.status, release.latestVersion, release.url], ['available', '2.0.0', 'https://github.com/rekazer0/keyskin/releases/tag/v2.0.0'])
 })
 
 test('the same or an older version is reported as latest', async () => {

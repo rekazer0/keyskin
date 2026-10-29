@@ -113,7 +113,7 @@ function configuredModel(config: AiDesignConfiguration, thinkingLevel: ThinkingL
     id: config.model.trim(),
     name: config.model.trim(),
     api,
-    provider: "bdi-editor",
+    provider: "keyskin",
     baseUrl: normalizedUrl(config.apiUrl),
     // The user picks the effort; "off" sends no reasoning parameters at all.
     reasoning: thinkingLevel !== "off",
@@ -566,7 +566,7 @@ async function runDesignAgent(
   const models = createModels()
   models.setProvider(createProvider({
     id: model.provider,
-    name: "BdiEditor configured provider",
+    name: "KeySkin configured provider",
     baseUrl: model.baseUrl,
     auth: { apiKey: envApiKeyAuth("API key", []) },
     models: [model],

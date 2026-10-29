@@ -15,11 +15,11 @@ struct ClientLog(Mutex<()>);
 const MAX_ARCHIVE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_SOURCE_FILES: usize = 4096;
-const SOURCE_MARKER: &str = ".bdi-editor-source";
-const SOURCE_MANIFEST: &str = ".bdi-editor-files.json";
+const SOURCE_MARKER: &str = ".keyskin-source";
+const SOURCE_MANIFEST: &str = ".keyskin-files.json";
 // 与前端最近皮肤上限 recentFilesLimit 保持一致，每条最近记录都能找回自己的源码目录。
 const SOURCE_LIMIT: usize = 9;
-const RELEASES_URL: &str = "https://github.com/rekazer0/BdiEditor/releases";
+const RELEASES_URL: &str = "https://github.com/rekazer0/keyskin/releases";
 const CLIENT_LOG_FILE: &str = "client.jsonl";
 const CLIENT_LOG_PREVIOUS_FILE: &str = "client.previous.jsonl";
 const MAX_CLIENT_LOG_BYTES: u64 = 4 * 1024 * 1024;
@@ -501,7 +501,7 @@ async fn create_source_workspace(
     let result = (|| {
         fs::write(
             workspace.join(SOURCE_MARKER),
-            b"BdiEditor source workspace\n",
+            b"KeySkin source workspace\n",
         )
         .map_err(|error| error.to_string())?;
         write_source_files(&workspace, &files)?;
@@ -540,7 +540,7 @@ async fn open_source_workspace(
     source_paths(&files)?;
     let marker = directory.join(SOURCE_MARKER);
     if marker.is_file() {
-        let _ = fs::write(marker, b"BdiEditor source workspace\n");
+        let _ = fs::write(marker, b"KeySkin source workspace\n");
     }
     app.fs_scope()
         .allow_directory(&directory, true)
@@ -977,7 +977,7 @@ async fn wait_for_left_mouse_release() -> Result<(), String> {
 #[tauri::command]
 async fn fetch_release_page() -> Result<String, String> {
     reqwest::Client::builder()
-        .user_agent("BdiEditor update checker")
+        .user_agent("KeySkin update checker")
         .build()
         .map_err(|error| error.to_string())?
         .get(RELEASES_URL)
@@ -1168,7 +1168,7 @@ async fn request_model_list(configuration: &ModelConfiguration) -> Result<Vec<St
         return Err("请先填写 API 密钥".into());
     }
     let client = reqwest::Client::builder()
-        .user_agent("BdiEditor model connection test")
+        .user_agent("KeySkin model connection test")
         .timeout(std::time::Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -1348,7 +1348,7 @@ mod tests {
     #[test]
     fn model_configuration_round_trips_as_private_json() {
         let root =
-            std::env::temp_dir().join(format!("bdi-edit-model-config-{}", std::process::id()));
+            std::env::temp_dir().join(format!("keyskin-model-config-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let path = root.join("model-config.json");
         let configuration = test_model_configuration("openai-chat");
@@ -1423,7 +1423,7 @@ mod tests {
     fn file_commands_report_success_and_missing_file_errors() {
         use tauri::async_runtime::block_on;
         let path = std::env::temp_dir().join(format!(
-            "bdi-edit-file-command-{}-{}.bdi",
+            "keyskin-file-command-{}-{}.bdi",
             std::process::id(),
             1
         ));
@@ -1441,7 +1441,7 @@ mod tests {
         assert!(read_file_bytes(&path_text).is_err());
 
         let oversized = std::env::temp_dir().join(format!(
-            "bdi-edit-oversized-{}-{}.bdi",
+            "keyskin-oversized-{}-{}.bdi",
             std::process::id(),
             1
         ));
@@ -1456,7 +1456,7 @@ mod tests {
 
     #[test]
     fn client_log_rotates_and_keeps_current_and_previous_files() {
-        let root = std::env::temp_dir().join(format!("bdi-edit-client-log-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("keyskin-client-log-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         append_client_log_path(&root, "first", 8).expect("append first log");
         append_client_log_path(&root, "second", 8).expect("rotate log");
@@ -1480,7 +1480,7 @@ mod tests {
 
     #[test]
     fn source_workspace_sync_only_removes_editor_managed_files() {
-        let root = std::env::temp_dir().join(format!("bdi-edit-source-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("keyskin-source-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create source root");
         fs::write(root.join("keep.txt"), b"external").expect("write external file");
@@ -1512,9 +1512,9 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let root =
-            std::env::temp_dir().join(format!("bdi-edit-source-link-{}", std::process::id()));
+            std::env::temp_dir().join(format!("keyskin-source-link-{}", std::process::id()));
         let outside =
-            std::env::temp_dir().join(format!("bdi-edit-source-outside-{}", std::process::id()));
+            std::env::temp_dir().join(format!("keyskin-source-outside-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&outside);
         fs::create_dir_all(&root).expect("create source root");
@@ -1538,7 +1538,7 @@ mod tests {
 
     #[test]
     fn built_in_source_pruning_keeps_limit_marked_workspaces() {
-        let root = std::env::temp_dir().join(format!("bdi-edit-prune-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("keyskin-prune-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create source root");
         for index in 0..=SOURCE_LIMIT {
@@ -1581,7 +1581,7 @@ mod tests {
     #[test]
     fn source_reader_accepts_empty_change_snapshots_and_limits_paths() {
         let root =
-            std::env::temp_dir().join(format!("bdi-edit-empty-source-{}", std::process::id()));
+            std::env::temp_dir().join(format!("keyskin-empty-source-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create source root");
         assert!(read_source_files(&root)
@@ -1624,7 +1624,7 @@ mod tests {
 
     #[test]
     fn source_reader_expands_workspace_root_events() {
-        let root = std::env::temp_dir().join(format!("bdi-edit-root-event-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("keyskin-root-event-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create source root");
         fs::write(root.join("Info.txt"), b"Name=changed").expect("write info");

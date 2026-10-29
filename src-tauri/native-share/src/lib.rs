@@ -49,7 +49,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     #[cfg(target_os = "android")]
     let builder = builder.setup(|app, api| {
         let handle =
-            api.register_android_plugin("io.github.rekazer0.bdiedit.share", "SharePlugin")?;
+            api.register_android_plugin("io.github.rekazer0.keyskin.share", "SharePlugin")?;
         app.manage(NativeShare(handle));
         Ok(())
     });
