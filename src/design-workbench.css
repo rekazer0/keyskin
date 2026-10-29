@@ -1,4 +1,4 @@
-/* 预览缩略图复用画布的马赛克，保证透明区域观感一致 */
+/* 预览缩略图复用画布的透明棋盘格，保证透明区域观感一致 */
 /* Transparency is UI-only: CSS never paints checker pixels into exported artwork. */
 :root body .resource-style-previews {
   background-image: var(--checker-image);

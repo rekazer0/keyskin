@@ -122,7 +122,6 @@
   --content: var(--material-content);
   --control: var(--material-control);
   --glass-surface: var(--material-glass-surface);
-  /* 透明马赛克：画布与各预览缩略图共用同一套方格，避免两处样式漂移 */
   --on-accent: #ffffff;        /* 强调色底上的文字/图标 */
   --backdrop: rgb(18 20 25 / 28%);   /* 对话框遮罩 */
   --floating: var(--material-panel); /* 浮层底色；玻璃材质下见下方覆盖 */
@@ -142,6 +141,7 @@
   --search-match: #ffd60a;
   --search-match-ink: #2c2100;
   --canvas-surface: #f4f5f8;   /* 画布区底色 */
+  /* 透明棋盘格：画布与各预览缩略图共用同一套方格，避免两处样式漂移 */
   --checker-light: #f7f7f8;
   --checker-dark: #dfe1e5;
   --checker-size: 24px;
