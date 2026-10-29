@@ -464,7 +464,8 @@ export class SkinArchive {
     return zipSync(this.packagedFiles(format), { level: 6 })
   }
 
-  async toBytesAsync(format?: ExportFormat, warnings?: string[]): Promise<Uint8Array> {
+  /** `warnings` collects key sounds the target cannot play; `notes` (by default the same list) what packaging for iOS adjusted. */
+  async toBytesAsync(format?: ExportFormat, warnings?: string[], notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
     if (this.changed.size === 0 && (!format || (format === this.format && this.layout !== "legacy-ios"))) {
       return this.sourceBytes.slice()
@@ -472,20 +473,20 @@ export class SkinArchive {
     // Avoid fflate's one-worker-per-large-file async ZIP path, which can exhaust WebView workers.
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     if ((format === "bdi" || format === "bds") && (format !== this.format || this.layout === "legacy-ios")) {
-      return this.platformBytesAsync(format, warnings, format === "bdi" && this.layout.startsWith("bds"))
+      return this.platformBytesAsync(format, warnings, format === "bdi" && this.layout.startsWith("bds"), notes)
     }
     return this.toBytes(format)
   }
 
   /** Packages for a BDI/BDS platform, pointing key sounds at a format that platform plays (AIFF / OGG). */
-  async platformBytesAsync(format: "bdi" | "bds", warnings?: string[], fromAndroid = false): Promise<Uint8Array> {
+  async platformBytesAsync(format: "bdi" | "bds", warnings?: string[], fromAndroid = false, notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
     const files = new Map(Object.entries(this.packagedFiles(format)))
     // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons, and it stretches panel
     // backgrounds behind the toolbar. The toolbar samples the bar's background before it is cleared.
     if (fromAndroid) {
-      adaptIosToolbar(files, warnings)
-      adaptIosPanelBackground(files, warnings)
+      adaptIosToolbar(files, notes)
+      adaptIosPanelBackground(files, notes)
     }
     const adapted = await adaptPackageSounds(files, format)
     warnings?.push(...adapted.warnings)

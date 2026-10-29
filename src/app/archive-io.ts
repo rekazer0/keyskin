@@ -401,9 +401,10 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   }
   if (appState.archive.format !== "bda" || format === "bda" || format === "sxi") {
     const soundWarnings: string[] = []
-    const bytes = await appState.archive.toBytesAsync(format, soundWarnings)
-    reportSoundWarnings(soundWarnings)
-    return { bytes, converted: false, warnings: soundWarnings }
+    const adjustments: string[] = []
+    const bytes = await appState.archive.toBytesAsync(format, soundWarnings, adjustments)
+    reportExportWarnings(soundWarnings, adjustments)
+    return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings] }
   }
   if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
   await waitForInterfacePaint()
@@ -415,14 +416,18 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   updateFileOperationProgress(48, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
   const soundWarnings: string[] = []
   const bytes = await result.archive.platformBytesAsync(format, soundWarnings)
-  reportSoundWarnings(soundWarnings)
+  reportExportWarnings(soundWarnings)
   return { bytes, converted: true, warnings: [...result.warnings, ...soundWarnings] }
 }
 
-function reportSoundWarnings(warnings: string[]): void {
-  if (!warnings.length) return
-  clientLog.info("export.sound-warnings", { count: warnings.length, detail: warnings.join("; ") })
-  window.alert(`以下按键音未能转换为目标平台格式，导出包中仍引用原文件，目标平台可能没有声音：\n\n${warnings.join("\n")}`)
+/** Key sounds the target platform cannot play, and what packaging for that platform adjusted, each under its own heading. */
+function reportExportWarnings(sounds: string[], adjustments: string[] = []): void {
+  if (!sounds.length && !adjustments.length) return
+  clientLog.info("export.warnings", { sounds: sounds.length, adjustments: adjustments.length, detail: [...adjustments, ...sounds].join("; ") })
+  window.alert([
+    adjustments.length ? `为适配目标平台做了以下调整：\n\n${adjustments.join("\n")}` : "",
+    sounds.length ? `以下按键音未能转换为目标平台格式，导出包中仍引用原文件，目标平台可能没有声音：\n\n${sounds.join("\n")}` : "",
+  ].filter(Boolean).join("\n\n"))
 }
 
 async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: string): Promise<boolean> {

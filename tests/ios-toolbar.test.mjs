@@ -73,3 +73,12 @@ test('BDS export and skins that already declare [LOGO] keep their toolbar files'
   assert.equal(bdi.getBytes('light/skin/port/logo.ini'), undefined)
   assert.ok(bdi.getBytes('light/skin/land/logo.ini'))
 })
+
+test('iOS packaging notes are collected apart from key sounds the target cannot play', async () => {
+  const sounds = []
+  const notes = []
+  await androidSkin().toBytesAsync('bdi', sounds, notes)
+  // 导出弹窗按两类分别说明：适配调整不能出现在「按键音未能转换」下面。
+  assert.ok(notes.some((text) => text.includes('收回')))
+  assert.equal(sounds.some((text) => text.includes('收回')), false)
+})
