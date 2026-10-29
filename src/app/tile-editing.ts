@@ -187,11 +187,9 @@ export function drawAtlas(): void {
     : allVisible
   const displayScale = Math.max(0.01, atlasCanvas.getBoundingClientRect().width / Math.max(1, naturalWidth))
   const lineWidth = Math.min(6, 1.5 / displayScale)
-  context.font = `${11 / displayScale}px ui-monospace, monospace`
   context.textBaseline = "top"
   const accent = getComputedStyle(atlasCanvas).getPropertyValue("--accent").trim() || "#3a6df0"
   const handle = 8 / displayScale
-  const labelHeight = 17 / displayScale
   for (const slice of visible) {
     const [x, y, width, height] = slice.source
     const selected = slice.index === appState.selectedTileIndex || slice.source === appState.tileDraft
@@ -199,12 +197,7 @@ export function drawAtlas(): void {
     context.strokeStyle = selected ? accent : "#8d96a7"
     context.strokeRect(x + context.lineWidth / 2, y + context.lineWidth / 2, width - context.lineWidth, height - context.lineWidth)
     const usage = appState.bdaTileUsages.find((item) => item.index === slice.index)
-    const label = usage?.label ?? `IMG${slice.index}`
-    const labelWidth = context.measureText(label).width + 6 / displayScale
-    context.fillStyle = selected ? accent : "#68758a"
-    context.fillRect(x, y, labelWidth, labelHeight)
-    context.fillStyle = "#fff"
-    context.fillText(label, x + 3 / displayScale, y + 2 / displayScale)
+    drawSliceLabel(context, usage?.label ?? `IMG${slice.index}`, String(slice.index), slice.source, displayScale, selected ? accent : "#68758a")
     if (selected) {
       for (const [hx, hy] of [[x, y], [x + width, y], [x, y + height], [x + width, y + height]]) {
         context.fillStyle = accent
@@ -226,6 +219,32 @@ export function drawAtlas(): void {
       }
     }
   }
+}
+
+// 角标随切片缩小：最多占切片高度的 35%、不超出切片宽度，放不下完整名称时只显示序号，避免小切片被角标整个盖住
+function drawSliceLabel(context: CanvasRenderingContext2D, label: string, shortLabel: string, source: TileSlice["source"], displayScale: number, fill: string): void {
+  const [x, y, width, height] = source
+  const font = (size: number) => `${size}px ui-monospace, monospace`
+  const minimum = 6 / displayScale
+  let size = Math.min(11 / displayScale, height * 0.35 / (17 / 11))
+  if (size < minimum) return
+  context.font = font(size)
+  const fits = (text: string) => context.measureText(text).width + size * 6 / 11 <= width
+  const text = fits(label) ? label : shortLabel
+  if (!fits(text)) {
+    size *= width / (context.measureText(text).width + size * 6 / 11)
+    if (size < minimum) return
+    context.font = font(size)
+  }
+  const padding = size * 3 / 11
+  context.save()
+  context.globalAlpha = 0.85
+  context.fillStyle = fill
+  context.fillRect(x, y, context.measureText(text).width + padding * 2, size * 17 / 11)
+  context.globalAlpha = 1
+  context.fillStyle = "#fff"
+  context.fillText(text, x + padding, y + size * 2 / 11)
+  context.restore()
 }
 
 function drawTilePreview(): void {
