@@ -4,13 +4,11 @@
 // into skin.json as one undo step through the same helpers the rest of the Palm inspector uses.
 
 import { element, iconButton } from "../dom-element.ts"
-import { iniPreviewClip } from "../animation-preview-model.ts"
 import {
   animationModeTitle, animationSection, animationWarning, comboList, renderAnimationResource,
   type AnimationListItem, type AnimationUse,
 } from "../animation-inspector.ts"
-import { IniDocument } from "../ini.ts"
-import { animationsIni } from "../palm/sxi-style.ts"
+import { palmPreviewClip } from "../palm/palm-preview-clip.ts"
 import { PalmStyles } from "../palm/palm-styles.ts"
 import { visualResolver } from "./bda-documents"
 import {
@@ -652,7 +650,6 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   const selected = selectedAnimation(items)
   const entry = entries.find((candidate) => candidate.id === selected)
   const resolver = visualResolver()
-  const document = IniDocument.parse(animationsIni(table).toString())
   const references = entry && animationReferences(skin, pointer, entry.id)
   const family = entry && animationFamilyInfo(entry.kind)
   renderAnimationResource(container, {
@@ -683,7 +680,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
       }),
     },
     player: entry && {
-      clip: iniPreviewClip(document, `ANIM${entry.id}`),
+      clip: palmPreviewClip(table, entry.id),
       key: `${SXI_SKIN_PATH}|${pointer.join(".")}|${entry.id}`,
       resolver,
       readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined,

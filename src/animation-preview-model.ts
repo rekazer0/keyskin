@@ -15,7 +15,7 @@ export type PreviewClip = {
   notes: string[]
 }
 
-const empty = (): PreviewClip => ({ tracks: [], particles: [], images: [], lanes: [], duration: 0, notes: [] })
+export const emptyClip = (): PreviewClip => ({ tracks: [], particles: [], images: [], lanes: [], duration: 0, notes: [] })
 const finite = (value: string | undefined, fallback = 0): number => value?.trim() && Number.isFinite(Number(value)) ? Number(value) : fallback
 const pair = (value: string | undefined, fallback: Pair): Pair => {
   const values = value?.split(",").map(Number)
@@ -26,7 +26,8 @@ export const PREVIEW_KEY_SIZE = 108
 /** Window a looping clip is watched for: one pass (two when it runs back and forth). */
 const LOOP_PASSES = 1
 
-function merge(target: PreviewClip, child: PreviewClip, offset: number): void {
+/** Adds a combination child that starts `offset` ms into `target`. */
+export function mergeClip(target: PreviewClip, child: PreviewClip, offset: number): void {
   target.tracks.push(...child.tracks.map((track) => ({ ...track, start: track.start + offset })))
   target.particles.push(...child.particles.map((item) => ({ ...item, start: item.start + offset })))
   target.images.push(...child.images.map((item) => ({ ...item, start: item.start + offset })))
@@ -36,7 +37,7 @@ function merge(target: PreviewClip, child: PreviewClip, offset: number): void {
 }
 
 /** Passes the preview plays; a looping clip is cut to a finite observation window and says so. */
-function passes(count: number, reverse: boolean, clip: PreviewClip): { passes: number; unbounded: boolean } {
+export function clipPasses(count: number, reverse: boolean, clip: PreviewClip): { passes: number; unbounded: boolean } {
   if (count < 0 || count >= 2 ** 31 - 1 || !Number.isFinite(count)) {
     clip.notes.push("循环动画：预览一个观察周期")
     return { passes: LOOP_PASSES * (reverse ? 2 : 1), unbounded: true }
@@ -58,13 +59,13 @@ function sectionTitle(section: string): string {
 }
 
 /**
- * The inspector previews a clip directly; it does not need a style binding to trigger it. Reads the
- * anim.ini dialect shared by Baidu skins and Palm's projection: basic transforms (TYPE 0–5),
+ * The inspector previews a clip directly; it does not need a style binding to trigger it. Reads a
+ * Baidu anim.ini (Palm's skin.json has its own reader, palm-preview-clip.ts): basic transforms (TYPE 0–5),
  * combinations, frame clips (`SOURCE_FILE` webp, `ANIM_PATH` gif) and particle emitters. Baidu plays
  * transforms with `fillBefore`: a delayed or later combination child shows its start value meanwhile.
  */
 export function iniPreviewClip(document: IniDocument, section: string, options: { fillBefore?: boolean } = {}, ancestors: string[] = []): PreviewClip {
-  const clip = empty()
+  const clip = emptyClip()
   if (ancestors.includes(section) || ancestors.length >= 16) {
     clip.notes.push("组合引用循环或层级过深，已跳过")
     return clip
@@ -86,7 +87,7 @@ export function iniPreviewClip(document: IniDocument, section: string, options: 
     if (method === "2") clip.notes.push("随机组合：本次预览第一个子动画")
     for (const id of selected) {
       const child = iniPreviewClip(document, `ANIM${Number(id)}`, options, [...ancestors, section])
-      merge(clip, child, delay + (method === "1" ? Math.max(0, clip.duration - delay) : 0))
+      mergeClip(clip, child, delay + (method === "1" ? Math.max(0, clip.duration - delay) : 0))
     }
     if (!ids.length) clip.notes.push("请先添加子动画")
     if (repeatCount(get("REPEAT_CNT")) !== 1 || reverse) clip.notes.push("组合按一次播放预览，整体重复与往返以真机为准")
@@ -101,7 +102,7 @@ export function iniPreviewClip(document: IniDocument, section: string, options: 
     } else clip.notes.push("请先配置粒子图片")
   } else if (kind === 2) {
     const file = get("SOURCE_FILE") ?? get("ANIM_PATH")
-    const repeat = passes(repeatCount(get("REPEAT_CNT")), reverse, clip)
+    const repeat = clipPasses(repeatCount(get("REPEAT_CNT")), reverse, clip)
     clip.images.push({ file, start: delay, duration, passes: repeat.passes, offset: pair(get("OFFSET"), [0, 0]) })
     clip.duration = delay + duration * repeat.passes
     clip.lanes.push({ label: `${prefix}帧序列`, start: delay, duration, passes: repeat.passes, unbounded: repeat.unbounded })
@@ -112,7 +113,7 @@ export function iniPreviewClip(document: IniDocument, section: string, options: 
       clip.notes.push("当前变化属性不支持预览，原始参数保留")
       return clip
     }
-    const repeat = passes(repeatCount(get("REPEAT_CNT")), reverse, clip)
+    const repeat = clipPasses(repeatCount(get("REPEAT_CNT")), reverse, clip)
     if ([get("FROM"), get("TO"), get("FROM_PX"), get("TO_PX")].some((value) => /rand\(/i.test(value ?? ""))) clip.notes.push("随机值 rand(a,b) 按区间中点预览")
     const pixels = type === 2 && (get("FROM_PX") !== undefined || get("TO_PX") !== undefined)
     const curves = numberRange(get("INTPOL"), [0, 0])
@@ -164,7 +165,7 @@ const midpoint = (range: BdaNumberRange) => (range[0] + range[1]) / 2
 
 /** A BDA effect by its `kind:key` id, as the inspector previews it; random ranges play their midpoint. */
 export function bdaPreviewClip(animation: BdaAnimation, id: string, ancestors: string[] = []): PreviewClip {
-  const clip = empty()
+  const clip = emptyClip()
   const effect = animation.effects.get(id)
   if (ancestors.includes(id) || ancestors.length >= 16) {
     clip.notes.push("组合引用循环或层级过深，已跳过")
@@ -178,7 +179,7 @@ export function bdaPreviewClip(animation: BdaAnimation, id: string, ancestors: s
   if (effect.kind === "group") {
     for (const item of effect.items) {
       const child = bdaPreviewClip(animation, `${item.kind}:${item.key}`, [...ancestors, id])
-      merge(clip, child, effect.delay + (effect.buildMode === 1 ? Math.max(0, clip.duration - effect.delay) : 0))
+      mergeClip(clip, child, effect.delay + (effect.buildMode === 1 ? Math.max(0, clip.duration - effect.delay) : 0))
     }
     if (!effect.items.length) clip.notes.push("组合里没有子效果")
     if (effect.repeatCount > 1) clip.notes.push("组合按一次播放预览，整体重复以真机为准")
@@ -193,7 +194,7 @@ export function bdaPreviewClip(animation: BdaAnimation, id: string, ancestors: s
   } else if (effect.kind === "image") {
     const resources = effect.sequence.frames.map((frame) => ({ id: frame.resourceID ?? "", duration: Math.max(16, frame.duration ?? 100) }))
     const total = resources.reduce((sum, frame) => sum + frame.duration, 0)
-    const repeat = passes(effect.loopForever ? -1 : effect.repeatCount, effect.repeatMode === 1, clip)
+    const repeat = clipPasses(effect.loopForever ? -1 : effect.repeatCount, effect.repeatMode === 1, clip)
     clip.images.push({ resources, start: 0, duration: total, passes: repeat.passes, offset: [0, 0] })
     clip.duration = total * repeat.passes
     clip.lanes.push({ label: `${prefix}图片序列`, start: 0, duration: total, passes: repeat.passes, unbounded: repeat.unbounded })
@@ -202,7 +203,7 @@ export function bdaPreviewClip(animation: BdaAnimation, id: string, ancestors: s
   } else if (!("from" in effect)) {
     clip.notes.push(`${BDA_LABELS[effect.kind]}暂不支持桌面预览，请在真机验证；参数仍可编辑`)
   } else {
-    const repeat = passes(effect.repeatCount, effect.repeatMode === 1, clip)
+    const repeat = clipPasses(effect.repeatCount, effect.repeatMode === 1, clip)
     if ([...effect.from, ...effect.to].some((range) => range[0] !== range[1])) clip.notes.push("随机范围按中点预览")
     const curves = effect.interpolationXY ?? [effect.interpolation, effect.interpolation]
     const scale = effect.kind === "alpha" ? 1 / 255 : effect.kind === "scale" || effect.kind === "shift" && effect.relative ? 1 / 100 : 1

@@ -136,7 +136,8 @@ export class PalmMotion {
       duration: number(model.duration),
       passes: passes(base),
       alternate: base.back === true,
-      hold: base.clear === false,
+      // `clear` defaults to false (SkinAnimationModel): the key keeps the end value unless told to clear.
+      hold: base.clear !== true,
       relative: type === 2 && !pixels,
       ...pivot ? { pivot } : {},
       value: (progress) => {
