@@ -181,6 +181,9 @@ export function wireFilesAndSettings(): void {
       exportLogsButton.disabled = false
     }
   }))
+  // 连点时第二次读到的是「已复制」：原文案只在绑定时取一次。
+  const qqGroupLabel = copyQqGroupButton.textContent ?? "QQ群：228040912"
+  let qqGroupReset = 0
   copyQqGroupButton.addEventListener("click", async () => {
     const value = "228040912"
     try {
@@ -196,9 +199,9 @@ export function wireFilesAndSettings(): void {
       document.execCommand("copy")
       fallback.remove()
     }
-    const label = copyQqGroupButton.textContent ?? "QQ群：228040912"
     copyQqGroupButton.textContent = "QQ群号已复制"
-    window.setTimeout(() => { copyQqGroupButton.textContent = label }, 1400)
+    window.clearTimeout(qqGroupReset)
+    qqGroupReset = window.setTimeout(() => { copyQqGroupButton.textContent = qqGroupLabel }, 1400)
   })
   for (const button of appDialogButtons) {
     button.addEventListener("click", () => {
