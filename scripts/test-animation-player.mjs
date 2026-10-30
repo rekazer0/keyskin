@@ -90,8 +90,19 @@ try {
     await player.getByRole('button', { name: '播放预览', exact: true }).click()
     await page.waitForFunction(() => Number(document.querySelector('.ui-animation-player .ui-slider').value) > 30)
     await player.getByRole('button', { name: '暂停预览', exact: true }).click()
-    await seek(Math.min(1000, Number(await slider.getAttribute('max'))))
-    assert.ok((await sample()).length > 100)
+    // 粒子直接画在画布的键盘上，播放器不再显示示例按键舞台。
+    assert.equal(await player.locator('.ui-animation-stage').isHidden(), true, `${format}: 粒子不在示例舞台上`)
+    await seek(0)
+    const keyboard = () => page.locator('#preview').evaluate((canvas) => canvas.toDataURL())
+    await page.waitForTimeout(80)
+    const emptyKeyboard = await keyboard()
+    const at = Math.min(1000, Number(await slider.getAttribute('max')))
+    await seek(at)
+    assert.equal(await page.evaluate(async () => {
+      const { preview } = await import('/src/app/canvas-interaction.ts')
+      return preview.playerParticles?.particles.length ? preview.playerParticles.elapsed : -1
+    }), at, `${format}: 键盘画布按播放器时间画粒子`)
+    await page.waitForFunction((before) => document.querySelector('#preview').toDataURL() !== before, emptyKeyboard)
     assert.ok(await player.locator('.ui-animation-lane').count() >= 1, `${format}: 粒子有发射轨道`)
     assert.deepEqual(await fingerprint(), before, `${format}: playback is read-only`)
 

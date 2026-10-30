@@ -539,7 +539,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   if (model.animNum !== undefined && model.animNum !== model.entries.length) {
     listRows.push(animationWarning(`[GLOBAL] ANIM_NUM=${model.animNum}，实际有 ${model.entries.length} 个动效；写回任意字段时自动修正。`))
   }
-  // 键盘画布上的粒子预览由播放器取代。
+  // 粒子由播放器画到键盘上（keyboardPlayback），不再用文档检查器的整面板预览。
   appState.particlePreviewSection = ""
   preview.setParticlePreview()
   const create = (kind: LegacyAnimationKind, copyOf?: string) => edit((current) => {
@@ -566,7 +566,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
       key: `${appState.selectedPath}|${entry.section}`,
       resolver: visualResolver(),
       readFile: readSkinFile,
-      onPlay: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(entry, model.entries, references))),
+      keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(entry, model.entries, references))),
     },
     warnings: entry?.category !== undefined && entry.category !== kindCategory(entry.kind)
       ? [animationWarning(`CATEGORY=${entry.category} 与识别出的${legacyAnimationKindLabel(entry.kind)}不一致，已按内容编辑。`, {

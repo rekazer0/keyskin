@@ -75,8 +75,17 @@ export async function paintPreview(self: Preview): Promise<void> {
     : particles.flatMap((particle) =>
         legacyParticleFrames(particle, panelAnimationElapsed, self.panelWidth, self.panelHeight)
       )
+  const player = self.playerParticles
+  const playerRect = player?.key?.rect ?? { x: 0, y: 0, width: self.panelWidth, height: self.panelHeight }
+  const playerParticleFrames = (player?.particles ?? []).flatMap((item) =>
+    player!.elapsed < item.start || player!.elapsed > item.start + item.duration
+      ? []
+      : legacyParticleFrames(item.emitter, player!.elapsed - item.start, playerRect.width, playerRect.height)
+        .map((frame) => ({ ...frame, x: frame.x + playerRect.x, y: frame.y + playerRect.y })),
+  )
   const bdaAnimationElapsed = self.bdaAnimationState ? Date.now() - self.bdaAnimationState.startedAt : -1
-  const bdaParticleFrames = self.animation && self.bdaAnimationState && bdaAnimationElapsed >= 0
+  // The player already draws this key's particles at its own time.
+  const bdaParticleFrames = self.animation && self.bdaAnimationState && bdaAnimationElapsed >= 0 && player?.key !== self.bdaAnimationState.key
     ? bdaAnimationBindingsForKey(self.animation, self.bdaAnimationState.key).flatMap((binding) =>
         bdaBindingEffects(self.animation!, binding).flatMap((effect) => {
           if (effect.kind !== "emitter" || !effect.resources.length) return []
@@ -91,7 +100,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         })
       )
     : []
-  const allParticleFrames = [...particleFrames, ...bdaParticleFrames]
+  const allParticleFrames = [...particleFrames, ...bdaParticleFrames, ...playerParticleFrames]
   const particleStyleIDs = [...new Set(allParticleFrames.map((frame) => frame.styleID))]
   const hintDirection = self.active?.direction ?? "center"
   const hintConfig = hintDirection === "hold" ? self.longHint ?? self.shortHint : self.shortHint

@@ -760,7 +760,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
       key: `${SXI_SKIN_PATH}|${pointer.join(".")}|${entry.id}`,
       resolver,
       readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined,
-      onPlay: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(skin, pointer, entry.id))),
+      keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(skin, pointer, entry.id))),
     },
     warnings: entry && baseNeedsFix(entry.kind, entry.model)
       ? [animationWarning(`分类值 ${String(animationBase(entry.model).c)} 与${family?.label ?? "动画"}不一致，导出后可能无法识别。`, {

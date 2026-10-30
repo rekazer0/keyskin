@@ -261,6 +261,8 @@ export function populateKeyInspector(): void {
   // 动效设计 / 粒子设计：列表进左侧栏、播放器上画布（animation-workspace.ts）。
   appState.animationWorkspace?.update(!hasSelection && appState.animationDesignMode !== "all")
   preview.animationView = appState.animationDesignMode !== "all"
+  // The rebuilt player puts its particles back on its first draw.
+  preview.setPlayerParticles()
   const skinSelected = isSkinInfoPath(appState.selectedPath)
   const toolbarSelected = isToolbarPath(appState.selectedPath)
   const toolbarSections = toolbarSelected ? effectiveToolbarSections() : []

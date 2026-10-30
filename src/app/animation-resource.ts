@@ -3,6 +3,7 @@
 
 import { strToU8 } from "fflate"
 import type { AnimationListItem } from "../animation-inspector.ts"
+import type { KeyboardPlayback } from "../animation-player.ts"
 import { visiblePreviewItems, type PreviewItem } from "../preview-items.ts"
 import { preview } from "./canvas-interaction"
 import { asObject } from "../palm/sxi-ini.ts"
@@ -44,11 +45,17 @@ export function selectAnimation(id: string): void {
   populateKeyInspector()
 }
 
-/** The player's `onPlay`: plays the press animation of the first key on the canvas that `plays` matches. */
-export function keyboardPlayback(plays: (key: PreviewItem) => boolean): () => void {
-  return () => {
-    const key = visiblePreviewItems(preview.keys, preview.skinState).find(plays)
-    if (key) void preview.playAnimation(key)
+/** The player's keyboard: the first key on the canvas that `plays` matches plays its press animation and emits the particles; without one they cover the panel. */
+export function keyboardPlayback(plays: (key: PreviewItem) => boolean): KeyboardPlayback {
+  const target = () => visiblePreviewItems(preview.keys, preview.skinState).find(plays)
+  return {
+    play() {
+      const key = target()
+      if (key) void preview.playAnimation(key)
+    },
+    particles(particles, elapsed) {
+      preview.setPlayerParticles({ particles, elapsed, key: target() })
+    },
   }
 }
 

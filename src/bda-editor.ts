@@ -3,6 +3,7 @@ import { bdaStyleID, type BdaAppearance, type BdaKey, type BdaStyleRef } from ".
 import { bdaColorHex } from "./bda-resolver.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
 import { renderBdaAnimationEditor, type BdaAnimationView } from "./bda-animation-editor.ts"
+import type { KeyboardPlayback } from "./animation-player.ts"
 import { bdaLayoutStyleGroups, type BdaLayoutStyleItem } from "./bda-layout-styles.ts"
 import { element } from "./dom-element.ts"
 
@@ -46,7 +47,7 @@ type ConfigEditorOptions = {
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
-  keyboardPlayback?: (effectID: string) => () => void
+  keyboardPlayback?: (effectID: string) => KeyboardPlayback
   animationView: BdaAnimationView
 }
 

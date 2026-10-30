@@ -16,6 +16,7 @@ import type {
 } from "./bda.ts"
 import { element } from "./dom-element.ts"
 import { bdaPreviewClip } from "./animation-preview-model.ts"
+import type { KeyboardPlayback } from "./animation-player.ts"
 import {
   animationSection, comboList, imageCard, renderAnimationResource, sliderField,
   type AnimationListItem, type AnimationMode, type AnimationUse,
@@ -38,8 +39,8 @@ type BdaAnimationEditorOptions = {
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
-  /** The player's `onPlay` for an effect: plays it on a keyboard key bound to it. */
-  keyboardPlayback?: (effectID: string) => () => void
+  /** The player's keyboard for an effect: plays it on a keyboard key bound to it. */
+  keyboardPlayback?: (effectID: string) => KeyboardPlayback
 }
 
 type EffectValue = string | number | boolean
@@ -530,7 +531,7 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
       key: `${options.path}|${effectID(effect)}`,
       resolver: options.resolver,
       resourceParticles: true,
-      onPlay: options.keyboardPlayback?.(effectID(effect)),
+      keyboard: options.keyboardPlayback?.(effectID(effect)),
     },
     sections,
     uses: effect ? effectUses(animation, effect) : [],

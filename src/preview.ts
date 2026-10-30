@@ -9,6 +9,7 @@ import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
 import { paintPreview } from "./preview-paint.ts"
 import type { NativeScene } from "./native-scene.ts"
+import type { PreviewClip } from "./animation-preview-model.ts"
 import { playNativePress } from "./preview-native.ts"
 import { pointerDown } from "./preview-pointer.ts"
 import { pointerMove } from "./preview-pointer.ts"
@@ -114,6 +115,8 @@ export class Preview {
   legacyAnimationState?: { key: PreviewItem; startedAt: number }
   private legacyAnimationTimer?: number
   particlePreview?: LegacyParticleEmitter
+  /** 动效 / 粒子设计的播放器把粒子画在 key 上（没有 key 时铺满面板），时间由播放器控制。 */
+  playerParticles?: { particles: PreviewClip["particles"]; elapsed: number; key?: PreviewItem }
   panelAnimationStyle = ""
   legacyPanelAnimationStartedAt = 0
   private legacyPanelAnimationTimer?: number
@@ -454,6 +457,12 @@ export class Preview {
     if (this.particlePreview === emitter) return
     this.particlePreview = emitter
     this.restartLegacyPanelAnimation()
+    void this.draw()
+  }
+
+  setPlayerParticles(value?: Preview["playerParticles"]): void {
+    if (!value && !this.playerParticles) return
+    this.playerParticles = value
     void this.draw()
   }
 
