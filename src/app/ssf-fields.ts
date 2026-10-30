@@ -200,7 +200,6 @@ function imageCard(label: string, keys: readonly string[], targets: SsfLocation[
     const state = element("button", "style-picker-state")
     state.type = "button"
     state.dataset.styleState = /PRESSED/.test(key) ? "highlighted" : "normal"
-    if (stateLabel) state.dataset.stateLabel = stateLabel
     state.title = `${stateLabel}${label}：${file ?? "未设置"}${own ? "" : "（沿用正常图片）"}，点击更换图片`
     state.setAttribute("aria-label", state.title)
     state.disabled = !isEditing()

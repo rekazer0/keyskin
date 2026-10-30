@@ -158,7 +158,6 @@ export function renderStyleReferenceRows(button: HTMLElement, input: HTMLInputEl
       item.type = "button"
       item.className = "style-picker-state"
       item.dataset.styleState = highlighted ? "highlighted" : "normal"
-      item.dataset.stateLabel = highlighted ? "按下" : "正常"
       // 预览图就是该状态引用的图片，点击它进入这张图片的切片选择器；
       // 更换引用的样式挪到 Alt 点击，编号框仍可直接输入。
       item.title = `点击选择${highlighted ? "按下" : "正常"}图片切片；Alt 点击更换样式；Command/Ctrl 点击编辑样式`

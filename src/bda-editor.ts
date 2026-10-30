@@ -417,7 +417,6 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
     const states = element("span", "style-picker-states")
     for (const [highlighted, label] of [[false, "正常"], [true, "按下"]] as const) {
       const state = element("span", "style-picker-state")
-      state.dataset.stateLabel = label
       const canvas = element("canvas")
       canvas.setAttribute("aria-label", `${label}状态`)
       state.append(canvas)

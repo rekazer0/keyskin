@@ -247,7 +247,7 @@
 .source .color-control > input[type="number"] { flex: none; width: 44px; text-align: right; }
 .source .bda-color-controls { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
 
-/* —— 样式卡片：左侧编号 + 类型，右侧并排「正常 | 按下」两个预览；标签在卡片上方。
+/* —— 样式卡片：左侧编号 + 类型，右侧并排正常、按下两个预览（不带状态名）；标签在卡片上方。
    按键、整体布局、BDA 共用同一张卡片（style-references.ts / bda-editor.ts 生成同样的结构）。 —— */
 .source :is(.ui-field, .document-property-field, .fore-style-reference-field).style-reference-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
 /* 卡片上方的标签：小号弱化，和属性行标签区分开；「+ 添加」靠右 */
@@ -290,7 +290,7 @@
 .source .style-picker-states { display: grid; flex: 1; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: var(--space-2xs); height: 100%; min-width: 0; background: var(--line-soft); }
 .source .style-picker-state {
   display: grid;
-  grid-template-rows: var(--control-height-sm) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   padding: var(--space-xs);
   overflow: hidden;
@@ -299,13 +299,6 @@
   background: var(--checker-image), var(--checker-light);
   background-position: 0 0, 4px 4px;
   background-size: 8px 8px;
-}
-.source .style-picker-state::before {
-  content: attr(data-state-label);
-  display: grid;
-  place-items: center;
-  color: var(--tertiary);
-  font-size: var(--font-size-xs);
 }
 .source .style-picker-state > canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
 @media (hover: hover) { .source .style-picker-state:hover { box-shadow: inset 0 0 0 2px var(--accent); } }
@@ -660,10 +653,8 @@
 .source .inspector-block-heading > code { min-width: 0; overflow: hidden; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
 .source .inspector-block-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
 .source .ssf-image-card > .style-reference-meta { gap: var(--space-xs); }
-/* 正常、按下并排的卡片和百度一样；配置段里只有一张图时只放一个预览，不带状态名 */
+/* 正常、按下并排的卡片和百度一样；配置段里只有一张图时只放一个预览 */
 .source .ssf-image-card .style-picker-states:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
-.source .ssf-image-card .style-picker-state:not([data-state-label]) { grid-template-rows: minmax(0, 1fr); }
-.source .ssf-image-card .style-picker-state:not([data-state-label])::before { display: none; }
 /* —— 动画资源（animation-inspector.ts）：列表下的新建 / 复制 / 删除、预览下的警告、组合子动画、浮动物体、引用 —— */
 .animation-list-actions { display: flex; align-items: center; gap: var(--space-2xs); }
 .animation-list-actions > .ui-select { flex: 1; min-width: 0; }
