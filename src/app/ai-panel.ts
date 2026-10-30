@@ -120,7 +120,10 @@ export function setAiDesignScope(project: boolean): void {
 
 function aiPreviewImage(): { type: "image"; data: string; mimeType: string } | undefined {
   try {
-    const url = keyboardSnapshot(theme.value === "dark" ? "#17191f" : "#f6f7f9")?.toDataURL("image/png")
+    const snapshot = keyboardSnapshot(theme.value === "dark" ? "#17191f" : "#f6f7f9")
+    const url = snapshot?.toDataURL("image/png")
+    // 编码完立即清空位图，WebKit 不会及时回收画布显存。
+    if (snapshot) snapshot.width = snapshot.height = 0
     const comma = url?.indexOf(",") ?? -1
     if (!url || comma < 0) return
     return { type: "image", mimeType: "image/png", data: url.slice(comma + 1) }

@@ -67,6 +67,18 @@ try {
 
   await page.keyboard.press("ControlOrMeta+ArrowLeft")
   await page.waitForFunction(async (path) => (await import("/src/app/state.ts")).appState.layoutPath === path, at(1))
+
+  // 皮肤改过再打开：换下来的旧截图要立即清空位图，WebKit 不会及时回收画布显存，越用越卡。
+  const oldSnapshots = await page.evaluateHandle(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    appState.archive.revision++
+    return [...appState.layoutOverviewCache.snapshots.values()]
+  })
+  await page.locator("#layout-overview-toggle").click()
+  await liveAt(at(1))
+  await page.keyboard.press("Space")
+  await closed()
+  assert.deepEqual(await oldSnapshots.evaluate((canvases) => [...new Set(canvases.map((canvas) => canvas.width))]), [0], "replaced snapshots release their bitmaps")
   assert.deepEqual(errors, [])
   console.log(`layout overview: ${layouts.length} layouts in a ${columns}×${columns} grid`)
 } finally {

@@ -22,6 +22,16 @@ const drawn = () => Promise.all([preview.whenDrawn(), toolbarPreview.whenDrawn()
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 // 截图都在交互预览下画，与模式无关；皮肤状态（skinState）随布局变化，不算在内。皮肤改动（revision）单独比较。
 const cacheKey = () => [theme.value, orientation.value, currentDeviceValue()].join("|")
+const snapshotCanvases = () => layoutOverviewGrid.querySelectorAll<HTMLCanvasElement>(".layout-overview-frame > canvas")
+
+/**
+ * 缓存里已经没有的截图立即清空位图。WebKit 不把画布显存算进 GC 压力，
+ * 不清的话皮肤每改一次再打开全局预览就多压一整组（十几张原分辨率截图，数百 MB），越用越卡。
+ */
+function release(canvas: HTMLCanvasElement | null | undefined): void {
+  if (!canvas || [...appState.layoutOverviewCache?.snapshots.values() ?? []].includes(canvas)) return
+  canvas.width = canvas.height = 0
+}
 
 const transform = (state: Overview) => `translate(${state.x}px, ${state.y}px) scale(${state.zoom})`
 
@@ -86,9 +96,10 @@ function showSnapshot(index: number, snapshot: HTMLCanvasElement | undefined): v
   const frame = frameOf(index)
   if (!frame) return
   if (snapshot) {
-    const previous = frame.querySelector(":scope > canvas")
+    const previous = frame.querySelector<HTMLCanvasElement>(":scope > canvas")
     previous?.remove()
     frame.prepend(snapshot)
+    if (previous !== snapshot) release(previous)
     // 旧截图换成新的，不再弹一次。
     if (previous) snapshot.getAnimations().forEach((animation) => animation.finish())
   } else {
@@ -230,7 +241,10 @@ export async function openLayoutOverview(): Promise<void> {
     : undefined
   // 皮肤改过：先摆上次的截图，再逐个重截替换，不用从空格子等起。
   const stale = cached?.revision !== revision ? cached?.snapshots : undefined
+  const previous = appState.layoutOverviewCache
   const cache = cached && !stale ? cached : appState.layoutOverviewCache = { archive: appState.archive, key, revision, snapshots: new Map() }
+  // 换了主题、方向或皮肤的旧截图用不上了；改过的旧截图先摆出来，换下或退出时再清。
+  if (previous !== cache && !stale) previous?.snapshots.forEach(release)
   for (const [index, button] of buttons.entries()) {
     const path = button.dataset.path ?? ""
     const snapshot = cache.snapshots.get(path) ?? stale?.get(path)
@@ -256,7 +270,7 @@ export async function openLayoutOverview(): Promise<void> {
   layoutOverview.dataset.entering = ""
   layoutOverview.hidden = false
   frameOf(state.index)?.querySelector("canvas")?.getAnimations().forEach((animation) => animation.finish())
-  const snapshotWidth = layoutOverviewGrid.querySelector<HTMLCanvasElement>(".layout-overview-frame > canvas")?.width
+  const snapshotWidth = snapshotCanvases()[0]?.width
   if (snapshotWidth) state.maxZoom = snapshotWidth / devicePixelRatio / (frameOf(0)?.offsetWidth || 1)
   fitLayoutOverview(true)
   if (keyboard) {
@@ -313,6 +327,7 @@ function finishClose(): void {
   delete canvasWrap.dataset.layoutOverview
   layoutOverview.hidden = true
   delete layoutOverview.dataset.closing
+  snapshotCanvases().forEach(release)
   layoutOverviewGrid.replaceChildren()
   appState.layoutOverview = undefined
   preview.setCrosshair(editorCrosshair.checked)
