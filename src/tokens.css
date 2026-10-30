@@ -157,6 +157,11 @@
   --titlebar-height: calc(86px + var(--safe-area-top));
 }
 
+/* Windows 顶栏上方留一条空白，高度随之加高 */
+:root.windows {
+  --titlebar-height: calc(54px + var(--space-sm) + var(--safe-area-top));
+}
+
 /* 版式尺寸随窗口变化：检查器宽度、标题栏高度、手机底栏高度 */
 :root { --inspector-width: 360px; }
 @media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {

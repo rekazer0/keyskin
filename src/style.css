@@ -5787,6 +5787,7 @@ main {
 }
 
 :root.windows body .titlebar {
+  padding-top: var(--space-sm);
   padding-right: 0;
 }
 
