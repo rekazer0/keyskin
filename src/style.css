@@ -959,7 +959,8 @@ h2 {
   left: 14px;
 }
 
-/* 全局预览：盖在画布上的布局网格，缩放平移由脚本写 transform，画布本身的键盘同时淡出 */
+/* 全局预览：盖在画布上的布局网格，缩放平移由脚本写 transform，画布本身的键盘同时淡出。
+   停手后网格按显示倍率（--_scale）重新排版，transform 只缩小不放大：WebKit 把合成层按 1 倍栅格化，放大会糊 */
 .layout-overview {
   position: absolute;
   inset: 0;
@@ -983,13 +984,14 @@ h2 {
 }
 
 .layout-overview-grid {
+  --_scale: 1;
   position: absolute;
   top: 0;
   left: 0;
   display: grid;
-  grid-template-columns: repeat(var(--_columns), 280px);
+  grid-template-columns: repeat(var(--_columns), calc(280px * var(--_scale)));
   grid-template-rows: repeat(var(--_columns), 1fr);
-  gap: var(--space-lg);
+  gap: calc(var(--space-lg) * var(--_scale));
   transform-origin: 0 0;
   transition: transform var(--duration-slow) var(--ease-emphasized);
 }
@@ -997,6 +999,8 @@ h2 {
 .layout-overview-grid[data-instant] {
   transition: none;
   will-change: transform;
+  /* 拖动时格子的悬停底色不跟着变，免得整层重绘 */
+  pointer-events: none;
 }
 
 /* 键盘贴着格子底边，矮的面板（符号面板没有候选栏）与同一行底边、标签对齐 */
@@ -1004,9 +1008,9 @@ h2 {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
-  border-radius: var(--radius-lg);
+  gap: calc(var(--space-sm) * var(--_scale));
+  padding: calc(var(--space-sm) * var(--_scale));
+  border-radius: calc(var(--radius-lg) * var(--_scale));
   color: var(--secondary);
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -1030,9 +1034,9 @@ h2 {
 .layout-overview-frame {
   position: relative;
   display: block;
-  border-radius: var(--radius-md);
-  outline: 2px solid transparent;
-  outline-offset: var(--space-xs);
+  border-radius: calc(var(--radius-md) * var(--_scale));
+  outline: calc(2px * var(--_scale)) solid transparent;
+  outline-offset: calc(var(--space-xs) * var(--_scale));
   transition: outline-color var(--duration-fast) var(--ease-standard);
 }
 
@@ -1049,7 +1053,7 @@ h2 {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: var(--radius-md);
+  border-radius: calc(var(--radius-md) * var(--_scale));
   animation: ui-pop var(--duration-slow) var(--ease-emphasized);
 }
 
@@ -1076,16 +1080,22 @@ h2 {
 }
 
 .layout-overview-label {
+  zoom: var(--_scale);
   text-align: center;
   transition: opacity var(--duration-base) var(--ease-standard);
 }
 
-/* 进入布局时只留当前格子，随网格放大到画布上的键盘位置 */
-.layout-overview[data-closing] :is(.layout-overview-cell:not([aria-selected="true"]), .layout-overview-label) {
+/* 进入布局时只留当前格子，随网格放大到画布上的键盘位置；打开全局预览时反过来，从这里缩小、其余格子淡入 */
+.layout-overview:is([data-closing], [data-entering]) :is(.layout-overview-cell:not([aria-selected="true"]), .layout-overview-label) {
   opacity: 0;
 }
 
-.layout-overview[data-closing] .layout-overview-cell[aria-selected="true"] .layout-overview-frame {
+/* 打开时当前格子正好盖在画布的键盘上，遮罩直接显示，不淡入 */
+.layout-overview[data-entering] {
+  transition: none;
+}
+
+.layout-overview:is([data-closing], [data-entering]) .layout-overview-cell[aria-selected="true"] .layout-overview-frame {
   outline-color: transparent;
 }
 

@@ -15,6 +15,7 @@ import { applyModeState, syncSegmentedControls } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
 import { recordRecentFile } from "./recent-files"
+import { dismissLayoutOverview } from "./layout-overview"
 import { renderFiles } from "./file-tree"
 import { bdaAvailableLayoutPaths, preferredPath, isBdaLayoutPath } from "./bda-documents"
 import { selectFile } from "./navigation"
@@ -51,6 +52,7 @@ export async function loadArchive(
     sizeBytes,
     sourceWorkspace: Boolean(existingSourceWorkspace),
   })
+  dismissLayoutOverview()
   if (showSkinLoadProgress(sizeBytes)) await waitForInterfacePaint()
   await flushSourceAutosave()
   await activateSourceWorkspace("", "")

@@ -46,4 +46,22 @@ assert.equal(frames.size, 0, 'immediate feedback cancels the duplicate queued dr
 finish()
 await Promise.resolve()
 assert.equal(frames.size, 0)
+
+// whenDrawn waits for the next render only, even while an animation keeps queueing draws every frame.
+preview.drawID = 0
+preview.lastDrawnID = 0
+preview.render = () => {
+  const drawID = ++preview.drawID
+  return Promise.resolve().then(() => { preview.lastDrawnID = drawID })
+}
+let settled = false
+const drawn = preview.whenDrawn().then(() => { settled = true })
+for (let i = 0; i < 5 && !settled; i++) {
+  frame()
+  preview.draw()
+  await new Promise(resolve => setTimeout(resolve))
+}
+await drawn
+assert.ok(frames.size > 0, 'the animation still has a draw queued')
+assert.equal(settled, true, 'continuous animation must not hold whenDrawn until its timeout')
 console.log('Preview scheduling checks passed')

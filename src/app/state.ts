@@ -196,10 +196,13 @@ export const appState = {
   layoutOverview: undefined as {
     index: number
     columns: number
+    /** 网格 transform 的倍率；显示倍率是 zoom × scale。 */
     zoom: number
+    /** 网格排版的倍率（--_scale），停手后跟随显示倍率，transform 因此只缩小不放大。 */
+    scale: number
     x: number
     y: number
-    /** 截图原生分辨率对应的倍数，再放大会变糊。 */
+    /** 截图原生分辨率对应的显示倍率，再放大会变糊。 */
     maxZoom: number
     /** 用户缩放或拖动过网格，截图全部到位后不再自动适配。 */
     touched: boolean
@@ -220,7 +223,7 @@ export const appState = {
   /** 从全局预览进入了某个布局：Esc 回到全局预览。 */
   layoutOverviewReturn: false,
   /** 全局预览截图，皮肤修订号与外观等没变时下次打开直接复用。 */
-  layoutOverviewCache: undefined as { archive: SkinArchive; key: string; snapshots: Map<string, HTMLCanvasElement> } | undefined,
+  layoutOverviewCache: undefined as { archive: SkinArchive; key: string; revision: number; snapshots: Map<string, HTMLCanvasElement> } | undefined,
   previewPanLocked: true,
   previewPanX: 0,
   previewPanY: 0,

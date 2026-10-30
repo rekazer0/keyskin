@@ -10,6 +10,7 @@ import { startNewDocument, newDocument } from "../new-document"
 import { runFileOperation, readBrowserSkinFile, showImage, showStatus } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
 import { recentFilesKey, recentPreviewCache, recentThumbRequest, renderRecentFiles } from "../recent-files"
+import { dismissLayoutOverview } from "../layout-overview"
 import { releaseArchivePreview, hydrateTemplateCardPreviews } from "../../template-preview"
 import { type ExportFormat } from "../../export.ts"
 import { type BdaPlatform } from "../../bda-platform.ts"
@@ -137,6 +138,7 @@ export function wireFilesAndSettings(): void {
   $("#welcome-recent-open")?.addEventListener("click", () => openButton.click())
   // 回到启动页但不关闭当前皮肤；在启动页打开别的皮肤时仍会先询问保存。
   $("#recent-files")?.addEventListener("click", () => {
+    dismissLayoutOverview()
     canvasWrap.classList.add("empty")
     renderRecentFiles()
   })

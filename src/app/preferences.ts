@@ -76,8 +76,9 @@ export function applyEditorCrosshairSetting(): void {
   const state = editorCrosshair.checked ? "on" : "off"
   deviceShell.dataset.crosshair = state
   previewCoordinates.dataset.crosshair = state
-  preview.setCrosshair(editorCrosshair.checked)
-  toolbarPreview.setCrosshair(editorCrosshair.checked)
+  // 全局预览里没有十字线浮层，不能隐藏系统光标。
+  preview.setCrosshair(editorCrosshair.checked && !appState.layoutOverview)
+  toolbarPreview.setCrosshair(editorCrosshair.checked && !appState.layoutOverview)
   editorCoordinateSnapSetting.hidden = !editorCrosshair.checked
   previewCoordinates.hidden = editorCrosshair.checked
   if (!editorCrosshair.checked) {

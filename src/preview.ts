@@ -171,16 +171,12 @@ export class Preview {
 
   whenDrawn(timeoutMs = 8_000): Promise<void> {
     this.draw()
-    const target = Math.max(this.drawID, 1)
+    // 只等调用之后开始的那次渲染；不等绘制队列清空，持续的动画会一直排绘制，那样每次都要等到超时。
+    const target = this.drawID + 1
     const started = Date.now()
     return new Promise((resolve, reject) => {
       const tick = () => {
-        if (
-          this.lastDrawnID >= target &&
-          !this.drawQueued &&
-          !this.renderPending &&
-          !this.renderAgain
-        ) {
+        if (this.lastDrawnID >= target) {
           resolve()
           return
         }
