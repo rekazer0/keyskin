@@ -2147,7 +2147,7 @@ body:has(.canvas-wrap.empty) .workspace {
   .picker-dialog {
     width: 100vw;
     max-width: none;
-    height: 100dvh;
+    height: var(--viewport-height);
     max-height: none;
     box-sizing: border-box;
     /* 全屏时避开系统状态栏和底部手势条 */
@@ -2579,7 +2579,7 @@ body:has(.canvas-wrap.empty) .workspace {
 }
 
 .new-project-dialog {
-  max-height: min(680px, calc(100dvh - 32px));
+  max-height: min(680px, calc(var(--viewport-height) - 32px));
   background: var(--menu);
 }
 
@@ -2986,7 +2986,7 @@ input[type="search"]:focus {
   }
 
   main {
-    height: calc(100dvh - var(--titlebar-height));
+    height: calc(var(--viewport-height) - var(--titlebar-height));
     min-height: 0;
     display: block;
     position: relative;
@@ -3386,7 +3386,7 @@ input[type="search"]:focus {
   }
 
   main {
-    height: calc(100dvh - var(--titlebar-height));
+    height: calc(var(--viewport-height) - var(--titlebar-height));
     grid-template-columns: clamp(116px, 18vw, 150px) minmax(0, 1fr) 0 clamp(190px, 28vw, 240px);
   }
 
@@ -6231,7 +6231,7 @@ main {
 
 /* 内容比视口高时只滚动中间，头尾保持可见。 */
 :root body #layout-image-dialog > form {
-  max-height: calc(100dvh - 64px);
+  max-height: calc(var(--viewport-height) - 64px);
   overflow-y: auto;
   gap: 16px;
 }
@@ -6690,7 +6690,7 @@ main {
   /* Menus anchor to the bar edges instead of the summary so they never leave the screen. */
   :root body .titlebar .mobile-command-actions {
     width: auto;
-    max-height: calc(100dvh - var(--titlebar-height) - 16px - env(safe-area-inset-bottom));
+    max-height: calc(var(--viewport-height) - var(--titlebar-height) - 16px - env(safe-area-inset-bottom));
     position: fixed;
     top: calc(var(--titlebar-height) + 6px);
     right: auto;
@@ -7201,7 +7201,7 @@ main {
 @media (max-width: 760px) {
   :root body #new-project-dialog[open] {
     height: auto;
-    max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(var(--viewport-height) - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
     overflow: hidden;

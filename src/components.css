@@ -49,7 +49,7 @@
 /* —— 文件操作弹窗：进度与结果共用同一个窗口 —— */
 .ui-operation-dialog {
   width: min(400px, calc(100vw - var(--space-2xl)));
-  max-height: calc(100dvh - var(--space-2xl));
+  max-height: calc(var(--viewport-height) - var(--space-2xl));
   box-sizing: border-box;
   padding: 0;
   overflow: auto;

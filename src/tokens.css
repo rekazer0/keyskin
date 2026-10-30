@@ -70,6 +70,8 @@
   --safe-area-top: max(env(safe-area-inset-top, 0px), var(--browser-occlusion-top));
   --safe-area-bottom: max(env(safe-area-inset-bottom, 0px), var(--browser-occlusion-bottom));
   --titlebar-height: calc(54px + var(--safe-area-top));
+  /* 夸克等 Chrome 100 内核不认 dvh，整条声明会被丢弃，先给 vh 兜底 */
+  --viewport-height: 100vh;
 
   /* 阴影系统：只用于浮层，表面用 1px 描边区分层级 */
   --shadow-sm: 0 1px 2px rgb(18 24 40 / 6%);
@@ -333,4 +335,8 @@
     --duration-base: 0ms;
     --duration-slow: 0ms;
   }
+}
+
+@supports (height: 100dvh) {
+  :root { --viewport-height: 100dvh; }
 }

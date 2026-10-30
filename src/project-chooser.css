@@ -1,7 +1,7 @@
 :root body #new-project-dialog {
   width: min(920px, calc(100vw - 32px));
-  height: min(620px, calc(100dvh - 32px));
-  max-height: calc(100dvh - 32px);
+  height: min(620px, calc(var(--viewport-height) - 32px));
+  max-height: calc(var(--viewport-height) - 32px);
   padding: 0;
   border-radius: var(--radius-lg);
 }

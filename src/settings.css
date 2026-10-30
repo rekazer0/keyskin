@@ -9,7 +9,7 @@
 
 #settings-dialog {
   width: min(800px, calc(100vw - 32px));
-  height: min(600px, calc(100dvh - 32px));
+  height: min(600px, calc(var(--viewport-height) - 32px));
   max-width: none;
   max-height: none;
   padding: 0;
@@ -217,7 +217,7 @@
 @media (max-width: 760px) {
   #settings-dialog {
     width: 100vw;
-    height: 100dvh;
+    height: var(--viewport-height);
     margin: 0;
     border: 0;
     border-radius: 0;
