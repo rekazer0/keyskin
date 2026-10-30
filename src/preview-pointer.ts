@@ -12,6 +12,11 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
   const key = self.hit(point)
   if (self.animationView) {
     if (key) void self.playAnimation(key)
+    if (self.mode !== "edit") return
+    if (key) pickKey(self, key, event)
+    else self.selected.clear()
+    self.onAnimationKeys([...self.selected])
+    void self.draw()
     return
   }
   if (!key) {
@@ -216,6 +221,12 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
 }
 
 export function selectKey(self: Preview, key: PreviewItem, event: Pick<PointerEvent, "metaKey" | "ctrlKey" | "shiftKey">): void {
+  pickKey(self, key, event)
+  self.onSelect([...self.selected])
+}
+
+/** 点按键改选择：Shift 连选、Cmd/Ctrl 加减选、再点唯一选中的键取消；不通知。 */
+function pickKey(self: Preview, key: PreviewItem, event: Pick<PointerEvent, "metaKey" | "ctrlKey" | "shiftKey">): void {
   if (self.mode === "edit" && event.shiftKey && self.selectionAnchor) {
     const sections = visiblePreviewItems(self.keys, self.skinState)
       .filter((item) => item.editable).map((item) => item.section)
@@ -237,7 +248,6 @@ export function selectKey(self: Preview, key: PreviewItem, event: Pick<PointerEv
   }
   if (self.mobileMultiSelect && !self.selected.size) self.mobileMultiSelect = false
   if (self.mode === "edit" && !event.shiftKey) self.selectionAnchor = key.section
-  self.onSelect([...self.selected])
 }
 
 function dragDelta(self: Preview, point: { x: number; y: number }): { x: number; y: number } {

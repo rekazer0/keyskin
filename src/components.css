@@ -427,7 +427,6 @@ body {
 /* —— 动画播放器：舞台 + 时间轴（每条轨道一行，播放头贯穿）+ 走带控件；只改变预览，不写配置 —— */
 .ui-animation-player { display: grid; gap: var(--space-sm); min-width: 0; }
 .ui-animation-stage { position: relative; display: grid; place-items: center; overflow: hidden; border-radius: var(--radius-md); background: var(--checker-image), var(--checker-light); background-position: 0 0, calc(var(--checker-size) / 2) calc(var(--checker-size) / 2); background-size: var(--checker-size) var(--checker-size); }
-.ui-animation-stage[hidden] { display: none; }
 .ui-animation-stage > canvas { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
 .ui-animation-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--space-xs); margin: 0; padding: var(--space-md); color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.6; text-align: center; }
 .ui-animation-empty[hidden] { display: none; }
@@ -449,8 +448,6 @@ body {
 /* 横排（画布下方的播放条）：左边舞台，右边时间轴、走带与说明 */
 .ui-animation-player[data-layout="row"] { grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto auto 1fr; column-gap: var(--space-lg); align-items: start; }
 .ui-animation-player[data-layout="row"] > .ui-animation-stage { grid-row: 1 / span 3; }
-/* 粒子画在键盘画布上时没有舞台，时间轴占满整行 */
-.ui-animation-player[data-layout="row"]:has(> .ui-animation-stage[hidden]) { grid-template-columns: minmax(0, 1fr); }
 
 /* —— 列表框：可滚动的单选列表（role="listbox"），行用 .ui-list-item，方向键切换 —— */
 .ui-listbox { position: relative; display: grid; align-content: start; gap: var(--space-xs); max-height: calc(var(--control-height-lg) * 7); margin: 0; padding: var(--space-2xs); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line-soft); border-radius: var(--radius-md); list-style: none; }

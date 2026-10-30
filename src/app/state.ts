@@ -125,6 +125,10 @@ export const appState = {
   animationDesignMode: "all" as "all" | "motion" | "particle",
   /** The animation shown per `path|mode` in the animation inspector (animation-resource.ts). */
   selectedAnimations: {} as Record<string, string>,
+  /** 动效 / 粒子设计里编辑模式下在画布上选中的按键（section）；列表只留它们播放的动画。 */
+  animationKeys: [] as string[],
+  /** 列表只看 animationKeys 播放的动画；切到「全部」可以挑一个应用到它们。 */
+  animationKeyOnly: true,
   selectedStyleID: "",
   selectedSoundID: "",
   selectedBdaStyleGroup: "imageStyles" as BdaAppearanceStyleGroup,

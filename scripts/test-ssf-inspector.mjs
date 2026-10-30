@@ -74,10 +74,10 @@ try {
   await page.locator('#inspector-filter').press('Escape')
   // A composite edit preserves its other coordinates; reset survives inspector reconstruction.
   const coord = () => row('FG_RECT').locator('input')
-  // A section's normal and pressed images share one Baidu-style card: two names, two labelled previews.
+  // A section's normal and pressed images share one Baidu-style card: two names, normal then pressed preview.
   const backgroundCard = fields.locator('[data-inspector-group-label="背景"] .ssf-image-card')
   assert.equal(await backgroundCard.count(), 1)
-  assert.deepEqual(await backgroundCard.locator('.style-picker-state').evaluateAll((states) => states.map((state) => state.dataset.stateLabel)), ['正常', '按下'])
+  assert.deepEqual(await backgroundCard.locator('.style-picker-state').evaluateAll((states) => states.map((state) => state.dataset.styleState)), ['normal', 'highlighted'])
   assert.equal(await backgroundCard.locator('.style-reference-name').count(), 2)
   // Boards are picked in the overview, not a 9 / 26 key switch; on phones a swipe that starts on a
   // thumbnail still scrolls the inspector, and a crowded category rail scrolls by itself.

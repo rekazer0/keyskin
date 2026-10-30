@@ -90,9 +90,10 @@ try {
     await player.getByRole('button', { name: '播放预览', exact: true }).click()
     await page.waitForFunction(() => Number(document.querySelector('.ui-animation-player .ui-slider').value) > 30)
     await player.getByRole('button', { name: '暂停预览', exact: true }).click()
-    // 粒子直接画在画布的键盘上，播放器不再显示示例按键舞台。
-    assert.equal(await player.locator('.ui-animation-stage').isHidden(), true, `${format}: 粒子不在示例舞台上`)
+    // 粒子同时画在示例舞台和画布的键盘上；舞台停着时也有整段弹道可看。
+    assert.equal(await player.locator('.ui-animation-stage').isVisible(), true, `${format}: 粒子有示例舞台`)
     await seek(0)
+    const stageAtStart = await sample()
     const keyboard = () => page.locator('#preview').evaluate((canvas) => canvas.toDataURL())
     await page.waitForTimeout(80)
     const emptyKeyboard = await keyboard()
@@ -103,6 +104,7 @@ try {
       return preview.playerParticles?.particles.length ? preview.playerParticles.elapsed : -1
     }), at, `${format}: 键盘画布按播放器时间画粒子`)
     await page.waitForFunction((before) => document.querySelector('#preview').toDataURL() !== before, emptyKeyboard)
+    assert.notEqual(await sample(), stageAtStart, `${format}: 舞台上的粒子随时间变化`)
     assert.ok(await player.locator('.ui-animation-lane').count() >= 1, `${format}: 粒子有发射轨道`)
     assert.deepEqual(await fingerprint(), before, `${format}: playback is read-only`)
 

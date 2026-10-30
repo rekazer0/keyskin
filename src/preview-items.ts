@@ -33,6 +33,13 @@ export type PreviewItem = {
   backAnimStyle?: string
   foreAnimStyle?: string
   foreAnimStyles: string[]
+  /** PRESS_STYLE：按下时整键的按压效果样式（如粒子），与 ANIM_STYLE 系列一同播放。 */
+  pressStyle?: string
+}
+
+/** Styles whose PRESS_ANIM plays when the key is pressed. */
+export function keyAnimationStyles(key: PreviewItem): string[] {
+  return [key.animStyle, key.backAnimStyle, ...key.foreAnimStyles, key.pressStyle].filter((style): style is string => Boolean(style))
 }
 
 function duplicateKeySignature(item: PreviewItem): string | undefined {
@@ -133,6 +140,7 @@ export function effectivePreviewItem(
       ? item.positionTypes
       : positionType.split(",").map((token) => token.trim()).filter(Boolean),
     animStyle: animStyle ?? item.animStyle,
+    pressStyle: value("PRESS_STYLE") ?? item.pressStyle,
     backAnimStyle: backAnimStyle ?? item.backAnimStyle,
     foreAnimStyle: foreAnimStyle === undefined
       ? item.foreAnimStyle
@@ -362,6 +370,7 @@ function itemFromSection(document: IniDocument, section: string): PreviewItem | 
     positionTypes: value("POS_TYPE").split(",").map((token) => token.trim()).filter(Boolean),
     statStyle: value("STAT_STYLE"),
     animStyle: value("ANIM_STYLE"),
+    pressStyle: value("PRESS_STYLE"),
     backAnimStyle: value("BACK_ANIM_STYLE"),
     foreAnimStyle: value("FORE_ANIM_STYLE").split(",")[0],
     foreAnimStyles: value("FORE_ANIM_STYLE").split(",").map((token) => token.trim()).filter(Boolean),
@@ -571,6 +580,7 @@ export function previewItems(
       positionTypes: document.get(section, "POS_TYPE")?.split(",").map((token) => token.trim()).filter(Boolean) ?? [],
       statStyle: value("STAT_STYLE"),
       animStyle: value("ANIM_STYLE"),
+      pressStyle: value("PRESS_STYLE"),
       backAnimStyle: value("BACK_ANIM_STYLE"),
       foreAnimStyle: value("FORE_ANIM_STYLE").split(",")[0],
       foreAnimStyles: value("FORE_ANIM_STYLE").split(",").map((token) => token.trim()).filter(Boolean),

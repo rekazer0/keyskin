@@ -17,7 +17,7 @@ import { drawVisualPreview, retinaThumbnail, thumbnailRecycler } from "../atlas.
 import { translatedConfigLabel } from "./document-inspector"
 import { refreshPreview } from "./preview-render"
 import { soundPathForFilename, soundResourcePaths, SOUND_ACCEPT, isSoundPath } from "../sounds.ts"
-import { symbolSpan } from "../icons"
+import { createIcon, symbolSpan } from "../icons"
 import { availableStyleIDs, styleKinds, styleKind, styleKindBadge, styleConfigDocument, styleSoundFile } from "./style-picker"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { asObject } from "../palm/sxi-ini.ts"
@@ -27,7 +27,8 @@ import { palmTileSlices } from "../palm/palm-style-edit.ts"
 import { openPalmSkin } from "./sxi-documents"
 import { showImage, showError, showStatus } from "./file-operations"
 import { updateSourceHighlight } from "./source-panel"
-import { styleAnimationLinks } from "./legacy-animation-inspector"
+import { styleAnimationLinks, styleAnimationPlayers, styleAnimationSummary } from "./legacy-animation-inspector"
+import { previewStyleAnimation } from "./animation-resource"
 
 export function openStyleImageResourceChooser(target: StyleImagePickerTarget): void {
   appState.resourcePickerSelect = undefined
@@ -168,9 +169,10 @@ export async function renderStyleResourceDetail(): Promise<void> {
   resourceMeta.textContent = palm ? `${SXI_SKIN_PATH} · ${palm.join(".")}` : path
   imageResourceDetail.hidden = true
   styleResourceDetail.hidden = false
-  styleDetailPreviews.hidden = false
+  const animated = !palm && styleKind(appState.selectedStyleID) === "anim"
+  styleDetailPreviews.hidden = animated
   const resolver = visualResolver()
-  if (resolver) {
+  if (resolver && !animated) {
     drawVisualPreview(retinaThumbnail(styleDetailNormal, 128, 88), [await resolver.resolve(appState.selectedStyleID, false).catch(() => undefined)], false)
     drawVisualPreview(retinaThumbnail(styleDetailHighlighted, 128, 88), [await resolver.resolve(appState.selectedStyleID, true).catch(() => undefined)], false)
   }
@@ -182,14 +184,16 @@ export async function renderStyleResourceDetail(): Promise<void> {
   }
   const archive = appState.archive!
   const stylesDocument = IniDocument.parse(archive.getText(path))
-  styleDetailFields.replaceChildren()
+  // 动画样式在原来的正常 / 按下预览处播放它的动画，也不列出它没有的颜色、字体等外观字段。
+  styleDetailFields.replaceChildren(...animated ? styleAnimationPlayers(appState.selectedStyleID, stylesDocument) : [])
   const existing = stylesDocument.entries(section)
-  const common = ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "SHOW", "INFO"]
+  const common = animated ? [] : ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "SHOW", "INFO"]
   const keys = [...common, ...existing.map((entry) => entry.key).filter((key) => !common.includes(key) && key !== "NM_IMG" && key !== "HL_IMG")]
   const groups = [
     ["colors", "状态颜色", (key: string) => key === "NM_COLOR" || key === "HL_COLOR"],
     ["typography", "字体", (key: string) => key.startsWith("FONT_")],
     ["content", "内容与说明", (key: string) => key === "SHOW" || key === "INFO"],
+    ["animation", "动画", (key: string) => /ANIM|^EVENT\d+$/.test(key)],
     ["advanced", "边框与扩展", () => true],
   ] as const
   const groupFields = new Map(groups.map(([id]) => [id, document.createElement("div")]))
@@ -393,18 +397,28 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
       badge.title = soundPath ? `点击试听 ${soundFilename}` : `声音文件不存在：${soundFilename}`
       button.append(badge)
     }
+    const kind = styleKind(styleID, stylesDocument)
     const previews = document.createElement("span")
     previews.className = "resource-style-previews"
-    for (const highlighted of [false, true]) {
-      const canvas = galleryCanvas(128, 88)
-      drawVisualPreview(canvas, [await resolver.resolve(styleID, highlighted).catch(() => undefined)], false)
-      previews.append(canvas)
+    if (kind === "anim" && stylesDocument) {
+      // 动画样式没有正常 / 按下外观：写明播放哪个动画，悬停时在画布上播放（DESIGN.md §10）。
+      previews.dataset.styleKind = "anim"
+      const summary = document.createElement("small")
+      summary.textContent = styleAnimationSummary(styleID, stylesDocument)
+      previews.append(createIcon(styleKinds.anim.icon, 16), summary)
+      button.addEventListener("mouseenter", () => previewStyleAnimation([styleID]))
+    } else {
+      for (const highlighted of [false, true]) {
+        const canvas = galleryCanvas(128, 88)
+        drawVisualPreview(canvas, [await resolver.resolve(styleID, highlighted).catch(() => undefined)], false)
+        previews.append(canvas)
+      }
     }
     const name = document.createElement("strong")
     name.textContent = `STYLE${styleID}`
     const nameRow = document.createElement("span")
     nameRow.className = "style-resource-name"
-    nameRow.append(name, styleKindBadge(styleKind(styleID, stylesDocument), true))
+    nameRow.append(name, styleKindBadge(kind, true))
     button.append(previews, nameRow)
     button.addEventListener("click", () => {
       selectGalleryItem(`STYLE${styleID}`, resourceGallery)

@@ -3,7 +3,7 @@ import { IniDocument } from "./ini.ts"
 import { DEFAULT_PANEL_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { snapPointToRects } from "./layout.ts"
 import type { BdaAnimation } from "./bda.ts"
-import { type PreviewItem, type Rect, previewItems, visiblePreviewItems, previewSurfaceHeight, effectivePreviewHitItem, previewHitItem } from "./preview-items.ts"
+import { type PreviewItem, type Rect, keyAnimationStyles, previewItems, visiblePreviewItems, previewSurfaceHeight, effectivePreviewHitItem, previewHitItem } from "./preview-items.ts"
 import { type LegacyAnimation, type LegacyParticleEmitter, bdaAnimationBindingsForKey, bdaBindingEffects, bdaEffectDuration, animationSequenceForKey, animationDuration } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
@@ -21,6 +21,9 @@ export type PreviewEvent = {
   code: string
   holdSymbols?: string
 }
+
+/** 发射完最后一个粒子、它也消失的时刻。 */
+const particleDuration = (particle: LegacyParticleEmitter) => particle.totalNumber / particle.birthRate * 1000 + Math.max(...particle.life)
 
 export class Preview {
   readonly canvas: HTMLCanvasElement
@@ -59,6 +62,8 @@ export class Preview {
   pointerInteractionLocked = false
   /** 动效设计 / 粒子设计：点按键只在画布上播放它的动画，不选中、不切换文件。 */
   animationView = false
+  /** 动效设计 / 粒子设计的编辑模式里点画布改了选中的按键（和普通画布一样多选，点空白处清空）。 */
+  onAnimationKeys: (sections: string[]) => void = () => {}
   private renderDeferred = false
   editDrag?: {
     pointerId: number
@@ -112,6 +117,8 @@ export class Preview {
   shortHint?: LegacyHint
   longHint?: LegacyHint
   bdaHints = false
+  /** 手机键盘的 pt 宽：iOS 按 @3x 图的 pt 尺寸画工具栏图标，不随面板缩放。 */
+  devicePointWidth?: number
   legacyAnimationState?: { key: PreviewItem; startedAt: number }
   private legacyAnimationTimer?: number
   particlePreview?: LegacyParticleEmitter
@@ -390,6 +397,11 @@ export class Preview {
     void this.draw()
   }
 
+  setDevicePointWidth(points: number | undefined): void {
+    this.devicePointWidth = points
+    void this.draw()
+  }
+
   setTransparent(transparent: boolean): void {
     this.transparent = transparent
     void this.draw()
@@ -613,7 +625,7 @@ export class Preview {
     await play(0)
   }
 
-  private restartLegacyPanelAnimation(): void {
+  restartLegacyPanelAnimation(): void {
     if (this.legacyPanelAnimationTimer) window.cancelAnimationFrame(this.legacyPanelAnimationTimer)
     this.legacyPanelAnimationTimer = undefined
     const particles = this.particlePreview
@@ -624,9 +636,7 @@ export class Preview {
       return
     }
     this.legacyPanelAnimationStartedAt = Date.now()
-    const duration = Math.max(...particles.map((particle) =>
-      particle.totalNumber / particle.birthRate * 1000 + Math.max(...particle.life)
-    ))
+    const duration = Math.max(...particles.map(particleDuration))
     const tick = () => {
       const elapsed = Date.now() - this.legacyPanelAnimationStartedAt
       void this.draw()
@@ -637,12 +647,12 @@ export class Preview {
   }
 
   private playLegacyAnimation(key: PreviewItem): void {
-    const styles = [key.animStyle, key.backAnimStyle, ...key.foreAnimStyles].filter(Boolean) as string[]
-    const duration = Math.max(0, ...styles.flatMap((style) => {
-      const frames = this.legacyAnimation?.get(style)?.frames
-      return frames?.length
-        ? [Math.max(...frames.map((frame) => frame.start + frame.delay + animationDuration(frame)))]
-        : []
+    const duration = Math.max(0, ...keyAnimationStyles(key).flatMap((style) => {
+      const effect = this.legacyAnimation?.get(style)
+      return [
+        ...effect?.frames.map((frame) => frame.start + frame.delay + animationDuration(frame)) ?? [],
+        ...effect?.particles.map(particleDuration) ?? [],
+      ]
     }))
     if (!duration) return
     if (this.legacyAnimationTimer) window.cancelAnimationFrame(this.legacyAnimationTimer)

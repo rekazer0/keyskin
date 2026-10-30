@@ -25,8 +25,21 @@ export type AnimationListItem = {
   problem?: string
 }
 
-/** Where an animation is played; each target opens that style or animation. */
-export type AnimationUse = { icon: string; title: string; detail: string; targets?: Array<{ label: string; open(): void }> }
+/**
+ * 编辑模式下在画布上选的按键：列表可以只留它们按下时播放的动画（`only`），也可以看全部再应用到它们。
+ * `none`：它们一个都不播放，只能看全部；`total`：不筛选时的个数。
+ */
+export type AnimationKeyFilter = { label: string; only: boolean; none: boolean; total: number; toggle(): void; clear(): void }
+
+/** 应用前要选的一项（时机、部位），呈现为一个下拉框。 */
+export type AnimationChoice = { label: string; options: Array<[value: string, label: string]>; value: string; change(value: string): void }
+
+/** Where an animation is played; each target opens that style or animation (or applies it, after `choices`). */
+export type AnimationUse = {
+  icon: string; title: string; detail: string
+  choices?: AnimationChoice[]
+  targets?: Array<{ label: string; icon?: string; title?: string; open(): void }>
+}
 
 type AnimationResourceView = {
   mode: AnimationMode
@@ -40,6 +53,7 @@ type AnimationResourceView = {
   create?: { options: Array<[kind: string, label: string]>; run(kind: string): void }
   duplicate?(): void
   remove?: { run(): void; blocked?: string }
+  keyFilter?: AnimationKeyFilter
   /** Document-level rows under the list (BDA design width, ANIM_NUM warnings). */
   listRows?: HTMLElement[]
   player?: AnimationPlayerOptions
@@ -158,10 +172,39 @@ function listBox(view: AnimationResourceView, fill = false): HTMLElement {
   return list
 }
 
+/** 「按键 N 的动效 | 全部」与取消选中按键的按钮。 */
+function keyFilterBar(view: AnimationResourceView): HTMLElement[] {
+  const filter = view.keyFilter
+  if (!filter) return []
+  const bar = element("div", "animation-key-filter")
+  const group = element("span", "ui-segmented")
+  group.dataset.size = "sm"
+  group.dataset.fill = ""
+  group.setAttribute("role", "group")
+  group.setAttribute("aria-label", "动画列表范围")
+  for (const [only, text] of [[true, `${filter.label} 的${MODE_NOUN[view.mode]}`], [false, "全部"]] as const) {
+    const button = element("button")
+    button.type = "button"
+    button.textContent = text
+    button.setAttribute("aria-pressed", String(only === filter.only))
+    if (only && filter.none) {
+      button.disabled = true
+      button.title = `${filter.label} 按下时没有播放${MODE_NOUN[view.mode]}`
+    }
+    button.addEventListener("click", () => { if (only !== filter.only) filter.toggle() })
+    group.append(button)
+  }
+  bar.append(group, iconButton("x", `取消选中${filter.label}`, filter.clear))
+  return [bar]
+}
+
+/** 列表头部的数量；按键筛选时是「1 / 2 个」。 */
+const countLabel = (view: AnimationResourceView) => view.keyFilter?.only ? `${view.items.length} / ${view.keyFilter.total} 个` : `${view.items.length} 个`
+
 function listSection(view: AnimationResourceView): HTMLElement {
-  const section = animationSection(MODE_NOUN[view.mode], view.sectionClass, `${view.items.length} 个`)
+  const section = animationSection(MODE_NOUN[view.mode], view.sectionClass, countLabel(view))
   section.toggleAttribute("data-filter-keep", true)
-  section.append(listBox(view))
+  section.append(...keyFilterBar(view), listBox(view))
   const actions = listActions(view)
   if (actions) section.append(actions)
   section.append(...view.listRows ?? [])
@@ -182,13 +225,15 @@ function listActions(view: AnimationResourceView): HTMLElement | undefined {
     button.addEventListener("click", () => view.create!.run(kind))
     bar.append(button)
   } else if (view.create) {
-    const control = element("span", "ui-input ui-select")
+    const control = element("label", "ui-input ui-select")
+    const plus = element("span", "ui-input-affix")
+    plus.append(createIcon("plus", 14))
     const select = element("select")
     select.setAttribute("aria-label", `新建${noun}`)
     select.disabled = !view.editable
     select.append(new Option(`新建${noun}…`, ""), ...view.create.options.map(([kind, label]) => new Option(label, kind)))
     select.addEventListener("change", () => { if (select.value) view.create!.run(select.value) })
-    control.append(select)
+    control.append(plus, select)
     bar.append(control)
   }
   const current = view.items.find((item) => item.id === view.selected)
@@ -230,13 +275,25 @@ function usesSection(view: AnimationResourceView): HTMLElement {
     list.append(row)
     if (!use.targets?.length) continue
     const targets = element("div", "animation-use-targets")
+    for (const choice of use.choices ?? []) {
+      const control = element("span", "ui-input ui-select")
+      const select = element("select")
+      select.setAttribute("aria-label", choice.label)
+      select.append(...choice.options.map(([value, label]) => new Option(label, value, false, value === choice.value)))
+      select.addEventListener("change", () => choice.change(select.value))
+      control.append(select)
+      targets.append(control)
+    }
     for (const target of use.targets) {
       const button = element("button", "ui-button")
       button.type = "button"
-      button.dataset.size = "sm"
-      button.dataset.variant = "quiet"
-      button.title = `打开 ${target.label}`
-      button.append(createIcon("arrow-up-right", 12), target.label)
+      // 跟在下拉框后面的是「应用」：默认高度与下拉框对齐，不用 quiet
+      if (!use.choices) {
+        button.dataset.size = "sm"
+        button.dataset.variant = "quiet"
+      }
+      button.title = target.title ?? `打开 ${target.label}`
+      button.append(createIcon(target.icon ?? "arrow-up-right", 12), target.label)
       button.addEventListener("click", target.open)
       targets.append(button)
     }
@@ -269,8 +326,8 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
   const item = view.items.find((candidate) => candidate.id === view.selected)
   const hosts = animationWorkspaceHosts()
   if (hosts && view.mode !== "all") {
-    hosts.setMode(view.mode === "particle", `${view.items.length} 个`)
-    hosts.library.replaceChildren(...[listActions(view)].filter((node) => node !== undefined), listBox(view, true))
+    hosts.setMode(view.mode === "particle", countLabel(view))
+    hosts.library.replaceChildren(...keyFilterBar(view), listBox(view, true), ...[listActions(view)].filter((node) => node !== undefined))
     hosts.filter()
     hosts.stage.replaceChildren(...stageContent(view, item))
     const rows = view.listRows?.length ? [animationSection("配置", view.sectionClass)] : []

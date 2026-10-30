@@ -510,6 +510,8 @@
 @media (hover: hover) { .source :is(.resource-item, .style-resource-item, .sound-resource-item):hover { background: var(--hover); } }
 .source :is(.resource-item, .style-resource-item, .sound-resource-item).selected { border-color: var(--accent); background: var(--accent-soft); }
 .source .resource-style-previews { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2xs); }
+/* 动画样式没有正常 / 按下两态：一块写明所播动画的占位，和两张缩略图等高 */
+.source .resource-style-previews[data-style-kind="anim"] { grid-template-columns: minmax(0, 1fr); place-content: center; justify-items: center; gap: var(--space-2xs); aspect-ratio: 2 / 1; padding: 0 var(--space-xs); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--material-content); color: var(--tertiary); }
 .source .resource-gallery:has(> .style-resource-item) { grid-template-columns: repeat(auto-fill, minmax(144px, 1fr)); }
 .source .style-resource-name { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
 .source .style-resource-name > .style-kind-badge { padding: 0; background: none; box-shadow: none; overflow: visible; }
@@ -542,6 +544,7 @@
   background-size: 12px 12px;
 }
 .source .style-detail-previews canvas { display: block; width: 100%; height: auto; }
+.source .style-detail-previews[hidden] { display: none; }
 .source #style-detail-fields { padding: var(--space-md) var(--_gutter); }
 .source :is(.style-detail-group, .style-detail-group-fields) { display: grid; gap: var(--space-sm); }
 .source .style-detail-field-row { display: grid; }
@@ -659,6 +662,9 @@
 .animation-list-actions { display: flex; align-items: center; gap: var(--space-2xs); }
 .animation-list-actions > .ui-select { flex: 1; min-width: 0; }
 .animation-list-actions > .ui-button { margin-right: auto; }
+/* 编辑模式下点了画布上的按键：「按键 N 的动效 | 全部」+ 取消选中 */
+.animation-key-filter { display: flex; align-items: center; gap: var(--space-2xs); }
+.animation-key-filter > .ui-segmented { flex: 1; min-width: 0; }
 .animation-warning {
   display: flex;
   align-items: center;
@@ -699,6 +705,8 @@
 /* 引用行下的跳转目标：点一下打开那个样式或动画 */
 .source .animation-use-targets { display: flex; flex-wrap: wrap; gap: var(--space-xs); padding: 0 0 var(--space-xs) calc(var(--icon-size-sm) + var(--space-sm)); }
 .source .animation-use-targets > .ui-button { font-family: var(--font-mono); }
+/* 应用到按键：时机、部位两个下拉框平分宽度，后面是「应用」 */
+.source .animation-use-targets > .ui-select { flex: 1; }
 /* 样式详情里动画事件（PRESS_ANIM…）引用的动画：每个编号一个按钮，打开动效设计 / 粒子设计 */
 .source .style-animation-links { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: var(--space-xs); }
 /* 图片卡片（gif 路径、帧资源、粒子资源）：只有一个预览，不带状态名 */

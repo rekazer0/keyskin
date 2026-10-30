@@ -1,7 +1,7 @@
 import { appState } from "./state"
-import { canvasWrap, candidateArea, deviceShell, editorCrosshair, files, layoutOverview, layoutOverviewGrid, layoutOverviewToggle, mode, orientation, previewCanvas, previewZoomIn, previewZoomOut, theme } from "./dom"
+import { canvasWrap, candidateArea, candidateInput, deviceShell, editorCrosshair, files, layoutOverview, layoutOverviewGrid, layoutOverviewToggle, mode, orientation, previewCanvas, previewZoomIn, previewZoomOut, theme } from "./dom"
 import { currentDeviceValue, preview, toolbarPreview } from "./canvas-interaction"
-import { applyPreviewZoom, keyboardSnapshot, setPreviewPan } from "./preview-render"
+import { applyPreviewZoom, keyboardInputRowShown, keyboardSnapshot, setPreviewPan } from "./preview-render"
 import { selectChoice } from "./mobile-layout"
 
 // 全局预览：概览里的每个布局按原分辨率截图，排成正方形网格，数量不足的格子留空。
@@ -73,10 +73,11 @@ function settleScale(state: Overview): void {
   if (state.scale > scale * 1.6) relayout(state, scale)
 }
 
-/** 画布上键盘（候选栏顶到面板底）在屏幕上的位置。 */
+/** 画布上键盘（拼音栏或候选栏顶到面板底）在屏幕上的位置。 */
 function keyboardRect(): { left: number; top: number; width: number } {
   const panel = previewCanvas.getBoundingClientRect()
-  const top = candidateArea.hidden ? panel.top : Math.min(panel.top, candidateArea.getBoundingClientRect().top)
+  const bar = keyboardInputRowShown() ? candidateInput : candidateArea
+  const top = candidateArea.hidden ? panel.top : Math.min(panel.top, candidateArea.getBoundingClientRect().top, bar.getBoundingClientRect().top)
   return { left: panel.left, top, width: panel.width }
 }
 
@@ -112,7 +113,7 @@ function focusCell(state: Overview, index: number): void {
   for (const [i, cell] of cells().entries()) cell.ariaSelected = String(i === index)
 }
 
-/** 把画布上的键盘（候选栏顶到面板底）缩放对齐到当前格子。 */
+/** 把画布上的键盘（拼音栏或候选栏顶到面板底）缩放对齐到当前格子。 */
 export function fitLiveKeyboard(): void {
   const state = appState.layoutOverview
   const frame = state?.live.parentElement

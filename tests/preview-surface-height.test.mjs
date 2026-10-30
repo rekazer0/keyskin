@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IniDocument } from '../src/ini.ts'
-import { paddedRect, previewItems, previewSurfaceHeight } from "../src/preview-items.ts"
+import { keyAnimationStyles, paddedRect, previewItems, previewSurfaceHeight } from "../src/preview-items.ts"
 
 test('keys below PANEL.SIZE extend the preview surface (Xiaomi bottom bar)', () => {
   const document = IniDocument.parse([
@@ -32,4 +32,10 @@ test('key PADDING (left,top,right,bottom) insets where the key is painted, never
   assert.deepEqual(first.rect, { x: 688, y: 155, width: 250, height: 143 })
   assert.deepEqual(paddedRect(first), { x: 698, y: 175, width: 210, height: 83 })
   assert.equal(paddedRect(second).height, 0)
+})
+
+// 按键的 PRESS_STYLE（如 STYLE1822 → PRESS_ANIM 粒子）在真机上按下即播放，和 ANIM_STYLE 系列一起算。
+test('a key plays its PRESS_STYLE along with its animation styles', () => {
+  const document = IniDocument.parse(['[KEY1]', 'VIEW_RECT=0,0,100,100', 'CENTER=a', 'BACK_ANIM_STYLE=820', 'FORE_ANIM_STYLE=821,822', 'PRESS_STYLE=1822'].join('\n'))
+  assert.deepEqual(keyAnimationStyles(previewItems(document, 1080, 585)[0]), ['820', '821', '822', '1822'])
 })

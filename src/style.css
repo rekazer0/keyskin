@@ -5033,7 +5033,7 @@ main {
 
 :root body .app-dialog header,
 :root body .project-dialog header,
-:root body :is(#about-dialog, #new-style-dialog, #layout-image-dialog, #unsaved-dialog, #edit-mode-dialog, #panel-scale-dialog, #ios26-dialog, #new-project-dialog) header {
+:root body :is(#about-dialog, #new-style-dialog, #layout-image-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #panel-scale-dialog, #ios26-dialog, #new-project-dialog) header {
   min-height: 56px;
   padding: 0 20px;
   gap: 12px;
@@ -5050,24 +5050,24 @@ main {
   line-height: 1.35;
 }
 
-/* 紧凑弹窗（面板复制、iOS 26、替换键盘样式、新增样式、未保存）：统一的
+/* 紧凑弹窗（面板复制、iOS 26、替换键盘样式、新增样式、未保存、自动创建动画）：统一的
  * 头部 / 内容 / 底部节奏——标题与正文左对齐 20px，头尾各有一条分隔线，按钮靠右。 */
-:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #atlas-create-dialog) {
+:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #atlas-create-dialog) {
   padding: 0;
   border-radius: var(--radius-xl);
 }
 
-:root body :is(#panel-scale-dialog, #ios26-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #atlas-create-dialog) {
+:root body :is(#panel-scale-dialog, #ios26-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #atlas-create-dialog) {
   width: min(460px, calc(100vw - 32px));
 }
 
-:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #atlas-create-dialog) > form {
+:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #atlas-create-dialog) > form {
   display: grid;
   gap: 16px;
   padding: 0 20px 20px;
 }
 
-:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #atlas-create-dialog) > form > header {
+:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #atlas-create-dialog) > form > header {
   display: grid;
   justify-items: start;
   align-content: center;
@@ -5077,14 +5077,20 @@ main {
   padding: 16px 20px 16px;
 }
 
-:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #atlas-create-dialog) > form > header :is(p, small) {
+/* 只有说明、没有内容区时，头尾两条分隔线之间是空的，只留底部那条。 */
+:root body :is(#unsaved-dialog, #edit-mode-dialog, #create-animation-dialog) > form > header:has(+ footer) {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #atlas-create-dialog) > form > header :is(p, small) {
   margin: 0;
   color: var(--secondary);
   font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 
-:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #atlas-create-dialog) > form > footer {
+:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #atlas-create-dialog) > form > footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -5093,7 +5099,7 @@ main {
   border-top: 1px solid var(--line);
 }
 
-:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #atlas-create-dialog) > form > footer button {
+:root body :is(#panel-scale-dialog, #ios26-dialog, #layout-image-dialog, #new-style-dialog, #unsaved-dialog, #edit-mode-dialog, #create-animation-dialog, #atlas-create-dialog) > form > footer button {
   min-width: 72px;
 }
 

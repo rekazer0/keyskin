@@ -40,7 +40,8 @@ export function selectFile(
   if (path !== appState.selectedPath) appState.sourceHistoryHighlight = undefined
   appState.styleReturnPath = ""
   appState.styleReturnCandidate = false
-  // A document refresh (undo, source sync, tree rebuild) keeps the selected animation view.
+  // A document refresh (undo, source sync, tree rebuild) keeps the selected animation view and its picked key.
+  if (path !== appState.selectedPath || (resourceMode === "motion" || resourceMode === "particle") && resourceMode !== appState.animationDesignMode) appState.animationKeys = []
   if (resourceMode === "motion" || resourceMode === "particle") appState.animationDesignMode = resourceMode
   else if (path !== appState.selectedPath) appState.animationDesignMode = "all"
   appState.animationWorkspace?.update(appState.animationDesignMode !== "all")

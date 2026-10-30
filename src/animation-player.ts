@@ -22,7 +22,7 @@ export type AnimationPlayerOptions = {
 export type KeyboardPlayback = {
   /** Called whenever playback starts from the beginning, to play the same animation on a key. */
   play(): void
-  /** Called on every draw at the player's time: particles go on the keyboard instead of the sample stage. */
+  /** Called on every draw at the player's time: particles also go on the keyboard. */
   particles(particles: PreviewClip["particles"], elapsed: number): void
 }
 
@@ -90,8 +90,8 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   let loading = true
   let fit = 1
   const hasContent = tracks.length + clip.particles.length + clip.images.length > 0
-  const stageParticles = keyboard ? [] : clip.particles
-  stage.hidden = Boolean(keyboard) && !tracks.length && !clip.images.length && clip.particles.length > 0
+  /** Every particle position sampled over the whole clip: the stage shows the trajectories even while paused. */
+  const trails: [number, number][] = []
   const resume = session.loop && session.looping === key
   if (session.looping !== key) session.looping = ""
   if (clip.duration > MAX_DURATION) notes.push("长动画只预览前 60 秒")
@@ -175,9 +175,10 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
           include(point.x, point.y)
         }
       }
-      for (const item of stageParticles) {
+      for (const item of clip.particles) {
         for (const particle of particleFrames(item, at)) {
           const [width, height] = particleSize(particle.styleID, particle.scale)
+          trails.push([KEY.x + particle.x * PIXEL, KEY.y + particle.y * PIXEL])
           include(KEY.x + particle.x * PIXEL - width / 2, KEY.y + particle.y * PIXEL - height / 2)
           include(KEY.x + particle.x * PIXEL + width / 2, KEY.y + particle.y * PIXEL + height / 2)
         }
@@ -211,7 +212,19 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       context.stroke()
       context.restore()
     }
-    if (tracks.length || stageParticles.length) outline(KEY, token("--line-strong"))
+    if (tracks.length || clip.particles.length) outline(KEY, token("--line-strong"))
+    if (trails.length) {
+      context.save()
+      context.fillStyle = token("--accent")
+      context.globalAlpha = 0.3
+      context.beginPath()
+      for (const [x, y] of trails) {
+        context.moveTo(x + 1 / fit, y)
+        context.arc(x, y, 1 / fit, 0, Math.PI * 2)
+      }
+      context.fill()
+      context.restore()
+    }
     if (tracks.length) withMotion(context, KEY, motionAt(tracks, elapsed, KEY), () => {
       context.fillStyle = token("--control")
       context.strokeStyle = token("--line-strong")
@@ -227,7 +240,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       context.fillText("A", KEY.x + KEY.width / 2, KEY.y + KEY.height / 2)
     })
     if (keyboard && clip.particles.length) keyboard.particles(clip.particles, elapsed)
-    for (const item of stageParticles) {
+    for (const item of clip.particles) {
       const [x, y, width, height] = item.emitter.emitRegion.every((value) => Math.abs(value) <= 1)
         ? item.emitter.emitRegion.map((value, index) => value * (index % 2 ? KEY.height : KEY.width))
         : item.emitter.emitRegion.map((value) => value * PIXEL)
@@ -329,7 +342,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     await Promise.all(ids.map(async (id) => {
       const visual = await (resourceParticles ? resolver?.resolveResource?.(id) : resolver?.resolve(id, false))?.catch(() => undefined)
       visuals.set(id, visual)
-      if (!visual) notes.push(keyboard ? `粒子图片 ${id} 未找到` : `粒子图片 ${id} 未找到，用圆点标出轨迹`)
+      if (!visual) notes.push(`粒子图片 ${id} 未找到，用圆点标出轨迹`)
     }))
     await Promise.all(clip.images.map(async (item) => {
       let frames: Frame[] = []

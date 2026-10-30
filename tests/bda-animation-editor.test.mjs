@@ -231,6 +231,8 @@ function render({ animation = sampleAnimation(), mode = "motion", selected, edit
         return selected ?? items[0]?.id
       },
       onSelect: (id) => events.selected.push(id),
+      filter: (items) => ({ items }),
+      keyUses: () => [],
     },
     editable,
     onDesignWidth: (value) => events.designWidth.push(value),

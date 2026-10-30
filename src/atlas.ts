@@ -306,7 +306,8 @@ function normalizedToolbarImagePath(path: string | undefined): string | undefine
   return path?.trim().replace(/^\/+/, "").replace(/\.png$/i, "") || undefined
 }
 
-function toolbarImagePaths(plist: string, limit = Number.POSITIVE_INFINITY): string[] {
+// iOS 的 F14 容器只放前 4 个 toolbar 功能、均分容器宽度（真机实测，plist 列了 5 个也只显示 4 个）。
+function toolbarImagePaths(plist: string, limit = 4): string[] {
   const paths = topLevelDicts(plist)
     .filter((entry) => /<key>Position<\/key>\s*<string>toolbar<\/string>/.test(entry))
     .flatMap((entry) => {

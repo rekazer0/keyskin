@@ -15,6 +15,7 @@ import { openStyleImageResourceChooser, selectStyleResource } from "./resource-i
 import { bdaStyleRef, type BdaAppearanceStyleGroup, type BdaStyleRef, bdaStyleID } from "../bda.ts"
 import { NEW_FORE_LAYER } from "../bda-layout-styles.ts"
 import { selectFile } from "./navigation"
+import { previewStyleAnimation } from "./animation-resource"
 import { updateBdaAppearanceStyleRef } from "./key-inspector"
 
 export const styleReferenceDrawIDs = new WeakMap<HTMLElement, number>()
@@ -78,6 +79,11 @@ export function decorateStyleReferenceInput(input: HTMLInputElement, key = style
     wrapper.append(soundMain)
   } else {
     wrapper.append(input)
+    // 动画样式没有静态外观可看：悬停时在画布上播放它（DESIGN.md §10）。
+    wrapper.addEventListener("mouseenter", () => {
+      const styleIDs = input.value.split(",").map((value) => value.trim()).filter((styleID) => styleKind(styleID) === "anim")
+      previewStyleAnimation(styleIDs)
+    })
   }
   const button = document.createElement(soundStyle ? "button" : "span")
   if (button instanceof HTMLButtonElement) button.type = "button"

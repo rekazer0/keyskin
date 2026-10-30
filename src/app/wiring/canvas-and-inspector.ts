@@ -17,6 +17,7 @@ import { canvasEditable, isEditing } from "../edit-history"
 import { chooseStyleImageSlice, clearImagePreviewError, showImagePreviewError } from "../resource-inspector"
 import { replacedSourceStyle } from "../../source-value-ranges.ts"
 import { decorateStyleReferenceInput } from "../style-references"
+import { pickAnimationKeys } from "../animation-resource"
 import { knownFunctionCodes, actionDescription } from "../../actions.ts"
 import { renameDocumentTitle } from "../key-inspector"
 import { runFileOperation } from "../file-operations"
@@ -32,6 +33,7 @@ export function wireCanvasAndInspector(): void {
   document.documentElement.classList.toggle("macos", isTauri() && navigator.userAgent.includes("Macintosh"))
   document.documentElement.classList.toggle("windows", isTauri() && navigator.userAgent.includes("Windows"))
   wireWindowControls()
+  preview.onAnimationKeys = pickAnimationKeys
   installNumberInputWheel(document, {
     isMixed: (field) => Boolean(mixedCoordinateDelta(field.dataset.keyField ?? "", field.placeholder, field.disabled, 1)),
     moveMixed: (field, steps) => {

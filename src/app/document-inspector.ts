@@ -5,6 +5,7 @@ import { thumbnailRecycler, drawVisualPreview } from "../atlas.ts"
 import { documentFields, documentFieldsGroup, skinFields, toolbarFields, bdaConfigFields, bdaConfigFieldsGroup } from "./dom"
 import { appState } from "./state"
 import { preview } from "./canvas-interaction"
+import type { PreviewItem } from "../preview-items.ts"
 import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue, effectiveKeySection, currentSkinState } from "./config-context"
 import { parseLegacyParticleEmitter } from "../preview-animation.ts"
 import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
@@ -20,7 +21,7 @@ import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
-import { keyboardPlayback, selectAnimation, selectedAnimation } from "./animation-resource"
+import { keyAnimationItems, keyUses, keyboardPlayback, selectAnimation, selectedAnimation } from "./animation-resource"
 import { bdaAnimationBindingsForKey, bdaBindingEffects } from "../preview-animation.ts"
 
 export const documentFieldLabels: Record<string, string> = {
@@ -620,6 +621,12 @@ export function selectedBdaSourceKeys(): string[] {
   return isBdaLayoutPath(appState.selectedPath) ? selectedBdaKeyNames() : []
 }
 
+/** A BDA key plays an effect bound to it directly, or through a group holding the effect, on press. */
+function bdaKeyPlays(id: string, key: PreviewItem): boolean {
+  return bdaAnimationBindingsForKey(preview.animation, key).some((binding) =>
+    `${binding.kind}:${binding.key}` === id || bdaBindingEffects(preview.animation!, binding).some((effect) => `${effect.kind}:${effect.key}` === id))
+}
+
 export function populateBdaConfigInspector(): void {
   bdaConfigFields.replaceChildren()
   if (!appState.archive || appState.archive.format !== "bda") {
@@ -694,9 +701,11 @@ export function populateBdaConfigInspector(): void {
     onPickAnimationResource: (sequence, frame) => openImageResourceChooser((resourceID) => update(
       updateBdaAnimationFrame(bytes, sequence, frame, "resourceID", resourceID),
     )),
-    animationView: { mode: appState.animationDesignMode, select: selectedAnimation, onSelect: selectAnimation },
-    // Bound directly or through a group holding the effect, on press.
-    keyboardPlayback: (id) => keyboardPlayback((key) => bdaAnimationBindingsForKey(preview.animation, key).some((binding) =>
-      `${binding.kind}:${binding.key}` === id || bdaBindingEffects(preview.animation!, binding).some((effect) => `${effect.kind}:${effect.key}` === id))),
+    animationView: {
+      mode: appState.animationDesignMode, select: selectedAnimation, onSelect: selectAnimation,
+      filter: (items) => keyAnimationItems(items, bdaKeyPlays),
+      keyUses: (id) => keyUses(id, bdaKeyPlays),
+    },
+    keyboardPlayback: (id) => keyboardPlayback((key) => bdaKeyPlays(id, key)),
   })
 }

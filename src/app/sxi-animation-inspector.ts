@@ -42,7 +42,8 @@ import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
 import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
-import { keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { keyAnimationItems, keyUses, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import type { PreviewItem } from "../preview-items.ts"
 import { decorateStyleReferenceInput, openStyleReferenceEditor } from "./style-references"
 import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
@@ -722,7 +723,8 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   const table = skin && pointer ? asObject(sxiValue(skin, pointer)) : undefined
   if (!pointer || !skin || !table) return false
   const entries = animationEntries(table).filter((entry) => shownInAnimationView(entry.kind === "a4"))
-  const items = entries.map((entry) => listItem(skin, pointer, entry, table))
+  const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, pressStyles(skin, pointer, id))
+  const { items, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(skin, pointer, entry, table)), plays)
   const selected = selectedAnimation(items)
   const entry = entries.find((candidate) => candidate.id === selected)
   const resolver = visualResolver()
@@ -733,6 +735,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
     sectionClass: SECTION,
     items,
     selected,
+    keyFilter,
     editable: isEditing(),
     onSelect: selectAnimation,
     create: {
@@ -769,7 +772,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
         })]
       : [],
     sections: entry ? parameterSections(pointer, entry, table) : [],
-    uses: entry ? uses(skin, pointer, entry) : [],
+    uses: entry ? [...keyUses(entry.id, plays), ...uses(skin, pointer, entry)] : [],
   })
   container.dataset.path = appState.selectedPath
   return true

@@ -36,7 +36,7 @@ import { isLegacyHintInputKey } from "./preview-hints.ts"
 import { setCanvasSize } from "./preview-draw.ts"
 import { phoneForegroundVisual } from "./preview-draw.ts"
 import { legacyHintText } from "./preview-hints.ts"
-import { dynamicToolbarRect } from "./preview-items.ts"
+import { dynamicToolbarRect, keyAnimationStyles } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { drawSceneLayer, type SceneLayer } from "./native-scene.ts"
@@ -100,7 +100,15 @@ export async function paintPreview(self: Preview): Promise<void> {
         })
       )
     : []
-  const allParticleFrames = [...particleFrames, ...bdaParticleFrames, ...playerParticleFrames]
+  // 旧版按键按下时，它的动画样式引用的粒子从按键上发射；播放器已在画这个键时不重复。
+  const pressed = self.legacyAnimationState
+  const pressedParticleFrames = pressed && player?.key !== pressed.key
+    ? keyAnimationStyles(pressed.key)
+        .flatMap((style) => self.legacyAnimation?.get(style)?.particles ?? [])
+        .flatMap((emitter) => legacyParticleFrames(emitter, Date.now() - pressed.startedAt, pressed.key.rect.width, pressed.key.rect.height))
+        .map((frame) => ({ ...frame, x: frame.x + pressed.key.rect.x, y: frame.y + pressed.key.rect.y }))
+    : []
+  const allParticleFrames = [...particleFrames, ...bdaParticleFrames, ...playerParticleFrames, ...pressedParticleFrames]
   const particleStyleIDs = [...new Set(allParticleFrames.map((frame) => frame.styleID))]
   const hintDirection = self.active?.direction ?? "center"
   const hintConfig = hintDirection === "hold" ? self.longHint ?? self.shortHint : self.shortHint
@@ -448,9 +456,11 @@ export async function paintPreview(self: Preview): Promise<void> {
   if (toolbarRect && toolbarImages.length) {
     const slotWidth = toolbarRect.width / toolbarImages.length
     toolbarImages.forEach((visual, index) => {
-      // 工具栏图标常是 @3x 大图（如 121px），按槽位等比缩小，只缩不放。
+      // iOS 把 @3x 图标按「像素 ÷ 3」pt 画，不随键盘缩放：面板宽 / 3 对应 375pt，屏越宽图标相对越小。
+      // 再按槽位等比缩小，只缩不放。
       const [, , sw, sh] = visual.source ?? [0, 0, slotWidth, toolbarRect.height]
-      const scale = Math.min(1, slotWidth / sw, toolbarRect.height / sh)
+      const points = /@3x\.png$/i.test(visual.imagePath ?? "") && self.devicePointWidth ? self.panelWidth / 3 / self.devicePointWidth : 1
+      const scale = Math.min(points, slotWidth / sw, toolbarRect.height / sh)
       drawVisual(context, visual, {
         x: toolbarRect.x + index * slotWidth + (slotWidth - sw * scale) / 2,
         y: toolbarRect.y + (toolbarRect.height - sh * scale) / 2,

@@ -673,6 +673,12 @@
   height: var(--candidate-viewport-height, auto);
 }
 
+/* 画布模式下屏幕只有键盘那么高；气泡层向上多留半屏，顶行按键的气泡不会在键盘顶边被截断。 */
+.device-shell.canvas-only #hint-preview {
+  top: -50%;
+  height: 150%;
+}
+
 .device-shell.canvas-only #preview {
   width: 100%;
   max-height: none;

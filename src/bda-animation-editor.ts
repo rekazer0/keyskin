@@ -19,13 +19,17 @@ import { bdaPreviewClip } from "./animation-preview-model.ts"
 import type { KeyboardPlayback } from "./animation-player.ts"
 import {
   animationSection, comboList, imageCard, renderAnimationResource, sliderField,
-  type AnimationListItem, type AnimationMode, type AnimationUse,
+  type AnimationKeyFilter, type AnimationListItem, type AnimationMode, type AnimationUse,
 } from "./animation-inspector.ts"
 
 /** Which effects the inspector lists, and the remembered selection (kept by the caller). */
 export type BdaAnimationView = {
   mode: AnimationMode
   select(items: readonly AnimationListItem[]): string | undefined
+  /** Narrows the list to the effects the key picked on the canvas plays. */
+  filter(items: AnimationListItem[]): { items: AnimationListItem[]; keyFilter?: AnimationKeyFilter }
+  /** The keys on the canvas that play the effect, ahead of its bindings in 引用. */
+  keyUses(id: string): AnimationUse[]
   onSelect(id: string): void
 }
 
@@ -501,7 +505,7 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
   const { animation, view } = options
   const effects = KIND_ORDER.flatMap((kind) => [...animation.effects.values()].filter((effect) => effect.kind === kind))
     .filter((effect) => view.mode === "all" || (effect.kind === "emitter") === (view.mode === "particle"))
-  const items = effects.map((effect): AnimationListItem => ({
+  const { items, keyFilter } = view.filter(effects.map((effect): AnimationListItem => ({
     id: effectID(effect),
     title: effect.key,
     kind: KIND_LABELS[effect.kind],
@@ -509,7 +513,7 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     detail: timingText(effect),
     uses: effectUses(animation, effect).length,
     problem: problem(effect, animation),
-  }))
+  })))
   const selected = view.select(items)
   const effect = effects.find((candidate) => effectID(candidate) === selected)
   const sections = effect ? effectSections(effect, animation, options) : []
@@ -523,6 +527,7 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     sectionClass: SECTION,
     items,
     selected,
+    keyFilter,
     editable: options.editable,
     onSelect: view.onSelect,
     listRows: [width],
@@ -534,6 +539,6 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
       keyboard: options.keyboardPlayback?.(effectID(effect)),
     },
     sections,
-    uses: effect ? effectUses(animation, effect) : [],
+    uses: effect ? [...view.keyUses(effectID(effect)), ...effectUses(animation, effect)] : [],
   })
 }
