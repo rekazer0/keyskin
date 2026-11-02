@@ -5,6 +5,12 @@ import { tileSliceAt, type TilePoint, type TileSlice } from "./tiles.ts"
 import { drawVisualPreview, retinaThumbnail, type Visual } from "./atlas.ts"
 import { createIcon, hydrateIcons } from "./icons.ts"
 import { nativePickerWindow, pickerEmitter, pickerListener } from "./picker-channel.ts"
+import { styleCard, styleFilterButtons, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "./style-card"
+import { animationPlayer } from "./animation-player"
+import { iniPreviewClip } from "./animation-preview-model"
+import { IniDocument } from "./ini"
+import type { TextVisual, VisualResolver } from "./atlas"
+import { element, iconButton } from "./dom-element"
 
 type ImagePayload = {
   path: string
@@ -33,6 +39,9 @@ export type StyleLibraryPayload = {
   source: string
   imagesCompatible: boolean
   bitmaps: Record<string, string>
+  animationText: string
+  animationFiles: Record<string, number[]>
+  particleVisuals: Record<string, StyleLibraryVisual | null>
   styles: {
     styleID: string
     label: string
@@ -43,6 +52,11 @@ export type StyleLibraryPayload = {
     compatible: boolean
     imagePaths: string[]
     visuals: Array<StyleLibraryVisual | null>
+    animationSections?: string[]
+    summary?: string
+    textVisuals?: Array<TextVisual | undefined>
+    sound?: string
+    soundPlayable?: boolean
   }[]
   images: { path: string; categories: string[]; referenced: boolean }[]
   sounds: { styleID: string; filename: string; playable: boolean }[]
@@ -235,8 +249,8 @@ function emitLibrary(event: string, payload: unknown = {}): void {
 function previewLibraryItem(card: HTMLElement, selected: { styleID?: string; imagePath?: string }): void {
   if (!library) return
   librarySelected = selected
-  libraryGrid.querySelector(".previewing")?.classList.remove("previewing")
-  card.classList.add("previewing")
+  libraryGrid.querySelector<HTMLElement>('[data-previewing="true"]')?.removeAttribute("data-previewing")
+  card.dataset.previewing = "true"
   libraryPreviewImage.replaceChildren()
   const style = library.styles.find((item) => item.styleID === selected.styleID)
   if (selected.imagePath) {
@@ -244,6 +258,8 @@ function previewLibraryItem(card: HTMLElement, selected: { styleID?: string; ima
     image.alt = selected.imagePath.split("/").pop() ?? selected.imagePath
     image.src = library.bitmaps[selected.imagePath] ?? ""
     libraryPreviewImage.append(image)
+  } else if (style?.kind === "anim") {
+    libraryPreviewImage.append(...libraryAnimationPlayers(style))
   } else {
     for (const visual of style?.visuals ?? []) {
       const canvas = retinaThumbnail(document.createElement("canvas"), 180, 120)
@@ -252,11 +268,58 @@ function previewLibraryItem(card: HTMLElement, selected: { styleID?: string; ima
     }
   }
   $("#style-library-preview-title").textContent = selected.imagePath?.split("/").pop() ?? `样式 ${style?.label ?? selected.styleID}`
-  $("#style-library-preview-meta").textContent = selected.imagePath ?? "正常 / 按下 · 确认后应用到当前项"
+  $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "动画引用缺失或未配置" : "正常 / 按下 · 确认后应用到当前项")
   const compatible = selected.imagePath ? library.imagesCompatible : Boolean(style?.compatible)
   libraryApply.disabled = !compatible || !library.editable
   libraryApply.textContent = !compatible ? "样式类型不兼容" : selected.imagePath && !library.bda ? "选择切片并应用" : "应用到当前项"
   libraryPreview.hidden = false
+}
+
+function libraryTextResolver(style: StyleLibraryPayload["styles"][number]): VisualResolver {
+  return {
+    resolve: async () => undefined,
+    resolveToolbarImages: async () => [],
+    resolveText: (_id, highlighted) => style.textVisuals?.[Number(highlighted)],
+    resolveStyleText: (_id, highlighted) => {
+      const visual = style.textVisuals?.[Number(highlighted)]
+      return visual ? { ...visual, text: "text" in visual ? String(visual.text) : "键设 Aa" } : undefined
+    },
+  }
+}
+
+function libraryAnimationPlayers(style: StyleLibraryPayload["styles"][number]): HTMLElement[] {
+  const payload = library
+  if (!payload?.animationText) return []
+  const document = IniDocument.parse(payload.animationText)
+  const resolver: VisualResolver = {
+    resolve: async id => {
+      const visual = payload.particleVisuals[id]
+      if (!visual) return
+      const { imageKey, ...rest } = visual
+      return { ...rest, image: await libraryBitmap(imageKey) }
+    },
+    resolveText: () => undefined,
+    resolveToolbarImages: async () => [],
+  }
+  return (style.animationSections ?? []).map(section => animationPlayer({
+    thumbnail: true, key: section, clip: iniPreviewClip(document, section, { fillBefore: true }), resolver,
+    readFile: path => payload.animationFiles[path] ? new Uint8Array(payload.animationFiles[path]) : undefined,
+  }))
+}
+
+function librarySoundSample(filename: string, playable: boolean): HTMLElement {
+  const root = element("span", "ui-style-sound")
+  const play = iconButton("play", `试听音效 ${filename}`)
+  play.disabled = !playable
+  play.addEventListener("click", event => { event.stopPropagation(); emitLibrary("style-library-play", { filename }) })
+  const info = element("span", "ui-style-sound-info")
+  const name = element("strong")
+  name.textContent = filename
+  const meta = element("small")
+  meta.textContent = playable ? "点击试听" : "声音文件不存在"
+  info.append(name, meta)
+  root.append(play, info)
+  return root
 }
 
 function renderLibrarySounds(payload: StyleLibraryPayload, query: string): number {
@@ -290,7 +353,7 @@ function renderLibrarySounds(payload: StyleLibraryPayload, query: string): numbe
 
 function renderLibrary(): void {
   const payload = library
-  for (const canvas of Array.from(libraryGrid.querySelectorAll("canvas"))) libraryCanvasObserver.unobserve(canvas)
+  libraryCanvasObserver.disconnect()
   libraryGrid.replaceChildren()
   libraryPreview.hidden = true
   librarySelected = undefined
@@ -309,14 +372,8 @@ function renderLibrary(): void {
     button.setAttribute("aria-pressed", String(button.dataset.libraryMode === libraryMode))
     button.disabled = sound && button.dataset.libraryMode === "images"
   }
-  const kinds = new Set(payload.styles.map((item) => item.kind))
-  for (const button of libraryButtons("[data-library-kind]")) {
-    button.setAttribute("aria-pressed", String(button.dataset.libraryKind === libraryKind))
-    button.hidden = button.dataset.libraryKind !== "all" && !kinds.has(button.dataset.libraryKind!)
-  }
-  for (const button of libraryButtons("[data-library-filter]")) {
-    button.setAttribute("aria-pressed", String(button.dataset.libraryFilter === libraryFilter))
-  }
+  libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => { libraryKind = value; renderLibrary() }))
+  libraryFilters.replaceChildren(styleFilterButtons(styleUsageOptions, "libraryFilter", libraryFilter, value => { libraryFilter = value; renderLibrary() }))
   libraryKinds.hidden = images || sound
   libraryFilters.hidden = sound
   libraryAdd.hidden = !payload.canAdd
@@ -331,48 +388,36 @@ function renderLibrary(): void {
     const items = images
       ? payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter)))
         .map((image) => ({ imagePath: image.path, image, style: undefined }))
-      : payload.styles.filter((style) =>
-        [style.styleID, style.label, ...style.imagePaths].join(" ").toLowerCase().includes(query)
-          && (libraryFilter === "all" || style.categories.includes(libraryFilter))
-          && (libraryKind === "all" || style.kind === libraryKind))
+      : payload.styles.filter(style => styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter, query))
         .map((style) => ({ imagePath: "", image: undefined, style }))
     for (const { imagePath, image, style } of items) {
-      const card = document.createElement("button")
-      card.type = "button"
-      card.className = "style-library-item"
       const selected = imagePath ? currentImages.includes(imagePath) : payload.currentID === style?.styleID
-      card.classList.toggle("selected", selected)
-      card.setAttribute("aria-pressed", String(selected))
-      const previews = document.createElement("span")
-      previews.className = "style-library-previews"
+      const card = style ? styleCard({
+        id: style.styleID, label: `STYLE${style.label}`, kind: style.kind, kindLabel: style.kindLabel, kindIcon: style.kindIcon,
+        draw: (canvas, highlighted) => {
+          if (style.kind === "text") return textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
+          const preview = canvas as HTMLCanvasElement & { libraryVisual?: StyleLibraryVisual | null }
+          preview.libraryVisual = style.visuals[Number(highlighted)]
+          libraryCanvasObserver.observe(preview)
+        },
+        animation: () => libraryAnimationPlayers(style), summary: style.summary,
+        sound: style.sound ? () => librarySoundSample(style.sound!, Boolean(style.soundPlayable)) : undefined,
+      }) : element("button", "style-library-item")
       if (image) {
+        const previews = element("span", "style-library-previews")
         const preview = new Image()
         preview.alt = ""
         preview.loading = "lazy"
         preview.src = payload.bitmaps[image.path] ?? ""
         previews.append(preview)
-      } else if (style) {
-        for (const [index, visual] of style.visuals.entries()) {
-          const canvas = retinaThumbnail(document.createElement("canvas"), 128, 88) as HTMLCanvasElement & { libraryVisual?: StyleLibraryVisual | null }
-          canvas.setAttribute("aria-label", index ? "按下状态" : "正常状态")
-          canvas.libraryVisual = visual
-          libraryCanvasObserver.observe(canvas)
-          previews.append(canvas)
-        }
+        const label = element("strong")
+        label.textContent = imagePath.split("/").pop()!
+        const note = element("small")
+        note.textContent = image.referenced ? "已引用" : "图片资源"
+        card.append(previews, label, note)
       }
-      const label = document.createElement("strong")
-      label.textContent = imagePath ? imagePath.split("/").pop()! : `样式 ${style!.label}`
-      card.title = imagePath || `${label.textContent} · 单击预览，双击应用，Command/Ctrl 单击编辑`
-      const note = document.createElement("small")
-      note.textContent = image ? (image.referenced ? "已引用" : "图片资源") : `#${style!.label}`
-      if (style && !image) {
-        // 类型徽标放在说明行里，不压在预览图上。
-        const badge = document.createElement("span")
-        badge.className = "style-kind-badge"
-        badge.append(createIcon(style.kindIcon, 11), style.kindLabel)
-        note.prepend(badge)
-      }
-      card.append(previews, label, note)
+      card.setAttribute("aria-pressed", String(selected))
+      card.title = imagePath || `样式 ${style!.label} · 单击预览，双击应用，Command/Ctrl 单击编辑`
       const target = imagePath ? { imagePath } : { styleID: style!.styleID }
       card.addEventListener("click", (event) => {
         if (event.metaKey || event.ctrlKey) emitLibrary("style-library-edit", target)
@@ -455,18 +500,12 @@ for (const button of libraryButtons("[data-library-mode]")) {
     renderLibrary()
   })
 }
-for (const button of libraryButtons("[data-library-kind]")) {
-  button.addEventListener("click", () => { libraryKind = button.dataset.libraryKind!; renderLibrary() })
-}
-for (const button of libraryButtons("[data-library-filter]")) {
-  button.addEventListener("click", () => { libraryFilter = button.dataset.libraryFilter!; renderLibrary() })
-}
 libraryAdd.addEventListener("click", () => emitLibrary("style-library-add"))
 libraryApply.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", librarySelected) })
 $("#style-library-edit").addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-edit", librarySelected) })
 $("#style-library-preview-close").addEventListener("click", () => {
   libraryPreview.hidden = true
-  libraryGrid.querySelector(".previewing")?.classList.remove("previewing")
+  libraryGrid.querySelector<HTMLElement>('[data-previewing="true"]')?.removeAttribute("data-previewing")
 })
 // 网页端没有原生标题栏，关闭按钮和 Esc 都交给主页面收起弹窗。
 const closeButton = $("#picker-close") as HTMLButtonElement

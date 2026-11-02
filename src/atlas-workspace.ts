@@ -5,6 +5,8 @@ import "./atlas-workspace.css"
 
 type AtlasState = {
   active: boolean
+  styleActive: boolean
+  styleSelected: boolean
   path: string
   width: number
   height: number
@@ -198,15 +200,20 @@ export function createAtlasWorkspace(actions: {
     state = next
     desktopActive = next.active && media.matches
     document.body.classList.toggle("atlas-workspace", desktopActive)
-    if (desktopActive) {
+    const sidebarActive = (next.active || next.styleActive) && media.matches
+    document.body.classList.toggle("resource-workspace", sidebarActive)
+    document.body.classList.toggle("style-workspace", next.styleActive && media.matches)
+    if (sidebarActive) {
       if (list.parentElement !== sidebar) sidebar.append(list)
+      list.hidden = false
+    } else if (list.parentElement !== listHome) {
+      listHome.prepend(list)
+      list.hidden = next.active && Boolean(next.path) || next.styleActive && next.styleSelected
+    }
+    if (desktopActive) {
       if (toolbar.parentElement !== header) header.insertBefore(toolbar, badge)
       list.hidden = false
     } else {
-      if (list.parentElement !== listHome) {
-        listHome.prepend(list)
-        list.hidden = next.active && Boolean(next.path)
-      }
       if (toolbar.parentElement !== toolbarHome) toolbarHome.prepend(toolbar)
       canvas.style.removeProperty("width")
       canvas.style.removeProperty("height")
@@ -215,7 +222,7 @@ export function createAtlasWorkspace(actions: {
     const slice = next.selected
     title.textContent = next.path.split("/").pop() || "皮肤图片"
     title.title = next.path
-    get(".source-heading .inspector-context h2").textContent = desktopActive ? (slice ? `切片 #${slice.index}` : "切片") : "检查器"
+    get(".source-heading .inspector-context h2").textContent = desktopActive ? (slice ? `切片 #${slice.index}` : "切片") : next.styleActive ? "样式编辑" : "检查器"
     meta.textContent = next.path ? `${next.width} × ${next.height} · ${next.slices.length} 个切片` : "未选择图片"
     badge.textContent = slice ? `切片 #${slice.index} · ${slice.source[2]} × ${slice.source[3]}` : "未选择切片"
     // 引用按切片统计：没选切片时不能说整张图「无引用」。

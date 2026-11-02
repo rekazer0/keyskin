@@ -17,6 +17,10 @@ import { NEW_FORE_LAYER } from "../bda-layout-styles.ts"
 import { selectFile } from "./navigation"
 import { previewStyleAnimation } from "./animation-resource"
 import { updateBdaAppearanceStyleRef } from "./key-inspector"
+import { styleAnimationReferencePreviews } from "./legacy-animation-inspector"
+import { releaseOnRemove } from "../dom-lifecycle"
+
+export const layoutAnimationFields = new Set(["ANIM_STYLE", "BACK_ANIM_STYLE", "FORE_ANIM_STYLE", "PRESS_STYLE"])
 
 export const styleReferenceDrawIDs = new WeakMap<HTMLElement, number>()
 
@@ -81,6 +85,7 @@ export function decorateStyleReferenceInput(input: HTMLInputElement, key = style
     wrapper.append(input)
     // 动画样式没有静态外观可看：悬停时在画布上播放它（DESIGN.md §10）。
     wrapper.addEventListener("mouseenter", () => {
+      if (layoutAnimationFields.has(key)) return
       const styleIDs = input.value.split(",").map((value) => value.trim()).filter((styleID) => styleKind(styleID) === "anim")
       previewStyleAnimation(styleIDs)
     })
@@ -129,9 +134,11 @@ export function decorateStyleReferenceInput(input: HTMLInputElement, key = style
 }
 
 export function renderStyleReferenceRows(button: HTMLElement, input: HTMLInputElement, key: string): string[] {
-  const styleIDs = input.value.split(",").map((value) => value.trim()).filter(Boolean)
+  const animationReference = layoutAnimationFields.has(key)
+  const styleIDs = input.value.split(",").map((value) => value.trim())
+  if (!animationReference) styleIDs.splice(0, styleIDs.length, ...styleIDs.filter(Boolean))
   // 每次编辑都会重建这些行；复用旧画布（保留已按卡片量好的位图尺寸），不再每次新建。
-  const spare = Array.from(button.querySelectorAll("canvas")).reverse()
+  const spare = Array.from(button.querySelectorAll<HTMLCanvasElement>(".style-picker-state > canvas")).reverse()
   for (const canvas of spare) styleStateCanvasObserver.unobserve(canvas)
   button.replaceChildren()
   const styles = styleConfigDocument()
@@ -141,10 +148,10 @@ export function renderStyleReferenceRows(button: HTMLElement, input: HTMLInputEl
       target.value = styleID
       target.dataset.styleReferenceIndex = String(styleIndex)
       target.addEventListener("change", () => {
-        const values = input.value.split(",").map((value) => value.trim()).filter(Boolean)
+        const values = input.value.split(",").map((value) => value.trim())
+        if (!animationReference) values.splice(0, values.length, ...values.filter(Boolean))
         values[styleIndex] = target.value.trim()
-        // An emptied card drops its layer instead of leaving ",205" behind.
-        input.value = values.filter(Boolean).join(",")
+        input.value = animationReference ? values.join(",") : values.filter(Boolean).join(",")
         input.dispatchEvent(new Event("input", { bubbles: true }))
         input.dispatchEvent(new Event("change", { bubbles: true }))
       })
@@ -158,7 +165,12 @@ export function renderStyleReferenceRows(button: HTMLElement, input: HTMLInputEl
     numberInput.setAttribute("aria-label", `样式 ${styleIndex + 1} 编号`)
     const previews = document.createElement("span")
     previews.className = "style-picker-states"
-    for (let index = 0; index < 2; index += 1) {
+    const animated = animationReference
+    if (animated) {
+      previews.dataset.variant = "animation"
+      previews.append(styleAnimationReferencePreviews(styleID, styles ?? IniDocument.parse(""), () => openStylePicker(rowInput())))
+    }
+    for (let index = 0; !animated && index < 2; index += 1) {
       const item = document.createElement("button")
       const highlighted = index === 1
       item.type = "button"
@@ -169,7 +181,7 @@ export function renderStyleReferenceRows(button: HTMLElement, input: HTMLInputEl
       item.title = `点击选择${highlighted ? "按下" : "正常"}图片切片；Alt 点击更换样式；Command/Ctrl 点击编辑样式`
       item.setAttribute("aria-label", item.title)
       const canvas = spare.pop() ?? retinaThumbnail(document.createElement("canvas"), 152, 76)
-      styleStateCanvases.add(canvas)
+      releaseOnRemove(canvas, () => releaseStyleStateCanvas(canvas))
       canvas.setAttribute("aria-hidden", "true")
       item.append(canvas)
       item.addEventListener("click", (event) => {
@@ -184,6 +196,7 @@ export function renderStyleReferenceRows(button: HTMLElement, input: HTMLInputEl
     meta.className = "style-reference-meta"
     meta.append(numberInput)
     if (styleID) meta.append(styleKindBadge(styleKind(styleID, styles)))
+    if (key === "FORE_ANIM_STYLE") numberInput.setAttribute("aria-label", `前景 ${styleIndex + 1} 动画样式编号`)
     wrapper.append(meta, previews)
     button.append(wrapper)
   }
@@ -219,7 +232,7 @@ export async function refreshStyleReferenceThumbnail(
     return
   }
   const styleIDs = renderStyleReferenceRows(button, input, key)
-  const canvases = Array.from(button.querySelectorAll<HTMLCanvasElement>("canvas"))
+  const canvases = Array.from(button.querySelectorAll<HTMLCanvasElement>(".style-picker-state > canvas"))
   if (canvases.length < 2 || !resolver || !styleIDs.length) {
     for (const canvas of canvases) {
       const context = canvas.getContext("2d")
@@ -231,6 +244,7 @@ export async function refreshStyleReferenceThumbnail(
     [false, true].map((highlighted) => resolver.resolve(styleID, highlighted).catch(() => undefined)),
   ))
   if (drawID !== styleReferenceDrawIDs.get(button)) return
+  if (!button.isConnected) { canvases.forEach(releaseStyleStateCanvas); return }
   // Unresolved visuals may resolve later; let the next refresh retry them.
   if (visuals.some((visual) => !visual)) styleReferenceThumbnailInputs.delete(button)
   const foreground = styleReferenceForeground(key)
@@ -243,11 +257,11 @@ export async function refreshStyleReferenceThumbnail(
 }
 
 const pendingStyleStateCanvases = new Set<HTMLCanvasElement>()
-const styleStateCanvases = new Set<HTMLCanvasElement>()
 
 /** WebKit 的 GC 不计入画布位图，检查器反复重建后旧位图越积越多、越用越卡；丢弃时立即释放。 */
 function releaseStyleStateCanvas(canvas: HTMLCanvasElement): void {
-  styleStateCanvases.delete(canvas)
+  pendingStyleStateCanvases.delete(canvas)
+  resizedStyleStateCanvases.delete(canvas)
   styleStateCanvasObserver.unobserve(canvas)
   styleStateVisuals.delete(canvas)
   styleStateCanvasSizes.delete(canvas)
@@ -264,8 +278,6 @@ function scheduleStyleStateSizing(canvas: HTMLCanvasElement): void {
   pendingStyleStateCanvases.add(canvas)
   styleStateSizingFrame ||= requestAnimationFrame(() => {
     styleStateSizingFrame = 0
-    // 检查器重建在这一帧之前已同步完成，此时还不在文档里的就是被丢弃的旧画布。
-    for (const canvas of styleStateCanvases) if (!canvas.isConnected) releaseStyleStateCanvas(canvas)
     const canvases = Array.from(pendingStyleStateCanvases).filter((canvas) => canvas.isConnected)
     pendingStyleStateCanvases.clear()
     const rects = canvases.map((canvas) => canvas.getBoundingClientRect())
@@ -298,7 +310,7 @@ function sizeStyleStateCanvas(canvas: HTMLCanvasElement, { width, height } = can
 
 /** 分组切换后为之前量不到尺寸的缩略图补一次按尺寸重绘。 */
 export function redrawStyleStateCanvases(): void {
-  const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>(".style-reference-row canvas"))
+  const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>(".style-reference-row .style-picker-state > canvas"))
   const rects = canvases.map((canvas) => canvas.getBoundingClientRect())
   canvases.forEach((canvas, index) => sizeStyleStateCanvas(canvas, rects[index]))
 }

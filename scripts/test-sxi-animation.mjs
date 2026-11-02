@@ -93,13 +93,11 @@ try {
   ])
   assert.equal(await fields.locator('[data-animation-id="100"] small').textContent(), "320 ms · 往返")
   assert.equal(await fields.locator('[data-animation-id="100"] [data-uses]').textContent(), "2", "被一个样式和一个组合使用")
-  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "引用", "变化", "时间与循环", "变换中心"])
+  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "变化", "时间与循环", "变换中心"])
 
   // 每类动画的字段都按手心自己的名字出现
   await show("100")
   assert.match(await section("预览").locator(".ui-animation-time").textContent(), /320 ms/)
-  assert.match(await section("引用").textContent(), /样式 9001按下时播放/)
-  assert.match(await section("引用").textContent(), /动画 102作为组合动画的一部分播放/)
   assert.ok((await captions()).includes("变化属性"))
   assert.ok((await captions()).includes("起始缩放（%）"))
   assert.equal(await pressed("变化属性").textContent(), "缩放")
@@ -107,13 +105,11 @@ try {
   assert.equal(await row("位移单位").count(), 0, "位移单位只属于位移")
 
   await show("101")
-  assert.match(await section("引用").textContent(), /动画 102作为组合动画的一部分播放/)
   assert.match(await section("变化").textContent(), /切换单位只保留数值/)
   assert.equal(await pressed("位移单位").textContent(), "像素")
   assert.ok((await captions()).includes("起始位移（px）"))
 
   await show("102")
-  assert.match(await section("引用").textContent(), /样式 9001显示时播放/)
   assert.equal(await fields.locator(".animation-combo-item").count(), 2)
   assert.equal(await fields.locator(".animation-combo-item .ui-list-item-text").first().textContent(), "动画 100缩放 · 320 ms")
   assert.equal(await pressed("组合方式").textContent(), "同时")
@@ -126,7 +122,7 @@ try {
   assert.match(await section("预览").locator(".ui-animation-time").textContent(), /1500 ms/)
 
   await show("104")
-  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "引用", "发射", "运动", "外观", "时间与循环"])
+  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "发射", "运动", "外观", "时间与循环"])
   assert.ok((await captions()).includes("发射区域位置"))
   assert.equal(await input("粒子总数").inputValue(), "12")
   // 粒子图片是样式卡片（每张图一张卡，标签旁有「+ 添加」），值仍是样式编号列表。

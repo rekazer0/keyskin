@@ -1,0 +1,82 @@
+import assert from "node:assert/strict"
+import { chromium } from "playwright"
+import { createServer } from "vite"
+
+const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41942, strictPort: false } })
+await server.listen()
+const browser = await chromium.launch()
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, bypassCSP: true })
+const errors = []
+page.on("pageerror", (error) => errors.push(error.message))
+try {
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await page.locator('.template-card[data-template="xiaomi-unified-rounded-blur"]').click()
+  await page.waitForFunction(() => !document.querySelector("#open").disabled)
+  await page.waitForFunction(() => !document.querySelector("#file-operation-dialog").open)
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  await page.evaluate(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    await (await import("/src/app/navigation.ts")).selectFile(appState.layoutPath)
+  })
+  const group = page.locator(".text-style-fields")
+  const note = group.locator("#text-style-note")
+  assert.match(await note.textContent(), /\d+ 个样式/)
+  assert.match(await note.getAttribute("title"), /修改本布局/)
+  assert.equal(await note.locator("svg").count(), 1)
+  assert.equal(await note.getAttribute("tabindex"), "0")
+  assert.equal(await group.locator('input[aria-label="按键文字字号"]').locator("..").locator(".ui-input-affix").textContent(), "px")
+  const color = group.locator('input[aria-label="按键文字颜色值"]')
+  const alpha = group.locator('input[aria-label="按键文字颜色透明度"]')
+  const change = async (input, value) => { await input.fill(value); await input.press("Enter") }
+  await change(color, "80123456")
+  assert.equal(await alpha.inputValue(), "50")
+  const picker = group.locator('input[aria-label="按键文字颜色"]')
+  await picker.fill("#abcdef")
+  await picker.dispatchEvent("change")
+  assert.equal(await color.inputValue(), "80ABCDEF", "changing hue preserves the exact alpha byte")
+  await change(alpha, "0")
+  assert.equal(await color.inputValue(), "00ABCDEF")
+  await change(alpha, "100")
+  assert.equal(await color.inputValue(), "FFABCDEF")
+  await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
+  assert.equal(await color.inputValue(), "00ABCDEF")
+  const filterButton = page.locator(".inspector-filter-open")
+  await filterButton.click()
+  assert.equal(await filterButton.getAttribute("aria-expanded"), "true")
+  const filter = page.locator("#inspector-filter")
+  await filter.fill("NO_BLUR")
+  assert.equal(await page.locator('[data-document-key="NO_BLUR"]').isVisible(), true)
+  await filter.press("Escape")
+  await filter.press("Escape")
+  assert.equal(await filterButton.getAttribute("aria-expanded"), "false")
+  // 末尾的分区滚不到检查器顶部：点它必须点亮它自己，不能按滚动位置退回上一个分区。
+  const lastButton = page.locator("#mobile-inspector-groups button").last()
+  const lastGroup = await lastButton.getAttribute("data-mobile-inspector-group")
+  assert.ok(lastGroup, "the last rail button belongs to an inspector group")
+  await lastButton.click()
+  await page.waitForTimeout(300)
+  assert.equal(await page.locator("#quick-inspector").getAttribute("data-mobile-inspector-group"), lastGroup)
+  assert.equal(await page.locator("#mobile-inspector-groups button.active").textContent(), await lastButton.textContent())
+  const panel = page.locator('#mobile-inspector-groups button', { hasText: "面板" }).first()
+  await panel.click()
+  const duration = await page.locator('.document-property-section[data-inspector-group-label="面板"]').evaluate(el => el.getAnimations().at(-1)?.effect.getTiming().duration)
+  assert.equal(duration, 200)
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  const reduced = await panel.evaluate(button => {
+    button.click()
+    const root = document.querySelector("#quick-inspector")
+    return getComputedStyle(root).getPropertyValue("--duration-base").trim() === "0ms"
+      && document.querySelector('.document-property-section[data-inspector-group-label="面板"]').getAnimations().every(a => a.effect.getTiming().duration === 0)
+  })
+  assert.equal(reduced, true)
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await page.evaluate(() => { document.documentElement.dataset.mobilePane = "inspector" })
+    assert.equal(await group.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, "text controls fit the inspector")
+  }
+  assert.deepEqual(errors, [])
+  console.log("Inspector polish: compact hints, units, percent alpha precision, undo, filter, navigation motion, reduced motion and narrow layout passed")
+} finally {
+  await browser.close()
+  await server.close()
+}

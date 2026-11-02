@@ -89,8 +89,8 @@ export function wireResourcesAndStartup(): void {
   })
   void onPickerEvent("image-picker-resources-request", () => void emitToPicker("image-picker-resources-data", resourcePickerPayload()))
   void onPickerEvent<{ path: string }>("resource-picker-select", ({ path }) => selectImageResource(path))
-  bindPaneResize($("#sidebar-resize-handle"), "--sidebar-width", "sidebarWidthV2", 180, 420, 248, 1)
-  bindPaneResize(inspectorResizeHandle, "--inspector-width", "inspectorWidthV5", 220, Math.max(700, window.innerWidth - 720), 360, -1)
+  bindPaneResize($("#sidebar-resize-handle"), "--sidebar-width", "sidebarWidthV2", 180, 248, 1)
+  bindPaneResize(inspectorResizeHandle, "--inspector-width", "inspectorWidthV5", 220, 360, -1)
   styleAddButton.addEventListener("click", () => {
     if (!canAddStyle() || !isEditing()) return
     newStyleID.value = nextStyleID()
@@ -393,8 +393,8 @@ export function wireResourcesAndStartup(): void {
       clearTimeout(appState.fitCanvasDebounce)
       movingDebounce = setTimeout(() => { fitCanvasPreview() }, 300)
     })
-    // 窗口获得焦点时重新同步材质状态，修复 Windows 10 亚克力材质导致的窗口移动卡顿问题
-    void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+    // Only Windows acrylic needs focus recovery; reapplying macOS vibrancy stacks native views.
+    if (document.documentElement.classList.contains("windows")) void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused && windowMaterial.checked && !appState.windowDragPointerDown && !appState.windowDragMaterialDisabled) {
         void applyWindowMaterialWithRetry().catch((error) => handleWindowMaterialError(error, "恢复窗口材质"))
       }

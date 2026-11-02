@@ -1,0 +1,120 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { chromium } from 'playwright'
+import { createServer } from 'vite'
+
+const bytes = await readFile(new URL('../demo/assets/flower.bdi', import.meta.url))
+const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41869, strictPort: false, hmr: false } })
+await server.listen()
+const browser = await chromium.launch()
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+const errors = []
+page.on('pageerror', error => errors.push(error.message))
+const PATH = 'light/skin/res/anim.ini'
+const fingerprint = () => page.evaluate(async path => {
+  const { appState } = await import('/src/app/state.ts')
+  return { text: appState.archive.getText(path), undo: appState.undoStack.length, revision: appState.archive.revision }
+}, PATH)
+const open = async (mode, id) => {
+  await page.evaluate(async ({ path, mode, id }) => {
+    const { appState } = await import('/src/app/state.ts')
+    appState.selectedAnimations[`${path}|${mode}`] = id
+    const { selectFile } = await import('/src/app/navigation.ts')
+    selectFile(path, 'overview', mode)
+  }, { path: PATH, mode, id })
+  await page.waitForFunction(() => document.querySelector('#animation-stage .ui-animation-player')?.dataset.sample === 'skin')
+}
+const handle = name => page.locator('#animation-stage').getByRole('slider', { name, exact: true })
+const drag = async (name, dx, dy = 0, cancel = false) => {
+  const box = await handle(name).boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, { steps: 6 })
+  if (cancel) await page.keyboard.press('Escape')
+  await page.mouse.up()
+}
+try {
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await page.locator('#browser-open').setInputFiles({ name: 'flower.bdi', mimeType: 'application/octet-stream', buffer: bytes })
+  await page.waitForFunction(() => !document.querySelector('#open').disabled)
+  const close = page.locator('#file-operation-dialog[open] #file-operation-close')
+  if (await close.isVisible()) await close.click()
+  await page.evaluate(async () => (await import('/src/app/navigation.ts')).selectFile('light/skin/port/py_26.ini'))
+  await open('motion', 'ANIM1')
+  const beforePreview = await fingerprint()
+  await page.locator('#animation-stage').getByRole('slider', { name: '预览时间', exact: true }).fill('35')
+  assert.deepEqual(await fingerprint(), beforePreview, 'scrubbing does not write or push history')
+  await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  await handle('缩放 X').waitFor()
+  const before = await fingerprint()
+  await drag('缩放 X', 14)
+  const edited = await fingerprint()
+  assert.equal(edited.undo, before.undo + 1)
+  assert.notEqual(edited.text, before.text)
+  assert.match(edited.text, /TO=\d+(?:\.\d+)?,85/)
+  await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+  assert.equal((await fingerprint()).text, before.text)
+  await page.evaluate(async () => (await import('/src/app/edit-history.ts')).redo())
+  assert.equal((await fingerprint()).text, edited.text)
+  const beforeCancel = await fingerprint()
+  await drag('缩放 Y', 0, 12, true)
+  assert.deepEqual(await fingerprint(), beforeCancel, 'Esc cancels a draft without history')
+  await handle('缩放 Y').focus()
+  await page.keyboard.press('ArrowRight')
+  assert.equal((await fingerprint()).undo, beforeCancel.undo + 1)
+  assert.match((await fingerprint()).text, /TO=\d+(?:\.\d+)?,86/)
+  const beforeTail = await fingerprint()
+  await drag('单程时长', 30)
+  assert.equal((await fingerprint()).undo, beforeTail.undo + 1, 'one tail gesture is one undo')
+  assert.notEqual((await fingerprint()).text.match(/DURATION=(\d+)/)[1], '70')
+  await page.locator('#animation-stage').getByRole('combobox', { name: '运动曲线' }).selectOption('0')
+  assert.match((await fingerprint()).text, /INTPOL=0/)
+  const player = page.locator('#animation-stage .ui-animation-player')
+  await player.getByRole('button', { name: '循环预览', exact: true }).click()
+  await player.getByRole('button', { name: '播放预览', exact: true }).click()
+  await handle('缩放 X').focus()
+  await page.keyboard.press('ArrowRight')
+  await page.waitForFunction(() => document.querySelector('#animation-stage .ui-animation-player')?.dataset.playing === 'true')
+  await player.getByRole('button', { name: '暂停预览', exact: true }).click()
+  await player.getByRole('button', { name: '循环预览', exact: true }).click()
+  await open('particle', 'ANIM572')
+  const particleBefore = await fingerprint()
+  await handle('方向下限').focus()
+  await page.keyboard.press('ArrowRight')
+  assert.equal((await fingerprint()).undo, particleBefore.undo + 1)
+  assert.match((await fingerprint()).text, /VELOCITY_DIRECTION=-119,-60/)
+  assert.match((await fingerprint()).text, /EMIT_REGION=20,50,70,40/)
+  assert.match((await fingerprint()).text, /ALPHA_CURVE=255,0/)
+  const latest = (await fingerprint()).text
+  assert.equal(await page.evaluate(async path => {
+    const { appState } = await import('/src/app/state.ts')
+    const { SkinArchive } = await import('/src/skin.ts')
+    return SkinArchive.open(await appState.archive.platformBytesAsync('bdi'), 'bdi').getText(path)
+  }, PATH), latest, 'saved/reopened skin preserves direct edits')
+  if (process.env.ANIMATION_SCREENSHOTS) {
+    await page.screenshot({ path: `${process.env.ANIMATION_SCREENSHOTS}/animation-particle.png` })
+    await open('motion', 'ANIM1')
+    await page.screenshot({ path: `${process.env.ANIMATION_SCREENSHOTS}/animation-motion.png` })
+  }
+  // A frame clip's decoded resources survive draft re-parsing, including Esc cancellation.
+  await page.evaluate(async path => {
+    const { appState } = await import('/src/app/state.ts')
+    const { IniDocument } = await import('/src/ini.ts')
+    const { commitTextChanges } = await import('/src/app/edit-history.ts')
+    const before = appState.archive.getText(path), doc = IniDocument.parse(before)
+    const image = appState.archive.names().find(name => name.startsWith('light/skin/res/') && /\.png$/i.test(name))
+    doc.appendSection('ANIM99999', [{ key: 'CATEGORY', value: '2' }, { key: 'TYPE', value: '0' }, { key: 'DURATION', value: '100' }, { key: 'ANIM_PATH', value: image }])
+    commitTextChanges([{ path, before, after: doc.toString() }])
+  }, PATH)
+  await open('motion', 'ANIM99999')
+  const seek = value => page.locator('#animation-stage').getByRole('slider', { name: '预览时间', exact: true }).fill(String(value))
+  const sample = () => page.locator('#animation-stage .ui-animation-stage > canvas').evaluate(canvas => canvas.toDataURL())
+  await seek(35)
+  const frameBefore = await sample(), beforeFrameCancel = await fingerprint()
+  await drag('单程时长', 25, 0, true)
+  await seek(35)
+  assert.deepEqual(await fingerprint(), beforeFrameCancel)
+  assert.equal(await sample(), frameBefore, 'frame image is retained after cancelled duration edit')
+  assert.deepEqual(errors, [])
+  console.log('main-project direct animation: real skin artwork, mouse/key gestures, single undo, cancel, duration/curve, particles and save/reopen passed')
+} finally { await browser.close(); await server.close() }

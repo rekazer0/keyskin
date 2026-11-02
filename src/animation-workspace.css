@@ -10,12 +10,22 @@
 .animation-library-body { display: flex; flex: 1; flex-direction: column; gap: var(--space-sm); min-height: 0; }
 .animation-library-body > .ui-listbox { flex: 1; }
 
-/* 播放条是画布下方固定高度的一行，缩放控件随之上移 */
-.animation-workspace .workspace { grid-template-rows: 48px minmax(0, 1fr) 184px 30px; }
+/* 播放条按内容高度停靠，拖动上边缘可调高，双击恢复（animation-workspace.ts 记忆高度、测量位置）。 */
+.animation-workspace .workspace { grid-template-rows: 48px minmax(0, 1fr) var(--animation-stage-height, minmax(160px, auto)) 30px; }
 .animation-workspace .workspace > .workspace-status { grid-row: 4; }
-.animation-workspace .preview-zoom-control { bottom: calc(184px + 42px); }
+.animation-workspace .preview-zoom-control { bottom: calc(var(--animation-stage-offset, 184px) + 42px); }
+.animation-stage-resize-handle { display: none; }
+.animation-workspace .animation-stage-resize-handle { position: absolute; left: 0; right: 0; bottom: calc(var(--animation-stage-offset, 184px) + 28px); z-index: 10; display: block; height: 4px; cursor: row-resize; background: transparent; transition: background var(--duration-fast) var(--ease-standard); }
+@media (hover: hover) {
+
+.animation-workspace .animation-stage-resize-handle:hover { background: var(--accent); }
+}
+.animation-workspace .animation-stage-resize-handle.dragging { background: var(--accent); }
 .animation-workspace .animation-stage { display: flex; flex-direction: column; grid-row: 3; gap: var(--space-sm); min-height: 0; padding: var(--space-md) var(--space-lg); overflow: auto; box-sizing: border-box; border-top: 1px solid var(--line); background: var(--material-panel); }
-.animation-stage-heading { display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0; }
-.animation-stage-heading > strong { flex: none; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-.animation-stage-heading > small { min-width: 0; overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+/* 标题行与左侧列表同构：类型图标、名称、类型角标，右侧是时长与引用情况 */
+.animation-stage-heading { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
+.animation-stage-icon { flex: none; display: grid; place-items: center; color: var(--tertiary); }
+.animation-stage-heading > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+.animation-stage-heading > .ui-badge { flex: none; }
+.animation-stage-meta { flex: none; margin-left: auto; color: var(--tertiary); font-size: var(--font-size-xs); }
 .animation-stage-empty { margin: auto; color: var(--tertiary); font-size: var(--font-size-sm); text-align: center; }

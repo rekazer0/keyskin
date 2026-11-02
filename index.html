@@ -537,12 +537,26 @@
             <div class="inspector-grid appearance-fields">
               <label class="ui-field style-ref-row" title="按键引用的共享背景样式编号（BACK_STYLE）"><span>背景</span><span class="style-field"><input data-key-field="BACK_STYLE" /></span></label>
               <label class="ui-field style-ref-row" title="按键引用的共享前景样式编号（FORE_STYLE）"><span>前景</span><span class="style-field"><input data-key-field="FORE_STYLE" /></span></label>
-              <label class="ui-field appearance-sound-field" title="按键引用的按键音效样式编号（SOUND_STYLE）"><span>音效</span><span class="style-field"><input data-key-field="SOUND_STYLE" /></span></label>
               <div class="appearance-layout-fields appearance-property-grid">
                   <label class="ui-field" title="STAT_STYLE：S状态_补丁序号，多组用 | 分隔；S0 是零（空）状态，用于叠层，不是“无状态”"><span>状态样式</span><span class="style-field"><input data-key-field="STAT_STYLE" /></span></label>
                   <label class="ui-field" title="FORE_OFFSET：每层前景偏移 x,y，多组用 ; 分隔"><span>前景偏移</span><span class="style-field"><input data-key-field="FORE_OFFSET" /></span></label>
                   <label class="ui-field" title="POS_TYPE：每层前景位置类型，逗号分隔"><span>位置类型</span><span class="style-field"><input data-key-field="POS_TYPE" /></span></label>
               </div>
+            </div>
+          </section>
+          <section class="inspector-group key-only key-animation-fields" data-inspector-group-label="动画">
+            <h3>动画</h3>
+            <div class="inspector-grid">
+              <label class="ui-field" title="ANIM_STYLE：整个按键的动画样式"><span>整键动画</span><span class="style-field"><input data-key-field="ANIM_STYLE" /></span></label>
+              <label class="ui-field" title="BACK_ANIM_STYLE：按键背景的动画样式"><span>背景动画</span><span class="style-field"><input data-key-field="BACK_ANIM_STYLE" /></span></label>
+              <label class="ui-field" title="FORE_ANIM_STYLE：按顺序对应各前景层的动画样式，0 或空位表示未绑定"><span>前景动画</span><span class="style-field"><input data-key-field="FORE_ANIM_STYLE" /></span></label>
+              <label class="ui-field" title="PRESS_STYLE：按下时的效果样式，例如粒子"><span>按下效果</span><span class="style-field"><input data-key-field="PRESS_STYLE" /></span></label>
+            </div>
+          </section>
+          <section class="inspector-group key-only" data-inspector-group-label="音效">
+            <h3>音效</h3>
+            <div class="inspector-grid">
+              <label class="ui-field appearance-sound-field" title="按键引用的按键音效样式编号（SOUND_STYLE）"><span>音效</span><span class="style-field"><input data-key-field="SOUND_STYLE" /></span></label>
             </div>
           </section>
           <section class="inspector-group key-only key-typography-fields" data-inspector-group-label="文字">

@@ -109,7 +109,7 @@ try {
   const pickerDialog = page.locator('#picker-dialog')
   await add.click()
   await pickerDialog.waitFor({ state: 'visible' })
-  await picker.locator('#style-library-grid > button').filter({ hasText: '样式 120' }).click()
+  await picker.locator('#style-library-grid > .ui-style-card[data-style-id="120"]').click()
   await picker.locator('#style-library-apply').click()
   assert.equal((await state()).refs, '3,4,120', 'existing image style can be appended')
   await undoRedo('undo')

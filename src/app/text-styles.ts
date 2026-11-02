@@ -12,9 +12,10 @@ import { styleConfigPath, genConfigPath, isToolbarPath, effectiveToolbarSections
 import { commitTextChanges, isEditing } from "./edit-history"
 import { currentBdaAppearance, bdaAppearancePart } from "./bda-documents"
 import { bdaStyleValue, createBdaPanelTextStyle, updateBdaRefs } from "./key-inspector"
-import { parseStyleColor } from "./resource-inspector"
+import { parseStyleColor } from "./color-control"
 import { fontFileField, textStyleGroup, textStyleNote, textStyleRows, textStyleTargetSwitch } from "./dom"
 import { palmSharedTextCount, palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
+import { createIcon } from "../icons"
 
 export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "NM_COLOR" | "HL_COLOR"
 
@@ -28,6 +29,7 @@ type TextTarget = {
   bdaCreate?: { path: string[]; copyFrom?: BdaStyleRef }
   palm?: PalmText
   note?: string
+  summary?: string
 }
 
 const LABELS: Record<TextProperty, string> = { FONT_NAME: "字体名称", FONT_SIZE: "字号", NM_COLOR: "颜色", HL_COLOR: "按下颜色" }
@@ -139,11 +141,16 @@ function cssTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } 
     const shared = [...sections].filter((section) => others.has(section)).length
     return `修改本布局按键用到的 ${sections.size} 个文字样式${shared ? `，其中 ${shared} 个也用于其他布局，会一并改变` : ""}`
   }
+  const summary = (refs: TextStyleRef[]) => {
+    const sections = new Set(refs.flatMap((ref) => textStyleSections(styles, ref.foreground)))
+    const shared = [...sections].filter((section) => others.has(section)).length
+    return `${sections.size} 个样式${shared ? ` · ${shared} 个跨布局共享` : ""}`
+  }
   return {
     scope: "layout",
     targets: [
-      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, css: label, note: label.length ? note(label) : "本布局的按键没有文字层（字画在图片里）；选中按键修改文字会为它新建文字层" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, css: hint, note: note(hint) }] : [],
+      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, css: label, summary: label.length ? summary(label) : "无文字层", note: label.length ? note(label) : "本布局的按键没有文字层（字画在图片里）；选中按键修改文字会为它新建文字层" },
+      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, css: hint, summary: summary(hint), note: note(hint) }] : [],
     ],
   }
 }
@@ -171,8 +178,8 @@ function bdaTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } 
   return {
     scope: "layout",
     targets: [
-      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, bda: label, note: label.length ? `修改本面板按键用到的 ${label.length} 个文字样式，其他面板共用的样式会一并改变` : "本面板的按键没有文字层" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, bda: hint, note: `修改本面板按键用到的 ${hint.length} 个提示文字样式，其他面板共用的样式会一并改变` }] : [],
+      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, bda: label, summary: label.length ? `${label.length} 个样式 · 跨面板共享` : "无文字层", note: label.length ? `修改本面板按键用到的 ${label.length} 个文字样式，其他面板共用的样式会一并改变` : "本面板的按键没有文字层" },
+      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, bda: hint, summary: `${hint.length} 个样式 · 跨面板共享`, note: `修改本面板按键用到的 ${hint.length} 个提示文字样式，其他面板共用的样式会一并改变` }] : [],
     ],
   }
 }
@@ -194,13 +201,17 @@ function palmTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] }
     const shared = palmSharedTextCount(ids)
     return `修改本布局按键用到的 ${ids.length} 个文字样式${shared ? `，其中 ${shared} 个也用于其他布局，会一并改变` : ""}`
   }
+  const summary = (ids: string[]) => {
+    const shared = palmSharedTextCount(ids)
+    return `${ids.length} 个样式${shared ? ` · ${shared} 个跨布局共享` : ""}`
+  }
   const label = palm.label?.ids ?? []
   const hint = palm.hint?.ids ?? []
   return {
     scope: "layout",
     targets: [
-      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, palm: palm.label, note: label.length ? note(label) : "本布局的按键没有文字样式（字画在图片里）；选中按键可以在「样式」里添加文字样式" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, palm: palm.hint, note: note(hint) }] : [],
+      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, palm: palm.label, summary: label.length ? summary(label) : "无文字样式", note: label.length ? note(label) : "本布局的按键没有文字样式（字画在图片里）；选中按键可以在「样式」里添加文字样式" },
+      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, palm: palm.hint, summary: summary(hint), note: note(hint) }] : [],
     ],
   }
 }
@@ -262,7 +273,14 @@ function valueRow(target: TextTarget, property: TextProperty, values: string[]):
     if (input.type === "number" && input.value && !input.checkValidity()) return
     writeTarget(target, property, input.value.trim())
   })
-  return fieldRow(LABELS[property], property, input)
+  if (property === "FONT_SIZE") {
+    const control = element("span", "ui-input")
+    const unit = element("span", "ui-input-affix")
+    unit.textContent = "px"
+    control.append(input, unit)
+    return fieldRow(LABELS[property], property, control)
+  }
+  return fieldRow("字体名", property, input)
 }
 
 /** Picker, AARRGGBB text and opacity; an unchanged opacity keeps its exact byte when only the hue changes. */
@@ -274,11 +292,11 @@ function colorRow(target: TextTarget, property: TextProperty, values: string[]):
   picker.type = "color"
   alpha.type = "number"
   alpha.min = "0"
-  alpha.max = "1"
-  alpha.step = "0.01"
+  alpha.max = "100"
+  alpha.step = "1"
   const common = values.every((value) => value === values[0]) ? values[0] ?? "" : ""
   const parsed = parseStyleColor(common)
-  const shownAlpha = String(parsed ? Math.round(parsed.alpha * 100) / 100 : 1)
+  const shownAlpha = String(parsed ? Math.round(parsed.alpha * 100) : 100)
   const alphaByte = parsed ? Math.round(parsed.alpha * 255) : 255
   text.value = common
   text.placeholder = placeholder(values)
@@ -288,9 +306,10 @@ function colorRow(target: TextTarget, property: TextProperty, values: string[]):
   picker.setAttribute("aria-label", label)
   text.setAttribute("aria-label", `${label}值`)
   alpha.setAttribute("aria-label", `${label}透明度`)
+  alpha.title = "不透明度（%）"
   for (const input of [picker, text, alpha]) input.disabled = !isEditing() || !writable(target)
   const fromControls = () => {
-    const opacity = alpha.value === shownAlpha ? alphaByte : Math.round(Math.max(0, Math.min(1, Number(alpha.value))) * 255)
+    const opacity = alpha.value === shownAlpha ? alphaByte : Math.round(Math.max(0, Math.min(100, Number(alpha.value))) / 100 * 255)
     writeTarget(target, property, `${opacity.toString(16).padStart(2, "0")}${picker.value.slice(1)}`.toUpperCase())
   }
   picker.addEventListener("change", fromControls)
@@ -299,7 +318,9 @@ function colorRow(target: TextTarget, property: TextProperty, values: string[]):
     const value = text.value.trim().replace(/^#/, "")
     if (!value || parseStyleColor(value)) writeTarget(target, property, value.toUpperCase())
   })
-  control.append(picker, text, alpha)
+  const unit = element("span", "ui-input-affix")
+  unit.textContent = "%"
+  control.append(picker, text, alpha, unit)
   return fieldRow(LABELS[property], property, control)
 }
 
@@ -311,8 +332,12 @@ export function populateTextStyleGroup(): void {
   textStyleRows.replaceChildren()
   if (!context) return
   const target = context.targets.find((item) => item.id === appState.textStyleTarget) ?? context.targets[0]
-  textStyleNote.textContent = target.note ?? ""
-  textStyleNote.hidden = !textStyleNote.textContent
+  textStyleNote.replaceChildren()
+  textStyleNote.title = target.note ?? ""
+  textStyleNote.setAttribute("aria-label", target.note ?? "")
+  textStyleNote.tabIndex = 0
+  textStyleNote.hidden = !target.note
+  if (target.note) textStyleNote.append(createIcon(target.summary ? "layers" : "info"), target.summary ?? (context.scope === "candidate" ? "跟随用户字体" : target.note))
   textStyleTargetSwitch.hidden = context.targets.length < 2
   for (const item of context.targets) {
     const button = element("button")

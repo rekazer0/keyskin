@@ -17,8 +17,8 @@ import { drawVisualPreview, retinaThumbnail, thumbnailRecycler } from "../atlas.
 import { translatedConfigLabel } from "./document-inspector"
 import { refreshPreview } from "./preview-render"
 import { soundPathForFilename, soundResourcePaths, SOUND_ACCEPT, isSoundPath } from "../sounds.ts"
-import { createIcon, symbolSpan } from "../icons"
-import { availableStyleIDs, styleKinds, styleKind, styleKindBadge, styleConfigDocument, styleSoundFile } from "./style-picker"
+import { symbolSpan } from "../icons"
+import { availableStyleIDs, styleKinds, styleKind, styleConfigDocument, styleSoundFile, styleLibraryCategories } from "./style-picker"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { asObject } from "../palm/sxi-ini.ts"
 import { renderSxiGroup } from "./sxi-fields"
@@ -29,6 +29,11 @@ import { showImage, showError, showStatus } from "./file-operations"
 import { updateSourceHighlight } from "./source-panel"
 import { styleAnimationLinks, styleAnimationPlayers, styleAnimationSummary } from "./legacy-animation-inspector"
 import { previewStyleAnimation } from "./animation-resource"
+import { configValueControl } from "./config-value-control"
+import { colorValueControl } from "./color-control"
+import { renderSoundLibrary } from "./sound-library"
+import { soundStyleSample } from "./style-card-preview"
+import { styleCard, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "../style-card"
 
 export function openStyleImageResourceChooser(target: StyleImagePickerTarget): void {
   appState.resourcePickerSelect = undefined
@@ -103,39 +108,6 @@ function styleSectionTarget(styleID: string, property: "NM_IMG" | "HL_IMG"): Sty
   }
 }
 
-export function parseStyleColor(value: string): { hex: string; alpha: number } | undefined {
-  const clean = value.trim().replace(/^#/, "")
-  if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(clean)) return
-  const normalized = clean.length === 6 ? `FF${clean}` : clean.toUpperCase()
-  return { hex: normalized.slice(2), alpha: Number.parseInt(normalized.slice(0, 2), 16) / 255 }
-}
-
-function bindStyleDetailColor(
-  textInput: HTMLInputElement,
-  picker: HTMLInputElement,
-  alpha: HTMLInputElement,
-): void {
-  const sync = () => {
-    const parsed = parseStyleColor(textInput.value)
-    if (!parsed) return
-    picker.value = `#${parsed.hex}`
-    alpha.value = String(parsed.alpha)
-    picker.disabled = textInput.disabled
-  }
-  const write = () => {
-    const parsed = parseStyleColor(textInput.value)
-    const rgb = picker.value.slice(1).toUpperCase()
-    if (!parsed && rgb.length !== 6) return
-    const alphaValue = Math.max(0, Math.min(1, Number(alpha.value) || 1))
-    textInput.value = `${Math.round(alphaValue * 255).toString(16).padStart(2, "0")}${rgb}`.toUpperCase()
-    textInput.dispatchEvent(new Event("change", { bubbles: true }))
-  }
-  textInput.addEventListener("input", sync)
-  textInput.addEventListener("change", sync)
-  picker.addEventListener("input", write)
-  alpha.addEventListener("input", write)
-  sync()
-}
 
 export async function renderStyleResourceDetail(): Promise<void> {
   const appearancePart = bdaAppearancePart(appState.selectedPath)
@@ -223,22 +195,8 @@ export async function renderStyleResourceDetail(): Promise<void> {
       const textInput = document.createElement("input")
       textInput.value = stylesDocument.get(section, key) ?? ""
       textInput.disabled = !isEditing()
-      const picker = document.createElement("input")
-      picker.type = "color"
-      picker.setAttribute("aria-label", `${key} 颜色选择器`)
-      const alpha = document.createElement("input")
-      alpha.type = "number"
-      alpha.min = "0"
-      alpha.max = "1"
-      alpha.step = "0.01"
-      alpha.setAttribute("aria-label", `${key} 透明度`)
-      alpha.disabled = !isEditing()
-      const colorControl = document.createElement("span")
-      colorControl.className = "color-control ui-input ui-color"
-      colorControl.append(picker, textInput, alpha)
-      bindStyleDetailColor(textInput, picker, alpha)
       textInput.addEventListener("change", () => updateField(textInput.value))
-      row.append(colorControl)
+      row.append(colorValueControl(textInput, translatedConfigLabel(key)))
     } else if (key.endsWith("SOUND_PATH")) {
       const filename = stylesDocument.get(section, key) ?? ""
       const soundPaths = currentSoundEntries()
@@ -272,7 +230,12 @@ export async function renderStyleResourceDetail(): Promise<void> {
       input.value = stylesDocument.get(section, key) ?? ""
       input.disabled = !isEditing()
       input.addEventListener("change", () => updateField(input.value))
-      row.append(input)
+      input.setAttribute("aria-label", translatedConfigLabel(key))
+      if (["FONT_SIZE", "BORDER_SIZE"].includes(key) && /^-?\d+(?:\.\d+)?$/.test(input.value.trim())) {
+        input.type = "number"
+        input.step = "any"
+      }
+      row.append(configValueControl(input, section, key, translatedConfigLabel(key)) ?? input)
       const links = styleAnimationLinks(key, input.value)
       if (links) row.append(links)
     }
@@ -306,7 +269,8 @@ export function selectStyleResource(styleID: string): void {
     if (!styles.has(Number(styleID))) return
   } else if (!availableStyleIDs().includes(styleID)) return
   appState.selectedStyleID = styleID
-  resourceListView.hidden = true
+  resourceListView.hidden = !document.body.classList.contains("style-workspace")
+  selectGalleryItem(`STYLE${styleID}`, resourceGallery)
   resourceDetail.hidden = false
   resourceInspector.scrollTop = 0
   void renderStyleResourceDetail()
@@ -340,7 +304,39 @@ function releaseResourceURLs(): void {
   appState.resourceURLs = []
 }
 
-/** galleryCanvas 复用上一轮列表的缩略图画布（每次编辑都会重建样式列表）。 */
+function renderStyleFilters(bdaGroup?: string): void {
+  let bar = resourceListView.querySelector<HTMLElement>(".ui-style-filter-bar")
+  if (!bar) {
+    bar = document.createElement("span")
+    bar.className = "ui-style-filter-bar"
+    styleAddButton.after(bar)
+  }
+  if (!bdaGroup && resourceCategory.dataset.styleCategories !== "bdi") {
+    resourceCategory.replaceChildren(...styleTypeOptions.map(([value, label]) => new Option(label, value)))
+    resourceCategory.dataset.styleCategories = "bdi"
+  }
+  const select = (label: string, options: readonly (readonly [string, string])[], value: string, change: (value: string) => void) => {
+    const wrap = document.createElement("span")
+    wrap.className = "ui-input ui-select"
+    const control = document.createElement("select")
+    control.setAttribute("aria-label", label)
+    control.replaceChildren(...options.map(([value, label]) => new Option(label, value)))
+    control.value = value
+    control.addEventListener("change", () => change(control.value))
+    wrap.append(control)
+    return wrap
+  }
+  bar.hidden = false
+  bar.replaceChildren(
+    select("样式类型", bdaGroup ? styleTypeOptions.filter(([kind]) => ["image", "color", "text"].includes(kind)) : styleTypeOptions, bdaGroup ?? resourceCategory.value, value => {
+      resourceCategory.value = bdaGroup ? value === "image" ? "imageStyles" : value === "text" ? "textStyles" : "colorStyles" : value
+      if (bdaGroup) resourceCategory.dispatchEvent(new Event("change"))
+      else renderResourceInspector()
+    }),
+    select("样式用途", styleUsageOptions, appState.styleUsageFilter, value => { appState.styleUsageFilter = value; renderResourceInspector() }),
+  )
+}
+
 async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumbnailRecycler>): Promise<void> {
   if (appState.archive?.format === "bda") {
     await renderBdaStyleResourceGallery(galleryCanvas)
@@ -348,81 +344,54 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
   }
   const stylesDocument = styleConfigDocument()
   if (!appState.archive || !stylesDocument && appState.archive.format !== "sxi") return
-  if (resourceCategory.dataset.styleCategories !== "bdi") {
-    resourceCategory.replaceChildren(
-      new Option("全部样式", "all"),
-      ...(["image", "color", "anim", "text", "sound"] as const).map((kind) => new Option(`${styleKinds[kind].label}样式`, kind)),
-    )
-    resourceCategory.dataset.styleCategories = "bdi"
-  }
+  renderStyleFilters()
   const query = resourceSearch.value.trim().toLowerCase()
   const category = resourceCategory.value
   // What a style says about itself: INFO / SHOW in default.css, a Palm style's text (`s_1.text`).
   const notes = (styleID: string) => stylesDocument
     ? stylesDocument.entries(`STYLE${styleID}`).filter((entry) => entry.key === "INFO" || entry.key === "SHOW").map((entry) => entry.value)
     : [String(asObject(palmStyle(styleID)?.s_1)?.text ?? "")]
+  const categories = styleLibraryCategories()
   const styleIDs = availableStyleIDs().filter((styleID) => {
-    const hasSound = Boolean(styleSoundFile(styleID, stylesDocument))
-    // 声音可与视觉属性共存，按是否带音效筛；其余按样式类型筛。
-    if (category === "sound" ? !hasSound : category !== "all" && styleKind(styleID, stylesDocument) !== category) return false
-    return !query || styleID.includes(query) || notes(styleID).some((note) => note.toLowerCase().includes(query))
+    return styleMatches({ kind: styleKind(styleID, stylesDocument), sound: Boolean(styleSoundFile(styleID, stylesDocument)),
+      categories: categories.get(styleID) ?? [], search: [styleID, ...notes(styleID)].join(" ") }, category, appState.styleUsageFilter, query)
   })
   resourceListTitle.textContent = "样式配置"
   resourceSearch.placeholder = "搜索样式"
   resourceSearch.setAttribute("aria-label", "搜索样式")
   resourceSearchControl.setAttribute("aria-label", "搜索样式")
-  resourceCategory.parentElement!.hidden = false
+  resourceCategory.parentElement!.hidden = true
   resourceCount.textContent = `${styleIDs.length} 个样式`
   resourceUploadButton.hidden = true
   styleAddButton.hidden = false
   resourceDownloadButton.hidden = true
   resourceDeleteButton.hidden = true
-  resourceListView.hidden = Boolean(appState.selectedStyleID)
+  resourceListView.hidden = Boolean(appState.selectedStyleID) && !document.body.classList.contains("style-workspace")
   resourceDetail.hidden = !appState.selectedStyleID
   const resolver = visualResolver()
   if (!resolver) return
   for (const styleID of styleIDs) {
-    const button = document.createElement("button")
-    button.className = "resource-item style-resource-item"
+    const kind = styleKind(styleID, stylesDocument)
+    const soundFilename = styleSoundFile(styleID, stylesDocument)
+    const soundPath = soundFilename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, soundFilename) : undefined
+    const button = styleCard({
+      id: styleID, label: `STYLE${styleID}`, kind, kindLabel: styleKinds[kind].label, kindIcon: styleKinds[kind].icon,
+      canvas: galleryCanvas,
+      draw: async (canvas, highlighted) => {
+        if (kind === "text") await textStyleSample(canvas, resolver, styleID, highlighted)
+        else drawVisualPreview(canvas, [await resolver.resolve(styleID, highlighted).catch(() => undefined)], false)
+      },
+      animation: () => stylesDocument ? styleAnimationPlayers(styleID, stylesDocument, true) : [],
+      summary: stylesDocument ? styleAnimationSummary(styleID, stylesDocument) : undefined,
+      sound: soundFilename ? () => soundStyleSample(soundFilename, soundPath) : undefined,
+    })
+    button.classList.add("resource-item", "style-resource-item")
     button.dataset.path = `STYLE${styleID}`
     button.title = `STYLE${styleID}`
-    const soundFilename = styleSoundFile(styleID, stylesDocument)
-    const soundPath = soundFilename
-      ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, soundFilename)
-      : undefined
-    if (soundFilename) {
-      button.classList.add("has-sound")
-      const badge = symbolSpan("play")
-      badge.classList.add("sound-style-badge")
-      badge.title = soundPath ? `点击试听 ${soundFilename}` : `声音文件不存在：${soundFilename}`
-      button.append(badge)
-    }
-    const kind = styleKind(styleID, stylesDocument)
-    const previews = document.createElement("span")
-    previews.className = "resource-style-previews"
-    if (kind === "anim" && stylesDocument) {
-      // 动画样式没有正常 / 按下外观：写明播放哪个动画，悬停时在画布上播放（DESIGN.md §10）。
-      previews.dataset.styleKind = "anim"
-      const summary = document.createElement("small")
-      summary.textContent = styleAnimationSummary(styleID, stylesDocument)
-      previews.append(createIcon(styleKinds.anim.icon, 16), summary)
-      button.addEventListener("mouseenter", () => previewStyleAnimation([styleID]))
-    } else {
-      for (const highlighted of [false, true]) {
-        const canvas = galleryCanvas(128, 88)
-        drawVisualPreview(canvas, [await resolver.resolve(styleID, highlighted).catch(() => undefined)], false)
-        previews.append(canvas)
-      }
-    }
-    const name = document.createElement("strong")
-    name.textContent = `STYLE${styleID}`
-    const nameRow = document.createElement("span")
-    nameRow.className = "style-resource-name"
-    nameRow.append(name, styleKindBadge(kind, true))
-    button.append(previews, nameRow)
+    if (kind === "anim") button.addEventListener("mouseenter", () => previewStyleAnimation([styleID]))
     button.addEventListener("click", () => {
       selectGalleryItem(`STYLE${styleID}`, resourceGallery)
-      if (soundPath) playSoundPath(soundPath)
+      if (document.body.classList.contains("style-workspace")) selectStyleResource(styleID)
     })
     button.addEventListener("dblclick", () => {
       selectGalleryItem(`STYLE${styleID}`, resourceGallery)
@@ -431,6 +400,7 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
     resourceGallery.append(button)
   }
   if (appState.selectedResourceGalleryPath) selectGalleryItem(appState.selectedResourceGalleryPath, resourceGallery)
+  if (!appState.selectedStyleID && document.body.classList.contains("style-workspace") && styleIDs.length) selectStyleResource(styleIDs[0])
 }
 
 async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof thumbnailRecycler>): Promise<void> {
@@ -443,49 +413,49 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
     colorStyles: { type: "color", styles: info.appearance.colorStyles },
   } as const
   const definition = definitions[part.group]
-  if (resourceCategory.dataset.styleCategories !== "bda") {
-    resourceCategory.replaceChildren(...bdaAppearanceStyleGroups.map(([value, label]) => new Option(label, value)))
-    resourceCategory.dataset.styleCategories = "bda"
-  }
+  renderStyleFilters(definition.type)
+  resourceCategory.dataset.styleCategories = "bda"
+  resourceCategory.replaceChildren(...bdaAppearanceStyleGroups.map(([value, label]) => new Option(label, value)))
   resourceCategory.value = part.group
   const query = resourceSearch.value.trim().toLowerCase()
-  const keys = [...definition.styles.keys()].filter((key) => !query || String(key).includes(query))
+  const categories = styleLibraryCategories()
+  const keys = [...definition.styles.keys()].filter(key => styleMatches({ kind: definition.type, categories: categories.get(bdaStyleID({ type: definition.type, key })) ?? [], search: String(key) }, "all", appState.styleUsageFilter, query))
   resourceListTitle.textContent = "样式配置"
   resourceSearch.placeholder = "搜索样式"
   resourceSearch.setAttribute("aria-label", "搜索样式")
   resourceSearchControl.setAttribute("aria-label", "搜索样式")
-  resourceCategory.parentElement!.hidden = false
+  resourceCategory.parentElement!.hidden = true
   resourceCount.textContent = `${keys.length} 个样式`
   resourceUploadButton.hidden = true
   styleAddButton.hidden = true
   resourceDownloadButton.hidden = true
   resourceDeleteButton.hidden = true
-  resourceListView.hidden = Boolean(appState.selectedStyleID)
+  resourceListView.hidden = Boolean(appState.selectedStyleID) && !document.body.classList.contains("style-workspace")
   resourceDetail.hidden = !appState.selectedStyleID
   const resolver = visualResolver()
   for (const key of keys) {
     const ref: BdaStyleRef = { type: definition.type, key }
-    const button = document.createElement("button")
-    button.className = "resource-item style-resource-item"
+    const button = styleCard({
+      id: bdaStyleID(ref), label: `STYLE ${key}`, kind: definition.type,
+      kindLabel: styleKinds[definition.type].label, kindIcon: styleKinds[definition.type].icon,
+      canvas: galleryCanvas,
+      draw: async (canvas, highlighted) => {
+        if (definition.type === "text" && resolver) await textStyleSample(canvas, resolver, bdaStyleID(ref), highlighted)
+        else drawVisualPreview(canvas, [await resolver?.resolve(bdaStyleID(ref), highlighted).catch(() => undefined)], false)
+      },
+    })
+    button.classList.add("resource-item", "style-resource-item")
     button.dataset.path = `STYLE${key}`
     button.title = `STYLE ${key}`
-    const previews = document.createElement("span")
-    previews.className = "resource-style-previews"
-    for (const highlighted of [false, true]) {
-      const canvas = galleryCanvas(128, 88)
-      previews.append(canvas)
-      void resolver?.resolve(bdaStyleID(ref), highlighted)
-        .then((visual) => { if (previews.isConnected) drawVisualPreview(canvas, [visual], false) })
-        .catch(() => {})
-    }
-    const name = document.createElement("strong")
-    name.textContent = `STYLE ${key}`
-    button.append(previews, name)
-    button.addEventListener("click", () => selectGalleryItem(`STYLE${key}`, resourceGallery))
+    button.addEventListener("click", () => {
+      selectGalleryItem(`STYLE${key}`, resourceGallery)
+      if (document.body.classList.contains("style-workspace")) selectStyleResource(String(key))
+    })
     button.addEventListener("dblclick", () => selectStyleResource(String(key)))
     resourceGallery.append(button)
   }
   if (appState.selectedResourceGalleryPath) selectGalleryItem(appState.selectedResourceGalleryPath, resourceGallery)
+  if (!appState.selectedStyleID && document.body.classList.contains("style-workspace") && keys.length) selectStyleResource(String(keys[0]))
 }
 
 export function currentSoundEntries(): SoundEntry[] {
@@ -509,56 +479,36 @@ export function currentSoundEntries(): SoundEntry[] {
 
 function renderSoundResourceGallery(): void {
   if (!appState.archive) return
-  const query = resourceSearch.value.trim().toLowerCase()
-  const entries = currentSoundEntries().filter((entry) =>
-    !query || `${entry.label} ${entry.filename} ${entry.usage}`.toLowerCase().includes(query)
-  )
+  const entries = currentSoundEntries()
   resourceListTitle.textContent = "按键音效"
   resourceSearch.placeholder = "搜索按键音效"
   resourceSearch.setAttribute("aria-label", "搜索按键音效")
   resourceSearchControl.setAttribute("aria-label", "搜索按键音效")
   resourceCategory.parentElement!.hidden = true
-  resourceCount.textContent = `${entries.length} 个音效文件`
+  resourceCount.textContent = `${entries.length} 个音效`
   resourceUploadInput.accept = SOUND_ACCEPT
-  resourceUploadButton.hidden = false
+  resourceUploadButton.hidden = true
   resourceUploadButton.title = appState.selectedSoundID ? "替换选中按键音效" : "添加按键音效"
   resourceUploadButton.setAttribute("aria-label", resourceUploadButton.title)
   styleAddButton.hidden = true
-  resourceDownloadButton.hidden = false
+  resourceDownloadButton.hidden = true
   resourceDownloadButton.title = "下载选中按键音效"
   resourceDownloadButton.setAttribute("aria-label", resourceDownloadButton.title)
   resourceDeleteButton.hidden = true
   resourceListView.hidden = false
   resourceDetail.hidden = true
-  for (const entry of entries) {
-    const button = document.createElement("button")
-    button.className = "resource-item sound-resource-item"
-    button.dataset.path = entry.id
-    button.title = `${entry.label} · 点击试听`
-    const icon = symbolSpan("speaker.wave.2")
-    icon.classList.add("sound-resource-icon")
-    const name = document.createElement("strong")
-    name.textContent = entry.label
-    const meta = document.createElement("small")
-    meta.textContent = entry.usage
-    button.append(icon, name, meta)
-    button.addEventListener("click", () => {
-      appState.selectedSoundID = entry.id
-      selectGalleryItem(entry.id, resourceGallery)
-      resourceUploadButton.title = "替换选中按键音效"
-      resourceUploadButton.setAttribute("aria-label", resourceUploadButton.title)
-      playSoundPath(entry.path)
-    })
-    resourceGallery.append(button)
-  }
-  if (appState.selectedSoundID) selectGalleryItem(appState.selectedSoundID, resourceGallery)
+  renderSoundLibrary(entries, updateResourceActionButtons)
 }
 
 export function renderResourceInspector(): void {
   if (!appState.archive) return
+  syncAtlasWorkspace()
   releaseResourceURLs()
   const galleryCanvas = thumbnailRecycler(resourceGallery)
+  const styleFilters = resourceListView.querySelector<HTMLElement>(".ui-style-filter-bar")
+  if (styleFilters) styleFilters.hidden = appState.resourceInspectorMode !== "style"
   resourceGallery.replaceChildren()
+  delete resourceGallery.dataset.kind
   if (appState.resourceInspectorMode === "style") {
     void renderStyleResourceGallery(galleryCanvas)
     return
@@ -694,21 +644,25 @@ function selectGalleryItem(path: string, container: HTMLElement): void {
   appState.selectedResourceGalleryPath = path
   for (const item of container.querySelectorAll<HTMLElement>(".resource-item")) {
     item.classList.toggle("selected", item.dataset.path === path)
+    if (item.classList.contains("ui-style-card")) item.setAttribute("aria-pressed", String(item.dataset.path === path))
   }
   updateResourceActionButtons()
 }
 
-export async function uploadKeySound(file: File): Promise<boolean> {
+export async function uploadKeySound(file: File, replacePath?: string): Promise<boolean> {
   if (!appState.archive || !isSoundPath(file.name)) throw new Error("按键音效仅支持 OGG、WAV 或 AIFF 文件")
   if (!isEditing()) return false
   const targetArchive = appState.archive
   const filename = file.name.split(/[\\/]/).pop() ?? file.name
   const entries = currentSoundEntries()
-  const selected = entries.find((entry) => entry.id === appState.selectedSoundID)
-  const base = selected?.path.split("/").slice(0, -1).join("/")
+  if (replacePath && !entries.some(entry => entry.path === replacePath)) throw new Error("要替换的音效已不存在")
+  if (replacePath && replacePath.split(".").pop()?.toLowerCase() !== filename.split(".").pop()?.toLowerCase()) {
+    throw new Error("替换文件需与原音效格式相同；其他格式请用「添加音效」。")
+  }
+  const base = replacePath?.split("/").slice(0, -1).join("/")
     ?? entries[0]?.path.split("/").slice(0, -1).join("/")
     ?? (appState.archive.format === "ssf" ? "default" : `${theme.value}/skin/res`)
-  const targetPath = `${base}/${filename}`
+  const targetPath = replacePath ?? `${base}/${filename}`
   const beforeResource = appState.archive.getBytes(targetPath)?.slice()
   const resourceBytes = new Uint8Array(await file.arrayBuffer())
   if (appState.archive !== targetArchive || !isEditing()) return false

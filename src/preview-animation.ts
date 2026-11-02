@@ -155,7 +155,7 @@ export function legacyParticleFrames(
 ): LegacyParticleFrame[] {
   // deterministic ballistic preview; add EMIT_TYPE modes when a real skin needs distinct emitters.
   const interval = 1000 / emitter.birthRate
-  const emitted = Math.min(emitter.totalNumber, Math.max(0, Math.floor(elapsed / interval)))
+  const emitted = elapsed < 0 ? 0 : Math.min(emitter.totalNumber, Math.floor(elapsed / interval) + 1)
   const maxLife = Math.max(...emitter.life)
   const first = Math.max(0, emitted - Math.ceil(maxLife / interval) - 1)
   const normalized = emitter.emitRegion.every((value) => Math.abs(value) <= 1)
@@ -169,7 +169,7 @@ export function legacyParticleFrames(
     : emitter.emitRegion
   const result: LegacyParticleFrame[] = []
   for (let index = first; index < emitted; index++) {
-    const age = elapsed - (index + 1) * interval
+    const age = elapsed - index * interval
     const life = ranged(emitter.life, index * 17 + 1)
     if (age < 0 || age > life) continue
     const seconds = age / 1000
@@ -193,11 +193,12 @@ export function legacyParticleFrames(
 export function parseLegacyAnimation(
   styles: IniDocument,
   animations: IniDocument,
+  event: "PRESS_ANIM" | "SHOW_ANIM" = "PRESS_ANIM",
 ): LegacyAnimation {
   const result: LegacyAnimation = new Map()
   for (const section of styles.sections()) {
     const styleID = section.match(/^STYLE(.+)$/)?.[1]
-    const animationID = styles.get(section, "PRESS_ANIM") ?? styles.get(section, "SHOW_ANIM")
+    const animationID = styles.get(section, event)?.trim()
     if (!styleID || !animationID) continue
     const build = `ANIM${animationID}`
     const ids = (animations.get(build, "BUILD_LIST") ?? animationID)
@@ -270,6 +271,7 @@ function legacyAnimationPair(
   relativeSize?: Pick<Rect, "width" | "height">,
 ): readonly [number, number] | undefined {
   const effect = styleID ? animation?.get(styleID) : undefined
+  if (elapsed < 0) return
   const frames = effect?.frames
   if (!frames?.length) return
   const total = Math.max(...frames.map((frame) => frame.start + frame.delay + animationDuration(frame)))

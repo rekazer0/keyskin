@@ -113,6 +113,10 @@ globalThis.Option = function Option(text, value) {
 globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" })
 globalThis.requestAnimationFrame = () => 0
 globalThis.cancelAnimationFrame = () => {}
+globalThis.MutationObserver = class MutationObserver {
+  observe() {}
+  disconnect() {}
+}
 
 function walk(node, output = []) {
   for (const child of node.children ?? []) {
@@ -232,7 +236,6 @@ function render({ animation = sampleAnimation(), mode = "motion", selected, edit
       },
       onSelect: (id) => events.selected.push(id),
       filter: (items) => ({ items }),
-      keyUses: () => [],
     },
     editable,
     onDesignWidth: (value) => events.designWidth.push(value),
@@ -273,14 +276,14 @@ test("点击或方向键切换选中效果，选择交给调用方保存", () =>
   assert.deepEqual(events.selected, ["scale:pop", "scale:pop", "group:g1"])
 })
 
-test("选中的效果按 列表 → 预览 → 引用 → 参数 分组，标题与分类栏标签一致", () => {
-  assert.deepEqual(sectionLabels(render({ selected: "alpha:press" }).container), ["动效", "预览", "引用", "变化", "时间与循环"])
-  assert.deepEqual(sectionLabels(render({ selected: "scale:pop" }).container), ["动效", "预览", "引用", "变化", "时间与循环", "变换中心"])
-  assert.deepEqual(sectionLabels(render({ selected: "group:g1" }).container), ["动效", "预览", "引用", "组合", "时间与循环"])
-  assert.deepEqual(sectionLabels(render({ selected: "image:seq" }).container), ["动效", "预览", "引用", "帧序列", "时间与循环"])
-  assert.deepEqual(sectionLabels(render({ selected: "video:vid" }).container), ["动效", "预览", "引用", "资源", "时间与循环"])
+test("选中的效果按 列表 → 预览 → 参数 分组，标题与分类栏标签一致", () => {
+  assert.deepEqual(sectionLabels(render({ selected: "alpha:press" }).container), ["动效", "预览", "变化", "时间与循环"])
+  assert.deepEqual(sectionLabels(render({ selected: "scale:pop" }).container), ["动效", "预览", "变化", "时间与循环", "变换中心"])
+  assert.deepEqual(sectionLabels(render({ selected: "group:g1" }).container), ["动效", "预览", "组合", "时间与循环"])
+  assert.deepEqual(sectionLabels(render({ selected: "image:seq" }).container), ["动效", "预览", "帧序列", "时间与循环"])
+  assert.deepEqual(sectionLabels(render({ selected: "video:vid" }).container), ["动效", "预览", "资源", "时间与循环"])
   const { container } = render({ mode: "particle" })
-  assert.deepEqual(sectionLabels(container), ["粒子", "预览", "引用", "发射", "运动", "外观", "时间与循环"])
+  assert.deepEqual(sectionLabels(container), ["粒子", "预览", "发射", "运动", "外观", "时间与循环"])
   for (const node of sections(container)) assert.ok(node.children[0].textContent.startsWith(node.dataset.inspectorGroupLabel))
   assert.equal(byClass(container, "ui-animation-player").length, 1, "预览分组里是播放器")
 })
@@ -345,15 +348,6 @@ test("组合列出子效果与时间，增删暂不支持时说明原因", () =>
   assert.match(combo.textContent, /暂不支持/)
   change(selectByLabel(combo, "组合方式"), 1)
   assert.deepEqual(events.effects, [["group:g1", "buildMode", 1]])
-})
-
-test("引用分组列出触发目标、事件中文名、作用域、条件与独立标记，也列出所在的组合", () => {
-  const uses = (selected) => section(render({ selected }).container, "引用").textContent
-  assert.match(uses("alpha:press"), /KEY_A · 按键按下前景 · 条件 KEY_A/)
-  assert.match(uses("alpha:press"), /组合 g1作为组合的子效果播放/)
-  assert.match(uses("image:seq"), /KEY_A · 元素显示前景与背景/)
-  assert.match(uses("frame:f1"), /KEY_B · 按键长按背景 · 独立 · 顶部 · 交互后移除/)
-  assert.match(uses("lottie:lo"), /还没有样式播放/)
 })
 
 test("图片序列帧：图片卡片选资源、资源编号与每帧时长写回", () => {

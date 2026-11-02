@@ -129,6 +129,8 @@ export const appState = {
   animationKeys: [] as string[],
   /** 列表只看 animationKeys 播放的动画；切到「全部」可以挑一个应用到它们。 */
   animationKeyOnly: true,
+  /** BDI/BDS 引用面板的时机、部位与前景槽位；只影响绑定预览，不写入文件。 */
+  animationBindingChoice: { trigger: "PRESS_ANIM", part: "ANIM_STYLE" as "ANIM_STYLE" | "BACK_ANIM_STYLE" | "FORE_ANIM_STYLE", foreground: 0 },
   selectedStyleID: "",
   selectedSoundID: "",
   selectedBdaStyleGroup: "imageStyles" as BdaAppearanceStyleGroup,
@@ -180,6 +182,7 @@ export const appState = {
   keySoundPath: "",
   keySoundContext: undefined as AudioContext | undefined,
   keySoundSource: undefined as AudioBufferSourceNode | undefined,
+  keySoundFinished: undefined as (() => void) | undefined,
   /**
   * 分类轨当前分组。属性面板每次重绘都会重建分区元素，DOM 上的高亮无法跨重绘留住，
   * 所以记住一个稳定的分组标识：文档分区用分区代码，其余分组用分组标签。
@@ -244,6 +247,7 @@ export const appState = {
   stylePickerTarget: undefined as HTMLInputElement | undefined,
   styleLibraryHighlighted: false,
   styleLibrarySelected: undefined as { styleID?: string; imagePath?: string } | undefined,
+  styleUsageFilter: "all",
   // 样式库内新增：复用「新增样式」对话框，创建后直接应用到当前引用并进入编辑。
   newStyleApplyTarget: undefined as HTMLInputElement | undefined,
   // Thumbnails redraw a frame later so they don't share a task with the inspector rebuild.

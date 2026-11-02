@@ -16,7 +16,9 @@ type Row = { el: HTMLElement; inputs: InspectorInput[] }
 
 const SECTION_HINTS: Record<string, string> = {
   布局: "VIEW_RECT / PADDING",
-  样式: "BACK_STYLE / FORE_STYLE / SOUND_STYLE",
+  样式: "BACK_STYLE / FORE_STYLE",
+  音效: "SOUND_STYLE",
+  动画: "ANIM_STYLE / BACK_ANIM_STYLE / FORE_ANIM_STYLE / PRESS_STYLE",
   文字: "SHOW / FONT_* / NM_COLOR / HL_COLOR",
   手势: "CENTER / HOLD / UP / DOWN / LEFT / RIGHT",
   皮肤信息: "Info.txt",
@@ -126,6 +128,7 @@ function setFilterOpen(open: boolean): void {
   const input = filterInput()
   if (!root || !input) return
   root.toggleAttribute("data-filter-open", open)
+  root.querySelector(".inspector-filter-open")?.setAttribute("aria-expanded", String(open))
   if (open) {
     input.focus()
     input.select()
@@ -201,6 +204,7 @@ function collectRows(): void {
   const grouped = new Map<HTMLElement, InspectorInput[]>()
   for (const input of Array.from(root.querySelectorAll<InspectorInput>("input, select, textarea"))) {
     if (input.id === "inspector-filter") continue
+    if (input.hasAttribute("data-config-derived")) continue
     const el = input.closest<HTMLElement>(ROW_SELECTOR) ?? input.closest("label")
     if (!el) continue
     grouped.set(el, [...(grouped.get(el) ?? []), input])
@@ -233,11 +237,12 @@ function updateStatus(): void {
   const reset = resetButton()
   if (reset) {
     reset.hidden = count === 0
+    reset.setAttribute("aria-label", `重置本次修改的 ${count} 项属性`)
     reset.title = `本次选择后改了 ${count} 项，点击全部恢复`
     const badge = document.createElement("span")
     badge.className = "inspector-changes"
     badge.textContent = `已改 ${count}`
-    reset.replaceChildren(badge, "重置")
+    reset.replaceChildren(createIcon("undo-2"), badge, "重置")
   }
   const root = inspector()
   if (!root) return

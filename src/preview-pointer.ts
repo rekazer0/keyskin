@@ -1,5 +1,5 @@
 import type { Preview } from "./preview.ts"
-import { visiblePreviewItems } from "./preview-items.ts"
+import { effectivePreviewItem, visiblePreviewItems } from "./preview-items.ts"
 import { gestureDirection } from "./layout.ts"
 import { isTouchLongPress } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
@@ -7,15 +7,18 @@ import { isAdditiveSelection } from "./preview-items.ts"
 import { snapRectDelta } from "./layout.ts"
 
 export function pointerDown(self: Preview, event: PointerEvent): void {
-  if (self.pointerInteractionLocked) return
+  if (self.pointerInteractionLocked || event.button !== 0) return
   const point = self.point(event)
   const key = self.hit(point)
   if (self.animationView) {
-    if (key) void self.playAnimation(key)
-    if (self.mode !== "edit") return
+    if (self.mode !== "edit") {
+      if (key) playPressedKey(self, key)
+      return
+    }
     if (key) pickKey(self, key, event)
     else self.selected.clear()
     self.onAnimationKeys([...self.selected])
+    if (key) playPressedKey(self, key)
     void self.draw()
     return
   }
@@ -56,6 +59,7 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
   if (self.mode === "edit") {
     selectKey(self, key, event)
     self.flashPress(key)
+    playPressedKey(self, key)
     if (self.editTool === "move" && !key.section.startsWith("LIST")) {
       const selectedSections = new Set(
         visiblePreviewItems(self.keys, self.skinState)
@@ -99,7 +103,7 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
       void self.draw()
     }, 450)
   }
-  void self.playAnimation(key)
+  playPressedKey(self, key)
   void self.draw()
 }
 
@@ -167,6 +171,10 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
         ctrlKey: event.ctrlKey || self.mobileMultiSelect,
         shiftKey: event.shiftKey,
       })
+      if (distance <= 12) {
+        self.flashPress(touch.key)
+        playPressedKey(self, touch.key)
+      }
     }
     void self.draw()
     return
@@ -186,7 +194,7 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     else void self.draw()
     return
   }
-  if (!self.active) return
+  if (!self.active || self.active.pointerId !== event.pointerId) return
   const point = self.point(event)
   const active = self.active
   const { key, startX, startY, startedAt } = active
@@ -218,6 +226,14 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     void self.draw()
   }
   globalThis.setTimeout(release, 160)
+}
+
+/** A canvas press takes over from the paused player and uses the state currently drawn. */
+function playPressedKey(self: Preview, key: PreviewItem): void {
+  self.setPlayerParticles()
+  void self.playAnimation(self.stateDocument
+    ? effectivePreviewItem(self.stateDocument, key, self.skinState ?? 0)
+    : key)
 }
 
 export function selectKey(self: Preview, key: PreviewItem, event: Pick<PointerEvent, "metaKey" | "ctrlKey" | "shiftKey">): void {

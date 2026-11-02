@@ -38,8 +38,13 @@ export type PreviewItem = {
 }
 
 /** Styles whose PRESS_ANIM plays when the key is pressed. */
-export function keyAnimationStyles(key: PreviewItem): string[] {
-  return [key.animStyle, key.backAnimStyle, ...key.foreAnimStyles, key.pressStyle].filter((style): style is string => Boolean(style))
+export function keyAnimationStyles(key: PreviewItem, panelStyle?: string): string[] {
+  return [...new Set([key.animStyle, key.backAnimStyle, key.foreAnimStyle, ...key.foreAnimStyles, key.pressStyle, panelStyle].filter((style): style is string => Boolean(style)))]
+}
+
+/** Empty foreground animation slots still occupy a layer; 0 explicitly prevents first-layer fallback. */
+function foregroundAnimationStyles(value: string | undefined): string[] {
+  return value ? value.split(",").map((token) => token.trim() || "0") : []
 }
 
 function duplicateKeySignature(item: PreviewItem): string | undefined {
@@ -147,7 +152,7 @@ export function effectivePreviewItem(
       : foreAnimStyle.split(",")[0],
     foreAnimStyles: foreAnimStyle === undefined
       ? item.foreAnimStyles
-      : foreAnimStyle.split(",").map((token) => token.trim()).filter(Boolean),
+      : foregroundAnimationStyles(foreAnimStyle),
   }
 }
 
@@ -373,7 +378,7 @@ function itemFromSection(document: IniDocument, section: string): PreviewItem | 
     pressStyle: value("PRESS_STYLE"),
     backAnimStyle: value("BACK_ANIM_STYLE"),
     foreAnimStyle: value("FORE_ANIM_STYLE").split(",")[0],
-    foreAnimStyles: value("FORE_ANIM_STYLE").split(",").map((token) => token.trim()).filter(Boolean),
+    foreAnimStyles: foregroundAnimationStyles(value("FORE_ANIM_STYLE")),
   }
 }
 
@@ -583,7 +588,7 @@ export function previewItems(
       pressStyle: value("PRESS_STYLE"),
       backAnimStyle: value("BACK_ANIM_STYLE"),
       foreAnimStyle: value("FORE_ANIM_STYLE").split(",")[0],
-      foreAnimStyles: value("FORE_ANIM_STYLE").split(",").map((token) => token.trim()).filter(Boolean),
+      foreAnimStyles: foregroundAnimationStyles(value("FORE_ANIM_STYLE")),
     }]
   }), ...list]
 }

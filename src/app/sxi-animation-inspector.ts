@@ -6,7 +6,7 @@
 import { element, iconButton } from "../dom-element.ts"
 import {
   animationModeTitle, animationSection, animationWarning, comboList, imageCard, renderAnimationResource, sliderField,
-  type AnimationListItem, type AnimationUse,
+  type AnimationListItem,
 } from "../animation-inspector.ts"
 import { decodeFrames } from "../native-motion.ts"
 import { palmPreviewClip } from "../palm/palm-preview-clip.ts"
@@ -42,9 +42,9 @@ import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
 import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
-import { keyAnimationItems, keyUses, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
 import type { PreviewItem } from "../preview-items.ts"
-import { decorateStyleReferenceInput, openStyleReferenceEditor } from "./style-references"
+import { decorateStyleReferenceInput } from "./style-references"
 import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
 
@@ -651,25 +651,6 @@ function listItem(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, 
   }
 }
 
-function uses(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry): AnimationUse[] {
-  const references = animationReferences(skin, pointer, entry.id)
-  return [
-    ...references.styles.map((style) => {
-      const styleID = style.name.match(/(\d+)$/)?.[1]
-      return {
-        icon: "palette", title: style.name, detail: `${style.events.join("、")}时播放`,
-        targets: styleID ? [{ label: `样式 ${styleID}`, open: () => openStyleReferenceEditor(styleID) }] : [],
-      }
-    }),
-    ...references.combos.map((id) => ({
-      icon: "layers", title: `动画 ${id}`, detail: "作为组合动画的一部分播放",
-      // Combinations live in 动效设计, also when a particle is part of one.
-      targets: [{ label: `动画 ${id}`, open: () => openAnimation(appState.selectedPath, false, String(id)) }],
-    })),
-    ...(references.contexts ?? []).map((context) => ({ icon: "layers", title: context, detail: "另一方向的组合动画" })),
-  ]
-}
-
 function parameterSections(pointer: SxiPointer, entry: AnimationEntry, table: JsonObject): HTMLElement[] {
   if (entry.kind === "a3") return [comboSection(pointer, entry, table)]
   const target: SxiPointer = [...pointer, entry.id, entry.kind]
@@ -753,8 +734,8 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
       run: () => entry && editSxi((current) => {
         const latest = animationReferences(current, pointer, entry.id)
         if (latest.styles.length || latest.combos.length) return
-        const neighbour = entries[entries.indexOf(entry) + 1] ?? entries[entries.indexOf(entry) - 1]
         delete asObject(sxiValue(current, pointer))?.[entry.id]
+        const neighbour = entries[entries.indexOf(entry) + 1] ?? entries[entries.indexOf(entry) - 1]
         if (neighbour) rememberAnimation(neighbour.id)
       }),
     },
@@ -772,7 +753,6 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
         })]
       : [],
     sections: entry ? parameterSections(pointer, entry, table) : [],
-    uses: entry ? [...keyUses(entry.id, plays), ...uses(skin, pointer, entry)] : [],
   })
   container.dataset.path = appState.selectedPath
   return true

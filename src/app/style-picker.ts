@@ -5,7 +5,7 @@ import { styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { type StyleKind } from "./types"
 import { createIcon } from "../icons"
-import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, refreshStyleReferenceThumbnail } from "./style-references"
+import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, refreshStyleReferenceThumbnail, layoutAnimationFields } from "./style-references"
 import { isEditing } from "./edit-history"
 import { updateBdaRefs } from "./key-inspector"
 import { bdaImageResourceID } from "./tile-editing"
@@ -20,6 +20,7 @@ import { type StyleLibraryPayload, type StyleLibraryVisual } from "../picker-win
 import { SkinArchive } from "../skin.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { palmStyleCategories, palmStyleIDs, palmStyleKind, palmStyleSound } from "./sxi-styles"
+import { styleAnimationSources, styleAnimationSummary } from "./legacy-animation-inspector"
 
 export function stylePickerLabel(styleID: string): string {
   return appState.archive?.format === "bda" ? String(bdaStyleRef(styleID)?.key ?? styleID) : styleID
@@ -61,6 +62,7 @@ export function styleKind(styleID: string, styles = styleConfigDocument()): Styl
   const has = (pattern: RegExp) => [...keys].some((key) => pattern.test(key))
   if (has(/^(?:NM|HL)_IMG$/)) return "image"
   if (has(/ANIM|^EVENT\d+$/)) return "anim"
+  if (has(/^(SHOW|FONT_SIZE|FONT_NAME|FONT|BOLD|ITALIC)$/)) return "text"
   if (has(/^(?:NM|HL)_COLOR$/)) return "color"
   if (keys.has("PRESS_SOUND_PATH")) return "sound"
   return keys.size ? "text" : "empty"
@@ -96,22 +98,31 @@ export function styleKindBadge(kind: StyleKind, iconOnly = false): HTMLElement {
 
 /** 由引用字段推断应优先展示的样式类型，打开样式库时据此预选筛选。 */
 function styleKindForKey(key: string): StyleKind | "all" {
-  if (/ANIM_STYLE$/.test(key)) return "anim"
+  if (layoutAnimationFields.has(key)) return "anim"
   if (key === "HW_FORE_STYLE") return "color"
   return "all"
 }
 
-function styleLibraryCategories(styleID: string): Set<string> {
-  if (appState.archive?.format === "sxi") return palmStyleCategories(styleID)
-  const categories = new Set<string>()
-  for (const { section, key, value } of appState.layoutDocument?.entries() ?? []) {
-    if (!isStyleReferenceKey(key) || !value.split(",").map((value) => value.trim()).includes(styleID)) continue
-    if (/CAND|INPUT|CELL/.test(section + key)) categories.add("candidate")
-    else if (styleReferenceForeground(key)) categories.add("foreground")
-    else if (section === "PANEL") categories.add("panel")
-    else categories.add("key")
+export function styleLibraryCategories(): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>()
+  if (appState.archive?.format === "sxi") {
+    for (const id of availableStyleIDs()) result.set(id, palmStyleCategories(id))
+    return result
   }
-  return categories
+  const prefix = `${theme.value}/skin/${orientation.value}/`
+  const documents = appState.archive?.format === "bda" ? [appState.layoutDocument] :
+    (appState.archive?.names() ?? []).filter(path => path.startsWith(prefix) && /\.(ini|cnd|pop)$/i.test(path))
+      .map(path => path === appState.layoutPath ? appState.layoutDocument : IniDocument.parse(appState.archive!.getText(path)))
+  for (const document of documents) for (const { section, key, value } of document?.entries() ?? []) {
+    if (!isStyleReferenceKey(key)) continue
+    const category = /CAND|INPUT|CELL/.test(section + key) ? "candidate" : styleReferenceForeground(key) ? "foreground" : section === "PANEL" ? "panel" : "key"
+    for (const id of value.split(",").map(value => value.trim()).filter(Boolean)) {
+      const categories = result.get(id) ?? new Set<string>()
+      categories.add(category)
+      result.set(id, categories)
+    }
+  }
+  return result
 }
 
 export function applyStyleLibrarySelection(): void {
@@ -204,6 +215,9 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
     source: appState.archive.format === "sxi" ? SXI_SKIN_PATH : (soundOnly ? styleConfigPath() : appState.layoutPath).split("/").pop() || "当前皮肤",
     imagesCompatible: !targetType || bdaStyleRef(currentID)?.type === "image",
     bitmaps,
+    animationText: "",
+    animationFiles: {} as Record<string, number[]>,
+    particleVisuals: {} as Record<string, StyleLibraryVisual | null>,
     styles: [] as StyleLibraryPayload["styles"],
     images: [] as StyleLibraryPayload["images"],
     sounds: [] as StyleLibraryPayload["sounds"],
@@ -224,8 +238,10 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
     visuals: await Promise.all([resolver.resolve(styleID, false).catch(() => undefined), resolver.resolve(styleID, true).catch(() => undefined)]),
   }))).then((items) => {
     const imageCategories = new Map<string, Set<string>>()
+    const styleCategories = styleLibraryCategories()
+    const particleIDs = new Set<string>()
     payload.styles = items.map(({ styleID, visuals }) => {
-      const categories = styleLibraryCategories(styleID)
+      const categories = styleCategories.get(styleID) ?? new Set<string>()
       for (const visual of visuals) {
         if (!visual?.imagePath) continue
         const merged = imageCategories.get(visual.imagePath) ?? new Set<string>()
@@ -233,6 +249,12 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
         imageCategories.set(visual.imagePath, merged)
       }
       const kind = styleKind(styleID, styles)
+      const animation = kind === "anim" && styles ? styleAnimationSources(styleID, styles) : undefined
+      if (animation) {
+        payload.animationText = animation.text
+        Object.assign(payload.animationFiles, animation.files)
+        for (const id of animation.particleIDs) particleIDs.add(id)
+      }
       return {
         styleID,
         label: stylePickerLabel(styleID),
@@ -242,6 +264,11 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
         categories: [...categories],
         compatible: !targetType || bdaStyleRef(styleID)?.type === targetType,
         imagePaths: visuals.flatMap((visual) => visual?.imagePath ? [visual.imagePath] : []),
+        animationSections: animation?.sections,
+        summary: kind === "anim" && styles ? styleAnimationSummary(styleID, styles) : undefined,
+        textVisuals: kind === "text" ? [false, true].map(highlighted => resolver.resolveStyleText?.(styleID, highlighted) ?? resolver.resolveText(styleID, highlighted)) : undefined,
+        sound: styleSoundFile(styleID, styles),
+        soundPlayable: Boolean(soundPathForFilename(source.names(), theme.value, orientation.value, styleSoundFile(styleID, styles) ?? "")),
         visuals: visuals.map(wireVisual),
       }
     })
@@ -251,7 +278,9 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
       bitmaps[path] ??= imageDataURL(bytes)
       return [{ path, categories: [...imageCategories.get(path) ?? []], referenced: imageCategories.has(path) }]
     })
-    return payload
+    return Promise.all([...particleIDs].map(async id => {
+      payload.particleVisuals[id] = wireVisual(await resolver.resolve(id, false).catch(() => undefined))
+    })).then(() => payload)
   })
 }
 

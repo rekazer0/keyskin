@@ -158,14 +158,23 @@ export function refreshPreview(): void {
   preview.setAnimation(animationBytes ? decodeBdaAnimation(animationBytes) : undefined)
   const layouts = layoutSource()
   const legacyAnimationPath = legacyAnimationConfigPath()
-  const legacyAnimation =
-    appState.archive.format !== "bda" && layouts?.isText(styleConfigPath()) && legacyAnimationPath
-      ? parseLegacyAnimation(
-          IniDocument.parse(layouts.getText(styleConfigPath())),
-          IniDocument.parse(layouts.getText(legacyAnimationPath)),
-        )
-      : undefined
+  const legacyAnimationText = appState.archive.format !== "bda" && legacyAnimationPath
+    && layouts?.isText(styleConfigPath()) && layouts.isText(legacyAnimationPath)
+    ? { styles: layouts.getText(styleConfigPath()), animations: layouts.getText(legacyAnimationPath) }
+    : undefined
+  const legacyActions = legacyAnimationText && {
+    styles: IniDocument.parse(legacyAnimationText.styles),
+    animations: IniDocument.parse(legacyAnimationText.animations),
+  }
+  // 面板的显示动画（SHOW_ANIM）在面板出现时自己播，按键的按下动画只在按下时播。
+  const legacyAnimation = legacyActions
+    ? parseLegacyAnimation(legacyActions.styles, legacyActions.animations)
+    : undefined
+  const legacyShowAnimation = legacyActions
+    ? parseLegacyAnimation(legacyActions.styles, legacyActions.animations, "SHOW_ANIM")
+    : undefined
   preview.setLegacyAnimation(legacyAnimation)
+  preview.setLegacyShowAnimation(legacyShowAnimation)
   toolbarPreview.setLegacyAnimation(legacyAnimation)
   const hintBase = `${theme.value}/skin/${orientation.value}/`
   const hintPath = (name: string) => `${hintBase}${name}`
@@ -231,7 +240,7 @@ export function refreshPreview(): void {
       config.styleID,
       config.width,
       config.height,
-      appState.layoutDocument.get("PANEL", "ANIM_STYLE") ?? "",
+      appState.layoutDocument.get("PANEL", "ANIM_STYLE") ?? context.gen.get("PANEL", "ANIM_STYLE") ?? "",
     )
     const candidateHeight = symbolPanel ? 0 : (toolbarSize?.height ?? 0)
     const candidateInputHeight = symbolPanel ? 0 : (toolbarSize?.inputHeight ?? 0)

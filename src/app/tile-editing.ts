@@ -136,6 +136,8 @@ export function syncAtlasWorkspace(): void {
   const references = slice ? sliceReferences(appState.selectedResourcePath.split("/").pop()?.replace(/\.png$/i, "") ?? "", slice.index) : []
   appState.atlasWorkspace?.update({
     active: appState.resourceConfigActive && appState.resourceInspectorMode === "image",
+    styleActive: appState.resourceConfigActive && appState.resourceInspectorMode === "style",
+    styleSelected: Boolean(appState.selectedStyleID),
     path: appState.selectedResourcePath,
     width: workspaceImage.naturalWidth,
     height: workspaceImage.naturalHeight,

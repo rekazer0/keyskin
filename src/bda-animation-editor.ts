@@ -19,7 +19,7 @@ import { bdaPreviewClip } from "./animation-preview-model.ts"
 import type { KeyboardPlayback } from "./animation-player.ts"
 import {
   animationSection, comboList, imageCard, renderAnimationResource, sliderField,
-  type AnimationKeyFilter, type AnimationListItem, type AnimationMode, type AnimationUse,
+  type AnimationKeyFilter, type AnimationListItem, type AnimationMode,
 } from "./animation-inspector.ts"
 
 /** Which effects the inspector lists, and the remembered selection (kept by the caller). */
@@ -28,8 +28,6 @@ export type BdaAnimationView = {
   select(items: readonly AnimationListItem[]): string | undefined
   /** Narrows the list to the effects the key picked on the canvas plays. */
   filter(items: AnimationListItem[]): { items: AnimationListItem[]; keyFilter?: AnimationKeyFilter }
-  /** The keys on the canvas that play the effect, ahead of its bindings in 引用. */
-  keyUses(id: string): AnimationUse[]
   onSelect(id: string): void
 }
 
@@ -85,9 +83,6 @@ const KIND_ORDER: readonly BdaAnimationKind[] = [
 ]
 
 // EventType / AnimationScopeType / IntpolType，字段号见 APK animation.proto。
-const EVENT_LABELS = ["键盘将显示", "按键按下", "按键抬起", "元素显示", "元素隐藏", "空闲进入", "空闲退出", "按键长按", "插入文字", "皮肤切换"]
-const SCOPE_LABELS = ["前景", "背景", "前景与背景"]
-const LOCATION_LABELS = ["顶部", "底部"]
 const REPEAT_MODE_LABELS = ["正向", "往返"]
 const BUILD_MODE_LABELS = ["同时", "接续"]
 const INTERPOLATION_LABELS = ["线性", "缓入", "缓出", "缓入缓出", "回弹"]
@@ -328,26 +323,15 @@ function problem(effect: BdaAnimationEffect, animation: BdaAnimation): string | 
   if (effect.kind === "emitter" && !effect.resources.length) return "粒子还没有资源"
 }
 
-/** Targets that trigger the effect, directly or through a group holding it. */
-function effectUses(animation: BdaAnimation, effect: BdaAnimationEffect): AnimationUse[] {
+/** How many targets trigger the effect, directly or through a group holding it. */
+function bindingCount(animation: BdaAnimation, effect: BdaAnimationEffect): number {
   const id = effectID(effect)
   const groups = [...animation.effects.values()].filter((candidate) => candidate.kind === "group" && candidate.items.some((item) => `${item.kind}:${item.key}` === id))
-  const uses: AnimationUse[] = []
-  for (const [target, bindings] of animation.targetBindings) {
-    for (const binding of bindings) {
-      const bound = `${binding.kind}:${binding.key}`
-      const via = groups.find((group) => effectID(group) === bound)
-      if (bound !== id && !via) continue
-      const parts = [SCOPE_LABELS[binding.scope] ?? `范围 ${binding.scope}`]
-      if (via) parts.unshift(`经组合 ${via.key}`)
-      if (binding.condition) parts.push(`条件 ${binding.condition}`)
-      if (binding.isolated) parts.push(binding.location !== undefined ? `独立 · ${LOCATION_LABELS[binding.location] ?? `位置 ${binding.location}`}` : "独立")
-      if (binding.removeOnInteraction) parts.push("交互后移除")
-      uses.push({ icon: "key-round", title: `${target} · ${EVENT_LABELS[binding.event] ?? `事件 ${binding.event}`}`, detail: parts.join(" · ") })
-    }
+  let count = groups.length
+  for (const bindings of animation.targetBindings.values()) {
+    count += bindings.filter((binding) => `${binding.kind}:${binding.key}` === id || groups.some((group) => effectID(group) === `${binding.kind}:${binding.key}`)).length
   }
-  for (const group of groups) uses.push({ icon: "layers", title: `组合 ${group.key}`, detail: "作为组合的子效果播放" })
-  return uses
+  return count
 }
 
 /* —— 参数分组 —— */
@@ -511,7 +495,7 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     kind: KIND_LABELS[effect.kind],
     icon: KIND_ICONS[effect.kind],
     detail: timingText(effect),
-    uses: effectUses(animation, effect).length,
+    uses: bindingCount(animation, effect),
     problem: problem(effect, animation),
   })))
   const selected = view.select(items)
@@ -539,6 +523,5 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
       keyboard: options.keyboardPlayback?.(effectID(effect)),
     },
     sections,
-    uses: effect ? [...view.keyUses(effectID(effect)), ...effectUses(animation, effect)] : [],
   })
 }

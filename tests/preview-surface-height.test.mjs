@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IniDocument } from '../src/ini.ts'
-import { keyAnimationStyles, paddedRect, previewItems, previewSurfaceHeight } from "../src/preview-items.ts"
+import { effectivePreviewItem, keyAnimationStyles, paddedRect, previewItems, previewSurfaceHeight } from "../src/preview-items.ts"
 
 test('keys below PANEL.SIZE extend the preview surface (Xiaomi bottom bar)', () => {
   const document = IniDocument.parse([
@@ -38,4 +38,11 @@ test('key PADDING (left,top,right,bottom) insets where the key is painted, never
 test('a key plays its PRESS_STYLE along with its animation styles', () => {
   const document = IniDocument.parse(['[KEY1]', 'VIEW_RECT=0,0,100,100', 'CENTER=a', 'BACK_ANIM_STYLE=820', 'FORE_ANIM_STYLE=821,822', 'PRESS_STYLE=1822'].join('\n'))
   assert.deepEqual(keyAnimationStyles(previewItems(document, 1080, 585)[0]), ['820', '821', '822', '1822'])
+})
+
+test('foreground animation empty slots keep their layer indices, including state overrides', () => {
+  const document = IniDocument.parse('[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=a\nFORE_STYLE=1,2,3\nFORE_ANIM_STYLE=,821,\nSTAT_STYLE=S11_4\n[TIP4]\nFORE_ANIM_STYLE=820,,822\n')
+  const key = previewItems(document, 1080, 585)[0]
+  assert.deepEqual(key.foreAnimStyles, ['0', '821', '0'])
+  assert.deepEqual(effectivePreviewItem(document, key, 11).foreAnimStyles, ['820', '0', '822'])
 })
