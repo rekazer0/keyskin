@@ -34,6 +34,7 @@ import { populateTextStyleGroup, selectedKeyTextRefs, textRefValues, writeTextRe
 import { canCreateBdaKeyText, createBdaKeyText, renderBdaTextLayerSwitch, selectedBdaTextRefs } from "./bda-key-text"
 import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
+import { syncSkinConfigControl } from "./config-value-control"
 
 export function selectedBdaRefs(
   source: "BACK_STYLE" | "FORE_STYLE",
@@ -333,8 +334,10 @@ export function populateKeyInspector(): void {
   setInspectorKind(appState.archive?.format === "bda" ? "bda" : appState.archive ? "bds" : "")
   syncMobileInspectorHeader()
   for (const field of skinFields) {
+    field.type = "text"
     field.value = skinSelected ? appState.selectedDocument?.get("", field.dataset.skinField ?? "") ?? "" : ""
-    field.disabled = !skinSelected
+    field.disabled = !skinSelected || !isEditing()
+    syncSkinConfigControl(field)
   }
   const general = appState.archive?.isText(genConfigPath())
     ? IniDocument.parse(appState.archive.getText(genConfigPath()))

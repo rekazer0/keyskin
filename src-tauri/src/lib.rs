@@ -4,10 +4,12 @@ use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 use tauri::window::{Effect, EffectsBuilder};
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
+#[cfg(target_os = "macos")]
+mod window_material;
 
 struct OpenedFiles(Mutex<Vec<String>>);
 struct ClientLog(Mutex<()>);
@@ -919,35 +921,31 @@ fn acrylic_alpha(opacity: u8) -> u8 {
 }
 
 #[tauri::command]
-fn set_window_material(
+async fn set_window_material(
     window: tauri::WebviewWindow,
     enabled: bool,
     opacity: u8,
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
-    let _ = opacity;
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let _ = opacity;
+        return window_material::set_material(window, enabled).await;
+    }
+    #[cfg(target_os = "windows")]
     {
         if !enabled {
             return window.set_effects(None).map_err(|error| error.to_string());
         }
-        #[cfg(target_os = "macos")]
+        let effect = if window_material_kind() == "glass" {
+            EffectsBuilder::new().effect(Effect::Mica)
+        } else {
+            EffectsBuilder::new()
+                .effect(Effect::Acrylic)
+                .color(tauri::window::Color(32, 34, 38, acrylic_alpha(opacity)))
+        };
         return window
-            .set_effects(EffectsBuilder::new().effect(Effect::Sidebar).build())
+            .set_effects(effect.build())
             .map_err(|error| error.to_string());
-        #[cfg(target_os = "windows")]
-        {
-            let effect = if window_material_kind() == "glass" {
-                EffectsBuilder::new().effect(Effect::Mica)
-            } else {
-                EffectsBuilder::new()
-                    .effect(Effect::Acrylic)
-                    .color(tauri::window::Color(32, 34, 38, acrylic_alpha(opacity)))
-            };
-            return window
-                .set_effects(effect.build())
-                .map_err(|error| error.to_string());
-        }
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {

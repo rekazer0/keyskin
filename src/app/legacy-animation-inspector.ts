@@ -9,7 +9,7 @@ import { iniPreviewClip } from "../animation-preview-model.ts"
 import { animationPlayer } from "../animation-player.ts"
 import {
   animationModeTitle, animationSection, animationWarning, comboList, imageCard, renderAnimationResource, sliderField,
-  type AnimationListItem, type AnimationUse,
+  type AnimationListItem,
 } from "../animation-inspector.ts"
 import { decodeFrames } from "../native-motion.ts"
 import { createIcon } from "../icons.ts"
@@ -41,18 +41,15 @@ import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./co
 import { commitText, isEditing, updateDirty } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
-import { keyAnimationItems, keyUses, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
-import { decorateStyleReferenceInput, openStyleReferenceEditor } from "./style-references"
+import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { decorateStyleReferenceInput } from "./style-references"
 import { appState } from "./state"
-import { legacyKeyApply, legacyPanelUse } from "./legacy-animation-apply"
+import { animationKeySample } from "./animation-key-sample"
 import type { PreviewItem } from "../preview-items.ts"
 
 const SECTION = "document-property-section"
 const KIND_ICONS: Record<LegacyAnimationKind, string> = { basic: "blend", combination: "layers", frame: "list-video", particle: "sparkles" }
 const TYPE_ICONS = ["blend", "rotate-cw", "move", "scaling", "scaling", "rotate-3d"]
-const EVENT_LABELS: Record<string, string> = {
-  PRESS_ANIM: "按下", RELEASE_ANIM: "抬起", SHOW_ANIM: "显示", HIDE_ANIM: "隐藏", FIRST_PRESS_PANEL_ANIM: "面板首次按下",
-}
 
 /* —— 选中对象与文档 —— */
 function isLegacyAnimationDocument(): boolean {
@@ -484,28 +481,6 @@ function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Lega
     problem: problem(entry, byIndex),
   }
 }
-
-/** default.css 的指针按事件归组；布局的 ANIM_STYLE 先指向样式，单独成行。 */
-function uses(references: readonly LegacyAnimationReference[]): AnimationUse[] {
-  const groups = new Map<string, LegacyAnimationReference[]>()
-  for (const reference of references) {
-    const key = reference.layoutField ? `${reference.layoutField}|${reference.field}` : reference.field
-    groups.set(key, [...groups.get(key) ?? [], reference])
-  }
-  return [...groups.values()].map((items) => {
-    const [first] = items
-    const event = EVENT_LABELS[first.field] ?? first.field
-    const names = [...new Set(items.map((item) => item.layoutSection ? `[${item.layoutSection}] → ${item.styleSection}` : item.styleSection))]
-    const styles = [...new Set(items.map((item) => item.styleSection))]
-    return {
-      icon: first.layoutField ? "layout-grid" : "palette",
-      title: first.layoutField ? `布局 ${first.layoutField} · ${event}` : `${event} · ${first.field}`,
-      detail: `${names.length} 处：${names.slice(0, 6).join("、")}${names.length > 6 ? " 等" : ""}`,
-      targets: styles.map((style) => ({ label: style, open: () => openStyleReferenceEditor(style.replace(/^STYLE/i, "")) })),
-    }
-  })
-}
-
 /** ANIM_PATH 相对 anim.ini 所在目录；找不到时再试皮肤的 res 目录。 */
 function readSkinFile(path: string): Uint8Array | undefined {
   const archive = appState.archive
@@ -571,7 +546,10 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
       key: `${appState.selectedPath}|${entry.section}`,
       resolver: visualResolver(),
       readFile: readSkinFile,
+      sample: () => animationKeySample((key) => keyPlaysStyle(key, pressStyles(entry, model.entries, references)), pressStyles(entry, model.entries, references)),
+      // 播放器的粒子同时画在画布的按键上（动画工作区用它看真机效果）。
       keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(entry, model.entries, references))),
+      direct: isEditing() ? { text, section: entry.section, editable: true, commit: (next) => edit(() => next) } : undefined,
     },
     warnings: entry?.category !== undefined && entry.category !== kindCategory(entry.kind)
       ? [animationWarning(`CATEGORY=${entry.category} 与识别出的${legacyAnimationKindLabel(entry.kind)}不一致，已按内容编辑。`, {
@@ -580,11 +558,6 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
         })]
       : [],
     sections: entry ? parameterSections(entry, byIndex) : [],
-    uses: entry ? [
-      ...keyUses(entry.section, plays, legacyKeyApply(entry)),
-      ...legacyPanelUse(entry, pressStyles(entry, model.entries, references)),
-      ...uses(referencesOf(entry)),
-    ] : [],
   })
   container.dataset.path = appState.selectedPath
   return true
@@ -611,18 +584,67 @@ export function styleAnimationSummary(styleID: string, styles: IniDocument): str
   return styleAnimations(styleID, styles).map((entry) => `动画 ${entry.index} · ${kindLabel(entry)}`).join("、") || "未引用动画"
 }
 
+/** Serializable sources; clips themselves contain sampler functions and cannot cross windows. */
+export function styleAnimationSources(styleID: string, styles: IniDocument) {
+  const entries = styleAnimations(styleID, styles)
+  const path = legacyAnimationConfigPath()
+  if (!entries.length || !path || !appState.archive) return
+  const text = appState.archive.getText(path)
+  const document = IniDocument.parse(text)
+  const clips = entries.map(entry => iniPreviewClip(document, entry.section, { fillBefore: true }))
+  const files: Record<string, number[]> = {}
+  for (const file of new Set(clips.flatMap(clip => clip.images.flatMap(item => item.file ? [item.file] : [])))) {
+    const bytes = readSkinFile(file)
+    if (bytes) files[file] = Array.from(bytes)
+  }
+  return { text, sections: entries.map(entry => entry.section), files,
+    particleIDs: [...new Set(clips.flatMap(clip => clip.particles.flatMap(item => item.emitter.images)))] }
+}
+
 /** 动画样式没有正常 / 按下外观：详情里为它引用的每个动画放一个播放器，播放时也在用这个样式的按键上播放。 */
-export function styleAnimationPlayers(styleID: string, styles: IniDocument): HTMLElement[] {
+export function styleAnimationPlayers(styleID: string, styles: IniDocument, thumbnail: boolean | "slow" = false): HTMLElement[] {
   const path = legacyAnimationConfigPath()!
   const animations = styleAnimations(styleID, styles)
   const animationsDocument = animations.length ? IniDocument.parse(appState.archive!.getText(path)) : undefined
   return animations.map((entry) => animationPlayer({
+    thumbnail,
     clip: iniPreviewClip(animationsDocument!, entry.section, { fillBefore: true }),
     key: `${path}|${entry.section}`,
     resolver: visualResolver(),
     readFile: readSkinFile,
-    keyboard: keyboardPlayback((key) => keyPlaysStyle(key, new Set([styleID]))),
+    keyboard: thumbnail ? undefined : keyboardPlayback((key) => keyPlaysStyle(key, new Set([styleID]))),
   }))
+}
+
+/** 预览负责选择样式；Ctrl/Command 点击进入实际动画编辑器。 */
+export function styleAnimationReferencePreviews(styleID: string, styles: IniDocument, choose: () => void): HTMLElement {
+  const root = element("span", "style-animation-previews")
+  const entries = styleAnimations(styleID, styles)
+  const players = styleAnimationPlayers(styleID, styles, "slow")
+  for (const [index, entry] of (entries.length ? entries : [undefined]).entries()) {
+    const item = element("div", "style-picker-state")
+    item.setAttribute("role", "button")
+    item.tabIndex = 0
+    item.title = entry ? `动画 ${entry.index} · ${kindLabel(entry)}；点击选择样式；Command/Ctrl 点击编辑` : "选择动画样式"
+    item.setAttribute("aria-label", item.title)
+    const activate = (edit: boolean) => {
+      if (edit && entry) openAnimation(legacyAnimationConfigPath()!, entry.kind === "particle", entry.section)
+      else choose()
+    }
+    item.addEventListener("click", event => {
+      event.preventDefault()
+      activate(event.ctrlKey || event.metaKey)
+    })
+    item.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return
+      event.preventDefault()
+      activate(event.ctrlKey || event.metaKey)
+    })
+    if (players[index]) item.append(players[index])
+    else item.textContent = !styleID || styleID === "0" ? "未绑定动画" : "动画引用缺失或未配置"
+    root.append(item)
+  }
+  return root
 }
 
 /** 样式里 PRESS_ANIM 等字段引用的动画：每个编号一个按钮，点一下打开动效设计 / 粒子设计并选中它。 */

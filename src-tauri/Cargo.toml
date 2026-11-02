@@ -26,9 +26,13 @@ tauri-plugin-native-share = { path = "native-share" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSBitmapImageRep", "NSImage", "NSImageRep"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSBitmapImageRep", "NSImage", "NSImageRep", "NSView"] }
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSDictionary", "NSString"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-version = "0.1.7"
 windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+
+[[test]]
+name = "window_material_lifetime"
+harness = false

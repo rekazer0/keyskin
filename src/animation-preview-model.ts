@@ -1,6 +1,6 @@
 import { IniDocument } from "./ini.ts"
 import type { BdaAnimation, BdaAnimationEffect, BdaNumberRange } from "./bda.ts"
-import { animationEasing, bdaParticleEmitter, numberRange, parseLegacyParticleEmitter, type LegacyParticleEmitter } from "./preview-animation.ts"
+import { animationEasing, bdaParticleEmitter, numberRange, parseLegacyParticleEmitter, ranged, type LegacyParticleEmitter } from "./preview-animation.ts"
 import { trackEnd, type Pair, type Track } from "./native-motion.ts"
 
 /** One row of the player's timeline: where a track, emitter or frame clip plays, in ms. */
@@ -97,8 +97,10 @@ export function iniPreviewClip(document: IniDocument, section: string, options: 
       const emitting = emitter.totalNumber / emitter.birthRate * 1000
       clip.duration = delay + Math.max(duration, emitting + Math.max(...emitter.life))
       clip.particles.push({ emitter, start: delay, duration: clip.duration - delay })
-      clip.lanes.push({ label: `${prefix}发射 ${emitter.totalNumber} 个粒子`, start: delay, duration: emitting, passes: 1 })
-      clip.notes.push("粒子按弹道预览；触摸跟随与发射模式以真机为准")
+      if (emitter.totalNumber <= 12) {
+        for (let index = 0; index < emitter.totalNumber; index++) clip.lanes.push({ label: `${prefix}粒子 ${index + 1} · 寿命采样`, start: delay + index / emitter.birthRate * 1000, duration: ranged(emitter.life, index * 17 + 1), passes: 1 })
+      } else clip.lanes.push({ label: `${prefix}发射 ${emitter.totalNumber} 个粒子`, start: delay, duration: emitting, passes: 1 })
+      clip.notes.push(get("EMIT_TYPE") === "1" ? "按顺序发射采样；Android 同时发射、iOS 忽略此模式，效果以真机为准" : "粒子按弹道采样；触摸跟随与发射模式以真机为准")
     } else clip.notes.push("请先配置粒子图片")
   } else if (kind === 2) {
     const file = get("SOURCE_FILE") ?? get("ANIM_PATH")

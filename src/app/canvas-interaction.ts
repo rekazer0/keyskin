@@ -322,6 +322,8 @@ export function activateSkinState(state?: number, message?: string): void {
 export const keySoundBuffers = new Map<string, AudioBuffer>()
 
 export function releaseKeySound(): void {
+  const finished = appState.keySoundFinished
+  appState.keySoundFinished = undefined
   appState.keySoundAudio?.pause()
   appState.keySoundAudio = undefined
   try {
@@ -331,9 +333,10 @@ export function releaseKeySound(): void {
   appState.keySoundPath = ""
   if (appState.keySoundURL) URL.revokeObjectURL(appState.keySoundURL)
   appState.keySoundURL = ""
+  finished?.()
 }
 
-async function playDecodedSound(path: string, bytes: Uint8Array): Promise<void> {
+async function playDecodedSound(path: string, bytes: Uint8Array, audio: HTMLAudioElement, onEnd: () => void): Promise<void> {
   appState.keySoundContext ??= new AudioContext()
   if (appState.keySoundContext.state === "suspended") await appState.keySoundContext.resume()
   let buffer = keySoundBuffers.get(path)
@@ -363,36 +366,44 @@ async function playDecodedSound(path: string, bytes: Uint8Array): Promise<void> 
     }
     keySoundBuffers.set(path, buffer)
   }
+  if (appState.keySoundAudio !== audio) return
   appState.keySoundSource = appState.keySoundContext.createBufferSource()
   appState.keySoundSource.buffer = buffer
   appState.keySoundSource.connect(appState.keySoundContext.destination)
+  appState.keySoundSource.onended = onEnd
   appState.keySoundSource.start()
 }
 
-export function playSoundPath(path: string): void {
+export function playSoundPath(path: string, onFinished?: (error?: string) => void): void {
   const bytes = appState.archive?.getBytes(path)
-  if (!bytes) return
-  if (path !== appState.keySoundPath) {
-    releaseKeySound()
-    const copy = bytes.slice()
-    appState.keySoundURL = URL.createObjectURL(new Blob([copy.buffer], { type: soundMimeType(path) }))
-    appState.keySoundPath = path
-    appState.keySoundAudio = new Audio(appState.keySoundURL)
-    appState.keySoundAudio.preload = "auto"
-  }
-  if (!appState.keySoundAudio) return
-  appState.keySoundAudio.currentTime = 0
-  void appState.keySoundAudio.play().catch(async (error: unknown) => {
+  if (!bytes) { onFinished?.("音效文件不存在"); return }
+  releaseKeySound()
+  const copy = bytes.slice()
+  appState.keySoundURL = URL.createObjectURL(new Blob([copy.buffer], { type: soundMimeType(path) }))
+  appState.keySoundPath = path
+  const audio = new Audio(appState.keySoundURL)
+  appState.keySoundAudio = audio
+  appState.keySoundFinished = () => onFinished?.()
+  const finish = () => { if (appState.keySoundAudio === audio) releaseKeySound() }
+  audio.onended = finish
+  audio.preload = "auto"
+  void audio.play().catch(async (error: unknown) => {
+    if (appState.keySoundAudio !== audio) return
     if (error instanceof DOMException && error.name === "NotSupportedError") {
       try {
-        await playDecodedSound(path, bytes)
+        await playDecodedSound(path, bytes, audio, finish)
         return
       } catch (fallbackError) {
         error = fallbackError
       }
     }
+    if (appState.keySoundAudio !== audio) return
     const reason = error instanceof Error ? `（${error.name}：${error.message}）` : ""
-    eventLog.textContent = `无法播放按键音效：${path.split("/").pop() ?? path}${reason}`
+    const message = `无法播放按键音效：${path.split("/").pop() ?? path}${reason}`
+    appState.keySoundFinished = undefined
+    releaseKeySound()
+    onFinished?.(message)
+    eventLog.textContent = message
   })
 }
 

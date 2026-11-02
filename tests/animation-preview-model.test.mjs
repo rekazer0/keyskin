@@ -126,3 +126,17 @@ test('BDA effects preview their midpoints, groups compose children, unsupported 
   assert.equal(lottie.tracks.length + lottie.images.length + lottie.particles.length, 0)
   assert.match(lottie.notes.join(' '), /Lottie暂不支持/)
 })
+
+test('particle lifetime lanes use the same deterministic sample as the stage', async () => {
+  const { legacyParticleFrames } = await import('../src/preview-animation.ts')
+  const document = IniDocument.parse('[ANIM1]\nCATEGORY=3\nPARTICLE_IMAGE=1818\nTOTAL_NUMBER=5\nBIRTH_RATE=5\nLIFE=1000,1500\nEMIT_TYPE=1\nDURATION=200\n')
+  const clip = iniPreviewClip(document, 'ANIM1')
+  assert.equal(clip.lanes.length, 5)
+  clip.lanes.forEach((lane, index) => {
+    assert.equal(lane.start, index * 200)
+    assert.ok(lane.duration >= 1000 && lane.duration <= 1500)
+    assert.match(lane.label, /寿命采样/)
+  })
+  assert.equal(legacyParticleFrames(clip.particles[0].emitter, 800, 108, 108).length, 5)
+  assert.match(clip.notes.join(' '), /Android 同时发射.*iOS 忽略/)
+})

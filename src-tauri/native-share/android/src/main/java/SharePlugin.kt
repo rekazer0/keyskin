@@ -12,6 +12,7 @@ import android.os.Looper
 import android.provider.DocumentsContract
 import android.util.Base64
 import androidx.annotation.Keep
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.activity.result.ActivityResult
 import androidx.documentfile.provider.DocumentFile
@@ -101,6 +102,17 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
   private var sourcePoll: ScheduledFuture<*>? = null
   private val sourceExecutor = Executors.newSingleThreadExecutor()
   private val sourcePollExecutor = Executors.newSingleThreadScheduledExecutor()
+
+  override fun onDestroy(activity: AppCompatActivity) {
+    try {
+      clearSourceObserver()
+    } finally {
+      sourcePollExecutor.shutdownNow()
+      // Let an in-flight save finish without leaving idle workers retaining the Activity.
+      sourceExecutor.shutdown()
+      super.onDestroy(activity)
+    }
+  }
 
   @Command
   fun chooseProjectTemplate(invoke: Invoke) {
@@ -264,8 +276,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
   fun startSourceObserver(invoke: Invoke) {
     try {
       val args = invoke.parseArgs(ObserveSourceArgs::class.java)
-      sourceObserver?.let { activity.contentResolver.unregisterContentObserver(it) }
-      sourcePoll?.cancel(false)
+      clearSourceObserver()
       sourceObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
           args.handler.sendObject(uri?.toString() ?: args.uri)
@@ -290,12 +301,16 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
     }
   }
 
-  @Command
-  fun stopSourceObserver(invoke: Invoke) {
+  private fun clearSourceObserver() {
     sourceObserver?.let { activity.contentResolver.unregisterContentObserver(it) }
     sourceObserver = null
     sourcePoll?.cancel(false)
     sourcePoll = null
+  }
+
+  @Command
+  fun stopSourceObserver(invoke: Invoke) {
+    clearSourceObserver()
     invoke.resolve()
   }
 

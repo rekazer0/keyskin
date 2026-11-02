@@ -2,7 +2,7 @@
 // between motion and particles, or undoing an edit, comes back to the same animation.
 
 import { strToU8 } from "fflate"
-import type { AnimationChoice, AnimationKeyFilter, AnimationListItem, AnimationUse } from "../animation-inspector.ts"
+import type { AnimationKeyFilter, AnimationListItem } from "../animation-inspector.ts"
 import type { KeyboardPlayback } from "../animation-player.ts"
 import { keyAnimationStyles, visiblePreviewItems, type PreviewItem } from "../preview-items.ts"
 import { preview } from "./canvas-interaction"
@@ -77,39 +77,6 @@ export function keyAnimationItems<T extends AnimationListItem>(
       clear: () => pickAnimationKeys([]),
     },
   }
-}
-
-/** 把动画应用到按键：先选的几项（时机、部位），再对选中的按键执行。 */
-export type KeyApply = { choices: AnimationChoice[]; run(keys: PreviewItem[]): void }
-
-/**
- * 「引用」开头的按键：当前布局哪些按键按下时播放 `id`（点一下在画布上标出）；
- * 画布上选了按键时，`apply` 给出时机、部位和「应用」按钮（格式不支持时不给）。
- */
-export function keyUses(id: string, plays: (id: string, key: PreviewItem) => boolean, apply?: KeyApply): AnimationUse[] {
-  const keys = visiblePreviewItems(preview.keys, preview.skinState).filter((key) => plays(id, key))
-  const sections = keys.map((key) => key.section)
-  const uses: AnimationUse[] = [keys.length
-    ? {
-        icon: "keyboard", title: `当前布局 ${keys.length} 个按键`, detail: keys.map(keyLabel).join("、"),
-        targets: [{ label: "在画布上标出", open: () => isEditing() ? pickAnimationKeys(sections) : preview.setSelected(sections) }],
-      }
-    : {
-        icon: "keyboard", title: "当前布局没有按键播放它",
-        detail: !apply ? "按键通过下面的样式或绑定播放它" : isEditing() ? "在画布上选按键（Shift / ⌘ 多选），再应用到它们" : "切到编辑模式后可以应用到按键",
-      }]
-  const picked = pickedKeys()
-  if (picked.length && apply) {
-    const label = keysLabel(picked)
-    const playing = picked.filter((key) => plays(id, key))
-    uses.push({
-      icon: "pointer", title: `应用到${label}`,
-      detail: `替换${picked.length > 1 ? "各" : "该"}按键在这个时机原来的动画，其他时机保留${playing.length ? `；${playing.map(keyLabel).join("、")} 按下时已在播放` : ""}`,
-      choices: apply.choices,
-      targets: [{ label: "应用", icon: "check", title: `应用到${label}`, open: () => isEditing() ? apply.run(picked) : requestEditMode() }],
-    })
-  }
-  return uses
 }
 
 /** Remembers `id` without re-rendering, for edits that create an animation and re-render anyway. */

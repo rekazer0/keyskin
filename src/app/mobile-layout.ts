@@ -76,6 +76,9 @@ export function mobileInspectorGroupKey(group: HTMLElement): string {
     || mobileInspectorGroupLabel(group)
 }
 
+// 点选分类栏后记下落点：末尾的短分区滚不到顶部，按滚动位置反推会指回上一个分区。
+let pinnedScrollTop: number | null = null
+
 export function setMobileInspectorGroup(id: string, scroll = true): void {
   quickInspector.dataset.mobileInspectorGroup = id
   for (const button of Array.from(mobileInspectorGroups.querySelectorAll<HTMLButtonElement>("button"))) {
@@ -86,15 +89,20 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
   const current = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .find((group) => group.dataset.mobileInspectorGroup === id)
   appState.inspectorGroupKey = current ? mobileInspectorGroupKey(current) : ""
-  // Each group owns its scrolling area. Scrolling the outer grid here moves the
-  // summary card and category rail together, so switching tabs appears to make
-  // the controls jump away from the pointer.
+  // 分类栏只定位同一列内的分组，不切换或隐藏属性。
   revealActiveRailButton()
   if (scroll) {
     quickInspector.scrollTop = 0
     // 样式引用缩略图只在可见时才量得到卡片尺寸，切到该分组时补绘一次。
     redrawStyleStateCanvases()
     scrollToSinglePageInspectorGroup()
+    // 程序滚动的落点：随后的 scroll 事件按位置反推分组时不改掉这次点选。
+    pinnedScrollTop = quickInspector.scrollTop
+    current?.getAnimations().forEach((animation) => animation.cancel())
+    current?.animate(
+      [{ opacity: 0.5, transform: "translateY(var(--space-xs))" }, { opacity: 1, transform: "translateY(0)" }],
+      { duration: Number.parseFloat(getComputedStyle(quickInspector).getPropertyValue("--duration-base")), easing: getComputedStyle(quickInspector).getPropertyValue("--ease-standard").trim() },
+    )
   }
 }
 
@@ -134,6 +142,11 @@ export function revealSinglePageInspectorGroup(context: string): void {
 export function syncSinglePageInspectorGroup(): void {
   const groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .filter((group) => group.getClientRects().length > 0)
+  // 刚点选分类栏：落点没变就保留点选的分区，用户自己滚动后才重新按位置点亮。
+  if (pinnedScrollTop !== null) {
+    if (Math.abs(quickInspector.scrollTop - pinnedScrollTop) <= 1) return
+    pinnedScrollTop = null
+  }
   if (!groups.length) return
   const view = quickInspector.getBoundingClientRect()
   const current = groups.find((group) => group.dataset.mobileInspectorGroup === quickInspector.dataset.mobileInspectorGroup)
@@ -330,9 +343,10 @@ export function selectChoice(select: HTMLSelectElement, value: string): void {
 }
 
 // 左栏与检查器共用的拖动调宽：direction 为 1 时向右拖变宽，-1 时向左拖变宽。
-export function bindPaneResize(handle: HTMLElement, cssVar: string, storageKey: string, minW: number, maxW: number, defaultW: number, direction: 1 | -1): void {
+export function bindPaneResize(handle: HTMLElement, cssVar: string, storageKey: string, minW: number, defaultW: number, direction: 1 | -1): void {
+  const clampWidth = (width: number) => Math.min(window.innerWidth * 0.7, Math.max(minW, width))
   const stored = Number(localStorage.getItem(storageKey) || defaultW)
-  const initialW = Math.max(minW, Math.min(maxW, stored))
+  const initialW = clampWidth(Number.isFinite(stored) ? stored : defaultW)
   document.documentElement.style.setProperty(cssVar, `${initialW}px`)
   const currentW = () => parseInt(getComputedStyle(document.documentElement).getPropertyValue(cssVar) || String(defaultW), 10)
 
@@ -354,10 +368,10 @@ export function bindPaneResize(handle: HTMLElement, cssVar: string, storageKey: 
   handle.addEventListener("pointermove", (e) => {
     if (!dragging) return
     if (pendingW === undefined) requestAnimationFrame(() => {
-      document.documentElement.style.setProperty(cssVar, `${pendingW}px`)
+      document.documentElement.style.setProperty(cssVar, `${clampWidth(pendingW!)}px`)
       pendingW = undefined
     })
-    pendingW = Math.max(minW, Math.min(maxW, startW + (e.clientX - startX) * direction))
+    pendingW = clampWidth(startW + (e.clientX - startX) * direction)
   })
 
   handle.addEventListener("pointerup", () => {
@@ -365,5 +379,10 @@ export function bindPaneResize(handle: HTMLElement, cssVar: string, storageKey: 
     dragging = false
     handle.classList.remove("dragging")
     localStorage.setItem(storageKey, String(pendingW ?? currentW()))
+  })
+
+  window.addEventListener("resize", () => {
+    if (pendingW !== undefined) pendingW = clampWidth(pendingW)
+    document.documentElement.style.setProperty(cssVar, `${clampWidth(currentW())}px`)
   })
 }

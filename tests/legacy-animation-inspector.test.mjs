@@ -48,7 +48,7 @@ test("资源配置里百度 anim.ini 与 BDA animationConfig 都分成动效设�
   assert.doesNotMatch(tree, /"动画效果"|动画与动效/, "不再有单独的动画分组或混合入口")
 })
 
-test("检查器用公共骨架：列表 → 预览 → 参数分组 → 引用", () => {
+test("检查器用公共骨架：列表 → 预览 → 参数分组", () => {
   assert.match(inspector, /renderAnimationResource\(container, \{/)
   assert.match(inspector, /shownInAnimationView\(entry\.kind === "particle"\)/, "粒子设计只列粒子，动效设计列其余三类")
   assert.match(inspector, /selectedAnimation\(items\)/)
@@ -57,7 +57,7 @@ test("检查器用公共骨架：列表 → 预览 → 参数分组 → 引用",
   assert.match(inspector, /const SECTION = "document-property-section"/)
   assert.match(inspector, /dataset\.documentKey = key/)
   assert.match(inspector, /dataset\.inspectorRowKey/)
-  for (const part of ["ui-listbox", 'setAttribute("role", "listbox")', 'setAttribute("role", "option")', "aria-selected", "animationPlayer(view.player)", '"预览"', '"引用"']) {
+  for (const part of ["ui-listbox", 'setAttribute("role", "listbox")', 'setAttribute("role", "option")', "aria-selected", "animationPlayer(view.player)", '"预览"']) {
     assert.ok(shared.includes(part), `公共骨架缺少 ${part}`)
   }
 })

@@ -148,7 +148,7 @@ export function refreshPalmPreview(): boolean {
   const surfaceHeight = updatePanelTools(board.width, board.height, candidateHeight, { items: board.items(undefined), states: board.states() })
   appState.activeKeyboardGeometry = { panelWidth: board.width, panelHeight: surfaceHeight, candidateHeight, candidateInputHeight }
   applyDeviceKeyboardGeometry(board.width, surfaceHeight, candidateHeight, candidateInputHeight)
-  preview.setDocument(undefined)
+  preview.setDocument(undefined, `${appState.layoutPath}|${board.theme}|${board.orientation}`)
   // The board is read again for each state and after each edit, so the scene follows skin.json.
   preview.setScene((state) => {
     const current = palmBoard()

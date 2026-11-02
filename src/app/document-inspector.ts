@@ -10,7 +10,7 @@ import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue
 import { parseLegacyParticleEmitter } from "../preview-animation.ts"
 import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
 import { refreshPreview } from "./preview-render"
-import { isStyleReferenceKey, decorateStyleReferenceInput, openStyleReferenceEditor, openBdaStyleReferencePicker } from "./style-references"
+import { isStyleReferenceKey, decorateStyleReferenceInput, openStyleReferenceEditor, openBdaStyleReferencePicker, layoutAnimationFields } from "./style-references"
 import { syncMobileInspectorGroups } from "./mobile-layout"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
 import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect } from "../bda-encode.ts"
@@ -21,8 +21,10 @@ import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
-import { keyAnimationItems, keyUses, keyboardPlayback, selectAnimation, selectedAnimation } from "./animation-resource"
+import { keyAnimationItems, keyboardPlayback, selectAnimation, selectedAnimation } from "./animation-resource"
 import { bdaAnimationBindingsForKey, bdaBindingEffects } from "../preview-animation.ts"
+import { configValueControl } from "./config-value-control"
+import { colorValueControl } from "./color-control"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -32,7 +34,7 @@ export const documentFieldLabels: Record<string, string> = {
   PADDING: "内边距",
   SIZE: "尺寸",
   TYPE: "类型",
-  LAYOUT_NAME: "布局名称",
+  LAYOUT_NAME: "布局",
   Style: "皮肤风格",
   SkinType: "加载主题（0支持/1不支持）",
   SkinFlags: "半屏手写高度",
@@ -40,14 +42,14 @@ export const documentFieldLabels: Record<string, string> = {
   SupportPatch: "动态补丁支持",
   CoupleSkinName: "配套皮肤名",
   AtomSkinName: "主题目录",
-  KEY_NUM: "按键数量",
+  KEY_NUM: "按键数",
   TIP_NUM: "补丁数量",
   LIST_NUM: "列表数量",
   LIST_ORDER: "列表排列方向（0竖排/1横排）",
   CELL_SIZE: "单元格尺寸",
   GRID: "网格",
   POS: "位置",
-  NO_BLUR: "精确输入模式",
+  NO_BLUR: "精确输入",
   OFFSET_NUM: "偏移数量",
   INPUT_STYLE: "输入码样式",
   SCAND_STYLE: "云输入样式",
@@ -56,9 +58,10 @@ export const documentFieldLabels: Record<string, string> = {
   FONT_CLEARTYPE: "字体平滑",
   NM_COLOR: "正常颜色",
   HL_COLOR: "按下颜色",
+  LIST_LEVEL: "列表层级",
   SHOW: "显示内容",
   INFO: "说明",
-  ANIM_STYLE: "整体动画样式（全景动效）",
+  ANIM_STYLE: "整体动效",
   PRESS_ANIM: "按下动画",
   SHOW_ANIM: "显示动画",
   EVENT1: "动画事件",
@@ -102,6 +105,7 @@ export const documentFieldLabels: Record<string, string> = {
   TEXT_STYLE: "图标文字颜色样式（logo/emoji）",
   BACK_ANIM_STYLE: "背景动画样式",
   FORE_ANIM_STYLE: "前景动画样式",
+  PRESS_STYLE: "按下效果",
   HW_FORE_STYLE: "手写笔刷颜色样式",
   ANIM_LEVEL: "动画显示层级（0下/1上）",
   ICON_NUM: "图标数量",
@@ -165,8 +169,6 @@ const documentQuadFieldLabels: Record<string, [string, string, string, string]> 
 const documentPartAffixes: Record<string, string> = {
   横向: "X", 纵向: "Y", 宽度: "W", 高度: "H", 左: "←", 上: "↑", 右: "→", 下: "↓",
 }
-
-const documentSwitchFields = new Set(["NO_BLUR"])
 
 export const documentNumericFields = new Set([
   "KEY_NUM", "TIP_NUM", "LIST_NUM", "OFFSET_NUM", "ANIM_NUM", "BUILD_NUM",
@@ -347,6 +349,10 @@ export function populateDocumentInspector(): void {
     (!toolbarSections.size || toolbarSections.has(entry.section)) &&
     !specialized.has(`${entry.section}\u0000${entry.key}`),
   )
+  // 缺少可选字段不等于不支持；只补检查器条目，不在查看时写入文档。
+  if (appState.selectedPath === appState.layoutPath && appState.selectedDocument.get("PANEL", "ANIM_STYLE") === undefined) {
+    entries.push({ section: "PANEL", key: "ANIM_STYLE", value: "" })
+  }
   documentFieldsGroup.hidden = entries.length === 0
   if (!entries.length) {
     appState.particlePreviewSection = ""
@@ -423,7 +429,7 @@ export function populateDocumentInspector(): void {
 
     const partLabels: readonly string[] | undefined = documentPairFieldLabels[entry.key] ?? documentQuadFieldLabels[entry.key]
     const partValues = entry.value.split(",").map((value) => value.trim())
-    if (!specialized && partLabels && partValues.length === partLabels.length) {
+    if (!specialized && partLabels && partValues.length === partLabels.length && partValues.every(looksNumeric)) {
       const row = document.createElement("span")
       row.className = "ui-field-pair"
       partLabels.forEach((name, index) => {
@@ -450,28 +456,22 @@ export function populateDocumentInspector(): void {
       return label
     }
 
-    if (!specialized && documentSwitchFields.has(entry.key)) {
-      const input = document.createElement("input")
-      input.type = "checkbox"
-      input.setAttribute("role", "switch")
-      input.checked = !["0", "false", "off", ""].includes(entry.value.trim().toLowerCase())
-      input.disabled = !isEditing()
-      input.setAttribute("aria-label", translatedConfigLabel(entry.key))
-      const control = document.createElement("span")
-      control.className = "document-switch-control"
-      input.addEventListener("change", () => update(entry.section, entry.key, input.checked ? "1" : "0"))
-      control.append(input)
-      label.classList.add("document-switch-field")
-      label.append(control)
-      return label
-    }
-
     const input = document.createElement("input")
     input.value = entry.value
     input.classList.add("document-property-input")
     input.title = `${translatedConfigLabel(entry.key)}：${entry.value}`
     input.disabled = !isEditing()
     input.setAttribute("aria-label", translatedConfigLabel(entry.key))
+    input.addEventListener("change", () => update(entry.section, entry.key, input.value))
+    if (/^(NM|HL)_COLOR$/.test(entry.key)) {
+      label.append(colorValueControl(input, captionLabel))
+      return label
+    }
+    const typedControl = !specialized && configValueControl(input, entry.section, entry.key, captionLabel)
+    if (typedControl) {
+      label.append(typedControl)
+      return label
+    }
     // 值不是数字时保持文本输入：number 输入框会清空显示，用户一编辑就丢原值。
     if (documentNumericFields.has(entry.key) && looksNumeric(entry.value)) {
       input.type = "number"
@@ -498,13 +498,11 @@ export function populateDocumentInspector(): void {
         if (Number(input.value) > Number(slider.max)) slider.max = String(Number(input.value) * 2)
         slider.value = input.value
       })
-      input.addEventListener("change", () => update(entry.section, entry.key, input.value))
       row.append(slider, input)
       label.classList.add("wide")
       label.append(row)
       return label
     }
-    input.addEventListener("change", () => update(entry.section, entry.key, input.value))
     label.append(input)
     if (specialized && entry.key === "PARTICLE_IMAGE") {
       const previews = document.createElement("span")
@@ -533,6 +531,7 @@ export function populateDocumentInspector(): void {
     const title = document.createElement("span")
     title.className = "document-section-title"
     title.textContent = sectionName
+    heading.title = sectionLabel
     heading.append(title)
     if (section && sectionName !== section) {
       const code = document.createElement("span")
@@ -555,6 +554,7 @@ export function populateDocumentInspector(): void {
         preview.setParticlePreview(parseLegacyParticleEmitter(appState.selectedDocument, section))
         populateDocumentInspector()
         syncMobileInspectorGroups()
+        preview.restartLegacyPanelAnimation()
       })
       toolbar.append(status, replay)
       sectionPanel.append(toolbar)
@@ -590,9 +590,24 @@ export function populateDocumentInspector(): void {
     }
     const grid = document.createElement("div")
     grid.className = "document-property-grid"
-    grid.append(...sectionEntries.map((entry) => renderEntry(entry)))
+    grid.append(...sectionEntries.filter((entry) => !layoutAnimationFields.has(entry.key)).map((entry) => renderEntry(entry)))
     sectionPanel.append(grid)
     documentFields.append(sectionPanel)
+    const animations = sectionEntries.filter((entry) => layoutAnimationFields.has(entry.key))
+    if (animations.length) {
+      const animationSection = document.createElement("section")
+      animationSection.className = "document-property-section"
+      animationSection.dataset.inspectorGroupLabel = "动画"
+      const heading = document.createElement("h3")
+      heading.className = "document-section-heading"
+      heading.textContent = "动画"
+      heading.title = `${section}：${animations.map((entry) => entry.key).join("、")}`
+      const grid = document.createElement("div")
+      grid.className = "document-property-grid"
+      grid.append(...animations.map((entry) => renderEntry(entry)))
+      animationSection.append(heading, grid)
+      documentFields.append(animationSection)
+    }
   }
   documentFieldsGroup.dataset.path = appState.selectedPath
 }
@@ -704,7 +719,6 @@ export function populateBdaConfigInspector(): void {
     animationView: {
       mode: appState.animationDesignMode, select: selectedAnimation, onSelect: selectAnimation,
       filter: (items) => keyAnimationItems(items, bdaKeyPlays),
-      keyUses: (id) => keyUses(id, bdaKeyPlays),
     },
     keyboardPlayback: (id) => keyboardPlayback((key) => bdaKeyPlays(id, key)),
   })

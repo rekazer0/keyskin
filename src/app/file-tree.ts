@@ -21,6 +21,7 @@ import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
 import { askToCreateAnimationConfig, canCreateAnimationConfig } from "./animation-resource"
+import { releaseOnRemove } from "../dom-lifecycle"
 
 function addNavButton(
   parent: HTMLElement,
@@ -544,8 +545,6 @@ export function renderFiles(): void {
     }
     node.paths.push(path)
   }
-  // 与概览同一套 Lucide 图标（16px、1.5 描边）；图片行先放图标，滚到附近再换成缩略图。
-  const sourceSymbol = (name: string) => symbolSpan(name)
   const thumbnailObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue
@@ -563,6 +562,7 @@ export function renderFiles(): void {
       })
     }
   }, { rootMargin: "200px 0px" })
+  releaseOnRemove(sourceFiles, () => thumbnailObserver.disconnect())
   const sourceFileCount = (node: SourceNode): number =>
     node.paths.length + [...node.folders.values()].reduce((total, child) => total + sourceFileCount(child), 0)
   const selectSourceRow = (row: HTMLElement) => {
@@ -605,7 +605,7 @@ export function renderFiles(): void {
       const count = document.createElement("span")
       count.className = "nav-meta source-item-count"
       count.textContent = `${sourceFileCount(compactNode)} 项`
-      folderSummary.append(disclosure, sourceSymbol("folder"), title, count)
+      folderSummary.append(disclosure, symbolSpan("folder"), title, count)
       const children = document.createElement("div")
       children.className = "source-tree-group"
       children.setAttribute("role", "group")
@@ -626,6 +626,7 @@ export function renderFiles(): void {
         selectSourceRow(folderSummary)
       })
       folderSummary.addEventListener("dblclick", (event) => {
+        if (disclosure.contains(event.target as Node)) return
         event.preventDefault()
         folder.open = !folder.open
       })
@@ -645,7 +646,7 @@ export function renderFiles(): void {
         : appState.archive?.isImage(path)
           ? "image"
           : "doc"
-      const symbol = sourceSymbol(symbolName)
+      const symbol = symbolSpan(symbolName)
       if (symbolName === "image") {
         symbol.dataset.thumbnailPath = path
         thumbnailObserver.observe(symbol)
@@ -706,7 +707,7 @@ export function renderFiles(): void {
   const rootChildren = document.createElement("div")
   rootChildren.className = "source-tree-group source-root-group"
   rootChildren.setAttribute("role", "group")
-  rootSummary.append(rootDisclosure, sourceSymbol("doc.text"), rootTitle, rootCount)
+  rootSummary.append(rootDisclosure, symbolSpan("doc.text"), rootTitle, rootCount)
   rootFolder.append(rootSummary, rootChildren)
   rootDisclosure.addEventListener("click", (event) => {
     event.preventDefault()
@@ -718,6 +719,7 @@ export function renderFiles(): void {
     selectSourceRow(rootSummary)
   })
   rootSummary.addEventListener("dblclick", (event) => {
+    if (rootDisclosure.contains(event.target as Node)) return
     event.preventDefault()
     rootFolder.open = !rootFolder.open
   })

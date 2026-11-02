@@ -1726,7 +1726,7 @@ body:has(.canvas-wrap.empty) .workspace {
   gap: 8px;
 }
 
-.resource-item {
+.resource-item:not(.ui-style-card) {
   position: relative;
   width: 100%;
   min-width: 0;
@@ -1742,18 +1742,15 @@ body:has(.canvas-wrap.empty) .workspace {
   text-align: left;
 }
 
-.style-resource-item.has-sound :is(strong, small) {
-  padding-right: 32px;
-}
 
 @media (hover: hover) {
 
-.resource-item:hover {
+.resource-item:not(.ui-style-card):hover {
   background: var(--hover);
 }
 }
 
-.resource-item.selected {
+.resource-item:not(.ui-style-card).selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
@@ -1890,25 +1887,6 @@ body:has(.canvas-wrap.empty) .workspace {
 .resource-item small {
   color: var(--secondary);
   font-size: var(--font-size-xs);
-}
-
-.sound-resource-item {
-  grid-template-rows: 60px auto auto;
-}
-
-.sound-resource-icon {
-  width: 100%;
-  height: 60px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--control));
-}
-
-.sound-resource-icon svg {
-  width: 30px;
-  height: 30px;
 }
 
 .tile-heading {
@@ -3969,14 +3947,10 @@ main {
   }
 
   .sidebar { position: relative; }
-  .sidebar-resize-handle { position: absolute; top: 0; right: -2px; bottom: 0; }
+  /* 左栏会裁掉溢出内容：手柄整个放在栏内，可见宽度与检查器手柄一样是 4px，拖动样式才一致 */
+  .sidebar-resize-handle { position: absolute; top: 0; right: 0; bottom: 0; }
 }
 
-@media (min-width: 761px) and (max-width: 1060px) {
-  main {
-    grid-template-columns: 160px minmax(0, 1fr) 4px 300px;
-  }
-}
 
 .sidebar {
   border-color: var(--line);
@@ -5471,7 +5445,7 @@ main {
   min-height: 0;
   grid-template-columns: minmax(0, 1fr);
   justify-items: center;
-  row-gap: 4px;
+  row-gap: var(--space-sm);
   padding: 4px;
   background: var(--hover);
   border-radius: var(--radius-md);
@@ -5485,6 +5459,8 @@ main {
 :root body #files .sidebar-overview > .nav-group[data-overview-group="资源配置"] button.nav-item > .nav-label {
   max-width: 100%;
   font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: color-mix(in srgb, currentColor 75%, transparent);
 }
 
 /* 磁贴放不下第二行，源文件名留在悬停提示里。 */

@@ -67,9 +67,11 @@ export async function paintPreview(self: Preview): Promise<void> {
   const panelAnimationElapsed = self.legacyPanelAnimationStartedAt
     ? Date.now() - self.legacyPanelAnimationStartedAt
     : -1
+  // 面板自己的粒子：选择器里试播的粒子优先，其次是面板的显示动画（SHOW_ANIM），最后才是面板的按下动画。
   const particles = self.particlePreview
     ? [self.particlePreview]
-    : self.legacyAnimation?.get(self.panelAnimationStyle)?.particles ?? []
+    : (self.legacyShowAnimation?.get(self.panelAnimationStyle)
+      ?? self.legacyAnimation?.get(self.panelAnimationStyle))?.particles ?? []
   const particleFrames = panelAnimationElapsed < 0
     ? []
     : particles.flatMap((particle) =>
@@ -101,13 +103,12 @@ export async function paintPreview(self: Preview): Promise<void> {
       )
     : []
   // 旧版按键按下时，它的动画样式引用的粒子从按键上发射；播放器已在画这个键时不重复。
-  const pressed = self.legacyAnimationState
-  const pressedParticleFrames = pressed && player?.key !== pressed.key
-    ? keyAnimationStyles(pressed.key)
-        .flatMap((style) => self.legacyAnimation?.get(style)?.particles ?? [])
-        .flatMap((emitter) => legacyParticleFrames(emitter, Date.now() - pressed.startedAt, pressed.key.rect.width, pressed.key.rect.height))
-        .map((frame) => ({ ...frame, x: frame.x + pressed.key.rect.x, y: frame.y + pressed.key.rect.y }))
-    : []
+  const pressedParticleFrames = [...self.legacyAnimationStates.values()].flatMap((pressed) =>
+    player?.key?.section === pressed.key.section ? [] : keyAnimationStyles(pressed.key, self.panelAnimationStyle)
+      .flatMap((style) => self.legacyAnimation?.get(style)?.particles ?? [])
+      .flatMap((emitter) => legacyParticleFrames(emitter, Date.now() - pressed.startedAt, pressed.key.rect.width, pressed.key.rect.height))
+      .map((frame) => ({ ...frame, x: frame.x + pressed.key.rect.x, y: frame.y + pressed.key.rect.y })),
+  )
   const allParticleFrames = [...particleFrames, ...bdaParticleFrames, ...playerParticleFrames, ...pressedParticleFrames]
   const particleStyleIDs = [...new Set(allParticleFrames.map((frame) => frame.styleID))]
   const hintDirection = self.active?.direction ?? "center"
@@ -146,7 +147,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         self.resolver?.resolve(self.panelStyle, false).catch(() => undefined),
         Promise.all(keys.map(async (key) => {
           const highlighted = self.active?.key.section === key.section ||
-            self.legacyAnimationState?.key.section === key.section ||
+            self.legacyAnimationStates.has(key.section) ||
             self.keyPressed(key)
           try {
             return {
@@ -217,9 +218,8 @@ export async function paintPreview(self: Preview): Promise<void> {
 
   const sprites: SceneSprite[] = []
   for (const [index, key] of keys.entries()) {
-    const animationElapsed = self.legacyAnimationState?.key.section === key.section
-      ? Date.now() - self.legacyAnimationState.startedAt
-      : -1
+    const keyAnimation = self.legacyAnimationStates.get(key.section)
+    const animationElapsed = keyAnimation ? Date.now() - keyAnimation.startedAt : -1
     const activeBdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
     const bdaBack = bdaTransforms(self.animation, key, activeBdaElapsed, "back")
     const bdaFore = bdaTransforms(self.animation, key, activeBdaElapsed, "fore")

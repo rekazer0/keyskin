@@ -3,14 +3,14 @@ import { IniDocument } from "./ini.ts"
 import { DEFAULT_PANEL_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { snapPointToRects } from "./layout.ts"
 import type { BdaAnimation } from "./bda.ts"
-import { type PreviewItem, type Rect, keyAnimationStyles, previewItems, visiblePreviewItems, previewSurfaceHeight, effectivePreviewHitItem, previewHitItem } from "./preview-items.ts"
-import { type LegacyAnimation, type LegacyParticleEmitter, bdaAnimationBindingsForKey, bdaBindingEffects, bdaEffectDuration, animationSequenceForKey, animationDuration } from "./preview-animation.ts"
+import { type PreviewItem, type Rect, previewItems, visiblePreviewItems, previewSurfaceHeight, effectivePreviewHitItem, previewHitItem } from "./preview-items.ts"
+import { type LegacyAnimation, type LegacyParticleEmitter } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
 import { paintPreview } from "./preview-paint.ts"
 import type { NativeScene } from "./native-scene.ts"
 import type { PreviewClip } from "./animation-preview-model.ts"
-import { playNativePress } from "./preview-native.ts"
+import { playAnimation, restartLegacyPanelAnimation, stopLegacyPanelAnimation, syncLegacyPanelAnimation } from "./preview-playback.ts"
 import { pointerDown } from "./preview-pointer.ts"
 import { pointerMove } from "./preview-pointer.ts"
 import { pointerUp } from "./preview-pointer.ts"
@@ -21,9 +21,6 @@ export type PreviewEvent = {
   code: string
   holdSymbols?: string
 }
-
-/** 发射完最后一个粒子、它也消失的时刻。 */
-const particleDuration = (particle: LegacyParticleEmitter) => particle.totalNumber / particle.birthRate * 1000 + Math.max(...particle.life)
 
 export class Preview {
   readonly canvas: HTMLCanvasElement
@@ -36,6 +33,7 @@ export class Preview {
   private defaults?: IniDocument
   offsets?: IniDocument
   resolver?: VisualResolver
+  private documentIdentity?: unknown
   /** Palm and Sogou skins paint a scene read from their own files instead of resolving styles. */
   scene?: (state: number | undefined) => Promise<NativeScene | undefined>
   private readonly scenes = new Map<number | undefined, Promise<NativeScene | undefined>>()
@@ -110,23 +108,29 @@ export class Preview {
   private persistentOnly = false
   animation?: BdaAnimation
   animationVisual?: { key: PreviewItem; visual: Visual }
-  private animationTimer?: number
+  animationTimer?: number
+  animationPlayback = 0
   bdaAnimationState?: { key: PreviewItem; startedAt: number }
-  private bdaAnimationTimer?: number
+  bdaAnimationTimer?: number
   legacyAnimation?: LegacyAnimation
+  /** 面板的显示动画（SHOW_ANIM）：里面的粒子在面板出现时自动播放。 */
+  legacyShowAnimation?: LegacyAnimation
   shortHint?: LegacyHint
   longHint?: LegacyHint
   bdaHints = false
   /** 手机键盘的 pt 宽：iOS 按 @3x 图的 pt 尺寸画工具栏图标，不随面板缩放。 */
   devicePointWidth?: number
-  legacyAnimationState?: { key: PreviewItem; startedAt: number }
-  private legacyAnimationTimer?: number
+  readonly legacyAnimationStates = new Map<string, { key: PreviewItem; startedAt: number; duration: number }>()
+  get legacyAnimationState(): { key: PreviewItem; startedAt: number } | undefined {
+    return [...this.legacyAnimationStates.values()].at(-1)
+  }
+  legacyAnimationTimer?: number
   particlePreview?: LegacyParticleEmitter
   /** 动效 / 粒子设计的播放器把粒子画在 key 上（没有 key 时铺满面板），时间由播放器控制。 */
   playerParticles?: { particles: PreviewClip["particles"]; elapsed: number; key?: PreviewItem }
   panelAnimationStyle = ""
   legacyPanelAnimationStartedAt = 0
-  private legacyPanelAnimationTimer?: number
+  legacyPanelAnimationTimer?: number
   /** A native scene's running press animation (kept across the refresh a press causes) and when panel animations started. */
   nativePress?: { section: string; startedAt: number; seed: number }
   nativeShownAt = Date.now()
@@ -201,6 +205,7 @@ export class Preview {
   }
 
   destroy(): void {
+    this.animationPlayback++
     this.resizeObserver.disconnect()
     this.cancelDragDraw()
     if (this.drawQueued) cancelAnimationFrame(this.drawQueued)
@@ -443,6 +448,7 @@ export class Preview {
 
   setAnimation(animation?: BdaAnimation): void {
     this.animation = animation
+    this.animationPlayback++
     this.animationVisual = undefined
     this.bdaAnimationState = undefined
     if (this.animationTimer) window.clearTimeout(this.animationTimer)
@@ -452,9 +458,15 @@ export class Preview {
 
   setLegacyAnimation(animation?: LegacyAnimation): void {
     this.legacyAnimation = animation
-    this.legacyAnimationState = undefined
+    this.legacyAnimationStates.clear()
     if (this.legacyAnimationTimer) window.cancelAnimationFrame(this.legacyAnimationTimer)
-    this.restartLegacyPanelAnimation()
+    syncLegacyPanelAnimation(this)
+    void this.draw()
+  }
+
+  setLegacyShowAnimation(animation?: LegacyAnimation): void {
+    this.legacyShowAnimation = animation
+    syncLegacyPanelAnimation(this)
     void this.draw()
   }
 
@@ -468,7 +480,7 @@ export class Preview {
   setParticlePreview(emitter?: LegacyParticleEmitter): void {
     if (this.particlePreview === emitter) return
     this.particlePreview = emitter
-    this.restartLegacyPanelAnimation()
+    stopLegacyPanelAnimation(this)
     void this.draw()
   }
 
@@ -488,18 +500,28 @@ export class Preview {
     this.panelHeight = height
     this.keys = this.layoutItems()
     this.fitCanvas()
-    if (animationChanged) this.restartLegacyPanelAnimation()
+    syncLegacyPanelAnimation(this, animationChanged)
     void this.draw()
   }
 
   /** Lists the canvas keys from the skin's own data instead of the layout document. */
   setNativeItems(items?: (state: number | undefined, persistentOnly: boolean) => PreviewItem[]): void {
     this.nativeItems = items
-    this.setDocument(this.document)
+    this.setDocument(this.document, this.documentIdentity)
   }
 
-  setDocument(document?: IniDocument): void {
+  setDocument(document?: IniDocument, identity: unknown = document): void {
+    if (this.documentIdentity !== identity) {
+      this.cancelPointerInteraction()
+      this.setAnimation(this.animation)
+      this.setLegacyAnimation(this.legacyAnimation)
+      this.setLegacyShowAnimation(this.legacyShowAnimation)
+      this.nativePress = undefined
+      this.drawnScene = undefined
+      this.playerParticles = undefined
+    }
     this.document = document
+    this.documentIdentity = identity
     // An edit to the layout is an edit to the skin a scene is built from.
     this.scenes.clear()
     this.visualCache.clear()
@@ -583,87 +605,12 @@ export class Preview {
     return item.sections.some((section) => this.selected.has(section))
   }
 
-  async playAnimation(key: PreviewItem): Promise<void> {
-    if (this.scene) return playNativePress(this, key)
-    this.playLegacyAnimation(key)
-    const effects = this.animation
-      ? bdaAnimationBindingsForKey(this.animation, key).flatMap((binding) => bdaBindingEffects(this.animation!, binding))
-      : []
-    const duration = Math.max(0, ...effects.map(bdaEffectDuration))
-    if (duration) {
-      if (this.bdaAnimationTimer) window.cancelAnimationFrame(this.bdaAnimationTimer)
-      this.bdaAnimationState = { key, startedAt: Date.now() }
-      const tick = () => {
-        const elapsed = this.bdaAnimationState ? Date.now() - this.bdaAnimationState.startedAt : duration + 1
-        void this.draw()
-        if (elapsed <= duration) this.bdaAnimationTimer = window.requestAnimationFrame(tick)
-        else {
-          this.bdaAnimationState = undefined
-          this.bdaAnimationTimer = undefined
-          void this.draw()
-        }
-      }
-      this.bdaAnimationTimer = window.requestAnimationFrame(tick)
-    }
-    const sequence = animationSequenceForKey(this.animation, key)
-    if (!sequence?.frames.length || !this.resolver?.resolveResource) return
-    if (this.animationTimer) window.clearTimeout(this.animationTimer)
-    const play = async (index: number) => {
-      const frame = sequence.frames[index]
-      if (!frame) {
-        this.animationVisual = undefined
-        void this.draw()
-        return
-      }
-      if (frame.resourceID === undefined) return void play(index + 1)
-      const visual = await this.resolver?.resolveResource?.(frame.resourceID)
-      if (!visual) return
-      this.animationVisual = { key, visual }
-      void this.draw()
-      this.animationTimer = window.setTimeout(() => void play(index + 1), Math.max(16, frame.duration ?? 0))
-    }
-    await play(0)
+  playAnimation(key: PreviewItem): Promise<void> {
+    return playAnimation(this, key)
   }
 
   restartLegacyPanelAnimation(): void {
-    if (this.legacyPanelAnimationTimer) window.cancelAnimationFrame(this.legacyPanelAnimationTimer)
-    this.legacyPanelAnimationTimer = undefined
-    const particles = this.particlePreview
-      ? [this.particlePreview]
-      : this.legacyAnimation?.get(this.panelAnimationStyle)?.particles ?? []
-    if (!particles.length) {
-      this.legacyPanelAnimationStartedAt = 0
-      return
-    }
-    this.legacyPanelAnimationStartedAt = Date.now()
-    const duration = Math.max(...particles.map(particleDuration))
-    const tick = () => {
-      const elapsed = Date.now() - this.legacyPanelAnimationStartedAt
-      void this.draw()
-      if (elapsed <= duration) this.legacyPanelAnimationTimer = window.requestAnimationFrame(tick)
-      else this.legacyPanelAnimationTimer = undefined
-    }
-    this.legacyPanelAnimationTimer = window.requestAnimationFrame(tick)
-  }
-
-  private playLegacyAnimation(key: PreviewItem): void {
-    const duration = Math.max(0, ...keyAnimationStyles(key).flatMap((style) => {
-      const effect = this.legacyAnimation?.get(style)
-      return [
-        ...effect?.frames.map((frame) => frame.start + frame.delay + animationDuration(frame)) ?? [],
-        ...effect?.particles.map(particleDuration) ?? [],
-      ]
-    }))
-    if (!duration) return
-    if (this.legacyAnimationTimer) window.cancelAnimationFrame(this.legacyAnimationTimer)
-    this.legacyAnimationState = { key, startedAt: Date.now() }
-    const tick = () => {
-      const elapsed = Date.now() - this.legacyAnimationState!.startedAt
-      if (elapsed >= duration) this.legacyAnimationState = undefined
-      void this.draw()
-      if (elapsed < duration) this.legacyAnimationTimer = window.requestAnimationFrame(tick)
-    }
-    tick()
+    restartLegacyPanelAnimation(this)
   }
 
   private cancelEditDrag(): void {

@@ -1,11 +1,14 @@
 import type { Visual, VisualResolver } from "./atlas.ts"
-import { PREVIEW_KEY_SIZE, type PreviewClip } from "./animation-preview-model.ts"
+import { PREVIEW_KEY_SIZE, iniPreviewClip, type PreviewClip } from "./animation-preview-model.ts"
+import { IniDocument } from "./ini.ts"
+import { animationDirectControls, type AnimationDirectEdit } from "./animation-direct-controls.ts"
 import { element, iconButton } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 import { decodeFrames, frameAt, motionAt, withMotion, type Frame, type Track } from "./native-motion.ts"
 import { legacyParticleFrames } from "./preview-animation.ts"
 import { drawVisual } from "./preview-draw.ts"
 import type { Rect } from "./preview-items.ts"
+import { releaseOnRemove } from "./dom-lifecycle.ts"
 
 export type AnimationPlayerOptions = {
   clip: PreviewClip
@@ -16,6 +19,9 @@ export type AnimationPlayerOptions = {
   resourceParticles?: boolean
   readFile?: (path: string) => Uint8Array | undefined
   keyboard?: KeyboardPlayback
+  thumbnail?: boolean | "slow"
+  direct?: AnimationDirectEdit
+  sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
 }
 
 /** The keyboard canvas beside the player. */
@@ -49,12 +55,14 @@ function stageTracks(tracks: readonly Track[]): Track[] {
 }
 
 /** Local playback state belongs to the generated component, never to the skin document. */
-export function animationPlayer({ clip, key, resolver, resourceParticles, readFile, keyboard }: AnimationPlayerOptions): HTMLElement {
+export function animationPlayer({ clip, key, resolver, resourceParticles, readFile, keyboard, thumbnail = false, direct, sample }: AnimationPlayerOptions): HTMLElement {
   const root = element("div", "ui-animation-player")
+  if (thumbnail) root.dataset.variant = "thumbnail"
   const stage = element("div", "ui-animation-stage")
   const canvas = element("canvas")
-  canvas.width = STAGE.width * RESOLUTION
-  canvas.height = STAGE.height * RESOLUTION
+  const resolution = thumbnail ? 1 : RESOLUTION
+  canvas.width = STAGE.width * resolution
+  canvas.height = STAGE.height * resolution
   canvas.setAttribute("aria-label", "动画播放预览")
   const emptyState = element("p", "ui-animation-empty")
   stage.append(canvas, emptyState)
@@ -76,39 +84,53 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const slow = iconButton("snail", "慢放 ¼×")
   transport.append(play, replay, time, loop, slow)
   const note = element("p", "ui-animation-note")
-  root.append(stage, timeline, transport, note)
+  // 时间轴、走带与说明作为一组，横排时整组在舞台旁边纵向居中
+  const panel = element("div", "ui-animation-controls")
+  panel.append(timeline, transport, note)
+  root.append(stage, panel)
 
   const context = canvas.getContext("2d")!
-  const tracks = stageTracks(clip.tracks)
+  let tracks = stageTracks(clip.tracks)
+  let sampleLayers: Array<{ visual: Visual; animate: boolean }> = []
+  const keyRect = { ...KEY }
   const visuals = new Map<string, Visual | undefined>()
-  const images = new Map<PreviewClip["images"][number], Frame[]>()
+  const images = new Map<string, Frame[]>()
+  const imageKey = (item: PreviewClip["images"][number]) => item.file ?? JSON.stringify(item.resources)
   const notes = [...clip.notes]
   let duration = Math.max(0, Math.min(clip.duration, MAX_DURATION))
   let elapsed = 0
   let startedAt = 0
   let timer = 0
+  let lastFrame = -Infinity
+  let thumbnailVisible = false
+  let disposed = false
+  let thumbnailObserver: IntersectionObserver | undefined
+  const thumbnailEvents = new AbortController()
   let loading = true
   let fit = 1
   const hasContent = tracks.length + clip.particles.length + clip.images.length > 0
+  let controls: ReturnType<typeof animationDirectControls> | undefined
+  const timelineExtent = direct ? Math.max(400, duration * 1.5) : duration
   /** Every particle position sampled over the whole clip: the stage shows the trajectories even while paused. */
   const trails: [number, number][] = []
-  const resume = session.loop && session.looping === key
-  if (session.looping !== key) session.looping = ""
+  const resume = !thumbnail && session.loop && session.looping === key
+  if (!thumbnail && session.looping !== key) session.looping = ""
   if (clip.duration > MAX_DURATION) notes.push("长动画只预览前 60 秒")
-  if (tracks.length) notes.push("示例按键按当前参数播放")
-  const rate = () => session.slow ? SLOW_RATE : 1
+  if (tracks.length && !sample) notes.push("示例按键按当前参数播放")
+  const rate = () => thumbnail === "slow" || !thumbnail && session.slow ? SLOW_RATE : 1
 
   /* —— timeline —— */
   const renderLanes = () => {
-    lanes.replaceChildren()
+    for (const child of [...lanes.children]) if (child !== playhead && !child.classList.contains("ui-animation-handle")) child.remove()
     lanes.hidden = !clip.lanes.length || duration <= 0
     for (const lane of clip.lanes) {
       const row = element("div", "ui-animation-lane")
       row.toggleAttribute("data-unbounded", Boolean(lane.unbounded))
       const bar = element("span", "ui-animation-bar")
-      const start = Math.min(1, lane.start / duration)
+      const extent = direct ? timelineExtent : duration
+      const start = Math.min(1, lane.start / extent)
       bar.style.left = `${start * 100}%`
-      bar.style.width = `${Math.max(0, Math.min(1 - start, lane.duration * lane.passes / duration)) * 100}%`
+      bar.style.width = `${Math.max(0, Math.min(1 - start, lane.duration * lane.passes / extent)) * 100}%`
       if (lane.passes > 1 && lane.passes <= 24) bar.append(...Array.from({ length: lane.passes }, () => element("i")))
       const label = element("span")
       label.textContent = lane.unbounded ? `${lane.label} · 循环` : lane.label
@@ -134,7 +156,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     play.disabled = replay.disabled = scrub.disabled = loading || !hasContent || duration <= 0
     scrub.max = String(Math.max(1, Math.ceil(duration)))
     scrub.value = String(Math.round(elapsed))
-    playhead.style.left = `${duration > 0 ? Math.min(1, elapsed / duration) * 100 : 0}%`
+    playhead.style.left = `${duration > 0 ? Math.min(1, elapsed / (direct ? timelineExtent : duration)) * 100 : 0}%`
     time.value = `${Math.round(elapsed)} / ${Math.round(duration)} ms`
     const text = [...new Set(notes)]
     emptyState.hidden = hasContent
@@ -158,19 +180,20 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   }
   /** Zooms out until the key's whole path and every particle stay on the stage. */
   const measure = () => {
-    let [left, top, right, bottom] = [KEY.x, KEY.y, KEY.x + KEY.width, KEY.y + KEY.height]
+    trails.length = 0
+    let [left, top, right, bottom] = [keyRect.x, keyRect.y, keyRect.x + keyRect.width, keyRect.y + keyRect.height]
     const include = (x: number, y: number) => {
       left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y)
     }
     for (let step = 0; step <= SAMPLES; step++) {
       const at = duration * step / SAMPLES
-      const motion = tracks.length ? motionAt(tracks, at, KEY) : undefined
+      const motion = tracks.length ? motionAt(tracks, at, keyRect) : undefined
       if (motion) {
-        const [cx, cy] = motion.pivot ? [KEY.x + motion.pivot[0] * KEY.width, KEY.y + motion.pivot[1] * KEY.height] : [KEY.x + KEY.width / 2, KEY.y + KEY.height / 2]
+        const [cx, cy] = motion.pivot ? [keyRect.x + motion.pivot[0] * keyRect.width, keyRect.y + motion.pivot[1] * keyRect.height] : [keyRect.x + keyRect.width / 2, keyRect.y + keyRect.height / 2]
         const matrix = new DOMMatrix()
           .translate(motion.translation?.[0] ?? 0, motion.translation?.[1] ?? 0)
           .translate(cx, cy).rotate(motion.rotation ?? 0).scale(motion.scale?.[0] ?? 1, motion.scale?.[1] ?? 1).translate(-cx, -cy)
-        for (const [x, y] of [[KEY.x, KEY.y], [KEY.x + KEY.width, KEY.y], [KEY.x, KEY.y + KEY.height], [KEY.x + KEY.width, KEY.y + KEY.height]]) {
+        for (const [x, y] of [[keyRect.x, keyRect.y], [keyRect.x + keyRect.width, keyRect.y], [keyRect.x, keyRect.y + keyRect.height], [keyRect.x + keyRect.width, keyRect.y + keyRect.height]]) {
           const point = matrix.transformPoint(new DOMPoint(x, y))
           include(point.x, point.y)
         }
@@ -196,7 +219,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const draw = () => {
     const style = getComputedStyle(root)
     const token = (name: string) => style.getPropertyValue(name).trim()
-    context.setTransform(RESOLUTION, 0, 0, RESOLUTION, 0, 0)
+    context.setTransform(resolution, 0, 0, resolution, 0, 0)
     context.clearRect(0, 0, STAGE.width, STAGE.height)
     context.translate(STAGE.width / 2, STAGE.height / 2)
     context.scale(fit, fit)
@@ -212,7 +235,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       context.stroke()
       context.restore()
     }
-    if (tracks.length || clip.particles.length) outline(KEY, token("--line-strong"))
+    if (tracks.length || clip.particles.length) outline(keyRect, token("--line-strong"))
     if (trails.length) {
       context.save()
       context.fillStyle = token("--accent")
@@ -225,7 +248,9 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       context.fill()
       context.restore()
     }
-    if (tracks.length) withMotion(context, KEY, motionAt(tracks, elapsed, KEY), () => {
+    if (sampleLayers.length) {
+      for (const layer of sampleLayers) withMotion(context, keyRect, layer.animate ? motionAt(tracks, elapsed, keyRect) : undefined, () => drawVisual(context, layer.visual, keyRect, true))
+    } else if (tracks.length) withMotion(context, keyRect, motionAt(tracks, elapsed, keyRect), () => {
       context.fillStyle = token("--control")
       context.strokeStyle = token("--line-strong")
       context.lineWidth = 1
@@ -240,11 +265,17 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       context.fillText("A", KEY.x + KEY.width / 2, KEY.y + KEY.height / 2)
     })
     if (keyboard && clip.particles.length) keyboard.particles(clip.particles, elapsed)
+    if (direct && clip.particles.length) {
+      const directions = clip.particles[0].emitter.velocityDirection
+      if (directions) {
+        context.save(); context.strokeStyle = token("--accent"); context.fillStyle = token("--accent-soft")
+        context.beginPath(); context.moveTo(160, 80)
+        context.arc(160, 80, 60, directions[0] * Math.PI / 180, directions[1] * Math.PI / 180)
+        context.closePath(); context.fill(); context.stroke(); context.restore()
+      }
+    }
     for (const item of clip.particles) {
-      const [x, y, width, height] = item.emitter.emitRegion.every((value) => Math.abs(value) <= 1)
-        ? item.emitter.emitRegion.map((value, index) => value * (index % 2 ? KEY.height : KEY.width))
-        : item.emitter.emitRegion.map((value) => value * PIXEL)
-      outline({ x: KEY.x + x, y: KEY.y + y, width: Math.max(1, width), height: Math.max(1, height) }, token("--accent"))
+      // EMIT_REGION's coordinate basis varies by platform; never draw it as a validated width/height box here.
       if (elapsed < item.start || elapsed > item.start + item.duration) continue
       for (const particle of particleFrames(item, elapsed)) {
         const [width, height] = particleSize(particle.styleID, particle.scale)
@@ -262,7 +293,10 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       }
     }
     for (const item of clip.images) {
-      const visual = frameAt(images.get(item) ?? [], elapsed - item.start, item.passes)
+      const frames = images.get(imageKey(item)) ?? []
+      const total = frames.reduce((sum, frame) => sum + frame.duration, 0)
+      const at = (elapsed - item.start) * (item.duration > 0 && total > 0 ? total / item.duration : 1)
+      const visual = frameAt(frames, at, item.passes)
       if (visual) drawVisual(context, visual, imageRect(item, visual), true)
     }
   }
@@ -271,15 +305,17 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const stop = (keepLooping = false) => {
     cancelAnimationFrame(timer)
     timer = 0
-    if (!keepLooping && session.looping === key) session.looping = ""
+    if (!thumbnail && !keepLooping && session.looping === key) session.looping = ""
     update()
   }
   const tick = (now: number) => {
     // An edit rebuilds the inspector: the replacement player under the same key keeps looping.
     if (!root.isConnected) return stop(true)
-    if (!root.checkVisibility() || document.hidden) return stop()
+    if (!root.checkVisibility() || document.hidden || thumbnail && !thumbnailVisible) return stop()
+    if (thumbnail && now - lastFrame < 1000 / 30) { timer = requestAnimationFrame(tick); return }
+    lastFrame = now
     elapsed = (now - startedAt) * rate()
-    if (elapsed >= duration && session.loop) {
+    if (elapsed >= duration && (thumbnail || session.loop)) {
       elapsed = 0
       startedAt = now
       keyboard?.play()
@@ -289,17 +325,17 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     if (elapsed >= duration) stop()
     else {
       timer = requestAnimationFrame(tick)
-      update()
+      if (!thumbnail) update()
     }
   }
   const start = () => {
-    if (loading || !hasContent || duration <= 0) return
+    if (disposed || loading || !hasContent || duration <= 0) return
     if (elapsed >= duration) elapsed = 0
     if (elapsed === 0) keyboard?.play()
     startedAt = performance.now() - elapsed / rate()
     cancelAnimationFrame(timer)
     timer = requestAnimationFrame(tick)
-    if (session.loop) session.looping = key
+    if (!thumbnail && session.loop) session.looping = key
     update()
   }
   const seek = (value: number) => {
@@ -325,7 +361,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   // The lanes scrub too: press anywhere on the timeline and drag.
   const scrubTo = (event: PointerEvent) => {
     const box = lanes.getBoundingClientRect()
-    if (box.width > 0) seek((event.clientX - box.left) / box.width * duration)
+    if (box.width > 0) seek((event.clientX - box.left) / box.width * (direct ? timelineExtent : duration))
   }
   lanes.addEventListener("pointerdown", (event) => {
     if (scrub.disabled) return
@@ -334,13 +370,60 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   })
   lanes.addEventListener("pointermove", (event) => { if (lanes.hasPointerCapture(event.pointerId)) scrubTo(event) })
 
+  if (thumbnail) {
+    const syncThumbnail = () => {
+      if (disposed || !root.isConnected) return
+      if (thumbnailVisible && !document.hidden) { ensureLoaded(); start() }
+      else stop()
+    }
+    thumbnailObserver = new IntersectionObserver(entries => {
+      thumbnailVisible = Boolean(entries[0]?.isIntersecting)
+      syncThumbnail()
+    })
+    requestAnimationFrame(() => { if (!disposed && root.isConnected) thumbnailObserver?.observe(root) })
+    document.addEventListener("visibilitychange", syncThumbnail, { signal: thumbnailEvents.signal })
+    timeline.inert = transport.inert = true
+  }
+  releaseOnRemove(root, () => {
+    disposed = true
+    stop(true)
+    thumbnailObserver?.disconnect()
+    thumbnailEvents.abort()
+    visuals.clear()
+    images.clear()
+    sampleLayers = []
+    for (const bitmap of root.querySelectorAll("canvas")) bitmap.width = bitmap.height = 0
+  })
+  if (direct && !thumbnail) controls = animationDirectControls(direct, {
+    stage, timeline, lanes, key: keyRect, fit: () => fit, duration: () => duration, stop: () => stop(true),
+    preview(text, at) {
+      clip = iniPreviewClip(IniDocument.parse(text), direct.section, { fillBefore: true })
+      tracks = stageTracks(clip.tracks)
+      duration = Math.max(0, Math.min(clip.duration, MAX_DURATION))
+      elapsed = Math.max(0, Math.min(duration, at))
+      const originalFit = fit
+      measure(); fit = originalFit
+      renderLanes(); draw(); update()
+    },
+  })
   renderLanes()
   update()
   queueMicrotask(() => { if (root.isConnected) draw() })
   const load = async () => {
+    const artwork = await sample?.()
+    if (disposed) return
+    if (artwork) {
+      sampleLayers = artwork.layers
+      const ratio = Math.min(64 / artwork.width, 88 / artwork.height)
+      keyRect.width = artwork.width * ratio; keyRect.height = artwork.height * ratio
+      keyRect.x = 160 - keyRect.width / 2; keyRect.y = 80 - keyRect.height / 2
+      root.dataset.sample = "skin"
+      if (artwork.trial) notes.push("当前按键未绑定此动画，舞台为临时试放")
+    }
     const ids = [...new Set(clip.particles.flatMap(({ emitter }) => emitter.images))]
     await Promise.all(ids.map(async (id) => {
       const visual = await (resourceParticles ? resolver?.resolveResource?.(id) : resolver?.resolve(id, false))?.catch(() => undefined)
+      if (disposed) return
       visuals.set(id, visual)
       if (!visual) notes.push(`粒子图片 ${id} 未找到，用圆点标出轨迹`)
     }))
@@ -358,26 +441,34 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
         if (!frames.length) notes.push(`图片序列 ${item.file || "（未配置）"} 无法加载`)
       }
       const total = frames.reduce((sum, frame) => sum + frame.duration, 0)
-      if (item.duration > 0 && total > 0) frames = frames.map((frame) => ({ ...frame, duration: frame.duration * item.duration / total }))
-      images.set(item, frames)
+      if (disposed) return
+      images.set(imageKey(item), frames)
       // GIF frame clips play at the file's own timing; the lane learns its length here.
       if (!item.duration && total > 0) {
         duration = Math.max(duration, Math.min(MAX_DURATION, item.start + total * item.passes))
         for (const lane of clip.lanes) if (lane.start === item.start && !lane.duration) lane.duration = total
       }
     }))
+    if (disposed) return
     measure()
     loading = false
     if (!root.isConnected) return
     renderLanes()
     draw()
     update()
-    if (resume) start()
+    controls?.sync()
+    if (resume || thumbnail && thumbnailVisible && !document.hidden) start()
   }
-  void load().catch(() => {
-    loading = false
-    notes.push("预览资源加载失败，请检查资源引用")
-    if (root.isConnected) update()
-  })
+  let loadStarted = false
+  const ensureLoaded = () => {
+    if (loadStarted) return
+    loadStarted = true
+    void load().catch(() => {
+      loading = false
+      notes.push("预览资源加载失败，请检查资源引用")
+      if (root.isConnected) update()
+    })
+  }
+  if (!thumbnail) ensureLoaded()
   return root
 }

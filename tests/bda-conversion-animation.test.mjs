@@ -67,7 +67,7 @@ test("生成的旧版动画能被现有预览解析器读回", () => {
   // 一个样式只放一条动画时，预览解析器要能按 TYPE 还原出对应效果。
   const parsedOne = (section) => {
     const styles = IniDocument.parse(`[GLOBAL]\nSTYLE_NUM=1\n\n[STYLE99]\nSHOW_ANIM=${section}\n`)
-    return [...parseLegacyAnimation(styles, animations).values()][0]?.frames[0]
+    return [...parseLegacyAnimation(styles, animations, "SHOW_ANIM").values()][0]?.frames[0]
   }
   const sectionOf = (type) => animations.sections().find((section) => animations.get(section, "TYPE") === type)?.replace(/^ANIM/, "")
   assert.equal(parsedOne(sectionOf("0"))?.type, "opacity")

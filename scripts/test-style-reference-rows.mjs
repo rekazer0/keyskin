@@ -6,12 +6,14 @@ import { combinedSource, withAppState } from '../tests/helpers/app-source.mjs'
 
 const source = combinedSource()
 const names = new Set(['renderStyleReferenceRows', 'refreshStyleReferenceThumbnail', 'styleReferenceForeground'])
-const code = source.statements.filter(node => ts.isFunctionDeclaration(node) && names.has(node.name?.text)).map(node => node.getText(source)).join('\n')
+const code = source.statements.filter(node => ts.isFunctionDeclaration(node) && names.has(node.name?.text)
+  || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(source) === 'layoutAnimationFields')).map(node => node.getText(source)).join('\n')
 class Element {
   children = []
   dataset = {}
   classList = { toggle() {} }
   listeners = {}
+  isConnected = true
   value = ''
   constructor(tag = '') { this.tag = tag }
   append(...items) { this.children.push(...items) }
@@ -22,7 +24,10 @@ class Element {
   dispatchEvent(event) { this.listeners[event.type]?.(event) }
   closest() { return this }
   cloneNode() { return new Element('input') }
-  querySelectorAll(tag) { return this.children.flatMap(child => [...(child.tag === tag ? [child] : []), ...child.querySelectorAll(tag)]) }
+  querySelectorAll(tag) {
+    if (tag === '.style-picker-state > canvas') return this.children.flatMap(child => [...(child.tag === 'canvas' && this.className === 'style-picker-state' ? [child] : []), ...child.querySelectorAll(tag)])
+    return this.children.flatMap(child => [...(child.tag === tag ? [child] : []), ...child.querySelectorAll(tag)])
+  }
 }
 const drawn = []
 let pickerTarget
@@ -33,7 +38,7 @@ const context = withAppState(vm.createContext({
   styleReferenceDrawIDs: new WeakMap(),
   styleStateVisuals: new WeakMap(),
   styleStateCanvasObserver: { observe() {}, unobserve() {} },
-  styleStateCanvases: new Set(),
+  releaseOnRemove() {},
   scheduleStyleStateSizing: canvas => { const meta = context.styleStateVisuals.get(canvas); drawn.push([meta.visual]) },
   visualResolver: () => ({ resolve: async (id, highlighted) => ({ id, highlighted }) }),
   drawVisualPreview: (canvas, layers) => drawn.push(layers),
