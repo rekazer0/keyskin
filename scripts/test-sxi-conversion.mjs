@@ -105,7 +105,7 @@ try {
 
   const targets = await page.evaluate(() => [...document.querySelectorAll("[data-export-format]")]
     .map((button) => `${button.dataset.exportFormat}${button.dataset.bdaPlatform ? `-${button.dataset.bdaPlatform}` : ""}:${button.hidden ? "hidden" : "shown"}`))
-  assert.deepEqual(targets, ["bdi:shown", "bds:shown", "bda-ios:shown", "bda-android:shown", "sxi:shown", "ssf:hidden"])
+  assert.deepEqual(targets, ["bdi:shown", "bds:shown", "bda-ios:shown", "bda-android:shown", "sxi:shown", "ssf:shown"])
 
   const source = new Map()
   for (const [theme, orientation, path] of views) {
@@ -115,7 +115,7 @@ try {
   }
 
   const exported = {}
-  for (const [format, platform] of [["bdi", ""], ["bds", ""], ["bda", "android"]]) {
+  for (const [format, platform] of [["bdi", ""], ["bds", ""], ["bda", "android"], ["ssf", ""]]) {
     const file = await download(async () => {
       await openMenu()
       await page.locator(`.pen-file-menu [data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`).click()
@@ -139,8 +139,12 @@ try {
   })
   assert.match(await page.evaluate(() => document.querySelector("#panel-status")?.textContent ?? ""), /1080 × 641/)
   assert.ok(bda.keys > 10)
+  const { SsfPackage } = await import('../src/ssf/ssf-package.ts')
+  assert.ok((await SsfPackage.open(exported.ssf)).skin('light').sections().length > 0)
+  await open('converted.ssf', exported.ssf)
+  assert.equal(await page.evaluate(async () => (await import('/src/app/state.ts')).appState.archive.format), 'ssf')
   assert.deepEqual(errors, [])
-  console.log("SXI export: menu offers BDI/BDS/BDA, BDI and BDS previews match the .sxi pixel for pixel after download and reopen; BDA reopen smoke passed")
+  console.log("SXI export: menu offers BDI/BDS/BDA/SSF, BDI and BDS previews match after download/reopen; BDA and SSF reopen passed")
 } catch (error) {
   await page.screenshot({ path: "/tmp/bdi-sxi-conversion-failure.png" }).catch(() => {})
   throw error

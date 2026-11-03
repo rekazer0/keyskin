@@ -56,7 +56,8 @@ export class SsfLook {
     if (!bytes || !isPng(bytes)) {
       if (!this.missing.has(name)) {
         this.missing.add(name)
-        this.warnings.push(`${this.theme === "dark" ? "夜间" : "白天"}外观缺少图片或不是 PNG：${name}`)
+        const theme = this.theme === "dark" ? "夜间" : "白天"
+        this.warnings.push(bytes ? `${theme}外观的 ${name} 不是 PNG（百度皮肤只用 PNG），已忽略` : `${theme}外观缺少图片：${name}`)
       }
       return
     }

@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
+import { strFromU8, strToU8, zipSync } from "fflate"
 import { convertBdaAppearancePlatform, convertBdaSoundPlatform, IOS_BDA_PANELS } from "./bda-encode.ts"
 import { decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
 import { SkinArchive } from "./skin.ts"
@@ -51,44 +51,41 @@ function setInfoAtomSkinNames(text: string, names: [string, string]): string {
 
 export function convertBdaPlatform(source: SkinArchive, platform: Exclude<BdaPlatform, "unknown">): SkinArchive {
   if (source.format !== "bda") throw new Error("只能转换 BDA 皮肤")
-  const output = SkinArchive.open(source.normalizedBytes(), "bda")
-  for (const path of output.names()) {
-    const bytes = output.getBytes(path)
+  const converted = new Map<string, Uint8Array>()
+  const deleted = new Set<string>()
+  const names = source.names()
+  for (const canonicalPath of names) {
+    const rawPath = source.sourcePath(canonicalPath)
+    const bytes = source.getSourceBytes(rawPath)
     if (!bytes) continue
-    if (/(^|\/)Info\.txt$/i.test(path)) output.setBytes(path, strToU8(setInfoPlatform(strFromU8(bytes), platform)))
-    else if (/\/appearanceConfig$/i.test(path)) output.setBytes(path, convertBdaAppearancePlatform(bytes, platform))
-    else if (/\/soundConfig$/i.test(path)) output.setBytes(path, convertBdaSoundPlatform(bytes, platform))
-    else if (platform === "ios" && /\/switchConfig$/i.test(path)) output.delete(path)
+    if (/(^|\/)Info\.txt$/i.test(canonicalPath)) converted.set(rawPath, strToU8(setInfoPlatform(strFromU8(bytes), platform)))
+    else if (/\/appearanceConfig$/i.test(canonicalPath)) converted.set(rawPath, convertBdaAppearancePlatform(bytes, platform))
+    else if (/\/soundConfig$/i.test(canonicalPath)) converted.set(rawPath, convertBdaSoundPlatform(bytes, platform))
+    else if (platform === "ios" && /\/switchConfig$/i.test(canonicalPath)) deleted.add(rawPath)
   }
-  const reopened = SkinArchive.open(output.normalizedBytes(), "bda")
-  if (platform === "ios") {
-    const files = unzipSync(reopened.normalizedBytes())
-    const renamed: Record<string, Uint8Array> = {}
-    for (const [path, value] of Object.entries(files)) {
-      // Android exports may carry a legacy BDI token under `skin/`. Native iOS
-      // BDA packages have no `skin/` wrapper; keeping it makes older importers
-      // treat the archive as a mixed package and skip the root preview image.
+
+  const output: Record<string, Uint8Array> = {}
+  // sourcePaths excludes explicit directory entries; retain those too, without normalizing raw names.
+  const paths = [...source.sourcePaths(), ...names.filter((path) => path.endsWith("/")).map((path) => source.sourcePath(path))]
+  for (const rawPath of paths) {
+    if (deleted.has(rawPath)) continue
+    let path = rawPath
+    if (platform === "ios") {
+      // Android exports may carry a legacy BDI token under `skin/`; native iOS BDA packages have
+      // no `skin/` wrapper, so keep the existing filter before renaming theme roots.
       if (/^skin(?:\/|$)/i.test(path)) continue
-      const name = path.replace(/^light\//, "skin_light/").replace(/^dark\//, "skin_dark/")
-      renamed[name] = /(?:^|\/)Info\.txt$/i.test(name)
-        ? strToU8(setInfoAtomSkinNames(strFromU8(value), ["skin_light", "skin_dark"]))
-        : value
+      path = path.replace(/^light\//, "skin_light/").replace(/^dark\//, "skin_dark/")
+    } else {
+      path = path.replace(/^skin_light\//, "light/").replace(/^skin_dark\//, "dark/")
     }
-    const ios = SkinArchive.open(zipSync(renamed, { level: 6 }), "bda")
-    if (bdaPlatform(ios) !== platform) throw new Error("无法转换为 iOS BDA")
-    return ios
+    const bytes = converted.get(rawPath) ?? source.getSourceBytes(rawPath)!
+    output[path] = /(?:^|\/)Info\.txt$/i.test(path)
+      ? strToU8(setInfoAtomSkinNames(strFromU8(bytes), platform === "ios" ? ["skin_light", "skin_dark"] : ["light", "dark"]))
+      : bytes
   }
-  const androidFiles = unzipSync(reopened.normalizedBytes())
-  const androidRenamed: Record<string, Uint8Array> = {}
-  for (const [path, value] of Object.entries(androidFiles)) {
-    const name = path.replace(/^skin_light\//, "light/").replace(/^skin_dark\//, "dark/")
-    androidRenamed[name] = /(?:^|\/)Info\.txt$/i.test(name)
-      ? strToU8(setInfoAtomSkinNames(strFromU8(value), ["light", "dark"]))
-      : value
-  }
-  const android = SkinArchive.open(zipSync(androidRenamed, { level: 6 }), "bda")
-  if (bdaPlatform(android) !== platform) throw new Error("无法转换为 Android BDA")
-  return android
+  const archive = SkinArchive.open(zipSync(output, { level: 6 }), "bda")
+  if (bdaPlatform(archive) !== platform) throw new Error(`无法转换为${platform === "ios" ? " iOS" : " Android"} BDA`)
+  return archive
 }
 
 export function bdaCompatibilityWarnings(archive: SkinArchive): string[] {

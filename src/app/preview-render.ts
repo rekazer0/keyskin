@@ -141,6 +141,9 @@ function merged(base: TextVisual | undefined, own: TextVisual | undefined): Text
   return base || own ? { ...base, ...own } : undefined
 }
 
+// SkinArchive preserves byte-array identity for unchanged files, even after unrelated edits.
+const previewAnimations = new WeakMap<Uint8Array, ReturnType<typeof decodeBdaAnimation>>()
+
 export function refreshPreview(): void {
   if (!appState.archive) return
   rebuildSsfPreview()
@@ -155,7 +158,12 @@ export function refreshPreview(): void {
     ? bdaConfigPath(appState.archive, theme.value, orientation.value, "animation")
     : undefined
   const animationBytes = animationPath && appState.archive.getBytes(animationPath)
-  preview.setAnimation(animationBytes ? decodeBdaAnimation(animationBytes) : undefined)
+  let animation = animationBytes ? previewAnimations.get(animationBytes) : undefined
+  if (animationBytes && !animation) {
+    animation = decodeBdaAnimation(animationBytes)
+    previewAnimations.set(animationBytes, animation)
+  }
+  if (preview.animation !== animation) preview.setAnimation(animation)
   const layouts = layoutSource()
   const legacyAnimationPath = legacyAnimationConfigPath()
   const legacyAnimationText = appState.archive.format !== "bda" && legacyAnimationPath

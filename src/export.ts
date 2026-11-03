@@ -2,9 +2,7 @@
 export type ExportFormat = "bdi" | "bds" | "bda" | "ssf" | "sxi"
 
 export function canExport(source: ExportFormat, target: ExportFormat): boolean {
-  // Palm (.sxi) is its own format; a Baidu package and BDA are both produced by conversion.
-  if (source === "sxi") return target !== "ssf"
-  if (source === "ssf") return target !== "sxi"
+  if (source === "sxi" || source === "ssf") return true
   return target !== "bda" || source === "bda"
 }
 

@@ -85,7 +85,6 @@ export function decorateStyleReferenceInput(input: HTMLInputElement, key = style
     wrapper.append(input)
     // 动画样式没有静态外观可看：悬停时在画布上播放它（DESIGN.md §10）。
     wrapper.addEventListener("mouseenter", () => {
-      if (layoutAnimationFields.has(key)) return
       const styleIDs = input.value.split(",").map((value) => value.trim()).filter((styleID) => styleKind(styleID) === "anim")
       previewStyleAnimation(styleIDs)
     })

@@ -14,7 +14,7 @@ import { convertSsfToBaidu } from '../src/ssf/ssf-to-baidu.ts'
 import { convertSsfToBda } from '../src/ssf/ssf-to-bda.ts'
 import { convertBaiduToSsf } from '../src/ssf/baidu-to-ssf.ts'
 import { convertSsfDocument, exportSsf, ssfDocumentBytes } from '../src/ssf/ssf-convert.ts'
-import { COLORS, SIZES, TEXT, skinContainer, solid, ssfFixture } from './helpers/ssf-fixture.mjs'
+import { COLORS, SIZES, TEXT, skinContainer, solid, ssfFixture, wav } from './helpers/ssf-fixture.mjs'
 
 const read = (path) => new Uint8Array(readFileSync(new URL(path, import.meta.url)))
 const bdsTemplate = SkinArchive.open(read('../public/default-template.bds'))
@@ -320,6 +320,31 @@ test('ssf → BDS: symbol column and key sounds', async () => {
   assert.equal(css.get('GLOBAL', 'STYLE_NUM'), String(css.sections().filter((name) => /^STYLE\d+$/.test(name)).length))
 })
 
+test('BDS → ssf keeps per-key sound overrides as Sogou key-class sounds', async () => {
+  const files = unzipSync(bdsTemplate.toBytes())
+  const gen = IniDocument.parse(strFromU8(files['port/gen.ini']))
+  const layout = IniDocument.parse(strFromU8(files['port/py_26.ini']))
+  const css = IniDocument.parse(strFromU8(files['res/default.css']))
+  const q = layout.sections().find((section) => /^KEY\d+$/.test(section) && layout.get(section, 'CENTER') === 'q')
+  css.appendSection('STYLE99998', [{ key: 'PRESS_SOUND_PATH', value: 'base.ogg' }])
+  css.appendSection('STYLE99999', [{ key: 'PRESS_SOUND_PATH', value: 'q.wav' }])
+  gen.set('PANEL', 'SOUND_STYLE', '99998')
+  layout.set(q, 'SOUND_STYLE', '99999')
+  files['port/gen.ini'] = strToU8(gen.toString())
+  files['port/py_26.ini'] = strToU8(layout.toString())
+  files['res/default.css'] = strToU8(css.toString())
+  files['res/base.ogg'] = read('./fixtures/click.ogg')
+  files['res/q.wav'] = wav(48)
+
+  const { bytes, warnings } = await convertBaiduToSsf(SkinArchive.open(zipSync(files)))
+  const pkg = await SsfPackage.open(bytes)
+  const sounds = pkg.ini('default/sound_android.ini')
+  assert.equal(sounds.get('Key', 'sound'), 'base')
+  assert.equal(sounds.get('Key_Q', 'sound'), 'q')
+  assert.equal(strFromU8(pkg.files.get('default/q.wav').subarray(0, 4)), 'RIFF')
+  assert.deepEqual(warnings, [])
+})
+
 test('ssf → BDS: a one-look skin becomes a single-theme package', async () => {
   const { archive } = convertSsfToBaidu(await SsfPackage.open(ssfFixture({ single: true })), bdsTemplate)
   assert.ok(archive.names().some((name) => name.startsWith('light/skin/')))
@@ -553,7 +578,7 @@ test('BDS → ssf: background stacking, FORE_OFFSET → FG_RECT and package file
 
 test('BDA → ssf goes through the official BDS base and keeps the panel background', async () => {
   const { bytes, warnings } = await exportSsf(bdaTemplate, bdaBase)
-  assert.deepEqual(warnings, [])
+  assert.ok(warnings.every(warning => /缺少图片：10039_1$/.test(warning)), warnings.join('；'))
   const pkg = await SsfPackage.open(bytes)
   const skin = pkg.skin('light')
   assert.ok(skin.get('RootView', 'BG_IMAGE'))

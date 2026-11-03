@@ -502,9 +502,9 @@
 }
 .source #resource-list-title { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); white-space: nowrap; }
 .source #resource-count { color: var(--tertiary); font-size: var(--font-size-xs); white-space: nowrap; }
-.source #resource-list-view .resource-filters { grid-column: 1 / 3; }
-.source .resource-gallery { display: grid; flex: 1; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); align-content: start; gap: var(--space-sm); min-height: 0; overflow: auto; padding: var(--space-md) var(--_gutter); }
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card) {
+.source #resource-list-view .resource-filters { grid-column: 1 / -1; }
+.source .resource-gallery { display: grid; flex: 1; grid-template-columns: repeat(auto-fill, minmax(min(100%, 144px), 1fr)); align-content: start; gap: var(--space-sm); min-height: 0; overflow: auto; padding: var(--space-md) var(--_gutter); }
+:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card) {
   display: grid;
   align-content: start;
   gap: var(--space-xs);
@@ -518,7 +518,7 @@
   font-size: var(--font-size-xs);
   text-align: left;
 }
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card) :is(img, canvas) {
+:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card) :is(img, canvas) {
   width: 100%;
   aspect-ratio: 1;
   object-fit: contain;
@@ -528,11 +528,11 @@
   background-position: 0 0, 4px 4px;
   background-size: 8px 8px;
 }
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card) :is(span, small, strong) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (hover: hover) { :is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card):hover { background: var(--hover); } }
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card).selected { border-color: var(--accent); background: var(--accent-soft); }
+:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card) :is(span, small, strong) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (hover: hover) { :is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card):hover { background: var(--hover); } }
+:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card).selected { border-color: var(--accent); background: var(--accent-soft); }
 :is(.source, .style-workspace .sidebar) .resource-style-previews { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2xs); }
-.source .resource-gallery:has(> .style-resource-item) { grid-template-columns: repeat(auto-fill, minmax(144px, 1fr)); }
+.source .resource-gallery:has(> .style-resource-item) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 :is(.source, .style-workspace .sidebar) .style-resource-name { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
 :is(.source, .style-workspace .sidebar) .style-resource-name > .style-kind-badge { padding: 0; background: none; box-shadow: none; overflow: visible; }
 .source .resource-gallery[data-kind="sound"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
@@ -568,6 +568,8 @@
 .source #style-detail-fields { padding: var(--space-md) var(--_gutter); }
 .source :is(.style-detail-group, .style-detail-group-fields) { display: grid; gap: var(--space-sm); }
 .source .style-detail-field-row { display: grid; }
+.source .style-detail-group-fields[data-embedded="true"],
+.source .style-detail-group-fields[data-embedded="true"] .style-detail-field-row { grid-template-columns: minmax(0, 1fr); }
 .source .style-detail-key-raw { color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); }
 .source .style-detail-sound-card { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm); border-radius: var(--radius-md); background: var(--material-content); }
 
@@ -685,6 +687,10 @@
 /* 编辑模式下点了画布上的按键：「按键 N 的动效 | 全部」+ 取消选中 */
 .animation-key-filter { display: flex; align-items: center; gap: var(--space-2xs); }
 .animation-key-filter > .ui-segmented { flex: 1; min-width: 0; }
+/* 样式（目标）筛住动画列表：「STYLE12 的动效」+ 清除 */
+.animation-style-filter { display: flex; align-items: center; gap: var(--space-2xs); padding-left: var(--space-sm); }
+.animation-style-filter-note { flex: 1; display: flex; align-items: center; gap: var(--space-xs); min-width: 0; color: var(--secondary); font-size: var(--font-size-xs); }
+.animation-style-filter-note > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .animation-warning {
   display: flex;
   align-items: center;

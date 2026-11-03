@@ -10,8 +10,9 @@
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-display: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 
-  /* 字号：6 档，正文 12；10 只给概览文件名注脚，其余最小 11 */
-  --font-size-xxs: 10px; /* 概览列表的文件名注脚、列表框行的第二行 */
+  /* 字号：正文 12；9 仅用于图片尺寸角标，10 用于概览注脚与列表摘要，其余最小 11 */
+  --font-size-micro: 9px; /* 仅限图片资源尺寸角标 */
+  --font-size-xxs: 10px; /* 概览文件名注脚、列表框行的第二行 */
   --font-size-xs: 11px;  /* 辅助说明、角标、单位 */
   --font-size-sm: 12px;  /* 正文、控件、列表行 */
   --font-size-md: 13px;  /* 分组标题、强调、搜索框 */
@@ -39,11 +40,14 @@
 
   /* 版式 */
   --content-max-width: 1100px;  /* 欢迎页等整页内容的最大宽度 */
+  --style-card-width: 192px; /* 样式库与动画列表固定等宽，按容器自动换列 */
 
   /* 控件高度：3 档 */
   --control-height-sm: 24px;  /* 行内小按钮、角标按钮 */
   --control-height-md: 28px;  /* 默认：按钮、输入框、下拉、分段控件 */
   --control-height-lg: 32px;  /* 主要操作、对话框底部按钮 */
+  --animation-stage-width: 320px; /* 横排播放器舞台保持 2:1，不随工作区无限放大 */
+  --animation-curve-height: 48px;
 
   /* 图标：只用 Lucide（src/icons.ts），描边 1.5 */
   --icon-size-sm: 14px;

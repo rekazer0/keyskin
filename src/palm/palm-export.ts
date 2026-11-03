@@ -333,7 +333,7 @@ function styleJson(context: ExportContext, res: string[] | undefined): Json {
       if (!palmBaseName(path).toLowerCase().endsWith(".til")) continue
       const sections = sectionsOf(context, path)
       if (sections === undefined) continue
-      map[stripExtension(path)] = tileModels(sections)
+      if (!(stripExtension(path) in map)) map[stripExtension(path)] = tileModels(sections)
     }
     skinTileMap = map
   }
@@ -558,6 +558,8 @@ function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
       path = path.slice("skin/".length)
     }
     if (!path) continue
+    // Single-theme Baidu packages keep resources at the root; Palm resolves them in the default theme.
+    if (/^(?:port|land|res)(?:\/|$)/.test(path)) path = `light/skin/${path}`
     entries.push({
       path,
       directory: item.directory,

@@ -18,12 +18,6 @@
 .resource-workspace #resource-list-view .resource-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
 .atlas-workspace .atlas-resource-extras { display: contents; }
 .atlas-workspace #resource-gallery:empty::after { content: "无匹配图片"; grid-column: 1 / -1; color: var(--secondary); padding: 16px 0; font-size: var(--font-size-sm); }
-.atlas-workspace .resource-item { max-width: none; grid-template-rows: 64px 16px 14px; padding: 0; border: 0; background: transparent; text-align: left; }
-.atlas-workspace .resource-item img { width: 100%; height: 64px; padding: var(--space-xs); object-fit: contain; box-sizing: border-box; border: 1px solid var(--line); border-radius: var(--radius-sm); }
-.atlas-workspace .resource-item.selected { background: transparent; box-shadow: none; }
-.atlas-workspace .resource-item.selected img { border: 2px solid var(--accent); }
-.atlas-workspace .resource-item strong { font-size: var(--font-size-xs); font-weight: 500; }
-.atlas-workspace .resource-item small { font-size: var(--font-size-xs); }
 .atlas-workspace .workspace { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .atlas-workspace .workspace > .preview-toolbar { display: none; }
 .atlas-workspace .workspace-status { display: none; }
@@ -49,7 +43,6 @@
 .atlas-workspace #tile-inspector:has(#bda-tile-usage:not([hidden])) .tile-heading { display: flex; }
 .atlas-workspace #tile-inspector { padding: 16px 16px; margin: 0; border: 0; background: transparent; border-radius: 0; }
 .atlas-workspace #tile-preview-wrap { height: auto; aspect-ratio: 1; margin: 12px 0 0; }
-.atlas-workspace .resource-item img,
 .atlas-workspace .canvas-wrap,
 .atlas-workspace #tile-preview-wrap {
   background: repeating-conic-gradient(var(--checker-dark) 0 25%, var(--checker-light) 0 50%) 0 0 / 12px 12px;
@@ -60,5 +53,8 @@
 .atlas-workspace #tile-inspector input[type=number] { width: 100%; min-width: 0; height: 30px; box-sizing: border-box; font: var(--font-size-xs) var(--font-mono); }
 @media (max-width: 1199px) { .atlas-selection { display: none; } }
 .atlas-workspace .canvas-wrap.atlas-panning, .atlas-workspace .canvas-wrap.atlas-panning #atlas-canvas { cursor: grabbing; }
-.resource-workspace #resource-gallery { display: grid; flex: 1; grid-template-columns: repeat(auto-fill, minmax(min(100%, 144px), 1fr)); align-content: start; align-items: start; gap: var(--space-xs); min-height: 0; overflow: auto; padding: var(--space-xs) var(--space-sm) var(--space-md); }
+.resource-workspace #resource-gallery { display: grid; flex: 1; grid-template-columns: repeat(auto-fill, minmax(min(100%, 144px), 1fr)); align-content: start; align-items: start; gap: var(--space-sm); min-height: 0; overflow: auto; padding: var(--space-xs) var(--space-sm) var(--space-md); }
 .style-workspace #resource-gallery:empty::after { content: "无匹配样式"; color: var(--secondary); padding: var(--space-md) 0; font-size: var(--font-size-sm); }
+/* 样式列表只有“新增样式”一个操作，放在标题行末尾，不单独占一行。 */
+.style-workspace #resource-list-view .inspector-title { grid-template-columns: 24px minmax(0, 1fr) auto auto; align-items: center; }
+.style-workspace #resource-list-view .resource-actions { grid-column: 4; grid-row: 1; }

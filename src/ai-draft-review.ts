@@ -1,5 +1,4 @@
 import type { AiSkinDraftChange } from "./ai-skin-workspace"
-
 /** Compare parsed JSON, including compact BDA sources; never parse bare property names. */
 export function changedJsonSections(before: string, after: string): string[] {
   const left = JSON.parse(before) as Record<string, unknown>
@@ -42,11 +41,13 @@ export function createDraftReview(change: AiSkinDraftChange): HTMLLIElement {
   if (change.syntax === "png") {
     const pair = document.createElement("div")
     pair.className = "ai-draft-images"
+    
     for (const [title, bytes] of [["修改前", change.before], ["修改后", change.after]] as const) {
       const figure = document.createElement("figure")
       const image = document.createElement("img")
-      // shortcut: object URLs live until reload; revoke them if drafts with many images get common.
-      image.src = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/png" }))
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/png" }))
+      image.src = url
+      image.addEventListener("load", () => URL.revokeObjectURL(url), { once: true })
       image.alt = `${change.path} ${title}`
       const caption = document.createElement("figcaption")
       caption.textContent = title

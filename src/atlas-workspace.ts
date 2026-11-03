@@ -220,7 +220,7 @@ export function createAtlasWorkspace(actions: {
       canvas.style.removeProperty("translate")
     }
     const slice = next.selected
-    title.textContent = next.path.split("/").pop() || "皮肤图片"
+    title.textContent = next.path.split("/").pop() || "图片资源"
     title.title = next.path
     get(".source-heading .inspector-context h2").textContent = desktopActive ? (slice ? `切片 #${slice.index}` : "切片") : next.styleActive ? "样式编辑" : "检查器"
     meta.textContent = next.path ? `${next.width} × ${next.height} · ${next.slices.length} 个切片` : "未选择图片"

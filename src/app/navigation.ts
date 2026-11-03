@@ -28,6 +28,7 @@ export function selectFile(
   resourceMode: "document" | "image" | "style" | "sound" | "motion" | "particle" = "document",
   preserveInspectorView = false,
 ): void {
+  if (path !== appState.selectedPath || (resourceMode === "motion" || resourceMode === "particle") && resourceMode !== appState.animationDesignMode) appState.animationStyleEditing = false
   if (resourceMode !== "image") appState.bdaSliceReturn = undefined
   if (path !== appState.selectedPath) {
     source.commit()

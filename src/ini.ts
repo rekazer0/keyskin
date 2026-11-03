@@ -27,6 +27,8 @@ export class IniDocument {
   private lines: Line[]
   // get/set 每次交互调用数千次，按 段+键 建索引代替线性查找；结构变化时置空重建。
   private index?: Map<string, Line>
+  // 样式库对每个段调用 entries(section)，几千个段时逐行扫描会变成平方级，按段分组索引行。
+  private sectionLines?: Map<string, Line[]>
   private sectionList?: string[]
 
   private constructor(lines: Line[]) {
@@ -35,6 +37,7 @@ export class IniDocument {
 
   private invalidate(): void {
     this.index = undefined
+    this.sectionLines = undefined
     this.sectionList = undefined
   }
 
@@ -136,11 +139,24 @@ export class IniDocument {
   }
 
   entries(section?: string): IniEntry[] {
-    return this.lines.flatMap((line) => {
+    const lines = section === undefined ? this.lines : this.linesOf(section)
+    return lines.flatMap((line) => {
       if (!line.key || line.section === undefined || line.value === undefined) return []
-      if (section !== undefined && line.section !== section) return []
       return [{ section: line.section, key: line.key, value: line.value }]
     })
+  }
+
+  private linesOf(section: string): Line[] {
+    if (!this.sectionLines) {
+      this.sectionLines = new Map()
+      for (const line of this.lines) {
+        if (line.key === undefined || line.section === undefined) continue
+        const lines = this.sectionLines.get(line.section)
+        if (lines) lines.push(line)
+        else this.sectionLines.set(line.section, [line])
+      }
+    }
+    return this.sectionLines.get(section) ?? []
   }
 
   sections(): string[] {
@@ -177,6 +193,11 @@ export class IniDocument {
       // Appended lines come last: they only fill keys no earlier line defines (the first one wins).
       const id = entryId(section, entry.key)
       if (this.index && !this.index.has(id)) this.index.set(id, line)
+      if (this.sectionLines) {
+        const lines = this.sectionLines.get(section)
+        if (lines) lines.push(line)
+        else this.sectionLines.set(section, [line])
+      }
     }
   }
 

@@ -3,8 +3,7 @@
 
 import { loadBuiltInProjectTemplate } from "../operations.ts"
 import { SkinArchive } from "../skin.ts"
-import { documentPackage, ssfSkeleton, type SsfTemplates } from "../ssf/ssf-convert.ts"
-import type { SsfPackage } from "../ssf/ssf-package.ts"
+import { ssfSkeleton, type SsfTemplates } from "../ssf/ssf-convert.ts"
 import { selectedVariant } from "./bda-documents"
 import { layout, orientation, theme } from "./dom"
 import { showStatus } from "./file-operations"
@@ -14,16 +13,9 @@ import { appState } from "./state"
 import { preview } from "./canvas-interaction"
 import { renderFiles } from "./file-tree"
 import { selectFile } from "./navigation"
-import { isSsfBoardPath, ssfBoardDocument } from "./ssf-documents"
+import { isSsfBoardPath, ssfBoardDocument, ssfDocumentPackage } from "./ssf-documents"
 
-/** The open SSF document's own files as a package, read again only when the document changes. */
-export function ssfDocumentPackage(archive: SkinArchive): SsfPackage {
-  const cached = appState.ssfPackage
-  if (cached?.archive === archive && cached.revision === archive.revision) return cached.pkg
-  const pkg = documentPackage(archive)
-  appState.ssfPackage = { archive, revision: archive.revision, pkg }
-  return pkg
-}
+export { ssfDocumentPackage } from "./ssf-documents"
 
 export async function ssfTemplates(): Promise<SsfTemplates> {
   if (!appState.ssfTemplates) {

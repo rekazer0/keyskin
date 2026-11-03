@@ -307,6 +307,15 @@ export class SkinArchive {
       .map(([path, data]) => ({ path, data: data.slice() }))
   }
 
+  sourcePaths(): string[] {
+    return [...this.files.keys()].filter((path) => !path.endsWith("/"))
+  }
+
+  sourceByteLength(): number {
+    let total = 0
+    for (const data of this.files.values()) total += data.byteLength
+    return total
+  }
   zipEncryptedPaths(): string[] {
     return this.sourceZip?.entries.filter((entry) => view(entry.central).getUint16(8, true) & 1).map((entry) => entry.name) ?? []
   }
@@ -414,7 +423,28 @@ export class SkinArchive {
     this.changedRaw.delete(raw)
   }
 
-  markSaved(bytes?: Uint8Array, format = this.format): void {
+  markSaved(bytes?: Uint8Array, format = this.format, expectedRevision = this.revision): void {
+    if (bytes && this.revision !== expectedRevision) {
+      const saved = SkinArchive.open(bytes, format)
+      this.originals = new Map()
+      this.sourceBytes = bytes.slice()
+      this.sourceZip = undefined
+      this.changed.clear()
+      this.changedRaw.clear()
+      const savedCanonical = new Set(saved.canonicalToRaw.keys())
+      for (const [canonical, raw] of this.canonicalToRaw) {
+        const original = saved.getBytes(canonical)
+        const current = this.files.get(raw)
+        if (original) this.originals.set(raw, original)
+        if (!original || !current || original.length !== current.length || original.some((byte, index) => byte !== current[index])) {
+          this.changed.add(canonical)
+          if (current) this.changedRaw.add(raw)
+        }
+        savedCanonical.delete(canonical)
+      }
+      for (const canonical of savedCanonical) this.changed.add(canonical)
+      return
+    }
     if (bytes) {
       if (format !== this.format || this.layout === "legacy-ios") {
         const reopened = SkinArchive.open(bytes, format)
@@ -429,7 +459,6 @@ export class SkinArchive {
         this.cachedNames = undefined
         this.revision++
       } else {
-        // The decoded files and paths do not change when saving in place.
         this.originals = new Map(this.files)
         this.sourceBytes = bytes.slice()
         this.sourceZip = parseZip(bytes)

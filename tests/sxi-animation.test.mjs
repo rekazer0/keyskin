@@ -18,6 +18,7 @@ import {
   animationHasBase,
   animationModel,
   animationReferences,
+  animationStyles,
   animationTimeline,
   baseNeedsFix,
   comboAnimations,
@@ -491,6 +492,31 @@ test('animationReferences finds the styles whose s_5 events and combos reference
   })
   assert.deepEqual(animationReferences(skin, ['default', 's_info', 'ss_2'], '999'), { styles: [], combos: [] })
   assert.deepEqual(animationReferences({}, ['default', 's_info', 'ss_2'], '100'), { styles: [], combos: [] })
+})
+
+test('animationStyles lists the styles that carry animation bindings in the shown table', () => {
+  const skin = {
+    default: {
+      s_info: {
+        ss_1: {
+          '7': { s_5: { '1': 100, '2': 101 } },
+          '8': { s_5: { '5': 102 } },
+          '9': { s_1: { text: '没有动画' } },
+        },
+      },
+      s_port: { ss_1: { '20': { s_5: { '1': 103 } } } },
+    },
+  }
+  // 只列当前这张表的样式；横竖屏表沿用 s_info 的绑定，自己覆盖的只在那个入口里出现。
+  assert.deepEqual(animationStyles(skin, ['default', 's_info', 'ss_2']), [
+    { id: '7', events: ['按下', '松开'], animations: ['100', '101'] },
+    { id: '8', events: ['长按'], animations: ['102'] },
+  ])
+  assert.deepEqual(animationStyles(skin, ['default', 's_port', 'ss_2']), [
+    { id: '7', events: ['按下', '松开'], animations: ['100', '101'] },
+    { id: '8', events: ['长按'], animations: ['102'] },
+    { id: '20', events: ['按下'], animations: ['103'] },
+  ])
 })
 
 test('baseNeedsFix flags a stale CATEGORY but never for a3', () => {

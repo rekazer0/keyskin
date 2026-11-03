@@ -16,6 +16,17 @@ const skin = zipSync({ ...files,
   'light/res/anim.ini': strToU8('[ANIM1]\nCATEGORY=0\nTYPE=3\nDURATION=240\nFROM=50,50\nTO=100,100\n'),
 })
 
+async function assertUniformCards(cards) {
+  const boxes = await cards.evaluateAll(items => items.map(card => {
+    const { width, height } = card.getBoundingClientRect()
+    return { width, height, overflow: card.scrollHeight > card.clientHeight + 1 }
+  }))
+  assert.ok(boxes.length > 1)
+  assert.equal(new Set(boxes.map(box => Math.round(box.width))).size, 1, '所有类型卡片等宽')
+  assert.equal(new Set(boxes.map(box => Math.round(box.height))).size, 1, '所有类型卡片等高')
+  assert.equal(boxes.some(box => box.overflow), false, '预览内容不撑破卡片')
+}
+
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41864, strictPort: false, hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
@@ -42,8 +53,11 @@ try {
   assert.equal(await page.locator('#resource-gallery > .ui-style-card').count(), 0, '类型与用途取交集')
   await filterBar.locator('select[aria-label="样式用途"]').selectOption('all')
   await filterBar.locator('select[aria-label="样式类型"]').selectOption('all')
-  const controls = await page.locator('#style-add, .ui-style-filter-bar select').evaluateAll(items => items.map(item => item.getBoundingClientRect().y))
-  assert.ok(Math.max(...controls) - Math.min(...controls) < 2, '添加和筛选位于同一行')
+  await assertUniformCards(page.locator('#resource-gallery > .ui-style-card'))
+  assert.equal(await page.locator('.ui-style-caption').count(), 0, '动画摘要不占用预览空间')
+  assert.ok(await page.locator('.ui-style-card[data-style-kind="anim"] .ui-style-preview').getAttribute('title'), '动画摘要保留为悬停提示')
+  const controls = await page.locator('#resource-search, .ui-style-filter-bar select').evaluateAll(items => items.map(item => item.getBoundingClientRect().y))
+  assert.ok(Math.max(...controls) - Math.min(...controls) < 2, '搜索和筛选位于同一行')
   const list = await page.locator('#resource-list-view').boundingBox()
   const editor = await page.locator('#style-resource-detail').boundingBox()
   assert.ok(list.x + list.width < editor.x, '样式列表在左、编辑器在右')
@@ -74,7 +88,8 @@ try {
   const selected = await page.locator('#resource-name').textContent()
   await sound.getByRole('button', { name: '试听音效', exact: true }).click()
   assert.equal(await page.locator('#resource-name').textContent(), selected, '试听与选中编辑分离')
-  await page.waitForFunction(() => document.querySelector('.ui-style-sound small')?.textContent.includes('试听结束'))
+  await page.waitForFunction(() => document.querySelector('.ui-style-sound')?.dataset.playing === 'false')
+  assert.equal(await sound.locator('small').textContent(), '', '正常试听不显示重复操作提示')
   await page.setViewportSize({ width: 1440, height: 320 })
   await page.locator('#resource-gallery').evaluate(el => { el.scrollTop = 0 })
   await page.waitForFunction(() => document.querySelector('.ui-style-card .ui-animation-player')?.dataset.playing === 'false')
@@ -101,6 +116,7 @@ try {
   const library = page.frameLocator('#picker-frame')
   await library.locator('#style-library-grid > .ui-style-card').first().waitFor()
   assert.deepEqual(await library.locator('[data-library-filter]').evaluateAll(items => items.map(item => item.dataset.libraryFilter)), filterValues)
+  await assertUniformCards(library.locator('#style-library-grid > .ui-style-card'))
   const animation = library.locator('.ui-style-card[data-style-kind="anim"] .ui-animation-player')
   await library.locator('[data-library-kind="anim"]').click()
   await animation.waitFor()
@@ -123,6 +139,7 @@ try {
   await library.locator('#style-library-preview .ui-animation-player[data-playing="false"]').waitFor({ state: 'attached' })
   await library.locator('[data-library-mode="styles"]').click()
   await library.locator('[data-library-kind="text"]').click()
+  await library.locator('canvas[aria-label*="文字示例"]').nth(1).waitFor({ state: 'attached' })
   assert.equal(await library.locator('canvas[aria-label*="文字示例"]').count(), 2, '弹窗复用文字示例')
   await library.locator('#picker-close').click()
   await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
@@ -130,7 +147,21 @@ try {
   await page.locator('.sidebar-overview [data-nav-mode="image"], .sidebar-overview [data-nav-mode="resource"]').first().click()
   await page.locator('.sidebar #resource-gallery img').first().waitFor()
   assert.ok(await columns() >= 2, '图片资源沿用拉宽后的自适应多列布局')
-  assert.equal(Math.round((await page.locator('#resource-gallery img').first().boundingBox()).height), 64)
+  assert.equal(await page.locator('#resource-list-title').textContent(), '图片资源')
+  const card = page.locator('#resource-gallery .ui-image-card').first()
+  await card.locator('.ui-image-card-size:not([hidden])').waitFor()
+  const cardLayout = await card.evaluate(el => {
+    const preview = el.querySelector('.ui-image-card-preview').getBoundingClientRect()
+    const size = el.querySelector('.ui-image-card-size').getBoundingClientRect()
+    const caption = el.querySelector('.ui-image-card-caption').getBoundingClientRect()
+    const til = el.querySelector('.ui-image-card-til')?.getBoundingClientRect()
+    return { sizeInside: size.right < preview.right && size.bottom < preview.bottom && size.top > preview.top,
+      tilInCaption: !!til && til.left >= caption.left && til.right <= caption.right && til.top >= caption.top && til.bottom <= caption.bottom,
+      overflow: el.scrollWidth > el.clientWidth + 1 }
+  })
+  assert.equal(cardLayout.sizeInside, true, '尺寸在预览右下角内部')
+  assert.equal(cardLayout.tilInCaption, true, 'TIL 图标在文件名同一行')
+  assert.equal(cardLayout.overflow, false, '图片卡片不横向溢出')
   await page.locator('#resource-gallery .resource-item').first().click()
   assert.ok(await page.locator('#atlas-canvas').isVisible(), '图片选择仍进入切片画布')
   assert.equal(await page.locator('body').evaluate(el => el.classList.contains('style-workspace')), false)

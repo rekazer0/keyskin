@@ -9,17 +9,18 @@ import { canExport } from "../src/export.ts"
 import { IniDocument } from "../src/ini.ts"
 import { parseXmlPlist } from "../src/palm/palm-plist.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { decodeBdaAnimation } from "../src/bda-decode.ts"
 
 function sxi() {
   return SkinArchive.open(buildSxiZip(SkinArchive.open(bdsFixture())).bytes, "sxi")
 }
 
-test("an .sxi exports to BDI, BDS and BDA; SSF stays unreachable", () => {
+test("an .sxi exports to Baidu formats and Sogou through conversion", () => {
   assert.ok(canExport("sxi", "bdi"))
   assert.ok(canExport("sxi", "bds"))
   assert.ok(canExport("sxi", "bda"))
   assert.ok(canExport("sxi", "sxi"))
-  assert.ok(!canExport("sxi", "ssf"))
+  assert.ok(canExport("sxi", "ssf"))
   assert.ok(canExport("bds", "sxi"))
 })
 
@@ -59,10 +60,16 @@ test("an .sxi exports to BDI as an iOS package", async () => {
 test("an .sxi exports to BDA on the official template", async () => {
   const template = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/default-template.bda", import.meta.url))), "bda")
   const { bytes, warnings } = await convertSxiToBda(sxi(), template)
-  assert.deepEqual(warnings, ["百度按键动画在搜狗皮肤中没有对应，已忽略"])
+  assert.deepEqual(warnings, [])
   const reopened = SkinArchive.open(bytes, "bda")
   assert.equal(reopened.format, "bda")
   assert.ok(reopened.names().some((path) => /appearanceConfig$/.test(path)))
+  const motion = decodeBdaAnimation(reopened.getBytes("light/skin/port/animationConfig"))
+  const rotate = motion.effects.get("rotate:legacy_1")
+  assert.equal(rotate.duration, 200)
+  assert.deepEqual(rotate.from[0], [0, 0])
+  assert.deepEqual(rotate.to[0], [1, 1])
+  assert.deepEqual(motion.targets, [], "unbound source animations stay unbound")
 })
 
 test("an .sxi keeps the toolbar plist and menu atlas the export folds into skin.json", () => {

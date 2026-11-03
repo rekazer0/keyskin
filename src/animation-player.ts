@@ -19,7 +19,7 @@ export type AnimationPlayerOptions = {
   resourceParticles?: boolean
   readFile?: (path: string) => Uint8Array | undefined
   keyboard?: KeyboardPlayback
-  thumbnail?: boolean | "slow"
+  /** A card-sized player: no transport, loops while visible, one frame every 30 ms. */ thumbnail?: boolean | "slow"
   direct?: AnimationDirectEdit
   sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
 }
@@ -117,7 +117,8 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   if (!thumbnail && session.looping !== key) session.looping = ""
   if (clip.duration > MAX_DURATION) notes.push("长动画只预览前 60 秒")
   if (tracks.length && !sample) notes.push("示例按键按当前参数播放")
-  const rate = () => thumbnail === "slow" || !thumbnail && session.slow ? SLOW_RATE : 1
+  // Every surface plays a clip at real speed; only a full player's 慢放 switches slows playback down.
+  const rate = () => !thumbnail && session.slow ? SLOW_RATE : 1
 
   /* —— timeline —— */
   const renderLanes = () => {
@@ -212,7 +213,9 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       (STAGE.width / 2 - left) / (STAGE.width / 2 - margin), (right - STAGE.width / 2) / (STAGE.width / 2 - margin),
       (STAGE.height / 2 - top) / (STAGE.height / 2 - margin), (bottom - STAGE.height / 2) / (STAGE.height / 2 - margin),
     )
-    fit = Number.isFinite(reach) && reach > 1 ? 1 / reach : 1
+    // Only thumbnails zoom in: retain real sampling coordinates and the full editor's handle geometry.
+    const maxFit = thumbnail && !clip.images.length ? 1.75 : 1
+    fit = Number.isFinite(reach) && reach > 0 ? Math.min(maxFit, 1 / reach) : 1
     if (fit < 1) notes.push(`舞台缩小到 ${Math.round(fit * 100)}% 以容纳整段运动`)
   }
 
@@ -312,12 +315,14 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     // An edit rebuilds the inspector: the replacement player under the same key keeps looping.
     if (!root.isConnected) return stop(true)
     if (!root.checkVisibility() || document.hidden || thumbnail && !thumbnailVisible) return stop()
+    // A card draws 30 times a second; a full player draws every frame.
     if (thumbnail && now - lastFrame < 1000 / 30) { timer = requestAnimationFrame(tick); return }
     lastFrame = now
     elapsed = (now - startedAt) * rate()
     if (elapsed >= duration && (thumbnail || session.loop)) {
-      elapsed = 0
-      startedAt = now
+      // Carry the overshoot into the next round: a clip shorter than one drawn frame keeps its own period.
+      elapsed = duration > 0 ? elapsed % duration : 0
+      startedAt = now - elapsed / rate()
       keyboard?.play()
     }
     elapsed = Math.min(duration, elapsed)

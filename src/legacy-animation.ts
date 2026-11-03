@@ -267,6 +267,18 @@ function readKind(document: IniDocument, section: string): LegacyAnimationKind {
   return detectKind(document, section)
 }
 
+/** Delete an unreferenced animation, refusing direct style or combination references. */
+export function removeLegacyAnimation(text: string, section: string, styles: IniDocument | undefined, layout: IniDocument | undefined): string | undefined {
+  const document = IniDocument.parse(text)
+  const entries = parseLegacyAnimationFile(text).entries
+  const entry = entries.find((candidate) => candidate.section === section)
+  if (!entry || legacyAnimationReferences(styles, layout).some((reference) => reference.animation === entry.index)) return
+  if (entries.some((candidate) => candidate.section !== section && candidate.kind === "combination"
+    && buildList(candidate).some((id) => Number(id) === entry.index))) return
+  document.removeSections([section])
+  updateAnimNum(document)
+  return document.toString()
+}
 /** 改一个或多个字段；`undefined` 表示删掉该键。段顺序、未知键与注释原样保留，并同步 ANIM_NUM。 */
 export function writeLegacyAnimationFields(
   text: string,
@@ -494,4 +506,41 @@ export function legacyAnimationReferences(
     }
   }
   return references
+}
+
+/** 样式里动效指针字段对应的时机。 */
+export const STYLE_ANIM_FIELD_LABELS: Record<string, string> = {
+  PRESS_ANIM: "按下",
+  RELEASE_ANIM: "抬起",
+  SHOW_ANIM: "显示",
+  HIDE_ANIM: "隐藏",
+  FIRST_PRESS_PANEL_ANIM: "首个按下面板",
+}
+
+export type LegacyAnimationStyle = {
+  /** STYLE 编号，如 `12`。 */
+  id: string
+  /** 有动效指针的时机，按字段顺序去重。 */
+  events: string[]
+  /** 引用的动效序号，去重。 */
+  animations: number[]
+}
+
+/** default.css 里引用了动效的 [STYLE*]：只列含动效的样式，动效序号去重。 */
+export function legacyAnimationStyles(styles: IniDocument | undefined): LegacyAnimationStyle[] {
+  if (!styles) return []
+  const result: LegacyAnimationStyle[] = []
+  for (const section of styles.sections()) {
+    if (!/^STYLE\d+$/i.test(section)) continue
+    const animations = new Set<number>()
+    const events: string[] = []
+    for (const field of STYLE_ANIM_FIELDS) {
+      const ids = referenceIDs(styles.get(section, field))
+      if (!ids.length) continue
+      for (const id of ids) animations.add(id)
+      events.push(STYLE_ANIM_FIELD_LABELS[field] ?? field)
+    }
+    if (animations.size) result.push({ id: section.replace(/^STYLE/i, ""), events, animations: [...animations] })
+  }
+  return result
 }

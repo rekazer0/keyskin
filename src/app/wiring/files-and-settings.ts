@@ -130,7 +130,7 @@ export function wireFilesAndSettings(): void {
   })
   $("#recent-clear")?.addEventListener("click", () => {
     localStorage.removeItem(recentFilesKey)
-    for (const image of recentPreviewCache.values()) releaseArchivePreview(image)
+    for (const cached of recentPreviewCache.values()) releaseArchivePreview(cached.image)
     recentPreviewCache.clear()
     void recentThumbRequest("readwrite", (store) => store.clear()).catch(() => undefined)
     renderRecentFiles()

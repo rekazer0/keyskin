@@ -85,11 +85,20 @@ try {
         await back()
         await button.click()
         await check(path, mode)
-        assert.equal(await page.locator("body.animation-workspace #animation-library .ui-listbox").count(), 1, "动画列表在左侧栏")
+        assert.equal(await page.locator("body.animation-workspace #animation-library .ui-listbox:has([data-animation-id])").count(), 1, "动画列表在左侧栏")
+        assert.equal(await page.locator('body.animation-workspace #animation-library .ui-listbox[data-size="fill"]').count(), 2, "动画与样式两份列表都在左侧栏")
+        assert.equal(await page.locator("body.animation-workspace #animation-library .animation-library-tabs > button").count(), 2, "左侧栏用分段开关切换动画与样式")
         assert.equal(await page.locator("#animation-stage .ui-animation-player").count(), 1, "播放器在画布上")
         // 播放条默认停在内容高度，拖动上边缘改高，双击恢复。
         const stageHeight = () => page.locator("#animation-stage").evaluate((node) => Math.round(node.getBoundingClientRect().height))
         const autoHeight = await stageHeight()
+        const sizing = await page.locator("#animation-stage").evaluate((node) => {
+          const stage = node.querySelector(".ui-animation-stage").getBoundingClientRect()
+          return { width: stage.width, height: stage.height, overflow: node.scrollHeight - node.clientHeight }
+        })
+        assert.ok(sizing.width <= 320 && sizing.height <= 160, "横排舞台保持紧凑尺寸，不随工作区宽度放大")
+        assert.ok(Math.abs(sizing.width / sizing.height - 2) < 0.01, "舞台与直操手柄保持 2:1 坐标比例")
+        assert.ok(sizing.overflow <= 1, "默认高度完整容纳播放条内容")
         const resize = page.locator(".animation-stage-resize-handle")
         const grab = await resize.boundingBox()
         assert.ok(grab, "播放条上边缘有拖动手柄")

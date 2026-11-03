@@ -49,7 +49,7 @@ try {
   })
 
   const bdaConfig = bda.locator("#bda-config-fields")
-  await bdaConfig.locator(".ui-listbox").waitFor()
+  await bdaConfig.locator('.ui-listbox[aria-label="动画列表"]').waitFor()
   // 原始文件视图列出全部效果；选中一个后是 预览 → 参数。
   const listed = await bdaConfig.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
   for (const id of ["group:combo", "alpha:press", "shift:slide", "emitter:spark", "image:seq", "lottie:lottie", "video:video"]) {
@@ -58,8 +58,9 @@ try {
   await bdaConfig.locator('[data-animation-id="alpha:press"]').click()
   await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-animation-id="alpha:press"]')?.getAttribute("aria-selected") === "true")
   const groupLabels = await bdaConfig.locator(":scope > section").evaluateAll((sections) => sections.map((section) => section.dataset.inspectorGroupLabel))
-  assert.deepEqual(groupLabels, ["动画", "预览", "变化", "时间与循环"])
-  assert.equal(await bdaConfig.locator(".ui-animation-player").count(), 1, "选中的效果有播放器")
+  assert.deepEqual(groupLabels, ["动画", "目标", "预览", "变化", "时间与循环"])
+  assert.ok(await bdaConfig.locator('.ui-listbox[aria-label="目标列表"] [data-style-id]').count() > 0, "BDA 目标列在效果列表之后")
+  assert.equal(await bdaConfig.locator('.ui-animation-player:not([data-variant="thumbnail"])').count(), 1, "选中的效果有播放器")
   await bdaConfig.locator('[data-animation-id="shift:slide"]').click()
   await bdaConfig.locator('[data-animation-id="shift:slide"]').click()
   await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-animation-id="shift:slide"]')?.getAttribute("aria-selected") === "true")
@@ -161,11 +162,12 @@ try {
     selectFile("light/skin/port/res/anim.ini")
   })
   const legacyFields = legacy.locator("#document-fields")
-  await legacyFields.locator(".ui-listbox").waitFor()
+  await legacyFields.locator('.ui-listbox[aria-label="动画列表"]').waitFor()
   const legacyItems = await legacyFields.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
   assert.ok(legacyItems.length >= 7 && legacyItems[0] === "ANIM1", `旧版检查器没有列出动效：${legacyItems.join("、")}`)
   const legacyGroups = await legacyFields.locator(":scope > section").evaluateAll((sections) => sections.map((section) => section.dataset.inspectorGroupLabel))
-  assert.deepEqual(legacyGroups, ["动画", "预览", "变化", "时间与循环"])
+  assert.deepEqual(legacyGroups, ["动画", "样式", "预览", "变化", "时间与循环"])
+  assert.ok(await legacyFields.locator('.ui-listbox[aria-label="样式列表"] [data-style-id]').count() > 0, "只列引用了动效的样式")
   assert.ok(await legacyFields.locator(".ui-animation-player canvas").count() > 0, "旧版检查器缺少播放预览")
   assert.ok(await legacyFields.locator(".ui-animation-lane").count() > 0, "旧版检查器缺少时间轴")
 
@@ -184,7 +186,7 @@ try {
   assert.equal(await legacyFields.locator('[data-animation-id="ANIM1"]').getAttribute("aria-selected"), "true", "撤销后仍选中同一个动效")
 
   // 组合动效：子动效列表移除一项，BUILD_LIST 与 BUILD_NUM 一起写回。
-  const combination = legacyFields.locator("[data-animation-id]").filter({ hasText: "组合" }).first()
+  const combination = legacyFields.locator('[data-animation-id]:has(.ui-style-card-kind[aria-label="组合"])').first()
   const comboSection = await combination.getAttribute("data-animation-id")
   await combination.click()
   await legacyFields.locator(".animation-combo-item").first().waitFor()

@@ -449,8 +449,9 @@ body {
 .ui-animation-note:empty { display: none; }
 /* 横排（画布下方的播放条）：左边舞台，右边时间轴、走带与说明；右侧整组在舞台高度里纵向居中 */
 .ui-animation-player[data-layout="row"] { grid-template-columns: minmax(240px, 1fr) minmax(200px, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: var(--space-lg); align-items: center; }
-.ui-animation-player[data-layout="row"] > .ui-animation-stage { grid-row: 1; }
+.ui-animation-player[data-layout="row"] > .ui-animation-stage { grid-row: 1; width: 100%; max-width: var(--animation-stage-width); justify-self: center; }
 .ui-animation-player[data-layout="row"] > .ui-animation-controls { grid-column: 2; }
+.ui-animation-player[data-layout="row"] .ui-animation-curve { height: var(--animation-curve-height); }
 .ui-animation-controls { display: grid; align-content: center; gap: var(--space-sm); min-width: 0; min-height: 0; }
 .ui-animation-handles { position: absolute; inset: 0; pointer-events: none; }
 .ui-animation-handle { position: absolute; z-index: 1; height: var(--control-height-sm); min-width: var(--control-height-sm); padding: 0 var(--space-xs); transform: translate(-50%, -50%); border: 1px solid var(--accent); border-radius: var(--radius-full); color: var(--accent); background: var(--panel); font-family: var(--font-mono); font-size: var(--font-size-xs); white-space: nowrap; cursor: grab; touch-action: none; pointer-events: auto; }
@@ -527,37 +528,104 @@ body {
 @container (max-width: 304px) { .ui-sound-size { display: none; } }
 
 /* —— 样式配置卡片 —— */
-.ui-style-card { display: grid; grid-template-rows: auto; grid-auto-rows: auto; max-width: none; gap: var(--space-xs); min-width: 0; padding: var(--space-sm); border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--content); color: var(--text); text-align: left; cursor: default; transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+/* 同一个 grid 用于样式库与动画 / 样式列表；窄容器只收窄一列，不拉伸卡片。 */
+.style-library-grid:has(> .ui-style-card), .ui-listbox:has(> .ui-style-card) { grid-template-columns: repeat(auto-fill, minmax(0, min(100%, var(--style-card-width)))); align-items: start; justify-content: start; gap: var(--space-sm); }
+/* 几千张卡片时，屏幕外的卡片跳过布局与绘制（content-visibility），打开和滚动列表都不卡顿。 */
+.ui-style-card { display: grid; grid-template-rows: var(--control-height-lg) calc(var(--control-height-lg) * 3 + var(--space-lg)); width: min(100%, var(--style-card-width)); box-sizing: border-box; gap: var(--space-sm); min-width: 0; padding: var(--space-sm); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--content); color: var(--text); text-align: left; cursor: default; content-visibility: auto; contain-intrinsic-block-size: auto calc(var(--control-height-lg) * 4 + var(--space-lg) + var(--space-sm) * 3); transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
 .ui-style-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .ui-style-card:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
-.ui-style-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: none; }
-@media (hover: hover) { .ui-style-card:hover { background: var(--hover); } }
-.ui-style-card-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); min-width: 0; }
-.ui-style-card-heading > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--font-size-xs) var(--font-mono); }
-.ui-style-card-heading > .style-kind-badge { flex-shrink: 0; padding: 0; background: none; box-shadow: none; color: var(--tertiary); }
-.ui-style-preview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); min-width: 0; }
-.ui-style-state { display: grid; gap: var(--space-xs); min-width: 0; text-align: center; }
-.ui-style-state > canvas { display: block; width: 100%; height: auto; aspect-ratio: 20 / 11; border-radius: var(--radius-sm); background: var(--checker-image), var(--checker-light); background-size: var(--checker-size) var(--checker-size); }
-.ui-style-state > small, .ui-style-caption { font-size: var(--font-size-xs); color: var(--tertiary); }
+.ui-style-card:is([aria-pressed="true"], [aria-selected="true"]) { border-color: var(--accent); background: var(--accent-soft); box-shadow: none; transition: none; }
+@media (hover: hover) { .ui-style-card:not([aria-pressed="true"]):not([aria-selected="true"]):hover { background: var(--hover); } }
+.ui-style-card-caption { display: grid; align-content: center; gap: var(--space-2xs); min-width: 0; }
+.ui-style-card-subtitle { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-xs); color: var(--secondary); }
+.ui-style-card-heading { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
+.ui-style-card-heading > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--font-size-xs) var(--font-mono); }
+.ui-style-card-info { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-xs); color: var(--secondary); }
+.ui-style-card-kind { display: inline-flex; flex: none; align-items: center; margin-left: auto; color: var(--tertiary); }
+/* 外观样式同时显示正常 / 按下；动画保留单列真实采样缩略图。 */
+.ui-style-preview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: var(--space-xs); min-width: 0; min-height: 0; }
+.ui-style-state { display: grid; min-width: 0; min-height: 0; }
+.ui-style-state > canvas { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; border-radius: var(--radius-sm); background: var(--checker-image), var(--checker-light); background-size: var(--checker-size) var(--checker-size); }
+.ui-style-preview[data-variant="animation"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); }
 .ui-style-card[data-style-kind="text"] .ui-style-state > canvas { background: var(--control); }
-.ui-style-card:where([data-style-kind="anim"], [data-style-kind="sound"], [data-style-kind="empty"]) .ui-style-preview { grid-template-columns: minmax(0, 1fr); }
-.ui-style-card[data-style-kind="empty"] .ui-style-preview { justify-items: center; padding: var(--space-md); gap: var(--space-sm); color: var(--tertiary); font-size: var(--font-size-xs); }
-.ui-style-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-style-card[data-style-kind="empty"] .ui-style-preview { place-items: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); color: var(--tertiary); }
 .ui-style-sound { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; padding: var(--space-xs); border-radius: var(--radius-sm); background: var(--control); }
 .ui-style-sound > .ui-icon-button { flex-shrink: 0; border-radius: var(--radius-full); background: var(--content); }
 .ui-style-sound[data-playing="true"] > .ui-icon-button { background: var(--accent-soft); color: var(--accent); }
 .ui-style-sound-info { display: grid; gap: var(--space-xs); min-width: 0; }
-.ui-style-sound-info > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-sm); font-weight: 500; }
+.ui-style-sound-info > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-xs); font-weight: 400; color: var(--secondary); }
 .ui-style-sound-info > small { font-size: var(--font-size-xs); color: var(--tertiary); }
+.ui-style-sound-info > small:empty { display: none; }
+.ui-style-card-heading > .ui-style-sound { padding: 0; background: none; }
+.ui-style-card-heading > .ui-style-sound .ui-style-sound-info { display: none; }
+.ui-style-card-heading > .ui-style-sound > .ui-icon-button { width: var(--control-height-sm); height: var(--control-height-sm); }
 .ui-animation-player[data-variant="thumbnail"] { gap: 0; pointer-events: none; grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .ui-animation-player[data-variant="thumbnail"] .ui-animation-stage > canvas { height: 100%; min-height: 0; object-fit: contain; }
 .ui-animation-player[data-variant="thumbnail"] > :not(.ui-animation-stage) { display: none; }
-.ui-animation-player[data-variant="thumbnail"] .ui-animation-stage { background: var(--control); }
 .ui-animation-player[data-variant="thumbnail"] .ui-animation-empty { font-size: var(--font-size-xs); }
 .ui-style-filter-bar { display: flex; flex: 1; gap: var(--space-xs); min-width: 0; }
 .ui-style-filter-bar > .ui-select { flex: 1; min-width: 0; }
 .ui-style-filter-bar select { width: 100%; min-width: 0; }
-.ui-style-card[data-style-kind="anim"] .ui-style-preview > .ui-animation-player { aspect-ratio: 2 / 1; }
+.ui-style-preview[data-variant="animation"] > .ui-animation-player { height: 100%; min-height: 0; }
+.ui-style-card-kind > .ui-icon { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+.ui-style-card .ui-animation-stage { border-radius: var(--radius-sm); }
+.ui-listbox > .ui-style-card { flex: none; }
+.ui-style-card > .ui-list-item-meta { min-width: 0; }
+.ui-style-card > .ui-field-note { margin: 0; }
 .ui-style-filters { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .ui-style-filters > .ui-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .ui-style-card[data-previewing="true"] { border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+/* —— 图片资源卡片 —— */
+.ui-image-card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-sm);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-xs);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+.ui-image-card-preview {
+  position: relative;
+  display: grid;
+  height: 80px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--checker-image), var(--checker-light);
+  background-size: 12px 12px;
+}
+.ui-image-card-preview > img { width: 100%; height: 100%; min-height: 0; padding: var(--space-sm); object-fit: contain; box-sizing: border-box; }
+.ui-image-card-size {
+  position: absolute;
+  right: var(--space-xs);
+  bottom: var(--space-xs);
+  max-width: calc(100% - var(--space-sm));
+  padding: var(--space-2xs) var(--space-xs);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--secondary);
+  font: var(--font-size-micro) var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ui-image-card-size[hidden] { display: none; }
+.ui-image-card-caption { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; padding: 0 var(--space-xs); }
+.ui-image-card-caption > strong { flex: 1; min-width: 0; overflow: hidden; font-family: var(--font-mono); font-size: var(--font-size-xs); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.ui-image-card-til { display: flex; flex: none; color: var(--secondary); }
+.ui-image-card > small { padding: 0 var(--space-xs); overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+@media (hover: hover) { .ui-image-card:hover { background: var(--hover); } }
+.ui-image-card:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.ui-image-card.selected { border-color: var(--accent); background: var(--accent-soft); }
+.ui-image-card:focus-visible { outline: 0; box-shadow: var(--focus-ring); }

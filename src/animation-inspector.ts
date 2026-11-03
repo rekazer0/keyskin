@@ -9,6 +9,7 @@ import { createIcon } from "./icons.ts"
 import { animationPlayer, type AnimationPlayerOptions } from "./animation-player.ts"
 import { animationWorkspaceHosts } from "./animation-workspace.ts"
 import { drawVisualPreview, type Visual } from "./atlas.ts"
+import { styleCard } from "./style-card.ts"
 
 export type AnimationMode = "all" | "motion" | "particle"
 
@@ -16,6 +17,7 @@ export type AnimationListItem = {
   /** Stable within the document: Palm's table key, `ANIM3`, a BDA `kind:key`. */
   id: string
   title: string
+  info?: string
   kind: string
   icon: string
   /** Timing summary shown under the title. */
@@ -25,13 +27,41 @@ export type AnimationListItem = {
   problem?: string
 }
 
+
 /**
  * 编辑模式下在画布上选的按键：列表可以只留它们按下时播放的动画（`only`），也可以看全部再应用到它们。
  * `none`：它们一个都不播放，只能看全部；`total`：不筛选时的个数。
  */
 export type AnimationKeyFilter = { label: string; only: boolean; none: boolean; total: number; toggle(): void; clear(): void }
 
+/** 侧栏第二份列表的一行：引用了动画的样式（BDA 是绑定着动画的目标）。 */
+export type AnimationStyleItem = {
+  /** 样式编号或目标名，同一份文件里唯一。 */
+  id: string
+  /** 行标题，如 `STYLE12`。 */
+  title: string
+  /** 时机或类型说明，如「按下 · 抬起」。 */
+  detail: string
+  /** 当前入口下引用的动画个数。 */
+  count: number
+}
+/** 侧栏的第二份列表：样式（BDI/BDS、手心）或目标（BDA），只列引用了动画的那些。 */
+export type AnimationStyleList = {
+  /** 列表叫什么：样式 / 目标。 */
+  noun: string
+  /** 行首图标，与动画行同一套 Lucide。 */
+  icon: string
+  items: AnimationStyleItem[]
+  selected?: string
+  onSelect(id: string): void
+  card?(item: AnimationStyleItem): HTMLElement
+}
+export type AnimationStyleFilter = { label: string; clear(): void }
+
 type AnimationResourceView = {
+  listOwner?: HTMLElement
+  listContext?: string
+  listSource?: object
   mode: AnimationMode
   /** The section class the inspector shell and the category rail pick up in this container. */
   sectionClass: string
@@ -44,8 +74,13 @@ type AnimationResourceView = {
   duplicate?(): void
   remove?: { run(): void; blocked?: string }
   keyFilter?: AnimationKeyFilter
+  /** 侧栏第二份列表：引用了动画的样式（BDA 是目标）。 */
+  styles?: AnimationStyleList
+  /** 列表被一个样式筛住时的说明与清除。 */
+  styleFilter?: AnimationStyleFilter
   /** Document-level rows under the list (BDA design width, ANIM_NUM warnings). */
   listRows?: HTMLElement[]
+  thumbnail?(id: string): AnimationPlayerOptions
   player?: AnimationPlayerOptions
   /** Problems with the selected animation, under the player. */
   warnings?: HTMLElement[]
@@ -83,82 +118,172 @@ function actionButton(icon: string, label: string, onClick: () => void, disabled
   return button
 }
 
-function listOption(item: AnimationListItem, selected: boolean): HTMLButtonElement {
-  const option = element("button", "ui-list-item")
-  option.type = "button"
-  option.setAttribute("role", "option")
-  option.setAttribute("aria-selected", String(selected))
-  option.tabIndex = selected ? 0 : -1
-  option.dataset.animationId = item.id
-  const text = element("span", "ui-list-item-text")
-  // 第一行只有名称；第二行是类型、引用次数两个标签和时间摘要。
-  const title = element("strong")
-  title.textContent = item.title
+function listOption(view: AnimationResourceView, item: AnimationListItem, selected: boolean): HTMLElement {
+  const card = styleCard({
+    id: item.id, label: item.title, kind: "anim", kindLabel: item.kind, kindIcon: item.icon,
+    subtitle: item.info,
+    summary: item.problem ?? item.detail,
+    animation: () => {
+      const player = view.thumbnail?.(item.id)
+      return player ? [animationPlayer({ ...player, thumbnail: true, direct: undefined, keyboard: undefined })] : []
+    },
+  })
+  delete card.dataset.styleId
+  card.dataset.animationId = item.id
+  card.setAttribute("role", "option")
+  card.setAttribute("aria-selected", String(selected))
+  card.tabIndex = selected ? 0 : -1
   const meta = element("span", "ui-list-item-meta")
-  const kind = element("span", "ui-badge")
-  kind.textContent = item.kind
-  meta.append(kind)
   if (item.uses) {
     const uses = element("span", "ui-badge")
     uses.dataset.uses = String(item.uses)
-    uses.append(createIcon("link", 12), String(item.uses))
-    uses.title = `${item.uses} 处引用`
+    uses.append(createIcon("link", 14), String(item.uses))
     meta.append(uses)
   }
   const detail = element("small")
   detail.textContent = item.detail
   meta.append(detail)
-  text.append(title, meta)
-  option.title = `${item.title} · ${item.kind} · ${item.uses ? `${item.uses} 处引用` : "未使用"}\n${item.detail}`
-  option.append(createIcon(item.icon, 14), text)
-  if (item.problem) {
-    option.dataset.problem = ""
-    option.title = item.problem
-    option.append(createIcon("circle-alert", 14))
-  }
-  return option
+  card.append(meta)
+  card.title = `${item.title} · ${item.kind} · ${item.uses ? `${item.uses} 处引用` : "未使用"}\n${item.problem ?? item.detail}`
+  if (item.problem) card.dataset.problem = ""
+  return card
 }
 
-function listBox(view: AnimationResourceView, fill = false): HTMLElement {
-  const noun = MODE_NOUN[view.mode]
-  const list = element("div", "ui-listbox")
-  if (fill) list.dataset.size = "fill"
-  list.setAttribute("role", "listbox")
-  list.setAttribute("aria-label", `${noun}列表`)
-  const options = view.items.map((item) => listOption(item, item.id === view.selected))
-  if (options.length) list.append(...options)
-  else {
-    const empty = element("p", "ui-listbox-empty")
-    empty.textContent = view.create ? `还没有${noun}，用「新建」添加一个。` : `这份配置里没有${noun}。`
-    list.append(empty)
+type OptionBoxState = {
+  signature: string
+  source?: object
+  list: HTMLElement
+  rows: Map<string, HTMLElement>
+  items: Array<{ id: string }>
+  selected?: string
+  onSelect(id: string): void
+}
+const optionBoxStates = new WeakMap<HTMLElement, Map<string, OptionBoxState>>()
+
+function optionBox<T extends { id: string }>(options: {
+  items: T[]
+  selected: string | undefined
+  label: string
+  empty: string
+  dataKey: "animationId" | "styleId"
+  row(item: T, selected: boolean): HTMLElement
+  onSelect(id: string): void
+  fill: boolean
+  owner: HTMLElement
+  context: string
+  source?: object
+}): HTMLElement {
+  const states = optionBoxStates.get(options.owner) ?? new Map<string, OptionBoxState>()
+  optionBoxStates.set(options.owner, states)
+  const signature = JSON.stringify([options.context, options.label, options.items.map(item => item.id)])
+  let state = states.get(options.dataKey)
+  const changedSelection = !state || state.selected !== options.selected
+  if (!state || state.source !== options.source || state.signature !== signature) {
+    const list = element("div", "ui-listbox")
+    list.setAttribute("role", "listbox")
+    const rows = new Map<string, HTMLElement>()
+    for (const item of options.items) rows.set(item.id, options.row(item, item.id === options.selected))
+    if (rows.size) list.append(...rows.values())
+    else list.append(Object.assign(element("p", "ui-listbox-empty"), { textContent: options.empty }))
+    state = { signature, source: options.source, list, rows, items: options.items, selected: options.selected, onSelect: options.onSelect }
+    states.set(options.dataKey, state)
+    const current = state
+    list.addEventListener("click", (event) => {
+      const attribute = options.dataKey === "animationId" ? "data-animation-id" : "data-style-id"
+      const row = (event.target as Element).closest<HTMLElement>(`[${attribute}]`)
+      if (row) current.onSelect(row.dataset[options.dataKey]!)
+    })
+    list.addEventListener("keydown", (event) => {
+      const visible = current.items.filter(item => !current.rows.get(item.id)?.hidden)
+      const index = visible.findIndex(item => item.id === current.selected)
+      const next = event.key === "ArrowDown" || event.key === "ArrowRight" ? index + 1
+        : event.key === "ArrowUp" || event.key === "ArrowLeft" ? index - 1
+        : event.key === "Home" ? 0 : event.key === "End" ? visible.length - 1 : undefined
+      if (next === undefined) return
+      event.preventDefault()
+      const item = visible[Math.max(0, Math.min(visible.length - 1, next))]
+      if (!item || item.id === current.selected) return
+      focus.list = true
+      current.onSelect(item.id)
+    })
   }
-  list.addEventListener("click", (event) => {
-    const option = (event.target as Element).closest<HTMLElement>("[data-animation-id]")
-    if (option && option.getAttribute("aria-selected") !== "true") view.onSelect(option.dataset.animationId!)
-  })
-  list.addEventListener("keydown", (event) => {
-    // Rows hidden by the sidebar search are skipped.
-    const visible = view.items.filter((_, position) => !options[position]?.hidden)
-    const index = visible.findIndex((item) => item.id === view.selected)
-    const next = event.key === "ArrowDown" ? index + 1 : event.key === "ArrowUp" ? index - 1
-      : event.key === "Home" ? 0 : event.key === "End" ? visible.length - 1 : undefined
-    if (next === undefined) return
-    event.preventDefault()
-    const item = visible[Math.max(0, Math.min(visible.length - 1, next))]
-    if (!item || item.id === view.selected) return
-    focus.list = true
-    view.onSelect(item.id)
-  })
-  // Keep the selected row in view inside the list without scrolling the inspector itself.
-  requestAnimationFrame(() => {
-    const selected = list.querySelector<HTMLElement>('[aria-selected="true"]')
-    if (!selected || !list.isConnected) return
-    if (selected.offsetTop < list.scrollTop) list.scrollTop = selected.offsetTop
-    else if (selected.offsetTop + selected.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = selected.offsetTop + selected.offsetHeight - list.clientHeight
+  state.items = options.items
+  state.selected = options.selected
+  state.onSelect = options.onSelect
+  state.list.setAttribute("aria-label", options.label)
+  if (options.fill) state.list.dataset.size = "fill"
+  else delete state.list.dataset.size
+  for (const item of options.items) {
+    const row = state.rows.get(item.id)!
+    row.setAttribute("aria-selected", String(item.id === options.selected))
+    row.tabIndex = item.id === options.selected || options.selected === undefined ? 0 : -1
+  }
+  if (changedSelection || focus.list) requestAnimationFrame(() => {
+    const selected = state!.list.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (!selected || !state!.list.isConnected) return
+    if (selected.offsetTop < state!.list.scrollTop) state!.list.scrollTop = selected.offsetTop
+    else if (selected.offsetTop + selected.offsetHeight > state!.list.scrollTop + state!.list.clientHeight) state!.list.scrollTop = selected.offsetTop + selected.offsetHeight - state!.list.clientHeight
     if (focus.list) selected.focus()
     focus.list = false
   })
-  return list
+  return state.list
+}
+
+function syncChildren(parent: HTMLElement, children: HTMLElement[]): void {
+  for (const child of [...parent.children]) if (!children.includes(child as HTMLElement)) child.remove()
+  children.forEach((child, index) => {
+    if (parent.children[index] !== child) parent.insertBefore(child, parent.children[index] ?? null)
+  })
+}
+
+
+function listBox(view: AnimationResourceView, fill = false): HTMLElement {
+  const noun = MODE_NOUN[view.mode]
+  return optionBox({ owner: view.listOwner!, context: view.listContext!, source: view.listSource, items: view.items, selected: view.selected, label: `${noun}列表`,
+    empty: view.create ? `还没有${noun}，用「新建」添加一个。` : `这份配置里没有${noun}。`,
+    dataKey: "animationId", row: (item, selected) => listOption(view, item, selected), onSelect: view.onSelect, fill })
+}
+
+function styleOption(styles: AnimationStyleList, item: AnimationStyleItem, selected: boolean, noun: string): HTMLElement {
+  if (styles.card) {
+    const card = styles.card(item)
+    card.dataset.styleId = item.id
+    card.setAttribute("role", "option")
+    card.setAttribute("aria-selected", String(selected))
+    card.tabIndex = selected || !styles.selected ? 0 : -1
+    return card
+  }
+  const option = element("button", "ui-list-item")
+  option.type = "button"
+  option.setAttribute("role", "option")
+  option.setAttribute("aria-selected", String(selected))
+  option.tabIndex = selected ? 0 : -1
+  option.dataset.styleId = item.id
+  const text = element("span", "ui-list-item-text")
+  const title = element("strong")
+  title.textContent = item.title
+  const meta = element("span", "ui-list-item-meta")
+  const count = element("span", "ui-badge")
+  count.append(createIcon("link", 14), String(item.count))
+  count.title = `${item.count} 个${noun}`
+  meta.append(count)
+  const detail = element("small")
+  detail.textContent = item.detail
+  meta.append(detail)
+  text.append(title, meta)
+  option.title = `${item.title} · ${item.count} 个${noun}${item.detail ? `\n${item.detail}` : ""}`
+  option.append(createIcon(styles.icon, 14), text)
+  return option
+}
+
+function styleListBox(view: AnimationResourceView, fill = false): HTMLElement | undefined {
+  const styles = view.styles
+  if (!styles) return undefined
+  const noun = MODE_NOUN[view.mode]
+  return optionBox({ owner: view.listOwner!, context: view.listContext!, source: view.listSource, items: styles.items, selected: styles.selected, label: `${styles.noun}列表`,
+    empty: `没有引用${noun}的${styles.noun}。`, dataKey: "styleId",
+    row: (item, selected) => styleOption(styles, item, selected, noun),
+    onSelect: (id) => { styles.onSelect(id); if (!styles.card) animationWorkspaceHosts()?.show("animations") }, fill })
 }
 
 /** 「按键 N 的动效 | 全部」与取消选中按键的按钮。 */
@@ -187,6 +312,17 @@ function keyFilterBar(view: AnimationResourceView): HTMLElement[] {
   return [bar]
 }
 
+/** 列表被一个样式（目标）筛住时的说明与「清除」。 */
+function styleFilterBar(view: AnimationResourceView): HTMLElement[] {
+  const filter = view.styleFilter
+  if (!filter) return []
+  const bar = element("div", "animation-style-filter")
+  const note = element("span", "animation-style-filter-note")
+  note.append(createIcon("list-filter", 14), Object.assign(element("span"), { textContent: `${filter.label} 的${MODE_NOUN[view.mode]}` }))
+  bar.append(note, iconButton("x", `清除${filter.label}筛选`, filter.clear))
+  return [bar]
+}
+
 /** 列表头部的数量；按键筛选时是「1 / 2 个」。 */
 const countLabel = (view: AnimationResourceView) => view.keyFilter?.only ? `${view.items.length} / ${view.keyFilter.total} 个` : `${view.items.length} 个`
 
@@ -197,6 +333,16 @@ function listSection(view: AnimationResourceView): HTMLElement {
   const actions = listActions(view)
   if (actions) section.append(actions)
   section.append(...view.listRows ?? [])
+  return section
+}
+
+/** 窄屏里排在动画列表下面的样式列表；桌面宽度下它在左侧栏的第二份列表里。 */
+function styleSection(view: AnimationResourceView): HTMLElement | undefined {
+  const styles = view.styles
+  const list = styleListBox(view)
+  if (!styles || !list) return undefined
+  const section = animationSection(styles.noun, view.sectionClass, `${styles.items.length} 个`)
+  section.append(list)
   return section
 }
 
@@ -268,9 +414,19 @@ function stageContent(view: AnimationResourceView, item: AnimationListItem | und
 export function renderAnimationResource(container: HTMLElement, view: AnimationResourceView): void {
   const item = view.items.find((candidate) => candidate.id === view.selected)
   const hosts = animationWorkspaceHosts()
+  view.listOwner = container
+  view.listContext = JSON.stringify([view.mode, view.player?.key])
   if (hosts && view.mode !== "all") {
     hosts.setMode(view.mode === "particle", countLabel(view))
-    hosts.library.replaceChildren(...keyFilterBar(view), listBox(view, true), ...[listActions(view)].filter((node) => node !== undefined))
+    hosts.setStyles(view.styles?.noun, view.styles?.items.length ?? 0)
+    syncChildren(hosts.library, [
+      ...keyFilterBar(view),
+      ...styleFilterBar(view),
+      listBox(view, true),
+      ...[listActions(view)].filter((node) => node !== undefined),
+    ])
+    const styles = styleListBox(view, true)
+    syncChildren(hosts.styles, styles ? [styles] : [])
     hosts.filter()
     hosts.stage.replaceChildren(...stageContent(view, item))
     const rows = view.listRows?.length ? [animationSection("配置", view.sectionClass)] : []
@@ -280,32 +436,56 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
     return
   }
   container.replaceChildren(listSection(view))
+  const styles = styleSection(view)
+  if (styles) container.append(styles)
   if (!item) return
   container.append(previewSection(view, item), ...view.sections)
 }
 
 /** A slider beside a number field for values with a natural range; dragging previews, release commits once. */
-export function sliderField(control: HTMLElement, input: HTMLInputElement, bounds: { min: number; max: number; step?: number }): HTMLElement {
+export function sliderField(
+  control: HTMLElement,
+  input: HTMLInputElement,
+  bounds: { min: number; max: number; step?: number },
+  preview?: (value: string) => void,
+  commit?: (value: string) => void,
+): HTMLElement {
   const field = element("span", "ui-slider-field")
   const range = element("input", "ui-slider")
   range.type = "range"
   range.min = String(bounds.min)
   range.step = String(bounds.step ?? 1)
-  range.disabled = input.disabled
-  range.setAttribute("aria-label", `${input.getAttribute("aria-label") ?? ""}滑块`)
+  const numeric = () => input.value.trim() !== "" && Number.isFinite(Number(input.value))
   const sync = () => {
     const value = Number(input.value)
     range.max = String(Math.max(bounds.max, Number.isFinite(value) ? value : bounds.min))
     range.value = String(Number.isFinite(value) && input.value.trim() ? value : bounds.min)
+    range.disabled = input.disabled || !numeric()
   }
   sync()
-  range.addEventListener("input", () => { input.value = range.value })
-  range.addEventListener("change", () => input.dispatchEvent(new Event("change", { bubbles: true })))
+  let before: string | undefined
+  range.addEventListener("input", () => {
+    before ??= input.value
+    input.value = range.value
+    preview?.(range.value)
+  })
+  const finish = () => {
+    if (before === undefined) return
+    const original = before
+    before = undefined
+    if (input.value !== original) {
+      if (commit) commit(input.value)
+      else input.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+  }
+  range.addEventListener("change", finish)
+  range.addEventListener("pointerup", finish)
+  range.addEventListener("pointercancel", finish)
+  range.addEventListener("keydown", (event) => { if (event.key === "Escape" && before !== undefined) { input.value = before; preview?.(before); before = undefined } })
   input.addEventListener("input", sync)
   field.append(range, control)
   return field
 }
-
 /**
  * An image reference drawn as the style card (DESIGN.md §10): the file or resource name on the left,
  * the picture on the right. Clicking the picture picks another one; the name stays editable.

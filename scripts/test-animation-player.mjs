@@ -27,14 +27,14 @@ const choose = async (mode) => {
   if (await page.locator('body.animation-workspace').count()) await page.locator('#animation-library button[aria-label="返回布局"]').click()
   await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).first().click()
 }
-const player = page.locator('.ui-animation-player').first()
+const player = page.locator('#animation-stage .ui-animation-player').first()
 const slider = player.getByRole('slider', { name: '预览时间' })
 const seek = (value) => slider.evaluate((node, value) => {
   node.value = String(value)
   node.dispatchEvent(new Event('input', { bubbles: true }))
 }, value)
 const sample = () => player.locator('canvas').evaluate((canvas) => canvas.toDataURL())
-const ready = () => page.waitForFunction(() => !document.querySelector('.ui-animation-player .ui-animation-transport button')?.disabled)
+const ready = () => page.waitForFunction(() => !document.querySelector('#animation-stage .ui-animation-player .ui-animation-transport button')?.disabled)
 const pick = async (id) => {
   if (id) await page.locator(`[data-animation-id="${id}"]`).click()
   await ready()
@@ -59,7 +59,7 @@ try {
     const before = await fingerprint()
     const initial = await sample()
     await player.getByRole('button', { name: '播放预览', exact: true }).click()
-    await page.waitForFunction(() => Number(document.querySelector('.ui-animation-player .ui-slider').value) > 30)
+    await page.waitForFunction(() => Number(document.querySelector('#animation-stage .ui-animation-player .ui-slider').value) > 30)
     await player.getByRole('button', { name: '暂停预览', exact: true }).click()
     const paused = await slider.inputValue()
     await page.waitForTimeout(80)
@@ -88,7 +88,7 @@ try {
     await page.waitForFunction(() => window.__oldAnimationPlayer.dataset.playing === 'false')
     await ready()
     await player.getByRole('button', { name: '播放预览', exact: true }).click()
-    await page.waitForFunction(() => Number(document.querySelector('.ui-animation-player .ui-slider').value) > 30)
+    await page.waitForFunction(() => Number(document.querySelector('#animation-stage .ui-animation-player .ui-slider').value) > 30)
     await player.getByRole('button', { name: '暂停预览', exact: true }).click()
     // 粒子同时画在示例舞台和画布的键盘上；舞台停着时也有整段弹道可看。
     assert.equal(await player.locator('.ui-animation-stage').isVisible(), true, `${format}: 粒子有示例舞台`)
@@ -114,7 +114,7 @@ try {
     await ready()
     const timeText = () => player.locator('.ui-animation-time').textContent()
     const untilTime = (previous, playing) => page.waitForFunction(({ previous, playing }) => {
-      const root = document.querySelector('.ui-animation-player')
+      const root = document.querySelector('#animation-stage .ui-animation-player')
       return root?.querySelector('.ui-animation-time')?.textContent.split(' / ')[1] !== previous.split(' / ')[1]
         && (!playing || root.dataset.playing === 'true')
     }, { previous, playing })

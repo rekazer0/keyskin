@@ -8,13 +8,14 @@
 import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
+import { applyLegacyBaiduMotion } from "../legacy-to-bda-motion.ts"
 import { convertBaiduToSsf } from "../ssf/baidu-to-ssf.ts"
 import { SsfPackage } from "../ssf/ssf-package.ts"
 import { convertSsfToBda } from "../ssf/ssf-to-bda.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 import { parseSkinJson, same } from "./sxi-json.ts"
 import { boardFileName, boardIni, bubbleIni, candidateIni } from "./sxi-layout.ts"
-import { animationsIni, infoIni, stylesIni, tilesIni } from "./sxi-style.ts"
+import { ANIMATION_FIELDS, animationsIni, infoIni, stylesIni, tilesIni } from "./sxi-style.ts"
 
 type Converted = { bytes: Uint8Array; warnings: string[] }
 
@@ -184,16 +185,50 @@ export async function convertSxiToBaidu(archive: SkinArchive, format: "bdi" | "b
   return { bytes, warnings }
 }
 
+// Some Palm-only model fields never reach anim.ini. Report them here rather than silently claiming
+// that the intermediate legacy file contained the complete animation model.
+function palmMotionWarnings(archive: SkinArchive): string[] {
+  const warnings = new Set<string>()
+  const skin = parseSkinJson(archive.getText("skin.json"))
+  for (const [themeKey] of THEMES_BY_KEY) {
+    const struct = asObject(skin[themeKey])
+    for (const styleKey of ["s_info", "s_port", "s_land"]) {
+      const animations = asObject(asObject(struct?.[styleKey])?.ss_2)
+      for (const [id, value] of Object.entries(animations ?? {})) {
+        const wrap = asObject(value) ?? {}
+        const known = new Set(["id", "a1", "a3", "a4", "af2"])
+        for (const key of Object.keys(wrap)) if (!known.has(key)) warnings.add(`${themeKey}/${styleKey} 动画 ${id} 的 ${key} 未映射到 BDA`)
+        for (const family of ["a1", "a3", "a4", "af2"]) {
+          const model = asObject(wrap[family])
+          const fields = new Set(family === "a3" ? ["method", "a_method", "animations"] : ["b", ...ANIMATION_FIELDS[family].map(([key]) => key)])
+          for (const key of Object.keys(model ?? {})) {
+            if (!fields.has(key) && !(family === "a1" && key === "c_delay" && model?.[key] === 0)) {
+              warnings.add(`动画 ${id} ${family}.${key} 未映射到 BDA`)
+            }
+          }
+          for (const key of Object.keys(asObject(model?.b) ?? {})) {
+            if (!["t", "c", "count", "back", "clear"].includes(key)) warnings.add(`动画 ${id} ${family}.b.${key} 未映射到 BDA`)
+          }
+        }
+      }
+    }
+  }
+  return [...warnings]
+}
+
 /**
- * Repackages an `.sxi` document as BDA on the official BDA template. BDA's appearance configs are
- * a different format, so the skin first takes the Baidu INI shape and is then painted through the
- * Sogou converters, the same two steps a real conversion would take.
+ * Repackages an `.sxi` document as BDA on the official BDA template. Only static appearance goes
+ * through Sogou; motion is read directly from the intermediate Baidu archive, including resources.
  */
 export async function convertSxiToBda(archive: SkinArchive, template: SkinArchive): Promise<Converted> {
   if (template.format !== "bda") throw new Error("BDA 转换需要 BDA 模板")
   const converted = sxiToBaiduArchive(archive)
-  const ssf = await convertBaiduToSsf(converted)
+  const ssf = await convertBaiduToSsf(converted, { animations: false })
   const pkg = await SsfPackage.open(ssf.bytes)
   const bda = convertSsfToBda(pkg, template)
-  return { bytes: bda.archive.toBytes(), warnings: [...ssf.warnings, ...bda.warnings] }
+  const motionWarnings = applyLegacyBaiduMotion(converted, bda.archive)
+  // This warning describes only the discarded SSF intermediary, not the resulting BDA.
+  const staticWarnings = ssf.warnings.filter((warning) => warning !== "百度按键动画在搜狗皮肤中没有对应，已忽略")
+  const bdaWarnings = bda.warnings.filter((warning) => warning !== "按键动画（anim.ini）暂不转换为 BDA 动效，已忽略；转为 BDS/BDI 可保留")
+  return { bytes: bda.archive.toBytes(), warnings: [...new Set([...staticWarnings, ...bdaWarnings, ...motionWarnings, ...palmMotionWarnings(archive)])] }
 }

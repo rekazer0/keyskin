@@ -75,7 +75,8 @@ export async function prepareDocumentReplacement(): Promise<boolean> {
   }
   if (decision === "cancel") return false
   if (decision === "discard") return true
-  return saveArchive(false, currentExportFormat())
+  const saved = await saveArchive(false, currentExportFormat())
+  return saved && !hasUnsavedChanges()
 }
 
 export function updateDirty(): void {

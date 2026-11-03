@@ -7,6 +7,7 @@ import { IniDocument } from "./ini.ts"
 import { SkinArchive } from "./skin.ts"
 import { soundPathForFilename } from "./sounds.ts"
 import { pngSize } from "./ssf/ssf-png.ts"
+import { resolveFontReference } from "./font-files.ts"
 
 /** Sound styles sit above the image/color/text ranges used by bdaStyleID. */
 const SOUND_STYLE_BASE = 4_000_000
@@ -94,7 +95,7 @@ function appendMotionRefs(
     if (!lines) continue
     for (const [prop, animation] of refs) lines.push(`${prop}=${animation}`)
   }
-  if (conflicts.size) warnings.push(`${theme} 的横竖屏有 ${conflicts.size} 个样式动效不同，横屏沿用竖屏动效`)
+  if (conflicts.size) warnings.push(`${theme} 的横竖屏有 ${conflicts.size} 个样式动效不同，已分别保存在方向资源目录`)
 }
 
 export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format: "bdi" | "bds" = "bds"): BdaConversion {
@@ -113,9 +114,13 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
     // 旧版通过 CSS 样式的 PRESS_ANIM/SHOW_ANIM… 引用 anim.ini，样式在主题内共享。
     const motionRefs = new Map<string, Map<LegacyStyleProp, number>>()
     const motionConflicts = new Set<string>()
+    let directionRefs = new Map<string, Map<LegacyStyleProp, number>>()
     const addMotionRef = (ref: BdaStyleRef | undefined, prop: LegacyStyleProp, animation: number) => {
       if (!ref) return
       const styleID = bdaStyleID(ref)
+      const local = directionRefs.get(styleID) ?? new Map<LegacyStyleProp, number>()
+      if (!local.has(prop)) local.set(prop, animation)
+      directionRefs.set(styleID, local)
       const props = motionRefs.get(styleID) ?? new Map<LegacyStyleProp, number>()
       const existing = props.get(prop)
       if (existing === undefined) props.set(prop, animation)
@@ -132,6 +137,8 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
       const appearanceBytes = appearancePath && source.getBytes(appearancePath)
       if (!appearanceBytes) continue
       const appearance = decodeBdaAppearance(appearanceBytes)
+      directionRefs = new Map()
+      const directionStyles = new Map<string, string[]>()
       const animationPath = bdaConfigPath(source, theme, orientation, "animation")
       const animationBytes = animationPath && source.getBytes(animationPath)
       const animation = animationBytes
@@ -156,7 +163,14 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
             warnings.push(`${theme}/${orientation} 的按键音 ${resource.resourceID || key} 缺少音频文件，已跳过`)
             continue
           }
-          const filename = path.split("/").pop()!
+          const originalName = path.split("/").pop()!
+          let filename = originalName
+          let suffix = 0
+          while (output.has(`${theme}/skin/res/${filename}`)) {
+            const existing = output.get(`${theme}/skin/res/${filename}`)!
+            if (existing.length === bytes.length && existing.every((byte, index) => byte === bytes[index])) break
+            filename = originalName.replace(/(\.[^.]+)$/, `_${orientation}_${++suffix}$1`)
+          }
           let styleID = soundStyles.get(filename)
           if (!styleID) {
             styleID = String(SOUND_STYLE_BASE + soundStyles.size)
@@ -192,26 +206,36 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
       }
 
       const addStyle = (header: string, lines: string[]) => {
+        directionStyles.set(header, [...lines])
         const existing = themeStyles.get(header)
         if (!existing) themeStyles.set(header, lines)
         else if (existing.join("\n") !== lines.join("\n")) conflicts++
       }
-      const copied = new Set<string>()
+      const copied = new Map<string, string>()
       const imageSpec = (atom: BdaImageAtom | undefined): string | undefined => {
         const original = atom?.resource?.resourceID
         if (!original) return
         const resourceID = staticResourceID(original, animation)
         const image = sourceImage(source, theme, orientation, resourceID)
-        if (!image) return
-        if (!copied.has(image.id)) {
+        if (!image) { warnings.push(`${theme}/${orientation} 缺少图片：${resourceID}`); return }
+        const key = `${image.id}:${JSON.stringify(atom?.innerRect)}`
+        let name = copied.get(key)
+        if (!name) {
           const size = pngSize(image.bytes)
           if (!size) throw new Error("BDA 资源不是有效的 PNG")
-          const [width, height] = size
-          output.set(`${theme}/skin/res/${image.id}.png`, image.bytes)
-          output.set(`${theme}/skin/res/${image.id}.til`, tile(width, height, atom?.innerRect))
-          copied.add(image.id)
+          const til = tile(size[0], size[1], atom?.innerRect)
+          name = image.id
+          let suffix = 0
+          const different = (path: string, bytes: Uint8Array) => {
+            const existing = output.get(path)
+            return existing && (existing.length !== bytes.length || !existing.every((byte, index) => byte === bytes[index]))
+          }
+          while (different(`${theme}/skin/res/${name}.png`, image.bytes) || different(`${theme}/skin/res/${name}.til`, til)) name = `${image.id}_${orientation}_${++suffix}`
+          output.set(`${theme}/skin/res/${name}.png`, image.bytes)
+          output.set(`${theme}/skin/res/${name}.til`, til)
+          copied.set(key, name)
         }
-        return `${image.id},1`
+        return `${name},1`
       }
       // 粒子动效的图片在旧版里必须指向 [STYLE*] 的 NM_IMG：优先复用外观里同图样式，否则新建样式。
       let nextParticleKey = Math.max(0, ...appearance.imageStyles.keys()) + 1
@@ -234,8 +258,8 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
       const animationFile = (resource: BdaResource): string | undefined => {
         const name = (resource.resourceID ?? "").split("/").pop() ?? ""
         if (!/\.gif$/i.test(name)) return
-        const candidates = source.names().filter((path) => path.split("/").pop() === name)
-        const path = candidates.find((candidate) => candidate.startsWith(`${theme}/skin/`)) ?? candidates[0]
+        const paths = [`${theme}/skin/${orientation}/res/${name}`, `${theme}/skin/res/${name}`]
+        const path = paths.find(candidate => source.getBytes(candidate))
         const bytes = path && source.getBytes(path)
         if (!bytes) return
         output.set(`${targetPrefix}res/${name}`, bytes)
@@ -257,8 +281,25 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
         ])
       }
       for (const [key, style] of appearance.textStyles) {
+        const reference = style.resource?.resourceID || style.fontName
+        const path = reference && resolveFontReference(source.names(), reference, [
+          `${theme}/skin/${orientation}/res`, `${theme}/skin/res`, `${theme}/skin`,
+        ], { extensions: true })
+        let fontName = style.fontName
+        if (path) {
+          const bytes = source.getBytes(path)!
+          const original = path.split("/").pop()!
+          fontName = original
+          let suffix = 0
+          while (output.has(`${theme}/skin/res/${fontName}`)) {
+            const existing = output.get(`${theme}/skin/res/${fontName}`)!
+            if (existing.length === bytes.length && existing.every((byte, index) => byte === bytes[index])) break
+            fontName = original.replace(/(\.[^.]+)$/, `_${orientation}_${++suffix}$1`)
+          }
+          output.set(`${theme}/skin/res/${fontName}`, bytes)
+        } else if (style.resource?.resourceID) warnings.push(`${theme}/${orientation} 缺少字体：${reference}`)
         addStyle(`[STYLE${bdaStyleID({ type: "text", key })}]`, [
-          ...(style.fontName ? [`FONT_NAME=${style.fontName}`] : []),
+          ...(fontName ? [`FONT_NAME=${fontName}`] : []),
           ...(style.fontSize ? [`FONT_SIZE=${style.fontSize}`] : []),
           `NM_COLOR=${bdaColorHex(style.normalColor ?? 0)}`,
           `HL_COLOR=${bdaColorHex(style.highlightColor ?? style.normalColor ?? 0)}`,
@@ -320,13 +361,17 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
       if (unmatched.size) {
         warnings.push(`${theme}/${orientation} 的动效目标 ${[...unmatched].join("、")} 在导出布局里找不到对应按键或样式，已跳过`)
       }
+      for (const [filename, styleID] of soundStyles) directionStyles.set(`[STYLE${styleID}]`, [`PRESS_SOUND_PATH=${filename}`])
+      appendMotionRefs(directionStyles, directionRefs, new Set(), theme, warnings)
+      const localSections = [...directionStyles].flatMap(([header, lines]) => [header, ...lines, ""])
+      output.set(`${targetPrefix}res/default.css`, strToU8(`[GLOBAL]\nSTYLE_NUM=${directionStyles.size}\n\n${localSections.join("\n")}`))
     }
     if (!themeStyles.size && !soundStyles.size) continue
     for (const [filename, styleID] of soundStyles) themeStyles.set(`[STYLE${styleID}]`, [`PRESS_SOUND_PATH=${filename}`])
     appendMotionRefs(themeStyles, motionRefs, motionConflicts, theme, warnings)
     const sections = [...themeStyles].flatMap(([header, lines]) => [header, ...lines, ""])
     output.set(`${theme}/skin/res/default.css`, strToU8(`[GLOBAL]\nSTYLE_NUM=${themeStyles.size}\n\n${sections.join("\n")}`))
-    if (conflicts) warnings.push(`${theme} 的横竖屏有 ${conflicts} 个同号样式内容不同，横屏沿用竖屏样式`)
+    if (conflicts) warnings.push(`${theme} 的横竖屏有 ${conflicts} 个同号样式内容不同，已分别保存在方向资源目录`)
   }
 
   if (!output.size) throw new Error("BDA 中没有可转换的外观配置")

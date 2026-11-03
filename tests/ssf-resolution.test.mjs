@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { strFromU8, strToU8 } from 'fflate'
 import { IniDocument } from '../src/ini.ts'
+import { adaptPackageSounds } from '../src/sounds.ts'
 import { SkinArchive } from '../src/skin.ts'
 import { convertSsfDocument, documentPackage, ssfDocumentBytes } from '../src/ssf/ssf-convert.ts'
 import { ssfToBaiduFiles } from '../src/ssf/ssf-to-baidu.ts'
@@ -78,7 +79,9 @@ test('SSF → BDI and BDS reopen with every preview layout, toolbar, image and f
         const id = added.get('GLOBAL', 'STYLE_NUM')
         added.removeSections([`STYLE${id}`])
         added.set('GLOBAL', 'STYLE_NUM', String(Number(id) - 1))
-        assert.equal(added.toString(), IniDocument.parse(strFromU8(bytes)).toString(), `${format}: ${path}`)
+        const expectedFiles = new Map(preview)
+        await adaptPackageSounds(expectedFiles, format)
+        assert.equal(added.toString(), IniDocument.parse(strFromU8(expectedFiles.get(path))).toString(), `${format}: ${path}`)
       } else if (/\.(?:png|til|ttf)$/.test(path)) assert.deepEqual(output.getBytes(path), bytes, `${format}: ${path}`)
     }
     const toolbar = IniDocument.parse(output.getText('light/skin/port/cand1.cnd'))
@@ -115,6 +118,9 @@ test('SSF → BDI and BDS share keys and resources and differ only in each platf
       const ios = IniDocument.parse(strFromU8(converted))
       for (const { section, key } of ios.entries()) if (key === 'FIX_SIZE') ios.remove(section, key)
       assert.equal(ios.toString(), strFromU8(bytes), name)
+    } else if (name.endsWith('.css')) {
+      const normalise = value => strFromU8(value).replace(/(_SOUND_PATH=.+)\.(?:aiff|ogg)$/gm, '$1.native')
+      assert.equal(normalise(converted), normalise(bytes), name)
     } else assert.ok(converted.length === bytes.length && converted.every((byte, offset) => byte === bytes[offset]), name)
   }
 })

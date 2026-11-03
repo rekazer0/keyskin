@@ -2,6 +2,7 @@
 
 import { zipSync } from "fflate"
 import { convertBdaArchive } from "../bda-convert.ts"
+import { applyLegacyBaiduMotion } from "../legacy-to-bda-motion.ts"
 import { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
 import { convertBaiduToSsf } from "./baidu-to-ssf.ts"
@@ -52,6 +53,13 @@ export async function convertSsfDocument(archive: SkinArchive, format: "bdi" | "
   const pkg = documentPackage(archive)
   if (format === "bda") {
     const { archive: converted, warnings } = convertSsfToBda(pkg, templates.bda)
+    if ([...pkg.files.keys()].some(path => /(^|\/)anim\.ini$/i.test(path))) {
+      const legacy = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution))
+      const motionWarnings = applyLegacyBaiduMotion(legacy.archive, converted)
+      return { bytes: converted.toBytes(), warnings: [...new Set([
+        ...warnings.filter(warning => !warning.startsWith("按键动画（anim.ini）暂不转换")), ...legacy.warnings, ...motionWarnings,
+      ])] }
+    }
     return { bytes: converted.toBytes(), warnings }
   }
   // Keep the SSF canvas geometry and artwork; the toolbar moves into Baidu's native F14 container and logo icons.

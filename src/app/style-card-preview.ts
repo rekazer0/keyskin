@@ -6,6 +6,7 @@ import { appState } from "./state"
 
 export function soundStyleSample(filename: string | undefined, path: string | undefined): HTMLElement {
   const root = element("div", "ui-style-sound")
+  root.title = filename ?? "未配置音效"
   const play = iconButton("play", "试听音效")
   play.disabled = !path
   const text = element("span", "ui-style-sound-info")
@@ -13,7 +14,7 @@ export function soundStyleSample(filename: string | undefined, path: string | un
   name.textContent = filename ?? "未配置音效"
   name.title = filename ?? "未配置音效"
   const meta = element("small")
-  meta.textContent = path ? `${filename?.split(".").pop()?.toUpperCase() ?? "音频"} · 点击试听` : "声音文件不存在"
+  meta.textContent = path ? "" : "声音文件不存在"
   text.append(name, meta)
   const update = () => {
     const playing = Boolean(path && appState.keySoundPath === path)
@@ -28,7 +29,7 @@ export function soundStyleSample(filename: string | undefined, path: string | un
     releaseKeySound()
     if (!stopping) playSoundPath(path, error => {
       if (!root.isConnected) return
-      meta.textContent = error ?? "试听结束 · 点击重播"
+      meta.textContent = error ?? ""
       update()
     })
     update()

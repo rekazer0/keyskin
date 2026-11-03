@@ -258,6 +258,7 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
       return {
         styleID,
         label: stylePickerLabel(styleID),
+        info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
         kind,
         kindLabel: styleKinds[kind].label,
         kindIcon: styleKinds[kind].icon,

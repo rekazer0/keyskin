@@ -84,6 +84,20 @@ test("粒子与 GIF 帧动效转成旧版 CATEGORY=3 / CATEGORY=2", () => {
   assert.equal(frame.ANIM_PATH, "spark.gif")
 })
 
+test("粒子发射率保留小数且混合组合不包含粒子子项", () => {
+  const bytes = animationConfigBytes()
+  const decoded = decodeBdaAnimation(new Uint8Array(bytes))
+  decoded.effects.get("emitter:spark").birthRate = 0.2
+  const group = decoded.effects.get("group:combo")
+  group.items.push({ kind: "emitter", key: "spark" })
+  const motion = buildLegacyMotion(decoded, { imageStyle: () => 77, animationPath: () => "spark.gif" })
+  const particle = particleSection(motion)
+  assert.equal(particle.BIRTH_RATE, "0.2")
+  const combo = [...motion.sections.values()].find((section) => section.BUILD_NUM)
+  assert.deepEqual(combo.BUILD_LIST.split(",").map(Number).map((id) => motion.sections.get(id).CATEGORY), [undefined, undefined])
+  assert.ok(motion.warnings.some((warning) => /非基础子动效/.test(warning)))
+})
+
 test("无法表达的动效给出降级警告而不是静默丢弃", () => {
   const motion = buildLegacyMotion(decode(), { imageStyle: () => 77, animationPath: () => "spark.gif" })
   const text = motion.warnings.join("\n")

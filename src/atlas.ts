@@ -379,7 +379,7 @@ export class AtlasResolver {
     ]
     const path = [
       ...this.resourceRoots.map((root) => `${root}/default.css`),
-    ].find((candidate) => archive.names().includes(candidate))
+    ].find((candidate) => archive.getBytes(candidate) !== undefined)
     if (path) this.styles = IniDocument.parse(archive.getText(path))
     const fontPath = path && this.styles
       ? embeddedFontPath(archive.names(), path, this.styles.get("GLOBAL", "FONT_PATH"))
@@ -427,7 +427,7 @@ export class AtlasResolver {
     if (!spec?.imageName || !Number.isInteger(spec.tile)) return
     const tilePath = this.resourceRoots
       .map((root) => `${root}/${spec.imageName}.til`)
-      .find((candidate) => this.archive.names().includes(candidate))
+      .find((candidate) => this.archive.getBytes(candidate) !== undefined)
     if (!tilePath) return
     let tiles = this.tiles.get(tilePath)
     if (!tiles) {
@@ -449,14 +449,14 @@ export class AtlasResolver {
     const base = this.resourceRoots
       .map((root) => `${root}/${spec.imageName}`)
       .find((candidate) =>
-        this.archive.names().includes(`${candidate}.png`) &&
-        this.archive.names().includes(`${candidate}.til`),
+        this.archive.getBytes(`${candidate}.png`) !== undefined &&
+        this.archive.getBytes(`${candidate}.til`) !== undefined,
       )
     if (!base) return { color: spec.color, borderColor: spec.borderColor }
     const imagePath = `${base}.png`
     const tilePath = `${base}.til`
     const image = this.bitmap(imagePath)
-    if (!image || !this.archive.names().includes(tilePath)) {
+    if (!image || this.archive.getBytes(tilePath) === undefined) {
       return { color: spec.color, borderColor: spec.borderColor }
     }
 

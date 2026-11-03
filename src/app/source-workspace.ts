@@ -28,7 +28,7 @@ function sourcePathForArchive(path: string): string {
   return resolveSourceArchivePath(
     path,
     appState.sourceWorkspacePrefix,
-    appState.archive?.sourceFiles().map((file) => file.path) ?? [],
+    appState.archive?.sourcePaths() ?? [],
   )
 }
 
@@ -151,9 +151,9 @@ async function refreshExternalSourceFiles(workspace: string, paths: string[]): P
   for (const snapshot of directorySnapshots) {
     const archiveSnapshotPath = sourcePathForArchive(snapshot.path).replace(/\/$/, "")
     const prefix = archiveSnapshotPath ? `${archiveSnapshotPath}/` : ""
-    const removed = appState.archive.sourceFiles()
-      .filter((file) => (file.path === archiveSnapshotPath || file.path.startsWith(prefix)) && !presentPaths.has(file.path))
-      .map((file) => appState.archive!.canonicalSourcePath(file.path))
+    const removed = appState.archive.sourcePaths()
+      .filter((file) => (file === archiveSnapshotPath || file.startsWith(prefix)) && !presentPaths.has(file))
+      .map((file) => appState.archive!.canonicalSourcePath(file))
     for (const canonical of removed) {
       appState.archive.delete(canonical)
       affected.add(canonical)
@@ -176,12 +176,11 @@ async function refreshExternalSourceFiles(workspace: string, paths: string[]): P
       changed = true
       continue
     }
-    const removed = appState.archive.sourceFiles()
-      .filter((file) => {
-        const archivePath = sourcePathForArchive(change.path)
-        return file.path === archivePath || file.path.startsWith(`${archivePath}/`)
-      })
-      .map((file) => appState.archive!.canonicalSourcePath(file.path))
+    const archivePath = sourcePathForArchive(change.path).replace(/\/$/, "")
+    const prefix = archivePath ? `${archivePath}/` : ""
+    const removed = appState.archive.sourcePaths()
+      .filter((file) => file === archivePath || file.startsWith(prefix))
+      .map((file) => appState.archive!.canonicalSourcePath(file))
     for (const canonical of removed) {
       appState.archive.delete(canonical)
       affected.add(canonical)

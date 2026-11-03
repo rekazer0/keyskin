@@ -1,9 +1,17 @@
+// Direct animation editing on a real third-party skin (not committed): FLOWER_BDI, default demo/assets/flower.bdi.
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 
-const bytes = await readFile(new URL('../demo/assets/flower.bdi', import.meta.url))
+const sample = process.env.FLOWER_BDI ?? fileURLToPath(new URL('../demo/assets/flower.bdi', import.meta.url))
+if (!existsSync(sample)) {
+  console.log(`skip direct animation: 没有样本 ${sample}（设置 FLOWER_BDI 指向 flower.bdi）`)
+  process.exit(0)
+}
+const bytes = await readFile(sample)
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41869, strictPort: false, hmr: false } })
 await server.listen()
 const browser = await chromium.launch()

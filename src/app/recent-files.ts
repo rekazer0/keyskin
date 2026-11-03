@@ -121,7 +121,7 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   return card
 }
 
-export const recentPreviewCache = new Map<string, HTMLImageElement>()
+export const recentPreviewCache = new Map<string, { stamp: string; image: HTMLImageElement }>()
 
 // 预览只取包里的 demo 图，不需要解整包；上限与后端可读的整包上限保持一致。
 const recentPreviewMaxBytes = 64 * 1024 * 1024
@@ -218,15 +218,18 @@ async function drainRecentPreviews(): Promise<void> {
       const host = card.querySelector<HTMLElement>(".template-preview")
       // data-preview：rendered 已画好，failed 已放弃，两种都不再重画。
       if (!path || !host || host.dataset.preview) continue
-      const cached = recentPreviewCache.get(path)
-      if (cached) {
-        host.replaceChildren(cached)
-        host.dataset.preview = "rendered"
-        continue
-      }
       try {
+        const stamp = (await invoke<number[]>("skin_file_stamp", { path })).join(":")
+        const cached = recentPreviewCache.get(path)
+        if (cached?.stamp === stamp) {
+          host.replaceChildren(cached.image)
+          host.dataset.preview = "rendered"
+          continue
+        }
+        if (cached) releaseArchivePreview(cached.image)
         const image = await renderRecentPreview(path, host)
-        if (readRecentFiles().some((item) => item.path === path)) recentPreviewCache.set(path, image)
+        if (readRecentFiles().some((item) => item.path === path)) recentPreviewCache.set(path, { stamp, image })
+        else releaseArchivePreview(image)
       } catch {
         host.dataset.preview = "failed"
         host.textContent = "暂无预览图"
@@ -284,9 +287,9 @@ export function renderRecentFiles(): void {
   if (hint) hint.textContent = items.length ? `${items.length} 个文件` : "还没有记录"
   // 预览图按路径缓存，这里裁掉已不在列表里的条目并释放它们占用的 blob URL
   const listed = new Set(items.map((item) => item.path))
-  for (const [path, image] of [...recentPreviewCache]) {
+  for (const [path, cached] of [...recentPreviewCache]) {
     if (listed.has(path)) continue
-    releaseArchivePreview(image)
+    releaseArchivePreview(cached.image)
     recentPreviewCache.delete(path)
   }
   void recentThumbRequest("readonly", (store) => store.getAllKeys())

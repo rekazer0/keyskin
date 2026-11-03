@@ -6,6 +6,7 @@ import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isT
 import { SkinArchive } from "../skin.ts"
 import { canExport, exportFormatFromPath, exportName, skinFileName, type ExportFormat } from "../export.ts"
 import { buildSxiZip } from "../palm/palm-export.ts"
+import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
@@ -45,7 +46,7 @@ export async function loadArchive(
 ): Promise<void> {
   const started = performance.now()
   const sizeBytes = bytes instanceof SkinArchive
-    ? bytes.sourceFiles().reduce((total, file) => total + file.data.byteLength, 0)
+    ? bytes.sourceByteLength()
     : bytes.byteLength
   clientLog.info("archive.load.start", {
     name: (displayName || path).split(/[\\/]/).pop() || (isNew ? "new-project" : "unnamed"),
@@ -54,11 +55,6 @@ export async function loadArchive(
   })
   dismissLayoutOverview()
   if (showSkinLoadProgress(sizeBytes)) await waitForInterfacePaint()
-  await flushSourceAutosave()
-  await activateSourceWorkspace("", "")
-  appState.sourceWorkspacePendingArchive = undefined
-  releaseKeySound()
-  keySoundBuffers.clear()
   let nextArchive: SkinArchive
   try {
     updateFileOperationProgress(18, "正在解析皮肤包…")
@@ -96,6 +92,11 @@ export async function loadArchive(
   if (isTauri() && sourceDirectoryActive && !nextSourceWorkspace && (!isAndroidTauri() || configuredDirectory)) {
     pendingSourceDirectory = configuredDirectory
   }
+  releaseKeySound()
+  keySoundBuffers.clear()
+  await flushSourceAutosave()
+  await activateSourceWorkspace("", "")
+  appState.sourceWorkspacePendingArchive = undefined
   appState.assetURL = releaseImagePreviewURL(appState.assetURL)
   clearImageSlicePicker()
   appState.archive = nextArchive
@@ -339,6 +340,15 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
   if (!canExport(appState.archive.format, format)) throw new Error(`${appState.archive.format.toUpperCase()} 皮肤不能导出为 ${format.toUpperCase()}`)
+  if (appState.archive.format === "ssf" && format === "sxi" || appState.archive.format === "sxi" && format === "ssf") {
+    updateFileOperationProgress(22, `正在转换为${exportTargetLabel(format)}…`)
+    await waitForInterfacePaint()
+    const result = await convertSsfSxi(appState.archive, appState.archive.format === "ssf" ? await ssfTemplates() : undefined)
+    if (result.warnings.length && !window.confirm(
+      `转换为${exportTargetLabel(format)}时将降级以下内容：\n\n${result.warnings.join("\n")}\n\n继续导出吗？`,
+    )) return
+    return { bytes: result.bytes, converted: true, warnings: result.warnings }
+  }
   if (format === "sxi" && appState.archive.format !== "sxi") {
     updateFileOperationProgress(22, "正在导出手心皮肤…")
     await waitForInterfacePaint()
@@ -432,27 +442,35 @@ function reportExportWarnings(sounds: string[], adjustments: string[] = []): voi
   ].filter(Boolean).join("\n\n"))
 }
 
+async function exportForSave(format: ExportFormat) {
+  const archive = appState.archive
+  if (!archive) throw new Error("当前没有可保存的皮肤")
+  const revision = archive.revision
+  const result = await exportArchive(format)
+  return result && { ...result, archive, revision }
+}
+
 async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: string): Promise<boolean> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
-  let exported: Awaited<ReturnType<typeof exportArchive>>
+  let exported: Awaited<ReturnType<typeof exportForSave>>
   let path = appState.currentPath
   if (saveAs || !path || (!path.startsWith("content://") && exportFormatFromPath(path) !== format)) {
     const written = await writeToChosenFile(suggestedName, async () => {
-      exported = await exportArchive(format)
+      exported = await exportForSave(format)
       return exported?.bytes
     }, exportTargetLabel(format))
     if (!written || !exported) return false
     path = written
   } else {
-    exported = await exportArchive(format)
+    exported = await exportForSave(format)
     if (!exported) return false
     await writeNativePath(path, exported.bytes)
   }
-  if (!exported.converted) {
+  if (!exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
     appState.unsavedNew = false
-    appState.archive.markSaved(exported.bytes, format)
-    documentName.textContent = documentNameForPath(path, appState.archive)
+    exported.archive.markSaved(exported.bytes, format, exported.revision)
+    documentName.textContent = documentNameForPath(path, exported.archive)
     updateDirty()
   }
   return true
@@ -568,16 +586,16 @@ export async function writeToChosenFile(
 
 async function downloadArchive(format: ExportFormat, suggestedName: string): Promise<boolean> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
-  let exported: Awaited<ReturnType<typeof exportArchive>>
+  let exported: Awaited<ReturnType<typeof exportForSave>>
   const path = await writeToChosenFile(suggestedName, async () => {
-    exported = await exportArchive(format)
+    exported = await exportForSave(format)
     return exported?.bytes
   }, exportTargetLabel(format))
   if (!path || !exported) return false
-  if (!exported.converted) {
+  if (!exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
     documentName.textContent = suggestedName
-    appState.archive.markSaved(exported.bytes, format)
+    exported.archive.markSaved(exported.bytes, format, exported.revision)
     appState.unsavedNew = false
     updateDirty()
   }

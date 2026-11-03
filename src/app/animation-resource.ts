@@ -1,8 +1,7 @@
 // Which animation the 动效设计 / 粒子设计 inspector shows. One choice per file and view, so switching
 // between motion and particles, or undoing an edit, comes back to the same animation.
-
+import type { AnimationKeyFilter, AnimationListItem, AnimationStyleFilter, AnimationStyleItem } from "../animation-inspector.ts"
 import { strToU8 } from "fflate"
-import type { AnimationKeyFilter, AnimationListItem } from "../animation-inspector.ts"
 import type { KeyboardPlayback } from "../animation-player.ts"
 import { keyAnimationStyles, visiblePreviewItems, type PreviewItem } from "../preview-items.ts"
 import { preview } from "./canvas-interaction"
@@ -37,12 +36,52 @@ export function selectedAnimation(items: readonly AnimationListItem[]): string |
 
 /** 编辑模式下在画布上选按键（可多选）筛选动画列表，清空时恢复；按键在画布上标为选中。 */
 export function pickAnimationKeys(sections: readonly string[]): void {
+  appState.animationStyleEditing = false
   if (sections.join() === appState.animationKeys.join()) return
   // 从没选到有选时先只看它们的动画；已在「全部」里挑动画时继续加选按键不打断。
   if (!appState.animationKeys.length) appState.animationKeyOnly = true
+  // 按键筛选与样式筛选互斥：一次只看一个范围。
+  if (sections.length) delete appState.animationStyle[selectionKey()]
   appState.animationKeys = [...sections]
   preview.setSelected(sections)
   populateKeyInspector()
+}
+
+/** 动效 / 粒子设计里按哪个样式（BDA 是按目标）筛动画列表，按文件与入口记住。 */
+export function selectedAnimationStyle(): string | undefined {
+  return appState.animationStyle[selectionKey()]
+}
+
+/** 选中一个样式：列表只留它播放的动画；和按键筛选互斥，一次只看一个范围。 */
+export function selectAnimationStyle(id: string | undefined): void {
+  const key = selectionKey()
+  appState.animationStyleEditing = id !== undefined
+  if (id === undefined) delete appState.animationStyle[key]
+  else {
+    appState.animationStyle[key] = id
+    appState.animationKeys = []
+    preview.setSelected([])
+  }
+  populateKeyInspector()
+}
+
+/** 按选中的样式筛列表：只留它引用的动画，并给出可清除的说明；记不住或该样式已没有动画时当作没筛。 */
+export function styleAnimationItems<T extends AnimationListItem>(
+  items: T[],
+  styles: readonly AnimationStyleItem[],
+  plays: (id: string, style: string) => boolean,
+): { items: T[]; styleFilter?: AnimationStyleFilter } {
+  const remembered = selectedAnimationStyle()
+  if (remembered === undefined) return { items }
+  const style = styles.find((item) => item.id === remembered)
+  if (!style) {
+    delete appState.animationStyle[selectionKey()]
+    return { items }
+  }
+  return {
+    items: items.filter((item) => plays(item.id, style.id)),
+    styleFilter: { label: style.title, clear: () => selectAnimationStyle(undefined) },
+  }
 }
 
 const keyLabel = (key: PreviewItem) => `按键 ${key.section.match(/\d+$/)?.[0] ?? key.section}`
@@ -85,6 +124,7 @@ export function rememberAnimation(id: string): void {
 }
 
 export function selectAnimation(id: string): void {
+  appState.animationStyleEditing = false
   rememberAnimation(id)
   populateKeyInspector()
 }
@@ -120,6 +160,7 @@ export function keyPlaysStyle(key: PreviewItem, styles: ReadonlySet<string>): bo
 
 /** Opens 动效设计 or 粒子设计 on `id`, e.g. from a style that plays it. */
 export function openAnimation(path: string, particle: boolean, id: string): void {
+  appState.animationStyleEditing = false
   const mode = particle ? "particle" : "motion"
   appState.selectedAnimations[`${path}|${mode}`] = id
   selectFile(path, "overview", mode)
@@ -127,7 +168,7 @@ export function openAnimation(path: string, particle: boolean, id: string): void
 
 /** Part of the inspector's selection context: another animation is another object (fresh change marks). */
 export function animationSelectionContext(): string {
-  return `${appState.animationDesignMode}|${appState.selectedAnimations[selectionKey()] ?? ""}`
+  return `${appState.animationDesignMode}|${appState.animationStyleEditing ? `style:${selectedAnimationStyle() ?? ""}` : appState.selectedAnimations[selectionKey()] ?? ""}`
 }
 
 /** Where 「自动创建」 puts the animation configuration of a skin that has none (BDI/BDS anim.ini, Palm ss_2). */

@@ -202,6 +202,28 @@ test('recovers ZIP64 central directory sizes without a ZIP64 end record', async 
   assert.equal(saved.getText('Info.txt'), 'AtomSkinName=saved')
 })
 
+test('keeps edits made after the saved bytes were produced dirty', async () => {
+  const archive = SkinArchive.open(sampleArchive())
+  archive.setText('Info.txt', 'AtomSkinName=first')
+  const revision = archive.revision
+  const savedBytes = await archive.toBytesAsync('bds')
+  archive.setText('Info.txt', 'AtomSkinName=second')
+  archive.markSaved(savedBytes, 'bds', revision)
+  assert.ok(archive.changed.has('Info.txt'))
+  assert.equal(archive.getText('Info.txt'), 'AtomSkinName=second')
+  assert.equal(SkinArchive.open(savedBytes, 'bds').getText('Info.txt'), 'AtomSkinName=first')
+})
+test('undo during a save compares against the written archive rather than leaving a false dirty mark', async () => {
+  const archive = SkinArchive.open(sampleArchive())
+  archive.setText('Info.txt', 'AtomSkinName=first')
+  const revision = archive.revision
+  const savedBytes = await archive.toBytesAsync('bds')
+  archive.setText('Info.txt', 'AtomSkinName=second')
+  archive.setText('Info.txt', 'AtomSkinName=first')
+  archive.markSaved(savedBytes, 'bds', revision)
+  assert.equal(archive.changed.size, 0)
+})
+
 test('opens an archive without any entries', async () => {
   const archive = await SkinArchive.openAsync(zipSync({}))
   assert.deepEqual(archive.names(), [])

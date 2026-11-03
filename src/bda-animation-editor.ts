@@ -21,14 +21,20 @@ import {
   animationSection, comboList, imageCard, renderAnimationResource, sliderField,
   type AnimationKeyFilter, type AnimationListItem, type AnimationMode,
 } from "./animation-inspector.ts"
+import { BDA_EVENT_LABELS } from "./bda-motion.ts"
+import { styleCard } from "./style-card.ts"
+import { animationPlayer } from "./animation-player.ts"
 
 /** Which effects the inspector lists, and the remembered selection (kept by the caller). */
 export type BdaAnimationView = {
   mode: AnimationMode
+  source?: object
   select(items: readonly AnimationListItem[]): string | undefined
   /** Narrows the list to the effects the key picked on the canvas plays. */
   filter(items: AnimationListItem[]): { items: AnimationListItem[]; keyFilter?: AnimationKeyFilter }
   onSelect(id: string): void
+  /** BDA 没有样式上的动效指针，绑定动效的是目标：第二个列表按目标筛选，选中状态由调用方记住。 */
+  targets?: { selected?: string; onSelect(id: string | undefined): void }
 }
 
 type BdaAnimationEditorOptions = {
@@ -483,13 +489,29 @@ function keyRows(sections: readonly HTMLElement[], id: string): void {
   }
 }
 
+/** 每个绑定了动效的目标：触发时机与它播放的效果（组合连同子效果）。 */
+function animationTargets(animation: BdaAnimation): Array<{ id: string; events: string[]; effects: string[] }> {
+  return [...animation.targetBindings].flatMap(([target, bindings]) => {
+    const effects = new Set<string>()
+    for (const binding of bindings) {
+      const id = `${binding.kind}:${binding.key}`
+      effects.add(id)
+      const effect = animation.effects.get(id)
+      if (effect?.kind === "group") for (const item of effect.items) effects.add(`${item.kind}:${item.key}`)
+    }
+    if (!bindings.length) return []
+    const events = [...new Set(bindings.map((binding) => BDA_EVENT_LABELS[binding.event] ?? `事件 ${binding.event}`))]
+    return [{ id: target, events, effects: [...effects] }]
+  })
+}
+
 /* —— 入口 —— */
 
 export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAnimationEditorOptions): void {
   const { animation, view } = options
   const effects = KIND_ORDER.flatMap((kind) => [...animation.effects.values()].filter((effect) => effect.kind === kind))
     .filter((effect) => view.mode === "all" || (effect.kind === "emitter") === (view.mode === "particle"))
-  const { items, keyFilter } = view.filter(effects.map((effect): AnimationListItem => ({
+  const { items: keyItems, keyFilter } = view.filter(effects.map((effect): AnimationListItem => ({
     id: effectID(effect),
     title: effect.key,
     kind: KIND_LABELS[effect.kind],
@@ -498,6 +520,17 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     uses: bindingCount(animation, effect),
     problem: problem(effect, animation),
   })))
+  // 目标列表只列绑定了当前入口效果的目标；点一个就把效果列表筛成它播放的那些。
+  const targets = animationTargets(animation)
+  const targetItems = targets.flatMap((target) => {
+    const included = target.effects.filter((id) => keyItems.some((item) => item.id === id))
+    return included.length ? [{ id: target.id, title: target.id, detail: target.events.join(" · "), count: included.length }] : []
+  })
+  const targetEffects = new Map(targets.map((target) => [target.id, new Set(target.effects)]))
+  const target = targetItems.find((item) => item.id === view.targets?.selected)
+  // 选中目标时只列它播放的效果，并给出可清除的说明；调用方记住的旧目标不再有绑定时当作没筛。
+  const items = target ? keyItems.filter((item) => targetEffects.get(target.id)?.has(item.id)) : keyItems
+  const styleFilter = target && { label: target.title, clear: () => view.targets!.onSelect(undefined) }
   const selected = view.select(items)
   const effect = effects.find((candidate) => effectID(candidate) === selected)
   const sections = effect ? effectSections(effect, animation, options) : []
@@ -507,11 +540,21 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     : valueRow("设计宽度", "未设置")
   width.dataset.inspectorRowKey = JSON.stringify(["bda-animation", "designWidth"])
   renderAnimationResource(container, {
+    listSource: view.source,
     mode: view.mode,
     sectionClass: SECTION,
     items,
     selected,
     keyFilter,
+    styles: view.targets && { noun: "目标", icon: "crosshair", items: targetItems, selected: view.targets.selected, onSelect: view.targets.onSelect,
+      card: item => styleCard({ id: item.id, label: item.title, kind: "anim", kindLabel: "目标", kindIcon: "crosshair", summary: item.detail,
+        animation: () => [...targetEffects.get(item.id) ?? []].map(id => animationPlayer({
+          clip: bdaPreviewClip(animation, id), key: `${options.path}|${id}`, resolver: options.resolver, resourceParticles: true, thumbnail: true,
+        })),
+      }),
+    },
+    thumbnail: id => ({ clip: bdaPreviewClip(animation, id), key: `${options.path}|${id}`, resolver: options.resolver, resourceParticles: true }),
+    styleFilter,
     editable: options.editable,
     onSelect: view.onSelect,
     listRows: [width],

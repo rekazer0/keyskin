@@ -21,11 +21,13 @@ import {
   legacyAnimationFieldGroups,
   legacyAnimationKindLabel,
   legacyAnimationReferences,
+  legacyAnimationStyles,
   legacyAnimationTimeline,
   legacyAnimationTypeLabel,
   legacyAnimationTypeOptions,
   legacyAnimationValueParts,
   parseLegacyAnimationFile,
+  removeLegacyAnimation,
   STYLE_ANIM_FIELDS,
   writeLegacyAnimationFields,
   writeLegacyAnimationKind,
@@ -41,11 +43,12 @@ import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./co
 import { commitText, isEditing, updateDirty } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
-import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
 import { decorateStyleReferenceInput } from "./style-references"
 import { appState } from "./state"
 import { animationKeySample } from "./animation-key-sample"
 import type { PreviewItem } from "../preview-items.ts"
+import { animationStyleCard } from "./animation-style-inspector"
 
 const SECTION = "document-property-section"
 const KIND_ICONS: Record<LegacyAnimationKind, string> = { basic: "blend", combination: "layers", frame: "list-video", particle: "sparkles" }
@@ -474,6 +477,7 @@ function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Lega
   return {
     id: entry.section,
     title: `动画 ${entry.index ?? entry.section}`,
+    info: fieldValue(entry, "INFO")?.trim() || undefined,
     kind: kindLabel(entry),
     icon: entry.kind === "basic" ? TYPE_ICONS[entry.type ?? 0] ?? "blend" : KIND_ICONS[entry.kind],
     detail,
@@ -510,8 +514,22 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   const references = legacyAnimationReferences(styleDocument(), layoutDocument())
   const referencesOf = (entry: LegacyAnimationEntry) => references.filter((reference) => reference.animation === entry.index)
   const entries = model.entries.filter((entry) => shownInAnimationView(entry.kind === "particle"))
-  const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, pressStyles(entries.find((entry) => entry.section === id)!, model.entries, references))
-  const { items, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(entry, byIndex, referencesOf(entry).length)), plays)
+  const pressByAnimation = new Map(entries.map((candidate) => [candidate.section, pressStyles(candidate, model.entries, references)]))
+  const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, pressByAnimation.get(id) ?? new Set())
+  const { items: keyItems, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(entry, byIndex, referencesOf(entry).length)), plays)
+  // 样式列表只列引用了当前入口动效的样式。
+  const styles = legacyAnimationStyles(styleDocument())
+  const shown = new Set(entries.flatMap((candidate) => candidate.index === undefined ? [] : [candidate.index]))
+  const usage = styles.flatMap((style) => {
+    const included = style.animations.filter((index) => shown.has(index))
+    return included.length ? [{ id: style.id, title: `STYLE${style.id}`, detail: style.events.join(" · "), count: included.length }] : []
+  })
+  const styleIndexes = new Map(styles.map((style) => [style.id, new Set(style.animations)]))
+  const entryIndexes = new Map(entries.flatMap((candidate) => candidate.index === undefined ? [] : [[candidate.section, candidate.index] as const]))
+  const { items, styleFilter } = styleAnimationItems(keyItems, usage, (id, style) => {
+    const index = entryIndexes.get(id)
+    return index !== undefined && Boolean(styleIndexes.get(style)?.has(index))
+  })
   const selected = selectedAnimation(items)
   const entry = entries.find((candidate) => candidate.section === selected)
   const listRows: HTMLElement[] = []
@@ -527,11 +545,15 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
     return next.text
   })
   renderAnimationResource(container, {
+    listSource: appState.archive,
     mode: appState.animationDesignMode,
     sectionClass: SECTION,
     items,
     selected,
     keyFilter,
+    styles: { noun: "样式", icon: "paintbrush", items: usage, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard },
+    thumbnail: id => ({ clip: iniPreviewClip(appState.selectedDocument!, id, { fillBefore: true }), key: `${appState.selectedPath}|${id}`, resolver: visualResolver(), readFile: readSkinFile }),
+    styleFilter,
     editable: isEditing(),
     onSelect: selectAnimation,
     create: {
@@ -540,15 +562,19 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
       run: (kind) => create(kind as LegacyAnimationKind),
     },
     duplicate: () => { if (entry) create(entry.kind, entry.section) },
+    remove: entry ? {
+      blocked: referencesOf(entry).length || model.entries.some((candidate) => candidate.section !== entry.section && candidate.kind === "combination"
+        && buildList(candidate).some((id) => Number(id) === entry.index)) ? "请先解除样式、布局或组合引用" : undefined,
+      run: () => edit((current) => removeLegacyAnimation(current, entry.section, styleDocument(), layoutDocument()) ?? current),
+    } : undefined,
     listRows,
     player: entry && {
       clip: iniPreviewClip(appState.selectedDocument!, entry.section, { fillBefore: true }),
       key: `${appState.selectedPath}|${entry.section}`,
       resolver: visualResolver(),
       readFile: readSkinFile,
-      sample: () => animationKeySample((key) => keyPlaysStyle(key, pressStyles(entry, model.entries, references)), pressStyles(entry, model.entries, references)),
-      // 播放器的粒子同时画在画布的按键上（动画工作区用它看真机效果）。
-      keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(entry, model.entries, references))),
+      sample: () => animationKeySample((key) => keyPlaysStyle(key, pressByAnimation.get(entry.section) ?? new Set()), pressByAnimation.get(entry.section) ?? new Set()),
+      keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressByAnimation.get(entry.section) ?? new Set())),
       direct: isEditing() ? { text, section: entry.section, editable: true, commit: (next) => edit(() => next) } : undefined,
     },
     warnings: entry?.category !== undefined && entry.category !== kindCategory(entry.kind)
@@ -602,7 +628,7 @@ export function styleAnimationSources(styleID: string, styles: IniDocument) {
 }
 
 /** 动画样式没有正常 / 按下外观：详情里为它引用的每个动画放一个播放器，播放时也在用这个样式的按键上播放。 */
-export function styleAnimationPlayers(styleID: string, styles: IniDocument, thumbnail: boolean | "slow" = false): HTMLElement[] {
+export function styleAnimationPlayers(styleID: string, styles: IniDocument, thumbnail = false): HTMLElement[] {
   const path = legacyAnimationConfigPath()!
   const animations = styleAnimations(styleID, styles)
   const animationsDocument = animations.length ? IniDocument.parse(appState.archive!.getText(path)) : undefined
@@ -620,7 +646,7 @@ export function styleAnimationPlayers(styleID: string, styles: IniDocument, thum
 export function styleAnimationReferencePreviews(styleID: string, styles: IniDocument, choose: () => void): HTMLElement {
   const root = element("span", "style-animation-previews")
   const entries = styleAnimations(styleID, styles)
-  const players = styleAnimationPlayers(styleID, styles, "slow")
+  const players = styleAnimationPlayers(styleID, styles, true)
   for (const [index, entry] of (entries.length ? entries : [undefined]).entries()) {
     const item = element("div", "style-picker-state")
     item.setAttribute("role", "button")

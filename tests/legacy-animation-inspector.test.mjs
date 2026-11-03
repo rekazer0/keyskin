@@ -3,8 +3,11 @@
 import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
+import { IniDocument } from "../src/ini.ts"
 import {
   LEGACY_ANIMATION_KINDS,
+  removeLegacyAnimation,
+  legacyAnimationStyles,
   legacyAnimationFieldGroups,
   legacyAnimationTimeline,
   legacyAnimationTypeOptions,
@@ -106,4 +109,35 @@ test("检查器、公共骨架与纯函数文件都不超过 800 行", () => {
   for (const [name, source] of [["检查器", inspector], ["公共骨架", shared], ["纯函数模块", pure]]) {
     assert.ok(source.split("\n").length <= 800, `${name}超过 800 行`)
   }
+})
+
+test("样式列表只列引用了动效的样式，带时机与动效序号", () => {
+  const styles = IniDocument.parse(`[STYLE1]
+NM_COLOR=FF000000
+[STYLE7]
+PRESS_ANIM=1
+[STYLE8]
+PRESS_ANIM=2,3
+RELEASE_ANIM=1
+[STYLE9]
+NM_IMG=btn,0
+`)
+  assert.deepEqual(legacyAnimationStyles(styles), [
+    { id: "7", events: ["按下"], animations: [1] },
+    { id: "8", events: ["按下", "抬起"], animations: [2, 3, 1] },
+  ])
+  assert.deepEqual(legacyAnimationStyles(undefined), [])
+  assert.match(inspector, /legacyAnimationStyles\(styleDocument\(\)\)/, "检查器从 default.css 取样式列表")
+  assert.match(inspector, /styleAnimationItems\(keyItems, usage/, "点样式筛动画列表")
+})
+
+test("removing legacy animations refuses references and removes unreferenced entries with ANIM_NUM", () => {
+  const text = "[GLOBAL]\nANIM_NUM=3\n[ANIM1]\nTYPE=0\n[ANIM2]\nBUILD_LIST=1\n[ANIM3]\nTYPE=1\n"
+  assert.equal(removeLegacyAnimation(text, "ANIM1", IniDocument.parse("[STYLE7]\nPRESS_ANIM=1\n"), undefined), undefined)
+  assert.equal(removeLegacyAnimation(text, "ANIM1", IniDocument.parse("[STYLE7]\nPRESS_ANIM=2\n"), undefined), undefined)
+  const removed = removeLegacyAnimation(text, "ANIM3", undefined, undefined)
+  assert.match(removed, /ANIM_NUM=2/)
+  assert.ok(!removed.includes("[ANIM3]"))
+  assert.ok(removed.includes("[ANIM2]"))
+  assert.equal(removeLegacyAnimation(text, "ANIM1", undefined, undefined), undefined)
 })

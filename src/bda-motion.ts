@@ -43,7 +43,8 @@ type LegacyMotionResources = {
   animationPath?: (resource: BdaResource) => string | undefined
 }
 
-const EVENT_LABELS: Record<number, string> = {
+/** 动画绑定的触发时机（protobuf EventType）。 */
+export const BDA_EVENT_LABELS: Record<number, string> = {
   0: "键盘显示",
   1: "按下",
   2: "抬起",
@@ -162,7 +163,7 @@ export function buildLegacyMotion(animation: BdaAnimation, resources: LegacyMoti
       LIFE: `${legacyNumber(effect.life[0])},${legacyNumber(effect.life[1])}`,
       EMIT_REGION: region.map(legacyFloat).join(","),
       TOTAL_NUMBER: legacyNumber(Math.max(1, effect.totalNumber)),
-      BIRTH_RATE: legacyNumber(Math.max(0.1, effect.birthRate)),
+      BIRTH_RATE: legacyFloat(Math.max(0.1, effect.birthRate)),
       PARTICLE_IMAGE: images.join(","),
       VELOCITY: `${legacyFloat(effect.velocity[0])},${legacyFloat(effect.velocity[1])}`,
       VELOCITY_DIRECTION: `${legacyFloat(effect.velocityDirection[0])},${legacyFloat(effect.velocityDirection[1])}`,
@@ -203,6 +204,7 @@ export function buildLegacyMotion(animation: BdaAnimation, resources: LegacyMoti
 
   const convertEffect = (effectID: string): number | undefined => {
     if (converted.has(effectID)) return converted.get(effectID)
+    converted.set(effectID, undefined)
     const effect = animation.effects.get(effectID)
     let id: number | undefined
     if (!effect) {
@@ -214,14 +216,14 @@ export function buildLegacyMotion(animation: BdaAnimation, resources: LegacyMoti
     } else if (effect.kind === "frame") {
       id = convertFrame(effect)
     } else if (effect.kind === "group") {
-      const childKinds = new Set(effect.items.map((item) => item.kind))
       const children = effect.items.flatMap((item) => {
+        if (!["alpha", "scale", "shift", "rotate"].includes(item.kind)) {
+          warn(`组合动效 ${effect.key} 含非基础子动效 ${item.key}，已跳过`)
+          return []
+        }
         const child = convertEffect(`${item.kind}:${item.key}`)
         return child === undefined ? [] : [child]
       })
-      if (children.length > 1 && [...childKinds].some((kind) => kind !== "alpha" && kind !== "scale" && kind !== "shift" && kind !== "rotate")) {
-        warn(`组合动效 ${effect.key} 含非基础动效，旧版组合动画可能不完整`)
-      }
       if (effect.delay || !effect.removeOnFinish || effect.repeatCount > 1 || effect.repeatMode) {
         warn(`组合动效 ${effect.key} 的延迟/重复设置旧版无法表达，已忽略`)
       }
@@ -253,7 +255,7 @@ export function buildLegacyMotion(animation: BdaAnimation, resources: LegacyMoti
     for (const binding of targetBindings) {
       const prop = legacyStyleProp(binding.event)
       if (!prop) {
-        warn(`目标 ${target} 的「${EVENT_LABELS[binding.event] ?? `事件 ${binding.event}`}」动效旧版没有对应触发方式，已跳过`)
+        warn(`目标 ${target} 的「${BDA_EVENT_LABELS[binding.event] ?? `事件 ${binding.event}`}」动效旧版没有对应触发方式，已跳过`)
         continue
       }
       if (binding.condition) warn(`目标 ${target} 的动效条件「${binding.condition}」旧版无法表达，已忽略`)
@@ -264,12 +266,20 @@ export function buildLegacyMotion(animation: BdaAnimation, resources: LegacyMoti
     }
     for (const [group, ids] of combined) {
       const [event, scope] = group.split(":").map(Number)
-      const animationID = ids.length === 1 ? ids[0] : addSection({
-        BUILD_NUM: String(ids.length),
-        BUILD_LIST: ids.join(","),
-        BUILD_METHOD: "0",
-      })
-      bindings.push({ target, event, scope, animation: animationID })
+      const basic = ids.filter((id) => sections.get(id)?.BUILD_NUM === undefined && sections.get(id)?.CATEGORY === undefined)
+      const other = ids.filter((id) => !basic.includes(id))
+      if (basic.length) {
+        const animationID = basic.length === 1 ? basic[0] : addSection({
+          BUILD_NUM: String(basic.length),
+          BUILD_LIST: basic.join(","),
+          BUILD_METHOD: "0",
+        })
+        bindings.push({ target, event, scope, animation: animationID })
+      }
+      if (other.length) {
+        warn(`目标 ${target} 的粒子、帧或组合动效分别绑定，未合并到基础组合中`)
+        for (const animation of other) bindings.push({ target, event, scope, animation })
+      }
     }
   }
 

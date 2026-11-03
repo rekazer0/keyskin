@@ -31,6 +31,8 @@ try {
   await page.locator('[data-library-filter="key"]').click()
   assert.equal(await page.locator('#style-library-grid > *').count(), 0, '类型与用途筛选取交集')
   await page.locator('[data-library-filter="foreground"]').click()
+  // 文字示例在卡片进入视口后才绘制（几千个样式时不一次画完）。
+  await page.locator('canvas[aria-label*="文字示例"]').nth(1).waitFor({ state: 'attached' })
   assert.equal(await page.locator('canvas[aria-label*="文字示例"]').count(), 2)
   await page.locator('[data-library-filter="all"]').click()
   await page.locator('[data-library-kind="anim"]').click()

@@ -114,8 +114,8 @@ test("an opened .sxi saves in place and exports to Baidu formats", () => {
   assert.ok(canExport("bds", "sxi"))
   assert.ok(!canExport("bds", "bda"))
   assert.ok(canExport("ssf", "bda"))
-  assert.ok(!canExport("ssf", "sxi"))
-  assert.ok(!canExport("sxi", "ssf"))
+  assert.ok(canExport("ssf", "sxi"))
+  assert.ok(canExport("sxi", "ssf"))
   assert.equal(exportFormatFromPath("skin.mssf"), "ssf")
   // Export goes through the converter, never a direct repackage.
   assert.throws(() => archive.toBytes("bds"), /需要转换/)

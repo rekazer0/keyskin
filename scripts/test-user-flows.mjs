@@ -841,7 +841,7 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   assert.equal(Object.keys(savedFiles).length, Object.keys(unzipSync(ssfFixture())).length)
   assert.equal(await page.locator("#dirty").isVisible(), false)
   const visibleFormats = await page.locator(".pen-file-menu [data-export-format]:not([hidden])").evaluateAll((items) => items.map((item) => item.dataset.exportFormat))
-  assert.deepEqual(visibleFormats, ["bdi", "bds", "bda", "bda", "ssf"])
+  assert.deepEqual(visibleFormats, ["bdi", "bds", "bda", "bda", "sxi", "ssf"])
   // A skin with one look has no night preview to switch to, and switching never adds Baidu files to it.
   await page.locator("#browser-open").setInputFiles({ name: "单外观.ssf", mimeType: "application/octet-stream", buffer: Buffer.from(ssfFixture({ single: true })) })
   await page.waitForFunction(() => document.querySelector("#document-name")?.textContent === "单外观.ssf", null, { timeout: 60000 })

@@ -7,21 +7,24 @@
 .animation-library-header { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
 .animation-library-header > strong { flex: 1; min-width: 0; overflow: hidden; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .animation-library-count { flex: none; color: var(--tertiary); font-size: var(--font-size-xs); }
-.animation-library-body { display: flex; flex: 1; flex-direction: column; gap: var(--space-sm); min-height: 0; }
-.animation-library-body > .ui-listbox { flex: 1; }
+.animation-library-tabs { flex: none; }
+.animation-library-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.animation-library-pane { display: flex; flex: 1; flex-direction: column; gap: var(--space-sm); min-height: 0; }
+.animation-library-pane[hidden] { display: none; }
+.animation-library-pane > .ui-listbox { flex: 1; }
 
 /* 播放条按内容高度停靠，拖动上边缘可调高，双击恢复（animation-workspace.ts 记忆高度、测量位置）。 */
-.animation-workspace .workspace { grid-template-rows: 48px minmax(0, 1fr) var(--animation-stage-height, minmax(160px, auto)) 30px; }
+.animation-workspace .workspace { grid-template-rows: 48px minmax(0, 1fr) var(--_animation-stage-height, minmax(160px, auto)) 30px; }
 .animation-workspace .workspace > .workspace-status { grid-row: 4; }
-.animation-workspace .preview-zoom-control { bottom: calc(var(--animation-stage-offset, 184px) + 42px); }
+.animation-workspace .preview-zoom-control { bottom: calc(var(--_animation-stage-offset, 184px) + 42px); }
 .animation-stage-resize-handle { display: none; }
-.animation-workspace .animation-stage-resize-handle { position: absolute; left: 0; right: 0; bottom: calc(var(--animation-stage-offset, 184px) + 28px); z-index: 10; display: block; height: 4px; cursor: row-resize; background: transparent; transition: background var(--duration-fast) var(--ease-standard); }
+.animation-workspace .animation-stage-resize-handle { position: absolute; left: 0; right: 0; bottom: calc(var(--_animation-stage-offset, 184px) + 28px); z-index: 10; display: block; height: 4px; cursor: row-resize; background: transparent; transition: background var(--duration-fast) var(--ease-standard); }
 @media (hover: hover) {
 
 .animation-workspace .animation-stage-resize-handle:hover { background: var(--accent); }
 }
-.animation-workspace .animation-stage-resize-handle.dragging { background: var(--accent); }
-.animation-workspace .animation-stage { display: flex; flex-direction: column; grid-row: 3; gap: var(--space-sm); min-height: 0; padding: var(--space-md) var(--space-lg); overflow: auto; box-sizing: border-box; border-top: 1px solid var(--line); background: var(--material-panel); }
+.animation-workspace .animation-stage-resize-handle[aria-busy="true"] { background: var(--accent); }
+.animation-workspace .animation-stage { display: flex; flex-direction: column; grid-row: 3; gap: var(--space-sm); min-height: 0; padding: var(--space-sm) var(--space-lg); overflow: auto; box-sizing: border-box; border-top: 1px solid var(--line); background: var(--material-panel); }
 /* 标题行与左侧列表同构：类型图标、名称、类型角标，右侧是时长与引用情况 */
 .animation-stage-heading { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
 .animation-stage-icon { flex: none; display: grid; place-items: center; color: var(--tertiary); }

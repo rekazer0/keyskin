@@ -17,7 +17,7 @@ import { drawVisualPreview, retinaThumbnail, thumbnailRecycler } from "../atlas.
 import { translatedConfigLabel } from "./document-inspector"
 import { refreshPreview } from "./preview-render"
 import { soundPathForFilename, soundResourcePaths, SOUND_ACCEPT, isSoundPath } from "../sounds.ts"
-import { symbolSpan } from "../icons"
+import { createIcon, symbolSpan } from "../icons"
 import { availableStyleIDs, styleKinds, styleKind, styleConfigDocument, styleSoundFile, styleLibraryCategories } from "./style-picker"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { asObject } from "../palm/sxi-ini.ts"
@@ -34,6 +34,7 @@ import { colorValueControl } from "./color-control"
 import { renderSoundLibrary } from "./sound-library"
 import { soundStyleSample } from "./style-card-preview"
 import { styleCard, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "../style-card"
+import { STYLE_ANIM_FIELDS } from "../legacy-animation.ts"
 
 export function openStyleImageResourceChooser(target: StyleImagePickerTarget): void {
   appState.resourcePickerSelect = undefined
@@ -109,18 +110,21 @@ function styleSectionTarget(styleID: string, property: "NM_IMG" | "HL_IMG"): Sty
 }
 
 
-export async function renderStyleResourceDetail(): Promise<void> {
+/** The same style fields are used in the style library and the animation workspace. */
+export async function renderStyleResourceDetail(embedded?: { container: HTMLElement; id: string; refresh(): void }): Promise<void> {
+  const styleID = embedded?.id ?? appState.selectedStyleID
+  const fieldsHost = embedded?.container ?? styleDetailFields
   const appearancePart = bdaAppearancePart(appState.selectedPath)
   const appearanceInfo = currentBdaAppearance()
-  if (appState.archive?.format === "bda" && appearancePart?.kind === "styles" && appearanceInfo && appState.selectedStyleID) {
+  if (!embedded && appState.archive?.format === "bda" && appearancePart?.kind === "styles" && appearanceInfo && styleID) {
     const type = appearancePart.group === "imageStyles" ? "image" : appearancePart.group === "textStyles" ? "text" : "color"
-    const ref: BdaStyleRef = { type, key: Number(appState.selectedStyleID) }
-    resourceName.textContent = `STYLE ${appState.selectedStyleID}`
+    const ref: BdaStyleRef = { type, key: Number(styleID) }
+    resourceName.textContent = `STYLE ${styleID}`
     resourceMeta.textContent = appearancePart.group
     imageResourceDetail.hidden = true
     styleResourceDetail.hidden = false
     styleDetailPreviews.hidden = true
-    renderBdaStyleEditor(styleDetailFields, {
+    renderBdaStyleEditor(fieldsHost, {
       appearance: appearanceInfo.appearance,
       ref,
       resolver: visualResolver(),
@@ -134,33 +138,33 @@ export async function renderStyleResourceDetail(): Promise<void> {
     return
   }
   const path = styleConfigPath()
-  const palm = appState.archive?.format === "sxi" ? palmStylePointer(appState.selectedStyleID) : undefined
-  if (!appState.archive?.isText(path) && !palm || !appState.selectedStyleID) return
-  const section = `STYLE${appState.selectedStyleID}`
-  resourceName.textContent = section
-  resourceMeta.textContent = palm ? `${SXI_SKIN_PATH} · ${palm.join(".")}` : path
-  imageResourceDetail.hidden = true
-  styleResourceDetail.hidden = false
-  const animated = !palm && styleKind(appState.selectedStyleID) === "anim"
-  styleDetailPreviews.hidden = animated
-  const resolver = visualResolver()
-  if (resolver && !animated) {
-    drawVisualPreview(retinaThumbnail(styleDetailNormal, 128, 88), [await resolver.resolve(appState.selectedStyleID, false).catch(() => undefined)], false)
-    drawVisualPreview(retinaThumbnail(styleDetailHighlighted, 128, 88), [await resolver.resolve(appState.selectedStyleID, true).catch(() => undefined)], false)
+  const palm = appState.archive?.format === "sxi" ? palmStylePointer(styleID) : undefined
+  if (!appState.archive?.isText(path) && !palm || !styleID) return
+  const section = `STYLE${styleID}`
+  const animated = !palm && styleKind(styleID) === "anim"
+  if (!embedded) {
+    resourceName.textContent = section
+    resourceMeta.textContent = palm ? `${SXI_SKIN_PATH} · ${palm.join(".")}` : path
+    imageResourceDetail.hidden = true
+    styleResourceDetail.hidden = false
+    styleDetailPreviews.hidden = animated
+    const resolver = visualResolver()
+    if (resolver && !animated) {
+      drawVisualPreview(retinaThumbnail(styleDetailNormal, 128, 88), [await resolver.resolve(styleID, false).catch(() => undefined)], false)
+      drawVisualPreview(retinaThumbnail(styleDetailHighlighted, 128, 88), [await resolver.resolve(styleID, true).catch(() => undefined)], false)
+    }
   }
-  // A Palm style is shown as its skin.json model, the way the Palm inspector shows every part.
   if (palm) {
     const group = renderSxiGroup("样式", [{ targets: [palm] }], { code: palm.slice(1).join(".") })
-    styleDetailFields.replaceChildren(...group ? [group] : [])
+    fieldsHost.replaceChildren(...group ? [group] : [])
     return
   }
   const archive = appState.archive!
   const stylesDocument = IniDocument.parse(archive.getText(path))
-  // 动画样式在原来的正常 / 按下预览处播放它的动画，也不列出它没有的颜色、字体等外观字段。
-  styleDetailFields.replaceChildren(...animated ? styleAnimationPlayers(appState.selectedStyleID, stylesDocument) : [])
+  fieldsHost.replaceChildren(...animated && !embedded ? styleAnimationPlayers(styleID, stylesDocument) : [])
   const existing = stylesDocument.entries(section)
   const common = animated ? [] : ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "SHOW", "INFO"]
-  const keys = [...common, ...existing.map((entry) => entry.key).filter((key) => !common.includes(key) && key !== "NM_IMG" && key !== "HL_IMG")]
+  const keys = [...new Set([...common, ...embedded ? STYLE_ANIM_FIELDS : [], ...existing.map((entry) => entry.key).filter((key) => key !== "NM_IMG" && key !== "HL_IMG")])]
   const groups = [
     ["colors", "状态颜色", (key: string) => key === "NM_COLOR" || key === "HL_COLOR"],
     ["typography", "字体", (key: string) => key.startsWith("FONT_")],
@@ -169,10 +173,15 @@ export async function renderStyleResourceDetail(): Promise<void> {
     ["advanced", "边框与扩展", () => true],
   ] as const
   const groupFields = new Map(groups.map(([id]) => [id, document.createElement("div")]))
-  for (const fields of groupFields.values()) fields.className = "style-detail-group-fields"
+  for (const fields of groupFields.values()) {
+    fields.className = "style-detail-group-fields"
+    if (embedded) fields.dataset.embedded = "true"
+  }
   for (const key of keys) {
     const label = document.createElement("label")
-    label.className = "style-detail-field"
+    label.className = embedded ? "ui-field document-property-field" : "style-detail-field"
+    label.dataset.documentKey = key
+    label.dataset.inspectorRowKey = JSON.stringify([path, section, key])
     const caption = document.createElement("span")
     caption.textContent = translatedConfigLabel(key)
     caption.title = key
@@ -186,9 +195,10 @@ export async function renderStyleResourceDetail(): Promise<void> {
       const before = current.toString()
       if (!current.set(section, key, value)) return
       commitText(path, before, current.toString())
-      setSourceValue(current.toString())
+      if (!embedded) setSourceValue(current.toString())
       refreshPreview()
-      void renderStyleResourceDetail()
+      if (embedded) embedded.refresh()
+      else void renderStyleResourceDetail()
       updateDirty()
     }
     if (key.endsWith("COLOR")) {
@@ -246,13 +256,14 @@ export async function renderStyleResourceDetail(): Promise<void> {
   for (const [id, title] of groups) {
     const fields = groupFields.get(id)!
     if (!fields.childElementCount) continue
-    const fieldset = document.createElement("fieldset")
-    fieldset.className = "style-detail-group"
+    const fieldset = document.createElement(embedded ? "section" : "fieldset")
+    fieldset.className = embedded ? "ui-section document-property-section" : "style-detail-group"
     fieldset.dataset.styleDetailGroup = id
-    const legend = document.createElement("legend")
+    if (embedded) fieldset.dataset.inspectorGroupLabel = title
+    const legend = document.createElement(embedded ? "h3" : "legend")
     legend.textContent = title
     fieldset.append(legend, fields)
-    styleDetailFields.append(fieldset)
+    fieldsHost.append(fieldset)
   }
 }
 
@@ -309,7 +320,7 @@ function renderStyleFilters(bdaGroup?: string): void {
   if (!bar) {
     bar = document.createElement("span")
     bar.className = "ui-style-filter-bar"
-    styleAddButton.after(bar)
+    resourceSearchControl.after(bar)
   }
   if (!bdaGroup && resourceCategory.dataset.styleCategories !== "bdi") {
     resourceCategory.replaceChildren(...styleTypeOptions.map(([value, label]) => new Option(label, value)))
@@ -326,14 +337,16 @@ function renderStyleFilters(bdaGroup?: string): void {
     wrap.append(control)
     return wrap
   }
+  // 未筛选时下拉只显示维度名（类型 / 用途），窄侧栏里也不会被截断。
+  const unfiltered = (options: readonly (readonly [string, string])[], name: string) => options.map(([value, label]) => [value, value === "all" ? name : label] as const)
   bar.hidden = false
   bar.replaceChildren(
-    select("样式类型", bdaGroup ? styleTypeOptions.filter(([kind]) => ["image", "color", "text"].includes(kind)) : styleTypeOptions, bdaGroup ?? resourceCategory.value, value => {
+    select("样式类型", bdaGroup ? styleTypeOptions.filter(([kind]) => ["image", "color", "text"].includes(kind)) : unfiltered(styleTypeOptions, "类型"), bdaGroup ?? resourceCategory.value, value => {
       resourceCategory.value = bdaGroup ? value === "image" ? "imageStyles" : value === "text" ? "textStyles" : "colorStyles" : value
       if (bdaGroup) resourceCategory.dispatchEvent(new Event("change"))
       else renderResourceInspector()
     }),
-    select("样式用途", styleUsageOptions, appState.styleUsageFilter, value => { appState.styleUsageFilter = value; renderResourceInspector() }),
+    select("样式用途", unfiltered(styleUsageOptions, "用途"), appState.styleUsageFilter, value => { appState.styleUsageFilter = value; renderResourceInspector() }),
   )
 }
 
@@ -376,6 +389,7 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
     const soundPath = soundFilename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, soundFilename) : undefined
     const button = styleCard({
       id: styleID, label: `STYLE${styleID}`, kind, kindLabel: styleKinds[kind].label, kindIcon: styleKinds[kind].icon,
+      info: stylesDocument?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
       canvas: galleryCanvas,
       draw: async (canvas, highlighted) => {
         if (kind === "text") await textStyleSample(canvas, resolver, styleID, highlighted)
@@ -387,7 +401,6 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
     })
     button.classList.add("resource-item", "style-resource-item")
     button.dataset.path = `STYLE${styleID}`
-    button.title = `STYLE${styleID}`
     if (kind === "anim") button.addEventListener("mouseenter", () => previewStyleAnimation([styleID]))
     button.addEventListener("click", () => {
       selectGalleryItem(`STYLE${styleID}`, resourceGallery)
@@ -446,7 +459,6 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
     })
     button.classList.add("resource-item", "style-resource-item")
     button.dataset.path = `STYLE${key}`
-    button.title = `STYLE ${key}`
     button.addEventListener("click", () => {
       selectGalleryItem(`STYLE${key}`, resourceGallery)
       if (document.body.classList.contains("style-workspace")) selectStyleResource(String(key))
@@ -517,7 +529,7 @@ export function renderResourceInspector(): void {
     renderSoundResourceGallery()
     return
   }
-  resourceListTitle.textContent = "皮肤图片"
+  resourceListTitle.textContent = "图片资源"
   resourceSearch.placeholder = "搜索图片"
   resourceSearch.setAttribute("aria-label", "搜索图片")
   resourceSearchControl.setAttribute("aria-label", "搜索图片")
@@ -546,28 +558,44 @@ export function renderResourceInspector(): void {
     const url = URL.createObjectURL(new Blob([copy.buffer], { type: "image/png" }))
     appState.resourceURLs.push(url)
     const button = document.createElement("button")
-    button.className = "resource-item"
+    button.className = "resource-item ui-image-card"
     button.dataset.path = path
     button.title = path
     const image = document.createElement("img")
     image.src = url
     image.alt = ""
+    const preview = document.createElement("span")
+    preview.className = "ui-image-card-preview"
+    const size = document.createElement("span")
+    size.className = "ui-image-card-size"
+    size.hidden = true
+    preview.append(image, size)
+    const caption = document.createElement("span")
+    caption.className = "ui-image-card-caption"
     const name = document.createElement("strong")
     name.textContent = path.split("/").pop() ?? path
-    const meta = document.createElement("small")
+    caption.append(name)
     const hasTil = appState.archive.isText(path.replace(/\.png$/i, ".til"))
+    if (hasTil) {
+      const til = document.createElement("span")
+      til.className = "ui-image-card-til"
+      til.title = "包含 TIL 切片配置"
+      til.setAttribute("aria-label", til.title)
+      til.append(createIcon("grid-2x2"))
+      caption.append(til)
+    }
+    const meta = document.createElement("small")
     const bdaUsageCount = bdaUsageCounts.get(bdaImageResourceID(path)) ?? 0
-    // Sogou styles take whole images: only the size says anything about them. Palm slices are skin.json's tile maps.
     const palmSlices = appState.archive.format === "sxi" ? palmTileSlices(openPalmSkin(), path).length : 0
     meta.textContent = appState.archive.format === "bda"
       ? bdaUsageCount ? `${bdaUsageCount} 个样式引用` : "未被外观引用"
-      : appState.archive.format === "ssf" ? ""
-      : appState.archive.format === "sxi" ? palmSlices ? `${palmSlices} 个切片` : "无切片"
-      : hasTil ? "TIL" : "无 TIL"
+      : appState.archive.format === "sxi" ? palmSlices ? `${palmSlices} 个切片` : "无切片" : ""
     image.addEventListener("load", () => {
-      meta.textContent = [`${image.naturalWidth} × ${image.naturalHeight}`, meta.textContent].filter(Boolean).join(" · ")
+      size.textContent = `${image.naturalWidth} × ${image.naturalHeight}`
+      size.hidden = false
     })
-    button.append(image, name, meta)
+    button.append(preview, caption)
+    if (meta.textContent) button.append(meta)
     button.addEventListener("click", () => {
       selectGalleryItem(path, resourceGallery)
       selectResourceImage(path)
@@ -640,12 +668,15 @@ export function updateResourceActionButtons(): void {
   syncAtlasWorkspace()
 }
 
+// 样式库可有几千张卡片：只改动之前选中和新选中的项，不逐个遍历。
 function selectGalleryItem(path: string, container: HTMLElement): void {
   appState.selectedResourceGalleryPath = path
-  for (const item of container.querySelectorAll<HTMLElement>(".resource-item")) {
-    item.classList.toggle("selected", item.dataset.path === path)
-    if (item.classList.contains("ui-style-card")) item.setAttribute("aria-pressed", String(item.dataset.path === path))
+  const mark = (item: HTMLElement, selected: boolean) => {
+    item.classList.toggle("selected", selected)
+    if (item.classList.contains("ui-style-card")) item.setAttribute("aria-pressed", String(selected))
   }
+  for (const item of container.querySelectorAll<HTMLElement>(".resource-item.selected")) mark(item, false)
+  for (const item of container.querySelectorAll<HTMLElement>(`.resource-item[data-path="${CSS.escape(path)}"]`)) mark(item, true)
   updateResourceActionButtons()
 }
 

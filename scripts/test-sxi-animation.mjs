@@ -88,12 +88,12 @@ try {
   assert.deepEqual(await fields.locator("[data-animation-id] strong").allTextContents(), [
     "动画 100", "动画 101", "动画 102", "动画 103", "动画 104", "动画 105", "动画 106", "动画 107", "动画 108", "动画 109",
   ])
-  assert.deepEqual(await fields.locator("[data-animation-id] .ui-list-item-meta > .ui-badge:first-child").allTextContents(), [
+  assert.deepEqual(await fields.locator("[data-animation-id] .ui-style-card-kind").evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), [
     "缩放", "位移", "组合动画", "帧序列", "粒子发射", "路径跟踪", "碰撞物理", "液体与浮动物", "底部嘉年华", "太空兔",
   ])
   assert.equal(await fields.locator('[data-animation-id="100"] small').textContent(), "320 ms · 往返")
   assert.equal(await fields.locator('[data-animation-id="100"] [data-uses]').textContent(), "2", "被一个样式和一个组合使用")
-  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "变化", "时间与循环", "变换中心"])
+  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "样式", "预览", "变化", "时间与循环", "变换中心"])
 
   // 每类动画的字段都按手心自己的名字出现
   await show("100")
@@ -122,7 +122,7 @@ try {
   assert.match(await section("预览").locator(".ui-animation-time").textContent(), /1500 ms/)
 
   await show("104")
-  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "预览", "发射", "运动", "外观", "时间与循环"])
+  assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "样式", "预览", "发射", "运动", "外观", "时间与循环"])
   assert.ok((await captions()).includes("发射区域位置"))
   assert.equal(await input("粒子总数").inputValue(), "12")
   // 粒子图片是样式卡片（每张图一张卡，标签旁有「+ 添加」），值仍是样式编号列表。
@@ -360,7 +360,7 @@ try {
   assert.equal(await page.getByRole('button', { name: '删除动画 100', exact: true }).isDisabled(), true)
   await page.evaluate(async () => (await import('/src/app/sxi-fields.ts')).editSxi((skin) => { skin.default.s_info.ss_2 = {} }))
   assert.equal(await fields.locator('[data-animation-id]').count(), 0)
-  assert.match(await fields.locator('.ui-listbox').textContent(), /还没有动画/)
+  assert.match(await fields.locator('.ui-listbox[aria-label="动画列表"]').textContent(), /还没有动画/)
   for (const [index, kind] of ['a1', 'a3', 'af2', 'a4', 'a10', 'a11', 'a12', 'a13', 'a14'].entries()) {
     await page.getByLabel('新建动画', { exact: true }).selectOption(kind)
     assert.ok((await animation(index + 1))[kind], `${kind} 创建后应直接进入可视化编辑`)

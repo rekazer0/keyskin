@@ -10,24 +10,26 @@ import type { SsfPackage, SsfTheme } from "../ssf/ssf-package.ts"
 import { orientation, theme } from "./dom"
 import { appState } from "./state"
 
-export const SSF_SOUNDS_PATH = "default/sound_android.ini"
 
-let cachedPackage: { archive: unknown; revision: number; pkg?: SsfPackage } | undefined
+/** Parse the open SSF archive once per revision for both document and preview consumers. */
+export function ssfDocumentPackage(archive: SkinArchive): SsfPackage {
+  const cached = appState.ssfPackage
+  if (cached?.archive === archive && cached.revision === archive.revision) return cached.pkg
+  const pkg = documentPackage(archive)
+  appState.ssfPackage = { archive, revision: archive.revision, pkg }
+  return pkg
+}
+export const SSF_SOUNDS_PATH = "default/sound_android.ini"
 
 /** The open Sogou skin as a package; undefined for other formats or a skin missing its main files. */
 export function ssfPackage(): SsfPackage | undefined {
   const archive = appState.archive
   if (archive?.format !== "ssf") return
-  if (cachedPackage?.archive !== archive || cachedPackage.revision !== archive.revision) {
-    let pkg: SsfPackage | undefined
-    try {
-      pkg = documentPackage(archive)
-    } catch {
-      pkg = undefined
-    }
-    cachedPackage = { archive, revision: archive.revision, pkg }
+  try {
+    return ssfDocumentPackage(archive)
+  } catch {
+    return undefined
   }
-  return cachedPackage.pkg
 }
 
 export function ssfTheme(): SsfTheme {

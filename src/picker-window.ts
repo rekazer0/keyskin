@@ -45,6 +45,7 @@ export type StyleLibraryPayload = {
   styles: {
     styleID: string
     label: string
+    info?: string
     kind: string
     kindLabel: string
     kindIcon: string
@@ -209,6 +210,11 @@ function showResourceList(): void {
   if (!resources.length) void emitMain("image-picker-resources-request")
 }
 
+function releaseLibraryBitmaps(): void {
+  for (const bitmap of libraryBitmaps.values()) void bitmap.then((image) => image?.close())
+  libraryBitmaps.clear()
+}
+
 function libraryBitmap(key: string | undefined): Promise<ImageBitmap | undefined> {
   const dataURL = key ? library?.bitmaps[key] : undefined
   if (!key || !dataURL) return Promise.resolve(undefined)
@@ -227,16 +233,6 @@ async function drawLibraryVisual(canvas: HTMLCanvasElement, visual: StyleLibrary
   const { imageKey, ...rest } = visual
   drawVisualPreview(canvas, [{ ...rest, image: await libraryBitmap(imageKey) }], foreground)
 }
-
-// 缩略图进入视口才绘制，几百个样式的窗口打开时不必一次画完。
-const libraryCanvasObserver = new IntersectionObserver((entries) => {
-  for (const entry of entries) {
-    if (!entry.isIntersecting) continue
-    const canvas = entry.target as HTMLCanvasElement & { libraryVisual?: StyleLibraryVisual | null }
-    libraryCanvasObserver.unobserve(canvas)
-    void drawLibraryVisual(canvas, canvas.libraryVisual ?? null, Boolean(library?.foreground))
-  }
-}, { rootMargin: "200px" })
 
 function libraryButtons(selector: string): HTMLButtonElement[] {
   return Array.from(libraryView.querySelectorAll<HTMLButtonElement>(selector))
@@ -309,6 +305,7 @@ function libraryAnimationPlayers(style: StyleLibraryPayload["styles"][number]): 
 
 function librarySoundSample(filename: string, playable: boolean): HTMLElement {
   const root = element("span", "ui-style-sound")
+  root.title = filename
   const play = iconButton("play", `试听音效 ${filename}`)
   play.disabled = !playable
   play.addEventListener("click", event => { event.stopPropagation(); emitLibrary("style-library-play", { filename }) })
@@ -316,7 +313,7 @@ function librarySoundSample(filename: string, playable: boolean): HTMLElement {
   const name = element("strong")
   name.textContent = filename
   const meta = element("small")
-  meta.textContent = playable ? "点击试听" : "声音文件不存在"
+  meta.textContent = playable ? "" : "声音文件不存在"
   info.append(name, meta)
   root.append(play, info)
   return root
@@ -353,7 +350,6 @@ function renderLibrarySounds(payload: StyleLibraryPayload, query: string): numbe
 
 function renderLibrary(): void {
   const payload = library
-  libraryCanvasObserver.disconnect()
   libraryGrid.replaceChildren()
   libraryPreview.hidden = true
   librarySelected = undefined
@@ -393,13 +389,10 @@ function renderLibrary(): void {
     for (const { imagePath, image, style } of items) {
       const selected = imagePath ? currentImages.includes(imagePath) : payload.currentID === style?.styleID
       const card = style ? styleCard({
-        id: style.styleID, label: `STYLE${style.label}`, kind: style.kind, kindLabel: style.kindLabel, kindIcon: style.kindIcon,
-        draw: (canvas, highlighted) => {
-          if (style.kind === "text") return textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
-          const preview = canvas as HTMLCanvasElement & { libraryVisual?: StyleLibraryVisual | null }
-          preview.libraryVisual = style.visuals[Number(highlighted)]
-          libraryCanvasObserver.observe(preview)
-        },
+        id: style.styleID, label: `STYLE${style.label}`, info: style.info, kind: style.kind, kindLabel: style.kindLabel, kindIcon: style.kindIcon,
+        draw: (canvas, highlighted) => style.kind === "text"
+          ? textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
+          : drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(library?.foreground)),
         animation: () => libraryAnimationPlayers(style), summary: style.summary,
         sound: style.sound ? () => librarySoundSample(style.sound!, Boolean(style.soundPlayable)) : undefined,
       }) : element("button", "style-library-item")
@@ -417,7 +410,7 @@ function renderLibrary(): void {
         card.append(previews, label, note)
       }
       card.setAttribute("aria-pressed", String(selected))
-      card.title = imagePath || `样式 ${style!.label} · 单击预览，双击应用，Command/Ctrl 单击编辑`
+      card.title = imagePath || [`样式 ${style!.label}`, style!.info, "单击预览，双击应用，Command/Ctrl 单击编辑"].filter(Boolean).join(" · ")
       const target = imagePath ? { imagePath } : { styleID: style!.styleID }
       card.addEventListener("click", (event) => {
         if (event.metaKey || event.ctrlKey) emitLibrary("style-library-edit", target)
@@ -442,12 +435,11 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
   search.hidden = false
   styleName.hidden = true
   subtitle.hidden = false
-  back.hidden = !(payload ?? library)?.sliceBack || !imagePayload
   backLabel.textContent = "图片切片"
   back.setAttribute("aria-label", "返回图片切片")
   if (payload) {
     library = payload
-    libraryBitmaps.clear()
+    releaseLibraryBitmaps()
     libraryMode = "styles"
     libraryKind = payload.kind
     libraryFilter = "all"

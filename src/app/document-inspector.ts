@@ -21,7 +21,7 @@ import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
 import { disconnectSsfThumbnails } from "./ssf-fields"
-import { keyAnimationItems, keyboardPlayback, selectAnimation, selectedAnimation } from "./animation-resource"
+import { keyAnimationItems, keyboardPlayback, selectAnimation, selectAnimationStyle, selectedAnimation, selectedAnimationStyle } from "./animation-resource"
 import { bdaAnimationBindingsForKey, bdaBindingEffects } from "../preview-animation.ts"
 import { configValueControl } from "./config-value-control"
 import { colorValueControl } from "./color-control"
@@ -63,6 +63,9 @@ export const documentFieldLabels: Record<string, string> = {
   INFO: "说明",
   ANIM_STYLE: "整体动效",
   PRESS_ANIM: "按下动画",
+  RELEASE_ANIM: "释放动画",
+  HIDE_ANIM: "隐藏动画",
+  FIRST_PRESS_PANEL_ANIM: "首次按下面板动画",
   SHOW_ANIM: "显示动画",
   EVENT1: "动画事件",
   ANIM_NUM: "动画数量",
@@ -717,8 +720,10 @@ export function populateBdaConfigInspector(): void {
       updateBdaAnimationFrame(bytes, sequence, frame, "resourceID", resourceID),
     )),
     animationView: {
+      source: appState.archive,
       mode: appState.animationDesignMode, select: selectedAnimation, onSelect: selectAnimation,
       filter: (items) => keyAnimationItems(items, bdaKeyPlays),
+      targets: { selected: selectedAnimationStyle(), onSelect: selectAnimationStyle },
     },
     keyboardPlayback: (id) => keyboardPlayback((key) => bdaKeyPlays(id, key)),
   })

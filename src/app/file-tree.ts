@@ -34,7 +34,7 @@ function addNavButton(
 ): HTMLButtonElement | undefined {
   // 没有动画配置时仍列出动效设计 / 粒子设计，点击时询问是否自动创建。
   const missingAnimation = !path && (navMode === "motion" || navMode === "particle")
-  if (!missingAnimation && !appState.archive?.names().includes(path) && !isBdaVirtualTextPath(path) && !isBdaAppearancePartPath(path) && !isSsfBoardPath(path) && !sxiPointer(path)) return undefined
+  if (!missingAnimation && appState.archive?.getBytes(path) === undefined && !isBdaVirtualTextPath(path) && !isBdaAppearancePartPath(path) && !isSsfBoardPath(path) && !sxiPointer(path)) return undefined
   const button = document.createElement("button")
   button.className = `nav-item ${className}`
   button.dataset.path = path
@@ -240,7 +240,7 @@ export function renderFiles(): void {
     ["scene", "场景配置", "场景配置", "layers"],
   ] as const
   const overviewPath = appState.archive.format === "sxi" ? sxiFragmentPath(["info"])
-    : appState.archive.names().includes(`${theme.value}/skin/Info.txt`) ? `${theme.value}/skin/Info.txt`
+    : appState.archive.getBytes(`${theme.value}/skin/Info.txt`) !== undefined ? `${theme.value}/skin/Info.txt`
     : "Info.txt"
   entries.push({
     group: appState.archive.format === "bda" ? "皮肤信息" : "皮肤",
@@ -250,7 +250,7 @@ export function renderFiles(): void {
     icon: "info",
   })
   // BDA 的 demo 在主题目录下，其他格式放在包根，手心 .sxi 用包根的 preview.png；条目只在文件存在时才显示。
-  const demoPath = ["preview.png", `${theme.value}/skin/demo.png`].find((path) => appState.archive?.names().includes(path)) ?? "demo.png"
+  const demoPath = ["preview.png", `${theme.value}/skin/demo.png`].find((path) => appState.archive?.getBytes(path) !== undefined) ?? "demo.png"
   entries.push({ group: appState.archive.format === "bda" ? "皮肤信息" : "皮肤", label: "效果预览", path: demoPath, className: "nav-overview", icon: "image" })
 
   if (appState.archive.format === "ssf") {
@@ -473,7 +473,7 @@ export function renderFiles(): void {
     : ["皮肤", "资源配置", "键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局"]
   for (const group of groups) {
     const grouped = entries.filter((entry) => entry.group === group && !skinEntries.includes(entry) && (
-      !entry.path && entry.meta === "未创建" || appState.archive?.names().includes(entry.path) || isSsfBoardPath(entry.path) || Boolean(sxiPointer(entry.path)) ||
+      !entry.path && entry.meta === "未创建" || appState.archive?.getBytes(entry.path) !== undefined || isSsfBoardPath(entry.path) || Boolean(sxiPointer(entry.path)) ||
       appState.archive?.format === "bda" && (isBdaAppearancePartPath(entry.path) || Boolean(appState.bdaBase?.isText(bdaBasePath(entry.path))))
     ))
     if (group === "键盘布局" && appState.archive.format !== "ssf") {

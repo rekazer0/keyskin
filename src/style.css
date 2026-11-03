@@ -1726,7 +1726,7 @@ body:has(.canvas-wrap.empty) .workspace {
   gap: 8px;
 }
 
-.resource-item:not(.ui-style-card) {
+.resource-item:not(.ui-style-card, .ui-image-card) {
   position: relative;
   width: 100%;
   min-width: 0;
@@ -1745,17 +1745,17 @@ body:has(.canvas-wrap.empty) .workspace {
 
 @media (hover: hover) {
 
-.resource-item:not(.ui-style-card):hover {
+.resource-item:not(.ui-style-card, .ui-image-card):hover {
   background: var(--hover);
 }
 }
 
-.resource-item:not(.ui-style-card).selected {
+.resource-item:not(.ui-style-card, .ui-image-card).selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.resource-item img,
+.resource-item:not(.ui-image-card) img,
 .resource-style-previews canvas,
 .style-detail-previews canvas {
   width: 100%;
@@ -1872,19 +1872,19 @@ body:has(.canvas-wrap.empty) .workspace {
   cursor: default;
 }
 
-.resource-item strong,
-.resource-item small {
+.resource-item:not(.ui-image-card) strong,
+.resource-item:not(.ui-image-card) small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   letter-spacing: 0;
 }
 
-.resource-item strong {
+.resource-item:not(.ui-image-card) strong {
   font-size: var(--font-size-xs);
 }
 
-.resource-item small {
+.resource-item:not(.ui-image-card) small {
   color: var(--secondary);
   font-size: var(--font-size-xs);
 }

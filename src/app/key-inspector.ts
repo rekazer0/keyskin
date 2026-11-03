@@ -35,6 +35,7 @@ import { canCreateBdaKeyText, createBdaKeyText, renderBdaTextLayerSwitch, select
 import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
 import { syncSkinConfigControl } from "./config-value-control"
+import { populateAnimationStyleInspector } from "./animation-style-inspector"
 
 export function selectedBdaRefs(
   source: "BACK_STYLE" | "FORE_STYLE",
@@ -558,6 +559,7 @@ export function populateKeyInspector(): void {
   void updateStylePreviews()
   populateDocumentInspector()
   populateBdaConfigInspector()
+  populateAnimationStyleInspector()
   if (bdaSelected) {
     for (const field of keyFields) {
       if (field.dataset.keyField === "SHOW") field.closest("label")?.setAttribute("hidden", "")

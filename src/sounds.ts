@@ -1,4 +1,5 @@
 import { IniDocument } from "./ini.ts"
+import { decodeWav } from "./wav.ts"
 
 export const SOUND_ACCEPT = ".ogg,.wav,.aiff,.aif,audio/ogg,audio/wav,audio/x-aiff"
 
@@ -253,6 +254,7 @@ async function decodeSound(bytes: Uint8Array): Promise<DecodedSound> {
   const head = new TextDecoder("ascii").decode(bytes.subarray(0, 4))
   if (head === "FORM") return decodeAiffPcm(bytes)
   if (head === "OggS") return decodeOggVorbis(bytes)
+  if (head === "RIFF") return decodeWav(bytes)
   throw new Error("不支持的音频编码")
 }
 
@@ -262,20 +264,16 @@ export async function soundAsWav(bytes: Uint8Array): Promise<Uint8Array> {
   return encodeWavPcm16(await decodeSound(bytes))
 }
 
-/**
- * Baidu skins ship key sounds as AIFF for iOS (BDI) and Ogg Vorbis for Android (BDS); official
- * BDI packages often carry both under the same name. WAV is left alone: whether either platform
- * plays it is unverified, so it is never introduced and never removed.
- */
+/** Baidu skins use AIFF on iOS and Ogg Vorbis on Android; retain originals while adding native copies. */
 const NATIVE_SOUND_EXTENSION = { bdi: "aiff", bds: "ogg" } as const
 
 function soundNeedsTranscode(path: string, format: "bdi" | "bds"): boolean {
-  return format === "bdi" ? /\.ogg$/i.test(path) : /\.(?:aiff?|caf)$/i.test(path)
+  return format === "bdi" ? /\.(?:ogg|wav)$/i.test(path) : /\.(?:aiff?|caf|wav)$/i.test(path)
 }
 
 /**
  * Rewrites every PRESS/PANEL_SHOW/PANEL_HIDE_SOUND_PATH in each theme's default.css (light and dark each have their own)
- * that names a format the target platform does not play: Ogg → AIFF for BDI, AIFF/CAF → Ogg for BDS.
+ * that needs a native copy: Ogg/WAV → AIFF for BDI, AIFF/CAF/WAV → Ogg for BDS.
  * A same-named file in the target format next to that css is used as is; otherwise the referenced
  * file is transcoded. Original files are kept, matching official packages that bundle both formats.
  */
@@ -293,13 +291,14 @@ export async function adaptPackageSounds(
   const nativeFile = async (directories: string[], filename: string): Promise<string | undefined> => {
     const stem = filename.replace(/\.[^.]+$/, "")
     const alternatives = format === "bdi" ? [`${stem}.aiff`, `${stem}.aif`] : [`${stem}.ogg`]
-    for (const directory of directories) {
+    const source = directories.map((directory) => find(`${directory}${filename}`)).find(Boolean)
+    const siblingDirectories = source ? [source.slice(0, source.lastIndexOf("/") + 1)] : directories
+    for (const directory of siblingDirectories) {
       for (const name of alternatives) {
         const existing = find(`${directory}${name}`)
         if (existing) return existing
       }
     }
-    const source = directories.map((directory) => find(`${directory}${filename}`)).find(Boolean)
     if (!source) {
       warnings.push(`${directories[0]}${filename} 不存在，无法生成 ${extension.toUpperCase()}`)
       return

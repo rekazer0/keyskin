@@ -12,9 +12,10 @@ import { IniDocument } from "../ini.ts"
 import { offsetFromSection } from "../preview-items.ts"
 import type { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
-import { soundAsWav } from "../sounds.ts"
+import { soundAsWav, soundPathForFilename } from "../sounds.ts"
 import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
 import { ssfClassTextStyles } from "./ssf-parts.ts"
+import { BaiduSsfMotion } from "./baidu-anim-to-ssf.ts"
 import { compositeImage, cropImage, decodePng, encodePng, placeImage, resizeImage, type RgbaImage } from "./ssf-png.ts"
 
 type Theme = "light" | "dark"
@@ -354,7 +355,58 @@ function toolbarImages(archive: SkinArchive, theme: Theme, styles: BaiduStyles, 
   }
 }
 
-function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output: Map<string, Uint8Array>, warnings: string[]): void {
+function convertAnimations(archive: SkinArchive, theme: Theme, writer: StatusWriter, folder: string, output: Map<string, Uint8Array>, warnings: string[]): void {
+  const animations = IniDocument.parse("")
+  const chosen = new Set<string>()
+  for (const orientation of ["port", "land"] as const) {
+    const prefix = `${theme}/skin/${orientation}/`
+    const animationPaths = [`${theme}/skin/res/anim.ini`, `${prefix}res/anim.ini`].filter(path => archive.isText(path))
+    if (!animationPaths.length) continue
+    const sourceAnimations = IniDocument.parse("")
+    for (const path of animationPaths) {
+      const document = IniDocument.parse(archive.getText(path))
+      for (const section of document.sections()) {
+        if (!sourceAnimations.sections().includes(section)) sourceAnimations.appendSection(section, [])
+        for (const { key, value } of document.entries(section)) sourceAnimations.set(section, key, value)
+      }
+    }
+    const styles = new BaiduStyles(archive, theme, orientation, warnings)
+    const motion = new BaiduSsfMotion(sourceAnimations, styles.styles, warnings, styles.scale, id => {
+      const slice = styles.resolve(id)?.normal
+      if (!slice) return
+      const image = slice.image
+      const scale = slice.stretch ? 1 : styles.scale
+      const scaled = resizeImage(image, Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)))
+      return { file: writer.file(scaled), width: scaled.width, height: scaled.height }
+    }, animations)
+    const gen = archive.isText(`${prefix}gen.ini`) ? IniDocument.parse(archive.getText(`${prefix}gen.ini`)) : undefined
+    const fallbackSize = numbers(gen?.get("PANEL", "SIZE"))
+    const layouts = archive.names().filter(path => path.startsWith(prefix) && /^[^/]+\.ini$/.test(path.slice(prefix.length)) && !path.endsWith("/gen.ini"))
+      .sort((a, b) => layoutRank(a) - layoutRank(b) || a.localeCompare(b))
+    for (const path of layouts) {
+      const layout = IniDocument.parse(archive.getText(path))
+      const panelSize = numbers(layout.get("PANEL", "SIZE"))
+      const [boardWidth, boardHeight] = panelSize.length === 2 ? panelSize : fallbackSize
+      for (const section of layout.sections().filter(name => /^KEY\d+$/.test(name))) {
+        const action = layout.get(section, "CENTER")?.trim()
+        if (!action) continue
+        const keyClass = ssfKeyBinding(path.slice(prefix.length, -4), action, orientation === "land").sections[0]
+        if (!keyClass || chosen.has(keyClass)) continue
+        const [, , width, height] = numbers(layout.get(section, "VIEW_RECT"))
+        if (!(width > 0 && height > 0 && boardWidth > 0 && boardHeight > 0)) continue
+        chosen.add(keyClass)
+        const style = motion.press(layout, section, { width, height }, { width: boardWidth, height: boardHeight })
+        if (style) {
+          if (!writer.keys.sections().includes(keyClass)) writer.keys.appendSection(keyClass, [])
+          writer.keys.set(keyClass, "ANIM_STYLE", style)
+        }
+      }
+    }
+  }
+  if (animations.sections().length) output.set(`${folder}anim.ini`, strToU8(animations.toString()))
+}
+
+function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output: Map<string, Uint8Array>, warnings: string[], animations: boolean): void {
   const styles = new BaiduStyles(archive, theme, "port", warnings)
   const writer = new StatusWriter(folder, output)
   const samples = sampleKeys(archive, theme, warnings)
@@ -429,6 +481,7 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
   if (codeView.length) writer.skin.appendSection("CandidateCodeView", codeView)
   const listText = styles.resolve(list?.get("LIST", "FORE_STYLE"))?.color
   if (listText) writer.skin.appendSection("TextStyle_Text", [{ key: "TEXT_COLOR", value: listText }])
+  if (animations) convertAnimations(archive, theme, writer, folder, output, warnings)
   writer.write()
 }
 
@@ -437,27 +490,93 @@ function infoValue(archive: SkinArchive, key: string): string | undefined {
   return bytes ? new TextDecoder().decode(bytes).match(new RegExp(`^\\uFEFF?${key}=(.*)$`, "mi"))?.[1].trim() : undefined
 }
 
-/** The keyboard's default key sound, re-encoded as WAV (Baidu ships OGG or AIFF; Sogou plays WAV). */
-async function soundFiles(archive: SkinArchive, theme: Theme, output: Map<string, Uint8Array>, warnings: string[]): Promise<void> {
-  const gen = `${theme}/skin/port/gen.ini`
-  if (!archive.isText(gen)) return
-  const styleID = IniDocument.parse(archive.getText(gen)).get("PANEL", "SOUND_STYLE")?.trim()
-  const path = styleID && new BaiduStyles(archive, theme, "port", warnings).styles.get(`STYLE${styleID}`, "PRESS_SOUND_PATH")?.trim()
-  const filename = path && path.split(/[\\/]/).pop()
-  const bytes = filename && [`${theme}/skin/port/res/${filename}`, `${theme}/skin/res/${filename}`].map((candidate) => archive.getBytes(candidate)).find(Boolean)
-  if (!filename || !bytes) return
-  const sound = filename.replace(/\.[^.]+$/, "")
-  try {
-    output.set(`default/${sound}.wav`, await soundAsWav(bytes))
-  } catch (error) {
-    warnings.push(`按键音 ${filename} 无法转换为 WAV（${error instanceof Error ? error.message : error}），已省略`)
-    return
+/** Sogou has one default sound plus per-key-class overrides; map Baidu layout keys to that table. */
+async function soundFiles(archive: SkinArchive, themes: Theme[], output: Map<string, Uint8Array>, warnings: string[]): Promise<void> {
+  const names = archive.names()
+  const copied = new Map<string, { name: string; bytes: Uint8Array }>()
+  const byName = new Map<string, Uint8Array>()
+  const copySound = async (theme: Theme, orientation: "port" | "land", filename: string) => {
+    const source = soundPathForFilename(names, theme, orientation, filename)
+    if (!source) {
+      warnings.push(`${theme}/skin/${orientation}/res/${filename} 不存在，无法转换按键音`)
+      return
+    }
+    const previous = copied.get(source)
+    if (previous) return previous
+    try {
+      const wav = await soundAsWav(archive.getBytes(source)!)
+      const stem = (source.split("/").pop() ?? filename).replace(/\.[^.]+$/, "")
+      let name = stem
+      let suffix = 0
+      while (byName.has(name) && (byName.get(name)!.length !== wav.length || !byName.get(name)!.every((byte, index) => byte === wav[index]))) {
+        suffix++
+        name = `${stem}_${theme}_${orientation}${suffix > 1 ? `_${suffix}` : ""}`
+      }
+      byName.set(name, wav)
+      output.set(`default/${name}.wav`, wav)
+      const result = { name, bytes: wav }
+      copied.set(source, result)
+      return result
+    } catch (error) {
+      warnings.push(`${source} 无法转换为 WAV（${error instanceof Error ? error.message : error}），已省略`)
+    }
   }
-  output.set("default/sound_android.ini", strToU8(`[General]\nSUPPORT_SCREEN=${SOGOU_WIDTH}\nVERSION=1\n\n[Key]\nsound=${sound}\n`))
-}
+  const defaults = new Map<Theme, { name: string; bytes: Uint8Array }>()
+  const keySounds = new Map<string, { name: string; bytes: Uint8Array; theme: Theme; priority: number }>()
+  for (const theme of themes) {
+    for (const orientation of ["port", "land"] as const) {
+      const prefix = `${theme}/skin/${orientation}/`
+      const genPath = `${prefix}gen.ini`
+      const gen = archive.isText(genPath) ? IniDocument.parse(archive.getText(genPath)) : undefined
+      const styles = new BaiduStyles(archive, theme, orientation, warnings).styles
+      const soundForStyle = async (id: string | undefined) => {
+        const filename = id && styles.get(`STYLE${id.split(",")[0].trim()}`, "PRESS_SOUND_PATH")?.trim()
+        return filename ? copySound(theme, orientation, filename.split(/[\\/]/).pop()!) : undefined
+      }
+      const generalID = gen?.get("PANEL", "SOUND_STYLE")?.trim()
+      const fallback = await soundForStyle(generalID)
+      if (fallback && !defaults.has(theme)) defaults.set(theme, fallback)
+      const layouts = names.filter((path) => path.startsWith(prefix) && /^[^/]+\.ini$/i.test(path.slice(prefix.length)) && !/^gen\.ini$/i.test(path.slice(prefix.length)))
+        .sort((a, b) => layoutRank(a) - layoutRank(b) || a.localeCompare(b))
+      for (const path of layouts) {
+        const layoutName = path.slice(prefix.length, -4)
+        const layout = IniDocument.parse(archive.getText(path))
+        const panelID = layout.get("PANEL", "SOUND_STYLE")?.trim()
+        const panelSound = panelID && panelID !== generalID ? await soundForStyle(panelID) : undefined
+        for (const section of layout.sections().filter((name) => /^KEY\d+$/.test(name))) {
+          const action = layout.get(section, "CENTER")?.trim()
+          if (!action) continue
+          const binding = ssfKeyBinding(layoutName, action, orientation === "land")
+          const explicit = layout.get(section, "SOUND_STYLE")?.trim()
+          const sound = explicit ? await soundForStyle(explicit) : panelSound
+          const priority = explicit ? 2 : panelSound ? 1 : 0
+          const key = binding.sections[0]
+          if (!sound || !key || !priority) continue
+          const previous = keySounds.get(key)
+          if (!previous || priority > previous.priority) keySounds.set(key, { ...sound, theme, priority })
+          else if (priority === previous.priority && (previous.bytes.length !== sound.bytes.length || !previous.bytes.every((byte, index) => byte === sound.bytes[index]))) {
+            warnings.push(`${key} 在百度布局中配置了不同按键音，搜狗只能保留优先布局的音效`)
+          }
+        }
+      }
+    }
+  }
 
+  const fallback = themes.map((theme) => defaults.get(theme)).find(Boolean)
+  const defaultConflict = themes.map((theme) => defaults.get(theme)).filter((sound): sound is { name: string; bytes: Uint8Array } => Boolean(sound))
+    .some((sound) => sound.bytes.length !== fallback?.bytes.length || !sound.bytes.every((byte, index) => byte === fallback?.bytes[index]))
+  if (defaultConflict) warnings.push("百度白天和夜间的默认按键音不同，搜狗格式只有一份默认音效，已优先使用白天音效")
+  const sounds = IniDocument.parse("")
+  sounds.appendSection("General", [{ key: "SUPPORT_SCREEN", value: String(SOGOU_WIDTH) }, { key: "VERSION", value: "1" }])
+  if (fallback) sounds.appendSection("Key", [{ key: "sound", value: fallback.name }])
+  for (const [section, sound] of keySounds) {
+    if (fallback && sound.bytes.length === fallback.bytes.length && sound.bytes.every((byte, index) => byte === fallback.bytes[index])) continue
+    sounds.appendSection(section, [{ key: "sound", value: sound.name }])
+  }
+  if (fallback || keySounds.size) output.set("default/sound_android.ini", strToU8(sounds.toString()))
+}
 /** Converts a Baidu BDS/BDI skin to Sogou `.ssf` bytes. */
-export async function convertBaiduToSsf(archive: SkinArchive): Promise<{ bytes: Uint8Array; warnings: string[] }> {
+export async function convertBaiduToSsf(archive: SkinArchive, options: { animations?: boolean } = {}): Promise<{ bytes: Uint8Array; warnings: string[] }> {
   if (archive.format === "bda") throw new Error("BDA 需要先转换为 BDS 再导出搜狗皮肤")
   const warnings: string[] = []
   const output = new Map<string, Uint8Array>()
@@ -465,7 +584,7 @@ export async function convertBaiduToSsf(archive: SkinArchive): Promise<{ bytes: 
     ["res", "port/res", "land/res"].some((root) => archive.isText(`${theme}/skin/${root}/default.css`)))
   if (!themes.length) throw new Error("皮肤缺少 res/default.css，无法转换")
   const dual = themes.length > 1
-  for (const theme of themes) convertTheme(archive, theme, dual ? `${SOGOU_WIDTH}/${STATUS[theme]}/` : `${SOGOU_WIDTH}/`, output, warnings)
+  for (const theme of themes) convertTheme(archive, theme, dual ? `${SOGOU_WIDTH}/${STATUS[theme]}/` : `${SOGOU_WIDTH}/`, output, warnings, options.animations !== false)
 
   const name = infoValue(archive, "Name") || "百度皮肤"
   const author = infoValue(archive, "Author") ?? ""
@@ -489,7 +608,6 @@ export async function convertBaiduToSsf(archive: SkinArchive): Promise<{ bytes: 
       "[status2]", "START=0,19", "END=6,23", "",
     ].join("\n")))
   }
-  await soundFiles(archive, themes[0], output, warnings)
-  if (archive.names().some((path) => /\/anim\.ini$/i.test(path))) warnings.push("百度按键动画在搜狗皮肤中没有对应，已忽略")
+  await soundFiles(archive, themes, output, warnings)
   return { bytes: zipSync(Object.fromEntries(withDirectoryEntries(output)), { level: 6 }), warnings: [...new Set(warnings)] }
 }

@@ -546,6 +546,28 @@ export function animationReferences(skin: JsonObject, tablePointer: ReadonlyArra
   return { styles, combos: [...combos], ...contexts.length ? { contexts } : {} }
 }
 
+export type PalmAnimationStyle = { id: string; events: string[]; animations: string[] }
+
+/**
+ * 引用了动效的样式：`ss_1.*.s_5` 的事件绑定（当前这张表的样式，横竖屏覆盖 s_info），按样式编号列出它的时机与动效。
+ * 与 `animationReferences` 是同一份引用关系的另一个方向。
+ */
+export function animationStyles(skin: JsonObject, tablePointer: ReadonlyArray<string | number>): PalmAnimationStyle[] {
+  const theme = asObject(skin[String(tablePointer[0])]) ?? {}
+  const shared = asObject(theme.s_info) ?? {}
+  const local = asObject(theme[String(tablePointer[1])]) ?? {}
+  const table = { ...asObject(shared.ss_1), ...asObject(local.ss_1) }
+  return Object.entries(table).flatMap(([id, style]) => {
+    const bindings = asObject(asObject(style)?.s_5)
+    const events = ANIMATION_EVENTS.flatMap(([event, name]) => bindings?.[event] === undefined ? [] : [name])
+    const animations = ANIMATION_EVENTS.flatMap(([event]) => {
+      const value = bindings?.[event]
+      return value === undefined ? [] : [String(value)]
+    })
+    return animations.length ? [{ id, events, animations }] : []
+  })
+}
+
 /** `b.c` should name the family; skins edited by hand can carry a stale category. */
 export function baseNeedsFix(kind: string, model: JsonObject): boolean {
   const category = animationFamilyInfo(kind)?.category

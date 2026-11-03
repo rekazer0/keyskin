@@ -23,7 +23,7 @@ function bands(width, height, split, top, bottom) {
   return encodePng(image)
 }
 
-function wav(samples = 32) {
+export function wav(samples = 32) {
   const bytes = new Uint8Array(44 + samples * 2)
   const view = new DataView(bytes.buffer)
   const ascii = (offset, text) => [...text].forEach((char, index) => { bytes[offset + index] = char.charCodeAt(0) })

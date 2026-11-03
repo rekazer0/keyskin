@@ -20,6 +20,7 @@ import {
   animationModel,
   addableComboIds,
   animationReferences,
+  animationStyles,
   animationTimeline,
   a1TypePatch,
   a1UnitPatch,
@@ -42,11 +43,12 @@ import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { fieldCaption } from "./property-rows"
 import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
-import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, rememberAnimation, selectAnimation, selectedAnimation, shownInAnimationView } from "./animation-resource"
+import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
 import type { PreviewItem } from "../preview-items.ts"
 import { decorateStyleReferenceInput } from "./style-references"
 import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
+import { animationStyleCard } from "./animation-style-inspector"
 
 type AnimationEntry = { id: string; kind: string; model: JsonObject; wrap: JsonObject }
 
@@ -640,9 +642,12 @@ function listItem(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, 
       ? [`${Number(entry.model.count ?? 0)} 个粒子`, timelineText(timeline)]
       : [timelineText(timeline), timeline.reverse ? "往返" : "", !timeline.continuous && timeline.repeatText !== "播放一次" ? timeline.repeatText : ""]
   const missing = entry.kind === "a3" && comboAnimations(entry.model).some((id) => !asObject(table[String(id)]))
+  const info = [entry.model.INFO, entry.model.info, entry.wrap.INFO, entry.wrap.info]
+    .find((value): value is string => typeof value === "string" && Boolean(value.trim()))
   return {
     id: entry.id,
     title: `动画 ${entry.id}`,
+    info: info?.trim(),
     kind: kindLabel(entry.kind, entry.model),
     icon: entry.kind === "a1" ? A1_ICONS[Number(animationBase(entry.model).t ?? 0)] ?? "blend" : FAMILY_ICONS[entry.kind] ?? "clapperboard",
     detail: detail.filter(Boolean).join(" · "),
@@ -678,11 +683,15 @@ function parameterSections(pointer: SxiPointer, entry: AnimationEntry, table: Js
 }
 
 /** Styles that play `id` on press, directly or through a combination: the keyboard canvas plays these. */
-function pressStyles(skin: JsonObject, pointer: SxiPointer, id: string): Set<string> {
+function pressStyles(skin: JsonObject, pointer: SxiPointer, id: string, cache = new Map<string, Set<string>>()): Set<string> {
+  const cached = cache.get(id)
+  if (cached) return cached
   const direct = animationReferences(skin, pointer, id)
-  return new Set([direct, ...direct.combos.map((combo) => animationReferences(skin, pointer, String(combo)))]
+  const result = new Set([direct, ...direct.combos.map((combo) => animationReferences(skin, pointer, String(combo)))]
     .flatMap((references) => references.styles.filter((style) => style.events.includes("按下")))
     .flatMap((style) => style.name.match(/(\d+)$/)?.[1] ?? []))
+  cache.set(id, result)
+  return result
 }
 
 // IDs are shared by inherited animations as well as orientation-specific overrides.
@@ -704,19 +713,34 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   const table = skin && pointer ? asObject(sxiValue(skin, pointer)) : undefined
   if (!pointer || !skin || !table) return false
   const entries = animationEntries(table).filter((entry) => shownInAnimationView(entry.kind === "a4"))
-  const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, pressStyles(skin, pointer, id))
-  const { items, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(skin, pointer, entry, table)), plays)
+  const pressStyleCache = new Map<string, Set<string>>()
+  const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, pressStyles(skin, pointer, id, pressStyleCache))
+  const { items: keyItems, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(skin, pointer, entry, table)), plays)
+  // 样式列表只列引用了当前入口动效的样式；点一个就把列表筛成它播放的动画。
+  const styles = animationStyles(skin, pointer)
+  const shown = new Set(entries.map((entry) => entry.id))
+  const styleItems = styles.flatMap((style) => {
+    const included = style.animations.filter((id) => shown.has(id))
+    return included.length ? [{ id: style.id, title: `样式 ${style.id}`, detail: style.events.join(" · "), count: included.length }] : []
+  })
+  const styleAnimations = new Map(styles.map((style) => [style.id, new Set(style.animations)]))
+  const { items, styleFilter } = styleAnimationItems(keyItems, styleItems, (id, style) => Boolean(styleAnimations.get(style)?.has(id)))
   const selected = selectedAnimation(items)
   const entry = entries.find((candidate) => candidate.id === selected)
   const resolver = visualResolver()
   const references = entry && animationReferences(skin, pointer, entry.id)
   const family = entry && animationFamilyInfo(entry.kind)
   renderAnimationResource(container, {
+    listSource: appState.archive,
     mode: appState.animationDesignMode,
     sectionClass: SECTION,
     items,
     selected,
     keyFilter,
+    styles: { noun: "样式", icon: "paintbrush", items: styleItems, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard },
+    thumbnail: id => ({ clip: palmPreviewClip(table, id), key: `${appState.selectedPath}|${id}`, resolver,
+      readFile: resolver instanceof PalmStyles ? file => resolver.bytes(file) : undefined }),
+    styleFilter,
     editable: isEditing(),
     onSelect: selectAnimation,
     create: {
@@ -735,7 +759,8 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
         const latest = animationReferences(current, pointer, entry.id)
         if (latest.styles.length || latest.combos.length) return
         delete asObject(sxiValue(current, pointer))?.[entry.id]
-        const neighbour = entries[entries.indexOf(entry) + 1] ?? entries[entries.indexOf(entry) - 1]
+        const index = items.findIndex((item) => item.id === entry.id)
+        const neighbour = items[index + 1] ?? items[index - 1]
         if (neighbour) rememberAnimation(neighbour.id)
       }),
     },
@@ -744,7 +769,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
       key: `${SXI_SKIN_PATH}|${pointer.join(".")}|${entry.id}`,
       resolver,
       readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined,
-      keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressStyles(skin, pointer, entry.id))),
+      keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressStyleCache.get(entry.id) ?? pressStyles(skin, pointer, entry.id, pressStyleCache))),
     },
     warnings: entry && baseNeedsFix(entry.kind, entry.model)
       ? [animationWarning(`分类值 ${String(animationBase(entry.model).c)} 与${family?.label ?? "动画"}不一致，导出后可能无法识别。`, {
