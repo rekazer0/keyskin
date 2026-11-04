@@ -226,7 +226,7 @@ export function createAtlasWorkspace(actions: {
     meta.textContent = next.path ? `${next.width} × ${next.height} · ${next.slices.length} 个切片` : "未选择图片"
     badge.textContent = slice ? `切片 #${slice.index} · ${slice.source[2]} × ${slice.source[3]}` : "未选择切片"
     // 引用按切片统计：没选切片时不能说整张图「无引用」。
-    reference.querySelector("output")!.textContent = next.reference || (slice ? "无引用" : "选中切片后显示")
+    reference.querySelector("output")!.textContent = next.reference || (slice ? "无引用" : "—")
     toggle.checked = Boolean(slice?.inner)
     toggle.disabled = !slice || !next.editable || next.bda
     stretch.hidden = next.bda

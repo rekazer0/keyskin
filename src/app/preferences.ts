@@ -1,4 +1,5 @@
 import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsDialog, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sidebarViewVisible, inspectorTabs, inspectorTabsVisible, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor } from "./dom"
+import { crossfade, playEnter } from "../motion"
 import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, sidebarViewHeading, source } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { checkForUpdate } from "../update.ts"
@@ -42,7 +43,9 @@ export function showSettingsPage(page: string): void {
   const target = settingsPages.find(panel => panel.dataset.settingsPanel === page && !panel.hasAttribute("data-platform-hidden"))
     ?? settingsPages.find(panel => !panel.hasAttribute("data-platform-hidden"))
   if (!target) return
+  const changed = target.hidden
   for (const panel of settingsPages) panel.hidden = panel !== target
+  if (changed) playEnter(target)
   for (const button of settingsNavItems) {
     const selected = button.dataset.settingsPage === target.dataset.settingsPanel
     button.setAttribute("aria-selected", String(selected))
@@ -91,9 +94,15 @@ export const systemTheme = matchMedia("(prefers-color-scheme: dark)")
 export function applyAppTheme(): void {
   const preference = appTheme.value === "light" || appTheme.value === "dark" ? appTheme.value : "system"
   const resolved = preference === "system" ? (systemTheme.matches ? "dark" : "light") : preference
-  document.documentElement.dataset.appTheme = resolved
-  document.documentElement.style.colorScheme = resolved
-  browserThemeColor.content = getComputedStyle(document.documentElement).getPropertyValue("--material-toolbar").trim()
+  const root = document.documentElement
+  const apply = () => {
+    root.dataset.appTheme = resolved
+    root.style.colorScheme = resolved
+    browserThemeColor.content = getComputedStyle(root).getPropertyValue("--material-toolbar").trim()
+  }
+  // 启动时直接上色；之后换主题整窗交叉淡化
+  if (root.dataset.appTheme && root.dataset.appTheme !== resolved) crossfade(apply)
+  else apply()
   if (isTauri()) void getCurrentWindow().setTheme(preference === "system" ? null : preference)
 }
 

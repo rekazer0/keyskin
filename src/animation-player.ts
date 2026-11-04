@@ -116,7 +116,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const resume = !thumbnail && session.loop && session.looping === key
   if (!thumbnail && session.looping !== key) session.looping = ""
   if (clip.duration > MAX_DURATION) notes.push("长动画只预览前 60 秒")
-  if (tracks.length && !sample) notes.push("示例按键按当前参数播放")
+  if (tracks.length && !sample) notes.push("示例按键")
   const rate = () => thumbnail === "slow" || !thumbnail && session.slow ? SLOW_RATE : 1
 
   /* —— timeline —— */
@@ -161,7 +161,9 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     const text = [...new Set(notes)]
     emptyState.hidden = hasContent
     emptyState.textContent = loading ? "正在加载预览资源…" : text[0] ?? "暂无可播放的内容"
-    note.textContent = loading ? "" : hasContent ? text.join(" · ") : text.slice(1).join(" · ")
+    const noteText = loading ? "" : hasContent ? text.join(" · ") : text.slice(1).join(" · ")
+    note.hidden = !noteText
+    note.replaceChildren(createIcon("info", 12), noteText)
   }
 
   /* —— stage —— */
@@ -213,7 +215,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       (STAGE.height / 2 - top) / (STAGE.height / 2 - margin), (bottom - STAGE.height / 2) / (STAGE.height / 2 - margin),
     )
     fit = Number.isFinite(reach) && reach > 1 ? 1 / reach : 1
-    if (fit < 1) notes.push(`舞台缩小到 ${Math.round(fit * 100)}% 以容纳整段运动`)
+    if (fit < 1) notes.push(`舞台缩放 ${Math.round(fit * 100)}%`)
   }
 
   const draw = () => {

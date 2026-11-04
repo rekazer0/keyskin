@@ -86,6 +86,13 @@
 - 只对 `opacity`、`transform`、颜色类属性做过渡，不对 `width/height/top/left` 做过渡。
 - `tokens.css` 在 `prefers-reduced-motion` 下把时长归零，组件不需要单独处理。
 - 不做装饰性动画，动效只用来说明状态变化。
+- TS 里需要播放的动效统一走 `src/motion.ts`（Web Animations，时长与曲线读 token，时长为 0 时跳过）：
+  - 分段控件换选中项：滑块从旧选项滑到新选项（`.ui-segment-thumb`），由一个监听 `aria-pressed` / `aria-selected` 的观察者统一处理，控件只要用这两个属性表示选中即可自动获得；
+  - 内容整体换了一批（检查器换选择对象、设置换分类、用户展开左侧栏分组）：`playEnter()` 淡入，不位移；
+  - 换主题（浅色 / 深色）：`crossfade()` 用 View Transitions 整窗交叉淡化，启动时的首次上色不播放；
+  - 列表重建时不能给每行加进入动画，否则每次刷新都会闪。
+- 按下：按钮与图标按钮缩到 0.96，卡片缩到 0.99，快速档。
+- 加载中的预览用骨架扫光（`ui-shimmer`，循环动画），不写“正在加载…”；没有预览图只留 `image-off` 图标。
 
 ## 7. 交互状态
 
@@ -125,6 +132,7 @@
 | 输入框 | `.ui-input` | 可带前后缀（单位、图标） |
 | 下拉 | `.ui-select` | 原生 `<select>` 加统一外观 |
 | 分段控件 | `.ui-segmented` | 2–4 个互斥选项；`data-multiple` 用于可组合的功能标识或平台，允许换行，各按钮用 `aria-pressed` 表示是否启用 |
+| 分段滑块 | `.ui-segment-thumb` | 切换选中项时由 `src/motion.ts` 临时插入、滑完即删；外观与所在控件的选中项一致，滑动期间容器带 `data-sliding`，选中项不画自己的底 |
 | 开关 | `.ui-switch` | `input[type=checkbox][role=switch]` |
 | 滑块 | `.ui-slider` | 原生 `input[type=range]` |
 | 滑块 + 数值 | `.ui-slider-field` | 有自然范围的数值（透明度、角度、时长、数量）：左侧 `.ui-slider` 拖动预览、松开提交一步撤销，右侧数值框照常输入 |

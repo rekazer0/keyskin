@@ -412,9 +412,14 @@ export function fitCanvasPreview(): void {
   requestAnimationFrame(resizeKeyboardPreviews)
 }
 
+/** 状态栏右侧：面板尺寸 · 预览缩放（含义写在 #panel-status 的 title 上，这里只放数字）。 */
+function panelStatusText(width: number, height: number, scale: number): string {
+  return `${Math.round(width)} × ${Math.round(height)} · ${Math.round(scale)}%`
+}
+
 function updateCanvasPanelStatus(renderedWidth: number): void {
   if (!appState.canvasLogicalSize) return
-  panelStatus.textContent = `面板：${Math.round(appState.canvasLogicalSize.width)} × ${Math.round(appState.canvasLogicalSize.layoutPanelHeight)} · 预览缩放：${Math.round(renderedWidth / appState.canvasLogicalSize.width * 100)}%`
+  panelStatus.textContent = panelStatusText(appState.canvasLogicalSize.width, appState.canvasLogicalSize.layoutPanelHeight, renderedWidth / appState.canvasLogicalSize.width * 100)
 }
 
 export function setPreviewPan(x: number, y: number): void {
@@ -451,7 +456,7 @@ export function applyPreviewZoom(value: number, anchor?: { x: number; y: number 
   if (currentDeviceValue() !== "canvas" && appState.canvasLogicalSize) {
     requestAnimationFrame(() => {
       const bounds = ($("#preview") as HTMLCanvasElement).getBoundingClientRect()
-      panelStatus.textContent = `面板：${Math.round(appState.canvasLogicalSize!.width)} × ${Math.round(appState.canvasLogicalSize!.layoutPanelHeight)} · 预览缩放：${previewScalePercent(bounds.width, bounds.height, appState.canvasLogicalSize!.width, appState.canvasLogicalSize!.panelHeight)}%`
+      panelStatus.textContent = panelStatusText(appState.canvasLogicalSize!.width, appState.canvasLogicalSize!.layoutPanelHeight, previewScalePercent(bounds.width, bounds.height, appState.canvasLogicalSize!.width, appState.canvasLogicalSize!.panelHeight))
     })
   }
   requestAnimationFrame(resizeKeyboardPreviews)
@@ -523,7 +528,7 @@ export function updatePanelTools(
   requestAnimationFrame(() => {
     if (currentDeviceValue() === "canvas") return
     const bounds = ($("#preview") as HTMLCanvasElement).getBoundingClientRect()
-    panelStatus.textContent = `面板：${Math.round(width)} × ${Math.round(height)} · 预览缩放：${previewScalePercent(bounds.width, bounds.height, width, surfaceHeight)}%`
+    panelStatus.textContent = panelStatusText(width, height, previewScalePercent(bounds.width, bounds.height, width, surfaceHeight))
   })
   return surfaceHeight
 }
