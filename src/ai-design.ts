@@ -11,13 +11,15 @@ import {
 } from "@earendil-works/pi-ai"
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy"
 import { googleGenerativeAIApi } from "@earendil-works/pi-ai/api/google-generative-ai.lazy"
+import { openAICodexResponsesApi } from "@earendil-works/pi-ai/api/openai-codex-responses.lazy"
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy"
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy"
 import { Channel, invoke } from "@tauri-apps/api/core"
 import { AI_DESIGN_DIRECTIONS, SUBAGENT_GUIDE, SUBAGENT_RULES, aiDesignSystemPrompt, contextText, type AiDesignIntensity, type AiDesignProject } from "./ai-design-prompt.ts"
 import { AiSkinImages, base64 } from "./ai-skin-images.ts"
 import { AiSkinWorkspace, type AiSkinDraftChange } from "./ai-skin-workspace.ts"
-import type { ModelProtocol } from "./model-providers.ts"
+import { modelProviderPreset, type ModelProtocol } from "./model-providers.ts"
+import { subscriptionModels } from "./model-settings.ts"
 
 type AiDesignConfiguration = {
   provider: string
@@ -97,6 +99,7 @@ function modelApi(protocol: ModelProtocol): Api {
   if (protocol === "anthropic") return "anthropic-messages"
   if (protocol === "google") return "google-generative-ai"
   if (protocol === "openai-responses") return "openai-responses"
+  if (protocol === "openai-codex") return "openai-codex-responses"
   return "openai-completions"
 }
 
@@ -104,17 +107,23 @@ function apiStreams(protocol: ModelProtocol): ProviderStreams {
   if (protocol === "anthropic") return anthropicMessagesApi()
   if (protocol === "google") return googleGenerativeAIApi()
   if (protocol === "openai-responses") return openAIResponsesApi()
+  if (protocol === "openai-codex") return openAICodexResponsesApi()
   return openAICompletionsApi()
 }
 
 function configuredModel(config: AiDesignConfiguration, thinkingLevel: ThinkingLevel): Model<Api> {
   const api = modelApi(config.protocol)
+  const id = config.model.trim()
+  // Subscription models keep pi-ai's compat flags (adaptive thinking, effort names); the rest is ours.
+  const known = subscriptionModels(config.provider).find((model) => model.id === id)
   return {
-    id: config.model.trim(),
-    name: config.model.trim(),
+    ...known,
+    id,
+    name: id,
     api,
     provider: "keyskin",
-    baseUrl: normalizedUrl(config.apiUrl),
+    // Settings keep the /v1 that model listing needs; the Anthropic SDK adds /v1/messages itself.
+    baseUrl: api === "anthropic-messages" ? normalizedUrl(config.apiUrl).replace(/\/v1$/, "") : normalizedUrl(config.apiUrl),
     // The user picks the effort; "off" sends no reasoning parameters at all.
     reasoning: thinkingLevel !== "off",
     input: ["text", "image"],
@@ -324,7 +333,8 @@ function toolsFor(workspace: AiSkinWorkspace, images: AiSkinImages, imageModel?:
     parameters: generateImageSchema,
     executionMode: "sequential",
     execute: async (_id, { path, slice, prompt, keepShape }, signal) => {
-      const reference = imageModel.protocol === "google" ? (await images.view(path, slice)).png : undefined
+      // Gemini and ChatGPT edit the current picture; the plain images endpoint only draws from text.
+      const reference = imageModel.protocol === "google" || imageModel.protocol === "openai-codex" ? (await images.view(path, slice)).png : undefined
       const picture = await requestImage(imageModel, prompt, reference, signal)
       await images.paint(path, picture, slice, keepShape ?? true)
       return jsonResult({ path, slice, painted: true })
@@ -372,18 +382,38 @@ async function requestImage(config: AiDesignConfiguration, prompt: string, refer
     return decodeBase64(data)
   }
   const model = config.model.trim()
-  const body = await responseJson(await fetch(`${base}/images/generations`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey.trim()}` },
-    // gpt-image models always return base64 and reject response_format.
-    body: JSON.stringify({ model, prompt, n: 1, size: "1024x1024", ...(/gpt-image/i.test(model) ? {} : { response_format: "b64_json" }) }),
-    signal,
-  }))
+  const body = config.protocol === "openai-codex"
+    ? await codexImage(config, model, prompt, reference, signal)
+    : await responseJson(await fetch(`${base}/images/generations`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey.trim()}` },
+      // gpt-image models always return base64 and reject response_format.
+      body: JSON.stringify({ model, prompt, n: 1, size: "1024x1024", ...(/gpt-image/i.test(model) ? {} : { response_format: "b64_json" }) }),
+      signal,
+    }))
   const item = body?.data?.[0]
   if (typeof item?.b64_json === "string") return decodeBase64(item.b64_json)
   // The native proxy only reaches saved API hosts, so CDN links (e.g. CogView) cannot be downloaded.
   if (typeof item?.url === "string") throw new Error("该图片模型只返回图片链接，暂不支持；请换用能返回 b64_json 的模型")
   throw new Error("图片模型没有返回图片")
+}
+
+/** A ChatGPT subscription draws on the Codex image routes with the signed-in account's token. */
+async function codexImage(config: AiDesignConfiguration, model: string, prompt: string, reference: string | undefined, signal?: AbortSignal): Promise<any> {
+  const token = await invoke<string>("model_oauth_token", { provider: config.provider })
+  const claims = JSON.parse(atob(token.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/") ?? ""))
+  return responseJson(await fetch(`${normalizedUrl(config.apiUrl)}/codex/images/${reference ? "edits" : "generations"}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token}`,
+      "chatgpt-account-id": claims?.["https://api.openai.com/auth"]?.chatgpt_account_id ?? "",
+      originator: "pi",
+    },
+    // The shape the Codex client sends: one JSON body for both routes, input images as data URLs.
+    body: JSON.stringify({ model, prompt, size: "auto", ...(reference ? { images: [{ image_url: `data:image/png;base64,${reference}` }] } : {}) }),
+    signal,
+  }))
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -518,7 +548,7 @@ export async function runAiSkinDesign(
   if (options.signal?.aborted) throw new DOMException("AI 设计已取消", "AbortError")
   if (!normalizedUrl(config.apiUrl)) throw new Error("请先配置模型 API 地址")
   if (!config.model.trim()) throw new Error("请先配置模型名称")
-  if (!config.apiKey.trim()) throw new Error("请先配置模型 API 密钥")
+  if (!modelProviderPreset(config.provider).subscription && !config.apiKey.trim()) throw new Error("请先配置模型 API 密钥")
   if (!project.files.length) throw new Error("当前皮肤没有可供 AI 编辑的配置文件")
 
   const webviewFetch = globalThis.fetch
@@ -581,7 +611,12 @@ async function runDesignAgent(
     return new Agent({
       initialState: { systemPrompt, model, thinkingLevel, tools: agentTools, messages },
       streamFn: models.streamSimple.bind(models),
-      getApiKey: () => config.apiKey.trim(),
+      // Subscription tokens expire within hours; the native side refreshes them when needed.
+      getApiKey: () => modelProviderPreset(config.provider).subscription
+        ? invoke<string>("model_oauth_token", { provider: config.provider })
+        : config.apiKey.trim(),
+      // WebSockets would bypass the native fetch proxy (and CORS), so ChatGPT streams over SSE.
+      transport: "sse",
       toolExecution: "sequential",
       beforeToolCall: async ({ toolCall }) => {
         toolCalls += 1

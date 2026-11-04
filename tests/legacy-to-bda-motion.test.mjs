@@ -330,3 +330,19 @@ test("infinite repeat stays a looping BDA count and shared definitions survive p
   assert.equal(effect(motion, "group", 3).items[0].key, "legacy_1")
   assert.ok(motion.targetBindings.get("KEY_Q").some((binding) => binding.kind === "group"))
 })
+
+test("a stylesheet with thousands of sections merges in one pass and leaves the motion untouched", () => {
+  const baseline = template()
+  applyLegacyBaiduMotion(source(), baseline)
+  const input = source()
+  // Two roots and 4000 unreferenced sections, the shape of a real Sogou skin's default.css.
+  const filler = Array.from({ length: 5000 }, (_, index) => `[STYLE${index + 500}]\nNM_IMG=images,${index + 1}\nHL_IMG=images,${index + 1}\nFONT_SIZE=32\nTEXT_COLOR=ffffff\nSHOW_ANIM=0\n`).join("")
+  input.setText("light/skin/res/default.css", `${input.getText("light/skin/res/default.css")}\n${filler}`)
+  input.setText("light/skin/port/res/default.css", `${filler}`)
+  const output = template()
+  const started = performance.now()
+  applyLegacyBaiduMotion(input, output)
+  const elapsed = performance.now() - started
+  assert.deepEqual(output.getBytes("light/skin/port/animationConfig"), baseline.getBytes("light/skin/port/animationConfig"))
+  assert.ok(elapsed < 5000, `merging ${5000 * 5} entries took ${Math.round(elapsed)}ms`)
+})

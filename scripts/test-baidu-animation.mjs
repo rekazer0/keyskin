@@ -5,6 +5,7 @@ import { unzipSync } from "fflate"
 import { SkinArchive } from "../src/skin.ts"
 import { convertBdaArchive } from "../src/bda-convert.ts"
 import { bdaAnimatedSkinBytes, bdsBaseArchive } from "../tests/helpers/bda-animation-fixture.mjs"
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 // BDA → 旧版：先用转换器生成一个带 anim.ini 的 BDS，作为旧版检查器的输入。
 const converted = convertBdaArchive(SkinArchive.open(bdaAnimatedSkinBytes(), "bda"), bdsBaseArchive())
@@ -41,7 +42,7 @@ try {
   // —— 第一部分：BDA animationConfig 的可视化检查器 / 编辑 / 导出 ——
   const bda = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true })
   bda.on("pageerror", (error) => errors.push(`BDA: ${error.message}`))
-  bda.on("dialog", (dialog) => dialog.accept())
+  await acceptAskDialogs(bda)
   await openSkin(bda, "动效测试.bda", bdaAnimatedSkinBytes())
   await bda.evaluate(async () => {
     const { selectFile } = await import("/src/app/navigation.ts")
@@ -66,8 +67,8 @@ try {
   await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-animation-id="shift:slide"]')?.getAttribute("aria-selected") === "true")
   await bdaConfig.locator('[data-animation-id="alpha:press"]').click()
   await bda.waitForFunction(() => document.querySelector('#bda-config-fields [data-animation-id="alpha:press"]')?.getAttribute("aria-selected") === "true")
-  await bdaConfig.locator('input[aria-label="时长（毫秒）"]').first().fill("700")
-  await bdaConfig.locator('input[aria-label="时长（毫秒）"]').first().press("Tab")
+  await bdaConfig.locator('input[aria-label="时长"]').first().fill("700")
+  await bdaConfig.locator('input[aria-label="时长"]').first().press("Tab")
   await bda.waitForFunction(async () => {
     const { appState } = await import("/src/app/state.ts")
     const { decodeBdaAnimation } = await import("/src/bda-decode.ts")

@@ -289,3 +289,20 @@ test('BDS → BDI writes .til slices in IMG order, since iOS numbers them by pos
   assert.equal(bdi.getText('light/skin/res/back.til'),
     '[GLOBAL]\nTILE_NUM=3\n\n[IMG1]\nSOURCE_RECT=0,0,1,1\n[IMG3]\nSOURCE_RECT=0,2,1,1\n\n[IMG10]\nSOURCE_RECT=0,9,1,1\n\n')
 })
+
+test('BDS → BDI makes empty key offsets explicit without changing actions or nonempty offsets', async () => {
+  const layout = '[PANEL]\nKEY_NUM=3\n[KEY1]\nFORE_STYLE=101\nPOS_TYPE=\nSHOW=2\nCENTER=b\n[KEY2]\nFORE_STYLE=102,103\nPOS_TYPE=4,\n[KEY3]\nFORE_STYLE=104\n'
+  const source = SkinArchive.open(zipSync({
+    'Info.txt': strToU8('Name=offsets'),
+    'light/port/py_9.ini': strToU8(layout),
+    'dark/land/py_9.ini': strToU8(layout),
+  }))
+  for (const bytes of [source.toBytes('bdi'), await source.toBytesAsync('bdi')]) {
+    const bdi = SkinArchive.open(bytes)
+    for (const path of ['light/skin/port/py_9.ini', 'dark/skin/land/py_9.ini']) {
+      assert.equal(bdi.getText(path), layout.replace('POS_TYPE=\n', 'POS_TYPE=0\n').replace('POS_TYPE=4,\n', 'POS_TYPE=4,0\n'))
+    }
+  }
+  assert.equal(source.getText('light/skin/port/py_9.ini'), layout)
+  assert.equal(SkinArchive.open(source.toBytes('bds')).getText('light/skin/port/py_9.ini'), layout)
+})

@@ -12,7 +12,8 @@ import { styleConfigPath, genConfigPath, isToolbarPath, effectiveToolbarSections
 import { commitTextChanges, isEditing } from "./edit-history"
 import { currentBdaAppearance, bdaAppearancePart } from "./bda-documents"
 import { bdaStyleValue, createBdaPanelTextStyle, updateBdaRefs } from "./key-inspector"
-import { parseStyleColor } from "./color-control"
+import { field } from "./property-rows"
+import { skinFontNameOptions } from "./skin-fonts"
 import { fontFileField, textStyleGroup, textStyleNote, textStyleRows, textStyleTargetSwitch } from "./dom"
 import { palmSharedTextCount, palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
 import { createIcon } from "../icons"
@@ -178,8 +179,8 @@ function bdaTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } 
   return {
     scope: "layout",
     targets: [
-      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, bda: label, summary: label.length ? `${label.length} 个样式 · 跨面板共享` : "无文字层", note: label.length ? `修改本面板按键用到的 ${label.length} 个文字样式，其他面板共用的样式会一并改变` : "本面板的按键没有文字层" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, bda: hint, summary: `${hint.length} 个样式 · 跨面板共享`, note: `修改本面板按键用到的 ${hint.length} 个提示文字样式，其他面板共用的样式会一并改变` }] : [],
+      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, bda: label, summary: label.length ? `${label.length} 个样式 · 跨布局共享` : "无文字层", note: label.length ? `修改本布局按键用到的 ${label.length} 个文字样式，其他布局共用的样式会一并改变` : "本布局的按键没有文字层" },
+      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, bda: hint, summary: `${hint.length} 个样式 · 跨布局共享`, note: `修改本布局按键用到的 ${hint.length} 个提示文字样式，其他布局共用的样式会一并改变` }] : [],
     ],
   }
 }
@@ -245,83 +246,44 @@ function writable(target: TextTarget): boolean {
   return target.bda ? target.bda.length > 0 || Boolean(target.bdaCreate) : (target.css ?? []).some((ref) => ref.owner || ref.foreground)
 }
 
-function fieldRow(label: string, property: TextProperty, control: HTMLElement): HTMLElement {
-  const row = element("label", "ui-field")
-  row.title = property
-  const caption = element("span")
-  caption.textContent = label
-  row.append(caption, control)
-  return row
-}
-
-function placeholder(values: string[]): string {
-  return new Set(values).size > 1 ? "混合" : "未设置"
-}
-
 function valueRow(target: TextTarget, property: TextProperty, values: string[]): HTMLElement {
-  const input = element("input")
-  input.value = values.every((value) => value === values[0]) ? values[0] ?? "" : ""
-  input.placeholder = placeholder(values)
-  input.setAttribute("aria-label", `${target.label}${LABELS[property]}`)
-  input.disabled = !isEditing() || !writable(target)
-  if (property === "FONT_SIZE") {
-    input.type = "number"
-    input.min = "1"
-    input.step = "1"
-  } else input.setAttribute("list", "skin-font-names")
-  input.addEventListener("change", () => {
-    if (input.type === "number" && input.value && !input.checkValidity()) return
-    writeTarget(target, property, input.value.trim())
-  })
-  if (property === "FONT_SIZE") {
-    const control = element("span", "ui-input")
-    const unit = element("span", "ui-input-affix")
-    unit.textContent = "px"
-    control.append(input, unit)
-    return fieldRow(LABELS[property], property, control)
-  }
-  return fieldRow("字体名", property, input)
+  const common = values.every((value) => value === values[0]) ? values[0] ?? "" : ""
+  const editable = isEditing() && writable(target)
+  const options = { key: property, label: LABELS[property], name: `${target.label}${LABELS[property]}`, mixed: new Set(values).size > 1, editable,
+    commit: (value: string) => writeTarget(target, property, value) }
+  return property === "FONT_SIZE"
+    ? field({ ...options, spec: { kind: "number", value: common, unit: "px", min: 1, step: 1, range: "fontSize" } })
+    : field({ ...options, spec: { kind: "text", value: common, suggestions: skinFontNameOptions() } })
 }
 
-/** Picker, AARRGGBB text and opacity; an unchanged opacity keeps its exact byte when only the hue changes. */
-function colorRow(target: TextTarget, property: TextProperty, values: string[]): HTMLElement {
-  const control = element("span", "color-control ui-input ui-color")
-  const picker = element("input")
-  const text = element("input")
-  const alpha = element("input")
-  picker.type = "color"
-  alpha.type = "number"
-  alpha.min = "0"
-  alpha.max = "100"
-  alpha.step = "1"
-  const common = values.every((value) => value === values[0]) ? values[0] ?? "" : ""
-  const parsed = parseStyleColor(common)
-  const shownAlpha = String(parsed ? Math.round(parsed.alpha * 100) : 100)
-  const alphaByte = parsed ? Math.round(parsed.alpha * 255) : 255
-  text.value = common
-  text.placeholder = placeholder(values)
-  picker.value = `#${parsed?.hex ?? "000000"}`
-  alpha.value = shownAlpha
-  const label = `${target.label}${LABELS[property]}`
-  picker.setAttribute("aria-label", label)
-  text.setAttribute("aria-label", `${label}值`)
-  alpha.setAttribute("aria-label", `${label}透明度`)
-  alpha.title = "不透明度（%）"
-  for (const input of [picker, text, alpha]) input.disabled = !isEditing() || !writable(target)
-  const fromControls = () => {
-    const opacity = alpha.value === shownAlpha ? alphaByte : Math.round(Math.max(0, Math.min(100, Number(alpha.value))) / 100 * 255)
-    writeTarget(target, property, `${opacity.toString(16).padStart(2, "0")}${picker.value.slice(1)}`.toUpperCase())
-  }
-  picker.addEventListener("change", fromControls)
-  alpha.addEventListener("change", () => { if (alpha.value !== "" && alpha.checkValidity()) fromControls() })
-  text.addEventListener("change", () => {
-    const value = text.value.trim().replace(/^#/, "")
-    if (!value || parseStyleColor(value)) writeTarget(target, property, value.toUpperCase())
+/** 正常 | 按下两个色块一行；改色相时保留原透明度的精确字节。 */
+function colorRow(target: TextTarget, values: Record<"NM_COLOR" | "HL_COLOR", string[]>): HTMLElement {
+  const common = (list: string[]) => list.every((value) => value === list[0]) ? list[0] ?? "" : ""
+  return field({
+    key: "NM_COLOR HL_COLOR",
+    label: "文字颜色",
+    name: `${target.label}颜色`,
+    spec: { kind: "colorPair", values: [common(values.NM_COLOR), common(values.HL_COLOR)], codec: "argb" },
+    mixed: new Set(values.NM_COLOR).size > 1 || new Set(values.HL_COLOR).size > 1,
+    editable: isEditing() && writable(target),
+    commit: (next, { index = 0 }) => writeTarget(target, index ? "HL_COLOR" : "NM_COLOR", next[index]),
   })
-  const unit = element("span", "ui-input-affix")
-  unit.textContent = "%"
-  control.append(picker, text, alpha, unit)
-  return fieldRow(LABELS[property], property, control)
+}
+
+/** 按键文字覆盖的「正常 | 按下」一行两个色块：改隐藏的原输入框，写回沿用 updateSelectedStyle。 */
+export function renderKeyTextColor(container: HTMLElement): void {
+  const [normal, pressed] = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=hidden]"))
+  container.querySelector(".ui-field")?.remove()
+  container.prepend(field({
+    key: "NM_COLOR HL_COLOR", label: "颜色", name: "文字颜色",
+    spec: { kind: "colorPair", values: [normal.value, pressed.value], codec: "argb" },
+    mixed: normal.placeholder === "混合" || pressed.placeholder === "混合", editable: !normal.disabled,
+    commit: (next, { index = 0 }) => {
+      const input = index ? pressed : normal
+      input.value = next[index]
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+    },
+  }))
 }
 
 export function populateTextStyleGroup(): void {
@@ -350,8 +312,6 @@ export function populateTextStyleGroup(): void {
     })
     textStyleTargetSwitch.append(button)
   }
-  textStyleRows.append(...target.properties.map((property) => {
-    const values = targetValues(target, property)
-    return property.endsWith("COLOR") ? colorRow(target, property, values) : valueRow(target, property, values)
-  }))
+  textStyleRows.append(...target.properties.filter((property) => !property.endsWith("COLOR")).map((property) => valueRow(target, property, targetValues(target, property))))
+  if (target.properties.includes("NM_COLOR")) textStyleRows.append(colorRow(target, { NM_COLOR: targetValues(target, "NM_COLOR"), HL_COLOR: targetValues(target, "HL_COLOR") }))
 }

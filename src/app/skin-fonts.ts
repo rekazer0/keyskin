@@ -74,7 +74,15 @@ function populateFontSelect(styles: string[]): void {
   fontFileSelect.disabled = !isEditing()
 }
 
-/** FONT_NAME 的候选项：皮肤内字体文件名（可带/不带扩展名）加“系统默认”，仍允许手输系统字体名。 */
+/** FONT_NAME 的候选项：皮肤内字体文件名（带 / 不带扩展名），仍允许手输系统字体名。 */
+export function skinFontNameOptions(): string[] {
+  const names = (skinFontFiles(appState.archive?.names() ?? [])).flatMap((path) => {
+    const name = path.split("/").pop() ?? path
+    return [name, name.replace(/\.(?:ttf|otf|ttc)$/i, "")]
+  })
+  return [...new Set(names)]
+}
+
 function populateFontNameOptions(available: boolean): void {
   skinFontNames.replaceChildren()
   if (!available) {
@@ -82,18 +90,7 @@ function populateFontNameOptions(available: boolean): void {
     return
   }
   fontNameInput.setAttribute("list", "skin-font-names")
-  const archive = appState.archive
-  const values = new Set(["系统默认"])
-  const options = [new Option("系统默认", "")]
-  for (const path of skinFontFiles(archive?.names() ?? [])) {
-    const name = path.split("/").pop() ?? path
-    for (const value of new Set([name, name.replace(/\.(?:ttf|otf|ttc)$/i, "")])) {
-      if (values.has(value)) continue
-      values.add(value)
-      options.push(new Option(value, value))
-    }
-  }
-  skinFontNames.append(...options)
+  skinFontNames.append(new Option("系统默认", ""), ...skinFontNameOptions().map((name) => new Option(name, name)))
 }
 
 export function populateFontControls(): void {
@@ -181,7 +178,7 @@ export function removeSelectedFont(): void {
   refreshPreview()
   populateKeyInspector()
   updateDirty()
-  showStatus(`已移除字体 ${fileName}。`)
+  showStatus(`已移除字体 ${fileName}`)
 }
 
 /** Rejects bytes the browser cannot load as a font. */
@@ -221,7 +218,7 @@ export async function importFontFile(file: File): Promise<void> {
     refreshPreview()
     populateKeyInspector()
     updateDirty()
-    showStatus(`已导入字体 ${fileName}。`)
+    showStatus(`已导入字体 ${fileName}`)
   } catch (error) {
     showError(error, "导入字体")
   }

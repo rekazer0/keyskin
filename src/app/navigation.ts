@@ -15,7 +15,7 @@ import { pickableImagePaths } from "./image-pickers"
 import { populateKeyInspector } from "./key-inspector"
 import { isSsfBoardPath, sourceEditPath, ssfBoardDocument } from "./ssf-documents"
 import { isSxiBoardAddress, isSxiSourcePath, showSxiSource, sxiPointer } from "./sxi-documents"
-import { ensureSourcePathRendered, setSidebarView, updateSourceFileActions } from "./source-files"
+import { ensureSourcePathRendered, setRowSelected, setSidebarView, updateSourceFileActions } from "./source-files"
 
 export function currentNavigationMode(): string {
   if (appState.resourceConfigActive) return appState.resourceInspectorMode === "image" ? "resource" : appState.resourceInspectorMode
@@ -60,7 +60,7 @@ export function selectFile(
     appState.drawingTile = false
     appState.tileDragStart = undefined
     appState.tileDraft = undefined
-    newTileButton.classList.remove("active")
+    newTileButton.setAttribute("aria-pressed", "false")
     atlasCanvas.classList.remove("drawing")
   } else {
     appState.selectedResourcePath = ""
@@ -195,7 +195,7 @@ export function selectFile(
     if (firstImage) selectResourceImage(firstImage)
   }
   if (!quickInspector.hidden) populateKeyInspector()
-  appState.selectedFileButton?.classList.remove("selected")
+  setRowSelected(appState.selectedFileButton, false)
   if (preferredSidebarView === "source") ensureSourcePathRendered(path)
   const preferredContainer = files.querySelector(preferredSidebarView === "overview" ? ".sidebar-overview" : ".raw-files")
   const navMode = currentNavigationMode()
@@ -206,7 +206,7 @@ export function selectFile(
   if (appState.selectedFileButton) {
     setSidebarView(appState.selectedFileButton.closest(".raw-files") ? "source" : "overview")
   }
-  appState.selectedFileButton?.classList.add("selected")
+  setRowSelected(appState.selectedFileButton, true)
   if (mobilePortraitQuery.matches) {
     const group = appState.selectedFileButton?.closest<HTMLElement>(".nav-group")?.dataset.overviewGroup
     files.querySelector<HTMLButtonElement>(`.mobile-overview-groups button[data-overview-group="${CSS.escape(group ?? "")}"]`)?.click()

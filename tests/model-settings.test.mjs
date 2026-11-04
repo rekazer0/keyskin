@@ -48,3 +48,26 @@ test('legacy credentials are removed only after the migrated configuration is sa
   assert.ok(persist.indexOf('save_model_configuration') < persist.indexOf('localStorage.removeItem'))
   assert.match(text.slice(text.indexOf('async function load')), /catch \(error\)[\s\S]*?读取配置失败/)
 })
+
+test('subscriptions need a signed-in account instead of an API key', () => {
+  const { validateModelProviders } = load('model-settings', { require: (id) => id.includes('model-providers') ? providers : {} })
+  const claude = group({ provider: 'claude-subscription', protocol: 'anthropic', apiUrl: 'https://api.anthropic.com/v1', apiKey: '', models: ['claude-sonnet-5'] })
+  assert.match(validateModelProviders([claude]).message, /请先登录 Claude/)
+  assert.equal(validateModelProviders([claude], new Map([['claude-subscription', '']])), undefined)
+  assert.equal(providers.modelProviderPreset('chatgpt-subscription').protocol, 'openai-codex')
+  assert.equal(providers.modelProviderPreset('removed-preset').id, 'openai')
+})
+
+test('the ChatGPT subscription image model reuses the chat sign-in and needs no key', () => {
+  const { validateImageModel } = load('model-settings', { require: (id) => id.includes('model-providers') ? providers : {} })
+  const image = { provider: 'chatgpt-subscription', protocol: 'openai-codex', apiUrl: 'https://chatgpt.com/backend-api', model: 'gpt-image-2.5', apiKey: '', kind: 'image' }
+  assert.match(validateImageModel(image), /请先登录 ChatGPT/)
+  assert.equal(validateImageModel(image, new Map([['chatgpt-subscription', 'me@example.com']])), undefined)
+  assert.equal(providers.imageModelPreset('chatgpt-subscription').id, providers.modelProviderPreset('chatgpt-subscription').id)
+})
+
+test('image model listings keep only image models', () => {
+  const { imageModelIds } = load('model-settings', { require: (id) => id.includes('model-providers') ? providers : {} })
+  const listed = ['gpt-5', 'gpt-image-1', 'dall-e-3', 'doubao-seedream-4-0-250828', 'deepseek-chat', 'imagen-4.0-generate-001', 'gemini-2.5-flash-image', 'image-01', 'cogview-4']
+  assert.deepEqual([...imageModelIds(listed)], ['gpt-image-1', 'dall-e-3', 'doubao-seedream-4-0-250828', 'imagen-4.0-generate-001', 'gemini-2.5-flash-image', 'image-01', 'cogview-4'])
+})

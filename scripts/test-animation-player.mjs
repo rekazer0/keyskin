@@ -8,6 +8,7 @@ import { sxiAnimationFixture } from '../tests/helpers/sxi-animation-fixture.mjs'
 import { bdaAnimatedSkinBytes, bdsBaseArchive } from '../tests/helpers/bda-animation-fixture.mjs'
 import { SkinArchive } from '../src/skin.ts'
 import { convertBdaArchive } from '../src/bda-convert.ts'
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const bda = bdaAnimatedSkinBytes()
 const bds = await convertBdaArchive(SkinArchive.open(bda, 'bda'), bdsBaseArchive()).archive.platformBytesAsync('bds')
@@ -17,14 +18,14 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-page.on('dialog', (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 const fingerprint = () => page.evaluate(async () => {
   const { appState } = await import('/src/app/state.ts')
   return { undo: appState.undoStack.length, revision: appState.archive.revision, dirty: [...appState.dirtyPaths ?? []] }
 })
 // 进入后概览让位给动画列表，先点列表顶部的返回再从概览切换。
 const choose = async (mode) => {
-  if (await page.locator('body.animation-workspace').count()) await page.locator('#animation-library button[aria-label="返回布局"]').click()
+  if (await page.locator('body.animation-workspace').count()) await page.locator('#animation-library .ui-pane-header button[aria-label="返回"]').click()
   await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).first().click()
 }
 const player = page.locator('#animation-stage .ui-animation-player').first()
@@ -42,9 +43,9 @@ const pick = async (id) => {
 
 try {
   for (const [format, bytes, motionID, field] of [
-    ['sxi', sxiAnimationFixture(), '100', '持续时间'],
+    ['sxi', sxiAnimationFixture(), '100', '时长'],
     ['bds', bds, 'ANIM1', '时长'],
-    ['bda', bda, 'alpha:press', '时长（毫秒）'],
+    ['bda', bda, 'alpha:press', '时长'],
   ]) {
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
     await page.locator('#browser-open').setInputFiles({ name: `preview.${format}`, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })

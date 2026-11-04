@@ -387,7 +387,10 @@ export class AtlasResolver {
     const embeddedFont = fontPath ? loadEmbeddedFont(archive, fontPath) : undefined
     this.embeddedFontFamily = embeddedFont?.family
     const fonts = [embeddedFont?.ready]
-    if (path && this.styles) {
+    // Android 的旧 CSS 引擎只解析 [GLOBAL] FONT_PATH（CssLoader.t()），[STYLE*] 的 FONT_NAME 和
+    // 样式级 FONT_PATH 都没有分支（StyleParam.v()）。BDS 预览只内嵌 GLOBAL 字体，样式里的
+    // FONT_NAME 保持系统字体名的回退处理；BDI 仍按手册支持这两项。
+    if (path && this.styles && archive.format !== "bds") {
       // iOS 专有的 [STYLE*] FONT_PATH：皮肤里已经写了才支持，内嵌字体优先于 FONT_NAME。
       for (const { section, key, value } of this.styles.entries()) {
         if (key !== "FONT_PATH" || section === "GLOBAL") continue

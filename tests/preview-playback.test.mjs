@@ -87,26 +87,6 @@ test('loading configuration stays idle; presses play panel and independent keys,
   assert.equal(frames.size, 0)
 })
 
-test('key presses stop inspector-wide particles without replaying them near LIST', async (t) => {
-  const { preview, frames } = harness(t)
-  preview.setLegacyAnimation(parseLegacyAnimation(styles, animations))
-  preview.setParticlePreview(emitter)
-  await playAnimation(preview, keys[0])
-  assert.equal(preview.legacyPanelAnimationStartedAt, 0)
-  assert.equal(preview.legacyAnimationStates.has('KEY1'), true)
-  preview.restartLegacyPanelAnimation()
-  assert.equal(preview.legacyPanelAnimationStartedAt, 1000, 'explicit inspector replay still works')
-  const panelTimer = preview.legacyPanelAnimationTimer
-  await playAnimation(preview, keys[1])
-  assert.equal(preview.legacyPanelAnimationStartedAt, 0)
-  assert.equal(frames.has(panelTimer), false)
-  assert.equal(preview.legacyAnimationStates.size, 2)
-  preview.setParticlePreview()
-  await playAnimation(preview, keys[0])
-  assert.equal(preview.legacyPanelAnimationStartedAt, 0)
-  assert.equal(preview.legacyAnimationStates.has('KEY1'), true, 'panel binding plays on the pressed key')
-})
-
 test('a key without particle bindings inherits panel particles at its own rectangle', async (t) => {
   const { preview } = harness(t)
   preview.setLegacyAnimation(parseLegacyAnimation(styles, animations))

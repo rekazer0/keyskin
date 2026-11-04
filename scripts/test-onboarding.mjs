@@ -98,7 +98,7 @@ async function walkTour(page, compact) {
   await next(page)
 
   await expectStep(page, "切换到编辑模式")
-  await page.locator(compact ? ".mode-control .mobile-choice-toggle" : '[data-mode-choice="edit"]').click()
+  await page.locator(compact ? '[data-mobile-choice="mode"]' : '[data-mode-choice="edit"]').click()
   await expectStep(page, "选中一个按键")
   assert.equal(await page.inputValue("#mode"), "edit")
   const canvas = await page.locator("#preview").boundingBox()
@@ -112,10 +112,10 @@ async function walkTour(page, compact) {
   await next(page)
 
   await expectStep(page, "保存与导出")
-  const menu = compact ? ".mobile-command-menu" : ".pen-file-menu"
+  const menu = ".pen-file-menu"
   await page.locator(`${menu} > summary`).click()
   await expectStep(page, "导出给输入法")
-  await assertRingOn(page, `${menu}[open] .toolbar-menu`)
+  await assertRingOn(page, `${menu}[open] .ui-menu`)
   // Going back skips the step that was completed by opening the menu, and the menu closes with its step.
   await page.locator(".ui-tour-card footer .ui-button[data-variant=quiet]").click()
   await expectStep(page, "设置")

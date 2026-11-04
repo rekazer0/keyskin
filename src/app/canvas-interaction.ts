@@ -1,4 +1,4 @@
-import { mobileCommandMenu, settingsDialog, $, sidebarViewControl, device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton } from "./dom"
+import { settingsDialog, $, sidebarViewControl, device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton } from "./dom"
 import { LazySourceCodeEditor } from "../lazy-source-editor.ts"
 import { effectiveDeviceValue } from "../canvas-background.ts"
 import { type SourceWriteSnapshot } from "../source-tree.ts"
@@ -30,14 +30,6 @@ import { createIcon } from "../icons"
 
 export const scrollbarIdleTimers = new WeakMap<HTMLElement, number>()
 
-export const mobileCommandButtons = Array.from(
-  mobileCommandMenu.querySelectorAll<HTMLButtonElement>("[data-mobile-command], [data-mobile-export-format]"),
-)
-
-const mobileShareMenuLabel = mobileCommandMenu.querySelector<HTMLElement>(
-  '[data-mobile-command="mobile-share"] span:last-child',
-)!
-
 export const settingsNavItems = Array.from(settingsDialog.querySelectorAll<HTMLButtonElement>("[data-settings-page]"))
 
 export const settingsPages = Array.from(settingsDialog.querySelectorAll<HTMLElement>("[data-settings-panel]"))
@@ -57,16 +49,6 @@ export const LARGE_SKIN_BYTES = 5 * 1024 * 1024
 export const keyboardFields = Array.from(
   document.querySelectorAll<HTMLInputElement>("[data-keyboard-field]"),
 )
-
-export const bdaKeyFieldLabels: Record<string, string> = {
-  BACK_STYLE: "背景样式（backStyle）",
-  FORE_STYLE: "前景样式（foreStyles）",
-  FORE_OFFSET: "前景样式偏移（foreStyleOffsets）",
-  FONT_NAME: "字体名称（fontName）",
-  FONT_SIZE: "字体大小（fontSize）",
-  NM_COLOR: "正常文字颜色（normalColor）",
-  HL_COLOR: "高亮文字颜色（highlightColor）",
-}
 
 export const layoutActionButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-layout-action]"),
@@ -445,7 +427,7 @@ function handlePreviewEvent(event: PreviewEvent): void {
   const soundPath = keySoundForEvent(event)
   if (soundPath) playSoundPath(soundPath)
   eventLog.textContent =
-    `${event.section} · ${event.direction.toUpperCase()} · ${event.code || "未配置"}`
+    `${event.section} · ${event.direction.toUpperCase()} · ${event.code || "未设置"}`
   if (event.direction === "hold" && event.holdSymbols) {
     eventLog.textContent = `${event.section} · HOLD · 长按符号候选：${event.holdSymbols}`
     return
@@ -645,7 +627,6 @@ export function syncMobileShareLabel(): void {
   mobileShareButton.querySelector("span:last-child")!.textContent = label
   mobileShareButton.title = label
   mobileShareButton.setAttribute("aria-label", label)
-  mobileShareMenuLabel.textContent = label
 }
 // 源文件树缩略图按 PNG 字节缓存：文件被改写时换成新的字节对象，旧缓存随之回收。
 // 只保留 16px（按像素比放大）的小图，大图解码后立即释放。
@@ -677,24 +658,7 @@ export function syncDeviceControlIcon(): void {
   deviceControlIcon.replaceChildren(createIcon(name, 16))
 }
 
-export function mobileCommandTarget(button: HTMLButtonElement): HTMLButtonElement | undefined {
-  const command = button.dataset.mobileCommand
-  if (command) return document.getElementById(command) as HTMLButtonElement | null ?? undefined
-  const format = button.dataset.mobileExportFormat
-  const platform = button.dataset.bdaPlatform
-  return format
-    ? document.querySelector<HTMLButtonElement>(
-      `[data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`,
-    ) ?? undefined
-    : undefined
-}
-
-export function syncMobileCommands(): void {
-  for (const button of mobileCommandButtons) {
-    const target = mobileCommandTarget(button)
-    button.disabled = target?.disabled ?? true
-    button.hidden = target?.hidden ?? false
-  }
+export function syncUndoButtons(): void {
   mobileUndoButton.disabled = undoButton.disabled
   mobileRedoButton.disabled = redoButton.disabled
   desktopUndoButton.disabled = undoButton.disabled

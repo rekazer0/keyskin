@@ -11,54 +11,44 @@
     <title>图片选择</title>
   </head>
   <body class="picker-window">
-    <header class="picker-toolbar">
-      <button id="picker-back" class="picker-back" type="button" aria-label="切换至全部图片" hidden>
-        <span class="picker-back-icon" data-icon="chevron-left" data-icon-size="16" aria-hidden="true"></span>
-        <span id="picker-back-label">全部图片</span>
-      </button>
-      <div class="picker-heading">
-        <span id="picker-style" hidden></span>
-        <strong id="picker-title">图片选择</strong>
-        <span id="picker-subtitle"></span>
-      </div>
-      <div class="picker-actions">
-        <input id="resource-search" type="search" results="0" placeholder="搜索图片资源" aria-label="搜索图片资源" hidden />
-        <button id="picker-close" class="ui-icon-button" type="button" title="关闭" aria-label="关闭" data-icon="x" data-icon-size="16" hidden></button>
+    <header class="ui-pane-header picker-toolbar">
+      <button id="picker-back" class="ui-icon-button" type="button" title="返回全部图片" aria-label="返回" hidden><span data-icon="arrow-left" aria-hidden="true"></span></button>
+      <span id="picker-style" hidden></span>
+      <h2 id="picker-title">图片选择</h2>
+      <span id="picker-count" class="ui-badge" data-variant="pill" hidden></span>
+      <div class="ui-pane-header-actions">
+        <label class="ui-input ui-search" hidden><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="resource-search" type="text" aria-label="搜索" /></label>
+        <button id="picker-close" class="ui-icon-button" type="button" title="关闭" aria-label="关闭" hidden><span data-icon="x" aria-hidden="true"></span></button>
       </div>
     </header>
     <main>
       <section id="image-picker-view" class="image-picker-view" hidden>
-        <div class="picker-canvas-stage"><canvas id="picker-canvas" width="720" height="420" aria-label="原始图片切片选择器"></canvas></div>
+        <div class="picker-canvas-stage"><canvas id="picker-canvas" class="ui-checker" width="720" height="420" aria-label="原始图片切片选择器"></canvas></div>
       </section>
       <section id="style-library-view" class="style-library-view" hidden>
         <div class="style-library-bar">
-          <div class="style-library-segmented" role="group" aria-label="内容类型">
+          <div id="style-library-modes" class="ui-segmented" role="group" aria-label="内容类型">
             <button type="button" data-library-mode="styles" aria-pressed="true">全部样式</button>
             <button type="button" data-library-mode="images" aria-pressed="false">全部图片</button>
           </div>
           <div id="style-library-kinds"></div>
           <div id="style-library-filters"></div>
-          <button id="style-library-add" class="style-library-add" type="button" title="新增样式" aria-label="新增样式">＋</button>
         </div>
-        <div id="style-library-grid" class="style-library-grid"></div>
-        <p id="style-library-empty" class="style-library-empty" role="status" hidden></p>
+        <div id="style-library-grid" class="style-library-grid" role="listbox" aria-label="全部样式"></div>
+        <div id="style-library-empty" class="style-library-empty" role="status" hidden></div>
         <section id="style-library-preview" class="style-library-preview" aria-label="所选资源预览" hidden>
-          <div id="style-library-preview-image" class="style-library-preview-image"></div>
+          <div id="style-library-preview-image" class="style-library-preview-image ui-checker"></div>
           <div class="style-library-preview-info">
             <strong id="style-library-preview-title"></strong>
             <small id="style-library-preview-meta"></small>
-            <div>
-              <button id="style-library-apply" type="button">应用到当前项</button>
-              <button id="style-library-edit" type="button">编辑</button>
-              <button id="style-library-preview-close" type="button">关闭预览</button>
+            <div class="style-library-preview-actions">
+              <button id="style-library-apply" class="ui-button" data-variant="primary" type="button">应用</button>
+              <button id="style-library-slice" class="ui-button" type="button" hidden>选择切片</button>
+              <button id="style-library-edit" class="ui-icon-button" type="button" title="编辑" data-shortcut="单击" aria-label="编辑"><span data-icon="pencil" aria-hidden="true"></span></button>
             </div>
           </div>
+          <button id="style-library-preview-close" class="ui-icon-button" type="button" title="关闭预览" aria-label="关闭预览"><span data-icon="x" aria-hidden="true"></span></button>
         </section>
-        <footer class="style-library-footer"><span id="style-library-status"></span><span id="style-library-source"></span></footer>
-      </section>
-      <section id="resource-picker-view" class="resource-picker-view" hidden>
-        <div id="resource-picker-grid" class="resource-picker-grid"></div>
-        <p id="resource-empty" hidden>没有匹配的图片资源</p>
       </section>
     </main>
     <script type="module" src="/src/picker-window.ts"></script>

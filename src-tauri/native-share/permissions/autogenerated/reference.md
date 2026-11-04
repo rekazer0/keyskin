@@ -88,6 +88,32 @@ Denies the createSourceWorkspace command without any pre-configured scope.
 <tr>
 <td>
 
+`native-share:allow-pickSkinFile`
+
+</td>
+<td>
+
+Enables the pickSkinFile command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-share:deny-pickSkinFile`
+
+</td>
+<td>
+
+Denies the pickSkinFile command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `native-share:allow-pickSourceDirectory`
 
 </td>

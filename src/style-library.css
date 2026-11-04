@@ -1,4 +1,0 @@
-/* 样式类型徽标：样式库卡片、样式配置列表放在说明行里，检查器样式引用的位置见 inspector-fidelity.css，都不压在预览图上。 */
-:root body .style-kind-badge { display: inline-flex; align-items: center; gap: 4px; height: 16px; margin-right: 4px; padding: 0 6px; border-radius: var(--radius-sm); vertical-align: -3px; background: var(--material-content); color: var(--secondary); font-size: var(--font-size-xs); font-weight: 500; line-height: 1; white-space: nowrap; pointer-events: none; box-shadow: 0 0 0 1px var(--line); }
-:root body .style-kind-badge :is(svg) { width: 11px; height: 11px; flex: none; }
-:root body .style-kind-badge:is([data-style-kind=color],[data-style-kind=anim]) { color: var(--accent); }

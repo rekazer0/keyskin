@@ -48,13 +48,24 @@ export function ssfSkeleton(pkg: SsfPackage, template: SkinArchive): SkinArchive
   return SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
 }
 
+/** 转换分几步：每步之间让出一帧，重活开始前先让进度框出现在屏幕上。 */
+export type ConversionReport = (fraction: number, detail: string) => Promise<void>
+
 /** Converts an SSF document into a Baidu package of `format`. */
-export async function convertSsfDocument(archive: SkinArchive, format: "bdi" | "bds" | "bda", templates: SsfTemplates): Promise<Converted> {
+export async function convertSsfDocument(
+  archive: SkinArchive,
+  format: "bdi" | "bds" | "bda",
+  templates: SsfTemplates,
+  report: ConversionReport = async () => {},
+): Promise<Converted> {
   const pkg = documentPackage(archive)
   if (format === "bda") {
+    await report(0.2, "正在转换按键样式…")
     const { archive: converted, warnings } = convertSsfToBda(pkg, templates.bda)
     if ([...pkg.files.keys()].some(path => /(^|\/)anim\.ini$/i.test(path))) {
+      await report(0.6, "正在转换按键动效…")
       const legacy = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution))
+      await report(0.85, "正在写入动效配置…")
       const motionWarnings = applyLegacyBaiduMotion(legacy.archive, converted)
       return { bytes: converted.toBytes(), warnings: [...new Set([
         ...warnings.filter(warning => !warning.startsWith("按键动画（anim.ini）暂不转换")), ...legacy.warnings, ...motionWarnings,
@@ -62,10 +73,22 @@ export async function convertSsfDocument(archive: SkinArchive, format: "bdi" | "
     }
     return { bytes: converted.toBytes(), warnings }
   }
+  await report(0.25, `正在转换为 ${format.toUpperCase()}…`)
   // Keep the SSF canvas geometry and artwork; the toolbar moves into Baidu's native F14 container and logo icons.
   const { archive: converted, warnings } = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution), format)
   syncKeyStateTips(converted)
   adaptSsfNativeToolbar(converted, pkg, format, warnings)
+  if (format === "bds") for (const theme of pkg.themes.keys()) {
+    const prefix = `${theme}/skin/`
+    const css = converted.getBytes(`${prefix}res/default.css`)
+    if (!css) continue
+    // Android skins load direction-local styles; the shared res folder still supplies their images.
+    for (const orientation of ["port", "land"]) {
+      const path = `${prefix}${orientation}/res/default.css`
+      if (converted.isText(`${prefix}${orientation}/gen.ini`) && !converted.isText(path)) converted.setBytes(path, css)
+    }
+  }
+  await report(0.7, `正在打包 ${format.toUpperCase()} 皮肤…`)
   // Platform packaging also re-encodes the Sogou WAV key sounds into what the target IME plays.
   return { bytes: await converted.platformBytesAsync(format, warnings), warnings }
 }

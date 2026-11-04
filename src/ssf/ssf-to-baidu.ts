@@ -251,7 +251,11 @@ class ThemeConverter {
 
   private keyboard(): { panel?: string; cand?: string; input?: string } {
     if (!this.keyboardStyles) {
-      const { panel, cand, panelColor } = this.look.keyboard()
+      const gen = IniDocument.parse(this.base.getText("light/skin/port/gen.ini"))
+      const height = numbers(gen.get("PANEL", "SIZE"))[1]
+      const barHeight = numbers(gen.get("CAND", "VIEW_RECT"))[3]
+      const { panel, cand, panelColor } = this.look.keyboard(this.panelWidth && height > 0 && barHeight > 0
+        ? barHeight / (height + barHeight) : undefined)
       const input = this.inlineInput ? this.look.inputBar() : undefined
       const bar = input && cand ? this.look.stackedCandidate(input, cand) ?? cand : cand
       this.keyboardStyles = {

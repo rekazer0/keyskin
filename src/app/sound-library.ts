@@ -1,4 +1,4 @@
-import { element, iconButton } from "../dom-element"
+import { bindListboxKeys, element, emptyState, iconButton, listToolbar } from "../dom-element"
 import { createIcon } from "../icons"
 import { SOUND_ACCEPT } from "../sounds"
 import { appState } from "./state"
@@ -14,15 +14,8 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
   resourceGallery.dataset.kind = "sound"
   const query = resourceSearch.value.trim().toLowerCase()
   const visible = entries.filter(entry => `${entry.filename} ${entry.usage}`.toLowerCase().includes(query))
-  resourceCount.textContent = query ? `${visible.length} / ${entries.length} 个音效` : `${entries.length} 个音效`
+  resourceCount.textContent = query ? `${visible.length} / ${entries.length}` : String(entries.length)
   const library = element("div", "ui-sound-library")
-  const toolbar = element("div", "ui-sound-toolbar")
-  const support = element("small")
-  support.textContent = "OGG / WAV / AIFF"
-  const add = element("button", "ui-button")
-  add.type = "button"
-  add.append(createIcon("plus"), "添加音效")
-  add.disabled = !isEditing()
   const chooseFile = (entry?: SoundEntry) => {
     const input = element("input")
     input.type = "file"
@@ -40,10 +33,9 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     input.addEventListener("cancel", () => input.remove(), { once: true })
     input.click()
   }
-  add.addEventListener("click", () => chooseFile())
-  toolbar.append(support, add)
+  const toolbar = listToolbar({ create: { label: "添加音效", title: "添加音效（OGG / WAV / AIFF）", run: () => chooseFile(), disabled: !isEditing() } })
   const list = element("div", "ui-sound-list")
-  list.setAttribute("role", "group")
+  list.setAttribute("role", "listbox")
   list.setAttribute("aria-label", "音效文件")
   const detail = element("section", "ui-sound-preview")
   detail.setAttribute("aria-label", "音效试听")
@@ -92,14 +84,11 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     }
   }
   const updateSelection = () => {
-    for (const { entry, select } of rows) select.setAttribute("aria-current", String(entry.id === appState.selectedSoundID))
+    for (const { entry, select } of rows) select.setAttribute("aria-selected", String(entry.id === appState.selectedSoundID))
     detail.replaceChildren()
     const selected = entries.find(entry => entry.id === appState.selectedSoundID)
     if (!selected) {
-      const title = element("strong")
-      title.textContent = "选择一个音效"
-      status.textContent = "点击播放按钮试听，选择文件后可替换或下载。"
-      detail.append(createIcon("audio-lines", 20), title, status)
+      detail.append(emptyState("audio-lines"))
       return
     }
     const heading = element("small")
@@ -123,7 +112,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     replace.addEventListener("click", () => chooseFile(selected))
     const download = iconButton("download", "下载选中按键音效", () => resourceDownloadButton.click())
     actions.append(play, replace, download)
-    status.textContent = "仅试听，不修改按键的音效绑定。"
+    status.textContent = ""
     status.dataset.error = "false"
     detail.append(heading, name, path, actions, status)
     updatePlaying()
@@ -133,6 +122,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     const select = element("button", "ui-list-item")
     select.type = "button"
     select.dataset.soundId = entry.id
+    select.setAttribute("role", "option")
     select.title = entry.path
     const text = element("span", "ui-list-item-text")
     const name = element("strong")
@@ -151,37 +141,14 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     list.append(row)
     rows.push({ entry, row, select, play })
   }
-  list.addEventListener("keydown", event => {
-    if (!(event.target instanceof Element)) return
-    const index = rows.findIndex(({ row }) => row.contains(event.target as Node))
-    const next = event.key === "ArrowDown" ? index + 1 : event.key === "ArrowUp" ? index - 1
-      : event.key === "Home" ? 0 : event.key === "End" ? rows.length - 1 : undefined
-    if (next === undefined || !rows.length) return
-    event.preventDefault()
-    const target = rows[Math.max(0, Math.min(rows.length - 1, next))]!
+  bindListboxKeys(list, (option) => {
+    const target = rows.find(({ select }) => select === option)
+    if (!target) return
     selectEntry(target.entry)
     target.select.focus()
   })
-  if (!visible.length) {
-    const empty = element("div", "ui-sound-empty")
-    const title = element("strong")
-    title.textContent = query ? "没有找到匹配的音效" : "还没有按键音效"
-    const hint = element("p", "ui-field-note")
-    hint.textContent = query ? "试试文件名、格式或所在路径。" : "添加 OGG、WAV 或 AIFF 文件，随后可在样式中配置。"
-    empty.append(createIcon(query ? "search" : "audio-lines", 20), title, hint)
-    if (query) {
-      const clear = element("button", "ui-button")
-      clear.type = "button"
-      clear.textContent = "清除搜索"
-      clear.addEventListener("click", () => {
-        resourceSearch.value = ""
-        resourceSearch.dispatchEvent(new Event("input", { bubbles: true }))
-        resourceSearch.focus()
-      })
-      empty.append(clear)
-    }
-    list.append(empty)
-  }
+  // 无结果只放图标；清除用搜索框尾部的 x。
+  if (!visible.length) list.append(emptyState(query ? "search-x" : "audio-lines"))
   library.append(toolbar, list, detail)
   resourceGallery.append(library)
   updateSelection()

@@ -164,7 +164,9 @@ test('ssf document: legacy toolbar logo, symbol text and double-pinyin function 
   const resolver = new AtlasResolver(baidu, 'light', 'port')
   await resolver.ready()
   const py9 = read('light/skin/port/py_9.ini')
-  assert.match(resolver.resolveText(py9.get('LIST', 'FORE_STYLE'), false).fontName, /^BdiEmbeddedFont/)
+  // BDS（Android 旧 CSS）不解析 [STYLE*] FONT_NAME（StyleParam.v()），转换后的样式字体在真机
+  // 走系统字体回退，预览也不再把它内嵌成 BdiEmbeddedFont。
+  assert.equal(resolver.resolveText(py9.get('LIST', 'FORE_STYLE'), false).fontName, 'symbols.ttf')
   assert.deepEqual([...archive.changed], [])
 })
 

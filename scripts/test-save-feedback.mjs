@@ -32,14 +32,16 @@ try {
     window.pendingSave = runFileOperation("保存", () => saveArchive(false, "bds"))
   })
   await page.waitForFunction(() => typeof window.finishWrite === "function")
-  assert.equal(await dialog.isVisible(), false, "do not show success until writable.close resolves")
+  assert.equal(await dialog.isVisible(), true, "show progress until writable.close resolves")
+  assert.equal(await page.locator("#file-operation-progress").evaluate((meter) => meter.value), 90)
+  assert.equal(await page.locator("#file-operation-detail").textContent(), "正在写入文件…")
   assert.ok(await page.evaluate(() => window.writtenSize > 0))
   await page.evaluate(async () => { window.finishWrite(); await window.pendingSave })
-  await dialog.waitFor({ state: "visible" })
-  assert.equal(await page.locator("#file-operation-title").textContent(), "保存成功")
-  assert.equal(await close.evaluate((element) => element === document.activeElement), true)
-  await page.keyboard.press("Enter")
   await dialog.waitFor({ state: "hidden" })
+  assert.equal(await page.locator("#file-operation-progress").evaluate((meter) => meter.value), 100)
+  // 成功不弹模态框：只在状态栏写结果。
+  assert.equal(await dialog.isVisible(), false, "success never opens a modal")
+  assert.equal(await page.locator("#event-log").textContent(), "保存完成")
 
   for (const outcome of ["cancel", "error"]) {
     await page.evaluate(async (outcome) => {
@@ -53,7 +55,12 @@ try {
       const { saveArchive } = await import("/src/app/archive-io.ts")
       await runFileOperation("导出", () => saveArchive(true, "bds"))
     }, outcome)
-    assert.equal(await dialog.isVisible(), false, `${outcome} must not show a success dialog`)
+    if (outcome === "error") {
+      assert.equal(await dialog.getAttribute("data-outcome"), "error")
+      assert.equal(await dialog.isVisible(), true, "write failure stays visible")
+      await close.click()
+    }
+    await dialog.waitFor({ state: "hidden" })
     assert.match(await page.locator("#event-log").textContent(), outcome === "cancel" ? /已取消/ : /磁盘已满/)
   }
 
@@ -63,17 +70,12 @@ try {
         const { runFileOperation, showFileOperationProgress } = await import("/src/app/file-operations.ts")
         await runFileOperation(action, () => { if (progress) showFileOperationProgress(); return true })
       }, { action, progress })
-      const download = action.startsWith("下载")
-      assert.equal(await dialog.isVisible(), !download, `${action} with progress=${progress}`)
-      if (!download) {
-        assert.equal(await page.locator("#file-operation-title").textContent(), `${action}成功`)
-        assert.equal(await page.locator(".ui-operation-meter").isVisible(), false)
-        await page.keyboard.press("Escape")
-        await dialog.waitFor({ state: "hidden" })
-      }
+      // 进度框开着时随结果一起关闭（带退出动效）；成功从不弹模态框。
+      await dialog.waitFor({ state: "hidden" })
+      assert.equal(await page.locator("#event-log").textContent(), `${action}完成`, `${action} with progress=${progress}`)
     }
   }
-  console.log("PASS: confirmed writes, cancellation, write failure, all save/export actions, no asset download popup, progress reuse, focus, Enter and Escape")
+  console.log("PASS: export progress, confirmed writes, cancellation, write failure, and status-bar completion")
 } finally {
   await browser?.close()
   await server.close()

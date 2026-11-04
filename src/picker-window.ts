@@ -3,14 +3,14 @@ import { LogicalSize } from "@tauri-apps/api/dpi"
 import { bindSlicePickerZoom, drawSlicePicker, MAX_SLICE_ZOOM, MIN_SLICE_ZOOM, pickableSlices } from "./slice-picker-canvas.ts"
 import { tileSliceAt, type TilePoint, type TileSlice } from "./tiles.ts"
 import { drawVisualPreview, retinaThumbnail, type Visual } from "./atlas.ts"
-import { createIcon, hydrateIcons } from "./icons.ts"
+import { hydrateIcons } from "./icons.ts"
 import { nativePickerWindow, pickerEmitter, pickerListener } from "./picker-channel.ts"
-import { styleCard, styleFilterButtons, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "./style-card"
+import { imageResourceCard, soundStyleSample, styleAddCard, styleCard, styleFilterButtons, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "./style-card"
 import { animationPlayer } from "./animation-player"
 import { iniPreviewClip } from "./animation-preview-model"
 import { IniDocument } from "./ini"
 import type { TextVisual, VisualResolver } from "./atlas"
-import { element, iconButton } from "./dom-element"
+import { bindListActionKeys, bindListboxKeys, emptyState, hydrateShortcuts, listToolbar, searchField } from "./dom-element"
 
 type ImagePayload = {
   path: string
@@ -35,8 +35,6 @@ export type StyleLibraryPayload = {
   bda: boolean
   kind: string
   currentID: string
-  currentLabel: string
-  source: string
   imagesCompatible: boolean
   bitmaps: Record<string, string>
   animationText: string
@@ -47,8 +45,6 @@ export type StyleLibraryPayload = {
     label: string
     info?: string
     kind: string
-    kindLabel: string
-    kindIcon: string
     categories: string[]
     compatible: boolean
     imagePaths: string[]
@@ -58,13 +54,16 @@ export type StyleLibraryPayload = {
     textVisuals?: Array<TextVisual | undefined>
     sound?: string
     soundPlayable?: boolean
+    /** Places that reference it; a referenced style cannot be removed. */
+    uses?: number
   }[]
-  images: { path: string; categories: string[]; referenced: boolean }[]
-  sounds: { styleID: string; filename: string; playable: boolean }[]
+  images: { path: string; categories: string[]; uses: number }[]
+  sounds: { styleID: string; filename: string; playable: boolean; uses?: number }[]
 }
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!
 hydrateIcons()
+hydrateShortcuts()
 // 取色器窗口跟随系统深浅色，与主窗口一样通过 data-app-theme 切换 token。
 const systemDark = matchMedia("(prefers-color-scheme: dark)")
 const syncTheme = () => { document.documentElement.dataset.appTheme = systemDark.matches ? "dark" : "light" }
@@ -72,24 +71,27 @@ syncTheme()
 systemDark.addEventListener("change", syncTheme)
 const title = $("#picker-title")
 const styleName = $("#picker-style")
-const subtitle = $("#picker-subtitle")
+const count = $("#picker-count")
 const back = $("#picker-back") as HTMLButtonElement
-const backLabel = $("#picker-back-label")
 const search = $("#resource-search") as HTMLInputElement
+const searchBox = searchField({ label: "搜索", input: search, onInput: () => { if (view === "styles" || view === "resources") renderLibrary() } })
 const imageView = $("#image-picker-view")
-const resourceView = $("#resource-picker-view")
 const canvas = $("#picker-canvas") as HTMLCanvasElement
-const grid = $("#resource-picker-grid")
-const empty = $("#resource-empty")
 const libraryView = $("#style-library-view")
 const libraryGrid = $("#style-library-grid")
 const libraryEmpty = $("#style-library-empty")
 const libraryKinds = $("#style-library-kinds")
 const libraryFilters = $("#style-library-filters")
-const libraryAdd = $("#style-library-add") as HTMLButtonElement
+const libraryModes = $("#style-library-modes")
 const libraryPreview = $("#style-library-preview")
 const libraryPreviewImage = $("#style-library-preview-image")
 const libraryApply = $("#style-library-apply") as HTMLButtonElement
+const librarySlice = $("#style-library-slice") as HTMLButtonElement
+// 新建在网格末尾的虚线卡，删除在卡片上；工具条只放复制（⌘D 同）。
+const libraryToolbar = listToolbar({ duplicate: { label: "复制样式", run: () => { if (librarySelected?.styleID) emitLibrary("style-library-duplicate", librarySelected) } } })
+const libraryDuplicate = libraryToolbar.querySelector("button")!
+$(".style-library-bar").append(libraryToolbar)
+bindListActionKeys(libraryGrid, libraryToolbar)
 const emitMain = pickerEmitter("main", () => parent)
 const onMain = pickerListener(() => parent)
 
@@ -108,6 +110,13 @@ let libraryKind = "all"
 let libraryFilter = "all"
 let librarySelected: { styleID?: string; imagePath?: string } | undefined
 const libraryBitmaps = new Map<string, Promise<ImageBitmap | undefined>>()
+
+/** 换视图时清空搜索（同步清除按钮）。 */
+function clearSearch(): void {
+  if (!search.value) return
+  search.value = ""
+  search.dispatchEvent(new Event("input"))
+}
 
 function setWindowTitle(text: string): void {
   if (nativePickerWindow) void getCurrentWindow().setTitle(text)
@@ -128,84 +137,47 @@ async function fitWindowHeight(): Promise<void> {
 
 function drawImage(): void {
   if (!image?.naturalWidth || !imagePayload) return
-  scale = drawSlicePicker(canvas, image, pickableSlices(imagePayload.slices, image), imagePayload.selectedIndex, fit * zoom, { normal: "#0a84ff", selected: "#ff453a" })
+  // 切片框颜色读 token（强调色 / 危险色），随主题变化。
+  const tokens = getComputedStyle(document.documentElement)
+  const colors = { normal: tokens.getPropertyValue("--accent").trim(), selected: tokens.getPropertyValue("--state-danger").trim() }
+  scale = drawSlicePicker(canvas, image, pickableSlices(imagePayload.slices, image), imagePayload.selectedIndex, fit * zoom, colors)
   offset = { x: 0, y: 0 }
-}
-
-function filterResources(): void {
-  const query = search.value.trim().toLocaleLowerCase()
-  let visible = 0
-  for (const button of Array.from(grid.querySelectorAll<HTMLButtonElement>("button"))) {
-    button.hidden = Boolean(query) && !button.dataset.path?.toLocaleLowerCase().includes(query)
-    if (!button.hidden) visible++
-  }
-  empty.hidden = !resourcesLoaded || visible > 0
-}
-
-function renderResources(): void {
-  grid.replaceChildren()
-  for (const resource of resources) {
-    const button = document.createElement("button")
-    button.type = "button"
-    button.dataset.path = resource.path
-    button.title = resource.path
-    button.classList.toggle("active", resource.path === imagePayload?.path)
-    const preview = document.createElement("img")
-    preview.src = resource.dataURL
-    preview.alt = ""
-    const name = document.createElement("span")
-    name.textContent = resource.path.split("/").pop() ?? resource.path
-    button.append(preview, name)
-    // 同一个窗口既显示切片也显示全部图片列表，由主窗口决定选完之后是切图还是关窗。
-    button.addEventListener("click", () => void emitMain("resource-picker-select", { path: resource.path }))
-    grid.append(button)
-  }
-  subtitle.textContent = resources.length ? `${resources.length} 张图片` : "正在读取图片资源"
-  filterResources()
 }
 
 function showEmptyView(): void {
   view = "empty"
   imageView.hidden = true
-  resourceView.hidden = true
   libraryView.hidden = true
-  search.hidden = true
+  searchBox.hidden = true
   back.hidden = true
   styleName.hidden = true
-  subtitle.hidden = true
+  count.hidden = true
 }
 
 function showSliceView(): void {
   view = "image"
   imageView.hidden = false
-  resourceView.hidden = true
   libraryView.hidden = true
-  search.hidden = true
+  searchBox.hidden = true
   back.hidden = !imagePayload
-  backLabel.textContent = imagePayload?.styleLibrary ? "全部样式" : "全部图片"
-  back.setAttribute("aria-label", `返回${backLabel.textContent}`)
+  back.title = imagePayload?.styleLibrary ? "返回全部样式" : "返回全部图片"
   if (imagePayload) title.textContent = imagePayload.path.split("/").pop() ?? imagePayload.path
   styleName.hidden = !styleName.textContent
-  subtitle.hidden = true
+  count.hidden = true
   setWindowTitle("图片切片")
 }
 
+/** 为样式或切片选一张图片：和「全部图片」同一个网格，单击即选中，选完由主窗口决定切图还是关窗。 */
 function showResourceList(): void {
   view = "resources"
   imageView.hidden = true
-  resourceView.hidden = false
-  libraryView.hidden = true
-  search.hidden = false
-  search.placeholder = "搜索图片资源"
+  libraryView.hidden = false
+  searchBox.hidden = false
   back.hidden = !imagePayload
-  backLabel.textContent = "图片切片"
-  back.setAttribute("aria-label", "返回图片切片")
+  back.title = "返回图片切片"
   styleName.hidden = true
-  subtitle.hidden = false
-  title.textContent = "全部图片"
-  search.value = ""
-  renderResources()
-  setWindowTitle("全部图片")
+  clearSearch()
+  renderLibrary()
   // 资源列表按需拉取，避免每次打开切片窗口都编码全部图片。
   if (!resources.length) void emitMain("image-picker-resources-request")
 }
@@ -242,18 +214,24 @@ function emitLibrary(event: string, payload: unknown = {}): void {
   void emitMain(event, payload)
 }
 
-function previewLibraryItem(card: HTMLElement, selected: { styleID?: string; imagePath?: string }): void {
+type LibraryTarget = { styleID?: string; imagePath?: string }
+
+/** 单击选中并在底部预览；选中只用 aria-selected 表示。 */
+function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   if (!library) return
   librarySelected = selected
-  libraryGrid.querySelector<HTMLElement>('[data-previewing="true"]')?.removeAttribute("data-previewing")
-  card.dataset.previewing = "true"
+  libraryGrid.querySelector<HTMLElement>('[aria-selected="true"]')?.setAttribute("aria-selected", "false")
+  card.setAttribute("aria-selected", "true")
   libraryPreviewImage.replaceChildren()
   const style = library.styles.find((item) => item.styleID === selected.styleID)
+  const sound = library.sounds.find((item) => item.styleID === selected.styleID)
   if (selected.imagePath) {
     const image = new Image()
     image.alt = selected.imagePath.split("/").pop() ?? selected.imagePath
     image.src = library.bitmaps[selected.imagePath] ?? ""
     libraryPreviewImage.append(image)
+  } else if (sound) {
+    libraryPreviewImage.append(librarySound(sound.filename, sound.playable))
   } else if (style?.kind === "anim") {
     libraryPreviewImage.append(...libraryAnimationPlayers(style))
   } else {
@@ -264,10 +242,15 @@ function previewLibraryItem(card: HTMLElement, selected: { styleID?: string; ima
     }
   }
   $("#style-library-preview-title").textContent = selected.imagePath?.split("/").pop() ?? `样式 ${style?.label ?? selected.styleID}`
-  $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "动画引用缺失或未配置" : "正常 / 按下 · 确认后应用到当前项")
-  const compatible = selected.imagePath ? library.imagesCompatible : Boolean(style?.compatible)
+  $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? "")
+  const compatible = selected.imagePath ? library.imagesCompatible : Boolean(style?.compatible ?? sound)
   libraryApply.disabled = !compatible || !library.editable
-  libraryApply.textContent = !compatible ? "样式类型不兼容" : selected.imagePath && !library.bda ? "选择切片并应用" : "应用到当前项"
+  // 不兼容时只禁用并说明原因，不改按钮文字。
+  libraryApply.title = compatible ? "" : "样式类型不兼容"
+  // 引用卡单击打开这里并定位当前样式；改它的图片切片从这里进。
+  librarySlice.hidden = style?.kind !== "image" || library.bda
+  librarySlice.disabled = !library.editable
+  libraryDuplicate.disabled = !selected.styleID || !library.canAdd || !library.editable
   libraryPreview.hidden = false
 }
 
@@ -303,140 +286,103 @@ function libraryAnimationPlayers(style: StyleLibraryPayload["styles"][number]): 
   }))
 }
 
-function librarySoundSample(filename: string, playable: boolean): HTMLElement {
-  const root = element("span", "ui-style-sound")
-  root.title = filename
-  const play = iconButton("play", `试听音效 ${filename}`)
-  play.disabled = !playable
-  play.addEventListener("click", event => { event.stopPropagation(); emitLibrary("style-library-play", { filename }) })
-  const info = element("span", "ui-style-sound-info")
-  const name = element("strong")
-  name.textContent = filename
-  const meta = element("small")
-  meta.textContent = playable ? "" : "声音文件不存在"
-  info.append(name, meta)
-  root.append(play, info)
-  return root
+function librarySound(filename: string, playable: boolean): HTMLElement {
+  return soundStyleSample(filename, playable ? () => emitLibrary("style-library-play", { filename }) : undefined)
 }
 
-function renderLibrarySounds(payload: StyleLibraryPayload, query: string): number {
-  const sounds = payload.sounds.filter(({ styleID, filename }) => !query || styleID.includes(query) || filename.toLowerCase().includes(query))
-  for (const { styleID, filename, playable } of sounds) {
-    const card = document.createElement("div")
-    card.className = "style-library-item style-library-sound"
-    card.classList.toggle("selected", payload.currentID === styleID)
-    const select = document.createElement("button")
-    select.type = "button"
-    select.title = `点击使用声音样式 ${styleID}；Command/Ctrl 点击编辑`
-    const label = document.createElement("strong")
-    label.textContent = `STYLE${styleID}`
-    const name = document.createElement("small")
-    name.textContent = filename
-    select.append(createIcon("music", 16), label, name)
-    select.addEventListener("click", (event) => emitLibrary(event.metaKey || event.ctrlKey ? "style-library-edit" : "style-library-apply", { styleID }))
-    const play = document.createElement("button")
-    play.type = "button"
-    play.disabled = !playable
-    play.title = playable ? `播放 ${filename}` : "声音文件不存在"
-    play.setAttribute("aria-label", play.title)
-    play.append(createIcon("play", 14))
-    play.addEventListener("click", () => emitLibrary("style-library-play", { filename }))
-    card.append(select, play)
-    libraryGrid.append(card)
+/** 卡片的单击 / 双击 / ⌘ 单击：选中预览、应用、编辑；选图片时单击就是选定。 */
+function bindLibraryCard(card: HTMLElement, target: LibraryTarget, chooser: boolean): void {
+  card.addEventListener("click", (event) => {
+    if (chooser) emitLibrary("resource-picker-select", { path: target.imagePath })
+    else if (event.metaKey || event.ctrlKey) emitLibrary("style-library-edit", target)
+    else previewLibraryItem(card, target)
+  })
+  if (!chooser) card.addEventListener("dblclick", () => { if (!libraryApply.disabled) emitLibrary("style-library-apply", target) })
+}
+
+function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean, images: boolean, query: string): HTMLElement[] {
+  if (chooser) return resources.filter(({ path }) => path.toLowerCase().includes(query)).map(({ path, dataURL }) => {
+    const card = imageResourceCard({ path, src: dataURL })
+    card.setAttribute("aria-selected", String(path === imagePayload?.path))
+    bindLibraryCard(card, { imagePath: path }, true)
+    return card
+  })
+  if (!payload) return []
+  if (payload.soundOnly) {
+    return payload.sounds.filter(({ styleID, filename }) => !query || styleID.includes(query) || filename.toLowerCase().includes(query)).map(({ styleID, filename, playable, uses }) => {
+      const card = styleCard({ id: styleID, label: `STYLE${styleID}`, kind: "sound", sound: () => librarySound(filename, playable), uses })
+      bindLibraryCard(card, { styleID }, false)
+      return card
+    })
   }
-  $("#style-library-status").textContent = `显示 ${sounds.length} 个声音样式`
-  return sounds.length
+  if (images) {
+    return payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter))).map(({ path, uses }) => {
+      const card = imageResourceCard({ path, src: payload.bitmaps[path] ?? "", uses })
+      bindLibraryCard(card, { imagePath: path }, false)
+      return card
+    })
+  }
+  return payload.styles.filter(style => styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter, query)).map((style) => {
+    const card = styleCard({
+      id: style.styleID, label: `STYLE${style.label}`, info: style.info, kind: style.kind,
+      draw: (canvas, highlighted) => style.kind === "text"
+        ? textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
+        : drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(library?.foreground)),
+      animation: () => libraryAnimationPlayers(style), summary: style.summary,
+      sound: style.sound ? () => librarySound(style.sound!, Boolean(style.soundPlayable)) : undefined,
+      uses: style.uses,
+    })
+    bindLibraryCard(card, { styleID: style.styleID }, false)
+    return card
+  })
 }
 
 function renderLibrary(): void {
   const payload = library
-  libraryGrid.replaceChildren()
+  const chooser = view === "resources"
   libraryPreview.hidden = true
   librarySelected = undefined
-  if (!payload) {
-    libraryEmpty.textContent = "正在加载样式…"
-    libraryEmpty.hidden = false
-    return
-  }
-  const sound = payload.soundOnly
-  const images = libraryMode === "images" && !sound
+  libraryDuplicate.disabled = true
+  libraryToolbar.hidden = chooser || !payload?.canAdd || !payload.editable
+  const sound = Boolean(payload?.soundOnly)
+  const images = chooser || libraryMode === "images" && !sound
   title.textContent = images ? "全部图片" : "全部样式"
   setWindowTitle(title.textContent)
-  subtitle.textContent = sound ? `${payload.sounds.length} 个声音样式` : `${payload.styles.length} 个样式 · ${payload.images.length} 张图片`
-  search.placeholder = images ? "搜索图片名称" : "搜索样式名称或编号"
   for (const button of libraryButtons("[data-library-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.libraryMode === libraryMode))
     button.disabled = sound && button.dataset.libraryMode === "images"
   }
+  libraryModes.hidden = chooser
   libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => { libraryKind = value; renderLibrary() }))
   libraryFilters.replaceChildren(styleFilterButtons(styleUsageOptions, "libraryFilter", libraryFilter, value => { libraryFilter = value; renderLibrary() }))
   libraryKinds.hidden = images || sound
-  libraryFilters.hidden = sound
-  libraryAdd.hidden = !payload.canAdd
-  libraryAdd.disabled = !payload.editable
-  const hint = sound ? "单击应用声音样式 · Command/Ctrl 单击编辑" : "单击预览 · 双击应用 · Command/Ctrl 单击编辑"
-  $("#style-library-source").textContent = `${hint} · 来源 ${payload.source}`
+  libraryFilters.hidden = sound || chooser
   const query = search.value.trim().toLowerCase().replace(/^#/, "")
-  let count: number
-  if (sound) count = renderLibrarySounds(payload, query)
-  else {
-    const currentImages = payload.styles.find((item) => item.styleID === payload.currentID)?.imagePaths ?? []
-    const items = images
-      ? payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter)))
-        .map((image) => ({ imagePath: image.path, image, style: undefined }))
-      : payload.styles.filter(style => styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter, query))
-        .map((style) => ({ imagePath: "", image: undefined, style }))
-    for (const { imagePath, image, style } of items) {
-      const selected = imagePath ? currentImages.includes(imagePath) : payload.currentID === style?.styleID
-      const card = style ? styleCard({
-        id: style.styleID, label: `STYLE${style.label}`, info: style.info, kind: style.kind, kindLabel: style.kindLabel, kindIcon: style.kindIcon,
-        draw: (canvas, highlighted) => style.kind === "text"
-          ? textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
-          : drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(library?.foreground)),
-        animation: () => libraryAnimationPlayers(style), summary: style.summary,
-        sound: style.sound ? () => librarySoundSample(style.sound!, Boolean(style.soundPlayable)) : undefined,
-      }) : element("button", "style-library-item")
-      if (image) {
-        const previews = element("span", "style-library-previews")
-        const preview = new Image()
-        preview.alt = ""
-        preview.loading = "lazy"
-        preview.src = payload.bitmaps[image.path] ?? ""
-        previews.append(preview)
-        const label = element("strong")
-        label.textContent = imagePath.split("/").pop()!
-        const note = element("small")
-        note.textContent = image.referenced ? "已引用" : "图片资源"
-        card.append(previews, label, note)
-      }
-      card.setAttribute("aria-pressed", String(selected))
-      card.title = imagePath || [`样式 ${style!.label}`, style!.info, "单击预览，双击应用，Command/Ctrl 单击编辑"].filter(Boolean).join(" · ")
-      const target = imagePath ? { imagePath } : { styleID: style!.styleID }
-      card.addEventListener("click", (event) => {
-        if (event.metaKey || event.ctrlKey) emitLibrary("style-library-edit", target)
-        else previewLibraryItem(card, target)
-      })
-      card.addEventListener("dblclick", () => { if (!libraryApply.disabled) emitLibrary("style-library-apply", target) })
-      libraryGrid.append(card)
-    }
-    count = items.length
-    $("#style-library-status").textContent = `显示 ${count} 项${payload.currentID ? ` · 当前 ${payload.currentLabel}` : ""}`
+  const cards = libraryCards(payload, chooser, images, query)
+  libraryGrid.replaceChildren(...cards)
+  if (payload && !chooser && !images && payload.canAdd && payload.editable) libraryGrid.append(styleAddCard(() => emitLibrary("style-library-add")))
+  // 数量只在标题旁出现一次。
+  count.textContent = String(cards.length)
+  count.hidden = !(chooser ? resourcesLoaded : payload)
+  libraryEmpty.replaceChildren(emptyState(query ? "search-x" : images ? "image-off" : "layers"))
+  libraryEmpty.hidden = cards.length > 0 || !(chooser ? resourcesLoaded : payload)
+  libraryGrid.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" })
+  // 打开时定位当前样式（检查器的引用卡单击进来），预览栏里可以应用或改切片。
+  const current = payload?.currentID && !chooser && !images ? cards.find(card => card.dataset.styleId === payload.currentID) : undefined
+  if (current) {
+    current.click()
+    current.scrollIntoView({ block: "nearest" })
   }
-  libraryEmpty.textContent = images ? "没有匹配的图片" : "没有匹配的样式"
-  libraryEmpty.hidden = count > 0
 }
 
 function showStyleLibrary(payload?: StyleLibraryPayload): void {
   const reset = view !== "styles" || Boolean(payload)
   view = "styles"
   imageView.hidden = true
-  resourceView.hidden = true
   libraryView.hidden = false
-  search.hidden = false
+  searchBox.hidden = false
   styleName.hidden = true
-  subtitle.hidden = false
-  backLabel.textContent = "图片切片"
-  back.setAttribute("aria-label", "返回图片切片")
+  back.title = "返回图片切片"
   if (payload) {
     library = payload
     releaseLibraryBitmaps()
@@ -444,7 +390,7 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
     libraryKind = payload.kind
     libraryFilter = "all"
   } else if (reset) library = undefined
-  if (reset) search.value = ""
+  if (reset) clearSearch()
   // 切片窗口会按图片高度收窄，样式库需要足够的可视面积。
   if (nativePickerWindow && (window.innerWidth < 960 || window.innerHeight < 680)) {
     void getCurrentWindow().setSize(new LogicalSize(Math.max(window.innerWidth, 1100), Math.max(window.innerHeight, 760)))
@@ -480,31 +426,40 @@ back.addEventListener("click", () => {
   } else if (view === "image") showResourceList()
   else if (imagePayload) showSliceView()
 })
-search.addEventListener("input", () => {
-  if (view === "styles") renderLibrary()
-  else filterResources()
-})
 for (const button of libraryButtons("[data-library-mode]")) {
   button.addEventListener("click", () => {
     libraryMode = button.dataset.libraryMode as "styles" | "images"
     libraryFilter = "all"
-    search.value = ""
+    clearSearch()
     renderLibrary()
   })
 }
-libraryAdd.addEventListener("click", () => emitLibrary("style-library-add"))
 libraryApply.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", librarySelected) })
+librarySlice.addEventListener("click", () => { if (librarySelected?.styleID) emitLibrary("style-library-slice", librarySelected) })
 $("#style-library-edit").addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-edit", librarySelected) })
-$("#style-library-preview-close").addEventListener("click", () => {
+function closeLibraryPreview(): void {
   libraryPreview.hidden = true
-  libraryGrid.querySelector<HTMLElement>('[data-previewing="true"]')?.removeAttribute("data-previewing")
+  libraryGrid.querySelector<HTMLElement>('[aria-selected="true"]')?.setAttribute("aria-selected", "false")
+}
+$("#style-library-preview-close").addEventListener("click", closeLibraryPreview)
+bindListboxKeys(libraryGrid, (card) => {
+  card.click()
+  card.focus()
+})
+// ⌘D 复制选中的样式（与侧栏样式列表一致）。
+libraryGrid.addEventListener("keydown", (event) => {
+  if (event.key.toLowerCase() !== "d" || !(event.metaKey || event.ctrlKey) || libraryDuplicate.disabled) return
+  event.preventDefault()
+  libraryDuplicate.click()
 })
 // 网页端没有原生标题栏，关闭按钮和 Esc 都交给主页面收起弹窗。
 const closeButton = $("#picker-close") as HTMLButtonElement
 closeButton.hidden = nativePickerWindow
 closeButton.addEventListener("click", () => void emitMain("picker-close"))
+// Esc 分层：搜索框先清除（searchField 自己拦下）→ 关预览 → 关窗口。
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.isComposing) return
+  if (!libraryView.hidden && !libraryPreview.hidden) return closeLibraryPreview()
   if (nativePickerWindow) void getCurrentWindow().close()
   else void emitMain("picker-close")
 })
@@ -532,6 +487,6 @@ await onMain<StyleLibraryPayload>("style-library-data", (payload) => showStyleLi
 await onMain<ResourcePayload>("image-picker-resources-data", (payload) => {
   resources = payload
   resourcesLoaded = true
-  renderResources()
+  if (view === "resources") renderLibrary()
 })
 void emitMain("picker-window-ready")

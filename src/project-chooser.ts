@@ -1,6 +1,7 @@
 import { save } from "@tauri-apps/plugin-dialog"
 import { builtInProjectTemplateExtension } from "./operations.ts"
 import { hydrateTemplateCardPreviews } from "./template-preview"
+import { element, iconButton } from "./dom-element.ts"
 
 export type ProjectChoice = { templateID: string; name: string; savePath: string }
 
@@ -14,30 +15,16 @@ export function projectChoice(form: HTMLFormElement): ProjectChoice {
 }
 
 export function initializeProjectChooser(form: HTMLFormElement): void {
-  form.classList.add("project-chooser")
+  form.classList.add("project-chooser", "ui-form")
   const heading = form.querySelector("h1, h2")!
   heading.textContent = "新建项目"
   const header = form.querySelector("header")!
-  const hint = document.createElement("small")
-  hint.textContent = "支持 .bdi · .bds · .bda · .ssf · .sxi"
-  const title = document.createElement("div")
-  title.className = "project-chooser-title"
-  title.append(heading, hint)
-  const upload = document.createElement("button")
-  upload.type = "button"
-  upload.className = "project-upload"
-  upload.textContent = "上传文件"
-  upload.addEventListener("click", () => form.dispatchEvent(new Event("project-import")))
-  const close = document.createElement("button")
-  close.type = "button"
-  close.className = "project-close"
-  close.textContent = "×"
-  close.setAttribute("aria-label", "关闭新建项目")
-  close.addEventListener("click", () => form.querySelector<HTMLButtonElement>("#cancel, button[value=cancel]")?.click())
-  header.replaceChildren(title, upload, close)
+  header.className = "ui-dialog-header"
+  const title = element("div")
+  title.append(heading, Object.assign(element("p"), { textContent: ".bdi · .bds · .bda · .ssf · .sxi" }))
+  header.replaceChildren(title, iconButton("upload", "上传文件", () => form.dispatchEvent(new Event("project-import"))))
 
-  const body = document.createElement("div")
-  body.className = "project-chooser-body"
+  const body = element("div", "ui-dialog-body project-chooser-body")
   const options = [...form.querySelectorAll<HTMLLabelElement>("label:has(input[name=project-template])")]
   for (const [index, label] of ["百度官方模板", "更多内置模板"].entries()) {
     const section = document.createElement("fieldset")
@@ -68,14 +55,24 @@ export function initializeProjectChooser(form: HTMLFormElement): void {
   }
   header.after(body)
   const footer = form.querySelector("footer")!
-  const fields = document.createElement("div")
-  fields.className = "project-chooser-fields"
-  fields.innerHTML = `<label>文件名称<span class="project-name-well"><input name="project-name" aria-label="文件名称" value="我的键盘皮肤" required maxlength="100" autocomplete="off"><output class="project-extension">.bda</output></span></label><label>保存位置<button type="button" class="project-location">首次保存时选择</button><input type="hidden" name="project-save-path"></label>`
+  footer.className = "ui-dialog-footer"
+  const name = Object.assign(element("input"), { name: "project-name", value: "我的键盘皮肤", required: true, maxLength: 100, autocomplete: "off" })
+  name.setAttribute("aria-label", "文件名称")
+  const extension = element("output", "ui-input-affix")
+  extension.value = ".bda"
+  const nameWell = element("span", "ui-input")
+  nameWell.append(name, extension)
+  const location = Object.assign(element("button", "ui-button project-location"), { type: "button", textContent: "首次保存时选择" })
+  const path = Object.assign(element("input"), { type: "hidden", name: "project-save-path" })
+  const fields = element("div", "project-chooser-fields")
+  const nameField = element("label", "ui-field")
+  nameField.dataset.stack = ""
+  nameField.append(Object.assign(element("span"), { textContent: "文件名称" }), nameWell)
+  const locationField = element("label", "ui-field")
+  locationField.dataset.stack = ""
+  locationField.append(Object.assign(element("span"), { textContent: "保存位置" }), location, path)
+  fields.append(nameField, locationField)
   footer.prepend(fields)
-  const name = fields.querySelector<HTMLInputElement>("[name=project-name]")!
-  const location = fields.querySelector<HTMLButtonElement>(".project-location")!
-  const path = fields.querySelector<HTMLInputElement>("[name=project-save-path]")!
-  const extension = fields.querySelector<HTMLOutputElement>("output")!
   const validate = () => {
     name.setCustomValidity(!name.value.trim() || /[\\/:*?"<>|\x00-\x1f]/.test(name.value) || /[. ]$/.test(name.value)
       ? "请输入有效文件名称，不要包含路径或特殊字符。" : "")

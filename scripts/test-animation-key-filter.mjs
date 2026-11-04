@@ -64,14 +64,13 @@ try {
   await clickKey('KEY1')
   await page.locator('.animation-key-filter').waitFor()
   assert.deepEqual(await listed(), ['ANIM1'])
-  assert.equal(await page.locator('.animation-library-count').textContent(), '1 / 2 个', '按键筛选时头部显示筛出 / 总数')
+  assert.equal(await page.locator('#animation-library .ui-pane-header .ui-badge').textContent(), '1 / 2', '按键筛选时头部显示筛出 / 总数')
   assert.equal(await page.locator('#animation-library [aria-selected="true"]').getAttribute('data-animation-id'), 'ANIM1')
   assert.deepEqual(await selectedKeys(), ['KEY1'], '按键在画布上标为选中')
 
-  // 再点一次取消选中；⌘ 点两个按键多选。
+  // 再点一次保持选中；⌘ 点两个按键多选。
   await clickKey('KEY1')
-  await page.locator('.animation-key-filter').waitFor({ state: 'detached' })
-  assert.deepEqual(await selectedKeys(), [])
+  assert.deepEqual(await selectedKeys(), ['KEY1'], '再点已选中的按键不取消选中')
   await clickKey('KEY1')
   await clickKey('KEY2', ['Meta'])
   await page.locator('.animation-key-filter').getByRole('button', { name: '2 个按键 的动效', exact: true }).waitFor()
@@ -92,7 +91,7 @@ try {
   assert.deepEqual(await listed(), ['ANIM1', 'ANIM2'])
 
   // 粒子：按键 2 没有粒子，提示切到「全部」。
-  await page.locator('#animation-library button[aria-label="返回布局"]').click()
+  await page.locator('#animation-library .ui-pane-header button[aria-label="返回"]').click()
   await open('particle')
   await clickKey('KEY2')
   await page.locator('.animation-key-filter').waitFor()

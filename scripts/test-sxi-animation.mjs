@@ -7,6 +7,7 @@ import { createServer } from "vite"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 import { SkinArchive } from "../src/skin.ts"
 import { sxiBaiduFiles } from "../src/palm/sxi-to-baidu.ts"
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const fixture = sxiAnimationFixture()
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41835, strictPort: false, host: "127.0.0.1", hmr: false } })
@@ -15,7 +16,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 const errors = []
 page.on("pageerror", (error) => errors.push(error.message))
-page.on("dialog", (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 
 const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
 const animationPath = "skin.json/default/s_info/ss_2"
@@ -47,7 +48,7 @@ async function show(id) {
 const section = (label) => fields.locator(`:scope > section[data-inspector-group-label="${label}"]`)
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const captionOf = (label) => page.locator(".document-field-caption").filter({ hasText: new RegExp(`^${escapeRegExp(label)}$`) })
-const row = (label) => fields.locator(".document-property-field").filter({ has: captionOf(label) })
+const row = (label) => fields.locator(".ui-field").filter({ has: captionOf(label) })
 // 有自然范围的数值行左边是滑块，右边才是数值输入框。
 const input = (label) => row(label).locator('input:not([type="range"])').first()
 const pressed = (label) => row(label).locator(".ui-segmented button[aria-pressed='true']")
@@ -82,7 +83,7 @@ try {
 
   // 入口、对象头与列表
   assert.deepEqual(await page.locator(`.sidebar-overview button[data-path="${animationPath}"] .nav-label`).allTextContents(), ["动效设计", "粒子设计"])
-  assert.equal(await page.locator("#selected-key").textContent(), "动画与动效")
+  assert.equal(await page.locator("#selected-key").textContent(), "动画")
   assert.match(await page.locator("#selected-key-context").textContent(), /skin\.json · s_info\.ss_2/)
   // 行里第一行是名称，第二行是类型、引用次数两个标签和时间摘要。
   assert.deepEqual(await fields.locator("[data-animation-id] strong").allTextContents(), [
@@ -99,15 +100,15 @@ try {
   await show("100")
   assert.match(await section("预览").locator(".ui-animation-time").textContent(), /320 ms/)
   assert.ok((await captions()).includes("变化属性"))
-  assert.ok((await captions()).includes("起始缩放（%）"))
+  assert.ok((await captions()).includes("起始缩放"))
   assert.equal(await pressed("变化属性").textContent(), "缩放")
-  assert.equal(await input("持续时间").inputValue(), "160")
+  assert.equal(await input("时长").inputValue(), "160")
   assert.equal(await row("位移单位").count(), 0, "位移单位只属于位移")
 
   await show("101")
   assert.match(await section("变化").textContent(), /切换单位只保留数值/)
   assert.equal(await pressed("位移单位").textContent(), "像素")
-  assert.ok((await captions()).includes("起始位移（px）"))
+  assert.ok((await captions()).includes("起始位移"))
 
   await show("102")
   assert.equal(await fields.locator(".animation-combo-item").count(), 2)
@@ -116,7 +117,7 @@ try {
   assert.equal(await section("预览").locator(".ui-animation-lane").count(), 2, "组合的每个子动画在时间轴上一行")
 
   await show("103")
-  assert.equal(await row("帧修改方式").locator("select").inputValue(), "1")
+  assert.equal(await pressed("帧修改方式").textContent(), "模式 1", "≤4 项的枚举是分段控件")
   assert.equal(await input("图片序列").inputValue(), "press.webp")
   assert.equal(await input("三段播放速率").inputValue(), "0.5,1,1.5")
   assert.match(await section("预览").locator(".ui-animation-time").textContent(), /1500 ms/)
@@ -125,14 +126,15 @@ try {
   assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "样式", "预览", "发射", "运动", "外观", "时间与循环"])
   assert.ok((await captions()).includes("发射区域位置"))
   assert.equal(await input("粒子总数").inputValue(), "12")
-  // 粒子图片是样式卡片（每张图一张卡，标签旁有「+ 添加」），值仍是样式编号列表。
+  // 粒子图片是样式引用卡（每张图一张卡，标签右端一个追加按钮），值仍是样式编号列表。
   assert.equal(await fields.locator('input[aria-label="粒子图片"]').first().inputValue(), "7,8")
-  assert.equal(await row("粒子图片添加").locator(".style-reference-row").count(), 2)
+  assert.equal(await row("粒子图片").locator(".ui-style-ref").count(), 2)
+  assert.equal(await row("粒子图片").locator(".ui-style-ref-append").count(), 1)
 
   await show("105")
-  assert.equal(await row("路径模式").locator("select").inputValue(), "3")
+  assert.equal(await pressed("路径模式").textContent(), "模式 3（默认）")
   // LEVEL 缺失时手心按上层处理，检查器不能显示成下层。
-  assert.equal(await row("显示层级").locator("select").inputValue(), "1")
+  assert.equal(await pressed("显示层级").textContent(), "上层")
   assert.equal(await input("空闲恢复间隔").inputValue(), "500")
   assert.match(await section("预览").textContent(), /暂不支持桌面预览/, "特殊动效明确说明，不用示意动画代替")
 
@@ -144,7 +146,7 @@ try {
   await show("107")
   assert.equal(await input("液体颜色").getAttribute("type"), "color")
   assert.equal(await fields.locator(".animation-floater").count(), 1)
-  assert.equal(await section("浮动物体").locator(".document-section-code").textContent(), "1 个")
+  assert.equal(await section("浮动物体").locator("h3 .ui-badge").textContent(), "1", "派生数量是标题右侧的只读角标")
 
   await show("108")
   assert.equal(await input("循环帧模板").inputValue(), "element%d_loop.webp")
@@ -158,7 +160,7 @@ try {
 
   // 数值编辑：写回 skin.json、进入撤销栈，并出现改动标记；皮肤包里不生成 anim.ini
   await show("100")
-  await change(input("持续时间"), "320")
+  await change(input("时长"), "320")
   await waitFor("100", "a1.duration", 320)
   assert.match(await exportedAnim(), /\[ANIM100\][\s\S]*DURATION=320/)
   assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.getBytes("light/skin/res/anim.ini")), undefined)
@@ -196,7 +198,7 @@ try {
   await row("位移单位").getByRole("button", { name: "像素", exact: true }).click()
   await waitFor("101", "a1.from_px", [12, 0])
   assert.equal((await animation(101)).a1.from_p, undefined)
-  await row("自动往返").locator("input").check()
+  await row("往返").locator("input").check()
   await waitFor("101", "a1.b.back", true)
   assert.match(await exportedAnim(), /\[ANIM101\][\s\S]*REPEAT_MODE=1/)
   await reset()
@@ -214,7 +216,7 @@ try {
   await change(input("三段播放速率"), "1,2,3")
   await waitFor("103", "af2.psr", [1, 2, 3])
   await show("105")
-  await row("显示层级").locator("select").selectOption("0")
+  await row("显示层级").getByRole("button", { name: "下层", exact: true }).click()
   await waitFor("105", "a10.l", 0)
 
   // 每类动效至少改一项，并验证矩形尺寸、负数和未知字段不会丢失。
@@ -262,13 +264,14 @@ try {
 
   // 浮动物体：改颜色、加一个、改文件名、删掉新的和原有的，重置后全部回来
   await show("107")
+  await row("液体颜色").locator(".ui-swatch").click()
   await change(page.locator('input[aria-label="液体颜色色值"]'), "#FF8800")
   await waitFor("107", "a12.surface_color", "#FF8800")
   await fields.getByRole("button", { name: "添加浮动物体", exact: true }).click()
   await waitFor("107", "a12.floaters.1.file", "")
   const secondFloater = fields.locator(".animation-floater").nth(1)
   assert.equal(await secondFloater.locator("h4").textContent(), "物体 2")
-  await change(secondFloater.locator(".document-property-field").filter({ has: captionOf("图片文件") }).locator("input"), "snow.png")
+  await change(secondFloater.locator(".ui-field").filter({ has: captionOf("图片文件") }).locator("input"), "snow.png")
   await waitFor("107", "a12.floaters.1.file", "snow.png")
   assert.equal((await animation(107)).a12.floaters[1].ride, undefined)
   await fields.getByRole("button", { name: "删除物体 2", exact: true }).click()
@@ -329,7 +332,7 @@ try {
 
   // 只读（交互预览）：字段禁用，编辑按钮不可用，重置不出现；列表与播放仍可用
   await open(true)
-  assert.equal(await page.locator("#selected-key").textContent(), "动画与动效")
+  assert.equal(await page.locator("#selected-key").textContent(), "动画")
   await show("102")
   assert.equal(await row("组合方式").locator("button").first().isDisabled(), true)
   assert.equal(await fields.getByLabel("新建动画", { exact: true }).isDisabled(), true)
@@ -337,20 +340,20 @@ try {
   assert.equal(await fields.getByRole("button", { name: "添加浮动物体", exact: true }).isDisabled(), true)
   assert.equal(await fields.getByRole("button", { name: "删除物体 1", exact: true }).isDisabled(), true)
   await show("100")
-  assert.equal(await input("持续时间").isDisabled(), true)
+  assert.equal(await input("时长").isDisabled(), true)
   assert.equal(await row("变化属性").locator("button").first().isDisabled(), true)
   assert.equal(await page.locator(".inspector-reset").isHidden(), true)
   await page.waitForFunction(() => !document.querySelector('#document-fields .ui-animation-transport button')?.disabled)
   // 点击只读数值统一引导到编辑模式；窄屏属性面板不横向溢出。
-  await row('持续时间').scrollIntoViewIfNeeded()
-  const readonlyField = await input('持续时间').boundingBox()
+  await row('时长').scrollIntoViewIfNeeded()
+  const readonlyField = await input('时长').boundingBox()
   await page.mouse.click(readonlyField.x + readonlyField.width / 2, readonlyField.y + readonlyField.height / 2)
-  await page.locator('#edit-mode-dialog[open]').waitFor()
+  await page.getByRole('dialog', { name: '交互预览中无法编辑' }).waitFor()
   await page.keyboard.press('Escape')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.emulateMedia({ colorScheme: 'dark' })
   await page.evaluate(async () => (await import('/src/app/mobile-layout.ts')).setMobilePane('inspector'))
-  assert.equal(await row('持续时间').isVisible(), true)
+  assert.equal(await row('时长').isVisible(), true)
   assert.equal(await fields.evaluate((node) => node.scrollWidth <= node.clientWidth + 1), true)
 
   // 空表也能直接创建全部九类动画；新建的动画直接选中；复制不覆盖原编号，删除可撤销，已引用的不能删。
@@ -360,7 +363,7 @@ try {
   assert.equal(await page.getByRole('button', { name: '删除动画 100', exact: true }).isDisabled(), true)
   await page.evaluate(async () => (await import('/src/app/sxi-fields.ts')).editSxi((skin) => { skin.default.s_info.ss_2 = {} }))
   assert.equal(await fields.locator('[data-animation-id]').count(), 0)
-  assert.match(await fields.locator('.ui-listbox[aria-label="动画列表"]').textContent(), /还没有动画/)
+  assert.match(await fields.locator('.ui-listbox[aria-label="动画列表"]').textContent(), /没有动画/)
   for (const [index, kind] of ['a1', 'a3', 'af2', 'a4', 'a10', 'a11', 'a12', 'a13', 'a14'].entries()) {
     await page.getByLabel('新建动画', { exact: true }).selectOption(kind)
     assert.ok((await animation(index + 1))[kind], `${kind} 创建后应直接进入可视化编辑`)

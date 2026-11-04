@@ -7,6 +7,7 @@ import { chromium } from "playwright"
 import { createServer } from "vite"
 import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
 import { decodePng } from "../src/ssf/ssf-png.ts"
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const shots = process.env.SSF_CONVERSION_SHOTS
 const sample = process.env.SSF_SKIN_PATH
@@ -18,7 +19,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2, acceptDownloads: true, bypassCSP: true })
 const errors = []
 page.on("pageerror", (error) => errors.push(error.message))
-page.on("dialog", (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 
 const panelSize = () => page.evaluate(() => document.querySelector("#panel-status")?.textContent ?? "")
 const keyCount = () => page.evaluate(async () => (await import("/src/app/canvas-interaction.ts")).preview.keys.length)
@@ -133,7 +134,7 @@ const download = async (trigger) => {
   const pending = page.waitForEvent("download", { timeout: 120000 })
   pending.catch(() => {})
   await trigger()
-  const tap = page.locator("#file-operation-dialog[open] button.primary", { hasText: "下载" })
+  const tap = page.locator('#file-operation-dialog[open] button[data-variant="primary"]', { hasText: "下载" })
   const tapped = tap.waitFor({ state: "visible", timeout: 120000 }).then(() => "tap")
   tapped.catch(() => {})
   const result = await Promise.race([pending, tapped])
@@ -177,27 +178,34 @@ try {
   await page.locator("#browser-open").setInputFiles({ name: sample?.split("/").pop() ?? "分辨率.ssf", mimeType: "application/octet-stream", buffer: sample ? readFileSync(sample) : Buffer.from(ssfFixture()) })
   await page.waitForFunction(() => !document.querySelector("#open").disabled)
   await closeDialog()
-  // The canvas paints the SSF natively; the export starts from the skin's look converted onto the
-  // skeleton, so the canvas's skeleton is swapped for that conversion and drawn with the converted styles.
-  await page.evaluate(async () => {
-    const { appState } = await import("/src/app/state.ts")
-    const { SkinArchive } = await import("/src/skin.ts")
-    const { documentPackage } = await import("/src/ssf/ssf-convert.ts")
-    const { ssfToBaiduFiles } = await import("/src/ssf/ssf-to-baidu.ts")
-    const pkg = documentPackage(appState.archive)
-    const files = ssfToBaiduFiles(pkg, appState.ssfTemplates.sogou, Number(pkg.resolution)).files
-    const boards = SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
-    appState.ssfSkeleton = { ...appState.ssfSkeleton, boards }
-  })
   const source = new Map()
-  for (const view of views) {
-    await chooseView(view)
-    const state = await snapshot(`source-${view.name}`)
-    assert.equal(state.icons.length, 7, `${view.name}: seven toolbar icons`)
-    assert.ok(state.icons.every((icon) => icon.center), `${view.name}: toolbar actions`)
-    source.set(view.name, state)
+  // Each platform has its own font rules and candidate background (BDI includes the input row).
+  // Compare against that platform's converted look, before native toolbar adaptation and packaging.
+  for (const format of ["bdi", "bds"]) {
+    await page.evaluate(async (format) => {
+      const { appState } = await import("/src/app/state.ts")
+      const { SkinArchive } = await import("/src/skin.ts")
+      const { documentPackage } = await import("/src/ssf/ssf-convert.ts")
+      const { ssfToBaiduFiles } = await import("/src/ssf/ssf-to-baidu.ts")
+      const { zipSync } = await import("/node_modules/fflate/esm/browser.js")
+      const pkg = documentPackage(appState.archive)
+      const files = ssfToBaiduFiles(pkg, appState.ssfTemplates.sogou, Number(pkg.resolution), format).files
+      const boards = format === "bdi"
+        ? SkinArchive.open(zipSync(Object.fromEntries([...files].map(([path, data]) => [`skin/${path}`, data]))), "bdi")
+        : SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
+      appState.ssfSkeleton = { ...appState.ssfSkeleton, boards }
+    }, format)
+    const states = new Map()
+    for (const view of views) {
+      await chooseView(view)
+      const state = await snapshot(`source-${format}-${view.name}`)
+      assert.equal(state.icons.length, 7, `${view.name}: seven toolbar icons`)
+      assert.ok(state.icons.every((icon) => icon.center), `${view.name}: toolbar actions`)
+      states.set(view.name, state)
+    }
+    source.set(format, states)
   }
-  if (reported) assert.notEqual(reported.hash, source.get(views[0].name).hash, "reported BDI reproduces the regression")
+  if (reported) assert.notEqual(reported.hash, source.get("bdi").get(views[0].name).hash, "reported BDI reproduces the regression")
 
   // Export every format while the SSF document is still open: a reopened BDI/BDS hides the BDA target.
   const exported = {}
@@ -217,7 +225,7 @@ try {
     for (const view of views) {
       await chooseView(view)
       const state = await snapshot(`${format}-${view.name}`)
-      const expected = source.get(view.name)
+      const expected = source.get(format).get(view.name)
       assert.deepEqual(state.panel, expected.panel, `${format} ${view.name}: panel size`)
       assert.deepEqual(state.keys, expected.keys, `${format} ${view.name}: every key and action`)
       assert.equal(state.panelHash, expected.panelHash, `${format} ${view.name}: every keyboard pixel`)

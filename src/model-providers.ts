@@ -1,4 +1,4 @@
-export type ModelProtocol = "anthropic" | "openai-chat" | "openai-responses" | "google"
+export type ModelProtocol = "anthropic" | "openai-chat" | "openai-responses" | "openai-codex" | "google"
 
 interface ModelProviderPreset {
   id: string
@@ -6,15 +6,18 @@ interface ModelProviderPreset {
   protocol: ModelProtocol
   apiUrl: string
   model: string
+  /** Signs in with an account in the browser instead of an API key (see src-tauri/src/model_oauth.rs). */
+  subscription?: true
 }
 
 export const MODEL_PROVIDER_PRESETS: readonly ModelProviderPreset[] = [
+  { id: "claude-subscription", label: "Claude 订阅 (Pro/Max)", protocol: "anthropic", apiUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5", subscription: true },
+  { id: "chatgpt-subscription", label: "ChatGPT 订阅 (Plus/Pro)", protocol: "openai-codex", apiUrl: "https://chatgpt.com/backend-api", model: "gpt-5.5", subscription: true },
   { id: "anthropic", label: "Anthropic", protocol: "anthropic", apiUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-5-5" },
   { id: "anthropic-compatible", label: "Anthropic 兼容格式", protocol: "anthropic", apiUrl: "", model: "" },
   { id: "openai", label: "OpenAI", protocol: "openai-chat", apiUrl: "https://api.openai.com/v1", model: "gpt-5" },
   { id: "openai-compatible", label: "OpenAI 兼容格式", protocol: "openai-chat", apiUrl: "", model: "" },
   { id: "openai-responses", label: "OpenAI Responses 格式", protocol: "openai-responses", apiUrl: "https://api.openai.com/v1", model: "gpt-5" },
-  { id: "chatgpt-codex", label: "ChatGPT 订阅 (Codex)", protocol: "openai-responses", apiUrl: "https://api.openai.com/v1", model: "gpt-5-codex" },
   { id: "xai-subscription", label: "xAI 订阅 (Grok)", protocol: "openai-chat", apiUrl: "https://api.x.ai/v1", model: "grok-4" },
   { id: "deepseek", label: "DeepSeek", protocol: "openai-chat", apiUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
   { id: "google", label: "Google", protocol: "google", apiUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-pro" },
@@ -32,14 +35,16 @@ export const MODEL_PROVIDER_PRESETS: readonly ModelProviderPreset[] = [
 ]
 
 export function modelProviderPreset(id: string): ModelProviderPreset {
-  return MODEL_PROVIDER_PRESETS.find((provider) => provider.id === id) ?? MODEL_PROVIDER_PRESETS[2]
+  return MODEL_PROVIDER_PRESETS.find((provider) => provider.id === id) ?? MODEL_PROVIDER_PRESETS.find((provider) => provider.id === "openai")!
 }
 
 /**
  * Image-generation services. "openai-chat" here means the OpenAI-compatible /images/generations
  * endpoint; MiniMax and Google use their own endpoints, chosen by preset id in ai-design.ts.
+ * The ChatGPT subscription shares its id with the chat preset, so one sign-in serves both.
  */
 export const IMAGE_MODEL_PRESETS: readonly ModelProviderPreset[] = [
+  { id: "chatgpt-subscription", label: "ChatGPT 订阅 (Plus/Pro)", protocol: "openai-codex", apiUrl: "https://chatgpt.com/backend-api", model: "gpt-image-2.5", subscription: true },
   { id: "openai-image", label: "OpenAI", protocol: "openai-chat", apiUrl: "https://api.openai.com/v1", model: "gpt-image-1" },
   { id: "volcengine-image", label: "火山方舟 Seedream", protocol: "openai-chat", apiUrl: "https://ark.cn-beijing.volces.com/api/v3", model: "doubao-seedream-4-0-250828" },
   { id: "google-image", label: "Google Gemini", protocol: "google", apiUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-flash-image" },

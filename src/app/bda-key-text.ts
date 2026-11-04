@@ -108,5 +108,5 @@ export function createBdaKeyText(property: string, value: string): void {
   refreshPreview()
   populateKeyInspector()
   updateDirty()
-  showStatus(blank ? "已新建文字层；功能键请在「显示文字」里填写要显示的内容。" : "已新建文字层。")
+  showStatus(blank ? "已新建文字层；功能键请在「显示文字」里填写要显示的内容" : "已新建文字层")
 }

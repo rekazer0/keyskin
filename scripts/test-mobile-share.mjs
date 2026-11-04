@@ -53,25 +53,29 @@ try {
       const close = page.locator('#file-operation-dialog[open] #file-operation-close')
       if (await close.isVisible()) await close.click()
       const share = async () => {
-        await page.locator('.mobile-command-menu summary').click()
-        await page.locator('[data-mobile-command="mobile-share"]').click()
+        await page.locator('.pen-file-menu summary').click()
+        await page.locator('#mobile-share').click()
       }
       await share()
       const tap = page.locator('#file-operation-dialog[open] button', { hasText: /^分享$/ })
       await tap.waitFor({ state: 'visible' })
       assert.equal(await page.evaluate(() => shareCalls.length), 0, 'do not share automatically after asynchronous export')
       await tap.click()
-      await page.waitForSelector('#file-operation-dialog[data-outcome="success"]')
+      // 成功不弹模态框：进度框随之关闭，结果只写状态栏。
+      await page.locator('#file-operation-dialog').waitFor({ state: 'hidden' })
       const shared = await page.evaluate(async () => ({ name: shareCalls[0].name, bytes: [...new Uint8Array(await shareCalls[0].arrayBuffer())] }))
       assert.equal(shared.name, '分享回归.bdi')
       assert.equal(SkinArchive.open(Uint8Array.from(shared.bytes), 'bdi').format, 'bdi', 'share a real BDI archive')
-      await close.click()
       for (const outcome of ['AbortError', 'NotAllowedError']) {
         await page.evaluate((outcome) => { globalThis.shareOutcome = outcome }, outcome)
         await share()
         await tap.waitFor({ state: 'visible' })
         await tap.click()
-        await page.waitForSelector(`#file-operation-dialog[data-outcome="${outcome === 'AbortError' ? 'cancelled' : 'error'}"]`)
+        if (outcome === 'AbortError') {
+          await page.locator('#file-operation-dialog').waitFor({ state: 'hidden' })
+          continue
+        }
+        await page.waitForSelector('#file-operation-dialog[data-outcome="error"]')
         assert.equal(await tap.count(), 0, 'remove the completed action button')
         await close.click()
       }

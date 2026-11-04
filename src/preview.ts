@@ -4,13 +4,13 @@ import { DEFAULT_PANEL_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { snapPointToRects } from "./layout.ts"
 import type { BdaAnimation } from "./bda.ts"
 import { type PreviewItem, type Rect, previewItems, visiblePreviewItems, previewSurfaceHeight, effectivePreviewHitItem, previewHitItem } from "./preview-items.ts"
-import { type LegacyAnimation, type LegacyParticleEmitter } from "./preview-animation.ts"
+import { type LegacyAnimation } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
 import { paintPreview } from "./preview-paint.ts"
 import type { NativeScene } from "./native-scene.ts"
 import type { PreviewClip } from "./animation-preview-model.ts"
-import { playAnimation, restartLegacyPanelAnimation, stopLegacyPanelAnimation, syncLegacyPanelAnimation } from "./preview-playback.ts"
+import { playAnimation, restartLegacyPanelAnimation, syncLegacyPanelAnimation } from "./preview-playback.ts"
 import { pointerDown } from "./preview-pointer.ts"
 import { pointerMove } from "./preview-pointer.ts"
 import { pointerUp } from "./preview-pointer.ts"
@@ -125,7 +125,6 @@ export class Preview {
     return [...this.legacyAnimationStates.values()].at(-1)
   }
   legacyAnimationTimer?: number
-  particlePreview?: LegacyParticleEmitter
   /** 动效 / 粒子设计的播放器把粒子画在 key 上（没有 key 时铺满面板），时间由播放器控制。 */
   playerParticles?: { particles: PreviewClip["particles"]; elapsed: number; key?: PreviewItem }
   panelAnimationStyle = ""
@@ -474,13 +473,6 @@ export class Preview {
     this.shortHint = shortHint
     this.longHint = longHint
     this.bdaHints = bda
-    void this.draw()
-  }
-
-  setParticlePreview(emitter?: LegacyParticleEmitter): void {
-    if (this.particlePreview === emitter) return
-    this.particlePreview = emitter
-    stopLegacyPanelAnimation(this)
     void this.draw()
   }
 

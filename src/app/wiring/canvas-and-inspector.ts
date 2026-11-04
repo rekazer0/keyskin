@@ -1,15 +1,16 @@
 import { installClientLogging } from "../../client-log.ts"
 import { installSafeAreaLock } from "../../safe-area.ts"
-import { isTauri, scrollbarIdleTimers, source, schedulePointerCoordinates, syncMobileShareLabel, mobileCommandButtons, mobileCommandTarget, syncMobileCommands, mobilePortraitQuery, preview, toolbarPreview, keyboardFields } from "../canvas-interaction"
+import { isTauri, scrollbarIdleTimers, source, schedulePointerCoordinates, syncMobileShareLabel, syncUndoButtons, mobilePortraitQuery, preview, toolbarPreview, keyboardFields } from "../canvas-interaction"
 import { installNumberInputWheel } from "../../number-input-wheel.ts"
 import { wheelZoomFactor } from "../../wheel-zoom.ts"
 import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
-import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileCommandMenu, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, mainWorkspace, mobileSplitHandle, mobilePreviewPosition, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, newStyleDialog, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton } from "../dom"
+import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, mainWorkspace, mobileSplitHandle, mobilePreviewPosition, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
+import { hydrateShortcuts } from "../../dom-element"
 import { syncSinglePageInspectorGroup, setMobileSplit, setMobilePane, syncMobileInspectorHeader, setMobilePreviewCollapsed } from "../mobile-layout"
 import { fitCandidateInputBar } from "../config-context"
 import { measureCanvasWrapInnerSize, scheduleFitCanvasPreview, applyPreviewZoom, setPreviewPan, finishPreviewPan, schedulePreviewPan } from "../preview-render"
@@ -17,6 +18,7 @@ import { canvasEditable, isEditing } from "../edit-history"
 import { chooseStyleImageSlice, clearImagePreviewError, showImagePreviewError } from "../resource-inspector"
 import { replacedSourceStyle } from "../../source-value-ranges.ts"
 import { decorateStyleReferenceInput } from "../style-references"
+import { bindFieldServices } from "../property-rows"
 import { pickAnimationKeys } from "../animation-resource"
 import { knownFunctionCodes, actionDescription } from "../../actions.ts"
 import { renameDocumentTitle } from "../key-inspector"
@@ -29,6 +31,7 @@ import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 
 /** 启动环境、全局指针、画布预览、检查器与缩放。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireCanvasAndInspector(): void {
+  bindFieldServices({ editing: isEditing, decorateStyle: decorateStyleReferenceInput })
   installClientLogging(document.querySelector<HTMLElement>("#about-update")?.dataset.currentVersion ?? "unknown")
   installSafeAreaLock()
   document.documentElement.classList.toggle("macos", isTauri() && navigator.userAgent.includes("Macintosh"))
@@ -126,29 +129,10 @@ export function wireCanvasAndInspector(): void {
   })
   syncMobileShareLabel()
   hydrateIcons()
-  for (const button of mobileCommandButtons) {
-    button.addEventListener("click", () => {
-      const target = mobileCommandTarget(button)
-      if (!target || target.disabled) return
-      mobileCommandMenu.open = false
-      target.click()
-    })
-  }
-  for (const target of [document.querySelector(".titlebar-actions"), document.querySelector(".app-more"), document.querySelector(".pen-file-menu")]) {
-    if (!target) continue
-    new MutationObserver(syncMobileCommands).observe(target, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["disabled", "hidden"],
-    })
-  }
-  syncMobileCommands()
-  for (const [button, target] of [[mobileUndoButton, undoButton], [mobileRedoButton, redoButton]] as const) {
-    button.addEventListener("click", () => {
-      if (!target.disabled) target.click()
-    })
-  }
-  for (const [button, target] of [[desktopUndoButton, undoButton], [desktopRedoButton, redoButton]] as const) {
+  hydrateShortcuts()
+  new MutationObserver(syncUndoButtons).observe(undoButton.parentElement!, { subtree: true, attributes: true, attributeFilter: ["disabled"] })
+  syncUndoButtons()
+  for (const [button, target] of [[mobileUndoButton, undoButton], [mobileRedoButton, redoButton], [desktopUndoButton, undoButton], [desktopRedoButton, redoButton]] as const) {
     button.addEventListener("click", () => {
       if (!target.disabled) target.click()
     })
@@ -171,7 +155,6 @@ export function wireCanvasAndInspector(): void {
       bdaConfigFieldsGroup.dataset.previewState = state
       for (const item of bdaInspectorStateButtons) {
         const active = item === button
-        item.classList.toggle("active", active)
         item.setAttribute("aria-pressed", String(active))
       }
     })
@@ -500,7 +483,6 @@ export function wireCanvasAndInspector(): void {
     source.commit()
   })
   for (const input of [...keyboardFields, ...toolbarFields, ...keyFields]) decorateStyleReferenceInput(input)
-  newStyleDialog.addEventListener("close", () => { appState.newStyleApplyTarget = undefined })
   baiduActionCodes.replaceChildren(...knownFunctionCodes.map((value) => {
     return new Option(actionDescription(value), value)
   }))

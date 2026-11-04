@@ -34,10 +34,10 @@ test("a single-section layout keeps the inspector category rail", () => {
 })
 
 test("unknown INI properties keep their source names", () => {
-  assert.match(main, /const known = documentFieldLabels\[key\] \?\? sourceKeyLabels\[key\]/)
+  assert.match(main, /const known = documentFieldLabels\[key\] \?\? LEGACY_ANIMATION_FIELDS\[key\]\?\.label \?\? sourceKeyLabels\[key\]/)
   assert.match(main, /documentSectionLabels\[section\] \?\? section/)
   // 译文之外的原始键名留在悬停提示里，属性行始终能对应回 ini 的键。
-  assert.match(main, /caption\.title = captionLabel === entry\.key \? entry\.key : `\$\{captionLabel\}（\$\{entry\.key\}）`/)
+  assert.match(main, /span\.title = label === key \? key : `\$\{label\}（\$\{key\}）`/)
 })
 
 test("document inspector labels cover the keys real skins use", () => {
@@ -87,7 +87,8 @@ test("numeric fields never hide a non-numeric value", () => {
 })
 
 test("style reference thumbnails are redrawn when their group becomes visible", () => {
-  // 这一行曾经落在 setMobileInspectorGroup 之外，变成模块顶层的死代码。
-  assert.match(main, /quickInspector\.scrollTop = 0[\s\S]{0,220}redrawStyleStateCanvases\(\)/)
-  assert.doesNotMatch(main, /\n\}\n\s*redrawStyleStateCanvases\(\)/)
+  // 引用卡和样式卡共用 style-card.ts 的 lazyDraw：隐藏分组里的卡片尺寸为 0，显示后 ResizeObserver 让它重新进入可见检测再画。
+  const card = readFileSync(new URL("../src/style-card.ts", import.meta.url), "utf8")
+  assert.match(card, /new ResizeObserver\(\(entries\) => \{\s*for \(const entry of entries\) if \(entry\.contentRect\.width && entry\.contentRect\.height\) drawObserver\(\)\.observe\(entry\.target\)/)
+  assert.doesNotMatch(main, /redrawStyleStateCanvases/)
 })

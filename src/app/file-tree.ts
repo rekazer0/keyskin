@@ -15,7 +15,7 @@ import { bdaAppearancePath, bdaConfigPaths } from "../bda.ts"
 import { decodeBdaAppearance } from "../bda-decode.ts"
 import { toolbarConfigPath, styleConfigPath, legacyAnimationConfigPath } from "./config-context"
 import { firstExistingPath } from "../resources.ts"
-import { updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView } from "./source-files"
+import { updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView, setRowSelected } from "./source-files"
 import { isSoundPath, soundMimeType } from "../sounds.ts"
 import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
@@ -36,7 +36,7 @@ function addNavButton(
   const missingAnimation = !path && (navMode === "motion" || navMode === "particle")
   if (!missingAnimation && appState.archive?.getBytes(path) === undefined && !isBdaVirtualTextPath(path) && !isBdaAppearancePartPath(path) && !isSsfBoardPath(path) && !sxiPointer(path)) return undefined
   const button = document.createElement("button")
-  button.className = `nav-item ${className}`
+  button.className = `ui-list-item nav-item ${className}`
   button.dataset.path = path
   button.dataset.navMode = navMode
   const navigationSystemSymbols: Record<string, string> = {
@@ -71,7 +71,7 @@ function addNavButton(
   })
   parent.append(button)
   if (appState.sidebarView === "overview" && path === appState.selectedPath && navMode === currentNavigationMode()) {
-    button.classList.add("selected")
+    setRowSelected(button, true)
     appState.selectedFileButton = button
   }
   return button
@@ -190,7 +190,6 @@ export function renderFiles(): void {
     appState.mobileOverviewGroup = title
     for (const button of Array.from(mobileGroups.querySelectorAll<HTMLButtonElement>("button"))) {
       const active = button.dataset.overviewGroup === title
-      button.classList.toggle("active", active)
       button.setAttribute("aria-pressed", String(active))
     }
     for (const group of Array.from(overview.querySelectorAll<HTMLDetailsElement>(".nav-group"))) {
@@ -208,14 +207,15 @@ export function renderFiles(): void {
     disclosure.open = overviewGroupState.get(title) ?? ["皮肤", "资源配置", "键盘布局"].includes(title)
     disclosure.addEventListener("toggle", () => overviewGroupState.set(title, disclosure.open))
     const summary = document.createElement("summary")
-    summary.className = "nav-section"
+    summary.className = "ui-list-item nav-section"
     const marker = document.createElement("span")
     marker.className = "source-disclosure"
     const label = document.createElement("span")
     label.className = "nav-label"
     label.textContent = title
     const countNode = document.createElement("span")
-    countNode.className = "nav-section-count"
+    countNode.className = "ui-badge nav-section-count"
+    countNode.dataset.variant = "pill"
     countNode.textContent = String(count)
     summary.append(marker, label, countNode)
     const body = document.createElement("div")
@@ -223,7 +223,9 @@ export function renderFiles(): void {
     disclosure.append(summary, body)
     overview.append(disclosure)
     const mobileButton = document.createElement("button")
+    mobileButton.className = "ui-list-item"
     mobileButton.type = "button"
+    mobileButton.dataset.layout = "tile"
     mobileButton.textContent = title
     mobileButton.dataset.overviewGroup = title
     mobileButton.addEventListener("click", () => setMobileOverviewGroup(title))
@@ -234,7 +236,7 @@ export function renderFiles(): void {
   const entries: NavEntry[] = []
   const bdaConfigGroups = [
     ["lightAnimation", "轻量动画", "轻量动画", "wand-sparkles"],
-    ["sound", "按键音效", "声音配置", "volume-2"],
+    ["sound", "按键音效", "音效配置", "volume-2"],
     ["switch", "开关配置", "开关配置", "toggle-right"],
     ["sticker", "贴纸配置", "贴纸配置", "sticker"],
     ["scene", "场景配置", "场景配置", "layers"],
@@ -265,8 +267,8 @@ export function renderFiles(): void {
       { group: "资源配置", label: "按键前景", path: `${folder}keys.ini`, className: "nav-style", icon: "layers" },
       { group: "资源配置", label: "按键动画", path: `${folder}anim.ini`, className: "nav-style", icon: "wand-sparkles" },
       { group: "资源配置", label: "按键音效", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "volume-2", navMode: "document" },
-      ...images.length ? [{ group: "资源配置", label: "图片资源", path: images[0], className: "nav-resource", icon: "images", navMode: "resource", meta: `${images.length} 张图片` }] : [],
-      { group: "资源配置", label: "音频资源", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "audio-lines", navMode: "sound" },
+      ...images.length ? [{ group: "资源配置", label: "图片", path: images[0], className: "nav-resource", icon: "images", navMode: "resource", meta: `${images.length} 张图片` }] : [],
+      { group: "资源配置", label: "音效", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "audio-lines", navMode: "sound" },
       { group: "资源配置", label: "运营配置", path: "op.ini", className: "nav-style", icon: "sparkles" },
     )
     // 搜狗手机输入法的全部键盘（取自官方安装包），按它的叫法列出；键位来自官方骨架，外观来自 phoneSkin.ini。
@@ -329,7 +331,7 @@ export function renderFiles(): void {
     }
     entries.push({
       group: "资源配置",
-      label: "样式配置",
+      label: "样式",
       path: bdaAppearanceStylePath(appState.selectedBdaStyleGroup),
       className: "nav-style",
       icon: "palette",
@@ -338,7 +340,7 @@ export function renderFiles(): void {
     })
     entries.push({
       group: "资源配置",
-      label: "图片资源",
+      label: "图片",
       path: appearancePath!,
       className: "nav-resource",
       icon: "images",
@@ -346,7 +348,7 @@ export function renderFiles(): void {
     })
     entries.push({
       group: "资源配置",
-      label: "声音资源",
+      label: "音效",
       path: appearancePath!,
       className: "nav-resource",
       icon: "audio-lines",
@@ -385,14 +387,14 @@ export function renderFiles(): void {
   if (stylePath && appState.archive.format !== "bda") {
     entries.push({
       group: "资源配置",
-      label: "图片资源",
+      label: "图片",
       path: stylePath,
       className: "nav-resource",
       icon: "images",
       navMode: "resource",
     })
-    entries.push({ group: "资源配置", label: "样式配置", path: stylePath, className: "nav-style", icon: "palette", navMode: "style" })
-    entries.push({ group: "资源配置", label: "按键音效", path: stylePath, className: "nav-resource", icon: "volume-2", navMode: "sound" })
+    entries.push({ group: "资源配置", label: "样式", path: stylePath, className: "nav-style", icon: "palette", navMode: "style" })
+    entries.push({ group: "资源配置", label: "音效", path: stylePath, className: "nav-resource", icon: "volume-2", navMode: "sound" })
   }
   // 动画资源（手心 skin.json、百度 anim.ini、BDA animationConfig）分「动效设计」与「粒子设计」两个入口，
   // 指向同一个文件，只筛选展示，不改变资源路径和编号。
@@ -485,30 +487,9 @@ export function renderFiles(): void {
       })
     }
     if (appState.archive.format === "bda" && group === "面板样式") {
-      const bdaLayoutRank: Record<string, number> = {
-        "py_9": 0,
-        "py_26": 1,
-        "en_26": 2,
-        "en_26s": 3,
-        "en_9": 4,
-        "en_9s": 5,
-        "num_9": 6,
-        "num_26": 7,
-        "symbol": 8,
-        "sym_26_cn": 9,
-        "sym_26_en": 10,
-        "hw_grid": 11,
-        "hw_full": 12,
-        "bh": 13,
-        "sel_ch": 14,
-        "sel_en": 15,
-        "voice": 16,
-      }
-      grouped.sort((a, b) => {
-        const aName = a.meta ?? ""
-        const bName = b.meta ?? ""
-        return (bdaLayoutRank[aName] ?? 100) - (bdaLayoutRank[bName] ?? 100) || aName.localeCompare(bName)
-      })
+      const bdaLayoutOrder = ["py_9", "py_26", "en_26", "en_26s", "en_9", "en_9s", "num_9", "num_26", "symbol", "sym_26_cn", "sym_26_en", "hw_grid", "hw_full", "bh", "sel_ch", "sel_en", "voice"]
+      const rank = (name: string) => bdaLayoutOrder.includes(name) ? bdaLayoutOrder.indexOf(name) : 100
+      grouped.sort((a, b) => rank(a.meta ?? "") - rank(b.meta ?? "") || (a.meta ?? "").localeCompare(b.meta ?? ""))
     }
     // 皮肤卡片放在它原来所在的分组（「皮肤」/ BDA 的「皮肤信息」）里，分组照常可折叠。
     const card = skinCard.childElementCount && group === skinEntries[0]?.group ? skinCard : undefined
@@ -516,7 +497,9 @@ export function renderFiles(): void {
     const body = section(group, grouped.length + (card?.childElementCount ?? 0))
     if (card) body.append(card)
     for (const entry of grouped) {
-      addNavButton(body, entry.label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
+      const button = addNavButton(body, entry.label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
+      // 资源配置条目少且各自独立，排成磁贴
+      if (button && group === "资源配置") button.dataset.layout = "tile"
     }
   }
   const availableMobileGroups = Array.from(mobileGroups.querySelectorAll<HTMLButtonElement>("button"))
@@ -566,9 +549,9 @@ export function renderFiles(): void {
   const sourceFileCount = (node: SourceNode): number =>
     node.paths.length + [...node.folders.values()].reduce((total, child) => total + sourceFileCount(child), 0)
   const selectSourceRow = (row: HTMLElement) => {
-    appState.selectedFileButton?.classList.remove("selected")
+    setRowSelected(appState.selectedFileButton, false)
     appState.selectedFileButton = row
-    row.classList.add("selected")
+    setRowSelected(row, true)
     for (const item of sourceFiles.querySelectorAll<HTMLElement>(".source-tree-row")) {
       item.tabIndex = item === row ? 0 : -1
     }
@@ -591,7 +574,7 @@ export function renderFiles(): void {
       folder.dataset.folderPath = path
       folder.dataset.treeDepth = String(depth)
       const folderSummary = document.createElement("summary")
-      folderSummary.className = "source-tree-row source-folder-row"
+      folderSummary.className = "ui-list-item source-tree-row source-folder-row"
       folderSummary.dataset.folderPath = path
       folderSummary.setAttribute("role", "treeitem")
       folderSummary.setAttribute("aria-expanded", "false")
@@ -638,7 +621,7 @@ export function renderFiles(): void {
     }
     for (const path of [...node.paths].sort(sourceNameCompare)) {
       const button = document.createElement("button")
-      button.className = "source-tree-row source-file-row"
+      button.className = "ui-list-item source-tree-row source-file-row"
       button.setAttribute("role", "treeitem")
       button.tabIndex = -1
       const symbolName = appState.archive?.isText(path) || appState.archive?.isBdaConfig(path)
@@ -691,7 +674,7 @@ export function renderFiles(): void {
   rootFolder.className = "raw-folder source-root-folder"
   rootFolder.open = true
   const rootSummary = document.createElement("summary")
-  rootSummary.className = "source-tree-row source-folder-row source-root-row"
+  rootSummary.className = "ui-list-item source-tree-row source-folder-row source-root-row"
   rootSummary.setAttribute("role", "treeitem")
   rootSummary.setAttribute("aria-expanded", "true")
   rootSummary.tabIndex = -1

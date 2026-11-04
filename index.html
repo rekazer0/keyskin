@@ -17,58 +17,32 @@
   <body class="app-window">
     <header class="titlebar" data-tauri-drag-region>
       <div class="titlebar-left">
-        <details class="toolbar-more mobile-command-menu">
-          <summary class="titlebar-icon-button" title="操作" aria-label="操作"><span class="system-symbol" data-icon="menu" aria-hidden="true"></span></summary>
-          <div class="toolbar-menu mobile-command-actions" aria-label="手机操作">
-            <button type="button" data-mobile-command="new"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span><span>新建皮肤</span></button>
-            <button type="button" data-mobile-command="open"><span class="system-symbol" data-icon="folder" aria-hidden="true"></span><span>打开皮肤</span></button>
-            <button type="button" data-mobile-command="recent-files"><span class="system-symbol" data-icon="history" aria-hidden="true"></span><span>最近打开</span></button>
-            <button type="button" data-mobile-command="save"><span class="system-symbol" data-icon="hard-drive" aria-hidden="true"></span><span>保存皮肤</span></button>
-            <button type="button" data-mobile-command="mobile-share"><span class="system-symbol" data-icon="share" aria-hidden="true"></span><span>分享皮肤</span></button>
-            <span class="mobile-menu-separator" role="separator"></span>
-            <button type="button" data-mobile-export-format="bdi"><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 iOS 皮肤</span></button>
-            <button type="button" data-mobile-export-format="bds"><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 Android 皮肤</span></button>
-            <button type="button" data-mobile-export-format="bda" data-bda-platform="ios"><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 iOS 皮肤</span></button>
-            <button type="button" data-mobile-export-format="bda" data-bda-platform="android"><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 Android 皮肤</span></button>
-            <button type="button" data-mobile-export-format="sxi"><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出手心皮肤 (.sxi)</span><span class="ui-badge" data-variant="accent">实验</span></button>
-            <button type="button" data-mobile-export-format="ssf"><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出搜狗皮肤 (.ssf)</span><span class="ui-badge" data-variant="accent">实验</span></button>
-            <span class="mobile-menu-separator" role="separator"></span>
-            <button type="button" data-mobile-command="panel-scale"><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span><span>面板复制</span></button>
-            <button type="button" data-mobile-command="replace-layout-image"><span class="system-symbol" data-icon="image-down" aria-hidden="true"></span><span>替换键盘样式</span></button>
-            <button type="button" data-mobile-command="adapt-ios26"><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26 透明背景</span></button>
-            <span class="mobile-menu-separator" role="separator"></span>
-            <button type="button" data-start-tour><span class="system-symbol" data-icon="circle-help" aria-hidden="true"></span><span>使用教程</span></button>
-          </div>
-        </details>
         <details class="toolbar-more pen-file-menu">
-          <summary class="titlebar-icon-button" title="文件操作" aria-label="文件操作"><span class="system-symbol" data-icon="menu" aria-hidden="true"></span></summary>
-          <div class="toolbar-menu file-actions" role="menu" aria-label="文件操作">
-            <span class="toolbar-menu-label">文件</span>
-            <button id="new" type="button" role="menuitem" title="新建皮肤" aria-label="新建皮肤"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span><span>新建皮肤…</span></button>
-            <button id="open" type="button" role="menuitem" title="打开皮肤" aria-label="打开皮肤"><span class="system-symbol" data-icon="folder" aria-hidden="true"></span><span>打开皮肤…</span></button>
-            <button id="recent-files" type="button" role="menuitem" title="最近打开" aria-label="最近打开"><span class="system-symbol" data-icon="history" aria-hidden="true"></span><span>最近打开</span></button>
-            <button id="save" type="button" role="menuitem" disabled title="保存皮肤" aria-label="保存皮肤"><span class="system-symbol" data-icon="hard-drive" aria-hidden="true"></span><span>保存皮肤</span></button>
-            <span class="toolbar-menu-separator" role="separator"></span>
-            <span class="toolbar-menu-label">导出</span>
-            <button type="button" role="menuitem" data-export-format="bdi" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 iOS 皮肤 (.bdi)</span></button>
-            <button type="button" role="menuitem" data-export-format="bds" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 Android 皮肤 (.bds)</span></button>
-            <button type="button" role="menuitem" data-export-format="bda" data-bda-platform="ios" disabled><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 iOS 皮肤 (.bda)</span></button>
-            <button type="button" role="menuitem" data-export-format="bda" data-bda-platform="android" disabled><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 Android 皮肤 (.bda)</span></button>
-            <button type="button" role="menuitem" data-export-format="sxi" disabled><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出手心皮肤 (.sxi)</span><span class="ui-badge" data-variant="accent">实验</span></button>
-            <button type="button" role="menuitem" data-export-format="ssf" disabled><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出搜狗皮肤 (.ssf)</span><span class="ui-badge" data-variant="accent">实验</span></button>
-            <span class="toolbar-menu-separator" role="separator"></span>
-            <span class="toolbar-menu-label">工具</span>
-            <button id="panel-scale" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span><span>面板复制…</span></button>
-            <button id="replace-layout-image" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="image-down" aria-hidden="true"></span><span>替换键盘样式…</span></button>
-            <button id="adapt-ios26" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26 透明背景…</span></button>
-            <span class="toolbar-menu-separator" role="separator"></span>
-            <button id="mobile-share" type="button" role="menuitem" disabled title="分享皮肤" aria-label="分享皮肤"><span class="system-symbol" data-icon="share" aria-hidden="true"></span><span>分享皮肤</span></button>
-            <span class="toolbar-menu-separator" role="separator"></span>
-            <button id="undo" type="button" role="menuitem" disabled title="撤销" aria-label="撤销"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span><span>撤销</span></button>
-            <button id="redo" type="button" role="menuitem" disabled title="重做" aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span><span>重做</span></button>
-            <span class="toolbar-menu-separator" role="separator"></span>
-            <button type="button" role="menuitem" data-app-dialog="settings"><span class="system-symbol" data-icon="settings" aria-hidden="true"></span><span>设置</span></button>
-            <button type="button" role="menuitem" data-start-tour><span class="system-symbol" data-icon="circle-help" aria-hidden="true"></span><span>使用教程</span></button>
+          <summary data-variant="filled" class="ui-icon-button" title="菜单" aria-label="菜单"><span class="system-symbol" data-icon="menu" aria-hidden="true"></span></summary>
+          <div class="ui-menu" role="menu" aria-label="菜单">
+            <button id="new" class="ui-list-item" type="button" role="menuitem" aria-label="新建皮肤"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span><span>新建皮肤…</span></button>
+            <button id="open" class="ui-list-item" type="button" role="menuitem" aria-label="打开皮肤"><span class="system-symbol" data-icon="folder" aria-hidden="true"></span><span>打开皮肤…</span></button>
+            <button id="recent-files" class="ui-list-item" type="button" role="menuitem" aria-label="最近打开"><span class="system-symbol" data-icon="history" aria-hidden="true"></span><span>最近打开</span></button>
+            <button id="save" class="ui-list-item" type="button" role="menuitem" disabled aria-label="保存皮肤"><span class="system-symbol" data-icon="hard-drive" aria-hidden="true"></span><span>保存皮肤</span></button>
+            <hr class="ui-menu-separator">
+            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bdi" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 iOS 皮肤 (.bdi)</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bds" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 Android 皮肤 (.bds)</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bda" data-bda-platform="ios" disabled><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 iOS 皮肤 (.bda)</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bda" data-bda-platform="android" disabled><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 Android 皮肤 (.bda)</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-export-format="sxi" disabled><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出手心皮肤 (.sxi)</span><span class="ui-badge" data-variant="accent">实验</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-export-format="ssf" disabled><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出搜狗皮肤 (.ssf)</span><span class="ui-badge" data-variant="accent">实验</span></button>
+            <hr class="ui-menu-separator">
+            <button id="panel-scale" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span><span>面板复制…</span></button>
+            <button id="replace-layout-image" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="image-down" aria-hidden="true"></span><span>替换键盘样式…</span></button>
+            <button id="adapt-ios26" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26 透明背景</span></button>
+            <hr class="ui-menu-separator">
+            <button id="mobile-share" class="ui-list-item" type="button" role="menuitem" disabled aria-label="分享皮肤"><span class="system-symbol" data-icon="share" aria-hidden="true"></span><span>分享皮肤</span></button>
+            <hr class="ui-menu-separator">
+            <button id="undo" class="ui-list-item" type="button" role="menuitem" disabled aria-label="撤销"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span><span>撤销</span></button>
+            <button id="redo" class="ui-list-item" type="button" role="menuitem" disabled aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span><span>重做</span></button>
+            <hr class="ui-menu-separator">
+            <button class="ui-list-item" type="button" role="menuitem" data-app-dialog="settings"><span class="system-symbol" data-icon="settings" aria-hidden="true"></span><span>设置…</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-start-tour><span class="system-symbol" data-icon="circle-help" aria-hidden="true"></span><span>使用教程</span></button>
           </div>
         </details>
         <span class="spacer" data-tauri-drag-region></span>
@@ -77,48 +51,34 @@
         <div class="document-title" data-tauri-drag-region>
           <span class="icon system-symbol document-icon" data-icon="keyboard" aria-hidden="true"></span>
           <strong id="document-name" role="button" tabindex="0" title="点击修改皮肤名称">未打开皮肤</strong>
-          <span id="dirty" hidden>未保存</span>
+          <span id="dirty" class="ui-badge" data-variant="pill" hidden>未保存</span>
         </div>
       </div>
       <div class="titlebar-right">
         <div class="desktop-quick-actions" aria-label="编辑操作">
-          <button id="desktop-undo" class="titlebar-icon-button" type="button" title="撤销" aria-label="撤销" disabled>
+          <button id="desktop-undo" data-variant="filled" class="ui-icon-button" type="button" title="撤销" aria-label="撤销" disabled>
             <span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span>
           </button>
-          <button id="desktop-redo" class="titlebar-icon-button" type="button" title="重做" aria-label="重做" disabled>
+          <button id="desktop-redo" data-variant="filled" class="ui-icon-button" type="button" title="重做" aria-label="重做" disabled>
             <span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span>
           </button>
         </div>
         <div class="mobile-quick-actions" aria-label="常用操作">
-          <button id="mobile-undo" class="titlebar-icon-button" type="button" title="撤销" aria-label="撤销"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span></button>
-          <button id="mobile-redo" class="titlebar-icon-button" type="button" title="重做" aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span></button>
+          <button id="mobile-undo" class="ui-icon-button" type="button" title="撤销" aria-label="撤销"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span></button>
+          <button id="mobile-redo" class="ui-icon-button" type="button" title="重做" aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span></button>
         </div>
-        <div class="mode-control" aria-label="工作模式">
-          <button data-mode-choice="edit" aria-pressed="false">编辑模式</button>
-          <button class="active" data-mode-choice="preview" aria-pressed="true">交互预览</button>
-          <button class="mobile-choice-toggle" type="button" data-mobile-choice="mode" title="切换工作模式" aria-label="交互预览">
-            <span class="system-symbol mode-toggle-icon" data-icon="zap" aria-hidden="true"></span>
-            <span class="mobile-choice-label">交互预览</span>
-          </button>
-          <select id="mode" hidden><option value="preview">交互预览</option><option value="edit">编辑模式</option></select>
+        <div class="mode-control ui-segmented" aria-label="工作模式">
+          <button type="button" data-mode-choice="edit" aria-pressed="false">编辑模式</button>
+          <button type="button" data-mode-choice="preview" aria-pressed="true">交互预览</button>
         </div>
-        <button class="titlebar-icon-button titlebar-preferences" type="button" data-app-dialog="settings" title="设置" aria-label="设置">
+        <select id="mode" hidden><option value="preview">交互预览</option><option value="edit">编辑模式</option></select>
+        <button class="ui-button mobile-choice-toggle" type="button" data-mobile-choice="mode" aria-pressed="false" title="切换工作模式" aria-label="交互预览">
+          <span class="system-symbol mode-toggle-icon" data-icon="zap" aria-hidden="true"></span>
+          <span class="mobile-choice-label">交互预览</span>
+        </button>
+        <button data-variant="filled" class="ui-icon-button titlebar-preferences" type="button" data-app-dialog="settings" title="设置" aria-label="设置">
           <span class="system-symbol" data-icon="ellipsis" aria-hidden="true"></span>
         </button>
-        <div class="mobile-title-choices" aria-label="预览选项">
-          <button class="mobile-choice-toggle" type="button" data-mobile-choice="orientation" title="切换方向" aria-label="竖屏">
-            <span class="mobile-choice-icons" aria-hidden="true">
-              <span class="mobile-choice-icon" data-mobile-choice-value="port"><span class="system-symbol" data-icon="rectangle-vertical" aria-hidden="true"></span></span>
-              <span class="mobile-choice-icon" data-mobile-choice-value="land"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span></span>
-            </span>
-          </button>
-          <button class="mobile-choice-toggle" type="button" data-mobile-choice="theme" title="切换外观" aria-label="浅色">
-            <span class="mobile-choice-icons" aria-hidden="true">
-              <span class="mobile-choice-icon" data-mobile-choice-value="light"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span></span>
-              <span class="mobile-choice-icon" data-mobile-choice-value="dark"><span class="system-symbol" data-icon="moon" aria-hidden="true"></span></span>
-            </span>
-          </button>
-        </div>
         <div class="window-controls" aria-label="窗口">
           <button id="window-minimize" type="button" title="最小化" aria-label="最小化"><span class="system-symbol" data-icon="minus" aria-hidden="true"></span></button>
           <button id="window-maximize" type="button" title="最大化" aria-label="最大化">
@@ -132,26 +92,26 @@
 
     <main>
       <nav class="mobile-workspace-tabs" aria-label="手机编辑区域">
-        <button class="active" type="button" data-mobile-pane="layout" aria-pressed="true" title="文件与布局（左右滑动切换）" aria-label="文件与布局">文件与布局</button>
-        <button type="button" data-mobile-pane="inspector" aria-pressed="false" title="属性检查器（左右滑动切换）" aria-label="属性检查器">属性检查器</button>
-        <button id="mobile-split-handle" class="mobile-split-handle" type="button" role="slider" aria-orientation="vertical" aria-valuemin="28" aria-valuemax="72" aria-valuenow="50" aria-expanded="true" title="拖动调整画布与配置区域比例；点击收起或展开预览" aria-label="拖动调整画布与配置区域比例；点击收起或展开预览">
+        <button type="button" data-mobile-pane="layout" aria-pressed="true">文件与布局</button>
+        <button type="button" data-mobile-pane="inspector" aria-pressed="false">属性检查器</button>
+        <button id="mobile-split-handle" class="mobile-split-handle" type="button" role="slider" aria-orientation="vertical" aria-valuemin="28" aria-valuemax="72" aria-valuenow="50" aria-expanded="true" title="调整预览高度" aria-label="调整预览高度">
           <span class="system-symbol mobile-split-icon" data-icon="chevrons-up-down" aria-hidden="true"></span>
         </button>
       </nav>
       <aside class="sidebar">
         <div class="pane-heading">
-          <div class="sidebar-view-control glass-module" aria-label="左侧视图">
-            <button class="active" data-sidebar-view="overview" aria-pressed="true"><span class="system-symbol" data-icon="layout-grid" aria-hidden="true"></span><span>概览</span></button>
-            <button data-sidebar-view="source" aria-pressed="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源文件</span></button>
+          <div class="sidebar-view-control ui-segmented" data-fill aria-label="左侧视图">
+            <button type="button" data-sidebar-view="overview" aria-pressed="true"><span class="system-symbol" data-icon="layout-grid" aria-hidden="true"></span><span>概览</span></button>
+            <button type="button" data-sidebar-view="source" aria-pressed="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源文件</span></button>
           </div>
         </div>
         <div id="source-file-toolbar" class="source-file-toolbar" aria-label="源文件操作" hidden>
-          <button id="source-upload" class="toolbar-button" type="button" title="上传文件" aria-label="上传文件"><span class="icon system-symbol" data-icon="upload" aria-hidden="true"></span></button>
-          <button id="source-download" class="toolbar-button" type="button" title="下载选中文件" aria-label="下载选中文件" disabled><span class="icon system-symbol" data-icon="download" aria-hidden="true"></span></button>
-          <button id="source-copy" class="toolbar-button" type="button" title="复制" aria-label="复制" disabled><span class="icon system-symbol" data-icon="copy" aria-hidden="true"></span></button>
-          <button id="source-paste" class="toolbar-button" type="button" title="粘贴" aria-label="粘贴" disabled><span class="icon system-symbol" data-icon="clipboard-paste" aria-hidden="true"></span></button>
-          <button id="source-move" class="toolbar-button" type="button" title="剪切" aria-label="剪切" disabled><span class="icon system-symbol" data-icon="scissors" aria-hidden="true"></span></button>
-          <button id="source-delete" class="toolbar-button" type="button" title="删除" aria-label="删除" disabled><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
+          <button id="source-upload" class="ui-icon-button" type="button" title="上传文件" aria-label="上传文件"><span class="icon system-symbol" data-icon="upload" aria-hidden="true"></span></button>
+          <button id="source-download" class="ui-icon-button" type="button" title="下载选中文件" aria-label="下载选中文件" disabled><span class="icon system-symbol" data-icon="download" aria-hidden="true"></span></button>
+          <button id="source-copy" class="ui-icon-button" type="button" title="复制" aria-label="复制" disabled><span class="icon system-symbol" data-icon="copy" aria-hidden="true"></span></button>
+          <button id="source-paste" class="ui-icon-button" type="button" title="粘贴" aria-label="粘贴" disabled><span class="icon system-symbol" data-icon="clipboard-paste" aria-hidden="true"></span></button>
+          <button id="source-move" class="ui-icon-button" type="button" title="剪切" aria-label="剪切" disabled><span class="icon system-symbol" data-icon="scissors" aria-hidden="true"></span></button>
+          <button id="source-delete" class="ui-icon-button" type="button" data-list-action="remove" title="删除" aria-label="删除" disabled><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
           <input id="source-upload-input" type="file" multiple hidden>
         </div>
         <div id="files"></div>
@@ -161,7 +121,7 @@
       <section class="workspace">
         <div class="preview-toolbar">
           <div class="preview-toolbar-start">
-            <button id="toggle-guides" class="preview-tool-toggle glass-module" aria-label="辅助线" title="辅助线" aria-pressed="false"><span class="system-symbol" data-icon="crosshair" aria-hidden="true"></span></button>
+            <button id="toggle-guides" class="ui-icon-button" data-variant="filled" type="button" aria-label="辅助线" title="辅助线" aria-pressed="false"><span class="system-symbol" data-icon="crosshair" aria-hidden="true"></span></button>
             <label id="skin-state-control" class="field-control" hidden>
               <span class="skin-state-value" aria-hidden="true">默认</span>
               <select id="skin-state" aria-label="皮肤 S 状态"><option value="">默认</option></select>
@@ -175,32 +135,31 @@
               <option value="xiaomi-17">Xiaomi 17 · 1220×2656</option>
               <option value="pixel-10-pro">Pixel 10 Pro · 1280×2856</option>
               <option value="galaxy-s25-ultra">Galaxy S25 Ultra · 1440×3120</option>
-              <option value="canvas-glass">画布 · 玻璃</option>
-              <option value="canvas-checkerboard" selected>画布 · 棋盘格</option>
-              <option value="canvas-checkerboard-soft">画布 · 棋盘格（柔和）</option>
-              <option value="canvas-checkerboard-panel">画布 · 棋盘格（仅面板）</option>
-              <option value="canvas-light-gray">画布 · 浅灰</option>
-              <option value="canvas-white">画布 · 白色</option>
-              <option value="canvas-gray">画布 · 中灰</option>
-              <option value="canvas-dark">画布 · 深色</option>
+              <optgroup label="画布">
+                <option value="canvas-glass">玻璃</option>
+                <option value="canvas-checkerboard" selected>棋盘格</option>
+                <option value="canvas-checkerboard-soft">棋盘格（柔和）</option>
+                <option value="canvas-checkerboard-panel">棋盘格（仅面板）</option>
+                <option value="canvas-light-gray">浅灰</option>
+                <option value="canvas-white">白色</option>
+                <option value="canvas-gray">中灰</option>
+                <option value="canvas-dark">深色</option>
+              </optgroup>
             </select>
           </label>
           <div class="preview-toolbar-end">
-            <div class="preview-choice glass-module" aria-label="方向">
-              <button class="active" data-orientation-choice="port" aria-pressed="true" title="竖屏" aria-label="竖屏"><span class="system-symbol" data-icon="rectangle-vertical" aria-hidden="true"></span></button>
-              <button data-orientation-choice="land" aria-pressed="false" title="横屏" aria-label="横屏"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span></button>
-              <button class="ui-icon-button mobile-choice-toggle" type="button" data-mobile-choice="orientation" title="切换方向" aria-label="切换方向（当前竖屏）"><span class="system-symbol" data-mobile-current-icon data-icon="rectangle-vertical" aria-hidden="true"></span></button>
-              <select id="orientation" hidden>
-                <option value="port">竖屏</option>
-                <option value="land">横屏</option>
-              </select>
+            <div class="preview-choice ui-segmented" data-variant="icon" aria-label="方向">
+              <button type="button" data-orientation-choice="port" aria-pressed="true" title="竖屏" aria-label="竖屏"><span class="system-symbol" data-icon="rectangle-vertical" aria-hidden="true"></span></button>
+              <button type="button" data-orientation-choice="land" aria-pressed="false" title="横屏" aria-label="横屏"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span></button>
             </div>
-            <div class="preview-choice glass-module" aria-label="外观">
-              <button class="active" data-theme-choice="light" aria-pressed="true" title="浅色" aria-label="浅色"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span></button>
-              <button data-theme-choice="dark" aria-pressed="false" title="深色" aria-label="深色"><span class="system-symbol" data-icon="moon" aria-hidden="true"></span></button>
-              <button class="ui-icon-button mobile-choice-toggle" type="button" data-mobile-choice="theme" title="切换外观" aria-label="切换外观（当前浅色）"><span class="system-symbol" data-mobile-current-icon data-icon="sun" aria-hidden="true"></span></button>
-              <select id="theme" hidden><option value="light">浅色</option><option value="dark">深色</option></select>
+            <div class="preview-choice ui-segmented" data-variant="icon" aria-label="外观">
+              <button type="button" data-theme-choice="light" aria-pressed="true" title="浅色" aria-label="浅色"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span></button>
+              <button type="button" data-theme-choice="dark" aria-pressed="false" title="深色" aria-label="深色"><span class="system-symbol" data-icon="moon" aria-hidden="true"></span></button>
             </div>
+            <select id="orientation" hidden><option value="port">竖屏</option><option value="land">横屏</option></select>
+            <select id="theme" hidden><option value="light">浅色</option><option value="dark">深色</option></select>
+            <button class="ui-icon-button mobile-choice-toggle" data-variant="filled" type="button" data-mobile-choice="orientation" title="切换方向" aria-label="切换方向（当前竖屏）"><span class="system-symbol" data-mobile-current-icon data-icon="rectangle-vertical" aria-hidden="true"></span></button>
+            <button class="ui-icon-button mobile-choice-toggle" data-variant="filled" type="button" data-mobile-choice="theme" title="切换外观" aria-label="切换外观（当前浅色）"><span class="system-symbol" data-mobile-current-icon data-icon="sun" aria-hidden="true"></span></button>
             <select id="layout" class="ui-select" aria-label="预览布局" hidden><option value="py_9.ini">9 键</option><option value="py_26.ini">26 键</option></select>
           </div>
         </div>
@@ -215,10 +174,7 @@
                   <button id="welcome-recent-open" class="welcome-head-action" type="button"><span class="icon system-symbol" data-icon="folder" aria-hidden="true"></span>打开皮肤…</button>
                 </div>
                 <div id="welcome-recent-grid" class="recent-grid" hidden></div>
-                <div id="welcome-recent-empty" class="recent-grid-empty">
-                  <span class="icon system-symbol" data-icon="folder" aria-hidden="true"></span>
-                  <span class="recent-grid-empty-copy"><strong>拖入皮肤文件即可打开</strong></span>
-                </div>
+                <div id="welcome-recent-empty" class="ui-empty"><span class="system-symbol" data-icon="folder" data-icon-size="20" aria-hidden="true"></span><p>拖入皮肤文件即可打开</p></div>
               </section>
               <header class="welcome-hero">
                 <h1>新建皮肤</h1>
@@ -318,7 +274,7 @@
 
               <div class="welcome-note">
                 <span class="icon system-symbol" data-icon="lightbulb" aria-hidden="true"></span>
-                <p><kbd>⌘</kbd> / <kbd>Ctrl</kbd> + 单击，多选按键</p>
+                <p><kbd data-shortcut="单击"></kbd> 多选按键</p>
                 <button class="ui-button" data-size="sm" type="button" data-start-tour>使用教程</button>
               </div>
             </div>
@@ -373,18 +329,18 @@
           </figure>
           <output id="preview-coordinates" aria-label="鼠标坐标" hidden><span class="preview-snap-guides" aria-hidden="true"></span><span class="preview-crosshair" aria-hidden="true"></span><span class="preview-coordinate-label">x: <span id="preview-coordinate-x">—</span>  y: <span id="preview-coordinate-y">—</span></span></output>
           <div id="canvas-multi-toolbar" class="canvas-multi-toolbar" role="toolbar" aria-label="多选批量布局" data-available="false">
-            <span class="canvas-multi-count" id="canvas-multi-count" role="status">选择 2 个或更多按键</span>
+            <span class="canvas-multi-count ui-badge" data-variant="selection" id="canvas-multi-count" role="status">选择 2 个或更多按键</span>
             <span class="canvas-multi-divider" aria-hidden="true"></span>
-            <button data-layout-action="left" title="左对齐" aria-label="左对齐"><span class="system-symbol" data-icon="align-start-vertical" aria-hidden="true"></span></button>
-            <button data-layout-action="right" title="右对齐" aria-label="右对齐"><span class="system-symbol" data-icon="align-end-vertical" aria-hidden="true"></span></button>
-            <button data-layout-action="top" title="顶对齐" aria-label="顶对齐"><span class="system-symbol" data-icon="align-start-horizontal" aria-hidden="true"></span></button>
-            <button data-layout-action="bottom" title="底对齐" aria-label="底对齐"><span class="system-symbol" data-icon="align-end-horizontal" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="left" title="左对齐" aria-label="左对齐"><span class="system-symbol" data-icon="align-start-vertical" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="right" title="右对齐" aria-label="右对齐"><span class="system-symbol" data-icon="align-end-vertical" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="top" title="顶对齐" aria-label="顶对齐"><span class="system-symbol" data-icon="align-start-horizontal" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="bottom" title="底对齐" aria-label="底对齐"><span class="system-symbol" data-icon="align-end-horizontal" aria-hidden="true"></span></button>
             <span class="canvas-multi-divider" aria-hidden="true"></span>
-            <button data-layout-action="same-width" title="等宽" aria-label="等宽"><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span></button>
-            <button data-layout-action="same-height" title="等高" aria-label="等高"><span class="system-symbol" data-icon="arrow-up-down" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="same-width" title="等宽" aria-label="等宽"><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="same-height" title="等高" aria-label="等高"><span class="system-symbol" data-icon="arrow-up-down" aria-hidden="true"></span></button>
             <span class="canvas-multi-divider" aria-hidden="true"></span>
-            <button data-layout-action="horizontal-gap" title="水平等间距" aria-label="水平等间距"><span class="system-symbol" data-icon="fold-horizontal" aria-hidden="true"></span></button>
-            <button data-layout-action="vertical-gap" title="垂直等间距" aria-label="垂直等间距"><span class="system-symbol" data-icon="fold-vertical" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="horizontal-gap" title="水平等间距" aria-label="水平等间距"><span class="system-symbol" data-icon="fold-horizontal" aria-hidden="true"></span></button>
+            <button class="ui-icon-button" type="button" data-layout-action="vertical-gap" title="垂直等间距" aria-label="垂直等间距"><span class="system-symbol" data-icon="fold-vertical" aria-hidden="true"></span></button>
           </div>
           <div id="layout-overview" class="layout-overview" hidden><div id="layout-overview-grid" class="layout-overview-grid" role="group" aria-label="全部布局"></div></div>
         </div>
@@ -394,7 +350,7 @@
           <button id="preview-zoom-in" type="button" aria-label="放大画布" title="放大" data-icon="plus" data-icon-size="16"></button>
         </div>
         <div class="preview-zoom-control preview-overview-control glass-module" aria-label="全局预览">
-          <button id="layout-overview-toggle" type="button" aria-label="全局预览全部布局" title="全局预览（⌘/Ctrl + 方向键切换布局）" aria-pressed="false" data-icon="maximize" data-icon-size="16"></button>
+          <button id="layout-overview-toggle" type="button" aria-label="全局预览全部布局" title="全局预览 · 切换布局" data-shortcut="方向键" aria-pressed="false" data-icon="maximize" data-icon-size="16"></button>
         </div>
         <div class="workspace-status" hidden aria-hidden="true"><div id="event-log" aria-live="polite"></div><div id="panel-status" title="面板尺寸 · 预览缩放"></div></div>
       </section>
@@ -410,15 +366,15 @@
           <div class="ai-design-heading"><strong>AI 设计</strong><span>描述想法，一起完善皮肤</span></div>
           <div class="inspector-view-controls">
             <div class="inspector-tabs ui-segmented" data-fill role="tablist" aria-label="检查器视图">
-              <button class="active" type="button" role="tab" data-inspector-tab="properties" aria-pressed="true">属性</button>
-              <button type="button" role="tab" data-inspector-tab="source" aria-pressed="false">源代码</button>
-              <button type="button" role="tab" data-inspector-tab="ai" aria-pressed="false">AI 设计</button>
+              <button type="button" role="tab" data-inspector-tab="properties" aria-selected="true">属性</button>
+              <button type="button" role="tab" data-inspector-tab="source" aria-selected="false">源代码</button>
+              <button type="button" role="tab" data-inspector-tab="ai" aria-selected="false">AI 设计</button>
             </div>
             <div class="inspector-title key-inspector-title">
               <span id="selected-key-preview" class="key-inspector-preview" aria-hidden="true" hidden></span>
               <div class="key-inspector-copy">
                 <strong id="selected-key">选择画布中的按键</strong>
-                <span id="selected-key-context">更改会自动写回配置</span>
+                <span id="selected-key-context"></span>
               </div>
               <div class="inspector-object-actions" aria-label="对象操作">
                 <button class="ui-icon-button" type="button" data-key-mode="select" title="选择按键" aria-label="选择按键" aria-pressed="true" data-icon="mouse-pointer-2"></button>
@@ -432,12 +388,12 @@
         </div>
         <div id="quick-inspector" class="ui-form" hidden>
           <div class="inspector-rail" role="group" aria-label="属性导航">
-            <button class="inspector-filter-open ui-icon-button" type="button" title="筛选属性（Ctrl/⌘ + F）" aria-label="筛选属性" data-icon="search"></button>
+            <button class="inspector-filter-open ui-icon-button" type="button" title="筛选属性" data-shortcut="F" aria-label="筛选属性" data-icon="search"></button>
             <nav id="mobile-inspector-groups" aria-label="属性分组"></nav>
           </div>
-          <label class="inspector-filter ui-input" data-size="sm"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="inspector-filter" type="text" role="searchbox" enterkeyhint="search" placeholder="筛选属性" aria-label="筛选属性" autocomplete="off" spellcheck="false" /><button class="inspector-filter-close ui-icon-button" data-size="sm" type="button" title="清除筛选（Esc）" aria-label="清除筛选" data-icon="x"></button></label>
-          <p class="inspector-filter-empty" role="status" hidden></p>
-          <section class="inspector-group skin-fields" hidden>
+          <label class="inspector-filter ui-input" data-size="sm"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="inspector-filter" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="筛选属性" autocomplete="off" spellcheck="false" /><button class="inspector-filter-close ui-icon-button" data-size="sm" type="button" title="清除筛选（Esc）" aria-label="清除筛选" data-icon="x"></button></label>
+          <p class="inspector-filter-empty ui-empty" role="status" hidden></p>
+          <section class="ui-section skin-fields" hidden>
             <h3>皮肤信息</h3>
             <div class="inspector-grid action-fields">
               <label class="ui-field"><span>名称</span><input data-skin-field="Name" /></label>
@@ -445,28 +401,40 @@
               <label class="ui-field"><span>作者</span><input data-skin-field="Author" /></label>
               <label class="ui-field"><span>版本号</span><input data-skin-field="VersionCode" /></label>
               <label class="ui-field"><span>最低输入法版本</span><input data-skin-field="MinImeCode" /></label>
-              <label class="ui-field" title="SupportPlatform：I=iOS，A=Android，SWIA=全平台（可组合）"><span>支持平台</span><input data-skin-field="SupportPlatform" placeholder="I / A / SWIA" /></label>
-              <label class="ui-field" title="SupportDarkMode：0 关闭 / 1 开启"><span>支持深色模式</span><input data-skin-field="SupportDarkMode" placeholder="0 / 1" /></label>
-              <label class="ui-field" title="Style：皮肤风格，例如 default"><span>皮肤风格</span><input data-skin-field="Style" /></label>
-              <label class="ui-field" title="SkinType：0 支持加载主题 / 1 不支持"><span>加载主题</span><input data-skin-field="SkinType" placeholder="0 / 1" /></label>
-              <label class="ui-field" title="SkinFlags：0 强制拉升半屏手写 / 1 不拉升，由皮肤控制高度"><span>半屏手写高度</span><input data-skin-field="SkinFlags" placeholder="0 / 1" /></label>
-              <label class="ui-field" title="Abilities：皮肤功能标识，逗号分隔，例如 Sound,Animation,3DTouch"><span>功能标识</span><input data-skin-field="Abilities" placeholder="Sound,Animation" /></label>
-              <label class="ui-field" title="SupportPatch：动态补丁支持，例如 Accessory|Sound|Anim"><span>动态补丁支持</span><input data-skin-field="SupportPatch" placeholder="Accessory|Sound|Anim" /></label>
+              <label class="ui-field" title="SupportPlatform"><span>支持平台</span><input data-skin-field="SupportPlatform" placeholder="I / A / SWIA" /></label>
+              <label class="ui-field" title="SupportDarkMode"><span>支持深色模式</span><input data-skin-field="SupportDarkMode" placeholder="0 / 1" /></label>
+              <label class="ui-field" title="Style"><span>皮肤风格</span><input data-skin-field="Style" /></label>
+              <label class="ui-field" title="SkinType"><span>加载主题</span><input data-skin-field="SkinType" placeholder="0 / 1" /></label>
+              <label class="ui-field" title="SkinFlags"><span>半屏手写高度</span><input data-skin-field="SkinFlags" placeholder="0 / 1" /></label>
+              <label class="ui-field" title="Abilities"><span>功能标识</span><input data-skin-field="Abilities" placeholder="Sound,Animation" /></label>
+              <label class="ui-field" title="SupportPatch"><span>动态补丁支持</span><input data-skin-field="SupportPatch" placeholder="Accessory|Sound|Anim" /></label>
             </div>
           </section>
           <div class="keyboard-fields" hidden></div>
-          <section class="inspector-group toolbar-fields" hidden>
+          <section class="ui-section toolbar-fields" hidden>
             <h3>候选栏与工具栏</h3>
             <div class="inspector-grid action-fields">
-              <label class="ui-field" title="cand 文件 [CAND] VIEW_RECT，格式 X,Y,W,H"><span>显示区域</span><input data-toolbar-field="VIEW_RECT" /></label>
+              <div class="ui-field" title="显示区域（VIEW_RECT）"><span>位置</span><div class="ui-field-pair">
+                <label class="ui-input"><span class="ui-input-affix">X</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="0" type="number" aria-label="显示区域 X" /></label>
+                <label class="ui-input"><span class="ui-input-affix">Y</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="1" type="number" aria-label="显示区域 Y" /></label>
+              </div></div>
+              <div class="ui-field" title="显示区域（VIEW_RECT）"><span>尺寸</span><div class="ui-field-pair">
+                <label class="ui-input"><span class="ui-input-affix">W</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="2" type="number" min="0" aria-label="显示区域 W" /></label>
+                <label class="ui-input"><span class="ui-input-affix">H</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="3" type="number" min="0" aria-label="显示区域 H" /></label>
+              </div></div>
               <label class="ui-field"><span>背景样式</span><span class="style-field"><input data-toolbar-field="BACK_STYLE" /></span></label>
               <label class="ui-field"><span>前景样式</span><span class="style-field"><input data-toolbar-field="FORE_STYLE" /></span></label>
-              <label class="ui-field" title="cand 文件 [CAND] PADDING，格式 左,上,右,下"><span>内边距</span><input data-toolbar-field="PADDING" /></label>
+              <div class="ui-field" title="内边距（PADDING）"><span>内边距</span><div class="ui-field-pair" data-columns="4">
+                <label class="ui-input"><span class="ui-input-affix">↑</span><input data-toolbar-field="PADDING" data-toolbar-part="1" type="number" aria-label="候选栏上内边距" /></label>
+                <label class="ui-input"><span class="ui-input-affix">→</span><input data-toolbar-field="PADDING" data-toolbar-part="2" type="number" aria-label="候选栏右内边距" /></label>
+                <label class="ui-input"><span class="ui-input-affix">↓</span><input data-toolbar-field="PADDING" data-toolbar-part="3" type="number" aria-label="候选栏下内边距" /></label>
+                <label class="ui-input"><span class="ui-input-affix">←</span><input data-toolbar-field="PADDING" data-toolbar-part="0" type="number" aria-label="候选栏左内边距" /></label>
+              </div></div>
               <label class="ui-field"><span>首个候选前景</span><span class="style-field"><input data-toolbar-field="FIRST_FORE" /></span></label>
               <label class="ui-field"><span>首个候选背景</span><span class="style-field"><input data-toolbar-field="FIRST_BACK" /></span></label>
             </div>
           </section>
-          <section class="inspector-group text-style-fields" data-inspector-group-label="文字" hidden>
+          <section class="ui-section text-style-fields" data-inspector-group-label="文字" hidden>
             <h3>文字<span id="text-style-targets" class="ui-segmented" data-size="sm" role="group" aria-label="文字对象"></span></h3>
             <p id="text-style-note" class="inspector-group-subtitle"></p>
             <div class="inspector-grid">
@@ -475,20 +443,20 @@
               <div id="text-style-rows" class="inspector-grid"></div>
             </div>
           </section>
-          <div class="inspector-group document-fields" hidden>
+          <div class="document-fields" hidden>
             <div id="document-fields"></div>
           </div>
-          <div class="inspector-group bda-config-fields" hidden>
+          <div class="bda-config-fields" hidden>
             <div id="bda-selected-style-heading" class="bda-selected-style-heading" hidden>
               <h3>样式</h3>
               <div class="inspector-state-switch ui-segmented" data-size="sm" role="group" aria-label="按键状态">
-                <button class="active" type="button" data-bda-inspector-state="normal" aria-pressed="true">正常</button>
+                <button type="button" data-bda-inspector-state="normal" aria-pressed="true">正常</button>
                 <button type="button" data-bda-inspector-state="pressed" aria-pressed="false">按下</button>
               </div>
             </div>
             <div id="bda-config-fields"></div>
           </div>
-          <section class="inspector-group inspector-arrange" id="inspector-multi-layout" data-available="false" data-inspector-group-label="排列" hidden>
+          <section class="ui-section inspector-arrange" id="inspector-multi-layout" data-available="false" data-inspector-group-label="排列" hidden>
             <h3>排列 <small role="status">选择 2 个或更多按键</small></h3>
             <div class="layout-actions inspector-tools" aria-label="对齐与分布">
               <button class="ui-icon-button" type="button" data-layout-action="left" title="左对齐" aria-label="左对齐" data-icon="align-start-vertical"></button>
@@ -511,8 +479,8 @@
               <button class="ui-button" type="button" data-layout-action="merge" title="合并按键（仅限 2 个按键）" data-icon="square-stack">合并</button>
             </div></div>
           </section>
-          <section class="inspector-group key-only key-layout-fields" data-inspector-group-label="布局">
-            <h3>布局</h3>
+          <section class="ui-section key-only key-layout-fields" data-inspector-group-label="布局">
+            <h3>布局<span class="inspector-heading-note" role="img" aria-label="仅供查看，外观和文字在对应分类中修改" title="仅供查看，外观和文字在对应分类中修改" hidden><span class="system-symbol" data-icon="lock" aria-hidden="true"></span></span></h3>
             <div class="inspector-grid geometry-fields">
               <div class="ui-field"><span>位置</span><div class="ui-field-pair">
                 <label class="ui-input"><span class="ui-input-affix">X</span><input data-key-field="x" type="number" aria-label="X 位置" /></label>
@@ -528,55 +496,51 @@
                 <label class="ui-input"><span class="ui-input-affix">↓</span><input data-key-field="PADDING.3" type="number" aria-label="下内边距" /></label>
                 <label class="ui-input"><span class="ui-input-affix">←</span><input data-key-field="PADDING.0" type="number" aria-label="左内边距" /></label>
               </div></div>
-              <p class="inspector-note ui-field-note" hidden>此格式的位置与尺寸仅供查看。外观和文字可在对应分类中修改。</p>
             </div>
           </section>
-          <section class="inspector-group key-only key-appearance-fields" data-inspector-group-label="样式">
+          <section class="ui-section key-only key-appearance-fields" data-inspector-group-label="样式">
             <h3>样式</h3>
             <div class="inspector-grid appearance-fields">
-              <label class="ui-field style-ref-row" title="按键引用的共享背景样式编号（BACK_STYLE）"><span>背景</span><span class="style-field"><input data-key-field="BACK_STYLE" /></span></label>
-              <label class="ui-field style-ref-row" title="按键引用的共享前景样式编号（FORE_STYLE）"><span>前景</span><span class="style-field"><input data-key-field="FORE_STYLE" /></span></label>
+              <label class="ui-field style-ref-row" title="BACK_STYLE"><span>背景</span><span class="style-field"><input data-key-field="BACK_STYLE" /></span></label>
+              <label class="ui-field style-ref-row" title="FORE_STYLE"><span>前景</span><span class="style-field"><input data-key-field="FORE_STYLE" /></span></label>
+              <div id="fore-layer-fields" class="appearance-property-grid"></div>
+              <input type="hidden" data-key-field="FORE_OFFSET" />
+              <input type="hidden" data-key-field="POS_TYPE" />
               <div class="appearance-layout-fields appearance-property-grid">
                   <label class="ui-field" title="STAT_STYLE：S状态_补丁序号，多组用 | 分隔；S0 是零（空）状态，用于叠层，不是“无状态”"><span>状态样式</span><span class="style-field"><input data-key-field="STAT_STYLE" /></span></label>
-                  <label class="ui-field" title="FORE_OFFSET：每层前景偏移 x,y，多组用 ; 分隔"><span>前景偏移</span><span class="style-field"><input data-key-field="FORE_OFFSET" /></span></label>
-                  <label class="ui-field" title="POS_TYPE：每层前景位置类型，逗号分隔"><span>位置类型</span><span class="style-field"><input data-key-field="POS_TYPE" /></span></label>
               </div>
             </div>
           </section>
-          <section class="inspector-group key-only key-animation-fields" data-inspector-group-label="动画">
+          <section class="ui-section key-only key-animation-fields" data-inspector-group-label="动画">
             <h3>动画</h3>
             <div class="inspector-grid">
-              <label class="ui-field" title="ANIM_STYLE：整个按键的动画样式"><span>整键动画</span><span class="style-field"><input data-key-field="ANIM_STYLE" /></span></label>
-              <label class="ui-field" title="BACK_ANIM_STYLE：按键背景的动画样式"><span>背景动画</span><span class="style-field"><input data-key-field="BACK_ANIM_STYLE" /></span></label>
-              <label class="ui-field" title="FORE_ANIM_STYLE：按顺序对应各前景层的动画样式，0 或空位表示未绑定"><span>前景动画</span><span class="style-field"><input data-key-field="FORE_ANIM_STYLE" /></span></label>
-              <label class="ui-field" title="PRESS_STYLE：按下时的效果样式，例如粒子"><span>按下效果</span><span class="style-field"><input data-key-field="PRESS_STYLE" /></span></label>
+              <label class="ui-field" title="ANIM_STYLE"><span>整键动画</span><span class="style-field"><input data-key-field="ANIM_STYLE" /></span></label>
+              <label class="ui-field" title="BACK_ANIM_STYLE"><span>背景动画</span><span class="style-field"><input data-key-field="BACK_ANIM_STYLE" /></span></label>
+              <label class="ui-field" title="FORE_ANIM_STYLE"><span>前景动画</span><span class="style-field"><input data-key-field="FORE_ANIM_STYLE" /></span></label>
+              <label class="ui-field" title="PRESS_STYLE"><span>按下效果</span><span class="style-field"><input data-key-field="PRESS_STYLE" /></span></label>
             </div>
           </section>
-          <section class="inspector-group key-only" data-inspector-group-label="音效">
+          <section class="ui-section key-only" data-inspector-group-label="音效">
             <h3>音效</h3>
             <div class="inspector-grid">
-              <label class="ui-field appearance-sound-field" title="按键引用的按键音效样式编号（SOUND_STYLE）"><span>音效</span><span class="style-field"><input data-key-field="SOUND_STYLE" /></span></label>
+              <label class="ui-field appearance-sound-field" title="SOUND_STYLE"><span>音效</span><span class="style-field"><input data-key-field="SOUND_STYLE" /></span></label>
             </div>
           </section>
-          <section class="inspector-group key-only key-typography-fields" data-inspector-group-label="文字">
-            <h3><span class="typography-heading-default">文字</span><span class="typography-heading-override">文字覆盖</span><span id="key-text-layers" class="ui-segmented" data-size="sm" role="group" aria-label="文字层" hidden></span></h3>
-            <p class="inspector-group-subtitle"><span class="typography-subtitle-default">显示内容与字体颜色</span><span class="typography-subtitle-override">仅当前状态</span></p>
+          <section class="ui-section key-only key-typography-fields" data-inspector-group-label="文字">
+            <h3>文字<span id="key-text-note" class="inspector-heading-note" role="img" hidden><span class="system-symbol" data-icon="info" aria-hidden="true"></span></span><span id="key-text-layers" class="ui-segmented" data-size="sm" role="group" aria-label="文字层" hidden></span></h3>
             <div class="inspector-grid typography-content-fields">
               <label class="ui-field" title="SHOW：直接点击后传给内核的键值，不是显示文字；显示文字请改样式 SHOW"><span>键值</span><input data-key-field="SHOW" /></label>
               <div id="primary-css-fields" class="primary-css-fields"></div>
             </div>
             <div class="appearance-typography-fields">
-              <label class="ui-field" data-text-style data-bda-text title="contentText：BDA 文字样式自带的显示文字"><span>显示文字</span><input data-style-field="CONTENT_TEXT" aria-label="显示文字" /></label>
+              <label class="ui-field" data-text-style data-bda-text title="contentText"><span>显示文字</span><input data-style-field="CONTENT_TEXT" aria-label="显示文字" /></label>
               <label class="ui-field" data-text-style title="FONT_NAME：字体名称，可填皮肤内字体文件名或系统字体名；Android 13.3.16.2 的 CSS 样式不解析此键，内嵌字体优先用全局字体"><span>字体名称</span><input data-style-field="FONT_NAME" aria-label="字体名称" list="skin-font-names" /></label>
               <datalist id="skin-font-names"></datalist>
               <label class="ui-field" data-text-style><span>字号</span><input data-style-field="FONT_SIZE" type="number" min="1" step="1" /></label>
-              <div class="color-pair-field" data-text-style>
-                <label class="ui-field"><span>颜色</span><span class="color-control ui-input ui-color"><input type="color" data-color-picker-for="style-NM_COLOR" value="#ffffff" aria-label="文字正常颜色"><input data-style-field="NM_COLOR" aria-label="文字正常颜色值" /><input type="number" data-color-alpha-for="style-NM_COLOR" min="0" max="1" step="0.01" value="1" aria-label="文字正常颜色透明度"></span></label>
-                <label class="ui-field"><span>按下颜色</span><span class="color-control ui-input ui-color"><input type="color" data-color-picker-for="style-HL_COLOR" value="#ffffff" aria-label="文字按下颜色"><input data-style-field="HL_COLOR" aria-label="文字按下颜色值" /><input type="number" data-color-alpha-for="style-HL_COLOR" min="0" max="1" step="0.01" value="1" aria-label="文字按下颜色透明度"></span></label>
-              </div>
+              <div id="key-text-color" class="color-pair-field" data-text-style><input type="hidden" data-style-field="NM_COLOR" /><input type="hidden" data-style-field="HL_COLOR" /></div>
             </div>
           </section>
-          <section class="inspector-group key-only key-gesture-fields" data-inspector-group-label="手势">
+          <section class="ui-section key-only key-gesture-fields" data-inspector-group-label="手势">
             <h3>手势 <small class="inspector-gesture-count"></small></h3>
             <div class="direction-editor inspector-gestures" aria-label="点击、滑动与长按动作">
               <label class="inspector-gesture" data-gesture="CENTER"><span data-icon="pointer">点击</span><input data-key-field="CENTER" list="baidu-action-codes" placeholder="+" /><small data-action-meaning="CENTER"></small></label>
@@ -590,72 +554,79 @@
         </div>
         <div id="resource-inspector" class="ui-form" hidden>
           <div id="resource-list-view">
-            <div class="inspector-title">
-              <strong id="resource-list-title">图片资源</strong>
-              <span id="resource-count"></span>
-              <div class="resource-filters">
-                <span class="ui-input ui-select" hidden><select id="resource-category" aria-label="样式分类"></select></span>
-                <label class="ui-input" aria-label="搜索图片"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="resource-search" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索图片" autocomplete="off" spellcheck="false"></label>
-              </div>
-              <div class="resource-actions">
-                <button id="style-add" class="toolbar-button" type="button" title="新增样式" aria-label="新增样式" hidden><span class="icon system-symbol" data-icon="plus" aria-hidden="true"></span></button>
-                <button id="resource-upload" class="toolbar-button" type="button" title="上传图片" aria-label="上传图片"><span class="icon system-symbol" data-icon="upload" aria-hidden="true"></span></button>
-                <button id="resource-download" class="toolbar-button" type="button" title="下载选中图片" aria-label="下载选中图片" disabled><span class="icon system-symbol" data-icon="download" aria-hidden="true"></span></button>
-                <button id="resource-delete" class="toolbar-button" type="button" title="删除选中图片" aria-label="删除选中图片" disabled><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
-              </div>
+            <header class="ui-pane-header">
+              <h2 id="resource-list-title">图片</h2>
+              <span id="resource-count" class="ui-badge" data-variant="pill"></span>
+            </header>
+            <div class="resource-filters">
+              <span class="ui-input ui-select" hidden><select id="resource-category" aria-label="样式分类"></select></span>
+              <label class="ui-input ui-search"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="resource-search" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="搜索图片" autocomplete="off" spellcheck="false"></label>
+            </div>
+            <div class="source-file-toolbar resource-actions">
+              <button id="resource-upload" class="ui-icon-button" type="button" title="上传图片" aria-label="上传图片"><span class="system-symbol" data-icon="upload" aria-hidden="true"></span></button>
+              <button id="resource-download" class="ui-icon-button" type="button" title="下载选中图片" aria-label="下载选中图片" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span></button>
+              <button id="resource-delete" class="ui-icon-button" type="button" data-list-action="remove" title="删除选中图片" aria-label="删除选中图片" disabled><span class="system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
             </div>
             <input id="resource-upload-input" type="file" accept=".png,image/png" hidden>
             <div id="resource-gallery" class="resource-gallery"></div>
           </div>
           <div id="resource-detail" hidden>
             <div class="resource-detail-heading">
-              <button id="resource-back" class="toolbar-button" type="button" title="返回" aria-label="返回"><span class="icon system-symbol" data-icon="chevron-left" aria-hidden="true"></span></button>
+              <button id="resource-back" class="ui-icon-button" type="button" title="返回列表" aria-label="返回"><span class="system-symbol" data-icon="arrow-left" aria-hidden="true"></span></button>
               <div><strong id="resource-name">图片</strong><small id="resource-meta"></small></div>
             </div>
             <div id="image-resource-detail">
               <div class="tile-toolbar">
-              <div class="tile-mode-control" aria-label="切片操作模式">
-                <button id="select-tile" class="toolbar-button active" type="button" data-tile-mode="select" title="选择切片" aria-label="选择切片"><span class="icon system-symbol" data-icon="mouse-pointer-2" aria-hidden="true"></span></button>
-                <button id="move-tile" class="toolbar-button" type="button" data-tile-mode="move" title="移动切片" aria-label="移动切片"><span class="icon system-symbol" data-icon="move" aria-hidden="true"></span></button>
+              <div class="tile-mode-control ui-segmented" data-variant="icon" aria-label="切片操作模式">
+                <button id="select-tile" type="button" aria-pressed="true" data-tile-mode="select" title="选择切片" aria-label="选择切片"><span class="icon system-symbol" data-icon="mouse-pointer-2" aria-hidden="true"></span></button>
+                <button id="move-tile" type="button" aria-pressed="false" data-tile-mode="move" title="移动切片" aria-label="移动切片"><span class="icon system-symbol" data-icon="move" aria-hidden="true"></span></button>
               </div>
-              <button id="new-tile" class="toolbar-button" type="button" title="新建切片" aria-label="新建切片"><span class="icon system-symbol" data-icon="square-plus" aria-hidden="true"></span></button>
-              <button id="duplicate-tile" class="toolbar-button" type="button" title="复制选中切片" aria-label="复制选中切片"><span class="icon system-symbol" data-icon="copy-plus" aria-hidden="true"></span></button>
-              <button id="delete-tile" class="toolbar-button" type="button" title="删除选中切片" aria-label="删除选中切片"><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
+              <button id="new-tile" class="ui-icon-button" data-variant="filled" type="button" aria-pressed="false" title="新建切片" aria-label="新建切片"><span class="icon system-symbol" data-icon="square-plus" aria-hidden="true"></span></button>
+              <button id="duplicate-tile" class="ui-icon-button" data-variant="filled" type="button" title="复制选中切片" aria-label="复制选中切片"><span class="icon system-symbol" data-icon="copy-plus" aria-hidden="true"></span></button>
+              <button id="delete-tile" class="ui-icon-button" data-variant="filled" type="button" title="删除选中切片" aria-label="删除选中切片"><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
             </div>
-          <div id="tile-inspector" class="inspector-group">
+          <div id="tile-inspector" class="ui-section">
             <div class="tile-heading">
               <h3 id="tile-title">切片</h3>
               <select id="bda-tile-usage" aria-label="BDA 图片样式引用" hidden></select>
             </div>
-            <div id="tile-preview-wrap" hidden><canvas id="tile-preview" width="240" height="240" aria-label="选中切片放大预览"></canvas></div>
+            <div id="tile-preview-wrap" class="ui-checker" hidden><canvas id="tile-preview" width="240" height="240" aria-label="选中切片放大预览"></canvas></div>
             <div id="tile-source-fields" class="inspector-grid geometry-fields">
-              <label>X（SOURCE） <input data-tile-source="0" type="number" min="0" /></label>
-              <label>Y（SOURCE） <input data-tile-source="1" type="number" min="0" /></label>
-              <label>宽（SOURCE） <input data-tile-source="2" type="number" min="1" /></label>
-              <label>高（SOURCE） <input data-tile-source="3" type="number" min="1" /></label>
+              <div class="ui-field" title="切片区域（SOURCE）"><span>位置</span><div class="ui-field-pair">
+                <label class="ui-input"><span class="ui-input-affix">X</span><input data-tile-source="0" type="number" min="0" aria-label="切片 X" /></label>
+                <label class="ui-input"><span class="ui-input-affix">Y</span><input data-tile-source="1" type="number" min="0" aria-label="切片 Y" /></label>
+              </div></div>
+              <div class="ui-field" title="切片区域（SOURCE）"><span>尺寸</span><div class="ui-field-pair">
+                <label class="ui-input"><span class="ui-input-affix">W</span><input data-tile-source="2" type="number" min="1" aria-label="切片 W" /></label>
+                <label class="ui-input"><span class="ui-input-affix">H</span><input data-tile-source="3" type="number" min="1" aria-label="切片 H" /></label>
+              </div></div>
             </div>
             <h3 id="tile-inner-title">拉伸边距</h3>
             <div class="inspector-grid geometry-fields">
-              <label>X（INNER_RECT） <input data-tile-inner="0" type="number" /></label>
-              <label>Y（INNER_RECT） <input data-tile-inner="1" type="number" /></label>
-              <label>宽（INNER_RECT） <input data-tile-inner="2" type="number" min="1" /></label>
-              <label>高（INNER_RECT） <input data-tile-inner="3" type="number" min="1" /></label>
+              <div class="ui-field" title="拉伸区域（INNER_RECT）"><span>位置</span><div class="ui-field-pair">
+                <label class="ui-input"><span class="ui-input-affix">X</span><input data-tile-inner="0" type="number" aria-label="拉伸 X" /></label>
+                <label class="ui-input"><span class="ui-input-affix">Y</span><input data-tile-inner="1" type="number" aria-label="拉伸 Y" /></label>
+              </div></div>
+              <div class="ui-field" title="拉伸区域（INNER_RECT）"><span>尺寸</span><div class="ui-field-pair">
+                <label class="ui-input"><span class="ui-input-affix">W</span><input data-tile-inner="2" type="number" min="1" aria-label="拉伸 W" /></label>
+                <label class="ui-input"><span class="ui-input-affix">H</span><input data-tile-inner="3" type="number" min="1" aria-label="拉伸 H" /></label>
+              </div></div>
             </div>
             </div>
             </div>
             <div id="style-resource-detail" hidden>
-              <div id="style-detail-previews" class="style-detail-previews">
-                <button type="button" data-style-image-property="NM_IMG" aria-label="选择正常状态图片切片（NM_IMG）"><canvas id="style-detail-normal" width="128" height="88" aria-label="正常状态预览（NM_IMG）"></canvas><span>正常（NM_IMG）</span></button>
-                <button type="button" data-style-image-property="HL_IMG" aria-label="选择按下状态图片切片（HL_IMG）"><canvas id="style-detail-highlighted" width="128" height="88" aria-label="按下状态预览（HL_IMG）"></canvas><span>按下（HL_IMG）</span></button>
+              <div id="style-detail-previews">
+                <button class="ui-checker" type="button" data-style-image-property="NM_IMG" title="正常图片（NM_IMG）" aria-label="选择正常图片"><canvas id="style-detail-normal" width="128" height="88"></canvas></button>
+                <button class="ui-checker" type="button" data-style-image-property="HL_IMG" title="按下图片（HL_IMG）" aria-label="选择按下图片"><canvas id="style-detail-highlighted" width="128" height="88"></canvas></button>
               </div>
-              <div id="style-detail-fields" class="inspector-grid action-fields"></div>
+              <div id="style-detail-fields"></div>
             </div>
           </div>
         </div>
         <div id="source-editor" hidden>
           <div class="source-toolbar" id="source-toolbar">
             <div class="source-find-row">
-              <label class="ui-input" aria-label="搜索源代码"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="source-search" type="text" role="searchbox" enterkeyhint="search" placeholder="查找" aria-label="查找源代码"><span id="source-search-count" aria-live="polite"></span></label>
+              <label class="ui-input" aria-label="搜索源代码"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="source-search" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="查找源代码"><span id="source-search-count" aria-live="polite"></span></label>
               <div class="source-search-actions">
                 <button id="source-search-previous" class="ui-icon-button" type="button" title="上一个（Shift + Enter）" aria-label="上一个搜索结果"><span class="system-symbol" data-icon="chevron-up" aria-hidden="true"></span></button>
                 <button id="source-search-next" class="ui-icon-button" type="button" title="下一个（Enter）" aria-label="下一个搜索结果"><span class="system-symbol" data-icon="chevron-down" aria-hidden="true"></span></button>
@@ -670,7 +641,7 @@
           </div>
           <div class="source-code">
             <div id="source"></div>
-            <button id="source-find-toggle" class="source-find-fab" type="button" title="查找（Ctrl/⌘ + F）" aria-label="查找" aria-controls="source-toolbar" aria-expanded="false" aria-pressed="false" hidden><span class="system-symbol source-find-fab-search" data-icon="search" aria-hidden="true"></span><span class="source-find-fab-close" data-icon="chevron-down" data-icon-size="20" aria-hidden="true"></span></button>
+            <button id="source-find-toggle" class="ui-icon-button source-find-fab" data-variant="filled" data-size="lg" type="button" title="查找" data-shortcut="F" aria-label="查找" aria-controls="source-toolbar" aria-expanded="false" aria-pressed="false" hidden><span class="system-symbol source-find-fab-search" data-icon="search" data-icon-size="16" aria-hidden="true"></span><span class="system-symbol source-find-fab-close" data-icon="chevron-down" data-icon-size="16" aria-hidden="true"></span></button>
           </div>
         </div>
         <div id="ai-design-panel" hidden>
@@ -687,7 +658,7 @@
             <deep-chat id="ai-design-chat" aria-label="AI 设计对话">
               <section class="ai-welcome" aria-label="开始设计">
                 <h2>想把皮肤变成什么样？</h2>
-                <p>描述一种风格或一处改动。AI 会参考画布重新配色、调整文字与质感，必要时直接改图；生成的是草稿，确认后才写入。</p>
+                <p>描述一种风格或一处改动，生成草稿后再确认写入</p>
                 <h3>风格灵感</h3>
                 <div class="ai-suggestions" data-layout="grid">
                   <button type="button" data-ai-prompt="整体换成赛博霓虹风：近黑的深色底板，按键用深灰蓝底，字母键文字用青色，功能键用洋红，回车键用亮青色底；按下态发光提亮，候选栏同步深色。保留布局。"><strong>赛博霓虹</strong><span>深色底 · 霓虹高亮</span></button>
@@ -719,7 +690,7 @@
             </header>
             <ul id="ai-draft-files" class="ai-draft-files"></ul>
             <footer class="ai-draft-actions">
-              <p class="ai-draft-note">确认前不会写入皮肤，应用后可撤销。</p>
+              <p class="ai-draft-note">应用后可撤销</p>
               <button id="ai-draft-cancel" type="button" class="ai-draft-cancel">丢弃</button>
               <button id="ai-draft-apply" type="button" class="ai-draft-apply">应用到皮肤</button>
             </footer>
@@ -727,8 +698,8 @@
         </div>
         <div id="asset" hidden>
           <div class="asset-toolbar">
-            <button id="asset-back" title="返回之前的配置" aria-label="返回之前的配置"><span class="system-symbol" data-icon="chevron-left" aria-hidden="true"></span></button>
-            <span>图片资源</span>
+            <button id="asset-back" class="ui-icon-button" type="button" title="返回之前的配置" aria-label="返回"><span class="system-symbol" data-icon="arrow-left" aria-hidden="true"></span></button>
+            <span>图片</span>
           </div>
           <img id="asset-image" alt="皮肤资源预览" />
           <button id="replace-asset">替换图片</button>
@@ -738,12 +709,10 @@
 
     <datalist id="baidu-action-codes"></datalist>
 
-    <dialog id="new-project-dialog" class="project-dialog new-project-dialog" aria-labelledby="new-project-title">
+    <dialog id="new-project-dialog" class="ui-dialog new-project-dialog" data-size="lg" aria-labelledby="new-project-title">
       <form id="new-project-form" method="dialog">
         <header>
           <h2 id="new-project-title">新建皮肤</h2>
-          <p>选择一个内置模板作为皮肤起点。</p>
-          <p>内置皮肤为互联网搜集整理，仅限技术交流请勿用于商业用途。如有侵权请联系作者下架。</p>
         </header>
         <fieldset>
           <legend>默认模板</legend>
@@ -757,155 +726,96 @@
           <label class="project-template-option"><input type="radio" name="project-template" value="palm-harmony" /><span><strong>手心鸿蒙内置</strong><small>互联网整理 · .sxi</small></span></label>
         </fieldset>
         <footer>
-          <button value="cancel">取消</button>
-          <button class="primary" value="create">创建皮肤</button>
+          <button class="ui-button" value="cancel">取消</button>
+          <button class="ui-button" data-variant="primary" value="create">新建</button>
         </footer>
       </form>
     </dialog>
 
-    <dialog id="unsaved-dialog" class="project-dialog" aria-labelledby="unsaved-title">
+    <dialog id="file-operation-dialog" class="ui-dialog" data-size="sm" data-variant="operation" aria-labelledby="file-operation-title" aria-describedby="file-operation-detail">
       <form method="dialog">
-        <header>
-          <h2 id="unsaved-title">未保存的皮肤</h2>
-          <p>当前皮肤尚未保存。是否先保存修改？</p>
-        </header>
-        <footer>
-          <button value="cancel" autofocus>取消</button>
-          <button value="discard">不保存</button>
-          <button class="primary" value="save">保存</button>
-        </footer>
-      </form>
-    </dialog>
-
-    <dialog id="edit-mode-dialog" class="project-dialog" aria-labelledby="edit-mode-title">
-      <form method="dialog">
-        <header>
-          <h2 id="edit-mode-title">交互预览中无法编辑</h2>
-          <p>交互预览下配置只读。切换至编辑模式后即可修改。</p>
-        </header>
-        <footer>
-          <button value="cancel">取消</button>
-          <button class="primary" value="edit" autofocus>切换至编辑模式</button>
-        </footer>
-      </form>
-    </dialog>
-
-    <dialog id="create-animation-dialog" class="project-dialog" aria-labelledby="create-animation-title" aria-describedby="create-animation-detail">
-      <form method="dialog">
-        <header>
-          <h2 id="create-animation-title">皮肤还没有动画配置</h2>
-          <p id="create-animation-detail"></p>
-        </header>
-        <footer>
-          <button value="cancel">取消</button>
-          <button class="primary" value="create" autofocus>自动创建</button>
-        </footer>
-      </form>
-    </dialog>
-
-    <dialog id="file-operation-dialog" class="ui-operation-dialog" aria-labelledby="file-operation-title" aria-describedby="file-operation-detail">
-      <form method="dialog">
-        <header>
-          <span id="file-operation-icon" class="ui-operation-icon" data-icon="keyboard" data-icon-size="20" aria-hidden="true"></span>
+        <header class="ui-dialog-header">
+          <span id="file-operation-icon" class="ui-dialog-icon" data-icon="keyboard" data-icon-size="20" aria-hidden="true"></span>
           <div><h2 id="file-operation-title">正在处理</h2><p id="file-operation-detail" aria-live="polite">正在准备…</p></div>
         </header>
-        <div class="ui-operation-meter">
-          <div class="ui-operation-progress-label"><span>处理进度</span><span id="file-operation-percent" aria-hidden="true">0%</span></div>
+        <div class="ui-dialog-meter">
+          <div class="ui-dialog-progress-label"><span>处理进度</span><span id="file-operation-percent" aria-hidden="true">0%</span></div>
           <progress id="file-operation-progress" aria-labelledby="file-operation-title" aria-describedby="file-operation-detail" max="100" value="0">0%</progress>
         </div>
         <p id="file-operation-result" aria-live="assertive" hidden></p>
-        <footer><span class="ui-operation-hint">皮肤文件仅在本地处理</span><button id="file-operation-close" class="ui-button primary" data-variant="primary" data-size="lg" value="close" disabled>关闭</button></footer>
+        <footer class="ui-dialog-footer"><button id="file-operation-close" class="ui-button" data-variant="primary" data-size="lg" value="close" disabled>关闭</button></footer>
       </form>
     </dialog>
 
-    <dialog id="panel-scale-dialog" class="project-dialog" aria-labelledby="panel-scale-title">
-      <form id="panel-scale-form" method="dialog">
-        <header><h2 id="panel-scale-title">面板复制</h2><p>复制目录下的全部内容，或复制单个文件。</p></header>
-        <div class="panel-copy-fields">
-          <label>源目录 <input id="panel-copy-source" list="panel-copy-source-options" required autocomplete="off" spellcheck="false" placeholder="输入目录或具体文件"><datalist id="panel-copy-source-options"></datalist></label>
-          <label>目标目录 <input id="panel-copy-target" list="panel-copy-target-options" required autocomplete="off" spellcheck="false" placeholder="输入目录或具体文件"><datalist id="panel-copy-target-options"></datalist></label>
+    <dialog id="panel-scale-dialog" class="ui-dialog" data-size="sm" aria-labelledby="panel-scale-title">
+      <form id="panel-scale-form" method="dialog" class="ui-form">
+        <header class="ui-dialog-header"><div><h2 id="panel-scale-title">面板复制</h2><p>复制目录下的全部内容，或单个文件</p></div></header>
+        <div class="ui-dialog-body">
+          <label class="ui-field"><span>源目录</span><input id="panel-copy-source" list="panel-copy-source-options" autofocus required autocomplete="off" spellcheck="false" placeholder="目录或文件"><datalist id="panel-copy-source-options"></datalist></label>
+          <label class="ui-field"><span>目标目录</span><input id="panel-copy-target" list="panel-copy-target-options" required autocomplete="off" spellcheck="false" placeholder="目录或文件"><datalist id="panel-copy-target-options"></datalist></label>
+          <label class="ui-field"><span>缩放分辨率</span><input id="panel-scale-enabled" class="ui-switch" type="checkbox" role="switch"></label>
+          <div id="panel-scale-options" class="ui-field-pair" hidden>
+            <label class="ui-field" data-stack><span>源宽度</span><input id="panel-source-width" type="number" min="1" readonly disabled></label>
+            <label class="ui-field" data-stack><span>源高度</span><input id="panel-source-height" type="number" min="1" readonly disabled></label>
+            <label class="ui-field" data-stack><span>目标宽度</span><input id="panel-target-width" type="number" min="1" required></label>
+            <label class="ui-field" data-stack><span>目标高度</span><input id="panel-target-height" type="number" min="1" required></label>
+          </div>
+          <p id="panel-scale-summary" class="ui-field-note"></p>
         </div>
-        <label class="project-template-option"><input id="panel-scale-enabled" type="checkbox"><span><strong>缩放分辨率</strong><small>按配置的目标宽高缩放面板、切片和图片</small></span></label>
-        <div id="panel-scale-options" class="panel-scale-grid" hidden>
-          <label>源宽度 <input id="panel-source-width" type="number" min="1" readonly disabled></label>
-          <label>源高度 <input id="panel-source-height" type="number" min="1" readonly disabled></label>
-          <label>目标宽度 <input id="panel-target-width" type="number" min="1" required></label>
-          <label>目标高度 <input id="panel-target-height" type="number" min="1" required></label>
-        </div>
-        <p id="panel-scale-summary"></p>
-        <footer><button value="cancel" formnovalidate>取消</button><button class="primary" value="copy">复制</button></footer>
-      </form>
-    </dialog>
-
-    <dialog id="ios26-dialog" class="project-dialog" aria-labelledby="ios26-title">
-      <form id="ios26-form" method="dialog">
-        <header>
-          <h2 id="ios26-title">适配 iOS 26</h2>
-          <p>为全部浅色、深色及横竖屏键盘和符号面板添加透明背景。</p>
-        </header>
-        <p class="dialog-note">将透明化键盘、候选栏和次选区；颜文字、剪贴板等功能页保持不变。</p>
-        <footer><button value="cancel">取消</button><button class="primary" value="apply">开始适配</button></footer>
+        <footer class="ui-dialog-footer"><button class="ui-button" value="cancel" formnovalidate>取消</button><button class="ui-button" data-variant="primary" value="copy">复制</button></footer>
       </form>
     </dialog>
 
     <input id="source-color-picker" class="source-color-picker" type="color" tabindex="-1" aria-label="源码颜色调节器" aria-hidden="true">
 
-    <dialog id="picker-dialog" class="picker-dialog" aria-label="图片与样式选择">
+    <dialog id="picker-dialog" class="ui-dialog picker-dialog" aria-label="图片与样式选择">
       <iframe id="picker-frame" title="图片与样式选择"></iframe>
     </dialog>
 
-    <dialog id="layout-image-dialog" class="app-dialog layout-image-dialog" aria-labelledby="layout-image-title" aria-describedby="layout-image-scope">
-      <form id="layout-image-form" method="dialog">
-        <header><h2 id="layout-image-title">替换键盘样式</h2><small id="layout-image-layout"></small></header>
-        <button id="layout-image-file" class="layout-image-file" type="button" autofocus>
-          <img id="layout-image-preview" alt="待切片的键盘图片预览" hidden>
-          <span class="system-symbol layout-image-file-icon" data-icon="image-down" aria-hidden="true"></span>
-          <span id="layout-image-file-label">选择或拖入一张 PNG 图片</span>
-          <small id="layout-image-size">支持 PNG · 也可以直接拖到画布</small>
-        </button>
-        <fieldset id="layout-image-targets" class="layout-image-targets">
-          <legend>替换位置</legend>
-          <label><input type="radio" name="layout-image-target" value="panel"><span><strong>键盘背景</strong><small>替换当前布局的完整背景</small></span></label>
-          <label><input type="radio" name="layout-image-target" value="key-normal"><span><strong>正常按键背景</strong><small>按按键区域自动切片</small></span></label>
-          <label><input type="radio" name="layout-image-target" value="key-highlight"><span><strong>按下按键背景</strong><small>按按键区域自动切片</small></span></label>
-          <label><input type="radio" name="layout-image-target" value="fore-normal"><span><strong>按键前景</strong><small>保留现有前景并添加图片层</small></span></label>
-          <label><input type="radio" name="layout-image-target" value="fore-highlight"><span><strong>按键按下前景</strong><small>保留现有前景并添加图片层</small></span></label>
-          <label><input type="radio" name="layout-image-target" value="candidate"><span><strong>候选栏背景样式</strong><small>替换候选栏背景图片</small></span></label>
-        </fieldset>
-        <fieldset id="layout-image-config" class="layout-image-config">
-          <legend>布局配置</legend>
-          <div class="layout-image-config-control glass-module" aria-label="布局配置">
-            <button type="button" class="active" data-layout-image-config="none">无跟随</button>
-            <button type="button" data-layout-image-config="image-follows-layout">图片跟随布局</button>
-            <button type="button" data-layout-image-config="layout-follows-image">布局跟随图片</button>
-          </div>
-          <small id="layout-image-config-desc">保持当前布局，图片按面板尺寸缩放后替换按键区域。</small>
-        </fieldset>
-        <p id="layout-image-scope"></p>
-        <p id="layout-image-error" class="field-error" hidden></p>
-        <footer><button value="cancel">取消</button><button id="layout-image-apply" class="primary" value="apply" disabled>应用替换</button></footer>
+    <dialog id="layout-image-dialog" class="ui-dialog layout-image-dialog" aria-labelledby="layout-image-title" aria-describedby="layout-image-scope">
+      <form id="layout-image-form" method="dialog" class="ui-form">
+        <header class="ui-dialog-header"><div><h2 id="layout-image-title">替换键盘样式</h2><p id="layout-image-layout"></p></div></header>
+        <div class="ui-dialog-body">
+          <button id="layout-image-file" class="layout-image-file" type="button" autofocus>
+            <img id="layout-image-preview" class="ui-checker" alt="待切片的键盘图片预览" hidden>
+            <span class="system-symbol" data-icon="image-down" data-icon-size="20" aria-hidden="true"></span>
+            <span id="layout-image-file-label">选择或拖入 PNG</span>
+            <small id="layout-image-size"></small>
+          </button>
+          <fieldset id="layout-image-targets" class="layout-image-targets">
+            <legend>替换位置</legend>
+            <label class="ui-list-item"><input type="radio" name="layout-image-target" value="panel"><span>键盘背景</span></label>
+            <label class="ui-list-item"><input type="radio" name="layout-image-target" value="key-normal"><span>按键</span></label>
+            <label class="ui-list-item"><input type="radio" name="layout-image-target" value="key-highlight"><span>按下</span></label>
+            <label class="ui-list-item"><input type="radio" name="layout-image-target" value="fore-normal"><span>前景</span></label>
+            <label class="ui-list-item"><input type="radio" name="layout-image-target" value="fore-highlight"><span>按下前景</span></label>
+            <label class="ui-list-item"><input type="radio" name="layout-image-target" value="candidate"><span>候选栏</span></label>
+          </fieldset>
+          <fieldset id="layout-image-config" class="layout-image-config">
+            <legend>布局</legend>
+            <div class="ui-segmented" data-fill role="group" aria-label="布局配置">
+              <button type="button" aria-pressed="true" data-layout-image-config="none">无跟随</button>
+              <button type="button" aria-pressed="false" data-layout-image-config="image-follows-layout">图片跟随布局</button>
+              <button type="button" aria-pressed="false" data-layout-image-config="layout-follows-image">布局跟随图片</button>
+            </div>
+          </fieldset>
+          <p id="layout-image-scope" class="ui-field-note"></p>
+          <p id="layout-image-error" class="ui-field-error" role="alert" hidden></p>
+        </div>
+        <footer class="ui-dialog-footer"><button class="ui-button" value="cancel">取消</button><button id="layout-image-apply" class="ui-button" data-variant="primary" value="apply" disabled>应用替换</button></footer>
       </form>
     </dialog>
 
-    <dialog id="new-style-dialog" class="app-dialog new-style-dialog" aria-labelledby="new-style-title">
-      <form id="new-style-form" method="dialog">
-        <header><h2 id="new-style-title">新增样式</h2><p>输入一个未使用的样式序号。</p></header>
-        <label>样式序号 <input id="new-style-id" type="number" min="0" step="1" required></label>
-        <p id="new-style-error" class="field-error" hidden></p>
-        <footer><button class="secondary" value="cancel">取消</button><button id="new-style-submit" class="primary" value="create">创建</button></footer>
-      </form>
-    </dialog>
-
-    <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+    <dialog id="settings-dialog" class="ui-dialog settings-dialog" data-size="lg" aria-labelledby="settings-title">
       <form method="dialog" class="ui-form">
-        <header class="settings-header"><h2 id="settings-title">设置</h2><button id="settings-close" class="ui-icon-button" type="button" title="关闭" aria-label="关闭设置"><span class="system-symbol" data-icon="x" aria-hidden="true"></span></button></header>
+        <header class="ui-dialog-header settings-header"><div><h2 id="settings-title">设置</h2></div></header>
         <div class="settings-layout">
           <nav class="settings-sidebar" role="tablist" aria-label="设置分类">
-            <button class="settings-nav-item" type="button" data-settings-page="appearance" role="tab" id="settings-tab-appearance" aria-controls="settings-panel-appearance" aria-selected="true"><span class="system-symbol" data-icon="paintbrush" aria-hidden="true"></span><span>外观</span></button>
-            <button class="settings-nav-item" type="button" data-settings-page="canvas" role="tab" id="settings-tab-canvas" aria-controls="settings-panel-canvas" aria-selected="false"><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>预览与画布</span><small data-settings-summary="canvas">画布</small></button>
-            <button class="settings-nav-item" type="button" data-settings-page="source" role="tab" id="settings-tab-source" aria-controls="settings-panel-source" aria-selected="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源代码</span></button>
-            <button id="settings-model-nav" class="settings-nav-item" type="button" data-settings-page="model" role="tab" aria-controls="settings-model-section" aria-selected="false" hidden><span class="system-symbol" data-icon="sparkles" aria-hidden="true"></span><span>AI 模型</span><small data-settings-summary="model"></small></button>
-            <button class="settings-nav-item" type="button" data-settings-page="about" role="tab" id="settings-tab-about" aria-controls="settings-panel-about" aria-selected="false"><span class="system-symbol" data-icon="info" aria-hidden="true"></span><span>关于</span></button>
+            <button class="ui-list-item settings-nav-item" type="button" data-settings-page="appearance" role="tab" id="settings-tab-appearance" aria-controls="settings-panel-appearance" aria-selected="true"><span class="system-symbol" data-icon="paintbrush" aria-hidden="true"></span><span>外观</span></button>
+            <button class="ui-list-item settings-nav-item" type="button" data-settings-page="canvas" role="tab" id="settings-tab-canvas" aria-controls="settings-panel-canvas" aria-selected="false"><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>预览与画布</span><small data-settings-summary="canvas">画布</small></button>
+            <button class="ui-list-item settings-nav-item" type="button" data-settings-page="source" role="tab" id="settings-tab-source" aria-controls="settings-panel-source" aria-selected="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源代码</span></button>
+            <button id="settings-model-nav" class="ui-list-item settings-nav-item" type="button" data-settings-page="model" role="tab" aria-controls="settings-model-section" aria-selected="false" hidden><span class="system-symbol" data-icon="sparkles" aria-hidden="true"></span><span>AI 模型</span><small data-settings-summary="model"></small></button>
+            <button class="ui-list-item settings-nav-item" type="button" data-settings-page="about" role="tab" id="settings-tab-about" aria-controls="settings-panel-about" aria-selected="false"><span class="system-symbol" data-icon="info" aria-hidden="true"></span><span>关于</span></button>
           </nav>
           <div class="settings-content">
           <section class="settings-page" data-settings-panel="appearance" role="tabpanel" id="settings-panel-appearance" aria-labelledby="settings-tab-appearance">
@@ -917,14 +827,14 @@
             </section>
             <section class="settings-group" aria-labelledby="settings-material-title">
               <h3 id="settings-material-title">窗口材质</h3>
-              <label class="settings-row"><span>使用窗口材质</span><input id="window-material" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span>使用窗口材质</span><input id="window-material" class="ui-switch" type="checkbox" role="switch" checked></label>
               <label id="window-material-opacity-setting" class="settings-row"><span id="window-material-opacity-label">材质不透明度</span><span class="settings-range"><input id="window-material-opacity" type="range" min="20" max="100" step="1" value="87" aria-labelledby="window-material-opacity-label window-material-opacity-value"><output id="window-material-opacity-value" for="window-material-opacity">87%</output></span></label>
             </section>
             <section class="settings-group" aria-labelledby="settings-chrome-title">
               <h3 id="settings-chrome-title">界面元素</h3>
-              <label class="settings-row"><span>概览与源文件切换<small>左侧栏顶部的切换按钮</small></span><input id="sidebar-view-visible" type="checkbox" role="switch" checked></label>
-              <label class="settings-row"><span>显示概览源文件<small>概览条目下方的文件名</small></span><input id="overview-meta-visible" type="checkbox" role="switch"></label>
-              <label class="settings-row"><span>属性与源代码切换<small>检查器顶部的模式切换</small></span><input id="inspector-tabs-visible" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span>概览与源文件切换<small>左侧栏顶部的切换按钮</small></span><input id="sidebar-view-visible" class="ui-switch" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span>显示概览源文件<small>概览条目下方的文件名</small></span><input id="overview-meta-visible" class="ui-switch" type="checkbox" role="switch"></label>
+              <label class="settings-row"><span>属性与源代码切换<small>检查器顶部的模式切换</small></span><input id="inspector-tabs-visible" class="ui-switch" type="checkbox" role="switch" checked></label>
             </section>
           </section>
 
@@ -933,15 +843,15 @@
               <h3 id="settings-preview-title">预览</h3>
               <label class="settings-row"><span>默认设备<small>打开皮肤时使用</small></span><span class="ui-input ui-select"><select id="default-device"><option value="canvas">画布</option><option value="iphone-17-pro">iPhone 17 Pro</option><option value="iphone-17-pro-max">iPhone 17 Pro Max</option><option value="xiaomi-17">Xiaomi 17</option><option value="pixel-10-pro">Pixel 10 Pro</option><option value="galaxy-s25-ultra">Galaxy S25 Ultra</option></select></span></label>
               <label class="settings-row"><span>画布背景</span><span class="ui-input ui-select"><select id="canvas-background"><option value="glass">玻璃</option><option value="checkerboard" selected>棋盘格</option><option value="checkerboard-soft">棋盘格（柔和）</option><option value="checkerboard-panel">棋盘格（仅面板）</option><option value="light-gray">浅灰</option><option value="white">白色</option><option value="gray">中灰</option><option value="dark">深色</option></select></span></label>
-              <label class="settings-row"><span>深色画布降低对比</span><input id="dark-canvas-soften" type="checkbox" role="switch" checked></label>
-              <label class="settings-row"><span><span>气泡预览<span class="ui-badge" data-variant="accent">实验</span></span><small>按住按键时显示按键气泡</small></span><input id="hint-preview-enabled" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span>深色画布降低对比</span><input id="dark-canvas-soften" class="ui-switch" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span><span>气泡预览<span class="ui-badge" data-variant="accent">实验</span></span><small>按住按键时显示按键气泡</small></span><input id="hint-preview-enabled" class="ui-switch" type="checkbox" role="switch" checked></label>
             </section>
             <section class="settings-group" aria-labelledby="settings-guides-title">
               <h3 id="settings-guides-title">编辑辅助</h3>
-              <label class="settings-row"><span>安全区边界</span><input id="safe-area-guides" type="checkbox" role="switch"></label>
-              <label class="settings-row"><span>布局辅助线</span><input id="settings-layout-guides" type="checkbox" role="switch"></label>
-              <label class="settings-row"><span>编辑十字光标</span><input id="editor-crosshair" type="checkbox" role="switch" checked></label>
-              <label id="editor-coordinate-snap-setting" class="settings-row"><span>坐标轴吸附</span><input id="editor-coordinate-snap" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span>安全区边界</span><input id="safe-area-guides" class="ui-switch" type="checkbox" role="switch"></label>
+              <label class="settings-row"><span>布局辅助线</span><input id="settings-layout-guides" class="ui-switch" type="checkbox" role="switch"></label>
+              <label class="settings-row"><span>编辑十字光标</span><input id="editor-crosshair" class="ui-switch" type="checkbox" role="switch" checked></label>
+              <label id="editor-coordinate-snap-setting" class="settings-row"><span>坐标轴吸附</span><input id="editor-coordinate-snap" class="ui-switch" type="checkbox" role="switch" checked></label>
             </section>
             <section class="settings-group" aria-labelledby="settings-mobile-title">
               <h3 id="settings-mobile-title">移动端</h3>
@@ -953,15 +863,15 @@
             <section class="settings-group" aria-labelledby="settings-editor-title">
               <h3 id="settings-editor-title">编辑器</h3>
               <label class="settings-row"><span>字号</span><span class="ui-input settings-number"><input id="source-font-size" type="number" min="8" max="32" step="1" value="11" inputmode="numeric"><span class="ui-input-affix">px</span></span></label>
-              <label class="settings-row"><span>分节定位滚动条<small>按 [节标题] 显示短线，点击跳转</small></span><input id="source-section-scrollbar" type="checkbox" role="switch" checked></label>
-              <label class="settings-row"><span>源代码补全</span><input id="source-completion-enabled" type="checkbox" role="switch"></label>
-              <label class="settings-row"><span>值解析与快捷编辑</span><input id="source-value-hints-enabled" type="checkbox" role="switch"></label>
-              <label class="settings-row"><span>当前行释义</span><input id="source-line-explanation-enabled" type="checkbox" role="switch"></label>
+              <label class="settings-row"><span>分节定位滚动条<small>按 [节标题] 显示短线，点击跳转</small></span><input id="source-section-scrollbar" class="ui-switch" type="checkbox" role="switch" checked></label>
+              <label class="settings-row"><span>源代码补全</span><input id="source-completion-enabled" class="ui-switch" type="checkbox" role="switch"></label>
+              <label class="settings-row"><span>值解析与快捷编辑</span><input id="source-value-hints-enabled" class="ui-switch" type="checkbox" role="switch"></label>
+              <label class="settings-row"><span>当前行释义</span><input id="source-line-explanation-enabled" class="ui-switch" type="checkbox" role="switch"></label>
             </section>
             <section id="settings-storage-section" class="settings-group" aria-labelledby="settings-storage-title">
               <h3 id="settings-storage-title">源码存储</h3>
-              <p class="settings-group-note">把打开的皮肤解包到本地目录，方便用其他编辑器查看。目录操作即时生效，不随“取消”撤回。</p>
-              <label id="source-directory-enabled-setting" class="settings-row"><span>保存可访问的源代码</span><input id="source-directory-enabled" type="checkbox" role="switch"></label>
+              <p class="settings-group-note">把打开的皮肤解包到本地目录，方便用其他编辑器查看</p>
+              <label id="source-directory-enabled-setting" class="settings-row"><span>保存可访问的源代码</span><input id="source-directory-enabled" class="ui-switch" type="checkbox" role="switch"></label>
               <div class="source-directory-setting">
                 <span class="settings-path">
                   <input id="source-directory" type="text" autocomplete="off" spellcheck="false" aria-label="皮肤源码保存目录">
@@ -975,10 +885,11 @@
 
           <section id="settings-model-section" class="settings-page" data-settings-panel="model" role="tabpanel" aria-labelledby="settings-model-nav" hidden>
             <section class="settings-group" aria-labelledby="model-chat-title">
-              <div class="settings-group-header"><h3 id="model-chat-title">对话模型</h3><button id="model-profile-add" class="ui-button" data-size="sm" type="button"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span>添加服务商</button></div>
-              <p class="settings-group-note">AI 设计通过这些模型修改皮肤。排在第一位的服务商为默认，AI 面板会记住上次选择的模型。密钥只保存在本机。</p>
+              <div class="settings-group-header"><h3 id="model-chat-title">对话模型</h3><details id="model-profile-add" class="model-add-menu"><summary class="ui-button" data-size="sm"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span>添加服务商</summary><div class="ui-menu" role="menu" aria-label="添加服务商"></div></details></div>
+              <p class="settings-group-note">AI 设计通过这些模型修改皮肤。Claude 和 ChatGPT 订阅可直接登录账号使用。排在第一位的服务商为默认，AI 面板会记住上次选择的模型。密钥和登录凭据只保存在本机。</p>
               <ul id="model-profiles" class="model-profiles" aria-label="已配置服务商"></ul>
               <div id="model-editor" class="model-editor" hidden>
+                <div id="model-account-row" class="settings-row" hidden><span>账号</span><span class="model-account"><small id="model-account-text"></small><button id="model-account-action" class="ui-button" type="button"></button></span></div>
                 <label class="settings-row"><span>服务商</span><span class="ui-input ui-select"><select id="model-provider"></select></span></label>
                 <label class="settings-row"><span>API 地址</span><input id="model-api-url" type="url" autocomplete="url" spellcheck="false" placeholder="https://api.openai.com/v1"></label>
                 <label class="settings-row"><span>API 密钥</span><span class="ui-input settings-secret"><input id="model-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"><button id="toggle-model-api-key" class="ui-icon-button" data-size="sm" type="button" title="显示 API 密钥" aria-label="显示 API 密钥"><span class="system-symbol" data-icon="eye" aria-hidden="true"></span></button></span></label>
@@ -1001,9 +912,12 @@
               <p id="image-model-hint" class="settings-group-note">AI 设计需要为按键或底板生成新图案时调用；只改颜色不需要配置。</p>
               <label class="settings-row"><span>服务商</span><span class="ui-input ui-select"><select id="image-model-provider" aria-describedby="image-model-hint"></select></span></label>
               <div id="image-model-fields" hidden>
+                <div id="image-model-account-row" class="settings-row" hidden><span>账号</span><span class="model-account"><small id="image-model-account-text"></small><button id="image-model-account-action" class="ui-button" type="button"></button></span></div>
+                <label id="image-model-choice-row" class="settings-row" hidden><span>模型</span><span class="ui-input ui-select"><select id="image-model-choice"></select></span></label>
                 <label class="settings-row"><span>API 地址</span><input id="image-model-api-url" type="url" autocomplete="url" spellcheck="false"></label>
                 <label class="settings-row"><span>API 密钥</span><span class="ui-input settings-secret"><input id="image-model-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"><button id="toggle-image-model-api-key" class="ui-icon-button" data-size="sm" type="button" title="显示 API 密钥" aria-label="显示 API 密钥"><span class="system-symbol" data-icon="eye" aria-hidden="true"></span></button></span></label>
-                <label class="settings-row"><span>模型</span><input id="image-model-name" type="text" autocomplete="off" spellcheck="false"></label>
+                <div class="settings-row"><span>模型</span><span class="model-image-name"><input id="image-model-name" type="text" list="image-model-options" autocomplete="off" spellcheck="false" aria-label="生图模型"><button id="refresh-image-model-list" class="ui-button" type="button" title="从服务商获取生图模型列表"><span class="system-symbol" data-icon="rotate-cw" aria-hidden="true"></span>获取列表</button></span><datalist id="image-model-options"></datalist></div>
+                <p id="image-model-status" role="status" aria-live="polite" hidden></p>
               </div>
             </section>
             <p class="settings-footnote">配置文件 <span id="model-configuration-path"></span></p>
@@ -1022,7 +936,7 @@
           </section>
           </div>
         </div>
-        <footer class="settings-footer"><div id="settings-save-state" role="status"><span class="settings-state-dot" aria-hidden="true"></span><span id="settings-dirty-label">所有更改已保存</span><small id="settings-saved-at"></small></div><div class="settings-footer-actions"><button id="settings-cancel" class="ui-button" data-size="lg" type="button">取消</button><button id="settings-save" class="ui-button" data-variant="primary" data-size="lg" type="button">保存</button></div></footer>
+        <footer class="ui-dialog-footer settings-footer"><div id="settings-save-state" role="status"><span class="settings-state-dot" aria-hidden="true"></span><span id="settings-dirty-label">所有更改已保存</span><small id="settings-saved-at"></small></div><div class="settings-footer-actions"><button id="settings-cancel" class="ui-button" data-size="lg" type="button">取消</button><button id="settings-save" class="ui-button" data-variant="primary" data-size="lg" type="button">保存</button></div></footer>
       </form>
     </dialog>
 

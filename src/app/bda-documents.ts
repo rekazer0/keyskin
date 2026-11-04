@@ -3,9 +3,8 @@ import { appState } from "./state"
 import { syncSegmentedControls } from "./mobile-layout"
 import { variantCopyPaths, scaleIniDocument } from "../panel-tools.ts"
 import { showError, showStatus } from "./file-operations"
-import { scheduleSourceAutosave } from "./source-workspace"
 import { renderFiles } from "./file-tree"
-import { updateDirty, isEditing, commitBytes } from "./edit-history"
+import { updateDirty, isEditing, commitBytes, commitBatch } from "./edit-history"
 import { type BdaAppearance, bdaAppearancePath, type BdaAppearanceStyleGroup, type BdaAppearancePart, bdaLayoutDocument } from "../bda.ts"
 import { decodeBdaAppearance } from "../bda-decode.ts"
 import { decodedBdaAppearancePart, decodedBdaEditorSource, decodedBdaSource, applyDecodedBdaAppearancePart, bdaDecodedSourceEditable, applyDecodedBdaSource } from "../bda-source.ts"
@@ -46,12 +45,6 @@ export function createMissingVariant(path: string): boolean {
   const label = sourceTheme !== targetTheme
     ? `${targetTheme === "dark" ? "深色" : "浅色"}布局`
     : `${targetOrientation === "land" ? "横屏" : "竖屏"}布局`
-  if (!window.confirm(`当前皮肤没有${label}，是否从当前配置创建？`)) {
-    theme.value = sourceTheme
-    orientation.value = sourceOrientation
-    syncSegmentedControls()
-    return false
-  }
   const copies = variantCopyPaths(appState.archive.names(), sourceTheme, sourceOrientation, targetTheme, targetOrientation)
   if (!copies.some(({ target }) => target === path)) {
     theme.value = sourceTheme
@@ -60,11 +53,12 @@ export function createMissingVariant(path: string): boolean {
     showError(new Error("当前配置没有可复制的对应布局"), `创建${label}`)
     return false
   }
-  for (const { source, target } of copies) appState.archive.setBytes(target, appState.archive.getBytes(source)!.slice())
-  scheduleSourceAutosave(copies.map(({ target }) => target))
+  // 进撤销栈，所以不再确认（DESIGN.md §7）。
+  const archive = appState.archive
+  commitBatch(copies.map(({ source, target }) => ({ kind: "bytes" as const, path: target, before: archive.getBytes(target), after: archive.getBytes(source)!.slice() })))
   renderFiles()
   updateDirty()
-  showStatus(`${label}已创建。`)
+  showStatus(`已创建${label}`)
   return true
 }
 

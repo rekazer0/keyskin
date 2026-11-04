@@ -18,9 +18,10 @@ import { element } from "./dom-element.ts"
 import { bdaPreviewClip } from "./animation-preview-model.ts"
 import type { KeyboardPlayback } from "./animation-player.ts"
 import {
-  animationSection, comboList, imageCard, renderAnimationResource, sliderField,
+  comboList, renderAnimationResource,
   type AnimationKeyFilter, type AnimationListItem, type AnimationMode,
 } from "./animation-inspector.ts"
+import { field, section } from "./app/property-rows.ts"
 import { BDA_EVENT_LABELS } from "./bda-motion.ts"
 import { styleCard } from "./style-card.ts"
 import { animationPlayer } from "./animation-player.ts"
@@ -53,8 +54,8 @@ type BdaAnimationEditorOptions = {
 
 type EffectValue = string | number | boolean
 type EffectUpdate = (property: string, value: EffectValue) => void
-/** `slider` puts a slider beside the number for values with a natural range. */
-type FieldOption = { step?: number; min?: number; slider?: { min: number; max: number; step?: number } }
+/** `range` puts a slider beside the number for values with a natural range (property-rows.ts). */
+type NumberOptions = { step?: number; min?: number; unit?: string; range?: "duration" | "count" | "rate" }
 
 const SECTION = "bda-inspector-section"
 
@@ -89,21 +90,20 @@ const KIND_ORDER: readonly BdaAnimationKind[] = [
 ]
 
 // EventType / AnimationScopeType / IntpolType，字段号见 APK animation.proto。
-const REPEAT_MODE_LABELS = ["正向", "往返"]
 const BUILD_MODE_LABELS = ["同时", "接续"]
 const INTERPOLATION_LABELS = ["线性", "缓入", "缓出", "缓入缓出", "回弹"]
-const FINISH_LABELS = ["发射完所有粒子", "粒子全部消失"]
+const FINISH_LABELS = ["发射完", "粒子消失"]
 
 type EmitterRangeKey =
   | "life" | "rotation" | "spin" | "scale" | "scaleSpeed" | "alpha" | "alphaSpeed"
   | "velocity" | "velocityDirection" | "acceleration" | "accelerationDirection"
 
-const EMITTER_GROUPS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [EmitterRangeKey, string]>]> = [
-  ["运动", [["life", "生命周期（ms）"], ["velocity", "初速度"], ["velocityDirection", "速度方向（°）"], ["acceleration", "加速度"], ["accelerationDirection", "加速度方向（°）"]]],
-  ["外观", [["rotation", "初始角度（°）"], ["spin", "自旋速度"], ["scale", "开局缩放"], ["scaleSpeed", "缩放速度"], ["alpha", "开局透明度"], ["alphaSpeed", "透明度速度"]]],
+const EMITTER_GROUPS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [EmitterRangeKey, string, string?]>]> = [
+  ["运动", [["life", "生命周期", "ms"], ["velocity", "初速度"], ["velocityDirection", "速度方向", "°"], ["acceleration", "加速度"], ["accelerationDirection", "加速度方向", "°"]]],
+  ["外观", [["rotation", "初始角度", "°"], ["spin", "自旋速度"], ["scale", "初始缩放"], ["scaleSpeed", "缩放速度"], ["alpha", "初始透明度"], ["alphaSpeed", "透明度速度"]]],
 ]
 
-/* —— 属性行 —— */
+/* —— 属性行（property-rows.ts field()） —— */
 
 function note(text: string): HTMLElement {
   const node = element("p", "ui-field-note")
@@ -111,168 +111,44 @@ function note(text: string): HTMLElement {
   return node
 }
 
-function row(label: string, control: HTMLElement): HTMLElement {
-  const node = element("label", "ui-field bda-animation-field")
-  const caption = element("span")
-  caption.textContent = label
-  node.append(caption, control)
-  return node
-}
+const finite = (text: string) => text !== "" && Number.isFinite(Number(text))
 
 function valueRow(label: string, value: string): HTMLElement {
-  const node = element("div", "ui-field bda-animation-field")
-  const caption = element("span")
-  caption.textContent = label
-  const output = element("span", "bda-animation-value")
-  output.textContent = value
-  output.title = value
-  node.append(caption, output)
-  return node
+  return field({ key: label, label, spec: { kind: "readonly", value } })
 }
 
-function numberInput(label: string, value: number, editable: boolean, onChange: (value: number) => void, options: FieldOption = {}): HTMLInputElement {
-  const input = element("input")
-  input.type = "number"
-  input.step = String(options.step ?? 1)
-  if (options.min !== undefined) input.min = String(options.min)
-  input.value = String(value)
-  input.disabled = !editable
-  input.setAttribute("aria-label", label)
-  input.addEventListener("change", () => {
-    const next = Number(input.value)
-    if (Number.isFinite(next)) onChange(next)
-  })
-  return input
+function numberRow(label: string, value: number, editable: boolean, onChange: (value: number) => void, options: NumberOptions = {}): HTMLElement {
+  return field({ key: label, label, editable, spec: { kind: "number", value: String(value), ...options },
+    commit: (text) => { if (finite(text)) onChange(Number(text)) } })
 }
 
-function numberRow(label: string, value: number, editable: boolean, onChange: (value: number) => void, options: FieldOption = {}): HTMLElement {
-  const wrapper = element("span", "ui-input")
-  const input = numberInput(label, value, editable, onChange, options)
-  wrapper.append(input)
-  return row(label, options.slider ? sliderField(wrapper, input, options.slider) : wrapper)
+function pairRow(label: string, values: readonly number[], editable: boolean, onChange: (index: number, value: number) => void,
+  affixes: readonly string[] = ["最小", "最大"], options: { step?: number; unit?: string } = {}): HTMLElement {
+  return field({ key: label, label, editable, spec: { kind: "parts", affixes, values: values.map(String), columns: affixes.length, ...options },
+    commit: (next, { index = 0 }) => { if (finite(next[index])) onChange(index, Number(next[index])) } })
 }
 
-function affixedNumber(label: string, affix: string, value: number, editable: boolean, onChange: (value: number) => void, options: FieldOption = {}): HTMLElement {
-  const wrapper = element("span", "ui-input")
-  const prefix = element("span", "ui-input-affix")
-  prefix.textContent = affix
-  wrapper.append(prefix, numberInput(label, value, editable, onChange, options))
-  return wrapper
-}
-
-function pairRow(
-  label: string,
-  values: readonly [number, number],
-  editable: boolean,
-  onChange: (index: 0 | 1, value: number) => void,
-  affixes: readonly [string, string] = ["最小", "最大"],
-  options: FieldOption = {},
-): HTMLElement {
-  const pair = element("span", "ui-field-pair")
-  pair.dataset.columns = "2"
-  pair.append(
-    affixedNumber(`${label}${affixes[0]}`, affixes[0], values[0], editable, (value) => onChange(0, value), options),
-    affixedNumber(`${label}${affixes[1]}`, affixes[1], values[1], editable, (value) => onChange(1, value), options),
-  )
-  return row(label, pair)
-}
-
-function quadRow(
-  label: string,
-  values: readonly number[],
-  editable: boolean,
-  onChange: (index: number, value: number) => void,
-  affixes: readonly string[],
-): HTMLElement {
-  const pair = element("span", "ui-field-pair")
-  pair.dataset.columns = String(values.length)
-  pair.append(...values.map((value, index) => affixedNumber(
-    `${label}${affixes[index]}`,
-    affixes[index],
-    value,
-    editable,
-    (next) => onChange(index, next),
-    { step: 0.5, min: 0 },
-  )))
-  return row(label, pair)
-}
-
-function selectControl(label: string, values: readonly string[], value: number, editable: boolean, onChange: (value: number) => void): HTMLElement {
-  const wrapper = element("span", "ui-input ui-select")
-  const select = element("select")
-  values.forEach((text, index) => {
-    const option = element("option")
-    option.value = String(index)
-    option.textContent = text
-    select.append(option)
-  })
-  select.value = String(value)
-  select.disabled = !editable
-  select.setAttribute("aria-label", label)
-  select.addEventListener("change", () => onChange(Number(select.value)))
-  wrapper.append(select)
-  return wrapper
-}
-
-function selectRow(label: string, values: readonly string[], value: number, editable: boolean, onChange: (value: number) => void): HTMLElement {
-  return row(label, selectControl(label, values, value, editable, onChange))
-}
-
-function selectPairRow(
-  label: string,
-  values: readonly string[],
-  current: readonly [number, number],
-  editable: boolean,
-  onChange: (index: 0 | 1, value: number) => void,
-): HTMLElement {
-  const pair = element("span", "ui-field-pair")
-  pair.dataset.columns = "2"
-  pair.append(
-    selectControl(`${label} X`, values, current[0], editable, (value) => onChange(0, value)),
-    selectControl(`${label} Y`, values, current[1], editable, (value) => onChange(1, value)),
-  )
-  return row(label, pair)
+function choiceRow(label: string, labels: readonly string[], value: number, editable: boolean, onChange: (value: number) => void): HTMLElement {
+  return field({ key: label, label, editable, spec: { kind: "choice", value: String(value), options: labels.map((text, index) => [String(index), text]) },
+    commit: (next) => onChange(Number(next)) })
 }
 
 function switchRow(label: string, value: boolean, editable: boolean, onChange: (value: boolean) => void): HTMLElement {
-  const input = element("input", "ui-switch")
-  input.type = "checkbox"
-  input.setAttribute("role", "switch")
-  input.checked = value
-  input.disabled = !editable
-  input.setAttribute("aria-label", label)
-  input.addEventListener("change", () => onChange(input.checked))
-  return row(label, input)
+  return field({ key: label, label, editable, spec: { kind: "switch", checked: value }, commit: onChange })
 }
 
 function textRow(label: string, value: string, editable: boolean, onChange: (value: string) => void): HTMLElement {
-  const wrapper = element("span", "ui-input")
-  const input = element("input")
-  input.type = "text"
-  input.value = value
-  input.disabled = !editable
-  input.setAttribute("aria-label", label)
-  input.addEventListener("change", () => onChange(input.value))
-  wrapper.append(input)
-  return row(label, wrapper)
+  return field({ key: label, label, editable, spec: { kind: "text", value }, commit: onChange })
 }
 
 /* —— 帧序列 —— */
 
 function resourceCard(label: string, resourceID: string | undefined, options: BdaAnimationEditorOptions, edit?: { onChange(value: string): void; pick(): void }): HTMLElement {
-  const node = element("div", "ui-field bda-animation-field style-reference-field")
-  const caption = element("span")
-  caption.textContent = label
-  node.append(caption, imageCard({
-    label,
-    value: resourceID ?? "",
-    editable: options.editable && Boolean(edit),
-    placeholder: "未设置资源",
-    load: () => resourceID ? options.resolver?.resolveResource?.(resourceID) : undefined,
-    onChange: (value) => edit?.onChange(value),
-    pick: edit?.pick,
-  }))
-  return node
+  return field({
+    key: label, label, editable: options.editable,
+    spec: { kind: "image", value: resourceID ?? "", load: () => resourceID ? options.resolver?.resolveResource?.(resourceID) : undefined, pick: edit?.pick },
+    commit: edit && ((value: string) => edit.onChange(value)),
+  })
 }
 
 function frameCard(sequence: BdaAnimationSequence, frame: BdaAnimationFrame, index: number, options: BdaAnimationEditorOptions): HTMLElement {
@@ -282,7 +158,7 @@ function frameCard(sequence: BdaAnimationSequence, frame: BdaAnimationFrame, ind
     pick: () => options.onPickAnimationResource(sequence.name, index),
   }))
   if (frame.duration !== undefined) {
-    node.append(numberRow("时长（毫秒）", frame.duration, options.editable, (value) => options.onAnimationFrame(sequence.name, index, "duration", value), { min: 0 }))
+    node.append(numberRow("时长", frame.duration, options.editable, (value) => options.onAnimationFrame(sequence.name, index, "duration", value), { min: 0, unit: "ms" }))
   }
   return node
 }
@@ -291,7 +167,7 @@ function frameCard(sequence: BdaAnimationSequence, frame: BdaAnimationFrame, ind
 function frameSequence(effect: Extract<BdaAnimationEffect, { kind: "image" }>, options: BdaAnimationEditorOptions): HTMLElement {
   const strip = element("div", "bda-animation-frames")
   strip.append(...effect.sequence.frames.map((frame, index) => frameCard(effect.sequence, frame, index, options)))
-  if (!effect.sequence.frames.length) strip.append(note("这个序列还没有帧。"))
+  if (!effect.sequence.frames.length) strip.append(note("没有帧"))
   return strip
 }
 
@@ -343,86 +219,81 @@ function bindingCount(animation: BdaAnimation, effect: BdaAnimationEffect): numb
 /* —— 参数分组 —— */
 
 function timingSection(effect: BdaAnimationEffect, editable: boolean, update: EffectUpdate): HTMLElement {
-  const section = animationSection("时间与循环", SECTION)
+  const rows: HTMLElement[] = []
   if (effect.kind === "alpha" || effect.kind === "scale" || effect.kind === "shift" || effect.kind === "rotate") {
-    section.append(
-      numberRow("时长（毫秒）", effect.duration, editable, (value) => update("duration", value), { min: 0, slider: { min: 0, max: 2000, step: 10 } }),
-      numberRow("延迟（毫秒）", effect.delay, editable, (value) => update("delay", value), { min: 0, slider: { min: 0, max: 2000, step: 10 } }),
-      selectRow("插值方式", INTERPOLATION_LABELS, effect.interpolation, editable, (value) => update("interpolation", value)),
+    rows.push(
+      numberRow("时长", effect.duration, editable, (value) => update("duration", value), { min: 0, unit: "ms", range: "duration" }),
+      numberRow("延迟", effect.delay, editable, (value) => update("delay", value), { min: 0, unit: "ms", range: "duration" }),
+      choiceRow("插值方式", INTERPOLATION_LABELS, effect.interpolation, editable, (value) => update("interpolation", value)),
     )
     if ((effect.kind === "scale" || effect.kind === "shift") && effect.interpolationXY) {
-      section.append(selectPairRow("XY 插值", INTERPOLATION_LABELS, effect.interpolationXY, editable, (index, value) => update(index ? "interpolationXYY" : "interpolationXYX", value)))
+      rows.push(field({ key: "XY 插值", label: "XY 插值", editable,
+        spec: { kind: "parts", affixes: ["X", "Y"], values: effect.interpolationXY.map(String), options: INTERPOLATION_LABELS.map((text, index) => [String(index), text]) },
+        commit: (next, { index = 0 }) => update(index ? "interpolationXYY" : "interpolationXYX", Number(next[index])) }))
     }
   } else if (effect.kind === "group") {
-    section.append(numberRow("延迟（毫秒）", effect.delay, editable, (value) => update("delay", value), { min: 0 }))
+    rows.push(numberRow("延迟", effect.delay, editable, (value) => update("delay", value), { min: 0, unit: "ms" }))
   } else if (effect.kind === "emitter") {
-    section.append(numberRow("时长（秒）", effect.duration, editable, (value) => update("duration", value), { min: 0, step: 0.5 }))
+    rows.push(numberRow("时长", effect.duration, editable, (value) => update("duration", value), { min: 0, step: 0.5, unit: "s" }))
   }
-  section.append(numberRow("重复次数", effect.repeatCount, editable, (value) => update("repeatCount", value), { min: 0 }))
-  if ("repeatMode" in effect) section.append(selectRow("重复模式", REPEAT_MODE_LABELS, effect.repeatMode, editable, (value) => update("repeatMode", value)))
+  rows.push(numberRow("重复次数", effect.repeatCount, editable, (value) => update("repeatCount", value), { min: 0 }))
+  if ("repeatMode" in effect) rows.push(switchRow("往返", effect.repeatMode === 1, editable, (value) => update("repeatMode", value ? 1 : 0)))
   if (effect.kind === "emitter") {
-    section.append(
-      selectRow("结束时机", FINISH_LABELS, effect.finishAfterPractices, editable, (value) => update("finishAfterPractices", value)),
+    rows.push(
+      choiceRow("结束时机", FINISH_LABELS, effect.finishAfterPractices, editable, (value) => update("finishAfterPractices", value)),
       numberRow("移除时保留粒子", effect.keepParticlesOnRemove, editable, (value) => update("keepParticlesOnRemove", value), { min: 0 }),
       numberRow("镜像层级", effect.mirrorUp, editable, (value) => update("mirrorUp", value), { min: 0 }),
     )
   }
-  section.append(switchRow("结束后移除", effect.removeOnFinish, editable, (value) => update("removeOnFinish", value)))
-  return section
+  rows.push(switchRow("结束后移除", effect.removeOnFinish, editable, (value) => update("removeOnFinish", value)))
+  return section("时间与循环", rows, { className: SECTION })
 }
 
 function transformSections(effect: BdaTransformAnimation, editable: boolean, update: EffectUpdate): HTMLElement[] {
-  const change = animationSection("变化", SECTION)
-  const unit = effect.kind === "alpha" ? "（0–255）" : effect.kind === "rotate" ? "（°）" : effect.kind === "scale" || effect.relative ? "（%）" : "（px）"
+  const unit = effect.kind === "alpha" ? undefined : effect.kind === "rotate" ? "°" : effect.kind === "scale" || effect.relative ? "%" : "px"
+  const rows: HTMLElement[] = []
   if (effect.kind === "alpha" || effect.kind === "rotate") {
-    change.append(
-      pairRow(`起始值${unit}`, effect.from[0], editable, (index, value) => update(index ? "fromMax" : "fromMin", value)),
-      pairRow(`结束值${unit}`, effect.to[0], editable, (index, value) => update(index ? "toMax" : "toMin", value)),
+    rows.push(
+      pairRow("起始值", effect.from[0], editable, (index, value) => update(index ? "fromMax" : "fromMin", value), undefined, { unit }),
+      pairRow("结束值", effect.to[0], editable, (index, value) => update(index ? "toMax" : "toMin", value), undefined, { unit }),
     )
   } else {
     for (const [axis, index] of [["X", 0], ["Y", 1]] as const) {
-      change.append(
-        pairRow(`起始 ${axis}${unit}`, effect.from[index], editable, (bound, value) => update(`from${axis}${bound ? "Max" : "Min"}`, value)),
-        pairRow(`结束 ${axis}${unit}`, effect.to[index], editable, (bound, value) => update(`to${axis}${bound ? "Max" : "Min"}`, value)),
+      rows.push(
+        pairRow(`起始 ${axis}`, effect.from[index], editable, (bound, value) => update(`from${axis}${bound ? "Max" : "Min"}`, value), undefined, { unit }),
+        pairRow(`结束 ${axis}`, effect.to[index], editable, (bound, value) => update(`to${axis}${bound ? "Max" : "Min"}`, value), undefined, { unit }),
       )
     }
-    if (effect.kind === "shift") change.append(valueRow("位移方式", effect.relative ? "相对按键（百分比）" : "像素"))
+    if (effect.kind === "shift") rows.push(valueRow("位移方式", effect.relative ? "相对按键（百分比）" : "像素"))
   }
-  change.append(note("每个值是一个随机范围：最小与最大相同时就是固定值，预览取中点。"))
-  const sections = [change, timingSection(effect, editable, update)]
+  rows.push(note("每个值是随机范围，最小与最大相同即固定值"))
+  const sections = [section("变化", rows, { className: SECTION }), timingSection(effect, editable, update)]
   if ((effect.kind === "scale" || effect.kind === "rotate") && (effect.pivotPx || effect.pivot)) {
-    const pivot = animationSection("变换中心", SECTION)
-    pivot.append(
-      pairRow("中心（像素）", effect.pivotPx ?? [0, 0], editable, (index, value) => update(index ? "pivotPxY" : "pivotPxX", value), ["X", "Y"]),
-      pairRow("中心（%）", effect.pivot ?? [0, 0], editable, (index, value) => update(index ? "pivotY" : "pivotX", value), ["X", "Y"]),
-    )
-    sections.push(pivot)
+    sections.push(section("变换中心", [
+      pairRow("像素", effect.pivotPx ?? [0, 0], editable, (index, value) => update(index ? "pivotPxY" : "pivotPxX", value), ["X", "Y"], { unit: "px" }),
+      pairRow("比例", effect.pivot ?? [0, 0], editable, (index, value) => update(index ? "pivotY" : "pivotX", value), ["X", "Y"], { unit: "%" }),
+    ], { className: SECTION }))
   }
   return sections
 }
 
 function emitterSections(effect: BdaEmitterAnimation, options: BdaAnimationEditorOptions, update: EffectUpdate): HTMLElement[] {
   const editable = options.editable
-  const emit = animationSection("发射", SECTION)
-  emit.append(
-    numberRow("出生率（个/秒）", effect.birthRate, editable, (value) => update("birthRate", value), { min: 0, step: 0.5, slider: { min: 0, max: 50, step: 0.5 } }),
-    numberRow("粒子总数", effect.totalNumber, editable, (value) => update("totalNumber", value), { min: 0, slider: { min: 0, max: 200 } }),
-    quadRow("发射区域", effect.emitRegion, editable, (index, value) => update(["emitRegionLeft", "emitRegionTop", "emitRegionRight", "emitRegionBottom"][index], value), ["左", "上", "右", "下"]),
+  const emit = section("发射", [
+    numberRow("发射速率", effect.birthRate, editable, (value) => update("birthRate", value), { min: 0, step: 0.5, unit: "个/s", range: "rate" }),
+    numberRow("粒子总数", effect.totalNumber, editable, (value) => update("totalNumber", value), { min: 0, range: "count" }),
+    pairRow("发射区域", effect.emitRegion, editable, (index, value) => update(["emitRegionLeft", "emitRegionTop", "emitRegionRight", "emitRegionBottom"][index], value), ["←", "↑", "→", "↓"], { step: 0.5 }),
     numberRow("发射器类型", effect.emitterType, editable, (value) => update("emitterType", value), { min: 0 }),
     // 粒子资源只能查看：BDA 只定点写回已有字段，不增删资源。
     ...effect.resources.length
       ? effect.resources.map((item, index) => resourceCard(effect.resources.length > 1 ? `粒子资源 ${index + 1}` : "粒子资源", item.resourceID, options))
       : [valueRow("粒子资源", "无")],
     valueRow("运动路径", effect.paths.length ? `${effect.paths.length} 条（只读）` : "无"),
-  )
-  const groups = EMITTER_GROUPS.map(([title, ranges]) => {
-    const section = animationSection(title, SECTION)
-    for (const [key, label] of ranges) {
-      const values: BdaNumberRange = effect[key]
-      section.append(pairRow(label, values, editable, (index, value) => update(`${key}${index ? "Max" : "Min"}`, value), ["最小", "最大"], { step: 0.5 }))
-    }
-    return section
-  })
+  ], { className: SECTION })
+  const groups = EMITTER_GROUPS.map(([title, ranges]) => section(title, ranges.map(([key, label, unit]) => {
+    const values: BdaNumberRange = effect[key]
+    return pairRow(label, values, editable, (index, value) => update(`${key}${index ? "Max" : "Min"}`, value), ["最小", "最大"], { step: 0.5, unit })
+  }), { className: SECTION }))
   return [emit, ...groups, timingSection(effect, editable, update)]
 }
 
@@ -438,12 +309,12 @@ function effectSections(effect: BdaAnimationEffect, animation: BdaAnimation, opt
     case "emitter":
       return emitterSections(effect, options, update)
     case "group": {
-      const group = animationSection("组合", SECTION)
+      const group = section("组合", [], { className: SECTION, count: String(effect.items.length) })
       group.append(
-        selectRow("组合方式", BUILD_MODE_LABELS, effect.buildMode, editable, (value) => update("buildMode", value)),
+        choiceRow("组合方式", BUILD_MODE_LABELS, effect.buildMode, editable, (value) => update("buildMode", value)),
         comboList({
           editable,
-          empty: "组合里没有子效果。",
+          empty: "没有子效果",
           children: effect.items.map((item) => {
             const child = animation.effects.get(`${item.kind}:${item.key}`)
             return child
@@ -451,12 +322,12 @@ function effectSections(effect: BdaAnimationEffect, animation: BdaAnimation, opt
               : { title: `${item.key} · ${KIND_LABELS[item.kind]}`, detail: "animationConfig 里没有这个效果", missing: true }
           }),
         }),
-        note("BDA 组合的子效果暂不支持在检查器中增删或排序。"),
+        note("子效果暂不支持增删或排序"),
       )
       return [group, timingSection(effect, editable, update)]
     }
     case "image": {
-      const sequence = animationSection("帧序列", SECTION, `${effect.sequence.frames.length} 帧`)
+      const sequence = section("帧序列", [], { className: SECTION, count: String(effect.sequence.frames.length) })
       sequence.append(
         switchRow("循环播放", effect.loopForever, editable, (value) => update("loopForever", value)),
         numberRow("起始帧", effect.startRepeatFrame, editable, (value) => update("startRepeatFrame", value), { min: 0 }),
@@ -467,7 +338,7 @@ function effectSections(effect: BdaAnimationEffect, animation: BdaAnimation, opt
     case "frame":
     case "lottie":
     case "video": {
-      const resource = animationSection("资源", SECTION)
+      const resource = section("资源", [], { className: SECTION })
       resource.append(
         textRow("资源编号", effect.resource?.resourceID ?? "", editable, (value) => update("resourceID", value)),
         numberRow("起始帧", effect.startRepeatFrame ?? 0, editable, (value) => update("startRepeatFrame", value), { min: 0 }),

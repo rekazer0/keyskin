@@ -7,7 +7,7 @@ import { sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSour
 import { type Change } from "../../history.ts"
 import { preview, source, scheduleSelectionInspectorSync, isTauri, exportButtons, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
 import { startNewDocument, newDocument } from "../new-document"
-import { runFileOperation, readBrowserSkinFile, showImage, showStatus } from "../file-operations"
+import { runFileOperation, readBrowserSkinFile, showImage, showStatus, showError } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
 import { recentFilesKey, recentPreviewCache, recentThumbRequest, renderRecentFiles } from "../recent-files"
 import { dismissLayoutOverview } from "../layout-overview"
@@ -28,6 +28,7 @@ import { commitSxiSourceEdit, isSxiSourcePath } from "../sxi-documents"
 import { scheduleSourceInputHighlight, applySourceColorPicker, selectKeyFromSourceOffset } from "../source-panel"
 import { IniDocument } from "../../ini.ts"
 import { tileSlices } from "../../tiles.ts"
+import { bindListActionKeys, bindMenuKeys } from "../../dom-element.ts"
 import { populateTileInspector, drawAtlas } from "../tile-editing"
 import { type SourceEditorCursorMove } from "../../lazy-source-editor.ts"
 import { keyEventElement } from "../key-editing"
@@ -46,7 +47,7 @@ export function wireFilesAndSettings(): void {
     const folder = sourceTargetFolder()
     if (appState.sourceTransfer.mode === "move" && appState.sourceTransfer.folder &&
       (folder === appState.sourceTransfer.sourcePath || folder.startsWith(`${appState.sourceTransfer.sourcePath}/`))) {
-      window.alert("不能将文件夹移动到自身内部。")
+      showError(new Error("不能将文件夹移动到自身内部"), "移动")
       return
     }
     let copies = appState.sourceTransfer.files.map(({ path, source, bytes }) => ({
@@ -92,6 +93,7 @@ export function wireFilesAndSettings(): void {
   sourceMoveButton.addEventListener("click", () => {
     setSourceTransfer("move")
   })
+  bindListActionKeys(files, sourceDeleteButton.parentElement!)
   sourceDeleteButton.addEventListener("click", () => {
     const selection = sourceSelection()
     if (!appState.archive || !selection || !isEditing()) return
@@ -103,15 +105,16 @@ export function wireFilesAndSettings(): void {
       before: appState.archive!.getBytes(path)?.slice(),
     })))
     refreshAfterSourceMutation()
-    showStatus(`已删除${selection.folder ? "文件夹" : "文件"} ${selection.path}，可撤销。`)
+    showStatus(`已删除${selection.folder ? "文件夹" : "文件"} ${selection.path}，可撤销`)
   })
   for (const menu of toolbarMenus) {
+    bindMenuKeys(menu)
     menu.addEventListener("click", (event) => {
       if ((event.target as Element).closest("button")) menu.open = false
     })
   }
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || event.isComposing) return
+    if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return
     const menuOpen = toolbarMenus.some((menu) => menu.open)
     for (const menu of toolbarMenus) menu.open = false
     // Esc 取消画布上的按键选择（与点空白处一致）；输入框、弹窗和菜单里的 Esc 留给它们自己。
@@ -246,7 +249,7 @@ export function wireFilesAndSettings(): void {
   })
   aiDraftApply.addEventListener("click", () => applyAiDesignDraft())
   aiDraftCancel.addEventListener("click", () => {
-    discardAiDesignDraft("草稿已丢弃 · 本轮未修改皮肤，可调整要求后重试。")
+    discardAiDesignDraft("草稿已丢弃 · 本轮未修改皮肤，可调整要求后重试")
   })
   sourceDirectoryEnabled.addEventListener("change", () => void (async () => {
     if (!sourceDirectoryEnabled.checked) {

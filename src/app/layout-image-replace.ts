@@ -1,4 +1,5 @@
-import { theme, layout, layoutImageSize, layoutImagePreview, layoutImageFileLabel, layoutImageFile, layoutImageApply, canvasWrap, orientation, layoutImageLayout, layoutImageScope, layoutImageError, layoutImageTargetInputs, layoutImageDialog, layoutImageConfigButtons, layoutImageConfigDesc, layoutImageConfigFieldset } from "./dom"
+import { theme, layout, layoutImageSize, layoutImagePreview, layoutImageFileLabel, layoutImageFile, layoutImageApply, canvasWrap, orientation, layoutImageLayout, layoutImageScope, layoutImageError, layoutImageTargetInputs, layoutImageDialog, layoutImageConfigButtons, layoutImageConfigFieldset } from "./dom"
+import { closeDialog } from "../motion.ts"
 import { IniDocument, normalizeKeySections } from "../ini.ts"
 import { appState } from "./state"
 import { currentConfigPath, styleConfigPath, genConfigPath, toolbarConfigPath, setSourceValue, layoutSource } from "./config-context"
@@ -50,11 +51,10 @@ export function nextResourceBase(root = resourceRootPath()): string {
 export function updateLayoutImageForm(): void {
   const hasImage = appState.layoutImageWidth > 0 && appState.layoutImageHeight > 0
   layoutImageSize.textContent = hasImage
-    ? `${appState.layoutImageWidth} × ${appState.layoutImageHeight} · 点击可更换`
-    : "支持 PNG · 也可以直接拖到画布"
+    ? `${appState.layoutImageWidth} × ${appState.layoutImageHeight}`
+    : "也可以直接拖到画布"
   layoutImagePreview.hidden = !hasImage
   layoutImageFileLabel.hidden = hasImage
-  layoutImageFile.classList.toggle("has-image", hasImage)
   layoutImageApply.disabled =
     !appState.archive || appState.archive.format === "bda" || !hasImage || !appState.layoutImageTarget || appState.layoutImageApplying
 }
@@ -247,7 +247,7 @@ async function runLayoutImageReplace(): Promise<void> {
       { kind: "text", path: candPath, before: cand.toString(), after: candDoc.toString() },
       { kind: "text", path: stylePath, before: styles.toString(), after: stylesDoc.toString() },
     ])
-    layoutImageDialog.close()
+    closeDialog(layoutImageDialog)
     if (appState.selectedPath === candPath) {
       appState.selectedDocument = candDoc
       setSourceValue(candDoc.toString())
@@ -285,7 +285,7 @@ async function runLayoutImageReplace(): Promise<void> {
     { kind: "text", path: stylePath, before: styles.toString(), after: stylesDoc.toString() },
   ])
   appState.layoutDocument = layoutDoc
-  layoutImageDialog.close()
+  closeDialog(layoutImageDialog)
   if (appState.selectedPath === targetPath) {
     appState.selectedDocument = layoutDoc
     setSourceValue(layoutDoc.toString())
@@ -301,7 +301,7 @@ async function runLayoutImageReplace(): Promise<void> {
 export function acceptLayoutImageFile(file: File | undefined): boolean {
   if (!file) return false
   if (!/\.png$/i.test(file.name) && file.type !== "image/png") {
-    layoutImageError.textContent = "只支持 PNG 图片。"
+    layoutImageError.textContent = "只支持 PNG 图片"
     layoutImageError.hidden = false
     return false
   }
@@ -323,8 +323,8 @@ export function syncLayoutImageConfig(): void {
   if (fixedLayout && appState.layoutImageConfig === "layout-follows-image") appState.layoutImageConfig = "none"
   for (const button of layoutImageConfigButtons) {
     button.hidden = fixedLayout && button.dataset.layoutImageConfig === "layout-follows-image"
-    button.classList.toggle("active", button.dataset.layoutImageConfig === appState.layoutImageConfig)
+    button.setAttribute("aria-pressed", String(button.dataset.layoutImageConfig === appState.layoutImageConfig))
+    button.title = layoutImageConfigDescriptions[button.dataset.layoutImageConfig as LayoutImageConfig]
   }
-  layoutImageConfigDesc.textContent = layoutImageConfigDescriptions[appState.layoutImageConfig]
   layoutImageConfigFieldset.disabled = appState.layoutImageTarget === "panel" || appState.layoutImageTarget === "candidate"
 }

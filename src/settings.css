@@ -7,43 +7,28 @@
  * only lays them out.
  */
 
+/* 外壳是 .ui-dialog[data-size="lg"]；这里只定高度，并让头 / 内容 / 底贴边铺满 */
 #settings-dialog {
-  width: min(800px, calc(100vw - 32px));
-  height: min(600px, calc(var(--viewport-height) - 32px));
-  max-width: none;
-  max-height: none;
-  padding: 0;
+  height: min(600px, calc(var(--viewport-height) - var(--space-2xl)));
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
-  background: var(--floating);
-  color: var(--text);
-  box-shadow: var(--shadow-lg);
   font-size: var(--font-size-sm);
 }
-#settings-dialog::backdrop {
-  background: var(--backdrop);
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
-}
 #settings-dialog > form {
-  display: grid;
   grid-template-rows: 52px minmax(0, 1fr) 56px;
+  gap: 0;
   height: 100%;
   margin: 0;
+  padding: 0;
 }
 #settings-dialog [hidden] { display: none; }
 
 /* —— 标题栏 —— */
 #settings-dialog .settings-header {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
   padding: 0 var(--space-md) 0 var(--space-lg);
   border-bottom: 1px solid var(--line-soft);
 }
-#settings-dialog .settings-header h2 { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+#settings-dialog .settings-header h2 { margin: 0; }
 
 /* —— 分类导航 —— */
 #settings-dialog .settings-layout {
@@ -62,46 +47,10 @@
   border-right: 1px solid var(--line-soft);
   background: var(--content);
 }
-#settings-dialog .settings-nav-item {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-sm);
-  height: var(--control-height-lg);
-  padding: 0 var(--space-md);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  text-align: left;
-  cursor: default;
-  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
-}
-#settings-dialog .settings-nav-item[hidden] { display: none; }
+#settings-dialog .settings-nav-item { flex: none; }
 #settings-dialog .settings-nav-item > span:nth-child(2) { white-space: nowrap; }
-#settings-dialog .settings-nav-item small {
-  min-width: 0;
-  margin-left: auto;
-  overflow: hidden;
-  color: var(--tertiary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-regular);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-@media (hover: hover) {
-  #settings-dialog .settings-nav-item:hover { background: var(--hover); color: var(--text); }
-}
-#settings-dialog .settings-nav-item:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
-#settings-dialog .settings-nav-item[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+#settings-dialog .settings-nav-item small { min-width: 0; margin-left: auto; overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 #settings-dialog .settings-nav-item[aria-selected="true"] small { color: inherit; }
-/* 切换分类时的滑块（src/motion.ts）：与选中项同色，滑动期间选中项不画底 */
-#settings-dialog .settings-sidebar { position: relative; isolation: isolate; }
-#settings-dialog .settings-sidebar > .ui-segment-thumb { background: var(--accent-soft); box-shadow: none; border-radius: var(--radius-md); }
-#settings-dialog .settings-sidebar[data-sliding] > .settings-nav-item[aria-selected="true"] { background: transparent; }
-#settings-dialog .settings-nav-item:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 
 /* —— 页面、分组与行 —— */
 #settings-dialog .settings-content { min-width: 0; min-height: 0; padding: var(--space-xl); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
@@ -128,7 +77,7 @@
 #settings-dialog .settings-row > span:first-child { display: grid; gap: var(--space-2xs); min-width: 0; font-weight: var(--font-weight-medium); }
 #settings-dialog .settings-row > span:first-child small { color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); line-height: 1.5; }
 #settings-dialog .settings-row > span:first-child .ui-badge { margin-left: var(--space-sm); vertical-align: 1px; }
-#settings-dialog .settings-row > :is(.ui-select, .settings-secret, input:not([type="checkbox"])) { flex: none; width: min(320px, 60%); }
+#settings-dialog .settings-row > :is(.ui-select, .settings-secret, .model-image-name, input:not([type="checkbox"])) { flex: none; width: min(320px, 60%); }
 #settings-dialog .settings-row > .ui-segmented { flex: none; }
 
 #settings-dialog .settings-color { flex: none; gap: var(--space-sm); padding-right: var(--space-sm); }
@@ -174,9 +123,19 @@
 #settings-dialog .model-profile-text > :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #settings-dialog .model-profile-text > small { color: var(--secondary); font: var(--font-size-xs) var(--font-mono); }
 #settings-dialog .model-profile-text > small[data-problem] { color: var(--state-warn); font-family: var(--font-ui); }
-#settings-dialog .model-profiles-empty { padding: var(--space-lg); border: 1px dashed var(--line); border-radius: var(--radius-md); color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.6; text-align: center; }
 
 #settings-dialog .model-editor:not([hidden]) { display: grid; padding: 0 var(--space-lg) var(--space-md); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+#settings-dialog :is(.model-editor, #image-model-fields) > [hidden] { display: none; }
+#settings-dialog .model-image-name { display: flex; align-items: center; gap: var(--space-xs); }
+#settings-dialog .model-image-name > input { flex: 1; min-width: 0; }
+#settings-dialog #image-model-status { padding-top: var(--space-sm); }
+#settings-dialog .model-account { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
+#settings-dialog .model-account > small { overflow: hidden; color: var(--secondary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+/* 添加服务商：订阅账号在前，API 服务商在后 */
+#settings-dialog .model-add-menu { position: relative; }
+#settings-dialog .model-add-menu > summary { list-style: none; }
+#settings-dialog .model-add-menu > summary::-webkit-details-marker { display: none; }
+#settings-dialog .model-add-menu > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); right: 0; z-index: 10; width: 260px; max-height: 360px; overflow-y: auto; transform-origin: top right; }
 #settings-dialog .model-choices-row { align-items: flex-start; }
 #settings-dialog .model-choices-row > span:first-child { padding-top: var(--space-xs); }
 #settings-dialog .model-choices-panel { display: grid; flex: none; gap: var(--space-sm); width: min(360px, 66%); }
@@ -189,12 +148,12 @@
 }
 #settings-dialog .model-choices label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #settings-dialog .model-choices input[type="checkbox"] { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
-#settings-dialog .model-choices-empty { padding: var(--space-md) var(--space-sm); color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.5; }
+
 #settings-dialog .model-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding-top: var(--space-md); }
-#settings-dialog #model-configuration-status { min-width: 0; margin: 0; color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.5; overflow-wrap: anywhere; }
-#settings-dialog #model-configuration-status[data-state="busy"] { color: var(--accent); }
-#settings-dialog #model-configuration-status[data-state="success"] { color: var(--state-ok); }
-#settings-dialog #model-configuration-status[data-state="error"] { color: var(--state-danger); }
+#settings-dialog :is(#model-configuration-status, #image-model-status) { min-width: 0; margin: 0; color: var(--secondary); font-size: var(--font-size-xs); line-height: 1.5; overflow-wrap: anywhere; }
+#settings-dialog :is(#model-configuration-status, #image-model-status)[data-state="busy"] { color: var(--accent); }
+#settings-dialog :is(#model-configuration-status, #image-model-status)[data-state="success"] { color: var(--state-ok); }
+#settings-dialog :is(#model-configuration-status, #image-model-status)[data-state="error"] { color: var(--state-danger); }
 #settings-dialog #image-model-fields:not([hidden]) { display: contents; }
 #settings-dialog .settings-footnote { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
 #settings-dialog #model-configuration-path { font-family: var(--font-mono); }
@@ -209,7 +168,7 @@
 #settings-dialog #download-update { justify-self: start; font-size: var(--font-size-xs); }
 
 /* —— 底栏 —— */
-#settings-dialog .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-lg); border-top: 1px solid var(--line-soft); }
+#settings-dialog .settings-footer { justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-lg); }
 #settings-save-state { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; padding: var(--space-xs) var(--space-md); border-radius: var(--radius-full); background: var(--content); color: var(--secondary); font-size: var(--font-size-xs); }
 #settings-save-state[data-dirty="true"] { background: var(--accent-soft); color: var(--accent); }
 #settings-save-state .settings-state-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--state-ok); }
@@ -222,6 +181,7 @@
   #settings-dialog {
     width: 100vw;
     height: var(--viewport-height);
+    max-height: none;
     margin: 0;
     border: 0;
     border-radius: 0;
@@ -252,7 +212,7 @@
   #settings-dialog .settings-content { padding: var(--space-lg) max(16px, env(safe-area-inset-right)) var(--space-xl) max(16px, env(safe-area-inset-left)); }
   #settings-dialog .settings-row { flex-wrap: wrap; gap: var(--space-sm) var(--space-md); min-height: 52px; font-size: var(--font-size-md); }
   #settings-dialog .settings-row > span:first-child { flex: 1 1 140px; }
-  #settings-dialog .settings-row > :is(.ui-select, .settings-secret, input:not([type="checkbox"])),
+  #settings-dialog .settings-row > :is(.ui-select, .settings-secret, .model-image-name, input:not([type="checkbox"])),
   #settings-dialog .model-choices-panel { flex: 1 1 100%; width: 100%; }
   /* ≥16px stops iOS Safari from zooming the sheet on focus */
   #settings-dialog :is(.ui-input, input:not([type="checkbox"], [type="range"], [type="color"])) { min-height: 40px; font-size: var(--font-size-lg); }
@@ -265,8 +225,8 @@
 }
 
 /* —— 设置项作用于编辑器的全局效果 —— */
-:root[data-interface-density="compact"] #files .raw-files .source-tree-row { height: 26px; min-height: 26px; }
+
 :root[data-interface-density="compact"] .inspector-grid { gap: 4px; }
 :root[data-interface-density="compact"] .inspector-grid input, :root[data-interface-density="compact"] .inspector-grid select { height: 26px; min-height: 26px; }
-:root[data-interface-density="compact"] .toolbar-button { height: 26px; }
+
 :root[data-safe-area-guides="true"] .keyboard-dock > .keyboard-accessories { outline: 1px dashed var(--selection); outline-offset: -1px; }

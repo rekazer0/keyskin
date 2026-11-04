@@ -8,18 +8,18 @@ const script = readFileSync(new URL("../src/picker-window.ts", import.meta.url),
 const css = readFileSync(new URL("../src/picker.css", import.meta.url), "utf8")
 const main = appSource()
 
-test("图片切片窗口把图片名居中，并在其上显示样式名", () => {
+test("图片切片窗口的标题栏是 .ui-pane-header：返回、样式名、图片名、数量、搜索", () => {
+  assert.match(html, /<header class="ui-pane-header picker-toolbar">/)
   assert.match(html, /<span id="picker-style" hidden><\/span>/)
   assert.match(script, /styleName\.textContent = payload\.styleName \?\? ""/)
-  // 标题栏用网格把标题真正居中，左右两列留给返回与搜索。
-  assert.match(css, /\.picker-toolbar \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) auto minmax\(0, 1fr\);/)
+  assert.match(css, /\.picker-toolbar \{/)
   assert.match(main, /styleName: imagePickerStyleName\(target\)/)
 })
 
 test("左侧返回项在切片窗口与全部图片列表之间切换", () => {
-  assert.match(html, /<button id="picker-back"[\s\S]{0,400}全部图片/)
+  assert.match(html, /<button id="picker-back" class="ui-icon-button"[^>]*title="返回全部图片" aria-label="返回"/)
   assert.match(script, /if \(view === "image"\) showResourceList\(\)/)
-  assert.match(script, /backLabel\.textContent = "图片切片"/)
+  assert.match(script, /back\.title = "返回图片切片"/)
   assert.match(script, /emitMain\("image-picker-resources-request"\)/)
   assert.match(main, /onPickerEvent\("image-picker-resources-request"/)
 })
@@ -33,7 +33,8 @@ test("全部图片列表复用现有窗口，不再新建资源窗口", () => {
   assert.match(script, /onMain\("image-picker-show-list", \(\) => showResourceList\(\)\)/)
   // 列表项只上报选择，选完由主窗口决定是切图还是关窗。
   assert.equal(script.match(/getCurrentWindow\(\)\.close\(\)/g)?.length, 1)
-  assert.match(script, /event\.key !== "Escape"[\s\S]{0,80}getCurrentWindow\(\)\.close\(\)/)
+  // Esc 分层：先关预览，再关窗口。
+  assert.match(script, /event\.key !== "Escape"[\s\S]{0,160}closeLibraryPreview\(\)[\s\S]{0,80}getCurrentWindow\(\)\.close\(\)/)
 })
 
 test("切片窗口不再提供右侧的选择图片资源按钮", () => {
@@ -59,7 +60,7 @@ test("网页端与桌面端共用 picker.html，网页端嵌在页内弹窗的 i
   assert.match(main, /pickerFrame\.src = "about:blank"/)
   // 网页端没有原生标题栏：关闭按钮和 Esc 交给主页面收起弹窗。
   assert.match(html, /<button id="picker-close" class="ui-icon-button"[^>]*hidden>/)
-  assert.match(main, /onPickerEvent\("picker-close", \(\) => pickerDialog\.close\(\)\)/)
+  assert.match(main, /onPickerEvent\("picker-close", \(\) => closeDialog\(pickerDialog\)\)/)
 })
 
 test("没有 TIL 切片时整张图可像切片一样选中，引用写成不带序号的图片名", () => {

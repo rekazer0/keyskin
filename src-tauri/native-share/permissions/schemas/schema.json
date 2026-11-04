@@ -331,6 +331,18 @@
           "markdownDescription": "Denies the createSourceWorkspace command without any pre-configured scope."
         },
         {
+          "description": "Enables the pickSkinFile command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pickSkinFile",
+          "markdownDescription": "Enables the pickSkinFile command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pickSkinFile command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pickSkinFile",
+          "markdownDescription": "Denies the pickSkinFile command without any pre-configured scope."
+        },
+        {
           "description": "Enables the pickSourceDirectory command without any pre-configured scope.",
           "type": "string",
           "const": "allow-pickSourceDirectory",

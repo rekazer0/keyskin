@@ -251,11 +251,8 @@ export const appState = {
   styleLibraryHighlighted: false,
   styleLibrarySelected: undefined as { styleID?: string; imagePath?: string } | undefined,
   styleUsageFilter: "all",
-  // 样式库内新增：复用「新增样式」对话框，创建后直接应用到当前引用并进入编辑。
-  newStyleApplyTarget: undefined as HTMLInputElement | undefined,
   // Thumbnails redraw a frame later so they don't share a task with the inspector rebuild.
   stylePreviewsPending: false,
-  particlePreviewSection: "",
   pickerSelectedIndex: undefined as number | undefined,
   mobileOverviewGroup: "",
   newProjectOptions: undefined as ProjectChoice | undefined,

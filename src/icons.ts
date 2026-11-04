@@ -18,8 +18,9 @@ import {
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
+  UserRound, Plug,
   Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
-  SkipBack, Rotate3d, ArrowUpRight, Square, ImageOff, SunMoon,
+  SkipBack, Rotate3d, ArrowUpRight, Square, ImageOff, SunMoon, SearchX, ArrowUpLeft, ArrowDownLeft, ArrowDownRight,
 } from "lucide"
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
@@ -36,7 +37,7 @@ const icons: Record<string, IconNode> = {
   "align-end-vertical": AlignEndVertical, "align-start-horizontal": AlignStartHorizontal,
   "align-end-horizontal": AlignEndHorizontal, "arrow-up-down": ArrowUpDown,
   "fold-horizontal": FoldHorizontal, "fold-vertical": FoldVertical, layers: Layers,
-  "square-stack": SquareStack, ruler: Ruler, search: Search, plus: Plus, x: X,
+  "square-stack": SquareStack, ruler: Ruler, search: Search, "search-x": SearchX, plus: Plus, x: X,
   upload: Upload, download: Download, "image-down": ImageDown,
   "square-plus": SquarePlus, "copy-plus": CopyPlus, "file-text": FileText, list: List,
   keyboard: Keyboard, image: Image, settings: Settings, "pen-line": PenLine, asterisk: Asterisk,
@@ -75,7 +76,11 @@ const icons: Record<string, IconNode> = {
   "party-popper": PartyPopper, rabbit: Rabbit, "rotate-3d": Rotate3d, repeat: Repeat, snail: Snail,
   // 跳到引用的样式或动画
   "arrow-up-right": ArrowUpRight, square: Square,
+  // 九宫格锚点
+  "arrow-up-left": ArrowUpLeft, "arrow-down-left": ArrowDownLeft, "arrow-down-right": ArrowDownRight,
   "skip-back": SkipBack,
+  // AI 模型：订阅账号与 API 服务商
+  "user-round": UserRound, plug: Plug,
 }
 
 export function createIcon(name: string, size = 14): SVGElement {

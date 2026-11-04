@@ -1,4 +1,7 @@
 import { createIcon } from "./icons"
+import { element, iconButton } from "./dom-element.ts"
+import { closeDialog } from "./motion.ts"
+import { bindDialog } from "./app/ask.ts"
 import { wheelZoomFactor } from "./wheel-zoom"
 import type { TileSlice } from "./tiles"
 import "./atlas-workspace.css"
@@ -21,7 +24,8 @@ type AtlasState = {
 export function createAtlasWorkspace(actions: {
   back(): void
   copy(): void
-  create(name: string, width: number, height: number): void
+  /** 校验失败时返回错误文字，对话框保持打开并在框内显示。 */
+  create(name: string, width: number, height: number): string | undefined
   import(files: File[]): void
   autoSlice(): void
   guides(): void
@@ -37,38 +41,22 @@ export function createAtlasWorkspace(actions: {
   const workspace = get(".workspace")
   const canvas = get("#atlas-canvas") as HTMLCanvasElement
   const wrap = get(".canvas-wrap")
-  const header = document.createElement("div")
-  header.className = "atlas-header"
-  header.innerHTML = '<div class="atlas-image-title"><strong></strong><small></small></div><span class="atlas-selection"></span>'
-  const title = header.querySelector("strong")!
-  const meta = header.querySelector("small")!
-  const badge = header.querySelector<HTMLElement>(".atlas-selection")!
+  const header = element("div", "atlas-header")
+  const heading = element("div", "atlas-image-title")
+  const title = element("strong")
+  const meta = element("small")
+  heading.append(title, meta)
+  const badge = element("span", "ui-badge atlas-selection")
+  badge.dataset.variant = "selection"
+  header.append(heading, badge)
   workspace.prepend(header)
-  const button = (id: string, label: string, icon: string, action: () => void) => {
-    const element = document.createElement("button")
-    element.id = id
-    element.type = "button"
-    element.className = "toolbar-button"
-    element.title = label
-    element.setAttribute("aria-label", label)
-    element.append(createIcon(icon, 16))
-    element.addEventListener("click", action)
-    return element
-  }
-  const back = button("atlas-back", "返回布局", "arrow-left", actions.back)
-  list.querySelector(".inspector-title")!.prepend(back)
+  const button = (id: string, label: string, icon: string, action: () => void) => Object.assign(iconButton(icon, label, action), { id })
+  const back = button("atlas-back", "返回", "arrow-left", actions.back)
+  back.title = "返回布局"
+  list.querySelector(".ui-pane-header")!.prepend(back)
   const copy = button("atlas-copy-image", "复制图片及切片", "copy", actions.copy)
-  const createDialog = document.createElement("dialog")
-  createDialog.id = "atlas-create-dialog"
-  createDialog.className = "app-dialog"
-  createDialog.innerHTML = '<form method="dialog"><header><h2>新建图片</h2><p>创建一张透明 PNG，之后可在画布中添加切片。</p></header><label>名称<input name="name" aria-label="图片名称" value="image.png" required></label><div class="atlas-create-size"><label>宽<input name="width" aria-label="图片宽度" type="number" min="1" max="8192" value="512" required></label><label>高<input name="height" aria-label="图片高度" type="number" min="1" max="8192" value="512" required></label></div><footer><button type="submit" value="cancel" formnovalidate>取消</button><button class="primary" type="submit" value="create">创建</button></footer></form>'
-  createDialog.querySelector("form")!.addEventListener("submit", event => {
-    if ((event as SubmitEvent).submitter?.getAttribute("value") !== "create") return
-    const data = new FormData(createDialog.querySelector("form")!)
-    actions.create(String(data.get("name")).trim(), Number(data.get("width")), Number(data.get("height")))
-  })
-  document.body.append(createDialog)
-  const create = button("atlas-create-image", "新建图片", "plus", () => createDialog.showModal())
+  const createDialog = atlasCreateDialog(actions.create)
+  const create = button("atlas-create-image", "新建图片", "plus", () => createDialog.open())
   const input = document.createElement("input")
   input.type = "file"
   input.multiple = true
@@ -79,16 +67,16 @@ export function createAtlasWorkspace(actions: {
     input.value = ""
   })
   const folder = button("atlas-import-folder", "导入图片目录", "folder-input", () => input.click())
-  const extras = document.createElement("span")
-  extras.className = "atlas-resource-extras"
+  const extras = element("span", "atlas-resource-extras")
+  extras.hidden = true
   extras.append(copy, create, folder, input)
   list.querySelector(".resource-actions")!.append(extras)
   const grid = button("atlas-grid", "显示切片网格", "grid-2x2", actions.guides)
   const autoSlice = button("atlas-auto-slice", "自动切片", "scissors", actions.autoSlice)
+  for (const tool of [grid, autoSlice]) tool.dataset.variant = "filled"
   toolbar.append(grid, autoSlice)
-  const reference = document.createElement("div")
-  reference.className = "atlas-reference"
-  reference.innerHTML = '<span>引用</span><output></output>'
+  const reference = element("div", "atlas-reference")
+  reference.append(Object.assign(element("span"), { textContent: "引用" }), element("output"))
   get("#tile-preview-wrap").after(reference)
   const sourceHeading = document.createElement("h3")
   sourceHeading.className = "atlas-source-heading"
@@ -96,19 +84,22 @@ export function createAtlasWorkspace(actions: {
   get("#tile-source-fields").before(sourceHeading)
   const stretch = document.createElement("label")
   stretch.className = "atlas-stretch"
-  stretch.innerHTML = '<span>按九宫格拉伸</span><input type="checkbox" role="switch" aria-label="按九宫格拉伸">'
+  stretch.innerHTML = '<span>按九宫格拉伸</span><input class="ui-switch" type="checkbox" role="switch" aria-label="按九宫格拉伸">'
   const toggle = stretch.querySelector("input")!
   toggle.addEventListener("change", () => actions.stretch(toggle.checked))
   // 开关决定下方拉伸边距是否生效，放在边距字段之前
   get("#tile-inner-title").before(stretch)
-  const status = document.createElement("div")
-  status.className = "atlas-status"
-  status.setAttribute("role", "status")
-  workspace.append(status)
-  const zoom = document.createElement("div")
-  zoom.className = "atlas-zoom"
-  const percent = document.createElement("output")
-  percent.setAttribute("aria-label", "图集缩放比例")
+  // 与主画布同一个缩放控件（.preview-zoom-control）：缩小 / 适配 / 放大。
+  const zoom = element("div", "preview-zoom-control glass-module")
+  zoom.id = "atlas-zoom"
+  zoom.setAttribute("aria-label", "图集缩放")
+  const zoomButton = (id: string, label: string, icon: string, action: () => void) => {
+    const control = Object.assign(element("button"), { id, type: "button", title: label })
+    control.setAttribute("aria-label", label)
+    control.append(createIcon(icon, 16))
+    control.addEventListener("click", action)
+    return control
+  }
   let state: AtlasState | undefined
   let zoomValue = 1
   let fitted = true
@@ -129,7 +120,7 @@ export function createAtlasWorkspace(actions: {
     }
     canvas.style.width = `${Math.round(state.width * zoomValue)}px`
     canvas.style.height = `${Math.round(state.height * zoomValue)}px`
-    percent.textContent = `${Math.round(zoomValue * 100)}%`
+    fit.setAttribute("aria-pressed", String(fitted))
   }
   // 与主画布一致：以指针为锚点缩放，锚点下的图像位置保持不动
   const zoomBy = (factor: number, anchor?: { x: number; y: number }) => {
@@ -146,9 +137,8 @@ export function createAtlasWorkspace(actions: {
     }
     actions.redraw()
   }
-  zoom.append(button("atlas-zoom-out", "缩小图集", "minus", () => zoomBy(1 / 1.2)), percent,
-    button("atlas-zoom-in", "放大图集", "plus", () => zoomBy(1.2)),
-    button("atlas-zoom-fit", "适配图集", "maximize", () => { fitted = true; resize(); actions.redraw() }))
+  const fit = zoomButton("atlas-zoom-fit", "适配", "scan", () => { fitted = true; resize(); actions.redraw() })
+  zoom.append(zoomButton("atlas-zoom-out", "缩小", "minus", () => zoomBy(1 / 1.2)), fit, zoomButton("atlas-zoom-in", "放大", "plus", () => zoomBy(1.2)))
   workspace.append(zoom)
   wrap.addEventListener("wheel", event => {
     if (!desktopActive) return
@@ -200,6 +190,7 @@ export function createAtlasWorkspace(actions: {
     state = next
     desktopActive = next.active && media.matches
     document.body.classList.toggle("atlas-workspace", desktopActive)
+    extras.hidden = !desktopActive
     const sidebarActive = (next.active || next.styleActive) && media.matches
     document.body.classList.toggle("resource-workspace", sidebarActive)
     document.body.classList.toggle("style-workspace", next.styleActive && media.matches)
@@ -220,25 +211,80 @@ export function createAtlasWorkspace(actions: {
       canvas.style.removeProperty("translate")
     }
     const slice = next.selected
-    title.textContent = next.path.split("/").pop() || "图片资源"
+    title.textContent = next.path.split("/").pop() || "图片"
     title.title = next.path
     get(".source-heading .inspector-context h2").textContent = desktopActive ? (slice ? `切片 #${slice.index}` : "切片") : next.styleActive ? "样式编辑" : "检查器"
-    meta.textContent = next.path ? `${next.width} × ${next.height} · ${next.slices.length} 个切片` : "未选择图片"
-    badge.textContent = slice ? `切片 #${slice.index} · ${slice.source[2]} × ${slice.source[3]}` : "未选择切片"
-    // 引用按切片统计：没选切片时不能说整张图「无引用」。
-    reference.querySelector("output")!.textContent = next.reference || (slice ? "无引用" : "—")
+    meta.textContent = next.path ? `${next.width} × ${next.height} · ${next.slices.length} 个切片` : ""
+    // 选中信息只在这里出现一次（头部 meta 是整张图，角标是当前切片）。
+    badge.textContent = slice ? `#${slice.index} · ${slice.source[2]} × ${slice.source[3]}` : ""
+    badge.hidden = !slice
+    // 引用按切片统计：没选切片时整行隐藏，不说整张图「未使用」。
+    reference.querySelector("output")!.textContent = next.reference || "未使用"
+    reference.hidden = !slice
     toggle.checked = Boolean(slice?.inner)
     toggle.disabled = !slice || !next.editable || next.bda
     stretch.hidden = next.bda
     copy.disabled = !next.path || !next.editable
     create.disabled = folder.disabled = !next.editable
     autoSlice.disabled = !next.path || !next.editable || next.bda
-    grid.classList.toggle("active", next.guides)
     grid.setAttribute("aria-pressed", String(next.guides))
-    status.textContent = `${slice ? `已选 1 个切片 · 切片 #${slice.index}` : "未选择切片"} · 原图 ${next.width} × ${next.height}`
     if (lastPath !== next.path) { lastPath = next.path; fitted = true }
     resize()
   }
   media.addEventListener("change", () => { if (state) update(state) })
   return { update }
 }
+
+/** 新建图片：.ui-dialog，校验错误显示在框内，通过前不关闭。 */
+function atlasCreateDialog(create: (name: string, width: number, height: number) => string | undefined): { open(): void } {
+  const dialog = element("dialog", "ui-dialog")
+  dialog.id = "atlas-create-dialog"
+  dialog.dataset.size = "sm"
+  dialog.setAttribute("aria-label", "新建图片")
+  const form = element("form", "ui-form")
+  form.method = "dialog"
+  const header = element("header", "ui-dialog-header")
+  const text = element("div")
+  text.append(Object.assign(element("h2"), { textContent: "新建图片" }), Object.assign(element("p"), { textContent: "透明 PNG" }))
+  header.append(text)
+  const input = (name: string, label: string, value: string, type = "text") => {
+    const control = Object.assign(element("input"), { name, value, type, required: true })
+    control.setAttribute("aria-label", label)
+    if (type === "number") Object.assign(control, { min: "1", max: "8192" })
+    return control
+  }
+  const field = (label: string, control: HTMLInputElement) => {
+    const row = element("label", "ui-field")
+    row.append(Object.assign(element("span"), { textContent: label }), control)
+    return row
+  }
+  const name = input("name", "图片名称", "image.png")
+  name.autofocus = true
+  const width = input("width", "图片宽度", "512", "number")
+  const height = input("height", "图片高度", "512", "number")
+  const error = element("p", "ui-field-error")
+  error.setAttribute("role", "alert")
+  error.hidden = true
+  const body = element("div", "ui-dialog-body")
+  body.append(field("名称", name), field("宽", width), field("高", height), error)
+  const footer = element("footer", "ui-dialog-footer")
+  const cancel = Object.assign(element("button", "ui-button"), { value: "cancel", formNoValidate: true, textContent: "取消" })
+  const confirm = Object.assign(element("button", "ui-button"), { value: "create", textContent: "新建" })
+  confirm.dataset.variant = "primary"
+  footer.append(cancel, confirm)
+  form.append(header, body, footer)
+  dialog.append(form)
+  form.addEventListener("submit", (event) => {
+    if (event.submitter !== confirm) return
+    event.preventDefault()
+    const message = create(name.value.trim(), Number(width.value), Number(height.value))
+    error.textContent = message ?? ""
+    error.hidden = !message
+    if (!message) closeDialog(dialog)
+  })
+  form.addEventListener("input", () => { error.hidden = true })
+  bindDialog(dialog)
+  document.body.append(dialog)
+  return { open: () => { error.hidden = true; dialog.showModal() } }
+}
+

@@ -9,6 +9,7 @@ import { createServer } from 'vite'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { encodePng } from '../src/ssf/ssf-png.ts'
 import { COLORS, solid, ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 // The harmony template with a press animation on KEY2's background: shrink to half towards the top
 // left corner in 100 ms and back (`back`), as `a1` writes it.
@@ -76,7 +77,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, bypassCSP: true })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-page.on('dialog', (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 
 const open = async (name, bytes) => {
   await page.locator('#browser-open').setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })

@@ -1,4 +1,5 @@
 import { asObject } from "../palm/sxi-ini.ts"
+import { closeDialog } from "../motion.ts"
 import { editSxi } from "./sxi-fields"
 import { palmKeyForegrounds, palmKeyPointer, palmValue, setPalmStyleImage } from "./sxi-styles"
 import { addPalmStyle, palmTileSlices } from "../palm/palm-style-edit.ts"
@@ -198,7 +199,7 @@ export function resourcePickerPayload(): NativeResourcePickerPayload {
 
 export function closePickerWindow(): void {
   if (nativePickerWindow) void WebviewWindow.getByLabel("image-picker").then((pickerWindow) => pickerWindow?.close())
-  else pickerDialog.close()
+  else closeDialog(pickerDialog)
 }
 
 export function selectImageResource(path: string): void {

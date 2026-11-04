@@ -6,11 +6,18 @@ import { renderFiles } from "./file-tree"
 import { selectFile } from "./navigation"
 import { refreshPreview } from "./preview-render"
 
+/** 左侧栏的行：源文件树是 tree（aria-selected），概览是导航（aria-current）。 */
+export function setRowSelected(row: HTMLElement | undefined, on: boolean): void {
+  if (!row) return
+  const attribute = row.getAttribute("role") === "treeitem" ? "aria-selected" : "aria-current"
+  if (on) row.setAttribute(attribute, "true")
+  else row.removeAttribute(attribute)
+}
+
 export function setSidebarView(view: "overview" | "source"): void {
   appState.sidebarView = view
   for (const button of sidebarViewButtons) {
     const on = button.dataset.sidebarView === view
-    button.classList.toggle("active", on)
     button.setAttribute("aria-pressed", String(on))
   }
   files.querySelector<HTMLElement>(".sidebar-overview")?.toggleAttribute("hidden", view !== "overview")
@@ -36,8 +43,6 @@ export function updateSourceFileActions(): void {
   sourcePasteButton.disabled = !available || !appState.sourceTransfer?.files.length
   sourceMoveButton.disabled = !available || !selection
   sourceDeleteButton.disabled = !available || !selection
-  sourceCopyButton.classList.toggle("active", appState.sourceTransfer?.mode === "copy")
-  sourceMoveButton.classList.toggle("active", appState.sourceTransfer?.mode === "move")
   sourceCopyButton.setAttribute("aria-pressed", String(appState.sourceTransfer?.mode === "copy"))
   sourceMoveButton.setAttribute("aria-pressed", String(appState.sourceTransfer?.mode === "move"))
 }

@@ -35,6 +35,13 @@ class FakeNode {
     return this.children[0] ?? null
   }
 
+  get classList() {
+    return {
+      add: (...names) => { this.className = [...new Set([...classes(this), ...names])].join(" ") },
+      contains: (name) => classes(this).includes(name),
+    }
+  }
+
   append(...nodes) {
     for (const node of nodes) {
       if (typeof node === "string") this._text += node
@@ -69,8 +76,15 @@ class FakeNode {
     else delete this.attributes[name]
   }
 
+  /** One row per child: the list behaves like a single-column listbox. */
+  get offsetTop() {
+    return this.parentElement?.children.indexOf(this) ?? 0
+  }
+
   matches(selector) {
     if (selector.startsWith(".")) return classes(this).includes(selector.slice(1))
+    const attribute = /^\[([a-z-]+)="([^"]*)"\]$/.exec(selector)
+    if (attribute) return this.getAttribute(attribute[1]) === attribute[2]
     const data = /^\[data-([a-z-]+)\]$/.exec(selector)?.[1]
     return Boolean(data && data.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()) in this.dataset)
   }
@@ -117,6 +131,12 @@ globalThis.MutationObserver = class MutationObserver {
   observe() {}
   disconnect() {}
 }
+// Reference cards draw lazily (style-card.ts lazyDraw): nothing is ever visible here.
+globalThis.IntersectionObserver = globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+}
+globalThis.document.body = new FakeNode("body")
 
 function walk(node, output = []) {
   for (const child of node.children ?? []) {
@@ -132,7 +152,7 @@ const byTag = (root, tag) => walk(root).filter((node) => node.tagName === tag.to
 const firstByTag = (root, tag) => byTag(root, tag)[0]
 const inputByLabel = (root, label) => walk(root).find((node) => node.tagName === "INPUT" && node.getAttribute("aria-label") === label)
 const selectByLabel = (root, label) => walk(root).find((node) => node.tagName === "SELECT" && node.getAttribute("aria-label") === label)
-const buttonByLabel = (root, label) => walk(root).find((node) => node.tagName === "BUTTON" && node.getAttribute("aria-label") === label)
+const buttonByLabel = (root, label) => walk(root).find((node) => (node.tagName === "BUTTON" || node.getAttribute("role") === "button") && node.getAttribute("aria-label") === label)
 const sections = (container) => container.children.filter((node) => node.tagName === "SECTION")
 const sectionLabels = (container) => sections(container).map((node) => node.dataset.inspectorGroupLabel)
 const section = (container, label) => sections(container).find((node) => node.dataset.inspectorGroupLabel === label)
@@ -291,9 +311,9 @@ test("选中的效果按 列表 → 预览 → 参数 分组，标题与分类�
 test("字段修改立即通过 onAnimationEffect 写回，属性名与 encoder 一致", () => {
   const alpha = render({ selected: "alpha:press" })
   change(inputByLabel(alpha.container, "重复次数"), 4)
-  change(selectByLabel(alpha.container, "重复模式"), 0)
+  change(inputByLabel(alpha.container, "往返"), false)
   change(inputByLabel(alpha.container, "结束后移除"), true)
-  change(inputByLabel(alpha.container, "起始值（0–255）最小"), 10)
+  change(inputByLabel(alpha.container, "起始值最小"), 10)
   change(selectByLabel(alpha.container, "插值方式"), 4)
   assert.deepEqual(alpha.events.effects, [
     ["alpha:press", "repeatCount", 4],
@@ -304,18 +324,18 @@ test("字段修改立即通过 onAnimationEffect 写回，属性名与 encoder �
   ])
 
   const scale = render({ selected: "scale:pop" })
-  assert.equal(inputByLabel(scale.container, "中心（像素）Y").value, "20")
-  assert.equal(selectByLabel(scale.container, "XY 插值 X").value, "1")
+  assert.equal(inputByLabel(scale.container, "像素Y").value, "20")
+  assert.equal(selectByLabel(scale.container, "XY 插值X").value, "1")
   assert.equal(rowValue(scale.container, "位移方式"), undefined, "缩放没有位移方式")
-  change(inputByLabel(scale.container, "中心（像素）X"), 12)
-  change(selectByLabel(scale.container, "XY 插值 Y"), 3)
+  change(inputByLabel(scale.container, "像素X"), 12)
+  change(selectByLabel(scale.container, "XY 插值Y"), 3)
   assert.deepEqual(scale.events.effects, [["scale:pop", "pivotPxX", 12], ["scale:pop", "interpolationXYY", 3]])
   assert.equal(rowValue(render({ selected: "shift:slide" }).container, "位移方式"), "像素")
 
   const emitter = render({ mode: "particle" })
-  change(inputByLabel(emitter.container, "发射区域左"), 11.5)
-  change(inputByLabel(emitter.container, "生命周期（ms）最大"), 20)
-  change(selectByLabel(emitter.container, "结束时机"), 1)
+  change(inputByLabel(emitter.container, "发射区域←"), 11.5)
+  change(inputByLabel(emitter.container, "生命周期最大"), 20)
+  buttonByLabel(emitter.container, "粒子消失").dispatch("click")
   assert.deepEqual(emitter.events.effects, [
     ["emitter:spark", "emitRegionLeft", 11.5],
     ["emitter:spark", "lifeMax", 20],
@@ -346,7 +366,8 @@ test("组合列出子效果与时间，增删暂不支持时说明原因", () =>
   const combo = section(container, "组合")
   assert.match(combo.textContent, /press · 透明度/)
   assert.match(combo.textContent, /暂不支持/)
-  change(selectByLabel(combo, "组合方式"), 1)
+  assert.equal(buttonByLabel(combo, "同时").getAttribute("aria-pressed"), "true", "两项枚举是分段控件")
+  buttonByLabel(combo, "接续").dispatch("click")
   assert.deepEqual(events.effects, [["group:g1", "buildMode", 1]])
 })
 
@@ -358,7 +379,7 @@ test("图片序列帧：图片卡片选资源、资源编号与每帧时长写�
   buttonByLabel(container, "选择第 1 帧").dispatch("click")
   assert.deepEqual(events.resources, [["seq", 0]])
   change(inputByLabel(frames[1], "第 2 帧"), "b2.png")
-  change(inputByLabel(frames[1], "时长（毫秒）"), 240)
+  change(inputByLabel(frames[1], "时长"), 240)
   assert.deepEqual(events.frames, [
     ["seq", 1, "resourceID", "b2.png"],
     ["seq", 1, "duration", 240],
@@ -377,15 +398,17 @@ test("不可编辑时所有字段禁用，预览播放不需要编辑权限", as
   const { container } = render({ editable: false })
   for (const input of byTag(container, "input").filter((node) => node.type !== "range")) assert.equal(input.disabled, true)
   for (const select of byTag(container, "select")) assert.equal(select.disabled, true)
+  for (const button of byTag(section(render({ selected: "group:g1", editable: false }).container, "组合"), "button").filter((node) => node.getAttribute("aria-pressed") !== null)) assert.equal(button.disabled, true)
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.equal(buttonByLabel(container, "播放预览").disabled, false)
-  assert.equal(buttonByLabel(render({ selected: "image:seq", editable: false }).container, "选择第 1 帧").disabled, true)
+  // 不可编辑时图片卡的预览格不响应点击，也不进 Tab 顺序（styleReferenceCard）。
+  assert.equal(buttonByLabel(render({ selected: "image:seq", editable: false }).container, "选择第 1 帧").tabIndex, -1)
 })
 
 test("没有效果时列表显示空状态，不渲染预览与参数", () => {
   const animation = { targets: [], sequences: new Map(), bindings: new Map(), targetBindings: new Map(), effects: new Map() }
   const { container } = render({ animation })
   assert.deepEqual(sectionLabels(container), ["动效"])
-  assert.match(container.textContent, /这份配置里没有动效/)
+  assert.match(container.textContent, /没有动效/)
   assert.equal(rowValue(container, "设计宽度"), "未设置")
 })

@@ -2,6 +2,8 @@ import { isAndroidTauri, isTauri } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { appState } from "./state"
 import { initializeProjectChooser, projectChoice } from "../project-chooser"
+import { bindDialog } from "./ask.ts"
+import { closeDialog } from "../motion.ts"
 import { newProjectForm, newProjectDialog, openButton, documentName } from "./dom"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { prepareDocumentReplacement, updateDirty } from "./edit-history"
@@ -33,7 +35,8 @@ async function chooseAndroidProjectTemplate(): Promise<string | undefined> {
 function chooseEmbeddedProjectTemplate(): Promise<string | undefined> {
   if (!appState.projectChooserInitialized) {
     initializeProjectChooser(newProjectForm)
-    newProjectForm.addEventListener("project-import", () => newProjectDialog.close("import"))
+    bindDialog(newProjectDialog)
+    newProjectForm.addEventListener("project-import", () => closeDialog(newProjectDialog, "import"))
     appState.projectChooserInitialized = true
   }
   newProjectDialog.returnValue = ""
@@ -125,7 +128,7 @@ export async function startNewDocument(): Promise<void> {
   const templateID = await chooseProjectTemplate()
   if (templateID === "__import__") { openButton.click(); return }
   if (!templateID) {
-    showStatus("新建皮肤已取消。")
+    showStatus("新建皮肤已取消")
     return
   }
   await runFileOperation("新建皮肤", async () => {

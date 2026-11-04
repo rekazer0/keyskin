@@ -125,7 +125,7 @@ export function skinStateLabel(state: number): string {
 }
 
 export function actionDescription(value: string): string {
-  if (!value) return "未配置"
+  if (!value) return "未设置"
   if (functionCodeDescriptions[value]) return functionCodeDescriptions[value]
   if (/^F\d+$/.test(value)) return `百度功能码 ${value}`
   const state = previewStateFromAction(value)

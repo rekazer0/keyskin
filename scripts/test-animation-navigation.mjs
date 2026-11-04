@@ -6,6 +6,7 @@ import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 import { bdaAnimatedSkinBytes, bdsBaseArchive } from "../tests/helpers/bda-animation-fixture.mjs"
 import { SkinArchive } from "../src/skin.ts"
 import { convertBdaArchive } from "../src/bda-convert.ts"
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const bda = bdaAnimatedSkinBytes()
 const bds = await convertBdaArchive(SkinArchive.open(bda, "bda"), bdsBaseArchive()).archive.platformBytesAsync("bds")
@@ -21,12 +22,12 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 const errors = []
 page.on("pageerror", (error) => errors.push(error.message))
-page.on("dialog", (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
 const entry = (path, mode) => page.locator(`.sidebar-overview button[data-path="${path}"][data-nav-mode="${mode}"]`)
 // 动效设计 / 粒子设计占用左侧栏（动画列表）；回到概览要先点列表顶部的返回。
 const back = async () => {
-  if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library button[aria-label="返回布局"]').click()
+  if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library .ui-pane-header button[aria-label="返回"]').click()
 }
 const open = async (path, mode) => {
   await back()
@@ -54,8 +55,8 @@ async function check(path, mode, source = false) {
   assert.equal(value.selectedPath, path)
   if (!source) {
     assert.equal(value.selectedMode, mode)
-    assert.equal(await entry(path, mode).evaluate((node) => node.classList.contains("selected")), true)
-    assert.equal(await page.locator(".sidebar-overview button.selected").count(), 1)
+    assert.equal(await entry(path, mode).evaluate((node) => node.getAttribute("aria-current")), "true")
+    assert.equal(await page.locator('.sidebar-overview button[aria-current="true"]').count(), 1)
   }
 }
 

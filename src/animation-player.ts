@@ -64,7 +64,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   canvas.width = STAGE.width * resolution
   canvas.height = STAGE.height * resolution
   canvas.setAttribute("aria-label", "动画播放预览")
-  const emptyState = element("p", "ui-animation-empty")
+  const emptyState = element("p", "ui-empty")
   stage.append(canvas, emptyState)
   const timeline = element("div", "ui-animation-timeline")
   const lanes = element("div", "ui-animation-lanes")
@@ -105,6 +105,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   let thumbnailVisible = false
   let disposed = false
   let thumbnailObserver: IntersectionObserver | undefined
+  let thumbnailResize: ResizeObserver | undefined
   const thumbnailEvents = new AbortController()
   let loading = true
   let fit = 1
@@ -161,10 +162,11 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     time.value = `${Math.round(elapsed)} / ${Math.round(duration)} ms`
     const text = [...new Set(notes)]
     emptyState.hidden = hasContent
-    emptyState.textContent = loading ? "正在加载预览资源…" : text[0] ?? "暂无可播放的内容"
+    emptyState.textContent = loading ? "" : text[0] ?? "暂无可播放的内容"
+    emptyState.setAttribute("aria-busy", String(loading))
     const noteText = loading ? "" : hasContent ? text.join(" · ") : text.slice(1).join(" · ")
     note.hidden = !noteText
-    note.replaceChildren(createIcon("info", 12), noteText)
+    note.replaceChildren(createIcon("info", 14), noteText)
   }
 
   /* —— stage —— */
@@ -387,7 +389,14 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       thumbnailVisible = Boolean(entries[0]?.isIntersecting)
       syncThumbnail()
     })
-    requestAnimationFrame(() => { if (!disposed && root.isConnected) thumbnailObserver?.observe(root) })
+    requestAnimationFrame(() => {
+      if (disposed || !root.isConnected) return
+      thumbnailObserver?.observe(root)
+      // 样式卡片是 content-visibility: auto：卡片滚进视口、内容重新布局时 Chromium 不补发相交通知，
+      // 尺寸一变就重新观察，拿一次新的初始通知（与 style-card.ts 的 lazyDraw 同一做法）。
+      thumbnailResize = new ResizeObserver(() => { thumbnailObserver?.unobserve(root); thumbnailObserver?.observe(root) })
+      thumbnailResize.observe(root)
+    })
     document.addEventListener("visibilitychange", syncThumbnail, { signal: thumbnailEvents.signal })
     timeline.inert = transport.inert = true
   }
@@ -395,6 +404,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     disposed = true
     stop(true)
     thumbnailObserver?.disconnect()
+    thumbnailResize?.disconnect()
     thumbnailEvents.abort()
     visuals.clear()
     images.clear()
@@ -445,7 +455,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       } else {
         const bytes = item.file ? readFile?.(item.file) : undefined
         if (bytes) frames = await decodeFrames(bytes, /\.gif$/i.test(item.file!) ? "image/gif" : /\.png$/i.test(item.file!) ? "image/png" : "image/webp")
-        if (!frames.length) notes.push(`图片序列 ${item.file || "（未配置）"} 无法加载`)
+        if (!frames.length) notes.push(`图片序列 ${item.file || "未设置"} 无法加载`)
       }
       const total = frames.reduce((sum, frame) => sum + frame.duration, 0)
       if (disposed) return

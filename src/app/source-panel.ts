@@ -1,4 +1,5 @@
 import { isSxiSourcePath, sxiPointer } from "./sxi-documents"
+import { shortcutLabel } from "../dom-element"
 import { sxiSectionRanges } from "../palm/sxi-edit.ts"
 import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { syncAtlasWorkspace } from "./tile-editing"
@@ -52,8 +53,7 @@ export function updateInspectorView(): void {
         ? imageSelected || propertiesAvailable
         : !imageSelected && Boolean(appState.selectedPath)
     button.disabled = !available
-    button.classList.toggle("active", tab === appState.inspectorTab && available)
-    button.setAttribute("aria-pressed", String(tab === appState.inspectorTab && available))
+    button.setAttribute("aria-selected", String(tab === appState.inspectorTab && available))
   }
   if (appState.resourceConfigActive) {
     sourceName.textContent = appState.inspectorTab === "source" && appState.selectedResourcePath
@@ -99,7 +99,7 @@ export function updateSourceFindVisibility(): void {
   sourceFindToggle.hidden = !sourceVisible
   sourceFindToggle.setAttribute("aria-pressed", String(expanded))
   sourceFindToggle.setAttribute("aria-expanded", String(expanded))
-  sourceFindToggle.title = sourceFindToggle.ariaLabel = appState.sourceFindVisible ? "收起查找" : "查找（Ctrl/⌘ + F）"
+  sourceFindToggle.title = sourceFindToggle.ariaLabel = appState.sourceFindVisible ? "收起查找" : `查找（${shortcutLabel("F")}）`
   sourceToolbar.hidden = !expanded
   syncSourceFindBarOffset()
 }

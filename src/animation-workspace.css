@@ -3,15 +3,14 @@
 /* :not(#id) 的优先级压过 #files 等带 id 的子元素 */
 .animation-workspace .sidebar > :not(#animation-library, #sidebar-resize-handle) { display: none; }
 .animation-workspace .sidebar { padding: 0; overflow: hidden; }
-.animation-workspace .animation-library { display: flex; flex-direction: column; gap: var(--space-sm); height: 100%; min-height: 0; padding: var(--space-md); box-sizing: border-box; }
-.animation-library-header { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
-.animation-library-header > strong { flex: 1; min-width: 0; overflow: hidden; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
-.animation-library-count { flex: none; color: var(--tertiary); font-size: var(--font-size-xs); }
+/* 侧栏是按内容定行高的栅格：跨满所有行，列表短时工具条也贴在底部 */
+.animation-workspace .animation-library { display: flex; grid-row: 1 / -1; flex-direction: column; gap: var(--space-sm); height: 100%; min-height: 0; padding: var(--space-md); box-sizing: border-box; }
 .animation-library-tabs { flex: none; }
 .animation-library-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .animation-library-pane { display: flex; flex: 1; flex-direction: column; gap: var(--space-sm); min-height: 0; }
 .animation-library-pane[hidden] { display: none; }
-.animation-library-pane > .ui-listbox { flex: 1; }
+/* 按内容高度起算再收缩到可用空间：基准为 0 时，外层高度一旦不确定，列表会被压成一条缝。 */
+.animation-library-pane > .ui-listbox { flex: 1 1 auto; }
 
 /* 播放条按内容高度停靠，拖动上边缘可调高，双击恢复（animation-workspace.ts 记忆高度、测量位置）。 */
 .animation-workspace .workspace { grid-template-rows: 48px minmax(0, 1fr) var(--_animation-stage-height, minmax(160px, auto)) 30px; }
@@ -25,10 +24,12 @@
 }
 .animation-workspace .animation-stage-resize-handle[aria-busy="true"] { background: var(--accent); }
 .animation-workspace .animation-stage { display: flex; flex-direction: column; grid-row: 3; gap: var(--space-sm); min-height: 0; padding: var(--space-sm) var(--space-lg); overflow: auto; box-sizing: border-box; border-top: 1px solid var(--line); background: var(--material-panel); }
+/* 「最近打开」回到启动页时不关闭皮肤，播放条跟着画布一起收起 */
+body:has(.canvas-wrap.empty) :is(.animation-stage, .animation-stage-resize-handle) { display: none; }
 /* 标题行与左侧列表同构：类型图标、名称、类型角标，右侧是时长与引用情况 */
 .animation-stage-heading { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
 .animation-stage-icon { flex: none; display: grid; place-items: center; color: var(--tertiary); }
 .animation-stage-heading > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .animation-stage-heading > .ui-badge { flex: none; }
 .animation-stage-meta { flex: none; margin-left: auto; color: var(--tertiary); font-size: var(--font-size-xs); }
-.animation-stage-empty { margin: auto; color: var(--tertiary); font-size: var(--font-size-sm); text-align: center; }
+

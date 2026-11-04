@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { port: 41797, strictPort: false, host: '127.0.0.1' } })
 await server.listen()
@@ -9,7 +10,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-page.on('dialog', (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 const snapshot = () => page.evaluate(async () => {
   const { appState } = await import('/src/app/state.ts')
   return { names: appState.archive.names(), changed: [...appState.archive.changed], undo: appState.undoStack.length, transfer: appState.sourceTransfer?.mode }
@@ -34,7 +35,7 @@ try {
       }, { path: await row.getAttribute('data-folder-path'), expected })
     }
     await row.locator('.nav-label').click()
-    assert.equal(await row.evaluate((node) => node.classList.contains('selected')), true)
+    assert.equal(await row.evaluate((node) => node.getAttribute('aria-selected')), 'true')
     const initial = await expanded()
     await row.locator('.source-disclosure').click()
     await assertExpanded(!initial, 'selected folder triangle toggles once')
@@ -88,13 +89,15 @@ try {
     } else {
       await button.locator('.icon').click()
     }
-    await page.locator('#edit-mode-dialog').waitFor({ state: 'visible' })
-    await page.locator('#edit-mode-dialog button[value="cancel"]').click()
+    await page.getByRole('dialog', { name: '交互预览中无法编辑' }).waitFor({ state: 'visible' })
+    await page.getByRole('dialog', { name: '交互预览中无法编辑' }).getByRole('button', { name: '取消', exact: true }).click()
+    // 对话框有退出动效，关完再继续（期间页面仍是模态的）。
+    await page.getByRole('dialog', { name: '交互预览中无法编辑' }).waitFor({ state: 'detached' })
     assert.equal(await page.locator('#mode').inputValue(), 'preview')
     assert.deepEqual(await snapshot(), before, `${action} must not modify files in preview`)
   }
   await page.locator('#source-paste').click()
-  await page.locator('#edit-mode-dialog button[value="edit"]').click()
+  await page.getByRole('dialog', { name: '交互预览中无法编辑' }).getByRole('button', { name: '切换至编辑模式', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('#mode').value === 'edit')
   await page.locator('#source-paste').click()
   await page.locator('.source-file-row[data-path="phoneTheme 副本.ini"]').waitFor({ state: 'visible' })

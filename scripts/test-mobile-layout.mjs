@@ -7,6 +7,7 @@ import { execSync } from "node:child_process"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { createServer } from "vite"
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 async function loadPlaywright() {
   const candidates = [process.env.PLAYWRIGHT_MODULE, "playwright"]
@@ -44,7 +45,7 @@ async function withPage(viewport, run, { mobile = true, storage = {}, colorSchem
   const page = await context.newPage()
   const errors = []
   page.on("pageerror", (error) => errors.push(error.message))
-  page.on("dialog", (dialog) => dialog.accept())
+  await acceptAskDialogs(page)
   await page.addInitScript((entries) => {
     for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value)
   }, storage)
@@ -83,7 +84,7 @@ async function assertTitlebarClean(page, label) {
     const items = Array.from(document.querySelectorAll(
       ".titlebar summary, .titlebar button, .titlebar .document-title",
     )).filter((element) => {
-      if (element.closest(".toolbar-menu, template")) return false
+      if (element.closest(".ui-menu, template")) return false
       if (element.closest(".document-title") && element !== element.closest(".document-title")) return false
       const style = getComputedStyle(element)
       const box = element.getBoundingClientRect()
@@ -138,14 +139,14 @@ async function assertPreviewToggles(page) {
     ["orientation", ["port", "land"], ["rectangle-vertical", "rectangle-horizontal"]],
     ["theme", ["light", "dark"], ["sun", "moon"]],
   ]) {
-    const button = page.locator(`.preview-choice [data-mobile-choice="${choice}"]`)
-    const group = button.locator("..")
-    assert.equal(await group.locator("button:visible").count(), 1, `${choice} has one mobile button`)
+    const button = page.locator(`.preview-toolbar [data-mobile-choice="${choice}"]`)
+    assert.equal(await page.locator(".preview-toolbar .preview-choice button:visible").count(), 0, "segmented choices hidden on phones")
+    assert.equal(await page.locator(`.preview-toolbar [data-mobile-choice="${choice}"]:visible`).count(), 1, `${choice} has one mobile button`)
     for (const [step, index] of [0, 1, 0].entries()) {
       await page.waitForFunction(([choice, value]) => document.querySelector(`#${choice}`).value === value, [choice, values[index]])
       await button.locator(`svg[data-pen-icon="${icons[index]}"]`).waitFor({ state: "visible" })
       assert.equal(await page.locator(`#${choice}`).inputValue(), values[index], `${choice} state at step ${step}`)
-      assert.equal(await group.locator("svg:visible").count(), 1, `${choice} shows one icon`)
+      assert.equal(await button.locator("svg:visible").count(), 1, `${choice} shows one icon`)
       assert.ok(await button.locator(`svg[data-pen-icon="${icons[index]}"]`).isVisible(), `${choice} icon follows state`)
       if (step === 0) await button.click()
       if (step === 1) await button.press("Enter")
@@ -227,7 +228,7 @@ for (const viewport of portraitPhones) {
 
   await check(`${tag} mode switch keeps the title readable`, () => withPage(viewport, async (page) => {
     await openTemplate(page)
-    await page.locator(".mode-control .mobile-choice-toggle").click()
+    await page.locator('[data-mobile-choice="mode"]').click()
     await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
     await assertTitlebarClean(page, "edit mode")
     const title = await rect(page, "#document-name")
@@ -400,10 +401,9 @@ await check("844×390 landscape phone keeps the canvas", () => withPage({ width:
 await check("1280×800 desktop title bar is unchanged", () => withPage({ width: 1280, height: 800 }, async (page) => {
   await openTemplate(page)
   await assertTitlebarClean(page, "desktop")
-  assert.equal(await page.locator('.preview-choice [data-mobile-choice]:visible').count(), 0, "mobile toggles hidden on desktop")
+  assert.equal(await page.locator('[data-mobile-choice]:visible').count(), 0, "mobile toggles hidden on desktop")
   assert.equal(await page.locator('.preview-choice button:visible').count(), 4, "desktop keeps both options")
   assert.equal((await rect(page, ".pen-file-menu")).visible, true, "desktop file menu")
-  assert.equal((await rect(page, ".mobile-command-menu")).visible, false, "phone menu hidden")
   assert.equal((await rect(page, ".mobile-workspace-tabs")).visible, false, "phone dock hidden")
   assert.equal((await rect(page, "main > aside")).visible, true, "sidebar column")
 }, { mobile: false }))

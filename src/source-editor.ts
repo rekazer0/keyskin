@@ -115,7 +115,7 @@ class ValueSwatchWidget extends WidgetType {
   constructor(private readonly color: string) { super() }
   toDOM(): HTMLElement {
     const node = document.createElement("span")
-    node.className = "cm-source-value-thumbnail cm-source-value-swatch"
+    node.className = "cm-source-value-thumbnail cm-source-value-swatch ui-checker"
     node.style.backgroundColor = this.color
     node.title = this.color
     return node
@@ -130,7 +130,7 @@ class ValuePreviewWidget extends WidgetType {
   ) { super() }
   toDOM(): HTMLElement {
     const node = document.createElement("span")
-    node.className = "cm-source-value-thumbnail"
+    node.className = "cm-source-value-thumbnail ui-checker"
     const canvas = document.createElement("canvas")
     canvas.width = 64
     canvas.height = 36
@@ -568,14 +568,17 @@ export class SourceCodeEditor extends EventTarget {
     if (!this.completionItems.length) return
     if (!this.completionPopup) {
       this.completionPopup = document.createElement("div")
-      this.completionPopup.className = "cm-source-completion"
+      this.completionPopup.className = "ui-menu cm-source-completion"
+      this.completionPopup.setAttribute("role", "listbox")
       this.completionPopup.addEventListener("mousedown", (event) => event.preventDefault())
       this.view.dom.parentElement?.append(this.completionPopup)
     }
     this.completionPopup.replaceChildren(...this.completionItems.map((item, index) => {
       const button = document.createElement("button")
       button.type = "button"
-      button.className = index === this.completionIndex ? "active" : ""
+      button.className = "ui-list-item"
+      button.setAttribute("role", "option")
+      button.setAttribute("aria-selected", String(index === this.completionIndex))
       button.textContent = item.label
       button.title = item.detail
       button.addEventListener("click", () => {

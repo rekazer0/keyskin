@@ -4,13 +4,14 @@
  * 解析、类型清理、时间轴和引用关系都在 src/legacy-animation.ts；每次编辑通过 commitText 写回一个撤销步骤。
  */
 import { IniDocument } from "../ini.ts"
-import { element } from "../dom-element.ts"
 import { iniPreviewClip } from "../animation-preview-model.ts"
 import { animationPlayer } from "../animation-player.ts"
 import {
-  animationModeTitle, animationSection, animationWarning, comboList, imageCard, renderAnimationResource, sliderField,
+  animationModeTitle, animationWarning, comboList, renderAnimationResource,
   type AnimationListItem,
 } from "../animation-inspector.ts"
+import { baiduConfigControl } from "../baidu-config-controls.ts"
+import { field, section, type FieldSpec } from "./property-rows"
 import { decodeFrames } from "../native-motion.ts"
 import { createIcon } from "../icons.ts"
 import {
@@ -38,19 +39,17 @@ import {
   type LegacyAnimationTimeline,
 } from "../legacy-animation.ts"
 import { visualResolver } from "./bda-documents"
-import { preview } from "./canvas-interaction"
 import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./config-context"
 import { commitText, isEditing, updateDirty } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
-import { decorateStyleReferenceInput } from "./style-references"
 import { appState } from "./state"
 import { animationKeySample } from "./animation-key-sample"
 import type { PreviewItem } from "../preview-items.ts"
-import { animationStyleCard } from "./animation-style-inspector"
+import { animationStyleActions, animationStyleCard } from "./animation-style-inspector"
+import { styleKindIcon, styleReferenceCard, type StyleReferenceState } from "../style-card.ts"
 
-const SECTION = "document-property-section"
 const KIND_ICONS: Record<LegacyAnimationKind, string> = { basic: "blend", combination: "layers", frame: "list-video", particle: "sparkles" }
 const TYPE_ICONS = ["blend", "rotate-cw", "move", "scaling", "scaling", "rotate-3d"]
 
@@ -92,271 +91,79 @@ function edit(update: (text: string) => string): void {
   populateKeyInspector()
 }
 
-/* —— 属性行 —— */
-function fieldRow(section: string, key: string, label: string, control: HTMLElement): HTMLElement {
-  const row = element("label", "ui-field document-property-field")
-  row.dataset.documentKey = key
-  row.dataset.inspectorRowKey = JSON.stringify([appState.selectedPath, section, key])
-  const caption = element("span", "document-field-caption")
-  caption.textContent = label
-  caption.title = `${label}（${key}）`
-  row.append(caption, control)
-  return row
-}
+/* —— 属性行：标签来自 LEGACY_ANIMATION_FIELDS，开关与枚举的控件来自 baiduConfigControl —— */
+type Commit = (value: string | undefined) => void
 
-const NUMBER_VALUE = /^-?\d+(?:\.\d+)?$/
-const RANDOM_VALUE = /^rand\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)$/i
-
-function validAnimationValue(value: string): boolean {
-  return NUMBER_VALUE.test(value) || RANDOM_VALUE.test(value)
-}
-
-function inputControl(
-  value: string | undefined,
-  label: string,
-  commit: (value: string | undefined) => void,
-  { numeric = true, unit, step, placeholder = "未设置" }: { numeric?: boolean; unit?: string; step?: string; placeholder?: string } = {},
-): HTMLElement {
-  const wrap = element("span", "ui-input")
-  const input = element("input")
-  input.type = numeric ? "number" : "text"
-  input.value = value ?? ""
-  input.placeholder = placeholder
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", label)
-  if (numeric) input.step = step ?? "any"
-  input.addEventListener("change", () => {
-    const text = input.value.trim()
-    if (text && numeric && !validAnimationValue(text)) {
-      input.value = value ?? ""
-      return
-    }
-    commit(text || undefined)
+function row(entry: LegacyAnimationEntry, key: string, label: string, spec: FieldSpec, commit: Commit): HTMLElement {
+  return field({
+    key, label, spec,
+    rowKey: [appState.selectedPath, entry.section, key],
+    commit: (value: string | string[] | boolean) => commit(typeof value === "boolean" ? (value ? "1" : "0")
+      : Array.isArray(value) ? (value.every((part) => !part) ? undefined : value.map((part) => part || "0").join(",")) : value || undefined),
   })
-  wrap.append(input)
-  if (unit) wrap.append(Object.assign(element("span", "ui-input-affix"), { textContent: unit }))
-  return wrap
 }
 
-/** 单值输入：手册允许 FROM/TO 写成 rand(a,b)，所以用文本输入而不是 number。 */
-function valueControl(value: string | undefined, label: string, commit: (value: string | undefined) => void, unit?: string): HTMLElement {
-  const wrap = element("span", "ui-input")
-  const input = element("input")
-  input.type = "text"
-  input.inputMode = "decimal"
-  input.value = value ?? ""
-  input.placeholder = "未设置"
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", label)
-  input.addEventListener("change", () => {
-    const text = input.value.trim()
-    if (text && !validAnimationValue(text)) {
-      input.value = value ?? ""
-      return
-    }
-    commit(text || undefined)
-  })
-  wrap.append(input)
-  if (unit) wrap.append(Object.assign(element("span", "ui-input-affix"), { textContent: unit }))
-  return wrap
-}
-
-function pairControl(
-  value: string | undefined,
-  label: string,
-  parts: readonly string[],
-  commit: (value: string | undefined) => void,
-  step?: string,
-): HTMLElement {
-  const values = value ? legacyAnimationValueParts(value) : []
-  const wrap = element("span", "ui-field-pair")
-  if (parts.length > 2) wrap.dataset.columns = String(parts.length)
-  const inputs = parts.map((part, index) => {
-    const box = element("span", "ui-input")
-    const affix = element("span", "ui-input-affix")
-    affix.textContent = part
-    const input = element("input")
-    input.type = "text"
-    input.inputMode = "decimal"
-    input.value = values[index] ?? ""
-    input.placeholder = part
-    input.step = step ?? "any"
-    input.disabled = !isEditing()
-    input.setAttribute("aria-label", `${label}${part}`)
-    box.append(affix, input)
-    wrap.append(box)
-    return input
-  })
-  const write = () => {
-    const next = inputs.map((input) => input.value.trim())
-    if (next.every((text) => !text)) {
-      commit(undefined)
-      return
-    }
-    if (next.some((text) => text && !validAnimationValue(text))) {
-      inputs.forEach((input, index) => { input.value = values[index] ?? "" })
-      return
-    }
-    commit(next.map((text) => text || "0").join(","))
-  }
-  for (const input of inputs) input.addEventListener("change", write)
-  return wrap
-}
-
-function selectControl(
-  value: string | undefined,
-  label: string,
-  options: ReadonlyArray<readonly [string, string]>,
-  commit: (value: string | undefined) => void,
-  optional = false,
-): HTMLElement {
-  const wrap = element("span", "ui-input ui-select")
-  const select = element("select")
-  select.disabled = !isEditing()
-  select.setAttribute("aria-label", label)
-  const choices: Array<readonly [string, string]> = optional ? [["", "未设置"] as const, ...options] : [...options]
-  if (value !== undefined && !choices.some(([option]) => option === value)) choices.push([value, `${value}（当前）`])
-  for (const [option, text] of choices) select.append(new Option(text, option))
-  select.value = value ?? (optional ? "" : choices[0]?.[0] ?? "")
-  select.addEventListener("change", () => commit(select.value === "" ? undefined : select.value))
-  wrap.append(select)
-  return wrap
-}
-
-function switchControl(value: string | undefined, label: string, commit: (value: string | undefined) => void): HTMLElement {
-  const input = element("input", "ui-switch")
-  input.type = "checkbox"
-  input.setAttribute("role", "switch")
-  input.checked = value?.trim() === "1"
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", label)
-  input.addEventListener("change", () => commit(input.checked ? "1" : "0"))
-  return input
-}
-
-/* —— 基础动效的数值字段：FROM/TO 的写法跟 TYPE 走 —— */
+/** 基础动效的起止值：写法跟 TYPE 走；手册允许 rand(a,b)，所以都是表达式数值。 */
 function basicValueLabel(entry: LegacyAnimationEntry, key: string): string {
   const prefix = key === "FROM" ? "起始" : "终止"
-  switch (entry.type ?? 0) {
-    case 0: return `${prefix}透明度`
-    case 1: return `${prefix}角度`
-    case 2: return `${prefix}位置（%）`
-    case 3:
-    case 4: return `${prefix}缩放（%）`
-    default: return `${prefix}3D 角度（°）`
-  }
+  return `${prefix}${["透明度", "角度", "位置", "缩放", "缩放", "3D 角度"][entry.type ?? 0] ?? ""}`
 }
 
-function basicValueControl(entry: LegacyAnimationEntry, key: string, value: string | undefined, commit: (value: string | undefined) => void): HTMLElement {
-  const label = basicValueLabel(entry, key)
-  switch (entry.type ?? 0) {
-    case 0: return valueControl(value, label, commit, "0–255")
-    case 1: return valueControl(value, label, commit, "°")
-    case 5: return pairControl(value, label, ["X", "Y", "Z"], commit)
-    default: return pairControl(value, label, ["X", "Y"], commit)
-  }
+function basicValueSpec(entry: LegacyAnimationEntry, value: string): FieldSpec {
+  const type = entry.type ?? 0
+  if (type === 0) return { kind: "number", value, expression: true, range: "alpha" }
+  if (type === 1) return { kind: "number", value, expression: true, unit: "°", range: "angle" }
+  const values = legacyAnimationValueParts(value)
+  return { kind: "parts", affixes: type === 5 ? ["X", "Y", "Z"] : ["X", "Y"], values, expression: true, unit: type === 5 ? "°" : "%" }
 }
 
-function intpolControl(entry: LegacyAnimationEntry, value: string | undefined, commit: (value: string | undefined) => void): HTMLElement {
+/** 位移与缩放的 X / Y 各有一个插值器。 */
+function intpolSpec(entry: LegacyAnimationEntry, value: string | undefined): FieldSpec {
   const values = legacyAnimationValueParts(value ?? "0")
-  const count = entry.kind === "basic" && [2, 3, 4].includes(entry.type ?? 0) ? 2 : 1
-  if (count === 1) return selectControl(values[0] ?? "0", "插值器", LEGACY_ANIMATION_INTPOL_OPTIONS, (next) => commit(next ?? "0"))
-  const wrap = element("span", "ui-field-pair")
-  const selects = ["X", "Y"].map((axis, index) => {
-    const box = element("span", "ui-input ui-select")
-    const select = element("select")
-    select.disabled = !isEditing()
-    select.setAttribute("aria-label", `插值器${axis}`)
-    for (const [option, text] of LEGACY_ANIMATION_INTPOL_OPTIONS) select.append(new Option(`${axis} · ${text}`, option))
-    select.value = values[index] ?? values[0] ?? "0"
-    box.append(select)
-    wrap.append(box)
-    return select
-  })
-  const write = () => commit(selects.map((select) => select.value).join(","))
-  for (const select of selects) select.addEventListener("change", write)
-  return wrap
+  if (!(entry.kind === "basic" && [2, 3, 4].includes(entry.type ?? 0))) return { kind: "choice", value: values[0] ?? "0", options: LEGACY_ANIMATION_INTPOL_OPTIONS }
+  return { kind: "parts", affixes: ["X", "Y"], values: [values[0] ?? "0", values[1] ?? values[0] ?? "0"], options: LEGACY_ANIMATION_INTPOL_OPTIONS }
 }
 
-/** Values with a natural range get a slider beside the number (DESIGN.md §10). */
-const SLIDERS: Record<string, { min: number; max: number; step?: number }> = {
-  DURATION: { min: 0, max: 2000, step: 10 },
-  DELAY: { min: 0, max: 2000, step: 10 },
-  TOTAL_NUMBER: { min: 1, max: 200 },
-  BIRTH_RATE: { min: 0.1, max: 50, step: 0.1 },
-}
+const RANGES: Record<string, "duration" | "count" | "rate"> = { DURATION: "duration", DELAY: "duration", TOTAL_NUMBER: "count", BIRTH_RATE: "rate" }
 
-function withSlider(control: HTMLElement, bounds: { min: number; max: number; step?: number }): HTMLElement {
-  return sliderField(control, control.querySelector("input")!, bounds)
-}
-
-/** PARTICLE_IMAGE lists style IDs: a bare input that the style card decorates once it is in its row. */
-function particleImageInput(value: string | undefined, commit: (value: string | undefined) => void): HTMLInputElement {
-  const input = element("input")
-  input.value = value ?? ""
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", "粒子图片样式")
-  input.addEventListener("change", () => commit(input.value.trim() || undefined))
-  return input
-}
-
-/** ANIM_PATH is a gif / webp / png next to anim.ini (or in res): a picture card with the files on offer. */
-function animPathCard(value: string | undefined, commit: (value: string | undefined) => void): HTMLElement {
-  const folder = appState.selectedPath.replace(/[^/]*$/, "")
-  const files = element("datalist")
-  files.id = "anim-path-files"
-  for (const path of appState.archive?.names() ?? []) {
-    if (path.startsWith(folder) && /\.(gif|webp|png)$/i.test(path)) files.append(new Option(path.slice(folder.length)))
+function fieldSpec(entry: LegacyAnimationEntry, key: string, value: string): FieldSpec {
+  const spec = LEGACY_ANIMATION_FIELDS[key]
+  const config = baiduConfigControl(entry.section, key)
+  if (config?.kind === "switch") return { kind: "switch", checked: (value || config.defaultValue) === config.on }
+  if (config?.kind === "choice") return { kind: "choice", value, options: config.options }
+  if (spec?.kind === "number") return { kind: "number", value, unit: spec.unit, step: Number(spec.step) || undefined, range: RANGES[key] }
+  if (spec?.kind === "pair" || spec?.kind === "quad") {
+    const affixes = spec.kind === "quad" ? ["←", "↑", "→", "↓"] : /PIVOT|_PX$/.test(key) ? ["X", "Y"] : ["最小", "最大"]
+    return { kind: "parts", affixes, values: legacyAnimationValueParts(value), columns: affixes.length, expression: true, unit: spec.unit, step: Number(spec.step) || undefined }
   }
-  const card = imageCard({
-    label: "gif 路径",
-    value: value ?? "",
-    editable: isEditing(),
+  return { kind: "text", value }
+}
+
+/** ANIM_PATH 是 anim.ini 旁（或 res 里）的 gif / webp / png：图片卡片，名称可选现有文件。 */
+function animPathSpec(value: string): FieldSpec {
+  const folder = appState.selectedPath.replace(/[^/]*$/, "")
+  return {
+    kind: "image",
+    value,
     placeholder: "选择或输入文件",
-    list: files.id,
+    suggestions: (appState.archive?.names() ?? []).filter((path) => path.startsWith(folder) && /\.(gif|webp|png)$/i.test(path)).map((path) => path.slice(folder.length)),
     load: () => {
       const bytes = value ? readSkinFile(value) : undefined
-      return bytes && decodeFrames(bytes, /\.gif$/i.test(value!) ? "image/gif" : /\.png$/i.test(value!) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual)
+      return bytes && decodeFrames(bytes, /\.gif$/i.test(value) ? "image/gif" : /\.png$/i.test(value) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual)
     },
-    onChange: (next) => commit(next || undefined),
-  })
-  card.append(files)
-  return card
+  }
 }
 
-function fieldControl(entry: LegacyAnimationEntry, key: string): HTMLElement {
-  const value = fieldValue(entry, key)
-  const spec = LEGACY_ANIMATION_FIELDS[key]
-  const commit = (next: string | undefined) => edit((text) => writeLegacyAnimationFields(text, entry.section, { [key]: next }))
-  if (key === "INTPOL") return intpolControl(entry, value, (next) => commit(next))
-  if (key === "FROM" || key === "TO") {
-    const control = basicValueControl(entry, key, value, (next) => commit(next))
-    const type = entry.type ?? 0
-    return type === 0 ? withSlider(control, { min: 0, max: 255 }) : type === 1 ? withSlider(control, { min: -360, max: 360 }) : control
-  }
-  if (key === "PARTICLE_IMAGE") return particleImageInput(value, commit)
-  if (key === "ANIM_PATH") return animPathCard(value, commit)
-  if (!spec) return inputControl(value, key, (next) => commit(next), { numeric: false })
-  if (spec.kind === "number") {
-    const control = inputControl(value, spec.label, (next) => commit(next), { unit: spec.unit, step: spec.step })
-    return SLIDERS[key] ? withSlider(control, SLIDERS[key]) : control
-  }
-  if (spec.kind === "text") return inputControl(value, spec.label, (next) => commit(next), { numeric: false })
-  if (spec.kind === "select") return selectControl(value, spec.label, spec.options ?? [], (next) => commit(next), spec.optional)
-  if (spec.kind === "switch") return switchControl(value, spec.label, (next) => commit(next))
-  const parts = spec.kind === "quad"
-    ? ["左", "上", "右", "下"]
-    : spec.kind === "triple" ? ["X", "Y", "Z"]
-      : spec.kind === "pair" && /PIVOT|_PX$/.test(key) ? ["X", "Y"] : ["最小", "最大"]
-  return pairControl(value, spec.label, parts, (next) => commit(next), spec.step)
-}
-
-
-function fieldLabel(entry: LegacyAnimationEntry, key: string): string {
-  if (key === "FROM" || key === "TO") return basicValueLabel(entry, key)
-  const spec = LEGACY_ANIMATION_FIELDS[key]
-  if (!spec) return key
-  return spec.unit && ["pair", "quad", "triple"].includes(spec.kind) ? `${spec.label}（${spec.unit}）` : spec.label
+function fieldRow(entry: LegacyAnimationEntry, key: string): HTMLElement {
+  const value = fieldValue(entry, key) ?? ""
+  const commit: Commit = (next) => edit((text) => writeLegacyAnimationFields(text, entry.section, { [key]: next }))
+  const label = key === "FROM" || key === "TO" ? basicValueLabel(entry, key) : LEGACY_ANIMATION_FIELDS[key]?.label ?? key
+  const spec = key === "INTPOL" ? intpolSpec(entry, fieldValue(entry, key))
+    : key === "FROM" || key === "TO" ? basicValueSpec(entry, value)
+      : key === "PARTICLE_IMAGE" ? { kind: "style", value, reference: key } as const
+        : key === "ANIM_PATH" ? animPathSpec(value)
+          : fieldSpec(entry, key, value)
+  return row(entry, key, label, spec, key === "INTPOL" ? (next) => commit(next ?? "0") : commit)
 }
 
 /** 手册第 180 页的 CATEGORY：0 基础 / 1 组合 / 2 帧 / 3 粒子。 */
@@ -368,21 +175,16 @@ function kindCategory(kind: LegacyAnimationKind): number {
 function kindRow(entry: LegacyAnimationEntry): HTMLElement | undefined {
   const kinds = LEGACY_ANIMATION_KINDS.filter(({ kind }) => shownInAnimationView(kind === "particle"))
   if (kinds.length < 2) return
-  const control = selectControl(entry.kind, "动效类型", kinds.map(({ kind, label }) => [kind, label] as const), (next) => {
+  return row(entry, "CATEGORY", LEGACY_ANIMATION_FIELDS.CATEGORY.label, { kind: "choice", value: entry.kind, layout: "labeled", options: kinds.map(({ kind, label }) => [kind, label.replace(/动效$/, ""), KIND_ICONS[kind]]) }, (next) => {
     if (next && next !== entry.kind) edit((text) => writeLegacyAnimationKind(text, entry.section, next as LegacyAnimationKind))
   })
-  return fieldRow(entry.section, "CATEGORY", "动效类型", control)
 }
 
 function typeRow(entry: LegacyAnimationEntry): HTMLElement {
-  const label = entry.kind === "particle" ? "粒子类型" : "动画类型"
-  const control = selectControl(
-    entry.type === undefined ? undefined : String(entry.type),
-    label,
-    legacyAnimationTypeOptions(entry.kind).map(([value, text]) => [String(value), text] as const),
-    (next) => { if (next !== undefined) edit((text) => writeLegacyAnimationType(text, entry.section, Number(next))) },
-  )
-  return fieldRow(entry.section, "TYPE", label, control)
+  const options = legacyAnimationTypeOptions(entry.kind).map(([value, text]) => [String(value), text] as const)
+  return row(entry, "TYPE", entry.kind === "particle" ? "粒子类型" : "变化属性", { kind: "choice", value: entry.type === undefined ? "" : String(entry.type), options }, (next) => {
+    if (next !== undefined) edit((text) => writeLegacyAnimationType(text, entry.section, Number(next)))
+  })
 }
 
 /* —— 组合动效：子动效按播放顺序排成列表，增删排序写回 BUILD_LIST / BUILD_NUM —— */
@@ -396,21 +198,17 @@ function writeBuildList(entry: LegacyAnimationEntry, ids: string[]): void {
 
 function comboRows(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>): HTMLElement[] {
   const ids = buildList(entry)
-  const method = fieldValue(entry, "BUILD_METHOD")
-  const methodRow = fieldRow(entry.section, "BUILD_METHOD", "组合方式",
-    selectControl(method, "组合方式", LEGACY_ANIMATION_FIELDS.BUILD_METHOD.options ?? [], (next) =>
-      edit((text) => writeLegacyAnimationFields(text, entry.section, { BUILD_METHOD: next }))))
-  // 隐藏的 BUILD_LIST 行承载改动标记与重置；列表本身是下面的子动效编辑器。
-  const listRow = fieldRow(entry.section, "BUILD_LIST", "子动效列表", inputControl(fieldValue(entry, "BUILD_LIST"), "子动效列表", (next) =>
-    writeBuildList(entry, (next ?? "").split(",").map((part) => part.trim()).filter(Boolean)), { numeric: false }))
+  // 隐藏的 BUILD_LIST 行承载改动标记与重置；列表本身是下面的子动效编辑器，数量（BUILD_NUM）在分组标题上。
+  const listRow = row(entry, "BUILD_LIST", LEGACY_ANIMATION_FIELDS.BUILD_LIST.label, { kind: "text", value: ids.join(",") }, (next) =>
+    writeBuildList(entry, (next ?? "").split(",").map((part) => part.trim()).filter(Boolean)))
   listRow.hidden = true
   const basics = [...byIndex.values()].filter((child) => child.kind === "basic" && child.index !== undefined && child.section !== entry.section)
-  return [methodRow, comboList({
+  return [fieldRow(entry, "BUILD_METHOD"), comboList({
     editable: isEditing(),
-    empty: "还没有子动效；组合动效只能引用基础动效。",
+    empty: "没有子动画",
     children: ids.map((id) => {
       const child = byIndex.get(String(Number(id)))
-      if (!child) return { title: `动画 ${id}`, detail: "anim.ini 里没有这个动效，请移除", missing: true }
+      if (!child) return { title: `动画 ${id}`, detail: "anim.ini 里没有这个动画", missing: true }
       if (child.kind !== "basic") return { title: `动画 ${id}`, detail: `${legacyAnimationKindLabel(child.kind)}不能放进组合，不会播放`, missing: true }
       return { title: `动画 ${id}`, detail: `${legacyAnimationTypeLabel(child.kind, child.type)} · ${timelineText(legacyAnimationTimeline(child, byIndex))}` }
     }),
@@ -430,23 +228,12 @@ function comboRows(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Leg
 
 function parameterSections(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>): HTMLElement[] {
   return legacyAnimationFieldGroups(entry).map((group, index) => {
-    const section = animationSection(group.title, SECTION)
-    if (index === 0) {
-      const kind = kindRow(entry)
-      if (kind) section.append(kind)
-    }
-    for (const key of group.keys) {
-      if (key === "TYPE") section.append(typeRow(entry))
-      else if (key === "BUILD_METHOD") section.append(...comboRows(entry, byIndex))
-      else if (key === "BUILD_LIST" || key === "BUILD_NUM") continue
-      else {
-        const row = fieldRow(entry.section, key, fieldLabel(entry, key), fieldControl(entry, key))
-        section.append(row)
-        if (key === "PARTICLE_IMAGE") decorateStyleReferenceInput(row.querySelector("input")!, key)
-        if (key === "ANIM_PATH") row.classList.add("style-reference-field")
-      }
-    }
-    return section
+    const rows = group.keys.flatMap((key) => key === "TYPE" ? [typeRow(entry)]
+      : key === "BUILD_METHOD" ? comboRows(entry, byIndex)
+        : key === "BUILD_LIST" || key === "BUILD_NUM" ? []
+          : [fieldRow(entry, key)])
+    const kind = index === 0 ? kindRow(entry) : undefined
+    return section(group.title, kind ? [kind, ...rows] : rows, { count: group.keys.includes("BUILD_LIST") ? String(buildList(entry).length) : undefined })
   })
 }
 
@@ -472,7 +259,7 @@ function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Lega
   const timeline = legacyAnimationTimeline(entry, byIndex)
   const detail = entry.kind === "frame" ? fieldValue(entry, "ANIM_PATH") || "未设置 gif"
     : entry.kind === "particle" ? `${fieldValue(entry, "TOTAL_NUMBER") ?? "?"} 个粒子 · ${timelineText(timeline)}`
-      : entry.kind === "combination" ? `${fieldValue(entry, "BUILD_METHOD") === "0" ? "同时" : "接续"} · ${buildList(entry).length} 个子动效 · ${timelineText(timeline)}`
+      : entry.kind === "combination" ? `${fieldValue(entry, "BUILD_METHOD") === "0" ? "同时" : "接续"} · ${buildList(entry).length} 个子动画 · ${timelineText(timeline)}`
         : timelineText(timeline)
   return {
     id: entry.section,
@@ -534,11 +321,8 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   const entry = entries.find((candidate) => candidate.section === selected)
   const listRows: HTMLElement[] = []
   if (model.animNum !== undefined && model.animNum !== model.entries.length) {
-    listRows.push(animationWarning(`[GLOBAL] ANIM_NUM=${model.animNum}，实际有 ${model.entries.length} 个动效；写回任意字段时自动修正。`))
+    listRows.push(animationWarning(`[GLOBAL] ANIM_NUM=${model.animNum}，实际有 ${model.entries.length} 个动画，写回任意字段时自动修正`))
   }
-  // 粒子由播放器画到键盘上（keyboardPlayback），不再用文档检查器的整面板预览。
-  appState.particlePreviewSection = ""
-  preview.setParticlePreview()
   const create = (kind: LegacyAnimationKind, copyOf?: string) => edit((current) => {
     const next = appendLegacyAnimation(current, kind, copyOf)
     rememberAnimation(next.section)
@@ -547,11 +331,11 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   renderAnimationResource(container, {
     listSource: appState.archive,
     mode: appState.animationDesignMode,
-    sectionClass: SECTION,
+    sectionClass: "document-property-section",
     items,
     selected,
     keyFilter,
-    styles: { noun: "样式", icon: "paintbrush", items: usage, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard },
+    styles: { noun: "样式", icon: "paintbrush", items: usage, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard, ...animationStyleActions(entry?.index) },
     thumbnail: id => ({ clip: iniPreviewClip(appState.selectedDocument!, id, { fillBefore: true }), key: `${appState.selectedPath}|${id}`, resolver: visualResolver(), readFile: readSkinFile }),
     styleFilter,
     editable: isEditing(),
@@ -642,56 +426,38 @@ export function styleAnimationPlayers(styleID: string, styles: IniDocument, thum
   }))
 }
 
-/** 预览负责选择样式；Ctrl/Command 点击进入实际动画编辑器。 */
-export function styleAnimationReferencePreviews(styleID: string, styles: IniDocument, choose: () => void): HTMLElement {
-  const root = element("span", "style-animation-previews")
+/** 检查器动画引用卡的内容：样式播放的每个动画一格真实缩略图；单击选择样式，⌘ 单击打开那个动画。 */
+export function styleAnimationReferenceStates(styleID: string, styles: IniDocument, choose: () => void): StyleReferenceState[] {
   const entries = styleAnimations(styleID, styles)
   const players = styleAnimationPlayers(styleID, styles, true)
-  for (const [index, entry] of (entries.length ? entries : [undefined]).entries()) {
-    const item = element("div", "style-picker-state")
-    item.setAttribute("role", "button")
-    item.tabIndex = 0
-    item.title = entry ? `动画 ${entry.index} · ${kindLabel(entry)}；点击选择样式；Command/Ctrl 点击编辑` : "选择动画样式"
-    item.setAttribute("aria-label", item.title)
-    const activate = (edit: boolean) => {
-      if (edit && entry) openAnimation(legacyAnimationConfigPath()!, entry.kind === "particle", entry.section)
-      else choose()
-    }
-    item.addEventListener("click", event => {
-      event.preventDefault()
-      activate(event.ctrlKey || event.metaKey)
-    })
-    item.addEventListener("keydown", event => {
-      if (event.key !== "Enter" && event.key !== " ") return
-      event.preventDefault()
-      activate(event.ctrlKey || event.metaKey)
-    })
-    if (players[index]) item.append(players[index])
-    else item.textContent = !styleID || styleID === "0" ? "未绑定动画" : "动画引用缺失或未配置"
-    root.append(item)
-  }
-  return root
+  if (!entries.length) return [{ label: "未设置", content: createIcon("image-off", 16), onClick: choose }]
+  return entries.map((entry, index) => ({
+    label: `动画 ${entry.index} · ${kindLabel(entry)}`,
+    content: players[index],
+    onClick: (edit: boolean) => edit ? openAnimation(legacyAnimationConfigPath()!, entry.kind === "particle", entry.section) : choose(),
+  }))
 }
 
-/** 样式里 PRESS_ANIM 等字段引用的动画：每个编号一个按钮，点一下打开动效设计 / 粒子设计并选中它。 */
-export function styleAnimationLinks(key: string, value: string): HTMLElement | undefined {
+/** 样式里 PRESS_ANIM 等字段：编号输入框放进样式引用卡，右侧每个引用的动画一格真实缩略图，单击打开那个动画。 */
+export function decorateStyleAnimationField(row: HTMLElement, key: string, value: string): void {
   const path = legacyAnimationConfigPath()
-  if (!STYLE_ANIM_FIELDS.some((field) => field === key) || !path) return
+  const input = row.querySelector("input")
+  if (!STYLE_ANIM_FIELDS.some((field) => field === key) || !path || !input) return
   const animations = referencedAnimations(value)
-  if (!animations.length) return
-  const links = element("span", "style-animation-links")
-  for (const { id, entry } of animations) {
-    const button = element("button", "ui-button")
-    button.type = "button"
-    button.dataset.size = "sm"
-    button.dataset.variant = "quiet"
-    button.disabled = !entry
-    button.title = entry ? `在${entry.kind === "particle" ? "粒子" : "动效"}设计中打开动画 ${id}` : `anim.ini 里没有动画 ${id}`
-    button.append(createIcon(entry?.kind === "particle" ? "wand-sparkles" : "film", 12), entry ? `动画 ${id} · ${kindLabel(entry)}` : `动画 ${id}（缺失）`)
-    if (entry) button.addEventListener("click", () => openAnimation(path, entry.kind === "particle", entry.section))
-    links.append(button)
-  }
-  return links
+  const document = animations.some(({ entry }) => entry) ? IniDocument.parse(appState.archive!.getText(path)) : undefined
+  const states: StyleReferenceState[] = animations.map(({ id, entry }) => entry ? {
+    label: `动画 ${id} · ${kindLabel(entry)}`,
+    content: animationPlayer({ thumbnail: true, clip: iniPreviewClip(document!, entry.section, { fillBefore: true }), key: `${path}|${entry.section}`, resolver: visualResolver(), readFile: readSkinFile }),
+    onClick: () => openAnimation(path, entry.kind === "particle", entry.section),
+  } : { label: `anim.ini 里没有动画 ${id}`, content: createIcon("image-off", 16) })
+  ;(input.closest(".ui-input") ?? input).replaceWith(styleReferenceCard({
+    name: input,
+    kind: animations.length ? styleKindIcon("anim") : undefined,
+    states,
+    empty: { icon: "clapperboard", label: "输入动画编号", onClick: () => input.focus() },
+    disabled: input.disabled,
+  }))
+  row.classList.add("style-reference-field")
 }
 
 /** 对象头：动效设计 / 粒子设计与文件位置。 */

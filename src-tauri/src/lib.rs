@@ -8,8 +8,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::window::{Effect, EffectsBuilder};
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
+mod model_oauth;
 #[cfg(target_os = "macos")]
 mod window_material;
+use model_oauth::{
+    model_oauth_accounts, model_oauth_cancel, model_oauth_login, model_oauth_logout,
+    model_oauth_token,
+};
 
 struct OpenedFiles(Mutex<Vec<String>>);
 struct ClientLog(Mutex<()>);
@@ -709,6 +714,17 @@ fn pick_source_directory(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn pick_skin_file(app: tauri::AppHandle, initial_uri: Option<String>) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    return tauri_plugin_native_share::pick_skin_file(&app, initial_uri).await;
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, initial_uri);
+        Err("SAF file selection is only available on Android".into())
+    }
+}
+
+#[tauri::command]
 async fn choose_project_template(app: tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "android")]
     return tauri_plugin_native_share::choose_project_template(&app).await;
@@ -1028,7 +1044,7 @@ fn validate_model_configuration(configuration: &ModelConfiguration) -> Result<()
     }
     if !matches!(
         configuration.protocol.as_str(),
-        "anthropic" | "openai-chat" | "openai-responses" | "google"
+        "anthropic" | "openai-chat" | "openai-responses" | "openai-codex" | "google"
     ) {
         return Err("不支持的模型服务协议".into());
     }
@@ -1235,7 +1251,16 @@ async fn request_model_list(configuration: &ModelConfiguration) -> Result<Vec<St
 }
 
 #[tauri::command]
-async fn fetch_model_list(configuration: ModelConfiguration) -> Result<Vec<String>, String> {
+async fn fetch_model_list(
+    app: tauri::AppHandle,
+    configuration: ModelConfiguration,
+) -> Result<Vec<String>, String> {
+    if matches!(
+        configuration.provider.as_str(),
+        "claude-subscription" | "chatgpt-subscription"
+    ) {
+        return model_oauth::subscription_models(app, configuration.provider).await;
+    }
     request_model_list(&configuration).await
 }
 
@@ -1711,6 +1736,11 @@ pub fn run() {
         fetch_model_list,
         test_model_connection,
         model_http_request,
+        model_oauth_accounts,
+        model_oauth_login,
+        model_oauth_cancel,
+        model_oauth_logout,
+        model_oauth_token,
         prepare_source_directory,
         create_source_workspace,
         open_source_workspace,
@@ -1719,6 +1749,7 @@ pub fn run() {
         read_source_changes,
         path_is_directory,
         pick_source_directory,
+        pick_skin_file,
         choose_project_template,
         start_source_observer,
         stop_source_observer
@@ -1745,6 +1776,11 @@ pub fn run() {
         fetch_model_list,
         test_model_connection,
         model_http_request,
+        model_oauth_accounts,
+        model_oauth_login,
+        model_oauth_cancel,
+        model_oauth_logout,
+        model_oauth_token,
         prepare_source_directory,
         create_source_workspace,
         open_source_workspace,
@@ -1753,6 +1789,7 @@ pub fn run() {
         read_source_changes,
         path_is_directory,
         pick_source_directory,
+        pick_skin_file,
         choose_project_template,
         start_source_observer,
         stop_source_observer

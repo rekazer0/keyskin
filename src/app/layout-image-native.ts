@@ -3,6 +3,7 @@
 // Palm, PNG files and phoneSkin.ini / keys.ini sections in every resolution folder for Sogou.
 
 import { IniDocument } from "../ini.ts"
+import { closeDialog } from "../motion.ts"
 import { layoutKeyRects, planLayoutImage, type LayoutImagePlan } from "../layout-image.ts"
 import { type TileRect } from "../tiles.ts"
 import { type Change } from "../history.ts"
@@ -45,7 +46,7 @@ function palmKeyRects(board: PalmBoard): Array<{ section: string; rect: TileRect
 }
 
 function finish(): void {
-  layoutImageDialog.close()
+  closeDialog(layoutImageDialog)
   renderFiles()
   refreshPreview()
   populateKeyInspector()

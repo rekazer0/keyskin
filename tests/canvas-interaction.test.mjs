@@ -69,22 +69,20 @@ test('crosshair lines follow the pointer while the readout snaps to the edge', (
 
 test('unchanged style thumbnails are not rebuilt on every selection', () => {
   class HTMLInputElement { constructor(value) { this.value = value } }
-  const input = new HTMLInputElement('118'), button = { previousElementSibling: input }
-  input.classList = { contains: () => false }
-  // 音效行：值在前面的卡片内
-  const soundInput = new HTMLInputElement('1001')
-  const soundButton = { previousElementSibling: { classList: { contains: (name) => name === 'sound-style-main' }, querySelector: () => soundInput } }
-  // BDA 样式行：前面不是输入框，由自己的路径绘制
-  const bdaButton = { previousElementSibling: { classList: { contains: () => false } } }
+  // 每个引用字段是一个 .ui-style-ref-list，第一个子元素是隐藏的引用输入框（音效字段也一样）。
+  const input = new HTMLInputElement('118'), list = { firstElementChild: input }
+  const soundList = { firstElementChild: new HTMLInputElement('1001') }
+  // 不是引用输入框的列表跳过
+  const other = { firstElementChild: {} }
   const refreshed = []
   const globals = {
-    HTMLInputElement, document: { querySelectorAll: () => [button, soundButton, bdaButton] }, theme: { value: 'light' }, orientation: { value: 'port' },
+    HTMLInputElement, document: { querySelectorAll: () => [list, soundList, other] }, theme: { value: 'light' }, orientation: { value: 'port' },
     archive: { revision: 1 }, styleReferenceKey: () => 'BACK_STYLE', visualResolver: () => ({}),
     refreshStyleReferenceThumbnail: (target) => refreshed.push(target),
   }
   const context = run(declarations('styleReferenceThumbnailInputs', 'refreshStyleReferenceThumbnails'), globals)
   context.refreshStyleReferenceThumbnails()
-  assert.deepEqual(refreshed, [button, soundButton], 'sound rows refresh too')
+  assert.deepEqual(refreshed, [list, soundList], 'sound rows refresh too')
   context.refreshStyleReferenceThumbnails()
   assert.equal(refreshed.length, 2)
   input.value = '119'

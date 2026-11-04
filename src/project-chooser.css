@@ -1,61 +1,30 @@
-:root body #new-project-dialog {
-  width: min(920px, calc(100vw - 32px));
-  height: min(620px, calc(var(--viewport-height) - 32px));
-  max-height: calc(var(--viewport-height) - 32px);
-  padding: 0;
-  border-radius: var(--radius-lg);
-}
-:root body form.project-chooser {
-  height: 100%; min-height: 0; padding: 0; gap: 0;
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
-  background: var(--material-control); color: var(--text);
-  font: var(--font-size-sm) var(--font-ui);
-}
-:root body .project-chooser > header {
-  display: flex; align-items: center; gap: 8px; min-height: 52px;
-  padding: 12px 20px; border-bottom: 1px solid var(--line);
-}
-:root body .project-chooser-title { display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; }
-:root body .project-chooser-title :is(h1,h2) { margin: 0; font-size: var(--font-size-lg); line-height: 1.4; white-space: nowrap; }
-:root body .project-chooser-title small { color: var(--secondary); font-size: var(--font-size-xs); }
-:root body .project-chooser button { font: inherit; cursor: pointer; height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--material-control); color: inherit; box-shadow: none; }
-:root body .project-chooser button:disabled { cursor: default; opacity: .65; }
-@media (hover: hover) {
-:root body .project-chooser button:hover:not(:disabled) { background: var(--material-content); }
-}
-:root body .project-chooser .project-close { width: 30px; padding: 0; font-size: var(--font-size-xl); }
-:root body .project-chooser-body { overflow: auto; min-height: 0; padding: 20px 20px; }
-:root body .project-chooser fieldset { display: block; margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
-:root body .project-chooser legend { margin-bottom: 12px; padding: 0; font-size: var(--font-size-md); font-weight: 600; }
-:root body .project-template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-:root body .project-chooser .project-template-card {
+/* 新建项目：应用内是 .ui-dialog[data-size="lg"]（头 / 底 / 按钮都来自组件），独立窗口里是同一个表单铺满窗口 */
+#new-project-dialog { --_width: 920px; height: min(620px, calc(var(--viewport-height) - var(--space-2xl))); overflow: hidden; }
+.project-chooser { height: 100%; min-height: 0; box-sizing: border-box; grid-template-rows: auto minmax(0, 1fr) auto; }
+.new-project-window .project-chooser { display: grid; gap: var(--space-xl); padding: var(--space-xl); background: var(--floating); color: var(--text); font: var(--font-size-sm) var(--font-ui); }
+.project-chooser-fields > .ui-field { flex: 1; min-width: 0; }
+.project-location { justify-content: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#project-error { flex-basis: 100%; margin: 0; color: var(--state-danger); font-size: var(--font-size-xs); }
+.project-chooser-body { overflow: auto; min-height: 0; }
+.project-chooser fieldset { display: block; margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
+.project-chooser legend { margin-bottom: 12px; padding: 0; font-size: var(--font-size-md); font-weight: 600; }
+.project-template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.project-chooser .project-template-card {
   position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 12px;
   min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md);
   background: var(--material-control); box-shadow: none; cursor: pointer;
 }
-:root body .project-chooser .project-template-card:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 .5px var(--accent); }
-:root body .project-chooser .project-template-card input { position: absolute; right: 16px; top: 16px; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); z-index: 1; }
-:root body .project-chooser .project-template-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-:root body .project-chooser .template-preview { display: flex; align-items: center; justify-content: center; width: 100%; height: 108px; overflow: hidden; border-radius: var(--radius-md); background: var(--material-content); color: var(--secondary); font-size: var(--font-size-xs); }
-:root body .project-chooser .template-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
-:root body .project-chooser .project-template-card > span:not(.template-preview) { display: grid; gap: 6px; min-width: 0; }
-:root body .project-chooser .project-template-card strong { font-size: var(--font-size-sm); font-weight: 500; line-height: 1.5; color: inherit; overflow-wrap: anywhere; }
-:root body .project-chooser .project-template-card small { font-size: var(--font-size-xs); color: var(--secondary); line-height: 1.5; }
-:root body .project-license { margin: 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--secondary); }
-:root body .project-chooser > footer { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; padding: 12px 20px; min-height: 72px; border-top: 1px solid var(--line); background: var(--material-control); }
-:root body .project-chooser-fields { display: flex; flex: 1; min-width: 0; gap: 12px; }
-:root body .project-chooser-fields > label { display: grid; gap: 6px; flex: 1; min-width: 0; color: var(--secondary); font-size: var(--font-size-xs); }
-:root body .project-name-well { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 30px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--material-content); }
-:root body .project-name-well input { width: 100%; min-width: 0; padding: 0; height: auto; font: inherit; font-size: var(--font-size-sm); border: 0; background: transparent; color: var(--text); box-shadow: none; }
-:root body .project-chooser .project-location { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; background: var(--material-content); }
-:root body .project-chooser footer .primary { color: var(--on-accent); background: var(--accent); border-color: transparent; }
-@media (hover: hover) {
-:root body .project-chooser footer .primary:hover { background: color-mix(in srgb, var(--accent) 90%, var(--text)); }
-}
-:root body .project-chooser #project-error { flex-basis: 100%; color: var(--state-danger); }
+.project-chooser .project-template-card:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 .5px var(--accent); }
+.project-chooser .project-template-card input { position: absolute; right: 16px; top: 16px; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); z-index: 1; }
+.project-chooser .project-template-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.project-chooser .template-preview { display: flex; align-items: center; justify-content: center; width: 100%; height: 108px; overflow: hidden; border-radius: var(--radius-md); background: var(--material-content); color: var(--secondary); font-size: var(--font-size-xs); }
+.project-chooser .template-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.project-chooser .project-template-card > span:not(.template-preview) { display: grid; gap: 6px; min-width: 0; }
+.project-chooser .project-template-card strong { font-size: var(--font-size-sm); font-weight: 500; line-height: 1.5; color: inherit; overflow-wrap: anywhere; }
+.project-chooser .project-template-card small { font-size: var(--font-size-xs); color: var(--secondary); line-height: 1.5; }
+.project-license { margin: 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--secondary); }
+.project-chooser-fields { display: flex; flex: 1; min-width: 0; gap: 12px; }
 @media(max-width: 640px) {
-  :root body .project-template-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  :root body .project-chooser-title small { display: none; }
-  :root body .project-chooser-fields { flex-basis: 100%; }
+  .project-template-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .project-chooser-fields { flex-basis: 100%; }
 }
-:root body .project-chooser :is(button,input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -4,7 +4,6 @@
  * 所以是 DESIGN.md 中唯一允许写色值字面量的文件（§1）。编辑器自身的界面不得写在这里。
  */
 
-
 .canvas-wrap.preview-pan-ready .device-shell {
   will-change: transform;
 }
@@ -73,7 +72,6 @@
   --_canvas-secondary: #a6a9ae;
   --_canvas-tertiary: #858991;
 }
-
 
 .device-shell {
   place-self: center;
@@ -414,14 +412,6 @@
   font-size: 10px;
 }
 
-.simulation-heading button {
-  padding: 2px 5px;
-  border-radius: 5px;
-  color: #737378;
-  background: rgb(0 0 0 / 5%);
-  font-size: 9px;
-}
-
 #simulated-output {
   width: 100%;
   min-height: 56px;
@@ -555,11 +545,6 @@
 
 .device-shell[data-theme="dark"] .simulation-heading {
   color: #98989f;
-}
-
-.device-shell[data-theme="dark"] .simulation-heading button {
-  color: #c3c3c8;
-  background: rgb(255 255 255 / 8%);
 }
 
 .device-shell[data-theme="dark"] #simulated-output::placeholder {
