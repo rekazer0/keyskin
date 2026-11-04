@@ -9,7 +9,9 @@ import { refreshPreview } from "./preview-render"
 export function setSidebarView(view: "overview" | "source"): void {
   appState.sidebarView = view
   for (const button of sidebarViewButtons) {
-    button.classList.toggle("active", button.dataset.sidebarView === view)
+    const on = button.dataset.sidebarView === view
+    button.classList.toggle("active", on)
+    button.setAttribute("aria-pressed", String(on))
   }
   files.querySelector<HTMLElement>(".sidebar-overview")?.toggleAttribute("hidden", view !== "overview")
   files.querySelector<HTMLElement>(".raw-files")?.toggleAttribute("hidden", view !== "source")

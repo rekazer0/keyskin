@@ -25,6 +25,7 @@ import { sourceTargetFolder, commitSourceUploads, sourceSelection, setSourceTran
 import { writeToChosenFile } from "../archive-io"
 import { rememberAiDesignModel, setAiDesignScope } from "../ai-panel"
 import { wireWindowControls } from "../window-controls"
+import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 
 /** 启动环境、全局指针、画布预览、检查器与缩放。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireCanvasAndInspector(): void {
@@ -33,6 +34,8 @@ export function wireCanvasAndInspector(): void {
   document.documentElement.classList.toggle("macos", isTauri() && navigator.userAgent.includes("Macintosh"))
   document.documentElement.classList.toggle("windows", isTauri() && navigator.userAgent.includes("Windows"))
   wireWindowControls()
+  initSegmentSlide()
+  initDisclosureReveal(files)
   preview.onAnimationKeys = pickAnimationKeys
   installNumberInputWheel(document, {
     isMixed: (field) => Boolean(mixedCoordinateDelta(field.dataset.keyField ?? "", field.placeholder, field.disabled, 1)),

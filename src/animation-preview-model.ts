@@ -206,7 +206,7 @@ export function bdaPreviewClip(animation: BdaAnimation, id: string, ancestors: s
     clip.notes.push(`${BDA_LABELS[effect.kind]}暂不支持桌面预览，请在真机验证；参数仍可编辑`)
   } else {
     const repeat = clipPasses(effect.repeatCount, effect.repeatMode === 1, clip)
-    if ([...effect.from, ...effect.to].some((range) => range[0] !== range[1])) clip.notes.push("随机范围按中点预览")
+    if ([...effect.from, ...effect.to].some((range) => range[0] !== range[1])) clip.notes.push("随机值取中点")
     const curves = effect.interpolationXY ?? [effect.interpolation, effect.interpolation]
     const scale = effect.kind === "alpha" ? 1 / 255 : effect.kind === "scale" || effect.kind === "shift" && effect.relative ? 1 / 100 : 1
     const axis = (index: 0 | 1) => {

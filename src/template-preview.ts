@@ -1,6 +1,7 @@
 import { builtInProjectTemplatePreviewURL, loadBuiltInProjectTemplate } from "./operations.ts"
 import { SkinArchive } from "./skin.ts"
 import { readArchiveEntry } from "./skin-zip.ts"
+import { createIcon } from "./icons.ts"
 
 const SXI_PREVIEW_PATH = "preview.png"
 
@@ -57,6 +58,12 @@ function previewImageElement(src: string, objectUrl?: string): HTMLImageElement 
   if (objectUrl) image.dataset.objectUrl = objectUrl
   image.src = src
   return image
+}
+
+/** 没有预览图：只留一个图标，不写说明文字。 */
+export function showMissingPreview(host: HTMLElement): void {
+  host.replaceChildren(createIcon("image-off", 20))
+  host.dataset.preview = "failed"
 }
 
 async function showPreviewImage(host: HTMLElement, image: HTMLImageElement): Promise<HTMLImageElement> {
@@ -149,14 +156,14 @@ async function hydrateTemplateCard(card: HTMLButtonElement): Promise<void> {
     await renderTemplatePreview(id, host)
   } catch (error) {
     if (error instanceof MissingPreviewImageError) {
-      host.textContent = "暂无预览图"
+      showMissingPreview(host)
       return
     }
     await yieldPreviewTask()
     try {
       await renderTemplatePreview(id, host)
     } catch {
-      host.textContent = "暂无预览图"
+      showMissingPreview(host)
     }
   }
 }

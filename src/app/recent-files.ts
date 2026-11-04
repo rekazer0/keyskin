@@ -7,7 +7,7 @@ import { symbolSpan } from "../icons"
 import { isTauri, sourceDirectoryEnabledBySettings } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { canvasWrap, welcomeScroller, $ } from "./dom"
-import { renderBlobPreview, archiveDemoImage, MissingPreviewImageError, releaseArchivePreview } from "../template-preview"
+import { renderBlobPreview, archiveDemoImage, MissingPreviewImageError, releaseArchivePreview, showMissingPreview } from "../template-preview"
 
 export const recentFilesKey = "recent-files"
 
@@ -90,7 +90,6 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   const preview = document.createElement("span")
   preview.className = "template-preview"
   preview.ariaHidden = "true"
-  preview.textContent = "正在加载预览…"
   const foot = document.createElement("span")
   foot.className = "template-foot"
   const nameRow = document.createElement("span")
@@ -228,8 +227,7 @@ async function drainRecentPreviews(): Promise<void> {
         const image = await renderRecentPreview(path, host)
         if (readRecentFiles().some((item) => item.path === path)) recentPreviewCache.set(path, image)
       } catch {
-        host.dataset.preview = "failed"
-        host.textContent = "暂无预览图"
+        showMissingPreview(host)
       }
     }
   } finally {
@@ -281,7 +279,7 @@ export function renderRecentFiles(): void {
   grid?.replaceChildren(...items.map(recentCard))
   grid?.toggleAttribute("hidden", items.length === 0)
   if (gridEmpty) gridEmpty.hidden = items.length > 0
-  if (hint) hint.textContent = items.length ? `${items.length} 个文件` : "还没有记录"
+  if (hint) hint.textContent = items.length ? String(items.length) : ""
   // 预览图按路径缓存，这里裁掉已不在列表里的条目并释放它们占用的 blob URL
   const listed = new Set(items.map((item) => item.path))
   for (const [path, image] of [...recentPreviewCache]) {

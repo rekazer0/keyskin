@@ -94,8 +94,8 @@
           <button id="mobile-redo" class="titlebar-icon-button" type="button" title="重做" aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span></button>
         </div>
         <div class="mode-control" aria-label="工作模式">
-          <button data-mode-choice="edit">编辑模式</button>
-          <button class="active" data-mode-choice="preview">交互预览</button>
+          <button data-mode-choice="edit" aria-pressed="false">编辑模式</button>
+          <button class="active" data-mode-choice="preview" aria-pressed="true">交互预览</button>
           <button class="mobile-choice-toggle" type="button" data-mobile-choice="mode" title="切换工作模式" aria-label="交互预览">
             <span class="system-symbol mode-toggle-icon" data-icon="zap" aria-hidden="true"></span>
             <span class="mobile-choice-label">交互预览</span>
@@ -141,8 +141,8 @@
       <aside class="sidebar">
         <div class="pane-heading">
           <div class="sidebar-view-control glass-module" aria-label="左侧视图">
-            <button class="active" data-sidebar-view="overview"><span class="system-symbol" data-icon="layout-grid" aria-hidden="true"></span><span>概览</span></button>
-            <button data-sidebar-view="source"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源文件</span></button>
+            <button class="active" data-sidebar-view="overview" aria-pressed="true"><span class="system-symbol" data-icon="layout-grid" aria-hidden="true"></span><span>概览</span></button>
+            <button data-sidebar-view="source" aria-pressed="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源文件</span></button>
           </div>
         </div>
         <div id="source-file-toolbar" class="source-file-toolbar" aria-label="源文件操作" hidden>
@@ -187,8 +187,8 @@
           </label>
           <div class="preview-toolbar-end">
             <div class="preview-choice glass-module" aria-label="方向">
-              <button class="active" data-orientation-choice="port" title="竖屏" aria-label="竖屏"><span class="system-symbol" data-icon="rectangle-vertical" aria-hidden="true"></span></button>
-              <button data-orientation-choice="land" title="横屏" aria-label="横屏"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span></button>
+              <button class="active" data-orientation-choice="port" aria-pressed="true" title="竖屏" aria-label="竖屏"><span class="system-symbol" data-icon="rectangle-vertical" aria-hidden="true"></span></button>
+              <button data-orientation-choice="land" aria-pressed="false" title="横屏" aria-label="横屏"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span></button>
               <button class="ui-icon-button mobile-choice-toggle" type="button" data-mobile-choice="orientation" title="切换方向" aria-label="切换方向（当前竖屏）"><span class="system-symbol" data-mobile-current-icon data-icon="rectangle-vertical" aria-hidden="true"></span></button>
               <select id="orientation" hidden>
                 <option value="port">竖屏</option>
@@ -196,8 +196,8 @@
               </select>
             </div>
             <div class="preview-choice glass-module" aria-label="外观">
-              <button class="active" data-theme-choice="light" title="浅色" aria-label="浅色"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span></button>
-              <button data-theme-choice="dark" title="深色" aria-label="深色"><span class="system-symbol" data-icon="moon" aria-hidden="true"></span></button>
+              <button class="active" data-theme-choice="light" aria-pressed="true" title="浅色" aria-label="浅色"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span></button>
+              <button data-theme-choice="dark" aria-pressed="false" title="深色" aria-label="深色"><span class="system-symbol" data-icon="moon" aria-hidden="true"></span></button>
               <button class="ui-icon-button mobile-choice-toggle" type="button" data-mobile-choice="theme" title="切换外观" aria-label="切换外观（当前浅色）"><span class="system-symbol" data-mobile-current-icon data-icon="sun" aria-hidden="true"></span></button>
               <select id="theme" hidden><option value="light">浅色</option><option value="dark">深色</option></select>
             </div>
@@ -210,27 +210,26 @@
               <section class="welcome-section welcome-recent">
                 <div class="welcome-section-head">
                   <h2>最近打开</h2>
-                  <span id="welcome-recent-hint">还没有记录</span>
+                  <span id="welcome-recent-hint"></span>
                   <button id="recent-clear" class="welcome-head-action welcome-head-clear" type="button" hidden>清除记录</button>
                   <button id="welcome-recent-open" class="welcome-head-action" type="button"><span class="icon system-symbol" data-icon="folder" aria-hidden="true"></span>打开皮肤…</button>
                 </div>
                 <div id="welcome-recent-grid" class="recent-grid" hidden></div>
                 <div id="welcome-recent-empty" class="recent-grid-empty">
                   <span class="icon system-symbol" data-icon="folder" aria-hidden="true"></span>
-                  <span class="recent-grid-empty-copy"><strong>还没有打开过皮肤</strong><span>拖入或选择 .bdi / .bds / .bda / .ssf / .sxi 文件，最近打开的皮肤会显示在这里。</span></span>
+                  <span class="recent-grid-empty-copy"><strong>拖入皮肤文件即可打开</strong></span>
                 </div>
               </section>
               <header class="welcome-hero">
                 <h1>新建皮肤</h1>
-                <p>从一个模板开始，或导入已有的 .bdi / .bds / .bda / .ssf / .sxi 文件继续编辑。新建项目会完整保留官方基础布局与资源结构。</p>
+                <p class="welcome-formats" aria-label="支持的格式"><em>.bdi</em><em>.bds</em><em>.bda</em><em>.ssf</em><em>.sxi</em></p>
               </header>
 
-              <section class="welcome-section">
-                <div class="welcome-section-head"><h2>从模板开始</h2><span>8 个起点</span></div>
+              <section class="welcome-section" aria-label="模板">
                 <div class="template-grid">
                 <div class="template-grid-row">
                   <button type="button" class="template-card" data-template="default-android">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">百度 BDA 默认</span>
@@ -240,7 +239,7 @@
                     </span>
                   </button>
                   <button type="button" class="template-card" data-template="official-android-bds">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">百度 BDS 旧版</span>
@@ -250,7 +249,7 @@
                     </span>
                   </button>
                   <button type="button" class="template-card" data-template="xiaomi-unified-rounded-blur">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">小米统一圆角</span>
@@ -262,7 +261,7 @@
                 </div>
                 <div class="template-grid-row">
                   <button type="button" class="template-card" data-template="oppo-dual-color">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">OPPO 双色</span>
@@ -272,7 +271,7 @@
                     </span>
                   </button>
                   <button type="button" class="template-card" data-template="iqoo-rounded-black">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">iQOO 圆角黑</span>
@@ -282,7 +281,7 @@
                     </span>
                   </button>
                   <button type="button" class="template-card" data-template="huawei-swipe-symbols-1080">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">华为滑动符号</span>
@@ -294,7 +293,7 @@
                 </div>
                 <div class="template-grid-row">
                   <button type="button" class="template-card" data-template="oppo-swipe-down">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">OPPO 皮肤加下滑</span>
@@ -304,7 +303,7 @@
                     </span>
                   </button>
                   <button type="button" class="template-card" data-template="palm-harmony">
-                    <span class="template-preview" aria-hidden="true">正在加载预览…</span>
+                    <span class="template-preview" aria-hidden="true"></span>
                     <span class="template-foot">
                       <span class="template-name-row">
                         <span class="template-name">手心鸿蒙内置</span>
@@ -319,7 +318,7 @@
 
               <div class="welcome-note">
                 <span class="icon system-symbol" data-icon="lightbulb" aria-hidden="true"></span>
-                <p>新建后可在左侧切换 9 键 / 26 键布局；macOS 使用 ⌘ 单击多选按键，Windows 使用 Ctrl 单击。</p>
+                <p><kbd>⌘</kbd> / <kbd>Ctrl</kbd> + 单击，多选按键</p>
                 <button class="ui-button" data-size="sm" type="button" data-start-tour>使用教程</button>
               </div>
             </div>
@@ -397,7 +396,7 @@
         <div class="preview-zoom-control preview-overview-control glass-module" aria-label="全局预览">
           <button id="layout-overview-toggle" type="button" aria-label="全局预览全部布局" title="全局预览（⌘/Ctrl + 方向键切换布局）" aria-pressed="false" data-icon="maximize" data-icon-size="16"></button>
         </div>
-        <div class="workspace-status" hidden aria-hidden="true"><div id="event-log" aria-live="polite">打开皮肤后可预览按键。</div><div id="panel-status">面板：-- × -- · 预览缩放：--%</div></div>
+        <div class="workspace-status" hidden aria-hidden="true"><div id="event-log" aria-live="polite"></div><div id="panel-status" title="面板尺寸 · 预览缩放"></div></div>
       </section>
 
       <div class="inspector-resize-handle" id="inspector-resize-handle" aria-hidden="true"></div>
@@ -912,7 +911,7 @@
           <section class="settings-page" data-settings-panel="appearance" role="tabpanel" id="settings-panel-appearance" aria-labelledby="settings-tab-appearance">
             <section class="settings-group" aria-labelledby="settings-theme-title">
               <h3 id="settings-theme-title">主题</h3>
-              <div class="settings-row"><span>外观模式</span><div class="ui-segmented" role="group" aria-label="外观模式"><button type="button" data-setting-choice="app-theme" data-value="system">跟随系统</button><button type="button" data-setting-choice="app-theme" data-value="light">浅色</button><button type="button" data-setting-choice="app-theme" data-value="dark">深色</button></div><select id="app-theme" aria-label="外观模式" hidden><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
+              <div class="settings-row"><span>外观模式</span><div class="ui-segmented" role="group" aria-label="外观模式"><button type="button" data-setting-choice="app-theme" data-value="system" title="跟随系统" aria-label="跟随系统"><span class="system-symbol" data-icon="sun-moon" aria-hidden="true"></span></button><button type="button" data-setting-choice="app-theme" data-value="light" title="浅色" aria-label="浅色"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span></button><button type="button" data-setting-choice="app-theme" data-value="dark" title="深色" aria-label="深色"><span class="system-symbol" data-icon="moon" aria-hidden="true"></span></button></div><select id="app-theme" aria-label="外观模式" hidden><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
               <label class="settings-row"><span>强调色</span><span class="ui-input ui-color settings-color"><input id="interface-accent" type="color" value="#3a6df0" aria-label="强调色"><output id="interface-accent-value" for="interface-accent">#3A6DF0</output></span></label>
               <div class="settings-row"><span>界面密度</span><div class="ui-segmented" role="group" aria-label="界面密度"><button type="button" data-setting-choice="interface-density" data-value="standard">标准</button><button type="button" data-setting-choice="interface-density" data-value="compact">紧凑</button></div><select id="interface-density" aria-label="界面密度" hidden><option value="standard">标准</option><option value="compact">紧凑</option></select></div>
             </section>

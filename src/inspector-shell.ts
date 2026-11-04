@@ -8,6 +8,7 @@
  * 只负责呈现，不写配置：恢复也是把输入框改回基线再派发 input / change，由各模块写回。
  */
 
+import { playEnter } from "./motion"
 import { createIcon } from "./icons"
 import { scrubbableField } from "./number-input-wheel"
 
@@ -386,6 +387,8 @@ let selectionContext = ""
 /** 渲染出新值后调用：换了选择对象就重拍基线，否则只清掉已回到基线的标记（撤销 / 重做不触发 input）。 */
 export function syncInspectorRows(context: string): void {
   const fresh = context !== selectionContext
+  // 换了选择对象：整块内容淡入，说明检查器里已经是另一个对象（首次填充不算）
+  if (fresh && selectionContext) playEnter(inspector())
   selectionContext = context
   if (fresh) keyedBaselines.clear()
   collectRows()
