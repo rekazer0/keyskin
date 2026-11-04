@@ -1,0 +1,110 @@
+/**
+ * 动效辅助（DESIGN.md §6）：时长与曲线从 tokens.css 读取，只动 opacity / transform，交给合成线程。
+ * prefers-reduced-motion 下 tokens 把时长归零，这里随之跳过，不再单独判断。
+ */
+
+type Duration = "fast" | "base" | "slow"
+type Ease = "standard" | "emphasized"
+
+function timing(duration: Duration, ease: Ease): KeyframeAnimationOptions | undefined {
+  const style = getComputedStyle(document.documentElement)
+  const ms = Number.parseFloat(style.getPropertyValue(`--duration-${duration}`))
+  if (!(ms > 0) || typeof Element.prototype.animate !== "function") return undefined
+  return { duration: ms, easing: style.getPropertyValue(`--ease-${ease}`).trim() || "ease-out" }
+}
+
+const entering = new WeakMap<Element, Animation>()
+
+/** 内容换了一批（换选择对象、换设置页）时淡入；连续触发时只保留最后一次。 */
+export function playEnter(element: Element | null | undefined): void {
+  if (!element) return
+  const options = timing("base", "standard")
+  if (!options) return
+  entering.get(element)?.cancel()
+  entering.set(element, element.animate([{ opacity: 0 }, { opacity: 1 }], options))
+}
+
+// —— 分段控件：选中项切换时，滑块从旧选项滑到新选项 ——
+// 同一套逻辑覆盖 .ui-segmented 以及标题栏 / 画布工具条 / 左侧栏 / 设置导航里的同类分组：
+// 只监听 aria-pressed / aria-selected 的变化（这两个属性很少变），不给每个控件单独挂观察者。
+
+const SEGMENTED = ".ui-segmented:not([data-multiple]), .mode-control, .sidebar-view-control, .preview-choice, .settings-sidebar"
+const ON = "true"
+
+function boxIn(container: Element, element: Element): DOMRect {
+  const outer = container.getBoundingClientRect()
+  const inner = element.getBoundingClientRect()
+  return new DOMRect(
+    inner.left - outer.left - container.clientLeft + container.scrollLeft,
+    inner.top - outer.top - container.clientTop + container.scrollTop,
+    inner.width,
+    inner.height,
+  )
+}
+
+function slide(container: HTMLElement, from: DOMRect, target: HTMLElement): void {
+  const options = timing("base", "emphasized")
+  const to = boxIn(container, target)
+  if (!options || !from.width || !to.width || (from.x === to.x && from.y === to.y)) return
+  container.querySelector(":scope > .ui-segment-thumb")?.remove()
+  const thumb = document.createElement("div")
+  thumb.className = "ui-segment-thumb"
+  thumb.setAttribute("aria-hidden", "true")
+  thumb.style.transform = `translate(${to.x}px, ${to.y}px)`
+  thumb.style.width = `${to.width}px`
+  thumb.style.height = `${to.height}px`
+  container.prepend(thumb)
+  container.dataset.sliding = ""
+  const start = `translate(${from.x}px, ${from.y}px) scale(${from.width / to.width}, ${from.height / to.height})`
+  const animation = thumb.animate([{ transform: start }, { transform: thumb.style.transform }], options)
+  const finish = () => {
+    if (!thumb.isConnected) return
+    thumb.remove()
+    delete container.dataset.sliding
+  }
+  animation.addEventListener("finish", finish)
+  animation.addEventListener("cancel", finish)
+}
+
+export function initSegmentSlide(): void {
+  const observer = new MutationObserver((records) => {
+    const previous = new Map<Element, DOMRect>()
+    const targets = new Map<HTMLElement, HTMLElement>()
+    for (const record of records) {
+      const button = record.target as HTMLElement
+      const container = button.parentElement
+      if (!container?.matches(SEGMENTED)) continue
+      if (record.oldValue === ON && button.getAttribute(record.attributeName!) !== ON && !previous.has(container)) {
+        // 上一次滑动还没结束：从滑块当前的位置接着滑
+        const thumb = container.querySelector(":scope > .ui-segment-thumb")
+        previous.set(container, boxIn(container, thumb ?? button))
+      } else if (record.oldValue !== ON && button.getAttribute(record.attributeName!) === ON) {
+        targets.set(container, button)
+      }
+    }
+    for (const [container, target] of targets) {
+      const from = previous.get(container)
+      if (from && target.isConnected) slide(container, from, target)
+    }
+  })
+  observer.observe(document.body, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["aria-pressed", "aria-selected"] })
+}
+
+/** 用户点开折叠组时，组内内容淡入；程序重建列表时自动展开的组不播放。 */
+export function initDisclosureReveal(root: HTMLElement): void {
+  root.addEventListener("click", (event) => {
+    const summary = (event.target as Element | null)?.closest("summary")
+    const group = summary?.parentElement
+    if (!(group instanceof HTMLDetailsElement) || group.open || !root.contains(group)) return
+    group.addEventListener("toggle", () => {
+      if (!group.open) return
+      for (const child of Array.from(group.children)) if (child !== summary) playEnter(child)
+    }, { once: true })
+  })
+}
+
+/** 整窗换色（浅色 / 深色）：交给 View Transitions 交叉淡化；不支持、后台或时长为 0 时直接切换。 */
+export function crossfade(update: () => void): void {
+  if ("startViewTransition" in document && document.visibilityState === "visible" && timing("slow", "standard")) document.startViewTransition(update)
+  else update()
+}

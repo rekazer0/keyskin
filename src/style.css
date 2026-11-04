@@ -1678,16 +1678,6 @@ body:has(.canvas-wrap.empty) .workspace {
   display: block;
 }
 
-@keyframes glass-select {
-  from { opacity: 0.72; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes glass-menu-in {
-  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
 #mobile-inspector-selection {
   display: none;
 }
@@ -3485,6 +3475,23 @@ input[type="search"]:focus {
   to { opacity: 1; transform: none }
 }
 
+/* 换主题时整窗交叉淡化（src/motion.ts 的 crossfade） */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-slow);
+  animation-timing-function: var(--ease-standard);
+}
+
+/* 菜单从触发按钮所在的角展开（各菜单自己的 transform-origin） */
+@keyframes ui-menu {
+  from { opacity: 0; transform: translateY(calc(var(--space-xs) * -1)) scale(0.96) }
+  to { opacity: 1; transform: none }
+}
+
+@keyframes ui-shimmer {
+  to { transform: translateX(100%) }
+}
+
 @keyframes ui-draft-pulse {
   0%, 100% { box-shadow: 0 0 0 0 transparent }
   50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--selection) 45%, transparent) }
@@ -3536,7 +3543,10 @@ dialog[open]::backdrop {
   animation: ui-fade var(--duration-base) var(--ease-standard);
 }
 
-.toolbar-menu,
+.toolbar-menu {
+  animation: ui-menu var(--duration-base) var(--ease-emphasized);
+}
+
 #files .source-tree {
   animation: ui-rise var(--duration-base) var(--ease-standard);
 }
@@ -4834,6 +4844,27 @@ main {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
+/* 切换选中项时的滑块（src/motion.ts）：外观与各自的选中项一致，滑动期间选中项不画底 */
+:where(.mode-control, .sidebar-view-control, .preview-choice) {
+  position: relative;
+  isolation: isolate;
+}
+
+:root body :is(.mode-control, .sidebar-view-control) > .ui-segment-thumb {
+  background: var(--material-panel);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+:root body .preview-choice > .ui-segment-thumb {
+  background: var(--material-control);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+:root body :is(.mode-control, .sidebar-view-control, .preview-choice)[data-sliding] > button.active:not([hidden]) {
+  background: transparent;
+  box-shadow: none;
+}
+
 @media (hover: hover) {
 
 :root body .preview-choice button:hover:not(.active):not(:disabled) {
@@ -5977,6 +6008,24 @@ main {
   line-height: 21px;
 }
 
+/* 支持的格式：一排等宽角标，代替整段说明 */
+:root body .welcome-formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+:root body .welcome-formats em {
+  padding: var(--space-2xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--material-content);
+  color: var(--secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-style: normal;
+  line-height: 1.5;
+}
+
 :root body .welcome-section {
   gap: 12px;
 }
@@ -6132,16 +6181,60 @@ main {
   outline-offset: -1px;
   background: var(--material-panel);
   box-shadow: none;
-  transition: outline-color var(--duration-base) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard);
+  transition:
+    outline-color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-emphasized);
+  /* 欢迎页出现时卡片依次浮上来：--_row / --_col 决定先后，单步 30ms，整排不超过 0.3s */
+  animation: ui-rise var(--duration-slow) var(--ease-emphasized) backwards;
+  animation-delay: calc((var(--_row, 0) * 3 + var(--_col, 0)) * var(--duration-fast) / 4);
 }
+
+:root body .template-grid-row:nth-child(2) { --_row: 1; }
+:root body .template-grid-row:nth-child(3) { --_row: 2; }
+:root body :is(.template-grid-row, .recent-grid) > .template-card:nth-child(3n + 2) { --_col: 1; }
+:root body :is(.template-grid-row, .recent-grid) > .template-card:nth-child(3n) { --_col: 2; }
 
 @media (hover: hover) {
 
 :root body .template-card:hover {
   border-color: transparent;
   outline-color: var(--accent);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(calc(var(--space-2xs) * -1));
 }
+
+:root body .template-card:hover .template-go {
+  color: var(--accent);
+  transform: translateX(var(--space-2xs));
+}
+}
+
+:root body .template-card:active {
+  transform: scale(0.99);
+}
+
+/* 预览还没画好：骨架底上扫过一道高光；没有预览图时只留一个图标 */
+:root body .template-preview:empty {
+  position: relative;
+}
+
+:root body .template-preview:empty::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 6%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: ui-shimmer calc(var(--duration-slow) * 4) var(--ease-standard) infinite;
+}
+
+:root body .template-preview[data-preview="failed"] {
+  align-items: center;
+  color: var(--tertiary);
+}
+
+:root body .template-preview img {
+  animation: ui-fade var(--duration-base) var(--ease-standard);
 }
 
 :root body .template-preview {
@@ -6172,6 +6265,7 @@ main {
 
 :root body .template-go {
   color: var(--tertiary);
+  transition: color var(--duration-base) var(--ease-standard), transform var(--duration-base) var(--ease-emphasized);
 }
 
 :root body .template-meta {
@@ -6196,6 +6290,16 @@ main {
   color: var(--secondary);
   font-size: var(--font-size-xs);
   line-height: 1.5;
+}
+
+:root body .welcome-note kbd {
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: var(--material-panel);
+  box-shadow: inset 0 -1px 0 var(--line);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
 }
 
 :root body .welcome-note .system-symbol {

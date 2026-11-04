@@ -13,13 +13,19 @@ import { syncAiDesignContext } from "./ai-panel"
 
 export function syncSegmentedControls(): void {
   for (const button of modeChoiceButtons) {
-    button.classList.toggle("active", button.dataset.modeChoice === mode.value)
+    const on = button.dataset.modeChoice === mode.value
+    button.classList.toggle("active", on)
+    button.setAttribute("aria-pressed", String(on))
   }
   for (const button of themeChoiceButtons) {
-    button.classList.toggle("active", button.dataset.themeChoice === theme.value)
+    const on = button.dataset.themeChoice === theme.value
+    button.classList.toggle("active", on)
+    button.setAttribute("aria-pressed", String(on))
   }
   for (const button of orientationChoiceButtons) {
-    button.classList.toggle("active", button.dataset.orientationChoice === orientation.value)
+    const on = button.dataset.orientationChoice === orientation.value
+    button.classList.toggle("active", on)
+    button.setAttribute("aria-pressed", String(on))
   }
   const values: Record<string, string> = { mode: mode.value, theme: theme.value, orientation: orientation.value }
   const labels: Record<string, string> = {

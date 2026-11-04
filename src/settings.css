@@ -97,6 +97,10 @@
 #settings-dialog .settings-nav-item:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
 #settings-dialog .settings-nav-item[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 #settings-dialog .settings-nav-item[aria-selected="true"] small { color: inherit; }
+/* 切换分类时的滑块（src/motion.ts）：与选中项同色，滑动期间选中项不画底 */
+#settings-dialog .settings-sidebar { position: relative; isolation: isolate; }
+#settings-dialog .settings-sidebar > .ui-segment-thumb { background: var(--accent-soft); box-shadow: none; border-radius: var(--radius-md); }
+#settings-dialog .settings-sidebar[data-sliding] > .settings-nav-item[aria-selected="true"] { background: transparent; }
 #settings-dialog .settings-nav-item:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 
 /* —— 页面、分组与行 —— */

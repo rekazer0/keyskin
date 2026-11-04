@@ -209,8 +209,8 @@ export function wireEditingControls(): void {
     else populateKeyInspector()
     eventLog.textContent =
       mode.value === "edit"
-        ? "编辑模式：点击选择按键，在检查器中修改布局与属性。"
-        : "交互预览：配置只读；可点击、长按或滑动按键模拟操作。"
+        ? "点选按键，在右侧编辑"
+        : "点击、长按或滑动按键试用"
   })
   // 只读表单里的禁用控件仍接收指针（components.css），点击统一提示切换模式。
   document.addEventListener("pointerdown", (event) => {

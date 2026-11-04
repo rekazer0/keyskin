@@ -30,7 +30,7 @@
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
   cursor: default;
-  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
 }
 .ui-icon-button { padding: 0; width: var(--_height); background: transparent; color: var(--secondary); }
 .ui-button[data-size="sm"], .ui-icon-button[data-size="sm"] { --_height: var(--control-height-sm); font-size: var(--font-size-xs); }
@@ -43,7 +43,7 @@
   .ui-button[data-variant="primary"]:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); color: var(--on-accent); }
   .ui-button[data-variant="danger"]:hover { background: color-mix(in srgb, var(--state-danger) 10%, transparent); color: var(--state-danger); }
 }
-.ui-button:active, .ui-icon-button:active { background: color-mix(in srgb, var(--text) 12%, transparent); }
+.ui-button:active, .ui-icon-button:active { background: color-mix(in srgb, var(--text) 12%, transparent); transform: scale(0.96); }
 .ui-button[aria-pressed="true"], .ui-icon-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
 /* —— 文件操作弹窗：进度与结果共用同一个窗口 —— */
@@ -165,6 +165,8 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 
 /* —— 分段控件 —— */
 .ui-segmented {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   gap: var(--space-2xs);
   height: var(--control-height-md);
@@ -197,11 +199,17 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 }
 @media (hover: hover) { .ui-segmented > button:hover { color: var(--text); } }
 .ui-segmented > button[aria-pressed="true"],
-.ui-segmented > button[aria-selected="true"] {
+.ui-segmented > button[aria-selected="true"],
+.ui-segment-thumb {
   background: var(--control);
   color: var(--text);
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--line);
 }
+/* 切换选中项时由 src/motion.ts 插入的滑块：从旧选项滑到新选项，结束后移除，新选项的底色接上。
+   滑动期间新选项不画自己的底，避免两块底叠在一起。 */
+.ui-segment-thumb { position: absolute; top: 0; left: 0; z-index: -1; border-radius: var(--radius-sm); transform-origin: 0 0; pointer-events: none; will-change: transform; }
+.ui-segmented[data-sliding] > button[aria-pressed="true"],
+.ui-segmented[data-sliding] > button[aria-selected="true"] { background: transparent; box-shadow: none; }
 
 /* —— 开关 —— */
 .ui-switch {
@@ -446,7 +454,8 @@ body {
 .ui-animation-transport { display: flex; align-items: center; gap: var(--space-2xs); min-width: 0; }
 .ui-animation-time { flex: 1; min-width: 0; margin-left: var(--space-xs); overflow: hidden; color: var(--secondary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .ui-animation-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.6; overflow-wrap: anywhere; }
-.ui-animation-note:empty { display: none; }
+.ui-animation-note[hidden] { display: none; }
+.ui-animation-note > .ui-icon { margin-right: var(--space-xs); vertical-align: -1px; }
 /* 横排（画布下方的播放条）：左边舞台，右边时间轴、走带与说明；右侧整组在舞台高度里纵向居中 */
 .ui-animation-player[data-layout="row"] { grid-template-columns: minmax(240px, 1fr) minmax(200px, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: var(--space-lg); align-items: center; }
 .ui-animation-player[data-layout="row"] > .ui-animation-stage { grid-row: 1; width: 100%; max-width: var(--animation-stage-width); justify-self: center; }

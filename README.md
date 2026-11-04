@@ -6,7 +6,7 @@
 
 ## 在线版本
 
-- 国内：[https://bdieditor-bdieditor-d4gdhm3ir22dcc04c.webapps.tcloudbase.com/](https://bdieditor-bdieditor-d4gdhm3ir22dcc04c.webapps.tcloudbase.com/)
+- 国内：[https://keyskin.work](https://keyskin.work)
 - 海外：[https://rekazer0.github.io/keyskin/](https://rekazer0.github.io/keyskin/)
 
 ## 界面预览

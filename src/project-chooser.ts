@@ -53,7 +53,6 @@ export function initializeProjectChooser(form: HTMLFormElement): void {
       const preview = document.createElement("span")
       preview.className = "template-preview"
       preview.setAttribute("aria-hidden", "true")
-      preview.textContent = "正在加载预览…"
       option.prepend(preview)
       grid.append(option)
     }

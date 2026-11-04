@@ -19,7 +19,7 @@ import {
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
   Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
-  SkipBack, Rotate3d, ArrowUpRight, Square,
+  SkipBack, Rotate3d, ArrowUpRight, Square, ImageOff, SunMoon,
 } from "lucide"
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
@@ -66,7 +66,7 @@ const icons: Record<string, IconNode> = {
   lightbulb: Lightbulb, "sliders-horizontal": SlidersHorizontal, paperclip: Paperclip, sparkles: Sparkles,
   "volume-x": VolumeX, check: Check, "chevrons-up-down": ChevronsUpDown, "code-xml": CodeXml,
   "file-down": FileDown, minus: Minus, scan: Scan, paintbrush: Paintbrush,
-  "circle-alert": CircleAlert, "folder-input": FolderInput, "grid-2x2": Grid2x2, maximize: Maximize,
+  "circle-alert": CircleAlert, "folder-input": FolderInput, "image-off": ImageOff, "sun-moon": SunMoon, "grid-2x2": Grid2x2, maximize: Maximize,
   pointer: Pointer, timer: Timer, frame: Frame, "layout-panel-top": LayoutPanelTop,
   // 手心内置工具栏（皮肤没有工具栏图标时画布代画）
   shirt: Shirt,

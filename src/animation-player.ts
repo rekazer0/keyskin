@@ -116,7 +116,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const resume = !thumbnail && session.loop && session.looping === key
   if (!thumbnail && session.looping !== key) session.looping = ""
   if (clip.duration > MAX_DURATION) notes.push("长动画只预览前 60 秒")
-  if (tracks.length && !sample) notes.push("示例按键按当前参数播放")
+  if (tracks.length && !sample) notes.push("示例按键")
   // Every surface plays a clip at real speed; only a full player's 慢放 switches slows playback down.
   const rate = () => !thumbnail && session.slow ? SLOW_RATE : 1
 
@@ -162,7 +162,9 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     const text = [...new Set(notes)]
     emptyState.hidden = hasContent
     emptyState.textContent = loading ? "正在加载预览资源…" : text[0] ?? "暂无可播放的内容"
-    note.textContent = loading ? "" : hasContent ? text.join(" · ") : text.slice(1).join(" · ")
+    const noteText = loading ? "" : hasContent ? text.join(" · ") : text.slice(1).join(" · ")
+    note.hidden = !noteText
+    note.replaceChildren(createIcon("info", 12), noteText)
   }
 
   /* —— stage —— */
@@ -216,7 +218,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     // Only thumbnails zoom in: retain real sampling coordinates and the full editor's handle geometry.
     const maxFit = thumbnail && !clip.images.length ? 1.75 : 1
     fit = Number.isFinite(reach) && reach > 0 ? Math.min(maxFit, 1 / reach) : 1
-    if (fit < 1) notes.push(`舞台缩小到 ${Math.round(fit * 100)}% 以容纳整段运动`)
+    if (fit < 1) notes.push(`舞台缩放 ${Math.round(fit * 100)}%`)
   }
 
   const draw = () => {
