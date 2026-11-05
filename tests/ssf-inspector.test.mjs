@@ -10,19 +10,19 @@ test('SSF multi-selection intersects properties and omits single-key actions', (
     [{ label: '背景', blocks: [{ path: 'one', section: 'A', omit: ['TYPE'], actions: ['copy'] }] }],
     [{ label: '背景', blocks: [{ path: 'two', section: 'B' }] }],
   ])
-  assert.deepEqual(JSON.parse(JSON.stringify(result)), [{ label: '背景', blocks: [{ path: 'one', section: 'A', only: ['NORMAL'], note: '修改会作用于所有选中按键；共享样式也会影响其他引用它的按键。', peers: [{ path: 'two', section: 'B' }] }] }])
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), [{ label: '背景', blocks: [{ path: 'one', section: 'A', only: ['NORMAL'], note: '作用于所有选中按键', peers: [{ path: 'two', section: 'B' }] }] }])
   assert.equal(context.commonKeyGroups([[{ label: '前景', blocks: [{ path: 'one', section: 'A' }] }], []]).length, 0)
 })
 
 test('SSF numeric controls keep names, versions and unknown values as text', () => {
-  const context = run(declarations('NUMERIC_FIELDS', 'valueInput'), {
-    element: () => ({ type: 'text', setAttribute() {}, addEventListener() {} }), isEditing: () => true,
-    ssfFieldLabel: (key) => key,
+  const context = run(declarations('NUMERIC_FIELDS', 'textField'), {
+    element: () => ({ append(kind) { this.kind = kind } }), caption() {}, isEditing: () => true,
+    ssfFieldLabel: (key) => key, fieldControl: (spec) => spec.kind,
   })
   const targets = [{ path: 'phoneTheme.ini', section: 'General' }]
-  for (const key of ['skin_name', 'skin_version', 'sound', 'CUSTOM']) assert.equal(context.valueInput(key, '001', targets).type, 'text')
-  assert.equal(context.valueInput('TEXT_SIZE', '18', targets).type, 'number')
-  assert.equal(context.valueInput('TEXT_SIZE', 'default', targets).type, 'text')
+  for (const key of ['skin_name', 'skin_version', 'sound', 'CUSTOM']) assert.equal(context.textField(key, '001', targets).kind, 'text')
+  assert.equal(context.textField('TEXT_SIZE', '18', targets).kind, 'number')
+  assert.equal(context.textField('TEXT_SIZE', 'default', targets).kind, 'text')
 })
 
 test('SSF edits to multiple files commit together and preview only after committing', () => {

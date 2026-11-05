@@ -253,3 +253,34 @@ test('SSF → BDI puts the Sogou pinyin bar in the iOS input row above the candi
   const css = IniDocument.parse(archive.getText('light/skin/res/default.css'))
   assert.equal(css.get(`STYLE${gen.get('INPUT', 'FORE_STYLE')}`, 'NM_COLOR'), 'FF123456')
 })
+
+test('SSF toolbar embedded in the root background is split by layout geometry, not placeholder artwork', async () => {
+  const files = unzipSync(ssfFixture())
+  const gen = IniDocument.parse(template.getText('light/skin/port/gen.ini'))
+  const height = Number(gen.get('PANEL', 'SIZE').split(',')[1])
+  const barHeight = Number(gen.get('CAND', 'VIEW_RECT').split(',')[3])
+  const background = solid(20, height + barHeight, [20, 40, 60])
+  background.data.set(solid(20, barHeight, [180, 90, 30]).data)
+  for (const folder of ['status1', 'status2']) {
+    const path = `1080/${folder}/phoneSkin.ini`
+    const skin = parse(files, path)
+    skin.set('RootView', 'BG_IMAGE', 'toolbar-background.png')
+    skin.set('CandidateView', 'BG_IMAGE', 'ToolbarPlaceholder')
+    skin.appendSection('ToolbarPlaceholder', [{ key: 'NORMAL', value: 'toolbar-placeholder.png' }])
+    files[path] = strToU8(skin.toString())
+    files[`1080/${folder}/toolbar-background.png`] = encodePng(background)
+    files[`1080/${folder}/toolbar-placeholder.png`] = encodePng(solid(1, 1, [0, 0, 0], 0))
+  }
+  const { archive } = convertSsfToBaidu(await SsfPackage.open(zipSync(files)), template, 1080)
+  for (const theme of ['light', 'dark']) {
+    const converted = IniDocument.parse(archive.getText(`${theme}/skin/port/gen.ini`))
+    const cand = IniDocument.parse(archive.getText(`${theme}/skin/port/${converted.get('CAND', 'LAYOUT_NAME')}.cnd`))
+    const css = IniDocument.parse(archive.getText(`${theme}/skin/res/default.css`))
+    const image = (style) => decodePng(archive.getBytes(`${theme}/skin/res/${css.get(`STYLE${style}`, 'NM_IMG').split(',')[0]}.png`))
+    const panelImage = image(converted.get('PANEL', 'BACK_STYLE'))
+    const barImage = image(cand.get('CAND', 'BACK_STYLE'))
+    assert.deepEqual([panelImage.height, barImage.height], [height, barHeight])
+    assert.deepEqual(pixel(panelImage, 0, 0), [20, 40, 60, 255])
+    assert.deepEqual(pixel(barImage, 0, barHeight - 1), [180, 90, 30, 255])
+  }
+})

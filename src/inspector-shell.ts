@@ -10,6 +10,7 @@
 
 import { playEnter } from "./motion"
 import { createIcon } from "./icons"
+import { shortcutLabel } from "./dom-element"
 import { scrubbableField } from "./number-input-wheel"
 
 type InspectorInput = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
@@ -25,9 +26,9 @@ const SECTION_HINTS: Record<string, string> = {
   皮肤信息: "Info.txt",
   候选栏与工具栏: "CAND",
 }
-const SECTION_SELECTOR = ":is(.inspector-group, .document-property-section, .bda-inspector-section)"
+const SECTION_SELECTOR = ".ui-section"
 /** 一条属性行：筛选、改动标记和恢复都以它为单位。 */
-const ROW_SELECTOR = ".ui-field, .document-property-field, .bda-text-field, .bda-readonly-field, .bda-range-field, .bda-color-field, .fore-style-reference-field, .inspector-gesture"
+const ROW_SELECTOR = ".ui-field, .inspector-gesture"
 const SCRUB_HANDLES = ".ui-input > .ui-input-affix, .ui-field > span:first-child, .document-field-caption"
 const baselines = new WeakMap<HTMLElement, string>()
 const keyedBaselines = new Map<string, string>()
@@ -120,7 +121,7 @@ function applyFilter(): void {
   const empty = root.querySelector<HTMLElement>(".inspector-filter-empty")
   if (empty) {
     empty.hidden = !query || matches > 0
-    empty.textContent = `没有与“${filterQuery.trim()}”匹配的属性`
+    empty.textContent = "没有匹配的属性"
   }
 }
 
@@ -209,6 +210,10 @@ function collectRows(): void {
     const el = input.closest<HTMLElement>(ROW_SELECTOR) ?? input.closest("label")
     if (!el) continue
     grouped.set(el, [...(grouped.get(el) ?? []), input])
+  }
+  // 分段这类只有按钮的行（field()）靠自己记下的值参与改动标记与重置。
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-inspector-value]"))) {
+    if (el.matches(ROW_SELECTOR) && !grouped.has(el)) grouped.set(el, [])
   }
   rows = Array.from(grouped, ([el, inputs]) => {
     const row = { el, inputs }
@@ -304,10 +309,9 @@ function renderEmptyState(): void {
   const title = document.createElement("strong")
   title.textContent = "未选择对象"
   const hint = document.createElement("p")
-  hint.textContent = "在画布或左侧概览中选择按键、面板或样式，属性会显示在这里。"
+  hint.textContent = "在画布或左侧概览中选择按键、面板或样式，属性会显示在这里"
   const shortcuts = document.createElement("dl")
-  const mac = /Mac/.test(navigator.platform)
-  for (const [label, key] of [["撤销", mac ? "⌘Z" : "Ctrl Z"], ["重做", mac ? "⇧⌘Z" : "Ctrl Shift Z"], ["筛选属性", mac ? "⌘F" : "Ctrl F"], ["保存皮肤", mac ? "⌘S" : "Ctrl S"]]) {
+  for (const [label, key] of [["撤销", shortcutLabel("Z")], ["重做", shortcutLabel("Z", true)], ["筛选属性", shortcutLabel("F")], ["保存皮肤", shortcutLabel("S")]]) {
     const term = document.createElement("dt")
     term.textContent = label
     const value = document.createElement("dd")

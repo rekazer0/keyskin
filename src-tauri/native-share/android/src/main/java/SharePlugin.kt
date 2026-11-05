@@ -59,6 +59,11 @@ class CreateWorkspaceArgs {
 }
 
 @InvokeArg
+class PickSkinFileArgs {
+  var initialUri: String? = null
+}
+
+@InvokeArg
 class WorkspaceArgs {
   lateinit var uri: String
 }
@@ -247,6 +252,36 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       )
     }
     startActivityForResult(invoke, intent, "sourceDirectoryResult")
+  }
+
+  @Command
+  fun pickSkinFile(invoke: Invoke) {
+    val args = invoke.parseArgs(PickSkinFileArgs::class.java)
+    // ACTION_OPEN_DOCUMENT 可以拿到持久读写授权；系统默认的 ACTION_GET_CONTENT 只给读权限，保存会被拒。
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+      addCategory(Intent.CATEGORY_OPENABLE)
+      type = "*/*"
+      args.initialUri?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(it)) }
+    }
+    startActivityForResult(invoke, intent, "skinFileResult")
+  }
+
+  @ActivityCallback
+  fun skinFileResult(invoke: Invoke, result: ActivityResult) {
+    val uri = result.data?.data
+    if (result.resultCode != Activity.RESULT_OK || uri == null) {
+      invoke.reject("File picker cancelled")
+      return
+    }
+    try {
+      activity.contentResolver.takePersistableUriPermission(
+        uri,
+        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+      )
+      invoke.resolveObject(uri.toString())
+    } catch (error: Exception) {
+      invoke.reject(error.message ?: "Unable to access selected file", error)
+    }
   }
 
   @ActivityCallback

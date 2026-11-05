@@ -82,17 +82,21 @@ class MotionWriter {
   }
 
   private document(name: string): IniDocument {
-    const merged = IniDocument.parse("")
+    // 逐条 set 插入新键在 5000+ 段的 default.css 上会退化成平方级（导出 BDA 长时间卡住的原因），
+    // 这里按「段首次出现顺序 + 键首次出现顺序 + 后写的值覆盖」拼成文本再解析一次。
+    const sections = new Map<string, Map<string, string>>()
     for (const root of [...this.roots].reverse()) {
       const path = `${root}/${name}`
       if (!this.source.isText(path)) continue
       const document = IniDocument.parse(this.source.getText(path))
       for (const section of document.sections()) {
-        if (!merged.sections().includes(section)) merged.appendSection(section, [])
-        for (const { key, value } of document.entries(section)) merged.set(section, key, value)
+        let entries = sections.get(section)
+        if (!entries) sections.set(section, entries = new Map())
+        for (const { key, value } of document.entries(section)) entries.set(key, value)
       }
     }
-    return merged
+    return IniDocument.parse([...sections].map(([section, entries]) =>
+      `[${section}]\n${[...entries].map(([key, value]) => `${key}=${value}\n`).join("")}`).join(""))
   }
 
   private find(name: string): string | undefined {

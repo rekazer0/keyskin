@@ -126,12 +126,7 @@ for (const [name, colorScheme, viewport] of [
   ["file-operation-mobile", "light", { width: 390, height: 844 }],
 ]) await withPage(async (page) => {
   await page.waitForSelector(".template-card")
-  await page.evaluate(async () => {
-    const { runFileOperation, showFileOperationProgress } = await import("/src/app/file-operations.ts")
-    await runFileOperation("保存", () => { showFileOperationProgress(); return true })
-  })
-  await capture(page, `${name}-success`)
-  await page.locator("#file-operation-close").click()
+  // 成功不弹模态框（DESIGN.md §7），只拍失败态。
   await page.evaluate(async () => {
     const { runFileOperation, showFileOperationProgress } = await import("/src/app/file-operations.ts")
     await runFileOperation("导出", () => { showFileOperationProgress(); throw new Error("无法写入所选位置，请重新选择保存位置。") })
@@ -153,7 +148,7 @@ await withPage(async (page) => {
   await capture(page, "settings")
   await page.keyboard.press("Escape")
   // 图片编辑：资源列表与切片工具栏会挪进画布工作区
-  await page.locator(".sidebar-overview button[data-path]", { hasText: "图片资源" }).first().click()
+  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片", { exact: true }) }).first().click()
   await capture(page, "bds-images")
   await page.locator("#resource-gallery > *").first().click()
   await capture(page, "bds-image")
@@ -190,7 +185,7 @@ for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await openSkinFile(page, "动效.sxi", sxiAnimationFixture(), "skin.json/default/s_info/ss_2")
   for (const mode of ["motion", "particle"]) {
     // 进入后概览让位给动画列表，先点列表顶部的返回再从概览切换。
-    if (mode === "particle") await page.locator('#animation-library button[aria-label="返回布局"]').click()
+    if (mode === "particle") await page.locator('#animation-library button[aria-label="返回"]').click()
     await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).click()
     await page.waitForSelector('#animation-library .ui-listbox [aria-selected="true"]')
     await page.waitForFunction(() => !document.querySelector(".ui-animation-transport button")?.disabled)

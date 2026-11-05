@@ -15,10 +15,11 @@ import type {
   BdaResourceAnimation,
   BdaTransformAnimation,
 } from "./bda.ts"
+import { EVENT_LABELS } from "./config-labels.ts"
 
 type LegacySection = Record<string, string>
 
-/** BDA 绑定到旧版 CSS 的字段：按下 / 抬起 / 出现 / 消失。 */
+/** BDA 绑定到旧版 CSS 的字段：按下 / 松开 / 显示 / 隐藏。 */
 export type LegacyStyleProp = "PRESS_ANIM" | "RELEASE_ANIM" | "SHOW_ANIM" | "HIDE_ANIM"
 
 export type LegacyMotionBinding = {
@@ -45,16 +46,16 @@ type LegacyMotionResources = {
 
 /** 动画绑定的触发时机（protobuf EventType）。 */
 export const BDA_EVENT_LABELS: Record<number, string> = {
-  0: "键盘显示",
-  1: "按下",
-  2: "抬起",
-  3: "元素显示",
-  4: "元素隐藏",
-  5: "空闲进入",
-  6: "空闲退出",
-  7: "长按",
-  8: "输入文字",
-  9: "切换皮肤",
+  0: EVENT_LABELS.keyboardShow,
+  1: EVENT_LABELS.press,
+  2: EVENT_LABELS.release,
+  3: EVENT_LABELS.show,
+  4: EVENT_LABELS.hide,
+  5: EVENT_LABELS.idleEnter,
+  6: EVENT_LABELS.idleExit,
+  7: EVENT_LABELS.hold,
+  8: EVENT_LABELS.input,
+  9: EVENT_LABELS.skinSwitch,
 }
 
 /** 旧版 CSS 动画字段；EventType 里没有对应字段的事件返回 undefined。 */

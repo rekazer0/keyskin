@@ -28,7 +28,7 @@ try {
     })
     if (width < 1000) await page.evaluate(async () => { const { showResourceList } = await import('/src/app/resource-inspector.ts'); showResourceList() })
     await page.locator('.ui-image-card-size:not([hidden])').first().waitFor()
-    assert.equal(await page.locator('#resource-list-title').textContent(), '图片资源')
+    assert.equal(await page.locator('#resource-list-title').textContent(), '图片')
     const cards = await page.locator('.ui-image-card').evaluateAll(items => items.map(el => {
       const preview = el.querySelector('.ui-image-card-preview').getBoundingClientRect()
       const size = el.querySelector('.ui-image-card-size').getBoundingClientRect()

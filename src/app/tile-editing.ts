@@ -307,9 +307,9 @@ export function populateTileInspector(): void {
   duplicateTileButton.disabled = !slice || !isEditing() || fixed
   deleteTileButton.disabled = !slice || !isEditing() || fixed
   tileTitle.textContent = usage ? "图片样式切片" : slice ? `切片 #${slice.index}`
-    : bdaSelected ? "未被当前 BDA 外观引用"
-    : sliceStore() === "none" ? "搜狗皮肤直接使用整张图片，没有切片"
-    : "未选择切片 · 点击图片中的切片进行编辑"
+    : bdaSelected ? "未使用"
+    : sliceStore() === "none" ? "整张图片，没有切片"
+    : "未选择切片"
   for (const field of tileSourceFields) {
     const index = Number(field.dataset.tileSource)
     if (field.parentElement?.firstChild?.nodeType === Node.TEXT_NODE) field.parentElement.firstChild.textContent = `${["X", "Y", "宽", "高"][index]} `
@@ -498,7 +498,7 @@ export function setDrawingTile(active: boolean): void {
     appState.moveStart = undefined
     appState.moveSource = undefined
   }
-  newTileButton.classList.toggle("active", active)
+  newTileButton.setAttribute("aria-pressed", String(active))
   atlasCanvas.classList.toggle("drawing", active)
   drawAtlas()
 }

@@ -37,7 +37,7 @@ try {
   await page.evaluate(async () => (await import('/src/app/navigation.ts')).selectFile('light/skin/port/py_26.ini'))
 
   // 悬停面板的整体动画样式：没有按键用它，面板重新播放。
-  const card = page.locator('#document-fields [data-document-key="ANIM_STYLE"] .style-reference-input')
+  const card = page.locator('#document-fields [data-document-key="ANIM_STYLE"] .ui-style-ref-list')
   await card.waitFor()
   const before = (await state()).panelStartedAt
   await page.waitForTimeout(20)

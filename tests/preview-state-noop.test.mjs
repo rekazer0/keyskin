@@ -9,12 +9,11 @@ const preview = ast.statements.find(n => ts.isClassDeclaration(n) && n.name.text
 for (const [method, property, same, changed] of [
   ['setMode', 'mode', 'edit', 'preview'],
   ['setEditTool', 'editTool', 'select', 'move'],
-  ['setParticlePreview', 'particlePreview', undefined, {}],
 ]) test(`${method} preserves interaction and skips rendering for unchanged state`, () => {
   const body = preview.members.find(n => n.name?.getText(ast) === method).body.getText(ast)
   const calls = []
   const target = { [property]: same, cancelDragDraw: () => calls.push('cancel'), clearPress() {}, cancelEditTouch() {}, cancelEditDrag() {}, updateCursor() {}, restartLegacyPanelAnimation: () => calls.push('restart'), draw: () => calls.push('draw') }
-  const fn = vm.runInNewContext(ts.transpile(`(function(${method === 'setMode' ? 'mode' : method === 'setEditTool' ? 'tool' : 'emitter'}) ${body})`), { stopLegacyPanelAnimation })
+  const fn = vm.runInNewContext(ts.transpile(`(function(${method === 'setMode' ? 'mode' : 'tool'}) ${body})`), { stopLegacyPanelAnimation })
   fn.call(target, same)
   assert.deepEqual(calls, [])
   fn.call(target, changed)

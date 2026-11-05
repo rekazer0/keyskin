@@ -4,8 +4,7 @@
  * 播放条默认按内容高度停靠，拖动上边缘可以改高（双击恢复默认），高度与位置只影响窗口，不写进皮肤。
  * 窄屏仍在检查器里自上而下排列，由 animation-inspector.ts 决定。
  */
-import { element, iconButton } from "./dom-element.ts"
-import { createIcon } from "./icons.ts"
+import { element, paneHeader, searchField } from "./dom-element.ts"
 
 const STAGE_HEIGHT_KEY = "animationStageHeightV1"
 /** 播放条高度：未设置时随内容；拖动后是固定像素值。 */
@@ -48,19 +47,11 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
   const workspace = document.querySelector<HTMLElement>(".workspace")!
   const library = element("section", "animation-library")
   library.id = "animation-library"
-  const header = element("div", "animation-library-header")
-  const title = element("strong")
-  const count = element("span", "animation-library-count")
-  header.append(iconButton("arrow-left", "返回布局", actions.back), title, count)
-  const search = element("label", "ui-input")
-  const searchInput = element("input")
-  searchInput.type = "text"
-  searchInput.setAttribute("role", "searchbox")
-  searchInput.autocomplete = "off"
-  searchInput.spellcheck = false
-  const searchIcon = element("span", "ui-input-affix")
-  searchIcon.append(createIcon("search", 14))
-  search.append(searchIcon, searchInput)
+  const header = paneHeader({ back: { to: "布局", run: actions.back }, title: "" })
+  const title = header.querySelector("h2")!
+  const count = header.querySelector<HTMLElement>(".ui-badge")!
+  const search = searchField({ label: "搜索", onInput: () => filter() })
+  const searchInput = search.querySelector("input")!
   /* —— 左栏分两份列表：动画 与 样式，用分段开关切换 —— */
   const tabs = element("div", "ui-segmented animation-library-tabs")
   tabs.dataset.fill = ""
@@ -168,7 +159,8 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
   let styleCount = 0
   let animationCount = ""
   const applyCount = () => {
-    count.textContent = list === "styles" ? `${styleCount} 个` : animationCount
+    count.textContent = list === "styles" ? String(styleCount) : animationCount
+    count.hidden = !count.textContent
   }
   const show = (next: AnimationList) => {
     if (next === "styles" && !styleNoun) return
@@ -177,9 +169,7 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
       tabButtons[key].setAttribute("aria-pressed", String(key === list))
       bodies[key].hidden = key !== list
     }
-    const subject = list === "styles" ? styleNoun : noun
-    searchInput.placeholder = `搜索${subject}`
-    searchInput.setAttribute("aria-label", `搜索${subject}`)
+    searchInput.setAttribute("aria-label", `搜索${list === "styles" ? styleNoun : noun}`)
     applyCount()
   }
   function tab(name: AnimationList, label: string): HTMLButtonElement {
@@ -197,13 +187,6 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
       option.hidden = Boolean(query) && !option.textContent!.toLowerCase().includes(query)
     }
   }
-  searchInput.addEventListener("input", filter)
-  searchInput.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || !searchInput.value) return
-    event.stopPropagation()
-    searchInput.value = ""
-    filter()
-  })
   const hosts: AnimationWorkspaceHosts = {
     library: bodies.animations,
     styles: bodies.styles,
@@ -238,6 +221,7 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
       bodies.styles.replaceChildren()
       stage.replaceChildren()
       searchInput.value = ""
+      searchInput.dispatchEvent(new Event("input"))
       styleNoun = ""
       tabButtons.styles.hidden = true
       show("animations")

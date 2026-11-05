@@ -12,6 +12,7 @@ import { buildSxiZip } from '../src/palm/palm-export.ts'
 import { encodePng } from '../src/ssf/ssf-png.ts'
 import { bdsFixture } from '../tests/helpers/baidu-fixture.mjs'
 import { solid, ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const RED = [230, 20, 20]
 const BLUE = [20, 40, 230]
@@ -25,7 +26,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-page.on('dialog', (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 
 async function open(name, bytes) {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
@@ -106,9 +107,8 @@ const waitIdle = async () => {
 
 async function adaptIos26(steps = 1) {
   const depth = await undoDepth()
+  // 可撤销，不再确认：点了就适配。
   await menuItem('#adapt-ios26')
-  await page.locator('#ios26-dialog[open]').waitFor()
-  await page.locator('#ios26-form button[value="apply"]').click()
   await waitIdle()
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible().catch(() => false)) await close.click()

@@ -35,8 +35,7 @@ function backgroundGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBin
     return renderGroup("背景", [{
       path: skinPath,
       section: owner,
-      title: "未设置背景",
-      note: "这个按键没有背景图，也没有可用的共享背景。",
+      title: "背景",
       template: [{ key: "BG_IMAGES", value: freeSectionName(skin, `SMA_${owner}`) }],
     }])
   }
@@ -60,7 +59,7 @@ function backgroundGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBin
   return renderGroup("背景", [{
     path: skinPath,
     section: background.images,
-    note: `共享背景：修改会影响所有使用 ${background.images} 的按键。`,
+    note: `共享：影响所有使用 ${background.images} 的按键`,
     actions: [copy],
   }], background.images)
 }
@@ -88,7 +87,7 @@ function foregroundGroup(skinPath: string, keysPath: string, skin: IniDocument, 
       })
     }))
     const owner = ownSection(skin, binding)
-    blocks.push({ path: skinPath, section: owner, title: "前景", note: "这个按键没有前景图，显示输入法自带的文字或图标。", actions: [add], only: [], template: [] })
+    blocks.push({ path: skinPath, section: owner, title: "前景", actions: [add], only: [], template: [] })
   }
   // FG_STYLE places the icon and labels inside the key.
   const fgStyle = binding.sections.map((section) => firstValue(skin.get(section, "FG_STYLE"))).find(Boolean)
@@ -118,7 +117,7 @@ function textGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBinding):
   const source = label?.style ?? fallbacks.find((section) => skin.sections().includes(section)) ?? fallbacks[0]
   if (!label?.style) {
     return renderGroup("文字", [textBlock(skinPath, source, TEXT_KEYS, {
-      note: label ? `${label.fgStyle} 没有 LABEL_STYLE，使用整个键盘的默认文字样式。` : "这个按键没有 FG_STYLE，使用整个键盘的默认文字样式。",
+      note: "使用键盘默认文字样式",
     })], source)
   }
   const { owner, fgStyle, style } = label
@@ -133,7 +132,7 @@ function textGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBinding):
     setSsfValue(document, owner, "FG_STYLE", [ownFgStyle, ...rest].join(","))
   }))
   return renderGroup("文字", [textBlock(skinPath, style, TEXT_KEYS, {
-    note: `共享文字样式：修改会影响所有使用 ${style} 的按键。`,
+    note: `共享：影响所有使用 ${style} 的按键`,
     actions: [copy],
   })], style)
 }
@@ -150,7 +149,6 @@ function animationGroup(keysPath: string, binding: SsfKeyBinding): Group | undef
     omit: ["FG_IMAGES", "FG_RECT"],
     expect: ["ANIM_STYLE"],
     options: { ANIM_STYLE: ssfDocument(animPath).sections() },
-    note: style ? undefined : "这个按键没有按键动画。",
   }]
   if (style) blocks.push({ path: animPath, section: style, title: "动画样式" })
   return renderGroup("动画", blocks)
@@ -164,7 +162,7 @@ function soundGroup(binding: SsfKeyBinding | undefined): Group | undefined {
     return renderGroup("音效", [{
       path: SSF_SOUNDS_PATH,
       section,
-      note: binding && section === "Key" ? "使用默认按键音效。" : undefined,
+      note: binding && section === "Key" ? "使用默认按键音效" : undefined,
       options,
     }], section)
   }
@@ -175,7 +173,7 @@ function soundGroup(binding: SsfKeyBinding | undefined): Group | undefined {
     title: "按键音效",
     expect: ["sound"],
     options,
-    note: binding && sounds.get("Key", "sound") ? `未单独设置，使用默认按键音效 ${sounds.get("Key", "sound")}。` : undefined,
+    note: binding && sounds.get("Key", "sound") ? `使用默认按键音效 ${sounds.get("Key", "sound")}` : undefined,
   }])
 }
 
@@ -280,7 +278,7 @@ function commonKeyGroups(selections: Group[][]): Group[] {
       const entries = matches.map((match) => ssfEntries(match.path, match.section).filter((entry) => !match.omit?.includes(entry.key) && (!match.only || match.only.includes(entry.key))))
       const only = entries[0].filter((entry) => entries.every((list) => list.some((item) => item.key === entry.key))).map((entry) => entry.key)
       return only.length || block.expect ? [{ path: block.path, section: block.section, title: block.title, only, options: block.options, expect: block.expect, create: block.create,
-        note: "修改会作用于所有选中按键；共享样式也会影响其他引用它的按键。",
+        note: "作用于所有选中按键",
         peers: matches.slice(1).map(({ path, section }) => ({ path, section })),
       }] : []
     })

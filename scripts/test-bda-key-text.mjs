@@ -77,8 +77,20 @@ try {
   const slot = page.locator('#bda-config-fields [data-bda-style-path="keys.KEY_F36.foreStyles.1"]')
   await slot.scrollIntoViewIfNeeded()
   const image = (await appearanceKey('KEY_F36')).layers[0]
-  await change(slot.locator('input'), String(image.key))
+  // 添加前景是「前景」标签右端的 ＋：打开「全部样式」选一张样式后应用。
+  await slot.locator('.ui-style-ref-append').click()
+  await page.locator('#picker-dialog').waitFor({ state: 'visible' })
+  const styleID = await page.evaluate(async (ref) => (await import('/src/bda.ts')).bdaStyleID(ref), image)
+  const picker = page.frameLocator('#picker-frame')
+  await picker.locator(`#style-library-grid > .ui-style-card[data-style-id="${styleID}"]`).click()
+  await picker.locator('#style-library-apply').click()
+  await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
   assert.deepEqual((await appearanceKey('KEY_F36')).layers, [image, image])
+  // 前景层卡片右侧的移除条把这一层移出列表。
+  const removeLayer = page.locator('#bda-config-fields [data-bda-style-path="keys.KEY_F36.foreStyles.1"] .ui-style-remove')
+  await removeLayer.hover()
+  await removeLayer.click()
+  assert.deepEqual((await appearanceKey('KEY_F36')).layers, [image])
 
   // A key shown in a state edits the state key the canvas draws.
   const stateKey = await page.evaluate(async () => {

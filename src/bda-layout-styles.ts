@@ -34,7 +34,7 @@ function keyStyleItems(name: string, key: BdaKey, path: string[]): BdaLayoutStyl
   return [
     { ...slot(key.backStyle, "背景样式", "backStyle", [...path, "backStyle"]), owner: name },
     ...key.foreStyles.map((ref, index) => ({ ...slot(ref, `前景样式 ${index + 1}`, `foreStyles[${index}]`, [...path, "foreStyles", String(index)]), owner: name })),
-    { ...slot(undefined, "新增前景层", NEW_FORE_LAYER, [...path, "foreStyles", String(key.foreStyles.length)]), owner: name },
+    { ...slot(undefined, "添加前景层", NEW_FORE_LAYER, [...path, "foreStyles", String(key.foreStyles.length)]), owner: name },
     { ...slot(key.backStyleState, "状态背景样式", "backStyleState", [...path, "backStyleState"]), owner: name },
   ]
 }

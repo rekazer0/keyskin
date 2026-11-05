@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { strToU8, zipSync } from 'fflate'
 import { sxiFragmentRange, sxiSectionRanges } from '../src/palm/sxi-edit.ts'
-import { addPalmStyle, palmStyleIDList, palmStyleKindOf, palmStyleLocation, palmTilePointer, palmTileSlices, removePalmTile, setPalmTile, setPalmTiles } from '../src/palm/palm-style-edit.ts'
+import { addPalmStyle, removePalmStyle, palmStyleIDList, palmStyleKindOf, palmStyleLocation, palmTilePointer, palmTileSlices, removePalmTile, setPalmTile, setPalmTiles } from '../src/palm/palm-style-edit.ts'
 import { encodeSkinJson, parseSkinJson, sxiAddressPointer } from '../src/palm/sxi-json.ts'
 import { SkinArchive } from '../src/skin.ts'
 
@@ -67,15 +67,26 @@ test('Palm styles are looked up by id in the orientation table first, then the s
   assert.deepEqual(palmStyleIDList(skin, 'default', 'land'), ['1728'])
 })
 
-test('a new Palm style takes an id no table of the theme uses, or the one asked for', () => {
+test('a new Palm style takes the id after every one the theme\'s tables use (as default.css does), or the one asked for', () => {
   const skin = parseSkinJson(original)
-  skin.default.s_land = { ss_1: { 1: { id: 'STYLE1' } } }
+  skin.default.s_land = { ss_1: { 1: { id: 'STYLE1' }, 2000: { id: 'STYLE2000' } } }
   const id = addPalmStyle(skin, 'default', { s_2: { normal: 'new,2' } })
-  assert.equal(id, '2')
-  assert.deepEqual(skin.default.s_info.ss_1[2], { f: 0, id: 'STYLE2', s_2: { normal: 'new,2' } })
+  assert.equal(id, '2001')
+  assert.deepEqual(skin.default.s_info.ss_1[2001], { f: 0, id: 'STYLE2001', s_2: { normal: 'new,2' } })
   assert.equal(addPalmStyle(skin, 'default', {}, '40'), '40')
   assert.throws(() => addPalmStyle(skin, 'default', {}, '1'), /STYLE1 已存在/)
   assert.throws(() => addPalmStyle(skin, 'night'), /缺少 night/)
+})
+
+test('removing a Palm style deletes it from the table the orientation looks it up in', () => {
+  const skin = parseSkinJson(original)
+  skin.default.s_port = { ss_1: { 1728: { id: 'STYLE1728' } } }
+  assert.equal(removePalmStyle(skin, 'default', 'port', '1728'), true)
+  assert.deepEqual(skin.default.s_port.ss_1, {}, 'the orientation\'s own copy goes first')
+  assert.ok(skin.default.s_info.ss_1[1728], 'the shared one stays')
+  assert.equal(removePalmStyle(skin, 'default', 'port', '1728'), true)
+  assert.equal(skin.default.s_info.ss_1[1728], undefined)
+  assert.equal(removePalmStyle(skin, 'default', 'port', '1728'), false)
 })
 
 test('Palm style kinds follow what the style draws', () => {

@@ -2,6 +2,7 @@ import { canvasWrap, mode, toolbarMenus } from "./dom"
 import { appState } from "./state"
 import { mobilePortraitQuery } from "./canvas-interaction"
 import { runTour, type TourStep } from "../tour.ts"
+import { shortcutLabel } from "../dom-element"
 
 const ONBOARDING_KEY = "onboarding-tour-v1"
 
@@ -10,8 +11,8 @@ const closeMenus = () => { for (const menu of toolbarMenus) menu.open = false }
 
 /** 首次打开的使用教程：电脑（宽屏）与手机竖屏的界面不同，按启动时的布局选一套说明。 */
 function onboardingSteps(compact: boolean): TourStep[] {
-  const menu = toolbarMenus.find((item) => item.classList.contains(compact ? "mobile-command-menu" : "pen-file-menu"))
-  const menuSelector = compact ? ".mobile-command-menu" : ".pen-file-menu"
+  const menu = toolbarMenus[0]
+  const menuSelector = ".pen-file-menu"
   const welcome = !hasSkin()
   const steps: TourStep[] = [
     {
@@ -55,7 +56,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       when: hasSkin,
     },
     {
-      target: compact ? [".mode-control .mobile-choice-toggle"] : ['[data-mode-choice="edit"]'],
+      target: compact ? ['[data-mobile-choice="mode"]'] : ['[data-mode-choice="edit"]'],
       title: "切换到编辑模式",
       body: "打开皮肤后默认处于「交互预览」，配置只读。切换到「编辑模式」后才能选中、拖动和修改按键。",
       action: { hint: compact ? "轻点右上角的「交互预览」按钮，切换到编辑模式" : "点击右上角的「编辑模式」", done: () => mode.value === "edit" },
@@ -66,7 +67,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       title: "选中一个按键",
       body: compact
         ? "编辑模式下轻点按键即可选中，选中后上半屏会自动切到「属性检查器」。"
-        : "编辑模式下点击按键即可选中，拖动可以移动位置；按住 Ctrl（macOS 为 ⌘）单击可以多选。",
+        : `编辑模式下单击按键即可选中，拖动可以移动位置；${shortcutLabel("单击")}可以多选。`,
       action: { hint: compact ? "轻点画布上任意一个按键" : "点击画布上任意一个按键", done: () => appState.selectedKeySections.length > 0 },
       when: () => hasSkin() && mode.value === "edit",
     },
@@ -75,7 +76,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       title: "属性检查器",
       body: compact
         ? "在这里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点顶部的撤销按钮可以撤回。右侧分类栏可快速跳到对应分组。"
-        : "在这里修改选中对象的位置、尺寸、样式、文字和手势，改动立即显示在画布上，可随时撤销（Ctrl/⌘ + Z）。右侧分类栏点击即可跳到对应分组，放大镜可以筛选属性。",
+        : `在这里修改选中对象的位置、尺寸、样式、文字和手势，改动立即显示在画布上，可随时撤销（${shortcutLabel("Z")}）。右侧分类栏点击即可跳到对应分组，放大镜可以筛选属性。`,
       when: hasSkin,
     },
     compact
@@ -103,7 +104,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       action: { hint: compact ? "轻点左上角的菜单按钮" : "点击左上角的菜单按钮", done: () => Boolean(menu?.open) },
     },
     {
-      target: [`${menuSelector}[open] .toolbar-menu`],
+      target: [`${menuSelector}[open] .ui-menu`],
       title: "导出给输入法",
       body: compact
         ? "改好后先「保存皮肤」，再按要使用的输入法选择导出格式；「分享皮肤」可以把皮肤直接发给输入法安装。"

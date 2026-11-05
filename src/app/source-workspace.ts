@@ -16,7 +16,7 @@ import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
 import { watch } from "@tauri-apps/plugin-fs"
 import { sourceDirectory, sourceDirectoryStatus, settingsStorageSection, sourceDirectoryEnabled, chooseSourceDirectory, resetSourceDirectory } from "./dom"
-import { message } from "@tauri-apps/plugin-dialog"
+import { ask } from "./ask.ts"
 
 function sourcePathForWorkspace(path: string): string {
   return appState.sourceWorkspacePrefix && path.startsWith(appState.sourceWorkspacePrefix)
@@ -91,7 +91,7 @@ export function sourceArchiveFromFiles(files: Array<{ path: string; data: Uint8A
 }
 
 export async function flushSourceAutosave(): Promise<void> {
-  if (appState.aiDraftPreview) discardAiDesignDraft("保存源码前已丢弃未应用的 AI 草稿。")
+  if (appState.aiDraftPreview) discardAiDesignDraft("保存源码前已丢弃未应用的 AI 草稿")
   if (appState.sourceAutosaveTimer !== undefined) {
     clearTimeout(appState.sourceAutosaveTimer)
     appState.sourceAutosaveTimer = undefined
@@ -144,7 +144,7 @@ async function refreshExternalSourceFiles(workspace: string, paths: string[]): P
     return consumeSourceWriteSnapshot(sourceWriteSnapshots, sourceWriteKey(change.path), data)
   }))
   if (appState.aiDraftPreview && changes.some((change) => !ignoredChanges.has(change))) {
-    discardAiDesignDraft("源码文件在外部被修改，AI 草稿已丢弃。")
+    discardAiDesignDraft("源码文件在外部被修改，AI 草稿已丢弃")
   }
   const directorySnapshots = changes.filter((change) => change.directory && !ignoredChanges.has(change))
   const presentPaths = new Set(changes.filter((change) => !change.directory && change.data).map((change) => sourcePathForArchive(change.path)))
@@ -313,10 +313,12 @@ export async function initializeSourceDirectory(): Promise<void> {
 
 export async function chooseAndroidSourceDirectory(): Promise<boolean> {
   try {
-    await message("开启后，编辑器会把皮肤源码保存到你授权的文件夹。下一步请在系统文件选择器中选择或新建 KeySkin 文件夹。", {
+    const choice = await ask({
       title: "授权皮肤源码目录",
-      kind: "info",
+      detail: "编辑器会把皮肤源码保存到你授权的文件夹，下一步请选择或新建 KeySkin 文件夹",
+      actions: [{ value: "cancel", label: "取消" }, { value: "choose", label: "选择文件夹", variant: "primary" }],
     })
+    if (choice !== "choose") return false
     await applySourceDirectory(await invoke<string>("pick_source_directory"))
     return true
   } catch (error) {

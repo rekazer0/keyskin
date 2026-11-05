@@ -1,7 +1,7 @@
 {
   "name": "keyskin",
   "private": true,
-  "version": "2.0.0-beta7",
+  "version": "2.0.0-beta8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,6 +26,7 @@
     "@earendil-works/pi-agent-core": "^0.84.4",
     "@earendil-works/pi-ai": "^0.84.4",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/noto-sans-sc": "^5.3.1",
     "@lezer/highlight": "^1.2.3",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-dialog": "^2.4.0",

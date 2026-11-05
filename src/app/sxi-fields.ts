@@ -11,7 +11,7 @@ import { actionText, actionValue, asObject, numberText, numberValue, type Json, 
 import { SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "../palm/sxi-json.ts"
 import { commitText, isEditing } from "./edit-history"
 import { showError } from "./file-operations"
-import { fieldCaption, numberParts } from "./property-rows"
+import { fieldCaption, fieldControl, numberParts, section } from "./property-rows"
 import { appState } from "./state"
 import { decorateStyleReferenceInput } from "./style-references"
 import { openPalmSkin, refreshSxiDocument } from "./sxi-documents"
@@ -134,101 +134,51 @@ function trackRow(row: HTMLElement, block: SxiBlock, path: string[], rowKey: unk
 type Tracking = { key: unknown; saved: Json[]; restore?: (current: Json, saved: Json) => Json }
 
 function palmRow(tag: "div" | "label", block: SxiBlock, path: string[], label: string, values: Json[], tracking: Tracking = { key: "", saved: values }): HTMLElement {
-  const row = element(tag, "ui-field document-property-field")
+  const row = element(tag, "ui-field")
   fieldCaption(row, path.join("."), label)
   trackRow(row, block, path, tracking.key, tracking.saved, tracking.restore)
   return row
 }
 
-function palmInput(type: "number" | "text", text: string, mixed: boolean, label: string): HTMLInputElement {
-  const input = element("input", "document-property-input")
-  input.type = type
-  if (type === "number") input.step = "any"
-  input.value = text
-  input.placeholder = mixed ? "混合" : "未设置"
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", label)
-  return input
-}
+/** 字号、字重这类有自然范围的数值配滑块（property-rows 的 RANGES）。 */
+const NUMBER_RANGES: Record<string, "fontSize" | "weight"> = { f_s: "fontSize", f_w: "weight" }
 
 function numberRow(block: SxiBlock, path: string[], label: string, values: Json[]): HTMLElement {
   const row = palmRow("label", block, path, label, values)
   const { value, mixed } = sharedValue(values)
   const text = numberText(value) ?? ""
   // Int.max reads as "inf", which a number box cannot show.
-  const input = palmInput(text === "inf" ? "text" : "number", text, mixed, label)
-  input.addEventListener("change", () => {
-    const entered = input.value.trim()
+  row.append(fieldControl({ kind: "number", value: text, expression: text === "inf", range: NUMBER_RANGES[path[path.length - 1]] }, label, (entered) => {
     if (!entered) return writeSxiValue(block.targets, path, undefined)
     try {
       writeSxiValue(block.targets, path, numberValue(entered))
     } catch (error) {
       showError(error, label)
     }
-  })
-  row.append(input)
+  }, { editable: isEditing(), mixed }))
   return row
 }
 
 function textRow(block: SxiBlock, path: string[], label: string, values: Json[]): HTMLElement {
   const row = palmRow("label", block, path, label, values)
   const { value, mixed } = sharedValue(values)
-  const input = palmInput("text", typeof value === "string" ? value : "", mixed, label)
-  input.addEventListener("change", () => writeSxiValue(block.targets, path, input.value === "" ? undefined : input.value))
-  row.append(input)
+  row.append(fieldControl({ kind: "text", value: typeof value === "string" ? value : "" }, label,
+    (next) => writeSxiValue(block.targets, path, next === "" ? undefined : next), { editable: isEditing(), mixed }))
   return row
 }
 
 function switchRow(block: SxiBlock, path: string[], label: string, values: Json[]): HTMLElement {
   const row = palmRow("label", block, path, label, values)
-  const input = element("input", "ui-switch")
-  input.type = "checkbox"
-  input.setAttribute("role", "switch")
-  input.setAttribute("aria-label", label)
-  input.checked = values[0] === true
-  input.disabled = !isEditing()
-  input.addEventListener("change", () => writeSxiValue(block.targets, path, input.checked))
-  row.append(input)
+  row.append(fieldControl({ kind: "switch", checked: values[0] === true }, label, (checked) => writeSxiValue(block.targets, path, checked), { editable: isEditing() }))
   return row
 }
 
-/** Palm colours are ARGB hex without a prefix ("99373737"). */
+/** Palm colours are ARGB hex without a prefix ("99373737"); each target keeps the part of its own colour that was not edited. */
 function palmColorRow(block: SxiBlock, path: string[], label: string, values: Json[]): HTMLElement {
   const row = palmRow("div", block, path, label, values)
   const { value, mixed } = sharedValue(values)
-  const current = typeof value === "string" ? value : ""
-  const argb = (text: string) => (text.length === 6 ? `FF${text}` : text).toUpperCase()
-  const control = element("span", "color-control ui-input ui-color")
-  if (mixed) control.dataset.mixed = ""
-  const picker = element("input")
-  picker.type = "color"
-  picker.value = `#${PALM_COLOR.test(current) ? argb(current).slice(2) : "000000"}`
-  picker.setAttribute("aria-label", label)
-  const text = palmInput("text", current, mixed, `${label}值`)
-  const alpha = element("input")
-  alpha.type = "number"
-  alpha.min = "0"
-  alpha.max = "1"
-  alpha.step = "0.01"
-  alpha.value = PALM_COLOR.test(current) ? String(Math.round(Number.parseInt(argb(current).slice(0, 2), 16) / 255 * 100) / 100) : "1"
-  alpha.setAttribute("aria-label", `${label}透明度`)
-  for (const input of [picker, alpha]) input.disabled = !isEditing()
-  // Each target keeps the part of its own colour that was not edited.
-  const own = (color: Json) => typeof color === "string" && PALM_COLOR.test(color) ? argb(color) : "FF000000"
-  picker.addEventListener("change", () => writeSxiValue(block.targets, path, (color) => `${own(color).slice(0, 2)}${picker.value.slice(1).toUpperCase()}`))
-  alpha.addEventListener("change", () => {
-    if (alpha.value === "" || !alpha.checkValidity()) return
-    const hex = Math.round(Number(alpha.value) * 255).toString(16).padStart(2, "0").toUpperCase()
-    writeSxiValue(block.targets, path, (color) => `${hex}${own(color).slice(2)}`)
-  })
-  text.addEventListener("change", () => {
-    const entered = text.value.trim().replace(/^(?:0x|#)/i, "")
-    if (!entered) writeSxiValue(block.targets, path, undefined)
-    else if (PALM_COLOR.test(entered)) writeSxiValue(block.targets, path, argb(entered))
-    else text.value = current
-  })
-  control.append(picker, text, alpha)
-  row.append(control)
+  row.append(fieldControl({ kind: "color", value: typeof value === "string" ? value : "", codec: "argb" }, label, (next, { merge }) =>
+    writeSxiValue(block.targets, path, (color) => !next ? undefined : merge ? merge(typeof color === "string" ? color : "") : next), { editable: isEditing(), mixed }))
   return row
 }
 
@@ -238,12 +188,10 @@ function listRow(block: SxiBlock, path: string[], label: string, values: Json[])
   const { value, mixed } = sharedValue(values)
   const list = isPrimitiveList(value) ? value : []
   const spaced = list.some((item) => typeof item === "string")
-  const input = palmInput("text", list.join(spaced ? " " : ","), mixed, label)
-  input.addEventListener("change", () => {
-    const parts = input.value.split(spaced ? /\s+/ : ",").map((part) => part.trim()).filter(Boolean)
+  row.append(fieldControl({ kind: "text", value: list.join(spaced ? " " : ",") }, label, (next) => {
+    const parts = next.split(spaced ? /\s+/ : ",").map((part) => part.trim()).filter(Boolean)
     writeSxiValue(block.targets, path, parts.map((part) => !spaced && Number.isFinite(Number(part)) ? Number(part) : part))
-  })
-  row.append(input)
+  }, { editable: isEditing(), mixed }))
   return row
 }
 
@@ -378,7 +326,7 @@ export function gestureRows(block: SxiBlock, path: string[], values: Json[]): HT
   options.append(...Object.entries(ACTION_CODES).map(([code, name]) => Object.assign(element("option"), { value: name, label: actionDescription(code) })))
   grid.append(options)
   const cell = (button: number, tag: "label", name: string, label: string, icon?: string) => {
-    const node = element(tag, icon ? "inspector-gesture" : "ui-field document-property-field")
+    const node = element(tag, icon ? "inspector-gesture" : "ui-field")
     const { value, mixed } = sharedValue(values.map((list) => gestureAction(list, button)))
     const caption = element("span")
     if (icon) {
@@ -388,8 +336,11 @@ export function gestureRows(block: SxiBlock, path: string[], values: Json[]): HT
     } else fieldCaption(node, `${path.join(".")}.${button}`, label)
     const actions = values.map((list) => gestureAction(list, button))
     trackRow(node, block, path, button, actions, (current, saved) => setGesture(current, button, saved === null || saved === undefined ? "" : String(saved)))
-    const input = palmInput("text", value === undefined ? "" : String(value), mixed, `${label}动作`)
-    if (icon && !mixed) input.placeholder = name === "HOLD" ? "未设置" : "+"
+    const input = element("input")
+    input.value = value === undefined ? "" : String(value)
+    input.placeholder = mixed ? "混合" : icon && name !== "HOLD" ? "+" : "未设置"
+    input.disabled = !isEditing()
+    input.setAttribute("aria-label", `${label}动作`)
     input.setAttribute("list", options.id)
     input.addEventListener("change", () => writeSxiValue(block.targets, path, (current) => setGesture(current, button, input.value.trim())))
     node.append(input)
@@ -404,9 +355,7 @@ export function gestureRows(block: SxiBlock, path: string[], values: Json[]): HT
   // Buttons besides the cross only show when a key sets them.
   const others = OTHER_BUTTONS.filter(([button]) => values.some((list) => gestureAction(list, button) !== undefined))
   if (!others.length) return [grid]
-  const rows = element("div", "document-property-grid")
-  rows.append(...others.map(([button, label]) => cell(button, "label", "", label)))
-  return [grid, rows]
+  return [grid, ...others.map(([button, label]) => cell(button, "label", "", label))]
 }
 
 /** Fields a block shows, as paths: the base model `b` is opened up into its own fields. */
@@ -475,18 +424,7 @@ export function renderSxiGroup(label: string, blocks: SxiBlock[], options: { cod
   // Reading only: the parse is shared with the canvas (edits go through editSxi on their own copy).
   const skin = openPalmSkin()
   if (!skin) return
-  const section = element("section", "ui-section document-property-section")
-  section.dataset.inspectorGroupLabel = label
-  const heading = element("h3", "document-section-heading")
-  const title = element("span", "document-section-title")
-  title.textContent = label
-  heading.append(title)
-  if (options.code) {
-    const code = element("span", "document-section-code")
-    code.textContent = options.code
-    heading.append(code)
-  }
-  section.append(heading, ...options.extra ?? [])
+  const group = section(label, options.extra, { code: options.code })
   const queue = [...blocks]
   const many = blocks.length > 1
   let shown = Boolean(options.extra?.length)
@@ -501,13 +439,9 @@ export function renderSxiGroup(label: string, blocks: SxiBlock[], options: { cod
       note.textContent = block.note
       subsection.append(note)
     }
-    if (rows.length) {
-      const grid = element("div", "document-property-grid")
-      grid.append(...rows)
-      subsection.append(grid)
-    }
-    section.append(subsection)
+    subsection.append(...rows)
+    group.append(subsection)
     shown = true
   }
-  return shown ? section : undefined
+  return shown ? group : undefined
 }

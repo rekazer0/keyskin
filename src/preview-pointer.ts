@@ -241,7 +241,7 @@ export function selectKey(self: Preview, key: PreviewItem, event: Pick<PointerEv
   self.onSelect([...self.selected])
 }
 
-/** 点按键改选择：Shift 连选、Cmd/Ctrl 加减选、再点唯一选中的键取消；不通知。 */
+/** 点按键改选择：Shift 连选、Cmd/Ctrl 加减选；不通知。 */
 function pickKey(self: Preview, key: PreviewItem, event: Pick<PointerEvent, "metaKey" | "ctrlKey" | "shiftKey">): void {
   if (self.mode === "edit" && event.shiftKey && self.selectionAnchor) {
     const sections = visiblePreviewItems(self.keys, self.skinState)
@@ -254,9 +254,6 @@ function pickKey(self: Preview, key: PreviewItem, event: Pick<PointerEvent, "met
   } else if (self.mode === "edit" && isAdditiveSelection(event)) {
     if (self.itemSelected(key)) key.sections.forEach((section) => self.selected.delete(section))
     else self.selected.add(key.section)
-  } else if (self.mode === "edit" && self.editTool === "select" && self.selected.size === 1 && self.itemSelected(key)) {
-    // 再次单击唯一选中的键即取消选中
-    self.selected = new Set()
   } else if (!self.itemSelected(key) || self.mode === "preview" || self.editTool === "select") {
     // 普通单击只选中这一个键；多选时单击收为单选。
     // 移动工具下保留多选，便于整体拖动。

@@ -1,6 +1,7 @@
 import { clientLog, flushClientLogs } from "../client-log.ts"
 import { showSkinLoadProgress, showFileOperationProgress, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
+import { ask } from "./ask.ts"
 import { appState } from "./state"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportButtons, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
@@ -210,14 +211,23 @@ export async function loadArchive(
 
 export async function openNative(): Promise<boolean> {
   if (!(await prepareDocumentReplacement())) return false
-  const path = await open({
+  const path = isAndroidTauri() ? await pickAndroidSkinFile() : await open({
     multiple: false,
-    // Android filters by MIME type; custom skin extensions have no reliable mapping.
-    filters: isAndroidTauri() ? undefined : [{ name: "输入法皮肤", extensions: ["bdi", "bds", "bda", "ssf", "mssf", "sxi"] }],
+    filters: [{ name: "输入法皮肤", extensions: ["bdi", "bds", "bda", "ssf", "mssf", "sxi"] }],
   })
   if (typeof path !== "string") return false
   await loadNativePath(path)
   return true
+}
+
+/** 安卓选文件并持久授予读写权限，保存才能写回；取消时返回 undefined。 */
+async function pickAndroidSkinFile(initialUri?: string): Promise<string | undefined> {
+  try {
+    return await invoke<string>("pick_skin_file", { initialUri })
+  } catch (error) {
+    if (/cancel/i.test(String(error))) return
+    throw error
+  }
 }
 
 /** skinPath 非空时表示从最近皮肤打开：保存仍写回原皮肤文件，并沿用这个源码目录。 */
@@ -332,6 +342,9 @@ function exportTargetLabel(format: ExportFormat): string {
   return format === "sxi" ? "手心皮肤" : format === "ssf" ? "搜狗皮肤" : `${format.toUpperCase()} 皮肤`
 }
 
+/** 降级提示对话框最多列几行，其余折成一句“另有 N 条”。 */
+const DOWNGRADE_LINES = 8
+
 export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<{
   bytes: Uint8Array
   converted: boolean
@@ -340,78 +353,75 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
   if (!canExport(appState.archive.format, format)) throw new Error(`${appState.archive.format.toUpperCase()} 皮肤不能导出为 ${format.toUpperCase()}`)
+  showFileOperationProgress()
+  updateFileOperationProgress(22, `正在生成 ${format.toUpperCase()} 皮肤包…`)
+  await waitForInterfacePaint()
   if (appState.archive.format === "ssf" && format === "sxi" || appState.archive.format === "sxi" && format === "ssf") {
-    updateFileOperationProgress(22, `正在转换为${exportTargetLabel(format)}…`)
-    await waitForInterfacePaint()
+    const report = conversionProgress(22, 78, `正在转换为${exportTargetLabel(format)}…`)
+    await report(0.2)
     const result = await convertSsfSxi(appState.archive, appState.archive.format === "ssf" ? await ssfTemplates() : undefined)
-    if (result.warnings.length && !window.confirm(
-      `转换为${exportTargetLabel(format)}时将降级以下内容：\n\n${result.warnings.join("\n")}\n\n继续导出吗？`,
-    )) return
+    if (!await acceptDowngrade(`转换为${exportTargetLabel(format)}时将降级以下内容`, result.warnings)) return
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
   if (format === "sxi" && appState.archive.format !== "sxi") {
-    updateFileOperationProgress(22, "正在导出手心皮肤…")
-    await waitForInterfacePaint()
+    const report = conversionProgress(22, 78, "正在导出手心皮肤…")
+    await report(0.2)
     let source: SkinArchive = appState.archive
     // `.sxi` is INI-based, so a BDA source needs the official INI base layout first.
     if (appState.archive.format === "bda") {
       if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
-      updateFileOperationProgress(34, "正在转换 BDA 配置…")
+      await report(0.45, "正在转换 BDA 配置…")
       const converted = convertBdaArchive(appState.archive, appState.bdaBase)
-      if (converted.warnings.length && !window.confirm(
-        `BDA 转换为手心皮肤时将降级以下内容：\n\n${converted.warnings.join("\n")}\n\n继续导出吗？`,
-      )) return
+      if (!await acceptDowngrade(`BDA 转换为手心皮肤时将降级以下内容`, converted.warnings)) return
       source = converted.archive
     }
+    await report(0.75, "正在打包手心皮肤…")
     const result = buildSxiZip(source)
     if (result.warnings.length) clientLog.info("sxi.export.warning", { warnings: result.warnings.join("；") })
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
   if (appState.archive.format === "ssf" && format !== "ssf" && format !== "sxi") {
-    updateFileOperationProgress(22, `正在转换为 ${format.toUpperCase()}…`)
-    await waitForInterfacePaint()
-    const result = await convertSsfDocument(appState.archive, format, await ssfTemplates())
-    if (result.warnings.length && !window.confirm(
-      `搜狗皮肤转换为 ${format.toUpperCase()} 时将降级以下内容：\n\n${result.warnings.join("\n")}\n\n继续导出吗？`,
-    )) return
+    const report = conversionProgress(22, 80, `正在准备 ${format.toUpperCase()} 模板…`)
+    await report(0.02)
+    const templates = await ssfTemplates()
+    const result = await convertSsfDocument(appState.archive, format, templates, (fraction, detail) => report(0.05 + fraction * 0.9, detail))
+    if (!await acceptDowngrade(`搜狗皮肤转换为 ${format.toUpperCase()} 时将降级以下内容`, result.warnings)) return
     // The converter writes Android BDA; iOS gets the same platform conversion as any BDA.
     const bytes = format === "bda" && targetBdaPlatform === "ios"
-      ? await convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync()
+      ? await report(0.97, "正在生成 iOS 皮肤包…").then(() => convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync())
       : result.bytes
     return { bytes, converted: true, warnings: result.warnings }
   }
   if (appState.archive.format === "sxi" && format !== "sxi") {
     if (format === "ssf") throw new Error("手心皮肤不能直接导出为搜狗皮肤")
-    updateFileOperationProgress(22, `正在转换为 ${format.toUpperCase()}…`)
-    await waitForInterfacePaint()
+    const report = conversionProgress(22, 80, `正在转换为 ${format.toUpperCase()}…`)
+    await report(0.2)
     const result = format === "bda"
       ? await convertSxiToBda(appState.archive, (await ssfTemplates()).bda)
       : await convertSxiToBaidu(appState.archive, format)
-    if (result.warnings.length && !window.confirm(
-      `手心皮肤转换为 ${format.toUpperCase()} 时将降级以下内容：\n\n${result.warnings.join("\n")}\n\n继续导出吗？`,
-    )) return
+    if (!await acceptDowngrade(`手心皮肤转换为 ${format.toUpperCase()} 时将降级以下内容`, result.warnings)) return
     // The BDA writer emits the Android package; iOS gets the usual platform conversion.
     const bytes = format === "bda" && targetBdaPlatform === "ios"
-      ? await convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync()
+      ? await report(0.97, "正在生成 iOS 皮肤包…").then(() => convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync())
       : result.bytes
     return { bytes, converted: true, warnings: result.warnings }
   }
   if (format === "ssf") {
     if (appState.archive.format === "ssf") return { bytes: await appState.archive.toBytesAsync("ssf"), converted: false, warnings: [] }
-    updateFileOperationProgress(22, "正在导出搜狗皮肤…")
-    await waitForInterfacePaint()
+    const report = conversionProgress(22, 78, "正在导出搜狗皮肤…")
+    await report(0.3)
     const result = await exportSsf(appState.archive, appState.bdaBase)
-    if (result.warnings.length && !window.confirm(
-      `转换为搜狗皮肤时将降级以下内容：\n\n${result.warnings.join("\n")}\n\n继续导出吗？`,
-    )) return
+    if (!await acceptDowngrade(`转换为搜狗皮肤时将降级以下内容`, result.warnings)) return
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
-  updateFileOperationProgress(22, `正在生成 ${format.toUpperCase()} 皮肤包…`)
   if (appState.archive.format === "bda" && format === "bda" && targetBdaPlatform) {
+    const report = conversionProgress(22, 78, `正在生成 ${format.toUpperCase()} 皮肤包…`)
+    await report(0.3)
     const result = convertBdaPlatform(appState.archive, targetBdaPlatform)
     return { bytes: await result.toBytesAsync(), converted: true, warnings: bdaCompatibilityWarnings(appState.archive) }
   }
   if (appState.archive.format !== "bda" || format === "bda" || format === "sxi") {
+    updateFileOperationProgress(35, `正在打包 ${format.toUpperCase()} 皮肤包…`)
     const soundWarnings: string[] = []
     const adjustments: string[] = []
     const bytes = await appState.archive.toBytesAsync(format, soundWarnings, adjustments)
@@ -419,27 +429,56 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
     return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings] }
   }
   if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
-  await waitForInterfacePaint()
-  updateFileOperationProgress(34, "正在转换 BDA 配置…")
+  const report = conversionProgress(22, 80, "正在转换 BDA 配置…")
+  await report(0.2)
   const result = convertBdaArchive(appState.archive, appState.bdaBase, format)
-  if (result.warnings.length && !window.confirm(
-    `BDA 转换为 ${format.toUpperCase()} 时将降级以下内容：\n\n${result.warnings.join("\n")}\n\n继续导出吗？`,
-  )) return
-  updateFileOperationProgress(48, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
+  if (!await acceptDowngrade(`BDA 转换为 ${format.toUpperCase()} 时将降级以下内容`, result.warnings)) return
+  await report(0.6, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
   const soundWarnings: string[] = []
   const bytes = await result.archive.platformBytesAsync(format, soundWarnings)
   reportExportWarnings(soundWarnings)
   return { bytes, converted: true, warnings: [...result.warnings, ...soundWarnings] }
 }
 
+/**
+ * 转换类导出先弹出进度框并让出一帧：转换本身是同步的重活，没有这一步用户只会看到窗口没反应。
+ * 返回的回调按 0–1 报告阶段，映射到给定的百分比区间。
+ */
+function conversionProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => Promise<void> {
+  showFileOperationProgress()
+  updateFileOperationProgress(start, detail)
+  return async (fraction, stage) => {
+    updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
+    await waitForInterfacePaint()
+  }
+}
+
 /** Key sounds the target platform cannot play, and what packaging for that platform adjusted, each under its own heading. */
 function reportExportWarnings(sounds: string[], adjustments: string[] = []): void {
   if (!sounds.length && !adjustments.length) return
   clientLog.info("export.warnings", { sounds: sounds.length, adjustments: adjustments.length, detail: [...adjustments, ...sounds].join("; ") })
-  window.alert([
-    adjustments.length ? `为适配目标平台做了以下调整：\n\n${adjustments.join("\n")}` : "",
-    sounds.length ? `以下按键音未能转换为目标平台格式，导出包中仍引用原文件，目标平台可能没有声音：\n\n${sounds.join("\n")}` : "",
-  ].filter(Boolean).join("\n\n"))
+  void ask({
+    title: "导出时做了调整",
+    detail: [
+      adjustments.length ? `为适配目标平台做了以下调整：\n${adjustments.join("\n")}` : "",
+      sounds.length ? `以下按键音未能转换为目标平台格式，导出包中仍引用原文件，目标平台可能没有声音：\n${sounds.join("\n")}` : "",
+    ].filter(Boolean).join("\n\n"),
+    actions: [{ value: "close", label: "好", variant: "primary" }],
+  })
+}
+
+/** 转换会降级内容时先问一次；没有降级时直接继续。 */
+async function acceptDowngrade(title: string, warnings: string[]): Promise<boolean> {
+  if (!warnings.length) return true
+  // 一枚搜狗皮肤能产出上千条按键级提示，全塞进对话框读不下去：只列前几条，完整清单进诊断日志。
+  clientLog.info("export.downgrade", { count: warnings.length, detail: warnings.join("；") })
+  return await ask({
+    title,
+    detail: warnings.length > DOWNGRADE_LINES
+      ? [...warnings.slice(0, DOWNGRADE_LINES), `……另有 ${warnings.length - DOWNGRADE_LINES} 条同类提示，已写入诊断日志`].join("\n")
+      : warnings.join("\n"),
+    actions: [{ value: "cancel", label: "取消" }, { value: "continue", label: "继续导出", variant: "primary" }],
+  }) === "continue"
 }
 
 async function exportForSave(format: ExportFormat) {
@@ -464,7 +503,21 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
   } else {
     exported = await exportForSave(format)
     if (!exported) return false
-    await writeNativePath(path, exported.bytes)
+    try {
+      await writeNativePath(path, exported.bytes)
+    } catch (error) {
+      // 别的应用打开过来的文件只给了读权限，先请用户在系统选择器里授权写入原文件。
+      if (!isAndroidTauri() || !path.startsWith("content://") || !/Permission Denial/i.test(String(error))) throw error
+      const granted = await ask({
+        title: "需要写入权限",
+        detail: "系统只允许读取这个皮肤文件。请在接下来打开的文件选择器中再次选中它，授权后保存会写回原文件。",
+        actions: [{ value: "cancel", label: "取消" }, { value: "grant", label: "去授权", variant: "primary" }],
+      }) === "grant"
+      const authorized = granted ? await pickAndroidSkinFile(path) : undefined
+      if (!authorized) return false
+      await writeNativePath(authorized, exported.bytes)
+      path = authorized
+    }
   }
   if (!exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
@@ -484,7 +537,7 @@ export function documentNameForPath(path: string, archive: SkinArchive): string 
 }
 
 export async function writeNativePath(path: string, bytes: Uint8Array): Promise<void> {
-  updateFileOperationProgress(72, "正在写入文件…")
+  updateFileOperationProgress(90, "正在写入文件…")
   if (path.startsWith("content://")) {
     await writeFile(path, bytes)
     return
@@ -532,6 +585,7 @@ export async function writeToChosenFile(
   if (!picker) {
     const bytes = await produce()
     if (!bytes) return
+    updateFileOperationProgress(90, "正在准备下载…")
     const link = document.createElement("a")
     link.href = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/octet-stream" }))
     link.download = filename
@@ -578,6 +632,7 @@ export async function writeToChosenFile(
     await (file as BrowserSaveFileHandle & { remove?: () => Promise<void> }).remove?.().catch(() => undefined)
     return
   }
+  updateFileOperationProgress(90, "正在写入文件…")
   const writable = await file.createWritable()
   await writable.write(bytes)
   await writable.close()
@@ -675,7 +730,7 @@ export function waitForTap(detail: string, label: string, onTap?: () => void | P
     updateFileOperationProgress(90, detail)
     const share = document.createElement("button")
     share.type = "button"
-    share.className = "ui-button primary"
+    share.className = "ui-button"
     share.dataset.variant = "primary"
     share.dataset.size = "lg"
     share.textContent = label

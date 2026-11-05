@@ -7,12 +7,13 @@ import { keyAnimationStyles, visiblePreviewItems, type PreviewItem } from "../pr
 import { preview } from "./canvas-interaction"
 import { asObject } from "../palm/sxi-ini.ts"
 import { legacyAnimationConfigPath } from "./config-context"
-import { createAnimationDetail, createAnimationDialog, theme } from "./dom"
+import { theme } from "./dom"
 import { commitBytes, isEditing, updateDirty } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
 import { requestEditMode } from "./mobile-layout"
 import { selectFile } from "./navigation"
 import { renderFiles } from "./file-tree"
+import { showStatus } from "./file-operations"
 import { palmTheme } from "./sxi-documents"
 import { editSxi } from "./sxi-fields"
 import { appState } from "./state"
@@ -183,29 +184,24 @@ export function canCreateAnimationConfig(): boolean {
   return Boolean(newAnimationConfigLocation())
 }
 
-/** Asks, then creates an empty animation configuration (one undo step) and opens the view. */
+/** Creates an empty animation configuration (one undo step, so no confirmation) and opens the view. */
 export function askToCreateAnimationConfig(particle: boolean): void {
   const location = newAnimationConfigLocation()
-  if (!location || createAnimationDialog.open) return
+  if (!location || !appState.archive) return
   if (!isEditing()) return requestEditMode()
-  createAnimationDetail.textContent = `要自动创建一份空的动画配置（${location}）吗？之后可以在${particle ? "粒子" : "动效"}设计里新建动画，可以撤销。`
-  createAnimationDialog.returnValue = ""
-  createAnimationDialog.showModal()
-  createAnimationDialog.addEventListener("close", () => {
-    if (createAnimationDialog.returnValue !== "create" || !appState.archive || !isEditing()) return
-    if (appState.archive.format === "sxi") {
-      editSxi((skin) => {
-        const info = asObject(asObject(skin[palmTheme()])?.s_info)
-        if (!info) throw new Error("skin.json 中缺少当前主题")
-        info.ss_2 = {}
-      })
-    } else {
-      commitBytes(location, undefined, strToU8("[GLOBAL]\nANIM_NUM=0\n"))
-      updateDirty()
-    }
-    const path = legacyAnimationConfigPath()
-    if (!path) return
-    selectFile(path, "overview", particle ? "particle" : "motion")
-    renderFiles()
-  }, { once: true })
+  if (appState.archive.format === "sxi") {
+    editSxi((skin) => {
+      const info = asObject(asObject(skin[palmTheme()])?.s_info)
+      if (!info) throw new Error("skin.json 中缺少当前主题")
+      info.ss_2 = {}
+    })
+  } else {
+    commitBytes(location, undefined, strToU8("[GLOBAL]\nANIM_NUM=0\n"))
+    updateDirty()
+  }
+  const path = legacyAnimationConfigPath()
+  if (!path) return
+  selectFile(path, "overview", particle ? "particle" : "motion")
+  renderFiles()
+  showStatus("已创建动画配置")
 }

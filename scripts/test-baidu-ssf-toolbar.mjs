@@ -8,6 +8,7 @@ import { SsfPackage } from '../src/ssf/ssf-package.ts'
 import { convertSsfToBaidu } from '../src/ssf/ssf-to-baidu.ts'
 import { encodePng } from '../src/ssf/ssf-png.ts'
 import { solid, ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const files = unzipSync(ssfFixture())
 for (const status of ['status1', 'status2']) {
@@ -25,7 +26,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true, bypassCSP: true })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-page.on('dialog', (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 const closeDialog = async () => {
   await page.waitForFunction(() => !document.querySelector('#file-operation-dialog')?.open || !document.querySelector('#file-operation-close')?.disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
@@ -56,7 +57,7 @@ try {
     const pending = page.waitForEvent('download', { timeout: 120000 })
     pending.catch(() => {})
     await page.locator('.pen-file-menu [data-export-format="ssf"]').click()
-    const tap = page.locator('#file-operation-dialog[open] button.primary', { hasText: '下载' })
+    const tap = page.locator('#file-operation-dialog[open] button[data-variant="primary"]', { hasText: '下载' })
     const ready = tap.waitFor({ state: 'visible', timeout: 120000 }).then(() => 'tap')
     ready.catch(() => {})
     if (await Promise.race([pending, ready]) === 'tap') await tap.click()

@@ -1,4 +1,6 @@
 import './settings.css'
+import { bindDialog } from './app/ask.ts'
+import { closeDialog } from './motion.ts'
 import { createSettingsDraft } from './settings-draft'
 
 type Control = HTMLInputElement | HTMLSelectElement
@@ -95,12 +97,11 @@ export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enable
     reverting = false
     apply()
     sync()
-    dialog.close()
+    closeDialog(dialog)
     draft.cancel()
   }
-  for (const id of ['settings-cancel', 'settings-close']) dialog.querySelector(`#${id}`)!.addEventListener('click', cancel)
-  dialog.addEventListener('cancel', event => { event.preventDefault(); cancel() })
-  dialog.addEventListener('click', event => { if (event.target === dialog) cancel() })
+  dialog.querySelector('#settings-cancel')!.addEventListener('click', cancel)
+  bindDialog(dialog, cancel)
   const capture = (event: Event) => {
     const control = event.target
     if (dialog.open && !saving && !reverting && (control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) {
@@ -127,7 +128,7 @@ export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enable
       for (const control of controls) if (read(control) !== values.get(control)) control.dispatchEvent(new Event('change', { bubbles: true }))
       localStorage.setItem('settings-saved-at', new Date().toISOString())
       begin()
-      dialog.close()
+      closeDialog(dialog)
     } catch (error) {
       dialog.querySelector('#settings-dirty-label')!.textContent = `保存失败：${error instanceof Error ? error.message : String(error)}`
     } finally {

@@ -56,7 +56,7 @@ try {
             const { preview } = await import('/src/app/canvas-interaction.ts')
             const { appState } = await import('/src/app/state.ts')
             const { animationPlayer } = await import('/src/animation-player.ts')
-            const { renderStyleReferenceRows, refreshStyleReferenceThumbnail } = await import('/src/app/style-references.ts')
+            const { refreshStyleReferenceThumbnail } = await import('/src/app/style-references.ts')
             const settle = async () => { await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame); await new Promise(resolve => setTimeout(resolve, 160)) }
             await settle()
             const before = resourceLifetime()
@@ -96,33 +96,27 @@ try {
             direct.remove()
             const host = document.createElement('span'), input = document.createElement('input')
             document.body.append(host)
-            input.value = ''
+            // 引用卡每次按值重建：被换下的卡片的画布位图要释放。
+            input.value = '1'
             for (let i = 0; i < 40; i++) {
-              renderStyleReferenceRows(host, input, 'BACK_STYLE')
+              refreshStyleReferenceThumbnail(host, input, 'BACK_STYLE')
               abandoned.push(...host.querySelectorAll('canvas'))
               await new Promise(requestAnimationFrame)
             }
-            // Reused canvas must keep its bitmap, not be mistaken for a removed node.
-            const reused = host.querySelector('canvas')
-            renderStyleReferenceRows(host, input, 'BACK_STYLE')
-            await settle()
-            const preserved = reused === host.querySelector('canvas') && reused.width > 0
             host.remove()
             const resolveVisuals = []
             const late = document.createElement('span')
             document.body.append(late)
             input.value = '1'
-            const pending = refreshStyleReferenceThumbnail(late, input, 'BACK_STYLE', { resolve: () => new Promise(resolve => { resolveVisuals.push(resolve) }) })
+            refreshStyleReferenceThumbnail(late, input, 'BACK_STYLE', { resolve: () => new Promise(resolve => { resolveVisuals.push(resolve) }) })
             abandoned.push(...late.querySelectorAll('canvas'))
             late.remove()
             await settle()
             resolveVisuals.forEach(resolve => resolve(undefined))
-            await pending
             await settle()
-            return { before, afterTree, after: resourceLifetime(), preserved, unreleased: abandoned.filter(canvas => canvas.width || canvas.height).length, archive: Boolean(appState.archive) }
+            return { before, afterTree, after: resourceLifetime(), unreleased: abandoned.filter(canvas => canvas.width || canvas.height).length, archive: Boolean(appState.archive) }
           })
           assert.equal(result.archive, true)
-          assert.equal(result.preserved, true, 'synchronous canvas reuse keeps its bitmap')
           assert.equal(result.unreleased, 0, 'removed and unused canvas bitmaps are released')
           for (const stats of [result.afterTree, result.after]) {
             for (const name of ['MutationObserver', 'ResizeObserver', 'IntersectionObserver']) {
@@ -132,7 +126,7 @@ try {
             assert.equal(stats.visibilityListeners, result.before.visibilityListeners, 'thumbnail visibility listeners return to baseline')
           }
           assert.deepEqual(errors, [])
-          console.log(`${engine.name()} ${mobile ? 'mobile' : 'desktop'}: 40 tree/layout rebuilds, hidden/unused/playing thumbnails, canvas reuse and async disposal passed`)
+          console.log(`${engine.name()} ${mobile ? 'mobile' : 'desktop'}: 40 tree/layout rebuilds, hidden/unused/playing thumbnails, rebuilt reference cards and async disposal passed`)
         } finally { await context.close() }
       }
     } finally { await browser.close() }

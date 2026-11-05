@@ -4,12 +4,11 @@ import { currentBdaAppearance, visualResolver } from "./bda-documents"
 import { styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { type StyleKind } from "./types"
-import { createIcon } from "../icons"
-import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, refreshStyleReferenceThumbnail, layoutAnimationFields } from "./style-references"
-import { isEditing } from "./edit-history"
+import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, openStyleReferenceStateImage, refreshStyleReferenceThumbnail, layoutAnimationFields, styleUsages } from "./style-references"
+import { commitText, isEditing, updateDirty } from "./edit-history"
 import { updateBdaRefs } from "./key-inspector"
 import { bdaImageResourceID } from "./tile-editing"
-import { theme, orientation, styleAddButton, newStyleError } from "./dom"
+import { theme, orientation } from "./dom"
 import { openImageSlicePicker, imageDataURL, showPickerWindow, closePickerWindow, emitToPicker } from "./image-pickers"
 import { type Visual, type VisualResolver } from "../atlas.ts"
 import { afterNextPaint } from "./canvas-interaction"
@@ -18,9 +17,15 @@ import { resourceImagePaths } from "../resources.ts"
 import { soundPathForFilename } from "../sounds.ts"
 import { type StyleLibraryPayload, type StyleLibraryVisual } from "../picker-window.ts"
 import { SkinArchive } from "../skin.ts"
-import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
-import { palmStyleCategories, palmStyleIDs, palmStyleKind, palmStyleSound } from "./sxi-styles"
+import { palmStyle, palmStyleCategories, palmStyleIDs, palmStyleKind, palmStyleSound } from "./sxi-styles"
 import { styleAnimationSources, styleAnimationSummary } from "./legacy-animation-inspector"
+import { nextStyleID } from "../layout-image.ts"
+import { addPalmStyle, removePalmStyle } from "../palm/palm-style-edit.ts"
+import { editSxi } from "./sxi-fields"
+import { palmOrientation, palmTheme } from "./sxi-documents"
+import { setSourceValue } from "./config-context"
+import { refreshPreview } from "./preview-render"
+import { type JsonObject } from "../palm/sxi-ini.ts"
 
 export function stylePickerLabel(styleID: string): string {
   return appState.archive?.format === "bda" ? String(bdaStyleRef(styleID)?.key ?? styleID) : styleID
@@ -43,15 +48,6 @@ export function availableStyleIDs(): string[] {
   return IniDocument.parse(appState.archive.getText(path)).sections()
     .flatMap((section) => section.match(/^STYLE(\d+)$/)?.[1] ?? [])
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-}
-
-export const styleKinds: Record<StyleKind, { label: string; icon: string }> = {
-  image: { label: "图片", icon: "image" },
-  color: { label: "颜色", icon: "palette" },
-  anim: { label: "动画", icon: "clapperboard" },
-  text: { label: "文字", icon: "type" },
-  sound: { label: "声音", icon: "volume-2" },
-  empty: { label: "空", icon: "square-dashed" },
 }
 
 /** 按样式内容判定类型：有图即图片样式，其次动画、颜色、声音，只剩文字属性的归为文字样式；INFO 只是备注，不算属性。 */
@@ -85,15 +81,66 @@ export function styleConfigDocument(): IniDocument | undefined {
   return appState.archive?.isText(path) ? IniDocument.parse(appState.archive.getText(path)) : undefined
 }
 
-/** 样式类型徽标：样式库、检查器缩略图、样式配置列表共用，保证同一类型处处同一图标与文字。 */
-export function styleKindBadge(kind: StyleKind, iconOnly = false): HTMLElement {
-  const badge = document.createElement("span")
-  badge.className = "style-kind-badge"
-  badge.dataset.styleKind = kind
-  badge.title = `${styleKinds[kind].label}样式`
-  badge.append(createIcon(styleKinds[kind].icon, 11))
-  if (!iconOnly) badge.append(styleKinds[kind].label)
-  return badge
+/**
+ * default.css 的一次改动：一个撤销步骤，源码编辑器正显示它时同步。STYLE_NUM 记的是最大编号，
+ * 新建超过它就跟上，删掉的正是它就退到剩下的最大编号。
+ */
+function editStyleConfig(change: (styles: IniDocument) => void): boolean {
+  const path = styleConfigPath()
+  if (!appState.archive?.isText(path) || !isEditing()) return false
+  const styles = IniDocument.parse(appState.archive.getText(path))
+  const before = styles.toString()
+  const counter = Number(styles.get("GLOBAL", "STYLE_NUM") ?? -1)
+  const had = styles.sections().includes(`STYLE${counter}`)
+  change(styles)
+  const ids = styles.sections().flatMap((section) => /^STYLE(\d+)$/.exec(section)?.[1] ?? []).map(Number)
+  const max = Math.max(0, ...ids)
+  if (!Number.isFinite(counter) || max > counter || had && !ids.includes(counter)) styles.set("GLOBAL", "STYLE_NUM", String(max))
+  const text = styles.toString()
+  if (text === before) return false
+  commitText(path, before, text)
+  if (appState.selectedPath === path) setSourceValue(text)
+  refreshPreview()
+  updateDirty()
+  return true
+}
+
+/** 新建一个样式，编号自动取下一个（BDI/BDS 写 default.css，手心写 skin.json）；给了动画编号时按下播放它。返回新编号。 */
+export function addStyle(pressAnimation?: number): string | undefined {
+  if (!canAddStyle() || !isEditing()) return
+  let id: string | undefined
+  if (appState.archive?.format === "sxi") editSxi((skin) => { id = addPalmStyle(skin, palmTheme(), pressAnimation === undefined ? {} : { s_5: { "1": pressAnimation } }) })
+  else editStyleConfig((styles) => {
+    id = String(nextStyleID(styles))
+    styles.appendSection(`STYLE${id}`, pressAnimation === undefined ? [] : [{ key: "PRESS_ANIM", value: String(pressAnimation) }])
+  })
+  return id
+}
+
+/** 复制一个样式的全部属性到下一个编号；返回新编号。 */
+export function duplicateStyle(styleID: string): string | undefined {
+  if (!canAddStyle() || !isEditing() || !availableStyleIDs().includes(styleID)) return
+  let id: string | undefined
+  if (appState.archive?.format === "sxi") editSxi((skin) => {
+    const model = structuredClone(palmStyle(styleID, skin) ?? {}) as JsonObject
+    delete model.id
+    id = addPalmStyle(skin, palmTheme(), model)
+  })
+  else editStyleConfig((styles) => {
+    id = String(nextStyleID(styles))
+    styles.appendSection(`STYLE${id}`, styles.entries(`STYLE${styleID}`).map(({ key, value }) => ({ key, value })))
+  })
+  return id
+}
+
+/** 删除没有被引用的样式；可撤销，不弹确认。被引用（含文字回退）的样式不能删。 */
+export function removeStyle(styleID: string): boolean {
+  if (!canAddStyle() || !isEditing() || styleUsages(styleID).length) return false
+  if (appState.selectedStyleID === styleID) appState.selectedStyleID = ""
+  if (appState.selectedResourceGalleryPath === `STYLE${styleID}`) appState.selectedResourceGalleryPath = ""
+  if (appState.archive?.format !== "sxi") return editStyleConfig((styles) => { styles.removeSections([`STYLE${styleID}`]) })
+  editSxi((skin) => { removePalmStyle(skin, palmTheme(), palmOrientation(), styleID) })
+  return true
 }
 
 /** 由引用字段推断应优先展示的样式类型，打开样式库时据此预选筛选。 */
@@ -211,8 +258,6 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
     bda: appState.archive.format === "bda",
     kind: styleKindForKey(key),
     currentID,
-    currentLabel: currentID ? stylePickerLabel(currentID) : "",
-    source: appState.archive.format === "sxi" ? SXI_SKIN_PATH : (soundOnly ? styleConfigPath() : appState.layoutPath).split("/").pop() || "当前皮肤",
     imagesCompatible: !targetType || bdaStyleRef(currentID)?.type === "image",
     bitmaps,
     animationText: "",
@@ -227,7 +272,7 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
       const filename = styleSoundFile(styleID, styles) ?? ""
       if (!filename) return []
       const playable = Boolean(soundPathForFilename(source.names(), theme.value, orientation.value, filename))
-      return [{ styleID, filename, playable }]
+      return [{ styleID, filename, playable, uses: payload.canAdd ? styleUsages(styleID).length : undefined }]
     })
     return Promise.resolve(payload)
   }
@@ -238,12 +283,14 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
     visuals: await Promise.all([resolver.resolve(styleID, false).catch(() => undefined), resolver.resolve(styleID, true).catch(() => undefined)]),
   }))).then((items) => {
     const imageCategories = new Map<string, Set<string>>()
+    const imageUses = new Map<string, number>()
     const styleCategories = styleLibraryCategories()
     const particleIDs = new Set<string>()
     payload.styles = items.map(({ styleID, visuals }) => {
       const categories = styleCategories.get(styleID) ?? new Set<string>()
       for (const visual of visuals) {
         if (!visual?.imagePath) continue
+        imageUses.set(visual.imagePath, (imageUses.get(visual.imagePath) ?? 0) + 1)
         const merged = imageCategories.get(visual.imagePath) ?? new Set<string>()
         for (const category of categories) merged.add(category)
         imageCategories.set(visual.imagePath, merged)
@@ -260,10 +307,9 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
         label: stylePickerLabel(styleID),
         info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
         kind,
-        kindLabel: styleKinds[kind].label,
-        kindIcon: styleKinds[kind].icon,
         categories: [...categories],
         compatible: !targetType || bdaStyleRef(styleID)?.type === targetType,
+        uses: payload.canAdd ? styleUsages(styleID).length : undefined,
         imagePaths: visuals.flatMap((visual) => visual?.imagePath ? [visual.imagePath] : []),
         animationSections: animation?.sections,
         summary: kind === "anim" && styles ? styleAnimationSummary(styleID, styles) : undefined,
@@ -277,7 +323,7 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
       const bytes = source.getBytes(path)
       if (!bytes) return []
       bitmaps[path] ??= imageDataURL(bytes)
-      return [{ path, categories: [...imageCategories.get(path) ?? []], referenced: imageCategories.has(path) }]
+      return [{ path, categories: [...imageCategories.get(path) ?? []], uses: imageUses.get(path) ?? 0 }]
     })
     return Promise.all([...particleIDs].map(async id => {
       payload.particleVisuals[id] = wireVisual(await resolver.resolve(id, false).catch(() => undefined))
@@ -290,10 +336,22 @@ export async function emitStyleLibrary(sliceBack = false): Promise<void> {
   if (payload) await emitToPicker("style-library-data", payload)
 }
 
+/** 弹窗里的新建：有可写的引用目标就应用并打开编辑器（关窗），否则留在弹窗里刷新。 */
 export function addStyleFromLibrary(): void {
-  appState.newStyleApplyTarget = appState.stylePickerTarget
-  closeStylePicker()
-  styleAddButton.click()
+  const id = addStyle()
+  if (!id) return
+  const target = appState.stylePickerTarget
+  if (target && !target.disabled) {
+    appState.styleLibrarySelected = { styleID: id }
+    applyStyleLibrarySelection()
+    openStyleReferenceEditor(id)
+  } else void emitStyleLibrary()
+}
+
+/** 预览栏的「选择切片」：改选中样式的图片切片，按打开弹窗时的状态（正常 / 按下）。 */
+export function sliceStyleLibrarySelection(styleID: string): void {
+  const target = appState.stylePickerTarget
+  if (target) void openStyleReferenceStateImage(target, styleReferenceKey(target), appState.styleLibraryHighlighted, [styleID])
 }
 
 export async function updateStylePreviews(): Promise<void> {
@@ -307,33 +365,22 @@ export async function updateStylePreviews(): Promise<void> {
 
 // What each thumbnail was last drawn from; selecting a key re-runs this for every
 // trigger, and rebuilding unchanged ones dominated the click cost.
-export const styleReferenceThumbnailInputs = new WeakMap<HTMLElement, { archive: SkinArchive; signature: string }>()
+const styleReferenceThumbnailInputs = new WeakMap<HTMLElement, { archive: SkinArchive; signature: string }>()
 
 export function refreshStyleReferenceThumbnails(): void {
   let resolver: VisualResolver | undefined
-  for (const button of Array.from(document.querySelectorAll<HTMLElement>(".style-picker-trigger"))) {
-    // 音效行的值藏在前面的卡片里；BDA 样式行前面不是输入框，它的缩略图另有绘制路径，这里跳过。
-    const previous = button.previousElementSibling
-    const input = previous?.classList.contains("sound-style-main") ? previous.querySelector("input") : previous
+  for (const list of Array.from(document.querySelectorAll<HTMLElement>(".ui-style-ref-list"))) {
+    // 列表的第一个子元素是隐藏的引用输入框（decorateStyleReferenceInput），卡片按它的值重建。
+    const input = list.firstElementChild
     if (!(input instanceof HTMLInputElement)) continue
     const key = styleReferenceKey(input)
     if (appState.archive) {
-      const signature = `${appState.archive.revision}|${theme.value}|${orientation.value}|${key}|${input.value}`
-      const previous = styleReferenceThumbnailInputs.get(button)
+      const signature = `${appState.archive.revision}|${theme.value}|${orientation.value}|${key}|${input.value}|${input.disabled}`
+      const previous = styleReferenceThumbnailInputs.get(list)
       if (previous?.archive === appState.archive && previous.signature === signature) continue
-      styleReferenceThumbnailInputs.set(button, { archive: appState.archive, signature })
-    } else styleReferenceThumbnailInputs.delete(button)
+      styleReferenceThumbnailInputs.set(list, { archive: appState.archive, signature })
+    } else styleReferenceThumbnailInputs.delete(list)
     resolver ??= visualResolver()
-    void refreshStyleReferenceThumbnail(button, input, key, resolver)
+    refreshStyleReferenceThumbnail(list, input, key, resolver)
   }
-}
-
-export function nextStyleID(): string {
-  const ids = availableStyleIDs().map(Number).filter(Number.isSafeInteger)
-  return String((ids.length ? Math.max(...ids) : -1) + 1)
-}
-
-export function showNewStyleError(text: string): void {
-  newStyleError.textContent = text
-  newStyleError.hidden = !text
 }

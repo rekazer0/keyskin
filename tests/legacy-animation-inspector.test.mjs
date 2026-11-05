@@ -56,10 +56,9 @@ test("检查器用公共骨架：列表 → 预览 → 参数分组", () => {
   assert.match(inspector, /shownInAnimationView\(entry\.kind === "particle"\)/, "粒子设计只列粒子，动效设计列其余三类")
   assert.match(inspector, /selectedAnimation\(items\)/)
   assert.match(inspector, /onSelect: selectAnimation/)
-  assert.match(inspector, /animationSection\(group\.title, SECTION\)/)
-  assert.match(inspector, /const SECTION = "document-property-section"/)
-  assert.match(inspector, /dataset\.documentKey = key/)
-  assert.match(inspector, /dataset\.inspectorRowKey/)
+  assert.match(inspector, /section\(group\.title, /)
+  assert.match(inspector, /sectionClass: "document-property-section"/)
+  assert.match(inspector, /rowKey: \[appState\.selectedPath, entry\.section, key\]/, "属性行走 field()，按文件 / 段 / 键记住改动")
   for (const part of ["ui-listbox", 'setAttribute("role", "listbox")', 'setAttribute("role", "option")', "aria-selected", "animationPlayer(view.player)", '"预览"']) {
     assert.ok(shared.includes(part), `公共骨架缺少 ${part}`)
   }
@@ -76,13 +75,13 @@ test("编辑走 commitText 一步撤销，并刷新源码、画布与检查器",
   assert.match(inspector, /writeLegacyAnimationKind\(text, entry\.section/)
   assert.match(inspector, /writeLegacyAnimationType\(text, entry\.section/)
   assert.match(inspector, /appendLegacyAnimation\(current, kind, copyOf\)/, "新建与复制都追加新的 [ANIM*]")
-  // 不可编辑状态禁用所有控件。
-  assert.match(inspector, /input\.disabled = !isEditing\(\)/)
-  assert.match(inspector, /select\.disabled = !isEditing\(\)/)
+  // 不可编辑状态禁用所有控件：field() 默认读编辑模式。
+  assert.match(read("src/app/property-rows.ts"), /options\.editable \?\? services\.editing\(\)/)
+  assert.match(inspector, /editable: isEditing\(\)/)
 })
 
 test("参数按动效类型分组，组合动效用子动效列表编辑 BUILD_LIST", () => {
-  for (const label of ["动效类型", "动画类型", "粒子类型", "组合方式", "子动效列表", "gif 路径", "发射", "运动", "外观", "其他参数"]) {
+  for (const label of ["动效类型", "变化属性", "粒子类型", "组合方式", "子动画", "gif 路径", "发射", "运动", "外观", "其他参数"]) {
     assert.match(inspector + pure, new RegExp(label), `缺少标签 ${label}`)
   }
   assert.match(inspector, /legacyAnimationFieldGroups\(entry\)/)
@@ -99,7 +98,6 @@ test("参数按动效类型分组，组合动效用子动效列表编辑 BUILD_L
 test("播放器按百度的语义采样真实参数，画布上的粒子预览由它取代", () => {
   assert.match(inspector, /iniPreviewClip\(appState\.selectedDocument!, entry\.section, \{ fillBefore: true \}\)/)
   assert.match(inspector, /key: `\$\{appState\.selectedPath\}\|\$\{entry\.section\}`/)
-  assert.match(inspector, /preview\.setParticlePreview\(\)/)
   assert.match(inspector, /legacyAnimationReferences\(styleDocument\(\), layoutDocument\(\)\)/)
   assert.ok(!existsSync(new URL("../src/legacy-animation-preview.ts", import.meta.url)), "旧的示意预览已删除")
   assert.ok(!existsSync(new URL("../src/legacy-animation.css", import.meta.url)), "样式并入公共组件")
@@ -124,7 +122,7 @@ NM_IMG=btn,0
 `)
   assert.deepEqual(legacyAnimationStyles(styles), [
     { id: "7", events: ["按下"], animations: [1] },
-    { id: "8", events: ["按下", "抬起"], animations: [2, 3, 1] },
+    { id: "8", events: ["按下", "松开"], animations: [2, 3, 1] },
   ])
   assert.deepEqual(legacyAnimationStyles(undefined), [])
   assert.match(inspector, /legacyAnimationStyles\(styleDocument\(\)\)/, "检查器从 default.css 取样式列表")

@@ -6,6 +6,7 @@ import type { TileRect, TileSlice } from "../tiles.ts"
 import type { PalmOrientation, PalmTheme } from "./palm-board.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "./sxi-ini.ts"
 import { sxiFragment } from "./sxi-json.ts"
+import { nextStyleNumber } from "../layout-image.ts"
 
 type PalmStyleKind = "image" | "color" | "anim" | "text" | "sound" | "empty"
 
@@ -38,8 +39,8 @@ export function palmStyleKindOf(style: JsonObject | undefined): PalmStyleKind {
 }
 
 /**
- * Adds a style to the theme's shared table and returns its id: `id`, or the first one no table of the
- * theme uses (so an orientation's own table never shadows it).
+ * Adds a style to the theme's shared table and returns its id: `id`, or the next number after every one
+ * the theme's tables use (the same rule as Baidu's default.css, so an orientation's table never shadows it).
  */
 export function addPalmStyle(skin: JsonObject, theme: PalmTheme, model: JsonObject = {}, id?: string): string {
   const struct = asObject(skin[theme])
@@ -48,14 +49,21 @@ export function addPalmStyle(skin: JsonObject, theme: PalmTheme, model: JsonObje
   for (const table of ["s_info", "s_port", "s_land"]) {
     for (const [key, style] of Object.entries(asObject(asObject(struct[table])?.ss_1) ?? {})) used.add(String(asObject(style)?.id ?? `STYLE${key}`)).add(`STYLE${key}`)
   }
-  let next = 1
-  while (used.has(`STYLE${next}`)) next += 1
-  const styleID = id ?? String(next)
+  const styleID = id ?? String(nextStyleNumber([...used].flatMap((name) => /^STYLE(\d+)$/.exec(name)?.[1] ?? []).map(Number)))
   if (used.has(`STYLE${styleID}`)) throw new Error(`STYLE${styleID} 已存在`)
   const shared = asObject(struct.s_info) ?? (struct.s_info = {}) as JsonObject
   const styles = asObject(shared.ss_1) ?? (shared.ss_1 = {}) as JsonObject
   styles[styleID] = { f: 0, id: `STYLE${styleID}`, ...model }
   return styleID
+}
+
+/** Removes style `id` from the table it is looked up in for the orientation; returns whether it existed. */
+export function removePalmStyle(skin: JsonObject, theme: PalmTheme, orientation: PalmOrientation, id: string): boolean {
+  const location = palmStyleLocation(skin, theme, orientation, id)
+  const table = location && asObject(sxiFragment(skin, location.slice(0, -1)))
+  if (!table) return false
+  delete table[id]
+  return true
 }
 
 /**

@@ -3,6 +3,7 @@
 // (ANIMATION_FIELDS); everything here is pure so the mapping stays testable.
 
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
+import { EVENT_LABELS } from "../config-labels.ts"
 import { FLOATER_FIELDS } from "./sxi-style.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
 
@@ -85,11 +86,11 @@ export function newAnimation(kind: string, id: string): JsonObject {
 /* —— Field labels, enum choices, units —— */
 const LABELS: Record<string, string> = {
   // Base model.
-  t: "变化属性", count: "重复次数", back: "自动往返", clear: "结束后移除",
+  t: "变化属性", count: "重复次数", back: "往返", clear: "结束后移除",
   // a1.
-  style: "插值曲线", duration: "持续时间", delay: "延迟时间",
+  style: "插值曲线", duration: "时长", delay: "延迟",
   from: "起始值", to: "结束值", from_p: "起始比例", to_p: "结束比例",
-  from_px: "起始位移", to_px: "结束位移", pp: "变换中心", pxp: "变换中心（像素）",
+  from_px: "起始位移", to_px: "结束位移", pp: "比例", pxp: "像素",
   // af2 / a10.
   type: "帧修改方式", file: "图片序列", d: "播放时长", l: "显示层级", r: "作用区域",
   pos: "画面偏移", psr: "三段播放速率", rr: "空闲时恢复", pm: "路径模式", rm: "中断方式",
@@ -144,7 +145,7 @@ const SELECTS: Record<string, AnimationOption[]> = {
   pm: [["0", "模式 0"], ["1", "模式 1"], ["2", "模式 2"], ["3", "模式 3（默认）"]],
   rm: [["0", "模式 0"], ["1", "模式 1（默认）"]],
   l: [["0", "下层"], ["1", "上层"]],
-  m_up: [["0", "关闭（0）"], ["1", "开启（1）"]],
+  m_up: [["0", "关闭"], ["1", "开启"]],
   mode: [["0", "模式 0"], ["1", "模式 1"], ["2", "模式 2"]],
   r: [0, 1, 2, 3, 4].map((value) => [String(value), `区域 ${value}`]),
 }
@@ -206,11 +207,11 @@ const FAMILY_GROUPS: Record<string, (model: JsonObject) => AnimationGroup[]> = {
       : variant === "pixels"
         ? [["from_px", "point"], ["to_px", "point"]] as Array<[string, AnimationFieldKind]>
         : [["from_p", "point"], ["to_p", "point"]] as Array<[string, AnimationFieldKind]>
-    const labels: Record<string, string> = variant === "pixels"
-      ? { from_px: "起始位移（px）", to_px: "结束位移（px）" }
-      : a1IsScale(model) ? { from_p: "起始缩放（%）", to_p: "结束缩放（%）" } : {}
+    const ends: Record<string, Partial<AnimationField>> = variant === "pixels"
+      ? { from_px: { label: "起始位移", unit: "px" }, to_px: { label: "结束位移", unit: "px" } }
+      : a1IsScale(model) ? { from_p: { label: "起始缩放", unit: "%" }, to_p: { label: "结束缩放", unit: "%" } } : {}
     return [
-      { title: "变化", fields: [baseField("t", "select"), ...pair.map(([key, kind]) => field(key, kind, labels[key] ? { label: labels[key] } : {}))] },
+      { title: "变化", fields: [baseField("t", "select"), ...pair.map(([key, kind]) => field(key, kind, ends[key] ?? {}))] },
       timing([["duration", "number"], ["delay", "number"], ["style", "select"]]),
       ...usesPivot(model) ? [group("变换中心", [["pp", "point"], ["pxp", "point"]])] : [],
     ]
@@ -509,7 +510,10 @@ export function floaterDefaults(): JsonObject {
 }
 
 /* —— References (shown as context in the inspector) —— */
-const ANIMATION_EVENTS: Array<[string, string]> = [["1", "按下"], ["2", "松开"], ["3", "显示"], ["4", "隐藏"], ["5", "长按"]]
+/** 手心 s_5 的事件编号。 */
+export const PALM_ANIMATION_EVENTS: Array<[string, string]> = [
+  ["1", EVENT_LABELS.press], ["2", EVENT_LABELS.release], ["3", EVENT_LABELS.show], ["4", EVENT_LABELS.hide], ["5", EVENT_LABELS.hold],
+]
 
 type AnimationReferences = { styles: Array<{ name: string; events: string[] }>; combos: number[]; contexts?: string[] }
 
@@ -529,7 +533,7 @@ export function animationReferences(skin: JsonObject, tablePointer: ReadonlyArra
     const table = { ...asObject(shared.ss_1), ...asObject(local.ss_1) }
     for (const [styleID, style] of Object.entries(table)) {
       const bindings = asObject(asObject(style)?.s_5)
-      const events = ANIMATION_EVENTS.filter(([event]) => bindings?.[event] !== undefined && String(bindings[event]) === id).map(([, name]) => name)
+      const events = PALM_ANIMATION_EVENTS.filter(([event]) => bindings?.[event] !== undefined && String(bindings[event]) === id).map(([, name]) => name)
       if (!events.length) continue
       const name = `样式 ${styleID}`
       if (key === "s_info" || scope !== "s_info") styles.push({ name, events })
@@ -559,8 +563,8 @@ export function animationStyles(skin: JsonObject, tablePointer: ReadonlyArray<st
   const table = { ...asObject(shared.ss_1), ...asObject(local.ss_1) }
   return Object.entries(table).flatMap(([id, style]) => {
     const bindings = asObject(asObject(style)?.s_5)
-    const events = ANIMATION_EVENTS.flatMap(([event, name]) => bindings?.[event] === undefined ? [] : [name])
-    const animations = ANIMATION_EVENTS.flatMap(([event]) => {
+    const events = PALM_ANIMATION_EVENTS.flatMap(([event, name]) => bindings?.[event] === undefined ? [] : [name])
+    const animations = PALM_ANIMATION_EVENTS.flatMap(([event]) => {
       const value = bindings?.[event]
       return value === undefined ? [] : [String(value)]
     })

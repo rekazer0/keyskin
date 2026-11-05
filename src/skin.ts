@@ -483,6 +483,16 @@ export class SkinArchive {
       const source = this.getBytes(path)
       if (!destination || !source) continue
       let data = source
+      if (format === "bdi" && this.format === "bds" && /\/(?:port|land)\/[^/]+\.(?:ini|cnd|pop)$/.test(path)) {
+        const document = IniDocument.parse(strFromU8(data))
+        let changed = false
+        for (const { section, key, value } of document.entries()) {
+          if (key !== "POS_TYPE" || !value.split(",").some((part) => !part.trim())) continue
+          // Android treats empty offset slots as centred; iOS can drop the entire key instead.
+          changed = document.set(section, key, value.split(",").map((part) => part.trim() || "0").join(",")) || changed
+        }
+        if (changed) data = strToU8(document.toString())
+      }
       if (path === "Info.txt" || /\/(?:Info\.txt)$/.test(path)) {
         data = setInfoField(data, "SupportPlatform", format === "bdi" ? "I" : "A")
         if (format === "bds" && path === "Info.txt") data = setInfoField(data, "Style", "default")

@@ -9,6 +9,7 @@ import { createServer } from "vite"
 import { SkinArchive } from "../src/skin.ts"
 import { buildSxiZip } from "../src/palm/palm-export.ts"
 import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const sxiBytes = buildSxiZip(SkinArchive.open(bdsFixture())).bytes
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { port: 41819, strictPort: false, host: "127.0.0.1" } })
@@ -17,7 +18,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2, acceptDownloads: true, bypassCSP: true })
 const errors = []
 page.on("pageerror", (error) => errors.push(error.message))
-page.on("dialog", (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 
 const closeDialog = async () => {
   await page.waitForFunction(() => {
@@ -82,7 +83,7 @@ const download = async (trigger) => {
   const pending = page.waitForEvent("download", { timeout: 180000 })
   pending.catch(() => {})
   await trigger()
-  const tap = page.locator("#file-operation-dialog[open] button.primary", { hasText: "下载" })
+  const tap = page.locator('#file-operation-dialog[open] button[data-variant="primary"]', { hasText: "下载" })
   const tapped = tap.waitFor({ state: "visible", timeout: 180000 }).then(() => "tap")
   tapped.catch(() => {})
   const result = await Promise.race([pending, tapped])

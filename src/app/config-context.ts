@@ -3,7 +3,7 @@ import { palmAnimationTableAddress, palmCandidateAddress, palmStyleTableAddress,
 import { palmStylePointer } from "./sxi-styles"
 import { palmTilePointer } from "../palm/palm-style-edit.ts"
 import { appState } from "./state"
-import { skinState, sourceEditor, theme, orientation, colorPickers, colorAlphas, candidateArea, toolbarStrip, candidateBackgroundCanvas, candidateInputBackgroundCanvas, candidateInputBox, candidateInputText, toolbarCanvas } from "./dom"
+import { skinState, sourceEditor, theme, orientation, candidateArea, toolbarStrip, candidateBackgroundCanvas, candidateInputBackgroundCanvas, candidateInputBox, candidateInputText, toolbarCanvas } from "./dom"
 import { isListCell } from "../layout.ts"
 import { effectivePanelSection } from "../panel-tools.ts"
 import { selectedBdaSourceKeys } from "./document-inspector"
@@ -170,39 +170,6 @@ export function isConfigLayoutPath(path: string): boolean {
 export function showsLayoutProperties(path: string): boolean {
   if (appState.archive?.format === "ssf") return /\.ini$/i.test(path) && appState.archive.isText(path)
   return appState.archive?.format !== "bda" && isConfigLayoutPath(path)
-}
-
-function colorControlKey(field: HTMLInputElement): string {
-  return `${field.hasAttribute("data-keyboard-field") ? "keyboard" : "style"}-${field.dataset.keyboardField ?? field.dataset.styleField ?? ""}`
-}
-
-export function syncColorControl(field: HTMLInputElement): void {
-  const value = field.value.trim().replace(/^#/, "")
-  // An unset colour resets the picker; otherwise it would keep (and re-write) the previous key's colour.
-  if (value && !/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value)) return
-  const hex = !value ? "FF000000" : value.length === 6 ? `FF${value}` : value.toUpperCase()
-  const picker = colorPickers.find((item) => item.dataset.colorPickerFor === colorControlKey(field))
-  const alpha = colorAlphas.find((item) => item.dataset.colorAlphaFor === colorControlKey(field))
-  if (picker) {
-    picker.value = `#${hex.slice(2)}`
-    picker.disabled = field.disabled
-  }
-  if (alpha) {
-    alpha.value = String(Number.parseInt(hex.slice(0, 2), 16) / 255)
-    alpha.disabled = field.disabled
-  }
-}
-
-export function writeColorControl(control: HTMLInputElement, alphaValue: number): void {
-  const key = control.dataset.colorPickerFor ?? control.dataset.colorAlphaFor ?? ""
-  const field = document.querySelector<HTMLInputElement>(
-    `[data-${key.startsWith("keyboard-") ? "keyboard" : "style"}-field="${CSS.escape(key.replace(/^(keyboard|style)-/, ""))}"]`,
-  )
-  if (!field) return
-  const rgb = control.type === "color" ? control.value.slice(1).toUpperCase() : colorPickers.find((item) => item.dataset.colorPickerFor === key)?.value.slice(1).toUpperCase()
-  if (!rgb || rgb.length !== 6) return
-  field.value = `${Math.round(Math.max(0, Math.min(1, alphaValue)) * 255).toString(16).padStart(2, "0")}${rgb}`.toUpperCase()
-  field.dispatchEvent(new Event("change", { bubbles: true }))
 }
 
 export function keyboardContext():

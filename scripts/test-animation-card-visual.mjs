@@ -27,8 +27,7 @@ try {
     for (const grid of [library, list]) {
       for (let i = 0; i < 6; i++) {
         const card = styleCard({ id: `${grid.id}-${i}`, label: i ? `STYLE${i}` : '动画 1', kind: i ? 'color' : 'anim', kindLabel: i ? '颜色' : '透明度', kindIcon: i ? 'palette' : 'blend',
-          subtitle: i ? undefined : '真实 INFO：按键轻轻出现，超长说明应该单行省略而非扩张卡片',
-          info: i ? '样式 INFO' : undefined, summary: '1000 ms', animation: () => [animationPlayer({ key: grid.id, clip: clip(), thumbnail: true })] })
+          info: i ? '样式 INFO' : '真实 INFO：按键轻轻出现，超长说明应该单行省略而非扩张卡片', summary: '1000 ms', animation: () => [animationPlayer({ key: grid.id, clip: clip(), thumbnail: true })] })
         grid.append(card)
       }
     }
@@ -48,12 +47,14 @@ try {
         return { available, columns: styles.gridTemplateColumns.split(' ').length, widths: cards.map(card => card.getBoundingClientRect().width), overflow: grid.scrollWidth > grid.clientWidth + 1 }
       }))
       for (const grid of grids) {
-        assert.ok(grid.widths.every(value => Math.abs(value - Math.min(192, grid.available)) < 1), `${theme}/${width}: fixed width, narrow-container fallback`)
-        assert.equal(grid.columns, Math.max(1, Math.floor((grid.available + 8) / 200)), `${theme}/${width}: responsive columns`)
+        // 卡片最小 160px，随容器拉伸填满每一列（--style-card-width 是最小宽度）。
+        const fill = (grid.available - 8 * (grid.columns - 1)) / grid.columns
+        assert.ok(grid.widths.every(value => Math.abs(value - fill) < 1 && value >= Math.min(160, grid.available) - 1), `${theme}/${width}: cards fill their column, narrow-container fallback`)
+        assert.equal(grid.columns, Math.max(1, Math.floor((grid.available + 8) / 168)), `${theme}/${width}: responsive columns`)
         assert.equal(grid.overflow, false, `${theme}/${width}: no horizontal overflow`)
       }
       const visual = await page.locator('#visual-library .ui-style-card').first().evaluate(card => {
-        const subtitle = card.querySelector('.ui-style-card-subtitle')
+        const subtitle = card.querySelector('.ui-style-card-info')
         const heading = card.querySelector('.ui-style-card-heading')
         const icon = card.querySelector('.ui-style-card-kind > .ui-icon')
         const stage = card.querySelector('.ui-animation-stage')
@@ -61,7 +62,7 @@ try {
       })
       assert.match(visual.subtitle, /^真实 INFO/)
       assert.doesNotMatch(visual.subtitle, /1000 ms/)
-      assert.ok(visual.subtitleY > visual.headingY)
+      assert.ok(Math.abs(visual.subtitleY - visual.headingY) < 8, 'INFO shares the heading row')
       assert.equal(visual.ellipsis, 'ellipsis')
       assert.equal(visual.icon, 14)
       assert.match(visual.checker, /conic-gradient/)
@@ -81,12 +82,11 @@ try {
   assert.ok(full >= 63 && full <= 68, `full editor keeps its 64-unit key: ${full}`)
   assert.ok(thumbnail > full * 1.6, `thumbnail key is larger without changing editor: ${thumbnail}/${full}`)
   const first = page.locator('#visual-library .ui-style-card').first()
-  for (const state of ['aria-selected', 'aria-pressed']) {
-    await first.evaluate((card, state) => { card.setAttribute('aria-pressed', 'false'); card.removeAttribute('aria-selected'); card.setAttribute(state, 'true') }, state)
-    const before = await first.evaluate(card => getComputedStyle(card).backgroundColor)
-    await first.hover()
-    assert.equal(await first.evaluate(card => getComputedStyle(card).backgroundColor), before, `${state}: selected state survives hover`)
-  }
+  // 列表选中只用 aria-selected（DESIGN §7）。
+  await first.evaluate(card => card.setAttribute('aria-selected', 'true'))
+  const before = await first.evaluate(card => getComputedStyle(card).backgroundColor)
+  await first.hover()
+  assert.equal(await first.evaluate(card => getComputedStyle(card).backgroundColor), before, 'selected state survives hover')
   assert.deepEqual(errors, [])
-  console.log('animation-card visuals passed: fixed 192px cards, 1–4 responsive columns, narrow fallback, both themes, INFO subtitle, 14px icons, checkerboard, thumbnail-only zoom, both selection states')
+  console.log('animation-card visuals passed: 160px-minimum stretching cards, 1–4 responsive columns, narrow fallback, both themes, INFO on heading row, 14px icons, checkerboard, thumbnail-only zoom, selection state')
 } finally { await browser.close(); await server.close() }

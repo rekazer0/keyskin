@@ -4,6 +4,7 @@ import { chromium } from 'playwright'
 import { SkinArchive } from '../src/skin.ts'
 import { buildSxiZip } from '../src/palm/palm-export.ts'
 import { bdsFixture } from '../tests/helpers/baidu-fixture.mjs'
+import { acceptAskDialogs } from "../tests/helpers/ask-dialogs.mjs"
 
 const bytes = buildSxiZip(SkinArchive.open(bdsFixture())).bytes
 const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 41829, strictPort: false, hmr: false } })
@@ -12,7 +13,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-page.on('dialog', (dialog) => dialog.accept())
+await acceptAskDialogs(page)
 const state = () => page.evaluate(async () => {
   const { appState } = await import('/src/app/state.ts')
   const { source } = await import('/src/app/canvas-interaction.ts')
@@ -70,7 +71,7 @@ try {
   const fields = page.locator('#document-fields')
   const beforeGeneral = (await state()).skin
   await page.locator(`.sidebar-overview button[data-path="${generalPath}"]`).click()
-  assert.ok(await fields.locator('.document-property-field').count() > 0, 'general configuration exposes its model fields')
+  assert.ok(await fields.locator('.ui-field').count() > 0, 'general configuration exposes its model fields')
   assert.equal(await page.locator('#selected-key').textContent(), '通用配置')
   assert.equal(await page.locator('#selected-key-context').textContent(), 'skin.json · port_layout.b.defaultGlobal')
   assert.deepEqual(JSON.parse((await state()).source), beforeGeneral)
@@ -104,7 +105,7 @@ try {
   await selectKey(1)
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '样式', exact: true }).click()
   // The Palm inspector shows the key's skin.json model: styles, text styles, gestures and rect.
-  const add = fields.locator('.style-reference-add')
+  const add = fields.locator('.ui-style-ref-append')
   const picker = page.frameLocator('#picker-frame')
   const pickerDialog = page.locator('#picker-dialog')
   await add.click()
@@ -118,7 +119,7 @@ try {
   await add.click()
   await pickerDialog.waitFor({ state: 'visible' })
   await picker.locator('[data-library-mode="images"]').click()
-  await picker.locator('#style-library-grid > button').first().click()
+  await picker.locator('#style-library-grid > .ui-image-card').first().click()
   await picker.locator('#style-library-apply').click()
   // 图片加载完才会给画布写上尺寸，之后才能点中切片。
   const sliceCanvas = picker.locator('#picker-canvas[style*="width"]')
@@ -139,9 +140,12 @@ try {
   await undoRedo('redo')
   assert.deepEqual((await state()).skin, added.skin)
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '样式', exact: true }).click()
-  const normal = fields.locator('[data-key-field="FORE_STYLE"]').locator('..').locator('.style-reference-row').last().locator('[data-style-state="normal"]')
+  // 引用卡单击打开「全部样式」并定位当前样式；改切片从预览栏的「选择切片」进。
+  const normal = fields.locator('[data-key-field="FORE_STYLE"]').locator('..').locator('.ui-style-ref').last().locator('.ui-style-state[data-state="normal"]')
   await normal.click()
   await pickerDialog.waitFor({ state: 'visible' })
+  await picker.locator('#style-library-slice:not([hidden])').click()
+  await picker.locator('#picker-canvas[style*="width"]').waitFor()
   await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
     const { updateSelectedImageReference } = await import('/src/app/image-pickers.ts')
@@ -154,7 +158,7 @@ try {
   await pickerDialog.waitFor({ state: 'hidden' })
   // Text edits on a key and on the whole layout land in the styles' s_1 inside skin.json.
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '文字', exact: true }).click()
-  const keySize = fields.locator('[data-inspector-group-label="文字"] .ui-subsection').filter({ hasText: 'ss_1.3.s_1' }).locator('[data-document-key="f_s"] input')
+  const keySize = fields.locator('[data-inspector-group-label="文字"] .ui-subsection').filter({ hasText: 'ss_1.3.s_1' }).locator('[data-document-key="f_s"] input[type=number]')
   await keySize.fill('44')
   await keySize.press('Enter')
   await page.waitForFunction(async () => {

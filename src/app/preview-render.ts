@@ -599,7 +599,6 @@ export function setGuidesVisible(enabled: boolean): void {
   appState.guidesVisible = enabled
   ;($("#settings-layout-guides") as HTMLInputElement).checked = enabled
   for (const button of [toggleGuides, mobileToggleGuides]) {
-    button.classList.toggle("active", appState.guidesVisible)
     button.setAttribute("aria-pressed", String(appState.guidesVisible))
   }
   preview.setGuides(appState.guidesVisible)

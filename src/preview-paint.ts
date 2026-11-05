@@ -67,11 +67,9 @@ export async function paintPreview(self: Preview): Promise<void> {
   const panelAnimationElapsed = self.legacyPanelAnimationStartedAt
     ? Date.now() - self.legacyPanelAnimationStartedAt
     : -1
-  // 面板自己的粒子：选择器里试播的粒子优先，其次是面板的显示动画（SHOW_ANIM），最后才是面板的按下动画。
-  const particles = self.particlePreview
-    ? [self.particlePreview]
-    : (self.legacyShowAnimation?.get(self.panelAnimationStyle)
-      ?? self.legacyAnimation?.get(self.panelAnimationStyle))?.particles ?? []
+  // 面板自己的粒子：先看面板的显示动画（SHOW_ANIM），再看面板的按下动画。
+  const particles = (self.legacyShowAnimation?.get(self.panelAnimationStyle)
+    ?? self.legacyAnimation?.get(self.panelAnimationStyle))?.particles ?? []
   const particleFrames = panelAnimationElapsed < 0
     ? []
     : particles.flatMap((particle) =>

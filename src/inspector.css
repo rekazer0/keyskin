@@ -134,14 +134,13 @@
 .source #quick-inspector[data-filter-open] .inspector-filter { display: flex; animation: inspector-reveal var(--duration-base) var(--ease-emphasized); }
 .source .inspector-filter > input { font-size: var(--font-size-xs); }
 .source .inspector-filter > .ui-icon-button { flex: none; }
-.source .inspector-filter-empty { margin: 0; padding: var(--space-2xl) var(--_gutter); color: var(--tertiary); font-size: var(--font-size-xs); text-align: center; }
-.source .inspector-filter-empty[hidden] { display: none; }
+
 .source #quick-inspector[data-filtering] [data-filter-miss] { display: none; }
 /* 筛选时折叠的分组也展开（见分组折叠规则），说明文字收起，只留命中的属性行 */
-.source #quick-inspector[data-filtering] :is(.inspector-note, .inspector-group-subtitle, .bda-advanced-note) { display: none; }
+.source #quick-inspector[data-filtering] :is(.inspector-group-subtitle, .bda-advanced-note) { display: none; }
 
 /* —— 分组 —— */
-.source :is(.inspector-group, .document-property-section, .bda-inspector-section) {
+.source .ui-section {
   display: grid;
   gap: var(--space-sm);
   margin: 0;
@@ -151,14 +150,14 @@
   background: none;
   box-shadow: none;
 }
-.source :is(.inspector-group, .document-property-section, .bda-inspector-section)[hidden] { display: none; }
+.source .ui-section[hidden] { display: none; }
 .source .mobile-inspector-managed ~ .mobile-inspector-managed,
 .source :is(.document-fields, .bda-config-fields):has(.mobile-inspector-managed) { border-top: 1px solid var(--line-soft); }
-.source :is(.document-property-section, .bda-inspector-section).mobile-inspector-managed:first-child { border-top: 0; }
+.source .ui-section.mobile-inspector-managed:first-child { border-top: 0; }
 /* 文档与 BDA 分组是外层容器里的多个分区：外层不画边和留白。 */
 .source :is(.document-fields, .bda-config-fields) { display: block; padding: 0; border: 0; }
 .source :is(.document-fields, .bda-config-fields)[hidden] { display: none; }
-.source :is(.inspector-group, .document-property-section, .bda-inspector-section) > h3 {
+.source :is(.ui-section > h3, .tile-heading > h3, .bda-selected-style-heading > h3) {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -175,8 +174,10 @@
 /* 文字分组标题右侧的对象切换（候选字 / 首选 / 输入码） */
 .source h3 > .ui-segmented { margin-left: auto; font-weight: var(--font-weight-regular); }
 .source h3 > .ui-segmented[hidden] { display: none; }
+/* 标题旁的说明：只放图标，文字在悬停提示里 */
+.source .inspector-heading-note { display: inline-flex; color: var(--tertiary); font-weight: var(--font-weight-regular); }
+.source .inspector-heading-note[hidden] { display: none; }
 .source .inspector-group-subtitle { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
-.source :is(.typography-heading-override, .typography-subtitle-override) { display: none; }
 .source #text-style-note { display: flex; align-items: center; gap: var(--space-xs); width: fit-content; max-width: 100%; font-size: var(--font-size-xs); color: var(--secondary); border-radius: var(--radius-sm); }
 .source #text-style-note[hidden] { display: none; }
 .source #text-style-note:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
@@ -185,31 +186,22 @@
 .source .appearance-typography-fields,
 .source .appearance-property-grid,
 .source #primary-css-fields,
-.source .document-property-grid,
 .source .color-pair-field { display: grid; gap: var(--space-sm); }
-.source :is(.inspector-grid, .document-property-grid) > [hidden], .source .color-pair-field[hidden] { display: none; }
+.source .inspector-grid > [hidden], .source .color-pair-field[hidden] { display: none; }
 
 /* —— 属性行：标签列固定宽度，控件占满 —— */
-.source :is(.ui-field, .document-property-field, .bda-text-field, .bda-readonly-field, .bda-range-field, .bda-color-field) {
+.source .ui-field {
   --_label-width: var(--_label);
   position: relative;
 }
-.source :is(.document-property-field, .bda-text-field, .bda-readonly-field, .bda-range-field, .bda-color-field) {
-  display: grid;
-  grid-template-columns: var(--_label) minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: var(--control-height-md);
-  color: var(--secondary);
-}
-.source :is(.ui-field, .document-property-field)[hidden] { display: none; }
+.source .ui-field[hidden] { display: none; }
 .source .ui-field > span:first-child,
 .source .document-field-caption { overflow: hidden; color: var(--secondary); text-overflow: ellipsis; white-space: nowrap; }
 .source .document-field-caption { display: grid; }
-.source .ui-field-note, .source .inspector-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
+.source .ui-field-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
 .source .ui-field-pair > .ui-input > input { height: 100%; }
 .source .ui-field[data-stack] { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
-.source .color-control[data-mixed] > input[type="color"] { opacity: 0; }
+.source .config-value-control { display: grid; min-width: 0; }
 .source .style-field { display: block; min-width: 0; }
 
 /* 改动标记：本次选择后改过的行在左侧留白里有一个点 */
@@ -252,122 +244,11 @@
 @keyframes inspector-mark { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
 
 /* —— 成对 / 四格数值 —— */
-.source .particle-range-inputs { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; align-items: center; gap: var(--space-xs); }
-.source .document-switch-control { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-sm); }
 
-/* —— 颜色：色块 + 色值 + 透明度 —— */
-.source .color-control { padding-left: var(--space-xs); }
-.source .color-control > input:not([type]) , .source .color-control > input[data-style-field] { flex: 1; font-family: var(--font-mono); font-size: var(--font-size-xs); }
-.source .color-control > input[type="number"] { flex: none; width: 40px; padding: 0; font-family: var(--font-mono); text-align: right; appearance: textfield; }
-.source .color-control > input[type="number"]::-webkit-inner-spin-button { appearance: none; }
-.source .bda-color-controls { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
-
-/* —— 样式卡片：左侧编号 + 类型，右侧并排正常、按下两个预览（不带状态名）；标签在卡片上方。
-   按键、整体布局、BDA 共用同一张卡片（style-references.ts / bda-editor.ts 生成同样的结构）。 —— */
-.source :is(.ui-field, .document-property-field, .fore-style-reference-field).style-reference-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
-/* 卡片上方的标签：小号弱化，和属性行标签区分开；「+ 添加」靠右 */
-.source :is(.ui-field, .document-property-field, .fore-style-reference-field).style-reference-field > :first-child { display: flex; align-items: center; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.source .style-reference-add { display: inline-flex; align-items: center; gap: var(--space-2xs); margin-left: auto; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; }
-.source .style-reference-add:focus-visible { outline: 0; border-radius: var(--radius-sm); box-shadow: var(--focus-ring); }
-.source #quick-inspector[data-readonly="true"] .style-reference-add { display: none; }
-.source .style-reference-input { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
-.source .style-reference-input > input:not(.style-reference-number):not(.sound-style-value) { display: none; }
-.source .style-picker-trigger { display: grid; flex: 1; gap: var(--space-xs); min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; }
-.source :is(.style-reference-row, .bda-style-reference-input) {
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  /* 行轨道锁在卡片高度内，预览画布的 height: 100% 才能解析，否则会按位图比例撑高后被裁掉 */
-  grid-template-rows: minmax(0, 1fr);
-  height: 88px;
-  overflow: hidden;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  background: var(--material-content);
-}
-.source .bda-style-reference-input > .style-picker-trigger { height: 100%; }
-.source .style-reference-meta { display: grid; place-content: center; justify-items: center; gap: var(--space-sm); min-width: 0; padding: 0 var(--space-xs); background: var(--content); }
-.source .style-reference-meta > input {
-  width: 100%;
-  height: auto;
-  padding: 0;
-  border-color: transparent;
-  background: none;
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  text-align: center;
-}
-.source .style-reference-meta > input:focus { border-color: transparent; background: none; box-shadow: none; }
-/* 搜狗皮肤的卡片引用的是样式段名而不是编号，名字较长，用等宽小字并截断 */
-.source .style-reference-meta > input.style-reference-name { font-family: var(--font-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); text-overflow: ellipsis; }
-.source .style-reference-meta > .style-kind-badge { padding: 0; background: none; box-shadow: none; color: var(--tertiary); }
-.source .style-picker-states { display: grid; flex: 1; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: var(--space-2xs); height: 100%; min-width: 0; background: var(--line-soft); }
-.source .style-picker-states[data-variant="animation"] { grid-template-columns: minmax(0, 1fr); }
-.source .style-animation-previews { display: flex; align-items: stretch; min-width: 0; height: 100%; color: var(--tertiary); font-size: var(--font-size-xs); }
-.source .style-animation-previews > .style-picker-state { flex: 1; min-width: 0; }
-.source .style-animation-previews .ui-animation-player { width: 100%; height: 100%; }
-.source .style-picker-state {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  height: 100%;
-  padding: var(--space-xs);
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background: var(--checker-image), var(--checker-light);
-  background-position: 0 0, 4px 4px;
-  background-size: 8px 8px;
-  transition: opacity var(--duration-fast) var(--ease-standard);
-}
-.source .style-picker-state > canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
-@media (hover: hover) { .source .style-picker-state:hover { box-shadow: inset 0 0 0 2px var(--accent); } }
-.source .style-picker-state:active { opacity: var(--disabled-opacity); }
-.source .style-picker-state:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--accent); }
-.source :is(.style-kind-badge, .sound-style-badge, .bda-inspector-context-badge) {
-  flex: none;
-  padding: 0 var(--space-xs);
-  border-radius: var(--radius-sm);
-  background: var(--material-content);
-  color: var(--secondary);
-  font-size: var(--font-size-xs);
-  line-height: 18px;
-}
-
-/* —— 音效引用：和样式卡片同一种外框；左侧图标块，中间文件名 + 编号，右侧「更换」。
-   整条点击试听，没有音效时整条就是「选择音效」。 —— */
-.source .sound-style-reference { gap: var(--space-2xs); padding: var(--space-2xs); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--material-content); }
-.source .sound-style-main { display: flex; flex: 1; align-items: center; gap: var(--space-sm); min-width: 0; padding: var(--space-xs); border-radius: var(--radius-md); color: var(--secondary); transition: background-color var(--duration-fast) var(--ease-standard); }
-.source .sound-style-main:not(.has-sound) { justify-content: center; gap: var(--space-xs); color: var(--tertiary); }
-.source .sound-style-main:not(.has-sound) > .sound-style-icon { width: auto; height: auto; background: none; }
-.source .sound-style-main:not(.has-sound) > .sound-style-main-meta { flex: none; }
-@media (hover: hover) { .source .sound-style-main:hover { background: var(--hover); } }
-.source .sound-style-main:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
-.source .sound-style-main:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
-.source #quick-inspector[data-readonly="true"] .sound-style-main:not(.has-sound) { pointer-events: none; }
-.source .sound-style-icon { display: grid; place-items: center; flex: none; width: var(--control-height-md); height: var(--control-height-md); border-radius: var(--radius-sm); background: var(--content); }
-.source .sound-style-main-meta { display: grid; flex: 1; min-width: 0; }
-.source :is(.sound-style-name, .sound-style-file) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.source .sound-style-name { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-.source .has-sound .sound-style-name { color: var(--text); font-family: var(--font-mono); }
-.source .sound-style-file { color: var(--tertiary); font-size: var(--font-size-xs); }
-.source .sound-style-file:empty { display: none; }
-.source .sound-style-value { display: none; }
-.source .sound-style-trigger {
-  display: grid;
-  place-items: center;
-  flex: none;
-  align-self: center;
-  width: var(--control-height-md);
-  height: var(--control-height-md);
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--secondary);
-}
-@media (hover: hover) { .source .sound-style-trigger:hover:not(:disabled) { background: var(--hover); color: var(--text); } }
-.source .sound-style-trigger[hidden] { display: none; }
+/* —— 样式引用字段：标签在卡片上方，卡片本身是 components.css 的 .ui-style-ref（styleReferenceCard()）。 —— */
+.source .ui-field.style-reference-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
+/* 卡片上方的标签：小号弱化，和属性行标签区分开 */
+.source .ui-field.style-reference-field > :first-child { display: flex; align-items: center; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 
 .source #font-file-field[hidden] { display: none; }
 .source .font-file-controls { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
@@ -447,7 +328,6 @@
 /* —— BDA：样式标题行、卡片压平为分区 —— */
 .source .bda-selected-style-heading { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-md) var(--_gutter) 0; }
 .source .bda-selected-style-heading[hidden] { display: none; }
-.source .bda-selected-style-heading > h3 { flex: 1; margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
 .source :is(.bda-style-card, .bda-metadata-card, .bda-key-style-block) {
   display: grid;
   gap: var(--space-sm);
@@ -461,80 +341,29 @@
 .source .bda-style-card + .bda-style-card { border-top: 1px solid var(--line-soft); padding-top: var(--space-md); }
 .source .bda-card-heading { display: flex; align-items: center; gap: var(--space-sm); color: var(--text); font-weight: var(--font-weight-medium); }
 .source :is(.bda-style-controls, .bda-fore-styles-grid, .bda-sound-list, .bda-panel-list) { display: grid; gap: var(--space-sm); min-width: 0; }
-.source :is(.bda-editor-empty, .bda-advanced-note, .bda-editor-summary) { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
+
 .source .bda-inspector-context { display: flex; align-items: center; gap: var(--space-sm); color: var(--secondary); }
+.source :is(.bda-advanced-note, .bda-editor-summary) { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
 .source .bda-style-preview {
   min-height: 48px;
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--checker-image), var(--checker-light);
-  background-position: 0 0, 4px 4px;
-  background-size: 8px 8px;
 }
 .source .bda-style-resource-name { overflow: hidden; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
-.source .bda-boolean-field { grid-template-columns: minmax(0, 1fr) auto; }
-
-/* —— 粒子 —— */
-.source .particle-preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); color: var(--tertiary); font-size: var(--font-size-xs); }
-.source .particle-preview-toolbar > button { height: var(--control-height-sm); padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-md); background: var(--material-content); color: var(--text); font: inherit; font-size: var(--font-size-xs); }
-.source .particle-property-group { display: grid; gap: var(--space-sm); margin: 0; padding: 0; border: 0; }
-.source .particle-property-group > legend, .source .particle-advanced-properties > h4 { margin: 0 0 var(--space-xs); padding: 0; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.source .particle-advanced-properties { display: grid; gap: var(--space-sm); }
-.source .particle-slider-input { display: grid; grid-template-columns: minmax(0, 1fr) 64px; align-items: center; gap: var(--space-sm); }
-.source .particle-image-previews { display: flex; flex-wrap: wrap; grid-column: 2; gap: var(--space-xs); }
-.source .particle-image-preview { display: grid; justify-items: center; gap: var(--space-2xs); color: var(--tertiary); font-size: var(--font-size-xs); }
-.source .particle-image-preview > canvas { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 
 /* ================================ 资源视图 ================================ */
 .source #resource-inspector { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .source #resource-inspector[hidden], .source #resource-list-view[hidden], .source #resource-detail[hidden] { display: none; }
 .source :is(#resource-list-view, #resource-detail) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 /* 资源列表头：第一行标题 · 数量，第二行搜索框占满剩余宽度、操作按钮紧跟其后。 */
-.source #resource-list-view > .inspector-title {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 0 var(--_gutter) var(--space-sm);
-  border-bottom: 1px solid var(--line);
-}
-.source #resource-list-title { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); white-space: nowrap; }
-.source #resource-count { color: var(--tertiary); font-size: var(--font-size-xs); white-space: nowrap; }
-.source #resource-list-view .resource-filters { grid-column: 1 / -1; }
+.source #resource-list-view > :is(.ui-pane-header, .resource-filters) { padding: 0 var(--_gutter); }
+.source #resource-list-view > .resource-filters { padding-block: var(--space-xs); }
+.source #resource-list-view > .resource-actions { margin: 0 var(--_gutter) var(--space-sm); }
+.source #resource-list-view > .resource-actions:not(:has(> :not([hidden]))) { display: none; }
 .source .resource-gallery { display: grid; flex: 1; grid-template-columns: repeat(auto-fill, minmax(min(100%, 144px), 1fr)); align-content: start; gap: var(--space-sm); min-height: 0; overflow: auto; padding: var(--space-md) var(--_gutter); }
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card) {
-  display: grid;
-  align-content: start;
-  gap: var(--space-xs);
-  min-width: 0;
-  padding: var(--space-xs);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  text-align: left;
-}
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card) :is(img, canvas) {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: contain;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--checker-image), var(--checker-light);
-  background-position: 0 0, 4px 4px;
-  background-size: 8px 8px;
-}
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card) :is(span, small, strong) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (hover: hover) { :is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card):hover { background: var(--hover); } }
-:is(.source, .style-workspace .sidebar) :is(.resource-item, .style-resource-item):not(.ui-style-card, .ui-image-card).selected { border-color: var(--accent); background: var(--accent-soft); }
-:is(.source, .style-workspace .sidebar) .resource-style-previews { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2xs); }
-.source .resource-gallery:has(> .style-resource-item) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
-:is(.source, .style-workspace .sidebar) .style-resource-name { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
-:is(.source, .style-workspace .sidebar) .style-resource-name > .style-kind-badge { padding: 0; background: none; box-shadow: none; overflow: visible; }
+.source .resource-gallery:has(> .style-resource-item) { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--style-card-width)), 1fr)); }
 .source .resource-gallery[data-kind="sound"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 
 .source .resource-detail-heading { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) var(--space-md); border-bottom: 1px solid var(--line); }
@@ -544,51 +373,23 @@
 .source :is(#image-resource-detail, #style-resource-detail) { display: grid; flex: 1; align-content: start; min-height: 0; overflow: auto; }
 .source :is(#image-resource-detail, #style-resource-detail)[hidden] { display: none; }
 .source .tile-toolbar { display: flex; align-items: center; gap: var(--space-2xs); padding: var(--space-sm) var(--_gutter); border-bottom: 1px solid var(--line-soft); }
-.source .tile-mode-control { display: flex; gap: var(--space-2xs); margin-right: auto; }
+
 .source .tile-heading { display: flex; align-items: center; gap: var(--space-sm); }
-.source .tile-heading > h3, .source #tile-inner-title { flex: 1; margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-.source #tile-preview-wrap { display: grid; place-items: center; padding: var(--space-sm); border-radius: var(--radius-md); background: var(--checker-image), var(--checker-light); background-position: 0 0, 6px 6px; background-size: 12px 12px; }
+.source :is(.tile-heading, .bda-selected-style-heading) > h3 { flex: 1; }
+.source #tile-preview-wrap { display: grid; place-items: center; padding: var(--space-sm); border-radius: var(--radius-md); }
 .source #tile-preview-wrap[hidden] { display: none; }
 .source #tile-preview { max-width: 100%; height: auto; }
-.source :is(#tile-source-fields, #tile-inspector .geometry-fields) { grid-template-columns: 1fr 1fr; }
-.source :is(#tile-inspector, #style-detail-fields) label,
-.source .style-detail-field { display: grid; gap: var(--space-2xs); color: var(--secondary); font-size: var(--font-size-xs); }
-.source .style-detail-previews { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); padding: var(--space-md) var(--_gutter) 0; }
-.source .style-detail-previews > button {
+.source #style-detail-previews { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); padding: var(--space-md) var(--_gutter) 0; }
+.source #style-detail-previews > button {
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--checker-image), var(--checker-light);
-  background-position: 0 0, 6px 6px;
-  background-size: 12px 12px;
 }
-.source .style-detail-previews canvas { display: block; width: 100%; height: auto; }
-.source .style-detail-previews[hidden] { display: none; }
-.source #style-detail-fields { padding: var(--space-md) var(--_gutter); }
-.source :is(.style-detail-group, .style-detail-group-fields) { display: grid; gap: var(--space-sm); }
-.source .style-detail-field-row { display: grid; }
-.source .style-detail-group-fields[data-embedded="true"],
-.source .style-detail-group-fields[data-embedded="true"] .style-detail-field-row { grid-template-columns: minmax(0, 1fr); }
-.source .style-detail-key-raw { color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); }
-.source .style-detail-sound-card { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm); border-radius: var(--radius-md); background: var(--material-content); }
+.source #style-detail-previews canvas { display: block; width: 100%; height: auto; }
+.source #style-detail-previews[hidden] { display: none; }
 
 /* 资源视图里的工具按钮与检查器图标按钮一致 */
-.source :is(.resource-actions, .tile-toolbar, .resource-detail-heading) .toolbar-button {
-  display: grid;
-  place-items: center;
-  width: var(--control-height-md);
-  height: var(--control-height-md);
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--secondary);
-}
-@media (hover: hover) { .source :is(.resource-actions, .tile-toolbar, .resource-detail-heading) .toolbar-button:hover:not(:disabled) { background: var(--hover); color: var(--text); } }
-.source :is(.resource-actions, .tile-toolbar) .toolbar-button.active { background: var(--accent-soft); color: var(--accent); }
-.source :is(.resource-actions, .tile-toolbar, .resource-detail-heading) .toolbar-button:disabled { opacity: var(--disabled-opacity); }
-.source .toolbar-button[hidden] { display: none; }
 
 /* ================================ 空状态 ================================ */
 .source .inspector-empty { display: none; }
@@ -611,12 +412,10 @@
 /* —— BDA 按键：上下文行、按键子块、主 / 辅前景样式 —— */
 .source .bda-inspector-context { padding: var(--space-md) var(--_gutter) 0; font-size: var(--font-size-xs); }
 .source .bda-key-style-block > h4 { margin: 0; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.source .fore-styles-reference-field { display: block; }
 .source .bda-fore-styles-grid { width: 100%; }
 .source .fore-style-reference-field { display: grid; grid-template-columns: var(--_label) minmax(0, 1fr); align-items: center; gap: var(--space-sm); }
 .source .bda-style-reference-label { overflow: hidden; color: var(--secondary); text-overflow: ellipsis; white-space: nowrap; }
 .source #primary-css-fields:empty { display: none; }
-.source .particle-range-inputs input { padding: 0 var(--space-xs); }
 
 /* 手机竖屏：侧栏与检查器叠在同一区域，检查器必须不透明，不能让下面的侧栏透出来。 */
 @media (max-width: 760px) and (orientation: portrait) {
@@ -637,7 +436,6 @@
 
   .source {
     width: 100%;
-    height: calc(50% - 18px);
     min-height: 0;
     position: absolute;
     right: 0;
@@ -647,13 +445,6 @@
     touch-action: pan-y;
     transition: transform var(--duration-base) var(--ease-emphasized);
     will-change: transform;
-  }
-}
-
-@media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
-
-  .source #style-detail-fields {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -668,6 +459,7 @@
 @media (max-width: 760px) {
 
   .source {
+    height: calc(50% - var(--mobile-dock-h));
     border-color: var(--line);
   }
 }
@@ -677,13 +469,7 @@
 .source .inspector-block-heading > span { flex: none; }
 .source .inspector-block-heading > code { min-width: 0; overflow: hidden; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); text-overflow: ellipsis; white-space: nowrap; }
 .source .inspector-block-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
-.source .ssf-image-card > .style-reference-meta { gap: var(--space-xs); }
-/* 正常、按下并排的卡片和百度一样；配置段里只有一张图时只放一个预览 */
-.source .ssf-image-card .style-picker-states:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
 /* —— 动画资源（animation-inspector.ts）：列表下的新建 / 复制 / 删除、预览下的警告、组合子动画、浮动物体、引用 —— */
-.animation-list-actions { display: flex; align-items: center; gap: var(--space-2xs); }
-.animation-list-actions > .ui-select { flex: 1; min-width: 0; }
-.animation-list-actions > .ui-button { margin-right: auto; }
 /* 编辑模式下点了画布上的按键：「按键 N 的动效 | 全部」+ 取消选中 */
 .animation-key-filter { display: flex; align-items: center; gap: var(--space-2xs); }
 .animation-key-filter > .ui-segmented { flex: 1; min-width: 0; }
@@ -704,7 +490,6 @@
 .animation-warning > .ui-icon { color: var(--state-warn); }
 .animation-warning > span { flex: 1; min-width: 0; }
 /* 隐藏的下拉只承载分段控件的值，让改动标记与重置复用检查器现有逻辑 */
-.source .animation-proxy { display: none; }
 .source .animation-floater { padding-top: var(--space-sm); border-top: 1px solid var(--line-soft); }
 .source .animation-floater > h4 { display: flex; align-items: center; justify-content: space-between; }
 .source .animation-combo { display: grid; gap: var(--space-sm); }
@@ -725,8 +510,3 @@
 .source .animation-combo-item .ui-list-item-text > strong { overflow: hidden; font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
 .source .animation-combo-actions { display: flex; }
 /* 样式详情里动画事件（PRESS_ANIM…）引用的动画：每个编号一个按钮，打开动效设计 / 粒子设计 */
-.source .style-animation-links { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: var(--space-xs); }
-/* 图片卡片（gif 路径、帧资源、粒子资源）：只有一个预览，不带状态名 */
-.source .image-reference-card .style-picker-states { grid-template-columns: minmax(0, 1fr); }
-.source .image-reference-card .style-picker-state { grid-template-rows: minmax(0, 1fr); }
-.source .image-reference-card .style-picker-state::before { display: none; }

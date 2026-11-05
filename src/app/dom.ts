@@ -11,7 +11,6 @@ export const newProjectDialog = $("#new-project-dialog") as HTMLDialogElement
 
 export const newProjectForm = $("#new-project-form") as HTMLFormElement
 
-export const unsavedDialog = $("#unsaved-dialog") as HTMLDialogElement
 
 export const openButton = $("#open") as HTMLButtonElement
 
@@ -25,7 +24,6 @@ export const redoButton = $("#redo") as HTMLButtonElement
 
 export const toolbarMenus = Array.from(document.querySelectorAll<HTMLDetailsElement>(".toolbar-more"))
 
-export const mobileCommandMenu = $(".mobile-command-menu") as HTMLDetailsElement
 
 export const mobileUndoButton = $("#mobile-undo") as HTMLButtonElement
 
@@ -232,13 +230,8 @@ export const panelScaleButton = $("#panel-scale") as HTMLButtonElement
 
 export const adaptIos26Button = $("#adapt-ios26") as HTMLButtonElement
 
-export const editModeDialog = $("#edit-mode-dialog") as HTMLDialogElement
-export const createAnimationDialog = $("#create-animation-dialog") as HTMLDialogElement
-export const createAnimationDetail = $("#create-animation-detail")
 
-export const ios26Dialog = $("#ios26-dialog") as HTMLDialogElement
 
-export const ios26Form = $("#ios26-form") as HTMLFormElement
 
 export const panelScaleDialog = $("#panel-scale-dialog") as HTMLDialogElement
 
@@ -319,10 +312,6 @@ export const bdaConfigFields = $("#bda-config-fields")
 export const bdaSelectedStyleHeading = $("#bda-selected-style-heading")
 
 export const bdaInspectorStateButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-bda-inspector-state]"))
-
-export const colorPickers = Array.from(document.querySelectorAll<HTMLInputElement>("[data-color-picker-for]"))
-
-export const colorAlphas = Array.from(document.querySelectorAll<HTMLInputElement>("[data-color-alpha-for]"))
 
 export const keyOnlyGroups = Array.from(document.querySelectorAll<HTMLElement>(".key-only"))
 
@@ -451,16 +440,6 @@ export const resourceGallery = $("#resource-gallery")
 
 export const resourceUploadButton = $("#resource-upload") as HTMLButtonElement
 
-export const styleAddButton = $("#style-add") as HTMLButtonElement
-
-export const newStyleDialog = $("#new-style-dialog") as HTMLDialogElement
-
-export const newStyleForm = $("#new-style-form") as HTMLFormElement
-
-export const newStyleID = $("#new-style-id") as HTMLInputElement
-
-export const newStyleError = $("#new-style-error")
-
 export const resourceDownloadButton = $("#resource-download") as HTMLButtonElement
 
 export const resourceDeleteButton = $("#resource-delete") as HTMLButtonElement
@@ -495,7 +474,6 @@ export const layoutImageOpen = $("#layout-image-open") as HTMLInputElement
 
 export const layoutImageConfigFieldset = $("#layout-image-config") as HTMLFieldSetElement
 
-export const layoutImageConfigDesc = $("#layout-image-config-desc") as HTMLElement
 
 export const layoutImageConfigButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-layout-image-config]"))
 

@@ -84,10 +84,46 @@ const rules = {
     ...perFile(ts, (text, file) => file === ICONS ? 0 : count(text, /from\s+["']lucide["']|<svg\b/g)),
     ...perFile(html, (text) => count(text, /<svg\b/g)),
   }),
+  // §5 图标尺寸：createIcon 的第二个参数只能是 14 / 16 / 20 或省略
+  "icon-size-off-scale": () => perFile(ts, (text, file) => file === ICONS ? 0
+    : callArguments(text, "createIcon").filter((args) => args.length > 1 && !["14", "16", "20"].includes(args[1])).length),
+  // §7 禁用：:disabled 里的透明度只能用 --disabled-opacity（1 表示取消禁用变淡）
+  "css-disabled-opacity-literal": () => {
+    const out = {}
+    for (const file of cssFiles) postcss.parse(read(file)).walkRules((rule) => {
+      if (!rule.selectors.some((selector) => selector.includes(":disabled"))) return
+      rule.walkDecls("opacity", (decl) => {
+        if (!["var(--disabled-opacity)", "1"].includes(decl.value)) out[file] = (out[file] ?? 0) + 1
+      })
+    })
+    return out
+  },
   // §8 HTML 不写内联样式
   "html-inline-style": () => perFile(html, (text) => count(text, /\sstyle="/g)),
   // §9 代码：单个 TS 文件不超过 800 行（超出部分计数）
   "ts-file-too-long": () => perFile(ts, (text) => Math.max(0, text.split("\n").length - 800)),
+}
+
+/** Top-level arguments of every `name(...)` call, trimmed. */
+function callArguments(text, name) {
+  const calls = []
+  for (const match of text.matchAll(new RegExp(`\\b${name}\\(`, "g"))) {
+    const args = []
+    let depth = 0
+    let start = match.index + match[0].length
+    for (let i = start; i < text.length; i++) {
+      const char = text[i]
+      if ("([{".includes(char)) depth++
+      else if (")]}".includes(char) && depth > 0) depth--
+      else if ((char === "," && depth === 0) || char === ")") {
+        args.push(text.slice(start, i).trim())
+        start = i + 1
+        if (char === ")") break
+      }
+    }
+    calls.push(args.filter(Boolean))
+  }
+  return calls
 }
 
 function perFile(files, measure) {

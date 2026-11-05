@@ -258,7 +258,7 @@ export class SsfLook {
    * Sogou paints one background behind both the candidate bar and the keys; Baidu styles them apart,
    * so the background is cut at the bar's height and the (usually translucent) bar is laid over the top.
    */
-  keyboard(): { panel?: LookImage; cand?: LookImage; panelColor?: string } {
+  keyboard(candidateFraction?: number): { panel?: LookImage; cand?: LookImage; panelColor?: string } {
     if (this.keyboardCache) return this.keyboardCache
     const solidBackground = this.skin.get("RootView", "BG_STYLE")?.trim() === "2"
     const backgroundName = solidBackground ? undefined : [
@@ -275,17 +275,21 @@ export class SsfLook {
     const result: { panel?: LookImage; cand?: LookImage; panelColor?: string } = {}
     if (backgroundName && backgroundBytes && backgroundSize) {
       const [width, height] = backgroundSize
-      const top = Math.min(height - 1, Math.max(0, barSize ? Math.round(barSize[1] * width / this.sogouWidth) : 0))
+      // Candidate artwork can be a 1×1 transparent placeholder; only layout geometry defines the split.
+      const top = Math.min(height - 1, Math.max(0, Math.round(candidateFraction !== undefined
+        ? height * candidateFraction : barSize ? barSize[1] * width / this.sogouWidth : 0)))
       const background = () => this.decode(backgroundName, backgroundBytes)
       result.panel = this.derive(`panel:${top}`, [backgroundBytes], () => {
         const image = background()
         return image && cropImage(image, 0, top, image.width, image.height - top)
       })
-      if (top > 0 && barRef && barBytes) {
-        result.cand = this.derive(`cand:${top}`, [backgroundBytes, barBytes], () => {
+      if (top > 0) {
+        result.cand = this.derive(`cand:${top}`, [backgroundBytes, ...barBytes ? [barBytes] : []], () => {
           const image = background()
-          const bar = this.decode(barRef.file, barBytes)
-          return image && bar && compositeImage(cropImage(image, 0, 0, image.width, top), resizeImage(bar, image.width, top))
+          const bar = barRef && barBytes && this.decode(barRef.file, barBytes)
+          if (!image) return
+          const strip = cropImage(image, 0, 0, image.width, top)
+          return bar ? compositeImage(strip, resizeImage(bar, image.width, top)) : strip
         })
       }
     } else if (barRef && barBytes) {

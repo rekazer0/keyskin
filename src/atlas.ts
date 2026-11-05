@@ -54,7 +54,7 @@ function scaleNumbers(value: string | undefined): [number, number, number, numbe
   return parsed as [number, number, number, number, number]
 }
 
-function parseColor(value: string | undefined): string | undefined {
+export function parseColor(value: string | undefined): string | undefined {
   if (!value) return
   const hex = value.trim().replace(/^#/, "")
   if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(hex)) return
@@ -381,13 +381,17 @@ export class AtlasResolver {
       ...this.resourceRoots.map((root) => `${root}/default.css`),
     ].find((candidate) => archive.getBytes(candidate) !== undefined)
     if (path) this.styles = IniDocument.parse(archive.getText(path))
-    const fontPath = path && this.styles
+    // 百度安卓（13.3 反编译与真机复现）虽然加载 [GLOBAL] FONT_PATH，但每次初始化键盘都用
+    // StyleParam.x(FontUtils.k()) 把画笔字体重置为系统字体，[STYLE*] FONT_NAME / FONT_PATH 也不解析，
+    // 所以 BDS 的按键文字在真机上一律是系统字体；要显示皮肤字体只能烘焙成图片（font-bake.ts）。
+    // 预览与真机保持一致，BDS 不内嵌任何字体；BDI 仍按手册支持 GLOBAL 与样式级字体。
+    const fontPath = path && this.styles && archive.format !== "bds"
       ? embeddedFontPath(archive.names(), path, this.styles.get("GLOBAL", "FONT_PATH"))
       : undefined
     const embeddedFont = fontPath ? loadEmbeddedFont(archive, fontPath) : undefined
     this.embeddedFontFamily = embeddedFont?.family
     const fonts = [embeddedFont?.ready]
-    if (path && this.styles) {
+    if (path && this.styles && archive.format !== "bds") {
       // iOS 专有的 [STYLE*] FONT_PATH：皮肤里已经写了才支持，内嵌字体优先于 FONT_NAME。
       for (const { section, key, value } of this.styles.entries()) {
         if (key !== "FONT_PATH" || section === "GLOBAL") continue

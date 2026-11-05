@@ -54,7 +54,7 @@ form.addEventListener("submit", (event) => {
 
 cancelButton.addEventListener("click", () => void finish())
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") void finish()
+  if (event.key === "Escape" && !event.defaultPrevented) void finish()
 })
 if (appWindow) {
   void appWindow.onCloseRequested(async (event) => {

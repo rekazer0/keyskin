@@ -29,7 +29,7 @@ try {
       return root
     }
     const doc = IniDocument.parse('[ANIM1]\nCATEGORY=0\nTYPE=3\nDURATION=240\nFROM=50,50\nTO=100,100\n')
-    for (const [i, [kind, label, icon]] of [['color', '颜色', 'palette'], ['anim', '动画', 'clapperboard'], ['sound', '声音', 'volume-2'], ['image', '图片', 'image'], ['text', '文字', 'type'], ['empty', '空', 'square-dashed']].entries()) {
+    for (const [i, [kind, label, icon]] of [['color', '颜色', 'palette'], ['anim', '动画', 'clapperboard'], ['sound', '音效', 'volume-2'], ['image', '图片', 'image'], ['text', '文字', 'type'], ['empty', '空', 'square-dashed']].entries()) {
       const card = styleCard({
         id: String(i), label: `STYLE${1000 + i}`, kind, kindLabel: label, kindIcon: icon,
         summary: '动画 1 · 缩放',

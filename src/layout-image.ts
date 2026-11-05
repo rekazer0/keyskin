@@ -34,13 +34,18 @@ export function validateKeyRects(keys: readonly LayoutKeyGeometry[], panelWidth:
   }
 }
 
+/** 新样式的编号：已用编号的最大值加一（BDI/BDS 与手心同一条规则）。 */
+export function nextStyleNumber(ids: readonly number[]): number {
+  return Math.max(0, ...ids) + 1
+}
+
 export function nextStyleID(styles: IniDocument): number {
   const ids = styles.sections().flatMap((section) => {
     const match = section.match(/^STYLE(\d+)$/)
     return match ? [Number(match[1])] : []
   })
   const counter = Number(styles.get("GLOBAL", "STYLE_NUM"))
-  return Math.max(0, ...ids, Number.isFinite(counter) ? counter : 0) + 1
+  return nextStyleNumber([...ids, Number.isFinite(counter) ? counter : 0])
 }
 
 export function planLayoutImage(target: LayoutImageTarget, keys: readonly LayoutKeyGeometry[], tileDocument: IniDocument, panelWidth: number, panelHeight: number): LayoutImagePlan {

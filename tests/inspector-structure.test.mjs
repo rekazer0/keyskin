@@ -30,7 +30,7 @@ test("properties are flat sections of rows inside one form scope", () => {
   assert.doesNotMatch(pane, /inspector-card|appearance-section-heading|inspector-padding-box/, "不再使用卡片套卡片")
   assert.doesNotMatch(pane, /<svg\b/)
   for (const group of ["key-layout-fields", "key-appearance-fields", "key-typography-fields", "key-gesture-fields"]) {
-    assert.match(pane, new RegExp(`<section class="inspector-group key-only ${group}"[^>]*>\\s*<h3>`))
+    assert.match(pane, new RegExp(`<section class="ui-section key-only ${group}"[^>]*>\\s*<h3>`))
   }
 })
 
@@ -68,9 +68,11 @@ test("the right rail: filter on top, groups with icon and label, edits count and
 })
 
 test("style references are one shared card: number and kind on the left, normal | pressed previews on the right", () => {
-  assert.match(read("src/app/style-references.ts"), /meta\.className = "style-reference-meta"/)
-  assert.match(read("src/bda-editor.ts"), /element\("span", "style-reference-meta"\)/)
-  assert.match(read("src/inspector.css"), /:is\(\.style-reference-row, \.bda-style-reference-input\) \{/)
+  // 五处构建器（百度/手心、BDA、搜狗、动画图片、动画样式）都只组装 styleReferenceCard() 的参数。
+  for (const file of ["src/app/style-references.ts", "src/bda-editor.ts", "src/app/ssf-fields.ts", "src/app/property-rows.ts"]) assert.match(read(file), /styleReferenceCard\(\{/, file)
+  assert.match(read("src/app/legacy-animation-inspector.ts"), /StyleReferenceState\[\]/)
+  assert.match(read("src/components.css"), /^\.ui-style-ref \{/m)
+  assert.doesNotMatch(read("src/inspector.css"), /style-reference-row|style-picker-state|sound-style-main/)
 })
 
 test("the text group imports skin fonts and writes GLOBAL FONT_PATH to every CSS", () => {

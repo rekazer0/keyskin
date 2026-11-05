@@ -122,6 +122,7 @@ test('SSF → BDS gives Android the native F14 toolbar and the Sogou icons in th
       const cand = IniDocument.parse(bds.getText(`${prefix}${orientation}/cand1.cnd`))
       assert.deepEqual([1, 2, 3, 4].map((id) => cand.get(`ICON${id}`, 'KEY')), ['F31', 'F14', 'F8', 'F9'])
       assert.ok(!cand.entries().some(({ key }) => key === 'FIX_SIZE'), 'FIX_SIZE is iOS only')
+      assert.equal(bds.getText(`${prefix}${orientation}/res/default.css`), bds.getText(`${prefix}res/default.css`), 'Android direction-local styles include the final toolbar styles')
       // LogoLoader reads [GLOBAL] VERSION; only 1 loads the skin's pop_menu_icons.
       assert.equal(IniDocument.parse(bds.getText(`${prefix}${orientation}/logo.ini`)).get('GLOBAL', 'VERSION'), '1')
     }

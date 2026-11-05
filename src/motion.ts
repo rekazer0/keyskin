@@ -24,11 +24,33 @@ export function playEnter(element: Element | null | undefined): void {
   entering.set(element, element.animate([{ opacity: 0 }, { opacity: 1 }], options))
 }
 
+/**
+ * 关闭 .ui-dialog：先淡出（入场由 components.css 的 ui-dialog-in 播放），再 close(value)。
+ * 时长为 0 时直接关；淡出途中再次调用不重复播放。
+ */
+const closing = new WeakSet<HTMLDialogElement>()
+
+export function closeDialog(dialog: HTMLDialogElement, value?: string): void {
+  if (!dialog.open || closing.has(dialog)) return
+  const options = timing("base", "standard")
+  if (!options) return dialog.close(value)
+  closing.add(dialog)
+  const fade = { ...options, fill: "forwards" as const }
+  const animations = [
+    dialog.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(0.98)" }], fade),
+    dialog.animate([{ opacity: 1 }, { opacity: 0 }], { ...fade, pseudoElement: "::backdrop" }),
+  ]
+  animations[0]!.addEventListener("finish", () => {
+    closing.delete(dialog)
+    dialog.close(value)
+    for (const animation of animations) animation.cancel()
+  })
+}
+
 // —— 分段控件：选中项切换时，滑块从旧选项滑到新选项 ——
-// 同一套逻辑覆盖 .ui-segmented 以及标题栏 / 画布工具条 / 左侧栏 / 设置导航里的同类分组：
 // 只监听 aria-pressed / aria-selected 的变化（这两个属性很少变），不给每个控件单独挂观察者。
 
-const SEGMENTED = ".ui-segmented:not([data-multiple]), .mode-control, .sidebar-view-control, .preview-choice, .settings-sidebar"
+const SEGMENTED = ".ui-segmented:not([data-multiple])"
 const ON = "true"
 
 function boxIn(container: Element, element: Element): DOMRect {

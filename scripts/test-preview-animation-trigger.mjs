@@ -113,19 +113,6 @@ try {
   const mouseStart = (await state()).starts.KEY1
   await click('KEY1', true)
   assert.ok((await state()).starts.KEY1 > mouseStart, '触摸点按也播放动画')
-  await page.evaluate(async () => {
-    const { preview } = await import('/src/app/canvas-interaction.ts')
-    preview.setParticlePreview(preview.legacyAnimation.get('7').particles[0])
-    preview.restartLegacyPanelAnimation()
-  })
-  assert.ok((await state()).panel > 0, '显式临时粒子预览仍可播放')
-  await click('KEY2')
-  assert.equal((await state()).panel, 0, '普通按键停止临时整面板粒子，不向 LIST 串发射')
-  assert.ok((await state()).keys.includes('KEY2'), '按键自身的粒子仍播放')
-  await page.evaluate(async () => {
-    const { preview } = await import('/src/app/canvas-interaction.ts')
-    preview.setParticlePreview()
-  })
   await open('py_26')
   await page.waitForTimeout(100)
   assert.equal((await state()).panel, 0, '返回布局后仍不自动播放')

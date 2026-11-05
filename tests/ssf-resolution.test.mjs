@@ -109,7 +109,13 @@ test('SSF → BDI and BDS share keys and resources and differ only in each platf
       .map((name) => [name, output.getBytes(name)]))
   }
   for (const name of trees.bdi.keys()) if (!trees.bds.has(name)) assert.match(name, /\/res\/logo\/ssf-(?:toolbar|menu)-.*\.png$/)
-  for (const name of trees.bds.keys()) if (!trees.bdi.has(name)) assert.match(name, /\/res\/logo\/pop_menu_icons\.(?:png|til)$/)
+  for (const [name, bytes] of trees.bds) {
+    if (trees.bdi.has(name)) continue
+    // Android loads direction-local styles: BDS repeats the shared res/default.css in port/ and land/.
+    const shared = name.match(/^(.*\/skin\/)(?:port|land)\/res\/default\.css$/)?.[1]
+    if (shared) assert.equal(strFromU8(bytes), strFromU8(trees.bds.get(`${shared}res/default.css`)), name)
+    else assert.match(name, /\/res\/logo\/pop_menu_icons\.(?:png|til)$/)
+  }
   for (const [name, bytes] of trees.bds) {
     const converted = trees.bdi.get(name)
     if (!converted) continue

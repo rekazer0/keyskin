@@ -1,17 +1,14 @@
 import { sourceKeyLabels } from "../config-labels.ts"
-import { IniDocument } from "../ini.ts"
+import { LEGACY_ANIMATION_FIELDS } from "../legacy-animation.ts"
 import { visualResolver, isBdaLayoutPath, currentBdaAppearance, bdaAppearancePart, refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
-import { thumbnailRecycler, drawVisualPreview } from "../atlas.ts"
 import { documentFields, documentFieldsGroup, skinFields, toolbarFields, bdaConfigFields, bdaConfigFieldsGroup } from "./dom"
 import { appState } from "./state"
 import { preview } from "./canvas-interaction"
 import type { PreviewItem } from "../preview-items.ts"
 import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue, effectiveKeySection, currentSkinState } from "./config-context"
-import { parseLegacyParticleEmitter } from "../preview-animation.ts"
 import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
 import { refreshPreview } from "./preview-render"
-import { isStyleReferenceKey, decorateStyleReferenceInput, openStyleReferenceEditor, openBdaStyleReferencePicker, layoutAnimationFields } from "./style-references"
-import { syncMobileInspectorGroups } from "./mobile-layout"
+import { isStyleReferenceKey, openStyleReferenceEditor, openBdaStyleReferencePicker, layoutAnimationFields } from "./style-references"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
 import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect } from "../bda-encode.ts"
 import { renderBdaMetadataEditor, renderBdaLayoutEditor, renderBdaConfigEditor } from "../bda-editor.ts"
@@ -20,11 +17,10 @@ import { openImageResourceChooser } from "./resource-inspector"
 import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
-import { disconnectSsfThumbnails } from "./ssf-fields"
 import { keyAnimationItems, keyboardPlayback, selectAnimation, selectAnimationStyle, selectedAnimation, selectedAnimationStyle } from "./animation-resource"
 import { bdaAnimationBindingsForKey, bdaBindingEffects } from "../preview-animation.ts"
-import { configValueControl } from "./config-value-control"
-import { colorValueControl } from "./color-control"
+import { configField } from "./config-value-control"
+import { field, section, type FieldSpec } from "./property-rows"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -36,16 +32,16 @@ export const documentFieldLabels: Record<string, string> = {
   TYPE: "类型",
   LAYOUT_NAME: "布局",
   Style: "皮肤风格",
-  SkinType: "加载主题（0支持/1不支持）",
+  SkinType: "加载主题",
   SkinFlags: "半屏手写高度",
-  Abilities: "功能标识（音效/动效等）",
+  Abilities: "功能标识",
   SupportPatch: "动态补丁支持",
   CoupleSkinName: "配套皮肤名",
   AtomSkinName: "主题目录",
   KEY_NUM: "按键数",
   TIP_NUM: "补丁数量",
   LIST_NUM: "列表数量",
-  LIST_ORDER: "列表排列方向（0竖排/1横排）",
+  LIST_ORDER: "列表排列方向",
   CELL_SIZE: "单元格尺寸",
   GRID: "网格",
   POS: "位置",
@@ -61,79 +57,47 @@ export const documentFieldLabels: Record<string, string> = {
   LIST_LEVEL: "列表层级",
   SHOW: "显示内容",
   INFO: "说明",
-  ANIM_STYLE: "整体动效",
+  ANIM_STYLE: "整键动画",
   PRESS_ANIM: "按下动画",
-  RELEASE_ANIM: "释放动画",
+  RELEASE_ANIM: "松开动画",
   HIDE_ANIM: "隐藏动画",
   FIRST_PRESS_PANEL_ANIM: "首次按下面板动画",
   SHOW_ANIM: "显示动画",
   EVENT1: "动画事件",
-  ANIM_NUM: "动画数量",
-  CATEGORY: "动画类别",
-  LIFE: "粒子寿命范围",
-  EMIT_REGION: "发射区域",
-  TOTAL_NUMBER: "粒子总数",
-  BIRTH_RATE: "发射速率",
-  EMIT_TYPE: "发射方式",
-  PARTICLE_IMAGE: "粒子图片样式",
-  VELOCITY: "初速度范围",
-  VELOCITY_DIRECTION: "初速度方向范围",
-  ACCELERATION: "加速度范围",
-  ACCELERATION_DIRECTION: "加速度方向范围",
-  INIT_SCALE: "初始缩放范围",
-  SCALE_SPEED: "缩放速度范围",
-  INIT_ROTATE: "初始旋转范围",
-  ROTATE_SPEED: "旋转速度范围",
-  INIT_ALPHA: "初始透明度范围",
-  ALPHA_SPEED: "透明度速度范围",
-  DURATION: "持续时间",
-  DELAY: "延迟时间",
-  REMOVE: "结束后移除",
-  INTPOL: "插值方式",
-  FROM: "起始值",
-  TO: "结束值",
-  FROM_PX: "起始位移",
-  TO_PX: "结束位移",
-  PIVOT: "变换中心",
-  BUILD_NUM: "组合动画数量",
-  BUILD_LIST: "组合动画列表",
-  BUILD_METHOD: "组合播放方式",
-  REPEAT_CNT: "重复次数",
-  REPEAT_MODE: "重复方式",
   // 以下键只出现在文档配置节（LIST / BAR / SWITCH / CAND / ICON…），此前都显示为英文原名。
   NAMES: "列表名称",
   VALUES: "列表值",
-  NAME: "事件名称（NAME）",
-  VERSION: "Logo 模式（1=二次元）",
-  TEXT_STYLE: "图标文字颜色样式（logo/emoji）",
+  NAME: "事件名称",
+  VERSION: "二次元 Logo",
+  TEXT_STYLE: "图标文字颜色样式",
   BACK_ANIM_STYLE: "背景动画样式",
   FORE_ANIM_STYLE: "前景动画样式",
   PRESS_STYLE: "按下效果",
   HW_FORE_STYLE: "手写笔刷颜色样式",
-  ANIM_LEVEL: "动画显示层级（0下/1上）",
+  ANIM_LEVEL: "动画显示层级",
   ICON_NUM: "图标数量",
   ICON_INDEX: "图标序号",
   BACK_ICON: "背景图标",
   ARROW_ICON: "箭头图标",
-  ICON_UP: "上划气泡图标",
-  ICON_DN: "下划气泡图标",
-  ICON_LT: "左划气泡图标",
-  ICON_RT: "右划气泡图标",
+  ICON_UP: "上滑气泡图标",
+  ICON_DN: "下滑气泡图标",
+  ICON_LT: "左滑气泡图标",
+  ICON_RT: "右滑气泡图标",
   ANCHOR_TYPE: "锚点类型",
   PERSIST: "显示时机",
   CELL_W: "候选字间距",
   FIRST_GAP: "首项间距",
-  NML_BACK_STYLE: "普通背景样式",
+  NML_BACK_STYLE: "正常背景样式",
   SEL_BACK_STYLE: "选中背景样式",
-  NML_FONT_STYLE: "普通文字样式",
+  NML_FONT_STYLE: "正常文字样式",
   SEL_FONT_STYLE: "选中文字样式",
   HLINE_STYLE: "横线样式",
   VLINE_STYLE: "竖线样式",
   SCROLL_SIDE: "滚动条位置",
   SYM_LAYOUT: "符号面板布局",
-  EVENT_NUM: "事件数量（EVENT_NUM）",
-  IDLE_TIME: "屏保触发时间（ms）",
-  FIX_SIZE: "图标固定大小（iOS）",
+  EVENT_NUM: "事件数量",
+  IDLE_TIME: "屏保触发时间",
+  FIX_SIZE: "图标固定大小",
 }
 
 export const documentSectionLabels: Record<string, string> = {
@@ -155,29 +119,24 @@ export const documentSectionLabels: Record<string, string> = {
   VIEWSTATE: "视图状态",
 }
 
-export const documentPairFieldLabels: Record<string, [string, string]> = {
-  SIZE: ["宽度", "高度"],
-  POS: ["横向", "纵向"],
-  CELL_SIZE: ["宽度", "高度"],
-  FIX_SIZE: ["宽度", "高度"],
+/** 成对数值的前缀，与按键布局区的 X / Y / W / H 一致。 */
+const documentPairAffixes: Record<string, [string, string]> = {
+  SIZE: ["W", "H"],
+  POS: ["X", "Y"],
+  CELL_SIZE: ["W", "H"],
+  FIX_SIZE: ["W", "H"],
 }
 
-const documentQuadFieldLabels: Record<string, [string, string, string, string]> = {
-  VIEW_RECT: ["横向", "纵向", "宽度", "高度"],
-  NON_SPLIT_PANEL_REGION: ["横向", "纵向", "宽度", "高度"],
-  PADDING: ["左", "上", "右", "下"],
-}
+/** X,Y,W,H 拆成「位置」「尺寸」两行（DESIGN.md §10）。 */
+const documentRectFields = new Set(["VIEW_RECT", "NON_SPLIT_PANEL_REGION"])
+/** 四边存储序是 左,上,右,下；显示一律 ↑ → ↓ ←。 */
+const EDGE_ORDER = [1, 2, 3, 0]
 
-/** 成对 / 四格数值框里的前缀，与按键布局区的 X / Y / W / H 一致。 */
-const documentPartAffixes: Record<string, string> = {
-  横向: "X", 纵向: "Y", 宽度: "W", 高度: "H", 左: "←", 上: "↑", 右: "→", 下: "↓",
-}
-
-export const documentNumericFields = new Set([
+const documentNumericFields = new Set([
   "KEY_NUM", "TIP_NUM", "LIST_NUM", "OFFSET_NUM", "ANIM_NUM", "BUILD_NUM",
   "REPEAT_CNT", "FONT_SIZE", "BORDER_SIZE", "STYLE_NUM", "TILE_NUM", "VERSION",
   "CELL_W", "FIRST_GAP", "ICON_NUM", "ICON_INDEX", "EVENT_NUM", "ANCHOR_TYPE",
-  "PERSIST", "SCROLL_SIDE", "HINT_TYPE", "ANIM_LEVEL", "HOLDFLAG",
+  "PERSIST", "SCROLL_SIDE", "HINT_TYPE", "ANIM_LEVEL", "HOLDFLAG", "IDLE_TIME",
 ])
 
 /** number 输入框会清空非数字值，只有纯数字才切换到数字类型。 */
@@ -237,7 +196,7 @@ export const layoutIDLabels: Record<string, string> = {
 
 export function translatedConfigLabel(key: string): string {
   // 文档标签优先，其次复用源码侧的通用标签表；都没有时保留原始键名，而不是猜一个词。
-  const known = documentFieldLabels[key] ?? sourceKeyLabels[key]
+  const known = documentFieldLabels[key] ?? LEGACY_ANIMATION_FIELDS[key]?.label ?? sourceKeyLabels[key]
   if (known) return known
   const layout = key.match(/^([A-Z0-9_]+)_LAYOUT$/)
   if (layout) {
@@ -273,47 +232,7 @@ function isHiddenConfigEntry(section: string, key: string, showTips = false): bo
   return !showTips && (/^TIP\d*$/i.test(section) || /^TIP(?:_|\d|$)/i.test(key))
 }
 
-const particleFieldGroups = [
-  ["发射", ["PARTICLE_IMAGE", "LIFE", "EMIT_REGION", "TOTAL_NUMBER", "BIRTH_RATE", "EMIT_TYPE"]],
-  ["运动", ["VELOCITY", "VELOCITY_DIRECTION", "ACCELERATION", "ACCELERATION_DIRECTION"]],
-  ["外观", ["INIT_SCALE", "SCALE_SPEED", "INIT_ROTATE", "ROTATE_SPEED", "INIT_ALPHA", "ALPHA_SPEED"]],
-] as const
-
-const particlePairFields = new Set<string>(particleFieldGroups.flatMap(([, keys]) => keys).filter((key) =>
-  !["PARTICLE_IMAGE", "EMIT_REGION", "TOTAL_NUMBER", "BIRTH_RATE", "EMIT_TYPE"].includes(key),
-))
-
-function isParticleSection(document: IniDocument, section: string): boolean {
-  return document.get(section, "CATEGORY")?.trim() === "3" || Boolean(document.get(section, "PARTICLE_IMAGE")?.trim())
-}
-
-async function renderParticleImages(container: HTMLElement, value: string): Promise<void> {
-  const resolver = visualResolver()
-  const styleIDs = value.split(",").map((item) => item.trim()).filter(Boolean)
-  const thumbnail = thumbnailRecycler(container)
-  container.replaceChildren()
-  if (!resolver) return
-  const visuals = await Promise.all(styleIDs.map((styleID) => resolver.resolve(styleID, false).catch(() => undefined)))
-  if (!container.isConnected) return
-  container.replaceChildren(...styleIDs.map((styleID, index) => {
-    const item = document.createElement("span")
-    item.className = "particle-image-preview"
-    const canvas = thumbnail(56, 56)
-    drawVisualPreview(canvas, [visuals[index]], false)
-    const caption = document.createElement("small")
-    caption.textContent = styleID
-    item.append(canvas, caption)
-    return item
-  }))
-}
-
-function particleNumberStep(key: string): string {
-  // 手册第 180 页：EMIT_REGION 与缩放/速度一样是相对坐标，允许小数。
-  return key === "EMIT_REGION" || /SCALE|VELOCITY|ACCELERATION/.test(key) ? "0.1" : "1"
-}
-
 export function populateDocumentInspector(): void {
-  disconnectSsfThumbnails()
   documentFields.replaceChildren()
   if (appState.archive?.format === "ssf") {
     documentFieldsGroup.hidden = !populateSsfInspector(documentFields)
@@ -323,7 +242,7 @@ export function populateDocumentInspector(): void {
     documentFieldsGroup.hidden = !populateSxiInspector(documentFields)
     return
   }
-  // 旧版百度皮肤的 anim.ini 有自己的可视化动效检查器，不再按通用 INI 行展开。
+  // 旧版百度皮肤的 anim.ini（粒子也只在这里）有自己的可视化动效检查器，不再按通用 INI 行展开。
   if (appState.archive?.format !== "bda" && /(^|\/)anim\.ini$/i.test(appState.selectedPath) && populateLegacyAnimationInspector(documentFields)) {
     documentFieldsGroup.hidden = false
     return
@@ -331,8 +250,6 @@ export function populateDocumentInspector(): void {
   const hasSelection = appState.selectedPath === appState.layoutPath && appState.selectedKeySections.length > 0
   if (appState.archive?.format === "bda" || !appState.selectedDocument || hasSelection || !appState.archive?.isText(appState.selectedPath)) {
     documentFieldsGroup.hidden = true
-    appState.particlePreviewSection = ""
-    preview.setParticlePreview()
     return
   }
   const specialized = new Set<string>()
@@ -357,260 +274,65 @@ export function populateDocumentInspector(): void {
     entries.push({ section: "PANEL", key: "ANIM_STYLE", value: "" })
   }
   documentFieldsGroup.hidden = entries.length === 0
-  if (!entries.length) {
-    appState.particlePreviewSection = ""
-    preview.setParticlePreview()
-    return
-  }
+  if (!entries.length) return
 
-  const sections = [...new Set(entries.map((entry) => entry.section))]
-  const particleSections = sections.filter((section) => isParticleSection(appState.selectedDocument!, section))
-  if (!particleSections.includes(appState.particlePreviewSection)) appState.particlePreviewSection = particleSections[0] ?? ""
-  preview.setParticlePreview(
-    appState.particlePreviewSection ? parseLegacyParticleEmitter(appState.selectedDocument, appState.particlePreviewSection) : undefined,
-  )
-  const update = (section: string, key: string, value: string): boolean => {
-    if (!appState.selectedDocument || appState.selectedPath !== documentFieldsGroup.dataset.path) return false
+  const update = (section: string, key: string, value: string): void => {
+    if (!appState.selectedDocument || appState.selectedPath !== documentFieldsGroup.dataset.path) return
     const before = appState.selectedDocument.toString()
-    if (!appState.selectedDocument.set(section, key, value)) return false
+    if (!appState.selectedDocument.set(section, key, value)) return
     const text = appState.selectedDocument.toString()
     commitText(appState.selectedPath, before, text)
     setSourceValue(text)
     if (appState.selectedPath === appState.layoutPath) appState.layoutDocument = appState.selectedDocument
     refreshPreview()
-    if (section === appState.particlePreviewSection) {
-      preview.setParticlePreview(parseLegacyParticleEmitter(appState.selectedDocument, section))
-    }
     updateDirty()
-    return true
   }
-  const renderEntry = (entry: typeof entries[number], specialized = false): HTMLElement => {
-    const label = document.createElement("label")
-    label.className = "document-property-field"
-    if (isStyleReferenceKey(entry.key)) label.classList.add("style-reference-field")
-    if (specialized) label.classList.add("particle-property-field")
-    if (entry.value.length > 18 || /(?:RECT|IMG|PADDING|ORDER|LIST|SOURCE|FONT_NAME)/.test(entry.key)) {
-      label.classList.add("wide")
+  const renderEntry = (entry: typeof entries[number]): HTMLElement[] => {
+    const label = translatedConfigLabel(entry.key)
+    const commit = (value: string) => update(entry.section, entry.key, value)
+    const rowKey = [appState.selectedPath, entry.section, entry.key]
+    const row = (spec: FieldSpec, commitValue: (value: never) => void, extra: { label?: string; key?: unknown } = {}) => field({
+      key: entry.key, label: extra.label ?? label, name: extra.label && `${label}${extra.label}`, spec,
+      commit: commitValue as (value: unknown) => void, rowKey: extra.key === undefined ? rowKey : [...rowKey, extra.key],
+    })
+    if (isStyleReferenceKey(entry.key)) return [row({ kind: "style", value: entry.value, reference: entry.key }, commit)]
+    // 只改动的那几格写回，其余格保持原值；不重绘，所以就地更新。
+    const values = entry.value.split(",").map((value) => value.trim())
+    const numeric = values.every(looksNumeric)
+    const pair = documentPairAffixes[entry.key]
+    if (numeric && pair && values.length === 2) {
+      return [row({ kind: "parts", affixes: pair, values }, (next: string[]) => commit(next.join(",")))]
     }
-    label.dataset.documentKey = entry.key
-    const caption = document.createElement("span")
-    caption.className = "document-field-caption"
-    const captionLabel = translatedConfigLabel(entry.key)
-    // 译文之外的原始键名保留在悬停提示里，属性行始终能对应回 ini 的键。
-    caption.title = captionLabel === entry.key ? entry.key : `${captionLabel}（${entry.key}）`
-    const captionName = document.createElement("span")
-    captionName.className = "document-field-name"
-    captionName.textContent = captionLabel
-    caption.append(captionName)
-    label.append(caption)
-
-    if (specialized && (particlePairFields.has(entry.key) || entry.key === "EMIT_REGION")) {
-      const count = entry.key === "EMIT_REGION" ? 4 : 2
-      const values = entry.value.split(",").map((value) => value.trim())
-      while (values.length < count) values.push(values.at(-1) ?? "0")
-      const row = document.createElement("span")
-      row.className = `particle-range-inputs particle-range-${count}`
-      // 手册第 180 页：EMIT_REGION=left,top,right,bottom（相对 location），不是 X/Y/W/H。
-      const names = count === 4 ? ["左", "上", "右", "下"] : ["最小", "最大"]
-      for (let index = 0; index < count; index += 1) {
-        const input = document.createElement("input")
-        input.type = "number"
-        input.step = particleNumberStep(entry.key)
-        input.value = values[index]
-        input.placeholder = names[index]
-        input.setAttribute("aria-label", `${translatedConfigLabel(entry.key)}${names[index]}`)
-        input.disabled = !isEditing()
-        input.addEventListener("change", () => {
-          values[index] = input.value
-          update(entry.section, entry.key, values.join(","))
-        })
-        row.append(input)
-      }
-      label.append(row)
-      return label
+    if (numeric && documentRectFields.has(entry.key) && values.length === 4) {
+      return ([["位置", ["X", "Y"], 0], ["尺寸", ["W", "H"], 2]] as const).map(([name, affixes, start]) =>
+        row({ kind: "parts", affixes, values: values.slice(start, start + 2) }, (next: string[]) => {
+          values.splice(start, 2, ...next)
+          commit(values.join(","))
+        }, { label: name, key: start }))
     }
-
-    const partLabels: readonly string[] | undefined = documentPairFieldLabels[entry.key] ?? documentQuadFieldLabels[entry.key]
-    const partValues = entry.value.split(",").map((value) => value.trim())
-    if (!specialized && partLabels && partValues.length === partLabels.length && partValues.every(looksNumeric)) {
-      const row = document.createElement("span")
-      row.className = "ui-field-pair"
-      partLabels.forEach((name, index) => {
-        const box = document.createElement("span")
-        box.className = "ui-input"
-        const affix = document.createElement("span")
-        affix.className = "ui-input-affix"
-        affix.textContent = documentPartAffixes[name]
-        affix.title = name
-        const input = document.createElement("input")
-        input.type = "number"
-        input.step = "1"
-        input.value = partValues[index] ?? ""
-        input.disabled = !isEditing()
-        input.setAttribute("aria-label", `${translatedConfigLabel(entry.key)} ${name}`)
-        input.addEventListener("change", () => {
-          partValues[index] = input.value
-          update(entry.section, entry.key, partValues.join(","))
-        })
-        box.append(affix, input)
-        row.append(box)
-      })
-      label.append(row)
-      return label
+    if (numeric && entry.key === "PADDING" && values.length === 4) {
+      return [row({ kind: "parts", affixes: ["↑", "→", "↓", "←"], values: EDGE_ORDER.map((index) => values[index]), columns: 4 }, (next: string[]) => {
+        EDGE_ORDER.forEach((index, position) => { values[index] = next[position] })
+        commit(values.join(","))
+      })]
     }
-
-    const input = document.createElement("input")
-    input.value = entry.value
-    input.classList.add("document-property-input")
-    input.title = `${translatedConfigLabel(entry.key)}：${entry.value}`
-    input.disabled = !isEditing()
-    input.setAttribute("aria-label", translatedConfigLabel(entry.key))
-    input.addEventListener("change", () => update(entry.section, entry.key, input.value))
-    if (/^(NM|HL)_COLOR$/.test(entry.key)) {
-      label.append(colorValueControl(input, captionLabel))
-      return label
-    }
-    const typedControl = !specialized && configValueControl(input, entry.section, entry.key, captionLabel)
-    if (typedControl) {
-      label.append(typedControl)
-      return label
-    }
+    // 百度配置值的类型化控件（开关、分段、九宫格、颜色）。
+    const typed = configField(entry.section, entry.key, label, entry.value, isEditing(), commit)
+    if (typed) return [typed]
     // 值不是数字时保持文本输入：number 输入框会清空显示，用户一编辑就丢原值。
     if (documentNumericFields.has(entry.key) && looksNumeric(entry.value)) {
-      input.type = "number"
-      input.step = "1"
-      input.inputMode = "numeric"
+      return [row({ kind: "number", value: entry.value, unit: entry.key === "IDLE_TIME" ? "ms" : undefined, range: entry.key === "FONT_SIZE" ? "fontSize" : undefined }, commit)]
     }
-    if (specialized && ["TOTAL_NUMBER", "BIRTH_RATE"].includes(entry.key)) {
-      const value = Math.max(Number(entry.value) || 1, entry.key === "BIRTH_RATE" ? 0.1 : 1)
-      input.type = "number"
-      input.min = entry.key === "BIRTH_RATE" ? "0.1" : "1"
-      input.step = entry.key === "BIRTH_RATE" ? "0.1" : "1"
-      const row = document.createElement("span")
-      row.className = "particle-slider-input"
-      const slider = document.createElement("input")
-      slider.type = "range"
-      slider.min = input.min
-      slider.max = String(Math.max(entry.key === "BIRTH_RATE" ? 20 : 1000, value * 2))
-      slider.step = input.step
-      slider.value = String(value)
-      slider.disabled = input.disabled
-      slider.addEventListener("input", () => { input.value = slider.value })
-      slider.addEventListener("change", () => update(entry.section, entry.key, slider.value))
-      input.addEventListener("input", () => {
-        if (Number(input.value) > Number(slider.max)) slider.max = String(Number(input.value) * 2)
-        slider.value = input.value
-      })
-      row.append(slider, input)
-      label.classList.add("wide")
-      label.append(row)
-      return label
-    }
-    label.append(input)
-    if (specialized && entry.key === "PARTICLE_IMAGE") {
-      const previews = document.createElement("span")
-      previews.className = "particle-image-previews"
-      void renderParticleImages(previews, input.value)
-      input.addEventListener("input", () => void renderParticleImages(previews, input.value))
-      label.append(previews)
-    } else {
-      decorateStyleReferenceInput(input, entry.key)
-    }
-    return label
+    return [row({ kind: "text", value: entry.value }, commit)]
   }
-  for (const section of sections) {
-    const sectionPanel = document.createElement("section")
-    sectionPanel.className = "document-property-section"
-    const sectionEntries = entries.filter((item) => item.section === section)
-    const particle = isParticleSection(appState.selectedDocument, section)
-    if (particle) sectionPanel.classList.add("particle-property-section")
-    const sectionLabel = particle
-      ? `粒子动效 ${section.replace(/^ANIM/, "")}（${section}）`
-      : section ? translatedSectionLabel(section) : "基本信息"
-    const sectionName = sectionLabel.replace(/\s*[（(][^）)]*[）)]\s*$/, "")
-    sectionPanel.dataset.inspectorGroupLabel = sectionName
-    const heading = document.createElement("h3")
-    heading.className = "document-section-heading"
-    const title = document.createElement("span")
-    title.className = "document-section-title"
-    title.textContent = sectionName
-    heading.title = sectionLabel
-    heading.append(title)
-    if (section && sectionName !== section) {
-      const code = document.createElement("span")
-      code.className = "document-section-code"
-      code.textContent = section
-      heading.append(code)
-    }
-    sectionPanel.append(heading)
-    if (particle) {
-      const toolbar = document.createElement("div")
-      toolbar.className = "particle-preview-toolbar"
-      const status = document.createElement("span")
-      status.textContent = section === appState.particlePreviewSection ? "正在画布预览" : "可在键盘画布中预览"
-      const replay = document.createElement("button")
-      replay.type = "button"
-      replay.textContent = section === appState.particlePreviewSection ? "重新播放" : "在画布预览"
-      replay.addEventListener("click", () => {
-        if (!appState.selectedDocument) return
-        appState.particlePreviewSection = section
-        preview.setParticlePreview(parseLegacyParticleEmitter(appState.selectedDocument, section))
-        populateDocumentInspector()
-        syncMobileInspectorGroups()
-        preview.restartLegacyPanelAnimation()
-      })
-      toolbar.append(status, replay)
-      sectionPanel.append(toolbar)
-      const used = new Set<string>()
-      for (const [name, keys] of particleFieldGroups) {
-        const grouped = keys.flatMap((key) => sectionEntries.filter((entry) => entry.key === key))
-        if (!grouped.length) continue
-        grouped.forEach((entry) => used.add(entry.key))
-        const fieldset = document.createElement("fieldset")
-        fieldset.className = "particle-property-group"
-        const legend = document.createElement("legend")
-        legend.textContent = name
-        const grid = document.createElement("div")
-        grid.className = "document-property-grid"
-        grid.append(...grouped.map((entry) => renderEntry(entry, true)))
-        fieldset.append(legend, grid)
-        sectionPanel.append(fieldset)
-      }
-      const advanced = sectionEntries.filter((entry) => !used.has(entry.key))
-      if (advanced.length) {
-        const advancedSection = document.createElement("section")
-        advancedSection.className = "particle-advanced-properties"
-        const heading = document.createElement("h4")
-        heading.textContent = `高级参数（${advanced.length}）`
-        const grid = document.createElement("div")
-        grid.className = "document-property-grid"
-        grid.append(...advanced.map((entry) => renderEntry(entry)))
-        advancedSection.append(heading, grid)
-        sectionPanel.append(advancedSection)
-      }
-      documentFields.append(sectionPanel)
-      continue
-    }
-    const grid = document.createElement("div")
-    grid.className = "document-property-grid"
-    grid.append(...sectionEntries.filter((entry) => !layoutAnimationFields.has(entry.key)).map((entry) => renderEntry(entry)))
-    sectionPanel.append(grid)
-    documentFields.append(sectionPanel)
+  for (const sectionName of [...new Set(entries.map((entry) => entry.section))]) {
+    const sectionEntries = entries.filter((item) => item.section === sectionName)
+    const title = sectionName ? translatedSectionLabel(sectionName).replace(/\s*[（(][^）)]*[）)]\s*$/, "") : "基本信息"
+    documentFields.append(section(title, sectionEntries.filter((entry) => !layoutAnimationFields.has(entry.key)).flatMap(renderEntry), {
+      code: sectionName && title !== sectionName ? sectionName : undefined,
+    }))
     const animations = sectionEntries.filter((entry) => layoutAnimationFields.has(entry.key))
-    if (animations.length) {
-      const animationSection = document.createElement("section")
-      animationSection.className = "document-property-section"
-      animationSection.dataset.inspectorGroupLabel = "动画"
-      const heading = document.createElement("h3")
-      heading.className = "document-section-heading"
-      heading.textContent = "动画"
-      heading.title = `${section}：${animations.map((entry) => entry.key).join("、")}`
-      const grid = document.createElement("div")
-      grid.className = "document-property-grid"
-      grid.append(...animations.map((entry) => renderEntry(entry)))
-      animationSection.append(heading, grid)
-      documentFields.append(animationSection)
-    }
+    if (animations.length) documentFields.append(section("动画", animations.flatMap(renderEntry)))
   }
   documentFieldsGroup.dataset.path = appState.selectedPath
 }
@@ -657,6 +379,7 @@ export function populateBdaConfigInspector(): void {
     renderBdaMetadataEditor(bdaConfigFields, {
       entries: appState.selectedDocument.entries("").map(({ key, value }) => ({ key, value })),
       editable: isEditing(),
+      label: translatedConfigLabel,
       onChange: (key, value) => {
         if (!appState.selectedDocument) return
         const before = appState.selectedDocument.toString()

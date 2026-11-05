@@ -1,11 +1,10 @@
-import { mode, unsavedDialog, dirty, undoButton, redoButton, sourceName } from "./dom"
+import { mode, dirty, undoButton, redoButton, sourceName } from "./dom"
 import { appState } from "./state"
-import { type UnsavedDecision, unsavedDecision } from "../unsaved.ts"
+import { ask } from "./ask"
 import { flushNumberInputWheel, numberInputGesture } from "../number-input-wheel.ts"
 import { flushSourceAutosave, scheduleSourceAutosave } from "./source-workspace"
 import { showError } from "./file-operations"
-import { isTauri, recordChange } from "./canvas-interaction"
-import { message } from "@tauri-apps/plugin-dialog"
+import { recordChange } from "./canvas-interaction"
 import { saveArchive, currentExportFormat } from "./archive-io"
 import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
@@ -41,18 +40,6 @@ export function hasUnsavedChanges(): boolean {
   return appState.unsavedNew || Boolean(appState.archive?.changed.size)
 }
 
-function chooseUnsavedDecision(): Promise<UnsavedDecision> {
-  unsavedDialog.returnValue = ""
-  unsavedDialog.showModal()
-  return new Promise((resolve) => {
-    unsavedDialog.addEventListener(
-      "close",
-      () => resolve(unsavedDecision(unsavedDialog.returnValue)),
-      { once: true },
-    )
-  })
-}
-
 export async function prepareDocumentReplacement(): Promise<boolean> {
   flushNumberInputWheel()
   try {
@@ -62,17 +49,11 @@ export async function prepareDocumentReplacement(): Promise<boolean> {
     return false
   }
   if (!hasUnsavedChanges()) return true
-  let decision: "save" | "discard" | "cancel"
-  if (isTauri()) {
-    const result = await message("当前皮肤尚未保存。是否先保存修改？", {
-      title: "未保存的皮肤",
-      kind: "warning",
-      buttons: { yes: "保存", no: "不保存", cancel: "取消" },
-    })
-    decision = unsavedDecision(result)
-  } else {
-    decision = await chooseUnsavedDecision()
-  }
+  const decision = await ask({
+    title: "未保存的皮肤",
+    detail: "当前皮肤尚未保存。是否先保存修改？",
+    actions: [{ value: "cancel", label: "取消" }, { value: "discard", label: "不保存" }, { value: "save", label: "保存", variant: "primary" }],
+  })
   if (decision === "cancel") return false
   if (decision === "discard") return true
   const saved = await saveArchive(false, currentExportFormat())
@@ -202,7 +183,7 @@ function refreshHistorySelection(): void {
 
 export function undo(): void {
   flushNumberInputWheel()
-  if (appState.aiDraftPreview) return discardAiDesignDraft("已撤销 AI 草稿预览 · 未修改皮肤。")
+  if (appState.aiDraftPreview) return discardAiDesignDraft("已撤销 AI 草稿预览 · 未修改皮肤")
   const change = appState.undoStack.pop()
   if (!change) return
   appState.sourceHistoryHighlight = undefined
@@ -213,7 +194,7 @@ export function undo(): void {
 
 export function redo(): void {
   flushNumberInputWheel()
-  if (appState.aiDraftPreview) discardAiDesignDraft("AI 草稿预览已丢弃。")
+  if (appState.aiDraftPreview) discardAiDesignDraft("AI 草稿预览已丢弃")
   const change = appState.redoStack.pop()
   if (!change) return
   appState.sourceHistoryHighlight = undefined

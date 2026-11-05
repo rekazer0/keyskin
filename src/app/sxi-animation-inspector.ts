@@ -5,7 +5,7 @@
 
 import { element, iconButton } from "../dom-element.ts"
 import {
-  animationModeTitle, animationSection, animationWarning, comboList, imageCard, renderAnimationResource, sliderField,
+  animationModeTitle, animationWarning, comboList, renderAnimationResource,
   type AnimationListItem,
 } from "../animation-inspector.ts"
 import { decodeFrames } from "../native-motion.ts"
@@ -41,18 +41,16 @@ import { compactPalmJSON } from "../palm/palm-json.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
-import { fieldCaption } from "./property-rows"
+import { field as propertyField, section, type FieldSpec } from "./property-rows"
 import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
 import type { PreviewItem } from "../preview-items.ts"
-import { decorateStyleReferenceInput } from "./style-references"
 import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
-import { animationStyleCard } from "./animation-style-inspector"
+import { animationStyleActions, animationStyleCard } from "./animation-style-inspector"
 
 type AnimationEntry = { id: string; kind: string; model: JsonObject; wrap: JsonObject }
 
-const SECTION = "document-property-section"
 const A1_TYPES = ["透明度", "旋转", "位移", "缩放"]
 const A1_ICONS = ["blend", "rotate-cw", "move", "scaling"]
 const FAMILY_ICONS: Record<string, string> = {
@@ -75,24 +73,27 @@ function animationEntries(table: JsonObject): AnimationEntry[] {
 }
 
 /* —— rows —— */
-function fieldRow(field: AnimationField, saved: Json, target: SxiPointer, path: string[], suffix: string, onReset?: (baseline: Json) => void, label = field.label): HTMLLabelElement {
-  const row = element("label", "ui-field document-property-field")
-  fieldCaption(row, field.key, label)
-  row.dataset.inspectorRowKey = JSON.stringify([target, path, suffix])
-  // The shell compares this render's value with the first render's for the change mark, and hands
-  // the first value back on reset (same contract as sxi-fields' rows).
-  row.dataset.inspectorValue = JSON.stringify([saved ?? null])
-  row.addEventListener("inspector-reset", (event) => {
-    if (target.at(-1) === "a1" && /^(from|to)(?:_p|_px)?$/.test(path[0])) {
-      const model = asObject(sxiValue(openPalmSkin(), target))
-      if (model && !animationGroups("a1", model).some((group) => group.fields.some((entry) => entry.key === path[0]))) return
-    }
-    event.preventDefault()
-    const baseline = (JSON.parse((event as CustomEvent<string>).detail) as Json[])[0]
-    if (onReset) onReset(baseline)
-    else commit(target, path, baseline ?? undefined)
+type Range = "duration" | "count" | "rate" | "alpha" | "angle"
+
+/**
+ * One property row (property-rows.ts field()). The shell compares this render's value with the first
+ * render's for the change mark, and 重置 hands the first value back (same contract as sxi-fields' rows).
+ */
+function row(field: AnimationField, saved: Json, target: SxiPointer, path: string[], spec: FieldSpec, write: (value: never) => void,
+  options: { suffix?: string; label?: string; reset?: (baseline: Json) => void } = {}): HTMLElement {
+  return propertyField({
+    key: field.key, label: options.label ?? field.label, spec, commit: (value) => write(value as never),
+    rowKey: [target, path, options.suffix ?? ""],
+    baseline: saved ?? null,
+    reset: (baseline) => {
+      if (target.at(-1) === "a1" && /^(from|to)(?:_p|_px)?$/.test(path[0])) {
+        const model = asObject(sxiValue(openPalmSkin(), target))
+        if (model && !animationGroups("a1", model).some((group) => group.fields.some((entry) => entry.key === path[0]))) return
+      }
+      if (options.reset) options.reset(baseline as Json)
+      else commit(target, path, (baseline ?? undefined) as Json)
+    },
   })
-  return row
 }
 
 function commit(target: SxiPointer, path: string[], value: Json, action = "修改动画"): void {
@@ -103,346 +104,124 @@ function commit(target: SxiPointer, path: string[], value: Json, action = "修�
   }
 }
 
-function numberInput(value: Json, label: string, disabled: boolean): HTMLInputElement {
-  const text = numberText(value)
-  const input = element("input")
-  input.type = text === "inf" ? "text" : "number"
-  input.step = "any"
-  input.value = text ?? ""
-  input.placeholder = "未设置"
-  input.disabled = disabled
-  input.setAttribute("aria-label", label)
-  return input
+/** A typed number; `inf` (Int.max) stays text, an empty box removes the field. */
+function writeNumber(target: SxiPointer, path: string[], label: string, text: string): void {
+  if (!text) return commit(target, path, undefined)
+  try {
+    commit(target, path, numberValue(text))
+  } catch (error) {
+    showError(error, label)
+  }
 }
-
-type Bounds = { min: number; max: number; step?: number }
 
 /** Values with a natural range get a slider beside the number (DESIGN.md §10). */
-const SLIDERS: Record<string, Bounds> = {
-  duration: { min: 0, max: 2000, step: 10 }, delay: { min: 0, max: 2000, step: 10 }, d: { min: 0, max: 2000, step: 10 },
-  rate: { min: 0, max: 50, step: 0.1 },
-}
-
-function sliderBounds(target: SxiPointer, field: AnimationField): Bounds | undefined {
+function sliderRange(target: SxiPointer, field: AnimationField): Range | undefined {
   const kind = target.at(-1)
-  if (kind === "a4" && field.key === "count") return { min: 1, max: 200 }
+  if (kind === "a4" && field.key === "count") return "count"
   if (kind === "a1" && (field.key === "from" || field.key === "to")) {
     const type = Number(animationBase(asObject(sxiValue(openPalmSkin(), target)) ?? {}).t ?? 0)
-    return type === 0 ? { min: 0, max: 255 } : type === 1 ? { min: -360, max: 360 } : undefined
+    return type === 0 ? "alpha" : type === 1 ? "angle" : undefined
   }
-  return field.scope === "base" ? undefined : SLIDERS[field.key]
+  if (field.scope === "base") return undefined
+  return ["duration", "delay", "d"].includes(field.key) ? "duration" : field.key === "rate" ? "rate" : undefined
 }
 
-function numberRow(target: SxiPointer, path: string[], field: AnimationField, value: Json, rowKey = ""): HTMLElement {
-  const row = fieldRow(field, value, target, path, rowKey)
-  const control = element("span", "ui-input")
-  const input = numberInput(value, field.label, !isEditing())
-  input.addEventListener("change", () => {
-    const text = input.value.trim()
-    if (!text) return commit(target, path, undefined)
-    try {
-      commit(target, path, numberValue(text))
-    } catch (error) {
-      showError(error, field.label)
-    }
-  })
-  control.append(input)
-  if (field.unit) {
-    const suffix = element("span", "ui-input-affix")
-    suffix.textContent = field.unit
-    control.append(suffix)
-  }
-  const bounds = input.type === "number" ? sliderBounds(target, field) : undefined
-  row.append(bounds ? sliderField(control, input, bounds) : control)
-  return row
-}
-
-/** `i_p` lists style IDs: the same style cards as a key's foreground, one per image. */
-function particleImageRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
-  const row = fieldRow(field, value, target, path, "")
-  const input = element("input")
-  input.value = listText(value) ?? ""
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", field.label)
-  input.addEventListener("change", () => {
-    const ids = input.value.split(",").map((part) => part.trim()).filter(Boolean)
-    commit(target, path, ids.length ? ids.map((id) => /^\d+$/.test(id) ? Number(id) : id) : undefined)
-  })
-  row.append(input)
-  decorateStyleReferenceInput(input, "PARTICLE_IMAGE")
-  return row
-}
-
-/** An image sequence file (af2, a11) as a picture card. */
-function fileRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
-  const row = fieldRow(field, value, target, path, "")
-  row.classList.add("style-reference-field")
-  const file = typeof value === "string" ? value : ""
-  const resolver = visualResolver()
-  row.append(imageCard({
-    label: field.label,
-    value: file,
-    editable: isEditing(),
-    load: () => {
-      const bytes = file && resolver instanceof PalmStyles ? resolver.bytes(file) : undefined
-      return bytes && decodeFrames(bytes, /\.gif$/i.test(file) ? "image/gif" : /\.png$/i.test(file) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual)
-    },
-    onChange: (next) => commit(target, path, next || undefined),
-  }))
-  return row
-}
-
-function textRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
-  const row = fieldRow(field, value, target, path, "")
-  const control = element("span", "ui-input")
-  const input = element("input")
-  input.type = "text"
-  input.value = typeof value === "string" ? value : ""
-  input.placeholder = "未设置"
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", field.label)
-  input.addEventListener("change", () => commit(target, path, input.value || undefined))
-  control.append(input)
-  row.append(control)
-  return row
-}
-
-function selectRow(target: SxiPointer, path: string[], field: AnimationField, value: Json, write?: (value: Json) => void, onReset?: (baseline: Json) => void): HTMLElement {
-  const row = fieldRow(field, value, target, path, "", onReset)
-  const control = element("span", "ui-input ui-select")
-  const select = element("select")
-  select.setAttribute("aria-label", field.label)
-  select.disabled = !isEditing()
-  const options = [...field.options ?? []]
-  if (value === undefined && field.defaultValue === undefined) options.unshift(["", "未设置"])
-  if (value !== undefined && !options.some(([option]) => option === String(value))) options.push([String(value), `${String(value)}（当前）`])
-  for (const [option, label] of options) select.append(new Option(label, option))
-  select.value = value === undefined ? field.defaultValue ?? "" : String(value)
-  const numeric = typeof value === "number" || options.filter(([option]) => option !== "").every(([option]) => /^-?\d+$/.test(option))
-  select.addEventListener("change", () => {
-    const next: Json = select.value === "" ? undefined : numeric ? Number(select.value) : select.value
-    if (write && next !== undefined) write(next)
-    else commit(target, path, next)
-  })
-  control.append(select)
-  row.append(control)
-  return row
-}
-
-function switchRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
-  const row = fieldRow(field, value, target, path, "")
-  const input = element("input", "ui-switch")
-  input.type = "checkbox"
-  input.setAttribute("role", "switch")
-  input.setAttribute("aria-label", field.label)
-  input.checked = value === undefined ? field.defaultValue === "true" : value === true
-  input.disabled = !isEditing()
-  input.addEventListener("change", () => commit(target, path, input.checked))
-  row.append(input)
-  return row
-}
-
-function colorRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
-  const row = fieldRow(field, value, target, path, "")
-  const current = typeof value === "string" ? value : ""
-  const hex = /^#?([0-9a-f]{6})$/i.exec(current)?.[1] ?? "000000"
-  const control = element("span", "color-control ui-input ui-color")
-  const picker = element("input")
-  picker.type = "color"
-  picker.value = `#${hex}`
-  picker.disabled = !isEditing()
-  picker.setAttribute("aria-label", `${field.label}颜色选择器`)
-  const text = element("input")
-  text.type = "text"
-  text.value = current
-  text.placeholder = "#RRGGBB"
-  text.disabled = !isEditing()
-  text.setAttribute("aria-label", `${field.label}色值`)
-  const write = (next: string) => {
-    const trimmed = next.trim()
-    if (!trimmed) return commit(target, path, undefined)
-    if (!/^#?[0-9a-f]{6}$/i.test(trimmed)) {
-      showError(new Error("颜色应为 #RRGGBB"), field.label)
-      text.value = current
-      return
-    }
-    commit(target, path, `#${trimmed.replace(/^#/, "").toUpperCase()}`)
-  }
-  picker.addEventListener("change", () => {
-    text.value = picker.value.toUpperCase()
-    commit(target, path, picker.value.toUpperCase())
-  })
-  text.addEventListener("change", () => write(text.value))
-  control.append(picker, text)
-  row.append(control)
-  return row
+function numberRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
+  const text = numberText(value) ?? ""
+  return row(field, value, target, path, { kind: "number", value: text, unit: field.unit, expression: text === "inf", range: sliderRange(target, field) },
+    (next: string) => writeNumber(target, path, field.label, next))
 }
 
 function pointValues(value: Json): [Json, Json] {
   return Array.isArray(value) && value.length === 2 ? [value[0], value[1]] : [undefined, undefined]
 }
 
-function pairRow(target: SxiPointer, path: string[], field: AnimationField, value: Json, axes: string[], rowKey = ""): HTMLElement {
-  const row = fieldRow(field, value, target, path, rowKey)
-  const wrap = element("span", "ui-field-pair")
-  const parts = pointValues(value)
-  const inputs = axes.map((axis, index) => {
-    const box = element("span", "ui-input")
-    const affix = element("span", "ui-input-affix")
-    affix.textContent = axis
-    const input = numberInput(parts[index], `${field.label}${axis}`, !isEditing())
-    input.placeholder = axis
-    box.append(affix, input)
-    wrap.append(box)
-    return input
-  })
-  const write = () => {
-    if (inputs.every((input) => !input.value.trim())) return commit(target, path, undefined)
-    const next = inputs.map((input) => {
-      try {
-        return input.value.trim() ? numberValue(input.value) : 0
-      } catch {
-        return 0
-      }
-    })
-    commit(target, path, next)
+function readNumber(text: string, fallback: Json = 0): number {
+  try {
+    return text ? numberValue(text) as number : Number(fallback ?? 0)
+  } catch {
+    return Number(fallback ?? 0)
   }
-  for (const input of inputs) input.addEventListener("change", write)
-  row.append(wrap)
-  return row
 }
 
-function rectRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement[] {
+function pairRow(target: SxiPointer, path: string[], field: AnimationField, value: Json, axes: string[]): HTMLElement {
+  return row(field, value, target, path, { kind: "parts", affixes: axes, values: pointValues(value).map((part) => numberText(part) ?? ""), unit: field.unit },
+    (next: string[]) => commit(target, path, next.every((text) => !text) ? undefined : next.map((text) => readNumber(text))))
+}
+
+function rectRows(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement[] {
   const rect = Array.isArray(value) && value.length === 2 ? value : undefined
   const origin = pointValues(rect?.[0])
   const size = pointValues(rect?.[1])
-  const values = [...origin, ...size]
   const labels = ["位置", "尺寸"]
-  const read = (input: HTMLInputElement, fallback: Json) => {
-    try {
-      return input.value.trim() ? numberValue(input.value) : Number(fallback ?? 0)
-    } catch {
-      return Number(fallback ?? 0)
-    }
-  }
-  return [0, 1].map((half) => {
-    // Both rows write and reset the whole rect, so a reset never leaves one half behind.
-    const row = fieldRow(field, value, target, path, `${field.key}.${half}`, undefined, `${field.label}${labels[half]}`)
-    const wrap = element("span", "ui-field-pair")
-    const inputs = (half === 0 ? ["X", "Y"] : ["W", "H"]).map((axis, index) => {
-      const box = element("span", "ui-input")
-      const affix = element("span", "ui-input-affix")
-      affix.textContent = axis
-      const input = numberInput(values[half * 2 + index], `${field.label}${labels[half]}${axis}`, !isEditing())
-      input.placeholder = axis
-      box.append(affix, input)
-      wrap.append(box)
-      return input
-    })
-    for (const input of inputs) {
-      input.addEventListener("change", () => {
-        const originValue = half === 0
-          ? [read(inputs[0], origin[0]), read(inputs[1], origin[1])]
-          : [Number(origin[0] ?? 0), Number(origin[1] ?? 0)]
-        const sizeValue = half === 1
-          ? [read(inputs[0], size[0]), read(inputs[1], size[1])]
-          : [Number(size[0] ?? 0), Number(size[1] ?? 0)]
-        commit(target, path, [originValue, sizeValue])
-      })
-    }
-    row.append(wrap)
-    return row
-  })
+  // Both rows write and reset the whole rect, so a reset never leaves one half behind.
+  return [0, 1].map((half) => row(field, value, target, path, {
+    kind: "parts", affixes: half ? ["W", "H"] : ["X", "Y"], values: (half ? size : origin).map((part) => numberText(part) ?? ""),
+  }, (next: string[]) => commit(target, path, half
+    ? [[Number(origin[0] ?? 0), Number(origin[1] ?? 0)], [readNumber(next[0], size[0]), readNumber(next[1], size[1])]]
+    : [[readNumber(next[0], origin[0]), readNumber(next[1], origin[1])], [Number(size[0] ?? 0), Number(size[1] ?? 0)]]),
+  { suffix: `${field.key}.${half}`, label: `${field.label}${labels[half]}` }))
 }
 
 function listRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
-  const row = fieldRow(field, value, target, path, "")
-  const control = element("span", "ui-input")
-  const input = element("input")
-  input.type = "text"
-  input.value = listText(value) ?? ""
-  input.placeholder = field.key === "psr" ? "三个正数，如 1,1,1" : "用逗号分隔"
-  input.disabled = !isEditing()
-  input.setAttribute("aria-label", field.label)
-  const write = () => {
-    const text = input.value.trim()
+  const rates = (text: string) => text.split(",").length === 3 ? toPlaySpeedRates(text) : undefined
+  return row(field, value, target, path, {
+    kind: "text", value: listText(value) ?? "", placeholder: field.key === "psr" ? "三个正数，如 1,1,1" : "用逗号分隔",
+    validate: field.key === "psr" ? (text) => rates(text) ? undefined : "播放速率必须是逗号分隔的三个正数" : undefined,
+  }, (text: string) => {
     if (!text) return commit(target, path, undefined)
-    if (field.key === "psr") {
-      const rates = text.split(",").length === 3 ? toPlaySpeedRates(text) : undefined
-      if (!rates) {
-        input.setCustomValidity("播放速率必须是逗号分隔的三个正数")
-        input.reportValidity()
-        return
-      }
-      input.setCustomValidity("")
-      return commit(target, path, rates)
-    }
+    if (field.key === "psr") return commit(target, path, rates(text)!)
     commit(target, path, text.split(",").map((part) => part.trim()).filter(Boolean).map((part) => /^-?\d+(?:\.\d+)?$/.test(part) ? Number(part) : part))
-  }
-  input.addEventListener("change", write)
-  input.addEventListener("input", () => input.setCustomValidity(""))
-  control.append(input)
-  row.append(control)
-  return row
+  })
+}
+
+function selectRow(target: SxiPointer, path: string[], field: AnimationField, value: Json): HTMLElement {
+  const options = field.options ?? []
+  const numeric = typeof value === "number" || options.every(([option]) => /^-?\d+$/.test(option))
+  return row(field, value, target, path, {
+    kind: "choice", value: value === undefined ? field.defaultValue ?? "" : String(value), options, unset: value === undefined && field.defaultValue === undefined,
+  }, (next: string) => commit(target, path, next === "" ? undefined : numeric ? Number(next) : next))
 }
 
 function fieldRows(target: SxiPointer, field: AnimationField, value: Json): HTMLElement[] {
-  if (field.key === "i_p") return [particleImageRow(target, [field.key], field, value)]
-  if (field.key === "file" && ["af2", "a11"].includes(String(target.at(-1)))) return [fileRow(target, [field.key], field, value)]
+  const path = [field.key]
+  const write = (next: Json) => commit(target, path, next)
+  if (field.key === "i_p") return [row(field, value, target, path, { kind: "style", value: listText(value) ?? "", reference: "PARTICLE_IMAGE" }, (text: string) => {
+    const ids = text.split(",").map((part) => part.trim()).filter(Boolean)
+    write(ids.length ? ids.map((id) => /^\d+$/.test(id) ? Number(id) : id) : undefined)
+  })]
+  if (field.key === "file" && ["af2", "a11"].includes(String(target.at(-1)))) {
+    // An image sequence file (af2, a11) as a picture card.
+    const file = typeof value === "string" ? value : ""
+    const resolver = visualResolver()
+    return [row(field, value, target, path, {
+      kind: "image", value: file,
+      load: () => {
+        const bytes = file && resolver instanceof PalmStyles ? resolver.bytes(file) : undefined
+        return bytes && decodeFrames(bytes, /\.gif$/i.test(file) ? "image/gif" : /\.png$/i.test(file) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual)
+      },
+    }, (next: string) => write(next || undefined))]
+  }
   switch (field.kind) {
-    case "number": return [numberRow(target, [field.key], field, value)]
-    case "bool": return [switchRow(target, [field.key], field, value)]
-    case "select": return [selectRow(target, [field.key], field, value)]
-    case "color": return [colorRow(target, [field.key], field, value)]
-    case "point": return [pairRow(target, [field.key], field, value, field.axes ?? ["X", "Y"])]
-    case "rect": return rectRow(target, [field.key], field, value)
-    case "list": return [listRow(target, [field.key], field, value)]
-    default: return [textRow(target, [field.key], field, value)]
+    case "number": return [numberRow(target, path, field, value)]
+    case "bool": return [row(field, value, target, path, { kind: "switch", checked: value === undefined ? field.defaultValue === "true" : value === true }, (next: boolean) => write(next))]
+    case "select": return [selectRow(target, path, field, value)]
+    case "color": return [row(field, value, target, path, { kind: "color", value: typeof value === "string" ? value : "", codec: "#rgb" }, (next: string) => write(next || undefined))]
+    case "point": return [pairRow(target, path, field, value, field.axes ?? ["X", "Y"])]
+    case "rect": return rectRows(target, path, field, value)
+    case "list": return [listRow(target, path, field, value)]
+    default: return [row(field, value, target, path, { kind: "text", value: typeof value === "string" ? value : "" }, (next: string) => write(next || undefined))]
   }
 }
-
 
 /* —— segmented rows: a1 type and unit, combination method —— */
-function segmentedRow(label: string, options: Array<[value: string, text: string]>, current: string, onSelect: (value: string) => void, title?: string, identity = label, key?: string, reset?: (baseline: Json) => void): HTMLElement {
-  const row = element("div", "ui-field document-property-field")
-  if (key) row.dataset.documentKey = key
-  row.dataset.inspectorRowKey = JSON.stringify(["segmented", identity])
-  row.dataset.inspectorValue = JSON.stringify([current])
-  const caption = element("span", "document-field-caption")
-  caption.textContent = label
-  caption.title = title ?? label
-  const group = element("span", "ui-segmented")
-  group.setAttribute("role", "group")
-  group.setAttribute("aria-label", label)
-  // A hidden select carries the value so the inspector's change marks and 重置 cover this row too.
-  const proxy = element("select", "animation-proxy") as HTMLSelectElement
-  proxy.tabIndex = -1
-  proxy.setAttribute("aria-hidden", "true")
-  for (const [value, text] of options) {
-    const button = element("button")
-    button.type = "button"
-    button.textContent = text
-    button.disabled = !isEditing()
-    button.setAttribute("aria-pressed", String(value === current))
-    button.addEventListener("click", () => {
-      if (value === current) return
-      onSelect(value)
-    })
-    group.append(button)
-    proxy.append(new Option(text, value))
-  }
-  proxy.value = current
-  proxy.addEventListener("change", () => onSelect(proxy.value))
-  row.addEventListener("inspector-reset", (event) => {
-    event.preventDefault()
-    const baseline = (JSON.parse((event as CustomEvent<string>).detail) as Json[])[0]
-    if (reset) reset(baseline)
-    else if (String(baseline) !== proxy.value) onSelect(String(baseline))
+function choiceRow(key: string, label: string, options: Array<[value: string, text: string]>, current: string, identity: string, onSelect: (value: string) => void, reset?: (baseline: Json) => void): HTMLElement {
+  return propertyField({
+    key, label, spec: { kind: "choice", value: current, options }, commit: (value: string) => onSelect(value),
+    rowKey: ["segmented", identity],
+    reset: (baseline) => { if (reset) reset(baseline as Json); else if (String(baseline) !== current) onSelect(String(baseline)) },
   })
-  row.append(caption, group, proxy)
-  return row
 }
-
 
 function a1TypeRow(target: SxiPointer, entry: AnimationEntry): HTMLElement {
   const type = Number(animationBase(entry.model).t ?? 0)
@@ -450,13 +229,13 @@ function a1TypeRow(target: SxiPointer, entry: AnimationEntry): HTMLElement {
   const ends = ["from", "to", "from_p", "to_p", "from_px", "to_px"]
   const snapshot: JsonObject = { type: animationBase(entry.model).t }
   for (const key of ends) if (entry.model[key] !== undefined) snapshot[key] = entry.model[key]
-  const row = segmentedRow("变化属性", A1_TYPES.map((label, index) => [String(index), label]), String(type), (next) => {
+  const node = choiceRow("t", "变化属性", A1_TYPES.map((label, index) => [String(index), label]), String(type), `${modelPointer.join(".")}|变化属性`, (next) => {
     editSxi((skin) => {
       const model = asObject(sxiValue(skin, modelPointer))
       if (!model) throw new Error("skin.json 中缺少动画")
       applyPatch(model, a1TypePatch(model, Number(next)))
     })
-  }, "透明度、旋转、位移或缩放；切换后起止值换成新属性的写法", `${modelPointer.join(".")}|变化属性`, "t", (baseline) => {
+  }, (baseline) => {
     // The type decides how from/to are spelled, so a reset puts both back together.
     const saved = asObject(baseline)
     if (!saved) return
@@ -473,20 +252,20 @@ function a1TypeRow(target: SxiPointer, entry: AnimationEntry): HTMLElement {
       }
     })
   })
-  row.dataset.inspectorValue = JSON.stringify([snapshot])
-  return row
+  node.dataset.inspectorValue = JSON.stringify([snapshot])
+  return node
 }
 
 function a1UnitRow(target: SxiPointer, entry: AnimationEntry): HTMLElement {
   const variant = a1Variant(entry.model)
-  return segmentedRow("位移单位", [["percent", "比例"], ["pixels", "像素"]], variant === "pixels" ? "pixels" : "percent", (value) => {
+  return choiceRow("from_px to_px", "位移单位", [["percent", "比例"], ["pixels", "像素"]], variant === "pixels" ? "pixels" : "percent", `${target.join(".")}|位移单位`, (value) => {
     editSxi((skin) => {
       const model = asObject(sxiValue(skin, target))
       if (!model) throw new Error(`skin.json 中缺少 ${target.join(".")}`)
       const patch = a1UnitPatch(model, value === "pixels" ? "pixels" : "percent")
       if (patch) applyPatch(model, patch)
     })
-  }, "相对按键尺寸或按像素位移", `${target.join(".")}|位移单位`, "from_px to_px")
+  })
 }
 
 function applyPatch(model: JsonObject, patch: AnimationPatch): void {
@@ -507,17 +286,11 @@ function applyPatch(model: JsonObject, patch: AnimationPatch): void {
  * row carries their value: the shell can mark the section and 重置 can put the list back.
  */
 function trackedControl(identity: unknown[], value: Json, restore: (baseline: Json) => void): HTMLElement {
-  const row = element("div", "document-property-field animation-tracker")
+  const row = element("div", "ui-field animation-tracker")
   row.hidden = true
   row.dataset.inspectorRowKey = JSON.stringify(["list", identity])
   // Key order changes when skin.json is re-encoded, so compare the canonical Palm JSON instead.
   row.dataset.inspectorValue = JSON.stringify([value === undefined ? null : compactPalmJSON(value)])
-  const select = element("select")
-  select.tabIndex = -1
-  select.setAttribute("aria-hidden", "true")
-  select.append(new Option("", ""))
-  select.disabled = !isEditing()
-  row.append(select)
   row.addEventListener("inspector-reset", (event) => {
     event.preventDefault()
     const baseline = (JSON.parse((event as CustomEvent<string>).detail) as Array<string | null>)[0]
@@ -536,25 +309,25 @@ function editButton(icon: string, label: string, onClick: () => void): HTMLButto
 
 /* —— a3: combination tracks —— */
 function comboSection(pointer: SxiPointer, entry: AnimationEntry, table: JsonObject): HTMLElement {
-  const section = animationSection("组合", SECTION)
   const target = [...pointer, entry.id, "a3"]
   const children = comboAnimations(entry.model)
+  const node = section("组合", [], { count: String(children.length) })
   const write = (mutate: (list: number[]) => number[]) => editSxi((skin) => {
     const model = asObject(sxiValue(skin, target))
     if (!model) throw new Error("skin.json 中缺少组合动画")
     model.animations = mutate(comboAnimations(model))
   })
-  section.append(segmentedRow("组合方式", [["simultaneous", "同时"], ["sequential", "顺序"], ["random", "随机"]], comboMethod(entry.model), (value) => {
+  node.append(choiceRow("a_method", "组合方式", [["simultaneous", "同时"], ["sequential", "顺序"], ["random", "随机"]], comboMethod(entry.model), `${target.join(".")}|组合方式`, (value) => {
     editSxi((skin) => {
       const model = asObject(sxiValue(skin, target))
       if (!model) throw new Error("skin.json 中缺少组合动画")
       model.a_method = value
       model.method = { [value === "simultaneous" ? "simultaneous" : "sequential"]: {} }
     })
-  }, "顺序播放会按列表依次衔接", `${target.join(".")}|组合方式`, "a_method"))
-  section.append(comboList({
+  }))
+  node.append(comboList({
     editable: isEditing(),
-    empty: "还没有子动画；顺序播放需要至少两个。",
+    empty: "没有子动画",
     children: children.map((id) => {
       const child = asObject(table[String(id)])
       const info = child && animationModel(child)
@@ -569,10 +342,10 @@ function comboSection(pointer: SxiPointer, entry: AnimationEntry, table: JsonObj
       run: (id) => write((items) => [...items, Number(id)]),
     },
   }))
-  section.append(trackedControl(target.concat("animations"), children, (baseline) => {
+  node.append(trackedControl(target.concat("animations"), children, (baseline) => {
     write(() => Array.isArray(baseline) ? baseline.filter((item): item is number => typeof item === "number") : [])
   }))
-  return section
+  return node
 }
 
 function swap<T>(items: T[], left: number, right: number): T[] {
@@ -592,24 +365,23 @@ function timelineText(timeline: AnimationTimeline): string {
 function floatersSection(pointer: SxiPointer, entry: AnimationEntry): HTMLElement {
   const floaters = Array.isArray(entry.model.floaters) ? entry.model.floaters : []
   const target = [...pointer, entry.id, "a12"]
-  const section = animationSection("浮动物体", SECTION, `${floaters.length} 个`)
   const edit = (change: (model: JsonObject) => void) => editSxi((skin) => {
     const model = asObject(sxiValue(skin, target))
     if (!model) throw new Error("skin.json 中缺少液体动画")
     change(model)
   })
-  section.querySelector("h3")!.append(editButton("plus", "添加浮动物体", () => edit((model) => {
+  const node = section("浮动物体", [], { count: String(floaters.length), actions: [editButton("plus", "添加浮动物体", () => edit((model) => {
     model.floaters = [...Array.isArray(model.floaters) ? model.floaters : [], floaterDefaults()]
-  })))
-  section.append(trackedControl([...target, "floaters"], entry.model.floaters, (baseline) => edit((model) => {
+  }))] })
+  node.append(trackedControl([...target, "floaters"], entry.model.floaters, (baseline) => edit((model) => {
     if (baseline === undefined) delete model.floaters
     else model.floaters = baseline
   })))
   if (!floaters.length) {
     const empty = element("p", "inspector-group-subtitle")
-    empty.textContent = "还没有浮动物体；添加后液体表面会出现可漂浮的图片。"
-    section.append(empty)
-    return section
+    empty.textContent = "没有浮动物体"
+    node.append(empty)
+    return node
   }
   const fields = floaterFields()
   for (const [index, value] of floaters.entries()) {
@@ -623,9 +395,9 @@ function floatersSection(pointer: SxiPointer, entry: AnimationEntry): HTMLElemen
     })))
     block.append(heading)
     for (const field of fields) block.append(...fieldRows([...target, "floaters", index], field, floater[field.key]))
-    section.append(block)
+    node.append(block)
   }
-  return section
+  return node
 }
 
 /* —— list, sections and uses —— */
@@ -660,23 +432,19 @@ function parameterSections(pointer: SxiPointer, entry: AnimationEntry, table: Js
   if (entry.kind === "a3") return [comboSection(pointer, entry, table)]
   const target: SxiPointer = [...pointer, entry.id, entry.kind]
   const sections = animationGroups(entry.kind, entry.model).map((group) => {
-    const section = animationSection(group.title, SECTION)
-    for (const field of group.fields) {
-      if (entry.kind === "a1" && field.key === "t") {
-        section.append(a1TypeRow([...target, "b"], entry))
-        continue
-      }
+    const node = section(group.title, group.fields.flatMap((field) => {
+      if (entry.kind === "a1" && field.key === "t") return [a1TypeRow([...target, "b"], entry)]
       const scoped = field.scope === "base" ? [...target, "b"] : target
-      section.append(...fieldRows(scoped, field, field.scope === "base" ? sxiValue(entry.model, ["b", field.key]) : entry.model[field.key]))
-    }
+      return fieldRows(scoped, field, field.scope === "base" ? sxiValue(entry.model, ["b", field.key]) : entry.model[field.key])
+    }))
     // Only 位移 has a percent / pixel spelling; 旋转 and 缩放 always use percent.
     if (entry.kind === "a1" && group.title === "变化" && Number(animationBase(entry.model).t) === 2) {
-      section.append(a1UnitRow(target, entry))
+      node.append(a1UnitRow(target, entry))
       const note = element("p", "ui-field-note")
-      note.textContent = "切换单位只保留数值，不会按画布尺寸换算。"
-      section.append(note)
+      note.textContent = "切换单位只保留数值，不按画布尺寸换算"
+      node.append(note)
     }
-    return section
+    return node
   })
   if (entry.kind === "a12") sections.push(floatersSection(pointer, entry))
   return sections
@@ -733,11 +501,11 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   renderAnimationResource(container, {
     listSource: appState.archive,
     mode: appState.animationDesignMode,
-    sectionClass: SECTION,
+    sectionClass: "document-property-section",
     items,
     selected,
     keyFilter,
-    styles: { noun: "样式", icon: "paintbrush", items: styleItems, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard },
+    styles: { noun: "样式", icon: "paintbrush", items: styleItems, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard, ...animationStyleActions(entry && /^\d+$/.test(entry.id) ? Number(entry.id) : undefined) },
     thumbnail: id => ({ clip: palmPreviewClip(table, id), key: `${appState.selectedPath}|${id}`, resolver,
       readFile: resolver instanceof PalmStyles ? file => resolver.bytes(file) : undefined }),
     styleFilter,

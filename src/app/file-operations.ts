@@ -12,7 +12,8 @@ import { exportButtons, isTauri, LARGE_SKIN_BYTES } from "./canvas-interaction"
 import { canExport, type ExportFormat } from "../export.ts"
 import { operationError, operationErrorDetail } from "../operations.ts"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { message } from "@tauri-apps/plugin-dialog"
+import { ask } from "./ask.ts"
+import { closeDialog } from "../motion.ts"
 import { invoke, Channel } from "@tauri-apps/api/core"
 import { adaptIos26Variant, adaptIos26KeyboardLayout } from "../ios26.ts"
 import { adaptSxiForIos26 } from "../palm/sxi-ios26.ts"
@@ -118,7 +119,7 @@ export function showError(error: unknown, action = "操作"): void {
   eventLog.dataset.kind = "error"
   eventLog.textContent = text
   if (isTauri() && !fileOperationDialog.open) {
-    void message(text, { title: `${action}失败`, kind: "error" }).catch(() => {})
+    void ask({ title: `${action}失败`, detail: text, actions: [{ value: "close", label: "关闭", variant: "primary" }] })
   }
 }
 
@@ -242,7 +243,7 @@ export async function runFileOperation(
 ): Promise<void> {
   if (appState.fileOperationRunning) {
     // 拖入、最近打开、模板卡片在上一个操作结束前也能触发：给出提示，不再静默忽略。
-    showStatus(`正在${appState.currentFileOperation}，请稍后再${action}。`, "progress")
+    showStatus(`正在${appState.currentFileOperation}，请稍后再${action}`, "progress")
     return
   }
   appState.currentFileOperation = action
@@ -252,8 +253,6 @@ export async function runFileOperation(
   fileOperationDialog.dataset.outcome = "progress"
   fileOperationIcon.replaceChildren(createIcon("keyboard", 20))
   fileOperationTitle.textContent = `正在${action}`
-  fileOperationClose.textContent = "关闭"
-  fileOperationClose.dataset.variant = "primary"
   fileOperationResult.hidden = true
   fileOperationResult.textContent = ""
   fileOperationClose.disabled = true
@@ -267,21 +266,12 @@ export async function runFileOperation(
       outcome: completed ? "completed" : "cancelled",
       durationMs: Math.round(performance.now() - started),
     })
-    const result = completed ? `${action}完成。` : `${action}已取消。`
-    showStatus(result)
-    if (completed && /^(保存|导出)/.test(action)) showFileOperationProgress()
+    // 成功 / 取消不弹模态框（DESIGN.md §7）：结果只写状态栏，开着的进度框随之关闭。
+    showStatus(completed ? `${action}完成` : `${action}已取消`)
     if (appState.fileOperationProgressVisible) {
-      fileOperationDialog.dataset.outcome = completed ? "success" : "cancelled"
-      fileOperationIcon.replaceChildren(createIcon(completed ? "check" : "x", 20))
-      fileOperationTitle.textContent = completed ? `${action}成功` : `${action}已取消`
-      fileOperationClose.textContent = completed ? "完成" : "关闭"
-      updateFileOperationProgress(completed ? 100 : fileOperationProgress.value, completed ? "处理完成，可继续编辑皮肤。" : "未进行更改")
-      fileOperationResult.textContent = result
-      fileOperationResult.hidden = completed
-      if (completed && (action === "打开" || action.startsWith("下载"))) {
-        fileOperationDialog.close()
-        appState.fileOperationProgressVisible = false
-      }
+      if (completed) updateFileOperationProgress(100, `${action}完成`)
+      closeDialog(fileOperationDialog)
+      appState.fileOperationProgressVisible = false
     }
   } catch (error) {
     clientLog.info("operation.finish", {
@@ -302,7 +292,6 @@ export async function runFileOperation(
     setFileOperationBusy(false)
     if (appState.fileOperationProgressVisible) {
       fileOperationClose.disabled = false
-      fileOperationClose.dataset.variant = "primary"
       fileOperationClose.focus()
     }
   }

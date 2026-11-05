@@ -5,6 +5,7 @@
  * 这里只做纯数据：解析、按类型清理字段的写回、时间轴与 default.css / 布局的引用关系；播放预览见 animation-preview-model.ts。
  */
 import { IniDocument } from "./ini.ts"
+import { EVENT_LABELS } from "./config-labels.ts"
 
 export type LegacyAnimationKind = "basic" | "combination" | "frame" | "particle"
 
@@ -71,35 +72,41 @@ export const LEGACY_ANIMATION_INTPOL_OPTIONS: ReadonlyArray<readonly [string, st
   ["0", "匀速"], ["1", "加速"], ["2", "减速"], ["3", "加速减速"], ["4", "弹跳"],
 ]
 
+/** `config`：开关或枚举，控件由 baidu-config-controls.ts 按 [ANIM*] 分区给出；这里只管标签。 */
 type LegacyAnimationFieldSpec = {
   label: string
-  kind: "number" | "text" | "pair" | "quad" | "triple" | "select" | "switch"
+  kind: "number" | "text" | "pair" | "quad" | "config"
   unit?: string
   step?: string
-  options?: ReadonlyArray<readonly [string, string]>
-  optional?: boolean
 }
 
+/** anim.ini 键的唯一标签表：动画检查器与通用 INI 检查器都从这里取中文名。 */
 export const LEGACY_ANIMATION_FIELDS: Record<string, LegacyAnimationFieldSpec> = {
-  PIVOT: { label: "锚点", kind: "pair", unit: "%" },
-  PIVOT_PX: { label: "锚点（像素）", kind: "pair", unit: "px" },
-  FROM_PX: { label: "起始位置（像素）", kind: "pair", unit: "px" },
-  TO_PX: { label: "终止位置（像素）", kind: "pair", unit: "px" },
+  ANIM_NUM: { label: "动画数量", kind: "number" },
+  CATEGORY: { label: "动效类型", kind: "text" },
+  TYPE: { label: "类型", kind: "text" },
+  FROM: { label: "起始值", kind: "text" },
+  TO: { label: "结束值", kind: "text" },
+  INTPOL: { label: "插值器", kind: "text" },
+  PIVOT: { label: "变换中心", kind: "pair", unit: "%" },
+  PIVOT_PX: { label: "变换中心", kind: "pair", unit: "px" },
+  FROM_PX: { label: "起始位置", kind: "pair", unit: "px" },
+  TO_PX: { label: "终止位置", kind: "pair", unit: "px" },
   DELAY: { label: "延迟", kind: "number", unit: "ms", step: "1" },
   DURATION: { label: "时长", kind: "number", unit: "ms", step: "1" },
   REPEAT_CNT: { label: "重复次数", kind: "text" },
-  REPEAT_MODE: { label: "自动往返", kind: "select", options: [["0", "否"], ["1", "是"]] },
-  REMOVE: { label: "结束移除", kind: "select", optional: true, options: [["0", "保持"], ["1", "移除"]] },
-  BUILD_LIST: { label: "子动效列表", kind: "text" },
-  BUILD_NUM: { label: "子动效数量", kind: "number", step: "1" },
-  BUILD_METHOD: { label: "组合方式", kind: "select", options: [["0", "同时播放"], ["1", "接续播放"]] },
+  REPEAT_MODE: { label: "往返", kind: "config" },
+  REMOVE: { label: "结束后移除", kind: "config" },
+  BUILD_LIST: { label: "子动画", kind: "text" },
+  BUILD_NUM: { label: "子动画数量", kind: "number", step: "1" },
+  BUILD_METHOD: { label: "组合方式", kind: "config" },
   ANIM_PATH: { label: "gif 路径", kind: "text" },
   PARTICLE_IMAGE: { label: "粒子图片", kind: "text" },
   LIFE: { label: "生命周期", kind: "pair", unit: "ms" },
   EMIT_REGION: { label: "发射区域", kind: "quad" },
   TOTAL_NUMBER: { label: "粒子总数", kind: "number", step: "1" },
   BIRTH_RATE: { label: "发射速率", kind: "number", unit: "个/s", step: "0.1" },
-  EMIT_TYPE: { label: "发射方式", kind: "select", options: [["0", "依次"], ["1", "同时"]] },
+  EMIT_TYPE: { label: "发射方式", kind: "config" },
   VELOCITY: { label: "初始速度", kind: "pair", unit: "px/s" },
   VELOCITY_DIRECTION: { label: "速度方向", kind: "pair", unit: "°" },
   ACCELERATION: { label: "加速度", kind: "pair", unit: "px/s²" },
@@ -108,10 +115,10 @@ export const LEGACY_ANIMATION_FIELDS: Record<string, LegacyAnimationFieldSpec> =
   SCALE_SPEED: { label: "缩放速度", kind: "pair", unit: "倍/s" },
   INIT_ROTATE: { label: "初始角度", kind: "pair", unit: "°" },
   ROTATE_SPEED: { label: "旋转速度", kind: "pair", unit: "°/s" },
-  INIT_ALPHA: { label: "初始透明度", kind: "pair", unit: "0–255" },
+  INIT_ALPHA: { label: "初始透明度", kind: "pair" },
   ALPHA_SPEED: { label: "透明度速度", kind: "pair", unit: "/s" },
-  FINISH_AFTER_PRACTICES: { label: "以粒子消失为结束", kind: "switch" },
-  REMOVE_INCLUDE_PRACTICES: { label: "移除时带走粒子", kind: "switch" },
+  FINISH_AFTER_PRACTICES: { label: "以粒子消失为结束", kind: "config" },
+  REMOVE_INCLUDE_PRACTICES: { label: "移除时带走粒子", kind: "config" },
   MIRROR_UP: { label: "父层级镜像次数", kind: "number", step: "1" },
   PARTICLE_PATH: { label: "粒子路径", kind: "text" },
 }
@@ -510,11 +517,11 @@ export function legacyAnimationReferences(
 
 /** 样式里动效指针字段对应的时机。 */
 export const STYLE_ANIM_FIELD_LABELS: Record<string, string> = {
-  PRESS_ANIM: "按下",
-  RELEASE_ANIM: "抬起",
-  SHOW_ANIM: "显示",
-  HIDE_ANIM: "隐藏",
-  FIRST_PRESS_PANEL_ANIM: "首个按下面板",
+  PRESS_ANIM: EVENT_LABELS.press,
+  RELEASE_ANIM: EVENT_LABELS.release,
+  SHOW_ANIM: EVENT_LABELS.show,
+  HIDE_ANIM: EVENT_LABELS.hide,
+  FIRST_PRESS_PANEL_ANIM: EVENT_LABELS.firstPress,
 }
 
 export type LegacyAnimationStyle = {

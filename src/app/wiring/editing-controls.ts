@@ -1,10 +1,13 @@
 import { source, keyboardFields, layoutActionButtons, preview, inspectorTabButtons, mobilePortraitQuery, activateSkinState } from "../canvas-interaction"
+import { bindDialog } from "../ask.ts"
+import { searchField } from "../../dom-element.ts"
+import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
 import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight } from "../source-panel"
-import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, styleFields, toolbarFields, skinFields, gapFields, quickInspector, colorPickers, colorAlphas, keyModeButtons, keyActionButtons, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, themeChoiceButtons, orientationChoiceButtons, mobileChoiceButtons, toggleGuides, mobileToggleGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, ios26Dialog, ios26Form, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontFileSelect, fontImportButton, fontImportInput, fontRemoveButton } from "../dom"
+import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, styleFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, themeChoiceButtons, orientationChoiceButtons, mobileChoiceButtons, toggleGuides, mobileToggleGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontFileSelect, fontImportButton, fontImportInput, fontRemoveButton } from "../dom"
 import { appState } from "../state"
 import { syncActionCodeSuggestions, updateSelectedKey, updateSelectedStyle, updateKeyboard, updateToolbar, updateSkinInfo, populateKeyInspector } from "../key-inspector"
-import { syncColorControl, writeColorControl, scrollSelectedSource } from "../config-context"
+import { scrollSelectedSource } from "../config-context"
 import { applyExactGap, moveMixedCoordinate, applyLayoutAction, copySelectedKeys, deleteSelectedKeys } from "../key-editing"
 import { shouldClearMixedInput } from "../../mixed-input.ts"
 import { syncCandidateSelection, updateDevicePreview, refreshPreview, setGuidesVisible } from "../preview-render"
@@ -32,7 +35,7 @@ import { type LayoutImageConfig } from "../types"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
-  fontFileSelect.addEventListener("change", () => setGlobalFont(fontFileSelect.value))
+  fontFileSelect.addEventListener("change", () => void setGlobalFont(fontFileSelect.value))
   fontImportButton.addEventListener("click", () => {
     if (!isEditing()) return
     fontImportInput.value = ""
@@ -102,11 +105,6 @@ export function wireEditingControls(): void {
   for (const field of styleFields) {
     field.addEventListener("change", () => updateSelectedStyle(field))
   }
-  for (const field of [...keyboardFields, ...styleFields]) {
-    if (!field.dataset.keyboardField?.endsWith("COLOR") && !field.dataset.styleField?.endsWith("COLOR")) continue
-    field.addEventListener("input", () => syncColorControl(field))
-    field.addEventListener("change", () => syncColorControl(field))
-  }
   for (const field of keyboardFields) {
     field.addEventListener("change", () => updateKeyboard(field))
   }
@@ -134,15 +132,6 @@ export function wireEditingControls(): void {
     field.placeholder = ""
     field.dispatchEvent(new Event("input", { bubbles: true }))
   })
-  for (const picker of colorPickers) {
-    picker.addEventListener("change", () => {
-      const alpha = colorAlphas.find((item) => item.dataset.colorAlphaFor === picker.dataset.colorPickerFor)
-      writeColorControl(picker, alpha?.value ? Number(alpha.value) : 1)
-    })
-  }
-  for (const alpha of colorAlphas) {
-    alpha.addEventListener("change", () => { if (alpha.value !== "" && alpha.checkValidity()) writeColorControl(alpha, Number(alpha.value)) })
-  }
   for (const button of layoutActionButtons) {
     button.addEventListener("click", () => applyLayoutAction(button.dataset.layoutAction ?? ""))
   }
@@ -207,10 +196,7 @@ export function wireEditingControls(): void {
     applyModeState()
     if (appState.resourceConfigActive) populateTileInspector()
     else populateKeyInspector()
-    eventLog.textContent =
-      mode.value === "edit"
-        ? "点选按键，在右侧编辑"
-        : "点击、长按或滑动按键试用"
+    eventLog.textContent = ""
   })
   // 只读表单里的禁用控件仍接收指针（components.css），点击统一提示切换模式。
   document.addEventListener("pointerdown", (event) => {
@@ -275,7 +261,7 @@ export function wireEditingControls(): void {
     }
     showResourceList()
   })
-  resourceSearch.addEventListener("input", renderResourceInspector)
+  searchField({ label: "搜索图片", input: resourceSearch, onInput: renderResourceInspector })
   resourceCategory.addEventListener("change", () => {
     if (appState.archive?.format !== "bda" || appState.resourceInspectorMode !== "style" || !appState.resourceConfigActive) {
       renderResourceInspector()
@@ -296,7 +282,7 @@ export function wireEditingControls(): void {
   for (const button of tileModeButtons) {
     button.addEventListener("click", () => {
       appState.tileMode = button.dataset.tileMode === "move" ? "move" : "select"
-      tileModeButtons.forEach((item) => item.classList.toggle("active", item === button))
+      tileModeButtons.forEach((item) => item.setAttribute("aria-pressed", String(item === button)))
       setDrawingTile(false)
     })
   }
@@ -393,14 +379,11 @@ export function wireEditingControls(): void {
     activateSkinState(state)
   })
   panelScaleButton.addEventListener("click", openPanelCopyDialog)
-  adaptIos26Button.addEventListener("click", () => ios26Dialog.showModal())
-  ios26Form.addEventListener("submit", (event) => {
-    if ((event.submitter as HTMLButtonElement | null)?.value !== "apply") return
-    event.preventDefault()
-    ios26Dialog.close()
-    void runFileOperation("适配 iOS 26", adaptArchiveForIos26)
-  })
+  // 适配走撤销栈，不再确认（DESIGN.md §7）。
+  adaptIos26Button.addEventListener("click", () => void runFileOperation("适配 iOS 26", adaptArchiveForIos26))
   replaceLayoutImageButton.addEventListener("click", openLayoutImageDialog)
+  bindDialog(layoutImageDialog)
+  bindDialog(panelScaleDialog)
   layoutImageFile.addEventListener("click", () => layoutImageOpen.click())
   layoutImageOpen.addEventListener("change", () => {
     acceptLayoutImageFile(layoutImageOpen.files?.[0])
@@ -469,7 +452,7 @@ export function wireEditingControls(): void {
   panelScaleForm.addEventListener("submit", (event) => {
     if ((event.submitter as HTMLButtonElement | null)?.value !== "copy") return
     event.preventDefault()
-    panelScaleDialog.close()
+    closeDialog(panelScaleDialog)
     void runFileOperation("复制面板", copyPanel)
   })
   candidateArea.addEventListener("click", (event) => {

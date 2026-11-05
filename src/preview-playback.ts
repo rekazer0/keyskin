@@ -60,9 +60,8 @@ export function stopLegacyPanelAnimation(self: Preview): void {
   self.legacyPanelAnimationStartedAt = 0
 }
 
-/** The panel's own particles: the inspector's picked particle, its SHOW_ANIM, then a panel PRESS_ANIM style. */
+/** The panel's own particles: its SHOW_ANIM, then a panel PRESS_ANIM style. */
 function panelParticles(self: Preview): LegacyParticleEmitter[] {
-  if (self.particlePreview) return [self.particlePreview]
   return (self.legacyShowAnimation?.get(self.panelAnimationStyle)
     ?? self.legacyAnimation?.get(self.panelAnimationStyle))?.particles ?? []
 }
@@ -93,8 +92,7 @@ export function restartLegacyPanelAnimation(self: Preview): void {
 export function syncLegacyPanelAnimation(self: Preview, restart = false): void {
   const particles = self.legacyShowAnimation?.get(self.panelAnimationStyle)?.particles ?? []
   if (!particles.length) {
-    // The inspector's picked particle keeps its own playback.
-    if (!self.particlePreview) stopLegacyPanelAnimation(self)
+    stopLegacyPanelAnimation(self)
     return
   }
   if (self.legacyPanelAnimationTimer) window.cancelAnimationFrame(self.legacyPanelAnimationTimer)

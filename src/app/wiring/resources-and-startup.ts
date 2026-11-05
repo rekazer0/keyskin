@@ -1,4 +1,6 @@
-import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, styleAddButton, newStyleID, newStyleDialog, newStyleForm, layout, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
+import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
+import { bindDialog } from "../ask.ts"
+import { closeDialog } from "../../motion.ts"
 import { updateSelectedImageReference, pickerImageReference, resourcePickerPayload, selectImageResource, pickableImagePaths, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
 import { appState } from "../state"
 import { isTauri, isAndroidTauri, playSoundPath, syncDeviceControlIcon, clearSimulatedOutput } from "../canvas-interaction"
@@ -6,19 +8,14 @@ import { listen } from "@tauri-apps/api/event"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { type ProjectChoice } from "../../project-chooser"
 import { finishNativeProjectChoice } from "../new-document"
-import { emitStyleLibrary, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, nextStyleID, showNewStyleError, availableStyleIDs, canAddStyle } from "../style-picker"
-import { editSxi } from "../sxi-fields"
-import { addPalmStyle } from "../../palm/palm-style-edit.ts"
-import { palmTheme } from "../sxi-documents"
-import { canvasEditable, isEditing, commitText, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
+import { emitStyleLibrary, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle, sliceStyleLibrarySelection } from "../style-picker"
+import { canvasEditable, isEditing, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
 import { WHOLE_IMAGE_INDEX } from "../../slice-picker-canvas.ts"
 import { soundPathForFilename } from "../../sounds.ts"
 import { bindPaneResize, applyModeState } from "../mobile-layout"
-import { styleConfigPath, setSourceValue, currentConfigPath } from "../config-context"
-import { IniDocument } from "../../ini.ts"
-import { openStyleReferenceEditor } from "../style-references"
+import { currentConfigPath } from "../config-context"
 import { refreshPreview, setGuidesVisible, updateDevicePreview, refreshSimulationPreview, fitCanvasPreview } from "../preview-render"
-import { selectStyleResource, renderResourceInspector, selectResourceImage, uploadKeySound, currentSoundEntries, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
+import { showStyle, renderResourceInspector, selectResourceImage, uploadKeySound, currentSoundEntries, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
 import { createAtlasWorkspace } from "../../atlas-workspace"
 import { createAnimationWorkspace } from "../../animation-workspace"
 import { selectFile } from "../navigation"
@@ -40,6 +37,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { setSourceDropTarget, sourceDropFolder, commitSourceUploads } from "../source-files"
 import { updateSourceHighlight, updateInspectorView } from "../source-panel"
 import { initInspectorShell } from "../../inspector-shell.ts"
+import { bindListboxKeys } from "../../dom-element.ts"
 import { startOnboarding, startOnboardingOnFirstLaunch } from "../onboarding"
 
 /** 样式图片资源、面板缩放、模拟输入与启动时的初始状态。只在启动时由 main.ts 按顺序调用一次。 */
@@ -59,13 +57,12 @@ export function wireResourcesAndStartup(): void {
     appState.pickerFrameReady = true
     void emitPickerView(appState.pickerRequestedView)
   })
-  void onPickerEvent("picker-close", () => pickerDialog.close())
+  bindDialog(pickerDialog)
+  void onPickerEvent("picker-close", () => closeDialog(pickerDialog))
   pickerDialog.addEventListener("close", () => {
     appState.pickerFrameReady = false
     pickerFrame.src = "about:blank"
   })
-  // 网页端弹窗的遮罩点在 dialog 自身上，iframe 内的点击不会冒泡过来。
-  pickerDialog.addEventListener("click", (event) => { if (event.target === pickerDialog) pickerDialog.close() })
   void onPickerEvent<{ index: number }>("image-picker-select", ({ index }) => {
     if (!isEditing() || !appState.pickerTarget) return
     if (index === WHOLE_IMAGE_INDEX ? appState.pickerSlices.length : !appState.pickerSlices.some((slice) => slice.index === index)) return
@@ -83,6 +80,8 @@ export function wireResourcesAndStartup(): void {
     editStyleLibrarySelection()
   })
   void onPickerEvent("style-library-add", addStyleFromLibrary)
+  void onPickerEvent<{ styleID: string }>("style-library-duplicate", ({ styleID }) => { if (duplicateStyle(styleID)) void emitStyleLibrary() })
+  void onPickerEvent<{ styleID: string }>("style-library-slice", ({ styleID }) => sliceStyleLibrarySelection(styleID))
   void onPickerEvent<{ filename: string }>("style-library-play", ({ filename }) => {
     const path = soundPathForFilename(appState.archive?.names() ?? [], theme.value, orientation.value, filename)
     if (path) playSoundPath(path)
@@ -91,55 +90,16 @@ export function wireResourcesAndStartup(): void {
   void onPickerEvent<{ path: string }>("resource-picker-select", ({ path }) => selectImageResource(path))
   bindPaneResize($("#sidebar-resize-handle"), "--sidebar-width", "sidebarWidthV2", 180, 248, 1)
   bindPaneResize(inspectorResizeHandle, "--inspector-width", "inspectorWidthV5", 220, 360, -1)
-  styleAddButton.addEventListener("click", () => {
-    if (!canAddStyle() || !isEditing()) return
-    newStyleID.value = nextStyleID()
-    showNewStyleError("")
-    newStyleDialog.showModal()
-    newStyleID.select()
+  // 样式 / 图片列表：方向键换选中，⌘D 复制选中的样式（Delete 由卡片自己处理）。
+  bindListboxKeys(resourceGallery, (card) => {
+    card.click()
+    card.focus()
   })
-  newStyleForm.addEventListener("submit", (event) => {
-    if ((event.submitter as HTMLButtonElement | null)?.value !== "create") return
+  resourceGallery.addEventListener("keydown", (event) => {
+    if (event.key.toLowerCase() !== "d" || !(event.metaKey || event.ctrlKey) || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID) return
     event.preventDefault()
-    const styleID = newStyleID.value.trim()
-    if (!/^\d+$/.test(styleID)) {
-      showNewStyleError("样式序号必须是非负整数")
-      return
-    }
-    if (availableStyleIDs().includes(styleID)) {
-      showNewStyleError(`STYLE${styleID} 已存在`)
-      return
-    }
-    const path = styleConfigPath()
-    // A Palm style joins the theme's shared table in skin.json.
-    if (appState.archive?.format === "sxi") editSxi((skin) => { addPalmStyle(skin, palmTheme(), {}, styleID) })
-    else {
-      if (!appState.archive?.isText(path)) return
-      const stylesDocument = IniDocument.parse(appState.archive.getText(path))
-      const before = stylesDocument.toString()
-      stylesDocument.appendSection(`STYLE${styleID}`, [])
-      const currentMax = Number(stylesDocument.get("GLOBAL", "STYLE_NUM") ?? -1)
-      const numericID = Number(styleID)
-      if (!Number.isFinite(currentMax) || numericID > currentMax) stylesDocument.set("GLOBAL", "STYLE_NUM", styleID)
-      commitText(path, before, stylesDocument.toString())
-      setSourceValue(stylesDocument.toString())
-    }
-    const applyTarget = appState.newStyleApplyTarget
-    newStyleDialog.close()
-    // 检查器缩略图传入的是行内克隆输入框（未挂载），只看是否可编辑。
-    if (applyTarget && !applyTarget.disabled) {
-      applyTarget.value = styleID
-      applyTarget.dispatchEvent(new Event("input", { bubbles: true }))
-      applyTarget.dispatchEvent(new Event("change", { bubbles: true }))
-      openStyleReferenceEditor(styleID)
-      refreshPreview()
-      updateDirty()
-      return
-    }
-    appState.selectedResourceGalleryPath = `STYLE${styleID}`
-    selectStyleResource(styleID)
-    refreshPreview()
-    updateDirty()
+    const id = duplicateStyle(appState.selectedStyleID)
+    if (id) showStyle(id)
   })
   appState.animationWorkspace = createAnimationWorkspace({
     back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),
@@ -171,14 +131,15 @@ export function wireResourcesAndStartup(): void {
       selectResourceImage(`${target}.png`)
       updateDirty()
     },
+    // 校验失败返回错误文字，由对话框在框内显示（DESIGN.md §7）。
     create: (name, width, height) => {
-      if (!appState.archive || !isEditing()) return
-      if (!/^[^\\/:*?"<>|]+\.png$/i.test(name) || name.startsWith(".")) { showStatus("请输入有效的 PNG 文件名"); return }
+      if (!appState.archive || !isEditing()) return "交互预览中无法编辑"
+      if (!/^[^\\/:*?"<>|]+\.png$/i.test(name) || name.startsWith(".")) return "请输入有效的 PNG 文件名"
       const size = [width, height]
-      if (size.length !== 2 || size.some(n => !Number.isInteger(n) || n < 1 || n > 8192)) { showStatus("图片宽高必须是 1 至 8192 的整数"); return }
+      if (size.some(n => !Number.isInteger(n) || n < 1 || n > 8192)) return "宽高必须是 1 至 8192 的整数"
       const base = appState.selectedResourcePath.substring(0, appState.selectedResourcePath.lastIndexOf("/")) || resourceRootPath()
       const path = `${base}/${name}`
-      if (appState.archive.getBytes(path)) { showStatus("同名图片已存在"); return }
+      if (appState.archive.getBytes(path)) return "同名图片已存在"
       const targetArchive = appState.archive
       const canvas = document.createElement("canvas")
       canvas.width = size[0]; canvas.height = size[1]
@@ -288,7 +249,7 @@ export function wireResourcesAndStartup(): void {
     updateResourceActionButtons()
     renderResourceInspector()
     updateDirty()
-    showStatus(`已删除图片 ${name}，可撤销。`)
+    showStatus(`已删除图片 ${name}，可撤销`)
   })
   device.addEventListener("change", () => {
     const background = canvasBackgroundFromDevice(device.value)
@@ -301,6 +262,8 @@ export function wireResourcesAndStartup(): void {
   clearSimulationButton.addEventListener("click", clearSimulatedOutput)
   simulatedOutput.addEventListener("input", refreshSimulationPreview)
   window.addEventListener("keydown", (event) => {
+    // 列表、菜单、搜索框已经处理过这次按键（方向键选项、Delete 删除列表项、Esc 清除）。
+    if (event.defaultPrevented) return
     const movement: Record<string, readonly [number, number]> = {
       ArrowLeft: [-1, 0],
       ArrowRight: [1, 0],

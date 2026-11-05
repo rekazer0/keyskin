@@ -107,7 +107,7 @@ function palmKeyGroups(skin: JsonObject, models: SxiPointer[]): Array<HTMLElemen
     return models.flatMap((model) => modelGroups(model, asObject(sxiValue(skin, model)) ?? {}, palmPartLabel(String(model[model.length - 2] === "key_fix" ? "key_fix" : model[model.length - 1]))))
   }
   const text = textBlocks(skin, models)
-  const note = models.length > 1 ? "修改会作用于所有选中按键。" : undefined
+  const note = models.length > 1 ? "作用于所有选中按键" : undefined
   const gestures = models.map((model) => sxiValue(skin, [...model, "values"]))
   const gestureBlock: SxiBlock = { targets: models, only: [] }
   // The shell counts the configured gestures into this title badge (inspector-shell.ts).
@@ -118,8 +118,8 @@ function palmKeyGroups(skin: JsonObject, models: SxiPointer[]): Array<HTMLElemen
     renderSxiGroup("布局", [{ targets: models, only: LAYOUT_FIELDS, expect: ["rect", "hit_rect"], note }]),
     renderSxiGroup("样式", [{ targets: models, only: STYLE_FIELDS, expect: ["b.base_b", "b.base_f"], keyForeground: true }]),
     text.length
-      ? renderSxiGroup("文字", text.map((block, index) => index ? block : { ...block, note: "前景样式可能被多个按键共用，修改会一起生效。" }))
-      : renderSxiGroup("文字", [{ targets: models, only: [], note: "前景没有文字样式：可以在「样式」里添加一个文字样式。" }]),
+      ? renderSxiGroup("文字", text.map((block, index) => index ? block : { ...block, note: "共享：可能被多个按键共用" }))
+      : renderSxiGroup("文字", [{ targets: models, only: [], note: "没有文字样式" }]),
     gestureGroup,
     renderSxiGroup("状态", [{ targets: models, only: ["fix_a"] }]),
     renderSxiGroup("其他", [{ targets: models, omit: ["id", "values", "b", ...LAYOUT_FIELDS, "fix_a"] }]),

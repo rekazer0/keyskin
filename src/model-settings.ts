@@ -1,4 +1,8 @@
+import type { Api, Model } from "@earendil-works/pi-ai"
+import { ANTHROPIC_MODELS } from "@earendil-works/pi-ai/providers/anthropic.models"
+import { OPENAI_CODEX_MODELS } from "@earendil-works/pi-ai/providers/openai-codex.models"
 import { invoke } from "@tauri-apps/api/core"
+import { bindMenuKeys } from "./dom-element"
 import { IMAGE_MODEL_PRESETS, MODEL_PROVIDER_PRESETS, imageModelPreset, modelProviderPreset, type ModelProtocol } from "./model-providers"
 
 export interface ModelConfiguration {
@@ -38,6 +42,20 @@ function presetProvider(id = "openai"): ModelProvider {
   return { provider: preset.id, protocol: preset.protocol, apiUrl: preset.apiUrl, apiKey: "", models: preset.model ? [preset.model] : [] }
 }
 
+/** Models a subscription account can use: pi-ai's catalog without dated snapshots. */
+export function subscriptionModels(provider: string): Model<Api>[] {
+  const catalog = provider === "claude-subscription" ? ANTHROPIC_MODELS : provider === "chatgpt-subscription" ? OPENAI_CODEX_MODELS : {}
+  return (Object.values(catalog) as Model<Api>[]).filter((model) => !/-\d{8}$/.test(model.id))
+}
+
+/** PKCE pair and state for a subscription sign-in; the native side never sees anything weaker. */
+async function pkce(): Promise<{ verifier: string; challenge: string; state: string }> {
+  const encode = (bytes: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+  const verifier = encode(crypto.getRandomValues(new Uint8Array(32)))
+  const challenge = encode(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
+  return { verifier, challenge, state: encode(crypto.getRandomValues(new Uint8Array(16))) }
+}
+
 export function modelHost(url: string): string {
   try { return new URL(url).host } catch { return url }
 }
@@ -59,19 +77,28 @@ export function flattenModelProviders(providers: ModelProvider[]): ModelConfigur
 }
 
 /** What still keeps one provider from being saved, for its row in the list. */
-function providerProblem(provider: ModelProvider): string | undefined {
-  if (!provider.apiUrl) return "缺少 API 地址"
-  if (!provider.apiKey) return "缺少 API 密钥"
+function providerProblem(provider: ModelProvider, accounts: ReadonlyMap<string, string>): string | undefined {
+  if (modelProviderPreset(provider.provider).subscription) {
+    if (!accounts.has(provider.provider)) return "未登录"
+  } else {
+    if (!provider.apiUrl) return "缺少 API 地址"
+    if (!provider.apiKey) return "缺少 API 密钥"
+  }
   if (!provider.models.length) return "未选择模型"
 }
 
-/** Returns the first problem in a provider list, so the editor can select the offending entry. */
-export function validateModelProviders(providers: ModelProvider[]): { index: number; message: string } | undefined {
+/**
+ * Returns the first problem in a provider list, so the editor can select the offending entry.
+ * `accounts` holds the signed-in subscriptions; those need no API key.
+ */
+export function validateModelProviders(providers: ModelProvider[], accounts: ReadonlyMap<string, string> = new Map()): { index: number; message: string } | undefined {
   const seen = new Set<string>()
   for (const [index, provider] of providers.entries()) {
+    const preset = modelProviderPreset(provider.provider)
+    if (preset.subscription && !accounts.has(provider.provider)) return { index, message: `请先登录 ${preset.label}` }
     if (!provider.apiUrl) return { index, message: "请填写 API 地址" }
     if (!/^https?:\/\/[^/]/i.test(provider.apiUrl)) return { index, message: "API 地址必须以 http:// 或 https:// 开头" }
-    if (!provider.apiKey) return { index, message: "请填写 API 密钥" }
+    if (!preset.subscription && !provider.apiKey) return { index, message: "请填写 API 密钥" }
     if (!provider.models.length) return { index, message: "请至少选择一个模型" }
     for (const model of flattenModelProviders([provider])) {
       const key = modelConfigurationKey(model)
@@ -81,10 +108,24 @@ export function validateModelProviders(providers: ModelProvider[]): { index: num
   }
 }
 
-export function validateImageModel(image: ModelConfiguration | undefined): string | undefined {
+/**
+ * Image models a ChatGPT subscription answers with, newest first. Its model listing carries chat
+ * models only, so these stand in for it (the ids PI-Desktop verified against the Codex backend).
+ */
+const CHATGPT_IMAGE_MODELS = ["gpt-image-2.5", "gpt-image-2"]
+
+/** Keeps the image models of a /models listing, which also carries the service's chat models. */
+export function imageModelIds(models: readonly string[]): string[] {
+  return models.filter((model) => /image|dall-e|imagen|seedream|seededit|cogview|flux|wanx|kolors|diffusion/i.test(model))
+}
+
+/** `accounts` holds the signed-in subscriptions, as for validateModelProviders. */
+export function validateImageModel(image: ModelConfiguration | undefined, accounts: ReadonlyMap<string, string> = new Map()): string | undefined {
   if (!image) return
+  const preset = imageModelPreset(image.provider)
+  if (preset?.subscription && !accounts.has(image.provider)) return `请先登录 ${preset.label} 后再用于生图`
   if (!/^https?:\/\/[^/]/i.test(image.apiUrl)) return "生图模型的 API 地址必须以 http:// 或 https:// 开头"
-  if (!image.apiKey) return "请填写生图模型的 API 密钥"
+  if (!preset?.subscription && !image.apiKey) return "请填写生图模型的 API 密钥"
   if (!image.model) return "请填写生图模型名称"
 }
 
@@ -119,6 +160,20 @@ export function initializeModelSettings(section: HTMLElement, options: {
   const imageApiUrl = $<HTMLInputElement>("image-model-api-url")
   const imageApiKey = $<HTMLInputElement>("image-model-api-key")
   const imageName = $<HTMLInputElement>("image-model-name")
+  const addMenu = $<HTMLDetailsElement>("model-profile-add")
+  const accountRow = $<HTMLElement>("model-account-row")
+  const accountText = $<HTMLElement>("model-account-text")
+  const accountAction = $<HTMLButtonElement>("model-account-action")
+  const keyRows = [provider, apiUrl, apiKey].map((input) => input.closest<HTMLElement>(".settings-row")!)
+  const imageAccountRow = $<HTMLElement>("image-model-account-row")
+  const imageAccountText = $<HTMLElement>("image-model-account-text")
+  const imageAccountAction = $<HTMLButtonElement>("image-model-account-action")
+  const imageChoiceRow = $<HTMLElement>("image-model-choice-row")
+  const imageChoice = $<HTMLSelectElement>("image-model-choice")
+  const imageRefresh = $<HTMLButtonElement>("refresh-image-model-list")
+  const imageOptions = $<HTMLDataListElement>("image-model-options")
+  const imageStatus = $<HTMLElement>("image-model-status")
+  const imageKeyRows = [imageApiUrl, imageApiKey, imageName].map((input) => input.closest<HTMLElement>(".settings-row")!)
 
   let saved: ModelConfiguration[] = []
   let draft: ModelProvider[] = []
@@ -126,9 +181,40 @@ export function initializeModelSettings(section: HTMLElement, options: {
   let active = -1
   // Models fetched from the open provider's API; offered as choices but not saved.
   let fetched: string[] = []
+  // Image models found in the image subscription's own listing, if it ever carries any.
+  let imageFetched: string[] = []
   let loadError = ""
+  // Signed-in subscriptions (provider id → email). Signing in and out apply at once, like any account.
+  const accounts = new Map<string, string>()
+  let signingIn = ""
 
-  provider.replaceChildren(...MODEL_PROVIDER_PRESETS.map((preset) => new Option(preset.label, preset.id)))
+  const services = MODEL_PROVIDER_PRESETS.filter((preset) => !preset.subscription)
+  provider.replaceChildren(...services.map((preset) => new Option(preset.label, preset.id)))
+  const menuItem = (icon: string) => (preset: (typeof MODEL_PROVIDER_PRESETS)[number]) => {
+    const item = document.createElement("button")
+    item.type = "button"
+    item.className = "ui-list-item"
+    item.setAttribute("role", "menuitem")
+    const label = document.createElement("span")
+    label.textContent = preset.label
+    item.append(options.icon(icon), label)
+    item.addEventListener("click", () => addProfile(preset.id))
+    return item
+  }
+  const separator = document.createElement("hr")
+  separator.className = "ui-menu-separator"
+  addMenu.querySelector(".ui-menu")!.replaceChildren(
+    ...MODEL_PROVIDER_PRESETS.filter((preset) => preset.subscription).map(menuItem("user-round")),
+    separator,
+    ...services.map(menuItem("plug")),
+  )
+  bindMenuKeys(addMenu)
+  addMenu.addEventListener("click", (event) => {
+    if ((event.target as Element).closest("button")) addMenu.open = false
+  })
+  document.addEventListener("pointerdown", (event) => {
+    if (addMenu.open && !addMenu.contains(event.target as Node)) addMenu.open = false
+  })
   imageProvider.replaceChildren(new Option("不使用", ""), ...IMAGE_MODEL_PRESETS.map((preset) => new Option(preset.label, preset.id)))
 
   const clone = <T extends object>(items: T[]) => structuredClone(items)
@@ -157,7 +243,7 @@ export function initializeModelSettings(section: HTMLElement, options: {
   function renderProfiles(): void {
     profiles.replaceChildren(...draft.map((group, index) => {
       const label = modelProviderPreset(group.provider).label
-      const problem = providerProblem(group)
+      const problem = providerProblem(group, accounts)
       const item = document.createElement("li")
       const select = document.createElement("button")
       select.type = "button"
@@ -168,7 +254,8 @@ export function initializeModelSettings(section: HTMLElement, options: {
       const title = document.createElement("strong")
       title.textContent = label
       const detail = document.createElement("small")
-      detail.textContent = problem ?? [group.models.join("、"), modelHost(group.apiUrl)].filter(Boolean).join(" · ")
+      const where = modelProviderPreset(group.provider).subscription ? accounts.get(group.provider) : modelHost(group.apiUrl)
+      detail.textContent = problem ?? [group.models.join("、"), where].filter(Boolean).join(" · ")
       if (problem) detail.dataset.problem = ""
       text.append(title, detail)
       select.append(text)
@@ -186,8 +273,8 @@ export function initializeModelSettings(section: HTMLElement, options: {
     }))
     if (!draft.length) {
       const empty = document.createElement("li")
-      empty.className = "model-profiles-empty"
-      empty.textContent = "还没有服务商。点击“添加服务商”，选择预设并填写 API 密钥即可开始使用 AI 设计。"
+      empty.className = "ui-empty"
+      empty.textContent = "还没有服务商"
       profiles.append(empty)
     }
     const count = draft.reduce((total, group) => total + group.models.length, 0)
@@ -223,7 +310,7 @@ export function initializeModelSettings(section: HTMLElement, options: {
     }))
     if (!shown.length) {
       const empty = document.createElement("li")
-      empty.className = "model-choices-empty"
+      empty.className = "ui-empty"
       empty.textContent = query
         ? `没有匹配“${name.value.trim()}”的模型，按回车或点 + 添加它`
         : "点击“获取列表”读取服务商的模型，或在上方输入模型 ID 添加"
@@ -235,7 +322,9 @@ export function initializeModelSettings(section: HTMLElement, options: {
   /** Everything the open provider can offer: its chosen models, the fetched list and the preset default. */
   function choiceModels(group: ModelProvider): string[] {
     const preset = modelProviderPreset(group.provider).model
-    return [...new Set([...group.models, ...fetched, ...(preset ? [preset] : [])])]
+    // pi-ai's catalog only stands in until the account's own list has been fetched.
+    const catalog = fetched.length ? [] : subscriptionModels(group.provider).map((model) => model.id)
+    return [...new Set([...group.models, ...fetched, ...(preset ? [preset] : []), ...catalog])]
   }
 
   function renderChoiceCount(group: ModelProvider): void {
@@ -246,6 +335,12 @@ export function initializeModelSettings(section: HTMLElement, options: {
     const group = current()
     editor.hidden = test.hidden = !group
     if (!group) return
+    const subscription = Boolean(modelProviderPreset(group.provider).subscription)
+    // A subscription signs in instead of taking an address and key; listing its models is the connection test.
+    for (const row of keyRows) row.hidden = subscription
+    accountRow.hidden = !subscription
+    test.hidden = subscription
+    renderAccount()
     provider.value = modelProviderPreset(group.provider).id
     apiUrl.value = group.apiUrl
     apiKey.value = group.apiKey
@@ -253,12 +348,117 @@ export function initializeModelSettings(section: HTMLElement, options: {
     renderChoices()
   }
 
+  /** The chat editor and the image model share one sign-in per subscription, so both rows follow it. */
+  function renderAccount(): void {
+    for (const [id, text, action] of [[current()?.provider, accountText, accountAction], [imageDraft?.provider, imageAccountText, imageAccountAction]] as const) {
+      const email = accounts.get(id ?? "")
+      const busy = signingIn === id
+      text.textContent = busy ? "等待浏览器中完成授权…" : email === undefined ? "未登录" : email ? `已登录 · ${email}` : "已登录"
+      text.title = text.textContent
+      action.textContent = busy ? "取消" : email === undefined ? "登录" : "退出登录"
+      if (!busy && email === undefined) action.dataset.variant = "primary"
+      else delete action.dataset.variant
+    }
+  }
+
+  async function login(id: string): Promise<void> {
+    const label = modelProviderPreset(id).label
+    if (!options.desktop) {
+      setStatus("请在桌面应用中登录账号", "error")
+      return
+    }
+    signingIn = id
+    renderAccount()
+    setStatus(`已在浏览器中打开 ${label} 授权页面，完成后回到这里`, "busy")
+    try {
+      const account = await invoke<{ email: string }>("model_oauth_login", { provider: id, ...await pkce() })
+      accounts.set(id, account.email)
+      setStatus(`已登录 ${label}，勾选模型后保存`, "success")
+      if (current()?.provider === id) fetchSubscriptionModels()
+      if (imageDraft?.provider === id) void fetchImageModels()
+    } catch (error) {
+      // A newer sign-in replaced this one; its own status stays.
+      const cancelled = String(error) === "已取消登录"
+      if (signingIn === id) setStatus(cancelled ? "" : `登录失败：${String(error)}`, cancelled ? "idle" : "error")
+    } finally {
+      if (signingIn === id) signingIn = ""
+      renderProfiles()
+      renderAccount()
+    }
+  }
+
+  async function logout(id: string): Promise<void> {
+    try {
+      await invoke("model_oauth_logout", { provider: id })
+      accounts.delete(id)
+      setStatus(`已退出 ${modelProviderPreset(id).label}`)
+    } catch (error) {
+      setStatus(`退出登录失败：${String(error)}`, "error")
+    }
+    renderProfiles()
+    renderAccount()
+  }
+
+  function toggleAccount(id: string | undefined): void {
+    if (!id) return
+    if (signingIn === id) void invoke("model_oauth_cancel")
+    else if (accounts.has(id)) void logout(id)
+    else void login(id)
+  }
+  accountAction.addEventListener("click", () => toggleAccount(current()?.provider))
+  imageAccountAction.addEventListener("click", () => toggleAccount(imageDraft?.provider))
+
+  function setImageStatus(message: string, state: Status = "idle"): void {
+    imageStatus.textContent = message
+    imageStatus.dataset.state = state
+    imageStatus.hidden = !message
+  }
+
+  /**
+   * Lists the image service's models. A signed-in subscription does this quietly on its own;
+   * an API service does it from 获取列表 (`report`), which says how it went.
+   */
+  async function fetchImageModels(report = false): Promise<void> {
+    const image = imageDraft
+    if (!image) return
+    if (!options.desktop) {
+      if (report) setImageStatus("请在桌面应用中连接模型服务", "error")
+      return
+    }
+    if (imageModelPreset(image.provider)?.subscription && !accounts.has(image.provider)) return
+    if (report) setImageStatus("正在从 API 获取模型…", "busy")
+    imageRefresh.disabled = true
+    try {
+      const models = imageModelIds(await invoke<string[]>("fetch_model_list", { configuration: { ...image, model: "" } }))
+      if (imageDraft !== image) return
+      imageFetched = models
+      renderImage()
+      if (report) setImageStatus(models.length ? `已获取 ${models.length} 个生图模型` : "服务商没有返回生图模型，请手动输入模型名称", models.length ? "success" : "idle")
+    } catch (error) {
+      // A subscription keeps offering its known image models when its listing fails.
+      if (report) setImageStatus(`获取模型失败：${String(error)}`, "error")
+    } finally {
+      imageRefresh.disabled = false
+    }
+  }
+  imageRefresh.addEventListener("click", () => void fetchImageModels(true))
+
   function renderImage(): void {
     imageProvider.value = imageDraft?.provider ?? ""
     imageFields.hidden = !imageDraft
     imageApiUrl.value = imageDraft?.apiUrl ?? ""
     imageApiKey.value = imageDraft?.apiKey ?? ""
     imageName.value = imageDraft?.model ?? ""
+    // A subscription uses the signed-in account and picks from image models only.
+    const subscription = Boolean(imageDraft && imageModelPreset(imageDraft.provider)?.subscription)
+    for (const row of imageKeyRows) row.hidden = subscription
+    imageAccountRow.hidden = imageChoiceRow.hidden = !subscription
+    imageOptions.replaceChildren(...imageFetched.map((model) => new Option(model)))
+    if (imageDraft && subscription) {
+      imageChoice.replaceChildren(...[...new Set([imageDraft.model, ...imageFetched, ...CHATGPT_IMAGE_MODELS])].filter(Boolean).map((model) => new Option(model)))
+      imageChoice.value = imageDraft.model
+    }
+    renderAccount()
   }
 
   function render(): void {
@@ -272,18 +472,37 @@ export function initializeModelSettings(section: HTMLElement, options: {
   const allModels = () => [...flattenModelProviders(draft), ...(imageDraft ? [imageDraft] : [])]
 
   function selectProfile(index: number): void {
-    if (index !== active) fetched = []
+    const changed = index !== active
+    if (changed) fetched = []
     active = index
     render()
     setStatus("")
+    if (changed) fetchSubscriptionModels()
   }
 
-  function addProfile(): void {
-    draft.push(presetProvider())
-    selectProfile(draft.length - 1)
-    provider.focus()
-    setStatus("选择服务商预设，填写 API 密钥并勾选模型后保存")
-    notify()
+  /** A signed-in subscription shows what the account offers today, not a list frozen at build time. */
+  function fetchSubscriptionModels(): void {
+    const group = current()
+    if (group && modelProviderPreset(group.provider).subscription && accounts.has(group.provider)) void fetchModels()
+  }
+
+  /** Adds a service from the menu; a subscription already in the list is selected rather than repeated. */
+  function addProfile(id: string): void {
+    const preset = modelProviderPreset(id)
+    const existing = preset.subscription ? draft.findIndex((group) => group.provider === id) : -1
+    if (existing < 0) {
+      draft.push(presetProvider(id))
+      notify()
+    }
+    selectProfile(existing < 0 ? draft.length - 1 : existing)
+    if (preset.subscription) {
+      if (!accounts.has(id)) void login(id)
+      return
+    }
+    // Compatible-format presets have no address yet; the rest only need a key.
+    const first = preset.apiUrl ? apiKey : apiUrl
+    first.focus()
+    setStatus("填写 API 密钥并勾选模型后保存")
   }
 
   function makeDefault(index: number): void {
@@ -344,15 +563,25 @@ export function initializeModelSettings(section: HTMLElement, options: {
     const next = imageModelPreset(imageProvider.value)
     const previous = imageDraft && imageModelPreset(imageDraft.provider)
     // Keep a typed key when switching services; replace only untouched preset values.
+    // A subscription takes its own address and default model, and never an API key.
+    const keep = (value: string | undefined, preset: string | undefined) => !next?.subscription && value && value !== preset
     imageDraft = next && {
       provider: next.id,
       protocol: next.protocol,
-      apiUrl: !imageDraft?.apiUrl || imageDraft.apiUrl === previous?.apiUrl ? next.apiUrl : imageDraft.apiUrl,
-      model: !imageDraft?.model || imageDraft.model === previous?.model ? next.model : imageDraft.model,
-      apiKey: imageDraft?.apiKey ?? "",
+      apiUrl: keep(imageDraft?.apiUrl, previous?.apiUrl) ? imageDraft!.apiUrl : next.apiUrl,
+      model: keep(imageDraft?.model, previous?.model) ? imageDraft!.model : next.model,
+      apiKey: next.subscription ? "" : imageDraft?.apiKey ?? "",
       kind: "image",
     }
+    imageFetched = []
+    setImageStatus("")
     renderImage()
+    notify()
+    // Signed in for chat already: nothing more to do. Otherwise sign in right here.
+    if (next?.subscription) void (accounts.has(next.id) ? fetchImageModels() : login(next.id))
+  })
+  imageChoice.addEventListener("change", () => {
+    if (imageDraft) imageDraft.model = imageChoice.value
     notify()
   })
   for (const [input, field] of [[imageApiUrl, "apiUrl"], [imageApiKey, "apiKey"], [imageName, "model"]] as const) {
@@ -370,7 +599,6 @@ export function initializeModelSettings(section: HTMLElement, options: {
     event.preventDefault()
     addCustomModel()
   })
-  $("model-profile-add").addEventListener("click", addProfile)
 
   function syncKeyToggle(toggle: HTMLButtonElement, input: HTMLInputElement): void {
     const revealed = input.type === "text"
@@ -405,13 +633,17 @@ export function initializeModelSettings(section: HTMLElement, options: {
     }
   }
 
-  refresh.addEventListener("click", () => void request<string[]>("正在从 API 获取模型…", "获取模型失败", "fetch_model_list", "").then((models) => {
-    if (!models) return
+  async function fetchModels(): Promise<void> {
+    const group = current()
+    const models = await request<string[]>("正在从 API 获取模型…", "获取模型失败", "fetch_model_list", "")
+    // The list belongs to the row it was asked for; the user may have moved on meanwhile.
+    if (!models || current() !== group) return
     fetched = models
     name.value = ""
     renderChoices()
     setStatus(models.length ? `已获取 ${models.length} 个模型，勾选要使用的模型` : "服务商没有返回模型，请手动输入模型 ID", models.length ? "success" : "idle")
-  }))
+  }
+  refresh.addEventListener("click", () => void fetchModels())
   test.addEventListener("click", () => {
     const model = current()?.models[0]
     if (!model) {
@@ -438,6 +670,11 @@ export function initializeModelSettings(section: HTMLElement, options: {
       return
     }
     try {
+      try {
+        for (const account of await invoke<{ provider: string; email: string }[]>("model_oauth_accounts")) accounts.set(account.provider, account.email)
+      } catch (error) {
+        setStatus(`读取登录状态失败：${String(error)}`, "error")
+      }
       const state = await invoke<ModelConfigurationState>("load_model_configuration")
       pathText.textContent = pathText.title = state.path
       saved = state.configurations ?? []
@@ -475,8 +712,12 @@ export function initializeModelSettings(section: HTMLElement, options: {
       syncKeyToggle(toggleImageKey, imageApiKey)
       active = Math.min(Math.max(active, 0), draft.length - 1)
       fetched = []
+      imageFetched = []
+      setImageStatus("")
       render()
       setStatus(loadError, loadError ? "error" : "idle")
+      fetchSubscriptionModels()
+      void fetchImageModels()
     },
     cancel(): void {
       this.begin()
@@ -490,13 +731,13 @@ export function initializeModelSettings(section: HTMLElement, options: {
       if (!options.desktop) throw new Error("请在桌面应用中保存模型配置")
       // Never overwrite a config file we could not read.
       if (loadError) throw new Error(loadError)
-      const problem = validateModelProviders(draft)
+      const problem = validateModelProviders(draft, accounts)
       if (problem) {
         selectProfile(problem.index)
         setStatus(problem.message, "error")
         throw new Error(`AI 模型 · ${problem.message}`)
       }
-      const imageProblem = validateImageModel(imageDraft)
+      const imageProblem = validateImageModel(imageDraft, accounts)
       if (imageProblem) {
         setStatus(imageProblem, "error")
         throw new Error(`AI 模型 · ${imageProblem}`)

@@ -3,11 +3,11 @@ import { styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { soundPathForFilename } from "../sounds.ts"
 import { theme, orientation, keyFields, toolbarFields, quickInspector } from "./dom"
-import { createIcon } from "../icons"
-import { playSoundPath, keyboardFields } from "./canvas-interaction"
-import { openStylePicker, styleConfigDocument, styleKindBadge, styleKind, styleReferenceThumbnailInputs, availableStyleIDs, styleSoundFile } from "./style-picker"
-import { sxiPointer } from "./sxi-documents"
-import { retinaThumbnail, drawVisualPreview, type Visual } from "../atlas.ts"
+import { iconButton } from "../dom-element.ts"
+import { keyboardFields } from "./canvas-interaction"
+import { openStylePicker, styleConfigDocument, styleKind, availableStyleIDs, styleSoundFile } from "./style-picker"
+import { openPalmSkin, palmTheme, sxiPointer } from "./sxi-documents"
+import { drawVisualPreview } from "../atlas.ts"
 import { visualResolver, bdaAppearanceStylePath } from "./bda-documents"
 import { type StyleImagePickerTarget } from "./types"
 import { openImageSlicePicker } from "./image-pickers"
@@ -17,12 +17,16 @@ import { NEW_FORE_LAYER } from "../bda-layout-styles.ts"
 import { selectFile } from "./navigation"
 import { previewStyleAnimation } from "./animation-resource"
 import { updateBdaAppearanceStyleRef } from "./key-inspector"
-import { styleAnimationReferencePreviews } from "./legacy-animation-inspector"
-import { releaseOnRemove } from "../dom-lifecycle"
+import { styleAnimationReferenceStates } from "./legacy-animation-inspector"
+import { keySoundSample } from "./style-card-preview"
+import { styleKindIcon, styleReferenceCard, type StyleReferenceState } from "../style-card"
+import { palmStyleLocation } from "../palm/palm-style-edit.ts"
+import { palmFieldLabel } from "../palm/palm-labels.ts"
+import { asObject, type Json } from "../palm/sxi-ini.ts"
+import { palmStylePointer } from "./sxi-styles"
+import type { SkinArchive } from "../skin.ts"
 
 export const layoutAnimationFields = new Set(["ANIM_STYLE", "BACK_ANIM_STYLE", "FORE_ANIM_STYLE", "PRESS_STYLE"])
-
-export const styleReferenceDrawIDs = new WeakMap<HTMLElement, number>()
 
 export function styleReferenceKey(input: HTMLInputElement): string {
   return input.dataset.keyboardField ?? input.dataset.toolbarField ?? input.dataset.keyField ?? input.dataset.documentStyleKey ?? ""
@@ -39,303 +43,168 @@ function soundPathForStyle(styleID: string): string | undefined {
   return filename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, filename) : undefined
 }
 
+/** 把一个样式引用输入框换成引用卡列表（.ui-style-ref）：输入框本身隐藏，仍是写回与改动标记的来源。 */
 export function decorateStyleReferenceInput(input: HTMLInputElement, key = styleReferenceKey(input)): void {
-  if (!isStyleReferenceKey(key) || input.closest(".style-reference-input")) return
-  const soundStyle = key === "SOUND_STYLE"
+  if (!isStyleReferenceKey(key) || input.closest(".ui-style-ref-list")) return
   input.dataset.documentStyleKey ||= key
   const parent = input.parentNode
   if (!parent) return
-  const wrapper = document.createElement("span")
-  wrapper.className = "style-reference-input"
-  wrapper.classList.toggle("sound-style-reference", soundStyle)
-  parent.insertBefore(wrapper, input)
+  const list = document.createElement("span")
+  list.className = "ui-style-ref-list"
+  parent.insertBefore(list, input)
+  list.append(input)
   // 卡片布局靠这个 class 而不是 :has()：检查器每次重建都会让 :has() 重算整个右栏样式。
-  wrapper.closest(".ui-field, .document-property-field, .fore-style-reference-field")?.classList.add("style-reference-field")
-  if (soundStyle) {
-    const soundMain = document.createElement("span")
-    soundMain.className = "sound-style-main"
-    soundMain.setAttribute("role", "button")
-    soundMain.tabIndex = 0
-    const musicIcon = document.createElement("span")
-    musicIcon.className = "sound-style-icon"
-    musicIcon.append(createIcon("volume-2", 14))
-    const soundMeta = document.createElement("span")
-    soundMeta.className = "sound-style-main-meta"
-    const soundTitle = document.createElement("strong")
-    soundTitle.className = "sound-style-name"
-    const soundSubtitle = document.createElement("small")
-    soundSubtitle.className = "sound-style-file"
-    soundMeta.append(soundTitle, soundSubtitle)
-    input.classList.add("sound-style-value")
-    input.tabIndex = -1
-    input.setAttribute("aria-hidden", "true")
-    soundMain.append(musicIcon, soundMeta, input)
-    // 没有音效时整条就是「选择音效」按钮，有音效时点击试听。
-    const activate = () => {
-      const path = soundPathForStyle(input.value.split(",")[0]?.trim() ?? "")
-      if (path) playSoundPath(path)
-      else openStylePicker(input)
-    }
-    soundMain.addEventListener("click", activate)
-    soundMain.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate() }
-    })
-    wrapper.append(soundMain)
-  } else {
-    wrapper.append(input)
-    // 动画样式没有静态外观可看：悬停时在画布上播放它（DESIGN.md §10）。
-    wrapper.addEventListener("mouseenter", () => {
-      const styleIDs = input.value.split(",").map((value) => value.trim()).filter((styleID) => styleKind(styleID) === "anim")
-      previewStyleAnimation(styleIDs)
-    })
-  }
-  const button = document.createElement(soundStyle ? "button" : "span")
-  if (button instanceof HTMLButtonElement) button.type = "button"
-  button.className = "style-picker-trigger"
-  button.classList.toggle("sound-style-trigger", soundStyle)
-  if (soundStyle) {
-    button.title = "点击更换样式；Command/Ctrl 点击编辑样式"
-    button.setAttribute("aria-label", "更换或编辑引用样式")
-    button.append(createIcon("ellipsis", 14))
-
-  }
-  if (button instanceof HTMLButtonElement) button.addEventListener("click", (event) => {
-    if (event.metaKey || event.ctrlKey) openStyleReferenceEditor(input.value.split(",")[0]?.trim() ?? "")
-    else openStylePicker(input)
+  list.closest(".ui-field")?.classList.add("style-reference-field")
+  // 动画样式没有静态外观可看：悬停时在画布上播放它（DESIGN.md §10）。
+  if (key !== "SOUND_STYLE") list.addEventListener("mouseenter", () => {
+    previewStyleAnimation(input.value.split(",").map((value) => value.trim()).filter((styleID) => styleKind(styleID) === "anim"))
   })
-  input.addEventListener("input", () => void refreshStyleReferenceThumbnail(button, input, key))
-  input.addEventListener("change", () => void refreshStyleReferenceThumbnail(button, input, key))
-  void refreshStyleReferenceThumbnail(button, input, key)
-  wrapper.append(button)
-  if (soundStyle) void refreshStyleReferenceThumbnail(button, input, key)
-  // 按键可以叠多层前景、粒子可以用多张图片：标签行尾部「+ 添加」选一个样式追加为新的一张卡片。
-  const caption = input.dataset.keyField === "FORE_STYLE" || key === "PARTICLE_IMAGE" ? input.closest(".ui-field")?.querySelector(":scope > span:first-child") : null
-  if (caption) {
-    const add = document.createElement("button")
-    add.type = "button"
-    add.className = "style-reference-add"
-    add.append(createIcon("plus", 12), "添加")
-    add.addEventListener("click", (event) => {
-      event.preventDefault()
-      const target = input.cloneNode(false) as HTMLInputElement
-      target.value = ""
-      target.dataset.styleReferenceAppend = "true"
-      target.addEventListener("change", () => {
-        if (!target.value.trim()) return
-        input.value = [...input.value.split(",").map((value) => value.trim()).filter(Boolean), target.value.trim()].join(",")
-        input.dispatchEvent(new Event("input", { bubbles: true }))
-        input.dispatchEvent(new Event("change", { bubbles: true }))
-      })
-      openStylePicker(target)
-    })
-    caption.append(add)
-  }
+  input.addEventListener("input", () => refreshStyleReferenceThumbnail(list, input, key))
+  input.addEventListener("change", () => refreshStyleReferenceThumbnail(list, input, key))
+  refreshStyleReferenceThumbnail(list, input, key)
 }
 
-export function renderStyleReferenceRows(button: HTMLElement, input: HTMLInputElement, key: string): string[] {
+/**
+ * 重建一个引用字段的卡片：每个编号一张，每张已绑定的卡都可移除。前景、粒子图片、前景动画可以有多张，字段标签右端的 `plus` 追加；
+ * 动画槽位按位置保留，空的或 0 只画一张紧凑虚线卡，移除写 0（末尾的空槽位一并去掉）。
+ */
+export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInputElement, key: string, resolver = visualResolver()): void {
   const animationReference = layoutAnimationFields.has(key)
-  const styleIDs = input.value.split(",").map((value) => value.trim())
-  if (!animationReference) styleIDs.splice(0, styleIDs.length, ...styleIDs.filter(Boolean))
-  // 每次编辑都会重建这些行；复用旧画布（保留已按卡片量好的位图尺寸），不再每次新建。
-  const spare = Array.from(button.querySelectorAll<HTMLCanvasElement>(".style-picker-state > canvas")).reverse()
-  for (const canvas of spare) styleStateCanvasObserver.unobserve(canvas)
-  button.replaceChildren()
-  const styles = styleConfigDocument()
-  for (const [styleIndex, styleID] of (styleIDs.length ? styleIDs : [""]).entries()) {
-    const rowInput = () => {
-      const target = input.cloneNode(false) as HTMLInputElement
-      target.value = styleID
-      target.dataset.styleReferenceIndex = String(styleIndex)
-      target.addEventListener("change", () => {
-        const values = input.value.split(",").map((value) => value.trim())
-        if (!animationReference) values.splice(0, values.length, ...values.filter(Boolean))
-        values[styleIndex] = target.value.trim()
-        input.value = animationReference ? values.join(",") : values.filter(Boolean).join(",")
-        input.dispatchEvent(new Event("input", { bubbles: true }))
-        input.dispatchEvent(new Event("change", { bubbles: true }))
-      })
-      return target
-    }
-    const wrapper = document.createElement("div")
-    wrapper.className = "style-reference-row"
-    const numberInput = rowInput()
-    numberInput.className = "style-reference-number"
-    numberInput.removeAttribute("id")
-    numberInput.setAttribute("aria-label", `样式 ${styleIndex + 1} 编号`)
-    const previews = document.createElement("span")
-    previews.className = "style-picker-states"
-    const animated = animationReference
-    if (animated) {
-      previews.dataset.variant = "animation"
-      previews.append(styleAnimationReferencePreviews(styleID, styles ?? IniDocument.parse(""), () => openStylePicker(rowInput())))
-    }
-    for (let index = 0; !animated && index < 2; index += 1) {
-      const item = document.createElement("button")
-      const highlighted = index === 1
-      item.type = "button"
-      item.className = "style-picker-state"
-      item.dataset.styleState = highlighted ? "highlighted" : "normal"
-      // 预览图就是该状态引用的图片，点击它进入这张图片的切片选择器；
-      // 更换引用的样式挪到 Alt 点击，编号框仍可直接输入。
-      item.title = `点击选择${highlighted ? "按下" : "正常"}图片切片；Alt 点击更换样式；Command/Ctrl 点击编辑样式`
-      item.setAttribute("aria-label", item.title)
-      const canvas = spare.pop() ?? retinaThumbnail(document.createElement("canvas"), 152, 76)
-      releaseOnRemove(canvas, () => releaseStyleStateCanvas(canvas))
-      canvas.setAttribute("aria-hidden", "true")
-      item.append(canvas)
-      item.addEventListener("click", (event) => {
-        if (event.metaKey || event.ctrlKey) openStyleReferenceEditor(styleID)
-        else if (event.altKey) openStylePicker(rowInput(), highlighted)
-        else void openStyleReferenceStateImage(rowInput(), key, highlighted)
-      })
-      previews.append(item)
-    }
-    // 卡片左侧：编号在上、样式类型在下；右侧并排两个状态预览（DESIGN.md §10）。
-    const meta = document.createElement("span")
-    meta.className = "style-reference-meta"
-    meta.append(numberInput)
-    if (styleID) meta.append(styleKindBadge(styleKind(styleID, styles)))
-    if (key === "FORE_ANIM_STYLE") numberInput.setAttribute("aria-label", `前景 ${styleIndex + 1} 动画样式编号`)
-    wrapper.append(meta, previews)
-    button.append(wrapper)
+  const multiple = input.dataset.keyField === "FORE_STYLE" || key === "PARTICLE_IMAGE"
+  const values = () => {
+    const items = input.value.split(",").map((value) => value.trim())
+    return animationReference ? items : items.filter(Boolean)
   }
-  return styleIDs
+  const write = (next: string[]) => {
+    input.value = animationReference ? next.join(",") : next.filter(Boolean).join(",")
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+  }
+  // 打开样式库或输入编号用的克隆输入框：选定后只改这一张卡对应的位置（`index` 为长度时追加）。
+  const slotInput = (index: number, value: string) => {
+    const target = input.cloneNode(false) as HTMLInputElement
+    target.removeAttribute("id")
+    target.value = value
+    // 手心新建图片样式时据此写回这一层或追加一层（image-pickers.ts updateSelectedImageReference）。
+    target.dataset.styleReferenceIndex = String(index)
+    if (index >= values().length) target.dataset.styleReferenceAppend = "true"
+    target.addEventListener("change", () => {
+      const next = values()
+      if (index >= next.length && !target.value.trim()) return
+      next[index] = target.value.trim()
+      write(next)
+    })
+    return target
+  }
+  const styles = styleConfigDocument()
+  const foreground = styleReferenceForeground(key)
+  const styleIDs = values()
+  const cards = (styleIDs.length ? styleIDs : [""]).map((styleID, index) => {
+    const name = slotInput(index, styleID)
+    name.setAttribute("aria-label", key === "FORE_ANIM_STYLE" ? `前景 ${index + 1} 动画样式编号` : `样式 ${index + 1} 编号`)
+    const choose = (highlighted = false) => openStylePicker(slotInput(index, styleID), highlighted)
+    const empty = !styleID || animationReference && styleID === "0"
+    let states: StyleReferenceState[] = []
+    if (key === "SOUND_STYLE" && !empty) {
+      const path = soundPathForStyle(styleID)
+      states = [{ label: "音效", content: keySoundSample(path?.split("/").pop() ?? styleSoundFile(styleID), path), onClick: (edit) => edit ? openStyleReferenceEditor(styleID) : choose() }]
+    } else if (animationReference && !empty) {
+      states = styleAnimationReferenceStates(styleID, styles ?? IniDocument.parse(""), () => choose())
+    } else if (!empty) {
+      states = [false, true].map((highlighted) => ({
+        label: highlighted ? "按下" : "正常",
+        draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await resolver?.resolve(styleID, highlighted).catch(() => undefined)], foreground),
+        onClick: (edit: boolean) => edit ? openStyleReferenceEditor(styleID) : choose(highlighted),
+      }))
+    }
+    const removable = !input.disabled && !empty
+    return styleReferenceCard({
+      name,
+      kind: empty ? undefined : styleKindIcon(styleKind(styleID, styles)),
+      states,
+      empty: { icon: animationReference ? "clapperboard" : key === "SOUND_STYLE" ? "volume-2" : "plus", label: animationReference ? "选择动画样式" : "选择样式", onClick: () => choose() },
+      remove: removable ? {
+        label: "移除",
+        run: () => {
+          if (!animationReference) return write(values().filter((_, at) => at !== index))
+          const next = values().map((value, at) => at === index ? "0" : value)
+          while (next.length > 1 && (!next.at(-1) || next.at(-1) === "0")) next.pop()
+          write(next)
+        },
+      } : undefined,
+      disabled: input.disabled,
+    })
+  })
+  list.replaceChildren(input, ...cards)
+  // 多张前景、粒子图片、前景动画：追加按钮在字段标签右端（没有标签时排在卡片末尾）。
+  const caption = list.closest(".ui-field")?.firstElementChild
+  const captionHost = caption && caption !== list ? caption : list
+  captionHost.querySelector(":scope > .ui-style-ref-append")?.remove()
+  const bound = styleIDs.some((styleID) => styleID && !(animationReference && styleID === "0"))
+  if ((multiple || key === "FORE_ANIM_STYLE") && bound && !input.disabled) {
+    const add = iconButton("plus", "添加", () => openStylePicker(slotInput(styleIDs.length, "")))
+    add.classList.add("ui-style-ref-append")
+    add.dataset.size = "sm"
+    captionHost.append(add)
+  }
 }
 
 export function styleReferenceForeground(key: string): boolean {
   return /FORE|INPUT_STYLE|SCAND_STYLE|CELL_STYLE/.test(key)
 }
 
-export async function refreshStyleReferenceThumbnail(
-  button: HTMLElement,
-  input: HTMLInputElement,
-  key: string,
-  resolver = visualResolver(),
-): Promise<void> {
-  const drawID = (styleReferenceDrawIDs.get(button) ?? 0) + 1
-  styleReferenceDrawIDs.set(button, drawID)
-  if (key === "SOUND_STYLE") {
-    const styleID = input.value.split(",")[0]?.trim() ?? ""
-    const path = soundPathForStyle(styleID)
-    const main = button.parentElement?.querySelector<HTMLElement>(".sound-style-main")
-    const title = main?.querySelector<HTMLElement>(".sound-style-name")
-    const file = main?.querySelector<HTMLElement>(".sound-style-file")
-    if (title) title.textContent = path?.split("/").pop() || "选择音效"
-    if (file) file.textContent = path ? `STYLE${styleID}` : ""
-    if (main) {
-      main.classList.toggle("has-sound", Boolean(path))
-      main.title = path ? "点击试听" : ""
-      main.setAttribute("aria-label", path ? "播放按键音效" : "选择音效")
+/** Each style id's reference locations, built once per archive revision (thousands of cards ask for it). */
+const usageIndex: { archive?: SkinArchive; key?: string; index?: Map<string, string[]> } = {}
+
+function styleUsageIndex(): Map<string, string[]> {
+  const archive = appState.archive
+  if (!archive) return new Map()
+  const key = `${archive.revision}|${theme.value}|${orientation.value}|${styleConfigPath()}`
+  if (usageIndex.archive === archive && usageIndex.key === key && usageIndex.index) return usageIndex.index
+  const index = new Map<string, string[]>()
+  const add = (id: string, location: string) => index.set(id, [...index.get(id) ?? [], location])
+  if (archive.format === "sxi") {
+    const skin = openPalmSkin()
+    const walk = (value: Json, path: string[], orientation: string) => {
+      if (Array.isArray(value)) { value.forEach((item, at) => walk(item, [...path, String(at)], orientation)); return }
+      const object = asObject(value)
+      if (!object) return
+      for (const [name, child] of Object.entries(object)) {
+        if (/^(?:base_(?:b|f|s|ba|fa|a|pa)|asi)$/.test(name)) for (const id of [child].flat().map(String)) add(`${orientation}:${id}`, `skin.json · ${[...path, name].join(".")}（${palmFieldLabel(name)}）`)
+        else walk(child, [...path, name], orientation)
+      }
     }
-    button.hidden = !path
-    return
-  }
-  const styleIDs = renderStyleReferenceRows(button, input, key)
-  const canvases = Array.from(button.querySelectorAll<HTMLCanvasElement>(".style-picker-state > canvas"))
-  if (canvases.length < 2 || !resolver || !styleIDs.length) {
-    for (const canvas of canvases) {
-      const context = canvas.getContext("2d")
-      context?.clearRect(0, 0, canvas.width, canvas.height)
+    for (const orientation of ["port", "land"] as const) walk(asObject(skin?.[palmTheme()])?.[`${orientation}_layout`], [palmTheme(), `${orientation}_layout`], orientation)
+  } else for (const path of archive.names()) {
+    if (!path.startsWith(`${theme.value}/`) || !/\.(ini|cnd|pop)$/i.test(path) || !archive.isText(path)) continue
+    const local = /^(.*\/skin\/(?:port|land))\//.exec(path)?.[1]
+    const effectiveStyles = local && archive.isText(`${local}/res/default.css`) ? `${local}/res/default.css` : `${theme.value}/skin/res/default.css`
+    if (styleConfigPath() !== effectiveStyles) continue
+    const document = path === appState.layoutPath && appState.layoutDocument ? appState.layoutDocument : IniDocument.parse(archive.getText(path))
+    for (const { section, key, value } of document.entries()) {
+      if (isStyleReferenceKey(key)) for (const id of new Set(value.split(",").map((part) => part.trim()).filter(Boolean))) add(id, `${path} · [${section}] ${key}`)
     }
-    return
   }
-  const visuals = await Promise.all(styleIDs.flatMap((styleID) =>
-    [false, true].map((highlighted) => resolver.resolve(styleID, highlighted).catch(() => undefined)),
-  ))
-  if (drawID !== styleReferenceDrawIDs.get(button)) return
-  if (!button.isConnected) { canvases.forEach(releaseStyleStateCanvas); return }
-  // Unresolved visuals may resolve later; let the next refresh retry them.
-  if (visuals.some((visual) => !visual)) styleReferenceThumbnailInputs.delete(button)
-  const foreground = styleReferenceForeground(key)
-  visuals.forEach((visual, index) => {
-    const canvas = canvases[index]
-    styleStateVisuals.set(canvas, { visual, foreground })
-    scheduleStyleStateSizing(canvas)
-    styleStateCanvasObserver.observe(canvas)
-  })
+  Object.assign(usageIndex, { archive, key, index })
+  return index
 }
 
-const pendingStyleStateCanvases = new Set<HTMLCanvasElement>()
-
-/** WebKit 的 GC 不计入画布位图，检查器反复重建后旧位图越积越多、越用越卡；丢弃时立即释放。 */
-function releaseStyleStateCanvas(canvas: HTMLCanvasElement): void {
-  pendingStyleStateCanvases.delete(canvas)
-  resizedStyleStateCanvases.delete(canvas)
-  styleStateCanvasObserver.unobserve(canvas)
-  styleStateVisuals.delete(canvas)
-  styleStateCanvasSizes.delete(canvas)
-  canvas.width = 0
-  canvas.height = 0
-}
-let styleStateSizingFrame = 0
-
-/*
- * 一次检查器重建会刷新几十个样式按钮，各自量尺寸再改位图，每个按钮都会触发一次强制布局，
- * WebKit 下切换文件、点选按键明显卡顿。改为下一帧统一先量完、再改位图，只排版一次。
+/**
+ * 实际引用一个样式的位置（含当前画布外的布局）。BDI/BDS 的文字还会回退到 STYLE<id/100>，
+ * 所以引用 id*100…id*100+99 的位置也算在内，删掉它会悄悄改变那些按键的文字。
  */
-function scheduleStyleStateSizing(canvas: HTMLCanvasElement): void {
-  pendingStyleStateCanvases.add(canvas)
-  styleStateSizingFrame ||= requestAnimationFrame(() => {
-    styleStateSizingFrame = 0
-    const canvases = Array.from(pendingStyleStateCanvases).filter((canvas) => canvas.isConnected)
-    pendingStyleStateCanvases.clear()
-    const rects = canvases.map((canvas) => canvas.getBoundingClientRect())
-    canvases.forEach((canvas, index) => {
-      const meta = styleStateVisuals.get(canvas)
-      // 量不到尺寸（所在分组隐藏）或尺寸未变时用现有位图绘制，保证切回该分组时不出现空白预览。
-      if (!sizeStyleStateCanvas(canvas, rects[index]) && meta) drawVisualPreview(canvas, [meta.visual], meta.foreground)
-    })
-  })
-}
-
-export const styleStateVisuals = new WeakMap<HTMLCanvasElement, { visual: Visual | undefined; foreground: boolean }>()
-
-const styleStateCanvasSizes = new WeakMap<HTMLCanvasElement, string>()
-
-/*
- * 缩略图按卡片的实际尺寸绘制：固定 152×76 的宽扁画布经过 object-fit: contain 后只剩卡片
- * 一半高度，图案显得又小又扁。改用卡片内容盒尺寸作为位图尺寸，样式图才能铺满卡片高度。
- */
-function sizeStyleStateCanvas(canvas: HTMLCanvasElement, { width, height } = canvas.getBoundingClientRect()): boolean {
-  if (width < 1 || height < 1) return false
-  const size = `${Math.round(width)}x${Math.round(height)}`
-  if (styleStateCanvasSizes.get(canvas) === size) return false
-  styleStateCanvasSizes.set(canvas, size)
-  retinaThumbnail(canvas, width, height)
-  const meta = styleStateVisuals.get(canvas)
-  if (meta) drawVisualPreview(canvas, [meta.visual], meta.foreground)
-  return true
-}
-
-/** 分组切换后为之前量不到尺寸的缩略图补一次按尺寸重绘。 */
-export function redrawStyleStateCanvases(): void {
-  const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>(".style-reference-row .style-picker-state > canvas"))
-  const rects = canvases.map((canvas) => canvas.getBoundingClientRect())
-  canvases.forEach((canvas, index) => sizeStyleStateCanvas(canvas, rects[index]))
-}
-
-const resizedStyleStateCanvases = new Set<HTMLCanvasElement>()
-let styleStateResizeTimer: ReturnType<typeof setTimeout> | undefined
-
-/** 面板宽度变化（选中态切换、窗口缩放）后按新尺寸重绘，避免位图与卡片比例不符。
- *  拖动调宽时每帧都会触发，几百张缩略图逐帧重绘会卡顿，所以等宽度停稳后再统一重绘。 */
-export const styleStateCanvasObserver = new ResizeObserver((entries) => {
-  for (const entry of entries) {
-    if (entry.target instanceof HTMLCanvasElement) resizedStyleStateCanvases.add(entry.target)
+export function styleUsages(id: string): string[] {
+  const index = styleUsageIndex()
+  if (appState.archive?.format === "sxi") {
+    const skin = openPalmSkin()
+    const selected = palmStylePointer(id, skin)?.join(".")
+    return (["port", "land"] as const).flatMap((orientation) =>
+      skin && palmStyleLocation(skin, palmTheme(), orientation, id)?.join(".") === selected ? index.get(`${orientation}:${id}`) ?? [] : [])
   }
-  clearTimeout(styleStateResizeTimer)
-  styleStateResizeTimer = setTimeout(() => {
-    const connected: HTMLCanvasElement[] = []
-    for (const canvas of resizedStyleStateCanvases) {
-      // 被重建替换掉的画布不再需要重绘，及时解绑，避免观察器长期持有已分离的位图。
-      if (canvas.isConnected) connected.push(canvas)
-      else releaseStyleStateCanvas(canvas)
-    }
-    resizedStyleStateCanvases.clear()
-    const rects = connected.map((canvas) => canvas.getBoundingClientRect())
-    connected.forEach((canvas, index) => sizeStyleStateCanvas(canvas, rects[index]))
-  }, 120)
-})
+  const number = Number(id)
+  const fallback = Number.isSafeInteger(number) ? Array.from({ length: 100 }, (_, offset) => String(number * 100 + offset)).filter((other) => other !== id) : []
+  return [id, ...fallback].flatMap((other) => index.get(other) ?? [])
+}
 
 export function styleWriteTarget(
   source: "BACK_STYLE" | "FORE_STYLE",
@@ -375,6 +244,7 @@ export async function openStyleReferenceStateImage(
   input: HTMLInputElement,
   key: string,
   highlighted: boolean,
+  styleIDs = input.value.split(",").map((value) => value.trim()).filter(Boolean),
 ): Promise<void> {
   if (input.disabled) return
   const resolver = visualResolver()
@@ -382,7 +252,6 @@ export async function openStyleReferenceStateImage(
   const foreground = styleReferenceForeground(key)
   const source: "BACK_STYLE" | "FORE_STYLE" = foreground ? "FORE_STYLE" : "BACK_STYLE"
   const property = highlighted ? "HL_IMG" : "NM_IMG"
-  let styleIDs = input.value.split(",").map((value) => value.trim()).filter(Boolean)
   let targetSource = source
   let visual = (await Promise.all(styleIDs.map((styleID) => resolver.resolve(styleID, highlighted).catch(() => undefined))))
     .find((item) => item?.imagePath)

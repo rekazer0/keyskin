@@ -1,6 +1,7 @@
-import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, mobileSplitHandle, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, editModeDialog, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, mobileSplitHandle, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { ask } from "./ask.ts"
+import { element } from "../dom-element.ts"
 import { appState } from "./state"
-import { redrawStyleStateCanvases } from "./style-references"
 import { createIcon, groupIcon } from "../icons"
 import { bdaConfigPath } from "../bda.ts"
 import { selectFile } from "./navigation"
@@ -14,17 +15,14 @@ import { syncAiDesignContext } from "./ai-panel"
 export function syncSegmentedControls(): void {
   for (const button of modeChoiceButtons) {
     const on = button.dataset.modeChoice === mode.value
-    button.classList.toggle("active", on)
     button.setAttribute("aria-pressed", String(on))
   }
   for (const button of themeChoiceButtons) {
     const on = button.dataset.themeChoice === theme.value
-    button.classList.toggle("active", on)
     button.setAttribute("aria-pressed", String(on))
   }
   for (const button of orientationChoiceButtons) {
     const on = button.dataset.orientationChoice === orientation.value
-    button.classList.toggle("active", on)
     button.setAttribute("aria-pressed", String(on))
   }
   const values: Record<string, string> = { mode: mode.value, theme: theme.value, orientation: orientation.value }
@@ -46,9 +44,7 @@ export function syncSegmentedControls(): void {
       const icons: Record<string, string> = { port: "rectangle-vertical", land: "rectangle-horizontal", light: "sun", dark: "moon" }
       currentIcon.replaceChildren(createIcon(icons[value]))
     }
-    for (const icon of Array.from(button.querySelectorAll<HTMLElement>("[data-mobile-choice-value]"))) {
-      icon.classList.toggle("active", icon.dataset.mobileChoiceValue === value)
-    }
+    if (button.dataset.mobileChoice === "mode") button.setAttribute("aria-pressed", String(value === "edit"))
     button.setAttribute("aria-label", `切换${label || "选项"}（当前${label}）`)
   }
 }
@@ -89,7 +85,6 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
   quickInspector.dataset.mobileInspectorGroup = id
   for (const button of Array.from(mobileInspectorGroups.querySelectorAll<HTMLButtonElement>("button"))) {
     const active = button.dataset.mobileInspectorGroup === id
-    button.classList.toggle("active", active)
     button.setAttribute("aria-pressed", String(active))
   }
   const current = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
@@ -99,8 +94,6 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
   revealActiveRailButton()
   if (scroll) {
     quickInspector.scrollTop = 0
-    // 样式引用缩略图只在可见时才量得到卡片尺寸，切到该分组时补绘一次。
-    redrawStyleStateCanvases()
     scrollToSinglePageInspectorGroup()
     // 程序滚动的落点：随后的 scroll 事件按位置反推分组时不改掉这次点选。
     pinnedScrollTop = quickInspector.scrollTop
@@ -115,7 +108,7 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
 /** 分类栏放不下时自己滚动：只滚分类栏让当前项露出来，不带动属性列表。 */
 function revealActiveRailButton(): void {
   const rail = mobileInspectorGroups.parentElement
-  const button = mobileInspectorGroups.querySelector<HTMLElement>("button.active")
+  const button = mobileInspectorGroups.querySelector<HTMLElement>('button[aria-pressed="true"]')
   if (!rail || !button) return
   const view = rail.getBoundingClientRect()
   const box = button.getBoundingClientRect()
@@ -168,11 +161,11 @@ export function syncMobileInspectorGroups(): void {
   const combinedBda = appState.archive?.format === "bda" && appState.selectedKeySections.length > 0 && !appState.selectedCandidate
   if (combinedBda && keyTypographyFieldsGroup.parentElement !== bdaConfigFieldsGroup) bdaConfigFieldsGroup.append(keyTypographyFieldsGroup)
   else if (!combinedBda && keyTypographyFieldsGroup.parentElement !== quickInspector) quickInspector.insertBefore(keyTypographyFieldsGroup, quickInspector.querySelector(".key-gesture-fields"))
-  let groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(":scope > .inspector-group"))
+  let groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(":scope > :is(.ui-section, .document-fields, .bda-config-fields)"))
     .filter((group) => !group.hidden)
     .flatMap((group) => {
       if (group === documentFieldsGroup) {
-        return Array.from(documentFields.querySelectorAll<HTMLElement>(":scope > .document-property-section"))
+        return Array.from(documentFields.querySelectorAll<HTMLElement>(":scope > .ui-section"))
       }
       if (group === bdaConfigFieldsGroup) {
         return Array.from(bdaConfigFields.querySelectorAll<HTMLElement>(":scope > .bda-inspector-section"))
@@ -230,8 +223,7 @@ export function syncMobileInspectorGroups(): void {
   // available groups change (for example: 面板 / 提示栏 / 扩展区域).
   mobileInspectorGroups.style.setProperty("--inspector-group-count", String(Math.max(groups.length, 1)))
   mobileInspectorGroups.replaceChildren(...groups.map((group) => {
-    const button = document.createElement("button")
-    button.type = "button"
+    const button = railButton()
     const label = railLabels.get(group) ?? mobileInspectorGroupLabel(group)
     const text = document.createElement("span")
     text.className = "inspector-group-label"
@@ -249,8 +241,7 @@ export function syncMobileInspectorGroups(): void {
   if (!remembered) appState.inspectorGroupKey = chosen
   if (appState.archive && appState.selectedKeySections.length) {
     const addDestination = (label: string, action: () => void) => {
-      const button = document.createElement("button")
-      button.type = "button"
+      const button = railButton()
       button.title = label
       button.append(groupIcon(label), Object.assign(document.createElement("span"), { className: "inspector-group-label", textContent: label }))
       button.addEventListener("click", action)
@@ -258,7 +249,7 @@ export function syncMobileInspectorGroups(): void {
     }
     if (appState.archive.format === "bda") {
       addDestination("面板", selectParentObject)
-      for (const [kind, label] of [["animation", "动画"], ["sound", "声音"]] as const) {
+      for (const [kind, label] of [["animation", "动画"], ["sound", "音效"]] as const) {
         const path = bdaConfigPath(appState.archive, theme.value, orientation.value, kind)
         if (path) addDestination(label, () => selectFile(path, "overview"))
       }
@@ -267,11 +258,17 @@ export function syncMobileInspectorGroups(): void {
   }
 }
 
+function railButton(): HTMLButtonElement {
+  const button = element("button", "ui-list-item")
+  button.type = "button"
+  button.dataset.layout = "tile"
+  return button
+}
+
 export function setMobilePane(pane: "layout" | "inspector"): void {
   document.documentElement.dataset.mobilePane = pane
   for (const button of mobilePaneButtons) {
     const active = button.dataset.mobilePane === pane
-    button.classList.toggle("active", active)
     button.setAttribute("aria-pressed", String(active))
   }
   const mobile = mobilePortraitQuery.matches
@@ -295,7 +292,7 @@ export function setMobilePreviewCollapsed(collapsed: boolean): void {
   }
   document.documentElement.dataset.mobilePreviewCollapsed = String(collapsed)
   mobileSplitHandle.setAttribute("aria-expanded", String(!collapsed))
-  mobileSplitHandle.title = collapsed ? "点击展开预览" : "拖动调整画布与配置区域比例；点击收起或展开预览"
+  mobileSplitHandle.title = collapsed ? "展开预览" : "调整预览高度"
   mobileSplitHandle.setAttribute("aria-label", mobileSplitHandle.title)
   if (!collapsed) setMobileSplit(appState.mobileSplitBeforeCollapse)
 }
@@ -332,13 +329,18 @@ export function applyModeState(): void {
 }
 
 /** 交互预览里点到只读控件时的唯一提示（DESIGN.md §7），确认后切换至编辑模式。 */
+let editModeAsked = false
 export function requestEditMode(): void {
-  if (editModeDialog.open) return
-  editModeDialog.returnValue = ""
-  editModeDialog.showModal()
-  editModeDialog.addEventListener("close", () => {
-    if (editModeDialog.returnValue === "edit") selectChoice(mode, "edit")
-  }, { once: true })
+  if (editModeAsked) return
+  editModeAsked = true
+  void ask({
+    title: "交互预览中无法编辑",
+    detail: "切换至编辑模式后即可修改",
+    actions: [{ value: "cancel", label: "取消" }, { value: "edit", label: "切换至编辑模式", variant: "primary" }],
+  }).then((choice) => {
+    editModeAsked = false
+    if (choice === "edit") selectChoice(mode, "edit")
+  })
 }
 
 export function selectChoice(select: HTMLSelectElement, value: string): void {

@@ -1,17 +1,7 @@
 /*
- * BDA 动画检查器（src/bda-animation-editor.ts）自己的样式：只读值与图片序列的帧列表。
+ * BDA 动画检查器（src/bda-animation-editor.ts）自己的样式：图片序列的帧列表。
  * 列表、播放器与分组来自 components.css / inspector.css，全部只引用 tokens.css 的 token。
  */
-
-/* 只读值（位移方式、粒子资源…）：单行省略，悬停由标题提示全文。 */
-.source .bda-animation-value {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text);
-  font-size: var(--font-size-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* 图片序列：每帧一张图片卡片（同样式卡片）加时长，竖向排列。 */
 .source .bda-animation-frames {
