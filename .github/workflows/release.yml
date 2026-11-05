@@ -87,7 +87,8 @@ jobs:
         run: |
           ARGS="--bundles ${{ matrix.bundles }}"
           if [ -n "${{ matrix.target }}" ]; then ARGS="$ARGS --target ${{ matrix.target }}"; fi
-          npm run tauri build -- $ARGS
+          # macOS 的 hdiutil 偶尔因 diskimages-helper 占用而打包 dmg 失败，重试一次
+          npm run tauri build -- $ARGS || { [ "$RUNNER_OS" = "macOS" ] && sleep 15 && npm run tauri build -- $ARGS; }
       - name: Upload release assets
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
