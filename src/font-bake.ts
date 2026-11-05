@@ -1,7 +1,8 @@
 // 字体烘焙：百度安卓（13.3 反编译与真机复现）每次初始化键盘都把画笔字体重置为系统字体或 keymap.ttf，
 // [GLOBAL] FONT_PATH 只加载进内存、不作用于按键文字，[STYLE*] FONT_NAME 完全不解析。
 // 唯一能在真机上显示皮肤字体的办法是把按键上的固定文字（STYLE 的 SHOW）画成图片，样式改用 NM_IMG / HL_IMG。
-// 原来的文字字段改名为 BAKED_* 留在样式里（安卓忽略不认识的键），换字体时据此重新烘焙，移除字体时据此还原。
+// 只在导出 BDS 时切片（app/font-bake-export.ts）。原来的文字字段改名为 BAKED_* 留在样式里（安卓忽略不认识的键），
+// 再次导出时据此重新切片，打开皮肤时可据此还原成文字。
 import { IniDocument } from "./ini.ts"
 import { type TileRect } from "./tiles.ts"
 

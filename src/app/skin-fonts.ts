@@ -1,25 +1,14 @@
 // 皮肤字体替换：导入 / 移除字体文件，并把 [GLOBAL] FONT_PATH 与 [STYLE*] FONT_NAME
-// 同步到皮肤的每份 CSS（light/dark × port/land 或单布局）；BDS 另把按键文字烘焙成图片（font-bake.ts）。
+// 同步到皮肤的每份 CSS（light/dark × port/land 或单布局），真机与预览都读同一套路径。
 import { appState } from "./state"
 import { IniDocument } from "../ini.ts"
 import { commitBatch, isEditing, updateDirty } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
-import { composePng, showError, showStatus } from "./file-operations"
+import { showError, showStatus } from "./file-operations"
 import { styleConfigPath } from "./config-context"
 import { fontFileField, fontFileSelect, fontImportButton, fontNameInput, fontRemoveButton, skinFontNames } from "./dom"
 import { type Change } from "../history.ts"
-import { parseColor } from "../atlas.ts"
-import {
-  bakeableStyles,
-  bakedImageBase,
-  bakedTileText,
-  keyForegroundStyleIDs,
-  layoutsUsingStyle,
-  packTiles,
-  withBakedStyles,
-  withoutBakedStyles,
-} from "../font-bake.ts"
 import {
   fontSearchDirectories,
   isFontFile,
@@ -126,106 +115,8 @@ function ensureThemeFont(theme: string, fontPath: string, changes: Change[]): st
   return path
 }
 
-let bakeFontID = 0
-
-/** 把字体注册进页面，返回可在画布上使用的字体族名；字体无法加载时抛错。 */
-async function loadBakeFont(bytes: Uint8Array): Promise<string> {
-  const family = `KeySkinBakeFont${++bakeFontID}`
-  document.fonts.add(await new FontFace(family, bytes.slice().buffer).load())
-  return family
-}
-
-/** 一段按键文字：按 FONT_SIZE 画在透明底上，以文字中线居中，与真机前景图的居中方式一致。 */
-function renderLabel(text: string, fontSize: number, family: string, color: string): HTMLCanvasElement {
-  const canvas = document.createElement("canvas")
-  const context = canvas.getContext("2d")
-  if (!context) throw new Error("无法创建文字画布")
-  const font = `${fontSize}px "${family}"`
-  context.font = font
-  canvas.width = Math.max(1, Math.ceil(context.measureText(text).width) + 4)
-  canvas.height = Math.max(1, Math.ceil(fontSize * 1.5))
-  // 改尺寸会重置画布状态，字体与对齐要在之后设置。
-  context.font = font
-  context.fillStyle = color
-  context.textAlign = "center"
-  context.textBaseline = "middle"
-  context.fillText(text, canvas.width / 2, canvas.height / 2)
-  return canvas
-}
-
-function replaceBytes(changes: Change[], path: string, after: Uint8Array | undefined): void {
-  const before = appState.archive?.getBytes(path)?.slice()
-  if (before || after) changes.push({ kind: "bytes", path, before, after })
-}
-
-/**
- * 百度安卓不会用皮肤字体画按键文字（每次初始化键盘都重置为系统字体），BDS 只能把按键上的固定文字
- * 用皮肤字体画成图片。texts 是各 CSS 改完 FONT_PATH 之后的文本，返回烘焙后的文本；
- * fontBytes 为空时撤销烘焙并删除图集。
- */
-async function bakeStyleTexts(texts: Map<string, string>, fontBytes: Uint8Array | undefined, changes: Change[]): Promise<Map<string, string>> {
-  const archive = appState.archive
-  if (archive?.format !== "bds") return texts
-  const result = new Map(texts)
-  const family = fontBytes && await loadBakeFont(fontBytes)
-  for (const [path, text] of texts) {
-    const base = bakedImageBase(path)
-    if (!family) {
-      result.set(path, withoutBakedStyles(text) ?? text)
-      replaceBytes(changes, `${base}.png`, undefined)
-      replaceBytes(changes, `${base}.til`, undefined)
-      continue
-    }
-    const layouts = layoutsUsingStyle(archive.names(), path).map((layout) => archive.getText(layout))
-    const styles = bakeableStyles(text, keyForegroundStyleIDs(layouts))
-    if (!styles.length) continue
-    const fallbackColor = themeOfPath(path) === "dark" ? "#f5f5f7" : "#17191c"
-    const labels: HTMLCanvasElement[] = []
-    const tiles = styles.map(({ id, fields }) => {
-      const fontSize = Number(fields.FONT_SIZE) > 0 ? Number(fields.FONT_SIZE) : 24
-      const normalColor = parseColor(fields.NM_COLOR) ?? fallbackColor
-      const highlightColor = parseColor(fields.HL_COLOR) ?? normalColor
-      labels.push(renderLabel(fields.SHOW.trim(), fontSize, family, normalColor))
-      const normal = labels.length
-      if (highlightColor !== normalColor) labels.push(renderLabel(fields.SHOW.trim(), fontSize, family, highlightColor))
-      return { id, normal, highlight: labels.length }
-    })
-    const atlas = packTiles(labels)
-    const png = await composePng(atlas.width, atlas.height, labels.map((image, index) => ({ image, rect: atlas.rects[index] })))
-    replaceBytes(changes, `${base}.png`, png)
-    replaceBytes(changes, `${base}.til`, new TextEncoder().encode(bakedTileText(atlas.rects)))
-    result.set(path, withBakedStyles(text, tiles))
-  }
-  return result
-}
-
-/** 各 CSS 改写 GLOBAL FONT_PATH 并按需烘焙按键文字，合成一步撤销。读文件或渲染期间换了皮肤 / 离开编辑模式则放弃。 */
-async function commitFontChange(changes: Change[], fontPaths: Map<string, string>, fontBytes: Uint8Array | undefined): Promise<boolean> {
-  const archive = appState.archive
-  if (!archive) return false
-  const styles = fontStylePaths()
-  const texts = new Map(styles.map((path) => {
-    const text = archive.getText(path)
-    const target = fontPaths.get(themeOfPath(path))
-    return [path, withGlobalFontPath(text, target ? relativeArchivePath(path, target) : "") ?? text]
-  }))
-  const baked = await bakeStyleTexts(texts, fontBytes, changes)
-  if (appState.archive !== archive || !isEditing()) return false
-  for (const path of styles) {
-    const text = archive.getText(path)
-    const after = baked.get(path)
-    replaceText(changes, path, text, after === text ? undefined : after)
-  }
-  if (!changes.length) return false
-  commitBatch(changes)
-  refreshPreview()
-  populateKeyInspector()
-  updateDirty()
-  return true
-}
-
 /** 把选中的字体应用为每份 CSS 的 GLOBAL FONT_PATH；空值表示恢复系统默认。 */
-export async function setGlobalFont(value: string): Promise<void> {
+export function setGlobalFont(value: string): void {
   if (!isEditing() || value.startsWith("missing:")) return
   const archive = appState.archive
   const styles = fontStylePaths()
@@ -240,11 +131,16 @@ export async function setGlobalFont(value: string): Promise<void> {
   if (fontPath) for (const theme of new Set(styles.map(themeOfPath))) {
     themeFonts.set(theme, ensureThemeFont(theme, fontPath, changes))
   }
-  try {
-    await commitFontChange(changes, themeFonts, fontPath ? archive.getBytes(fontPath) : undefined)
-  } catch (error) {
-    showError(error, "设置字体")
+  for (const path of styles) {
+    const text = archive.getText(path)
+    const target = themeFonts.get(themeOfPath(path))
+    replaceText(changes, path, text, withGlobalFontPath(text, target ? relativeArchivePath(path, target) : ""))
   }
+  if (!changes.length) return
+  commitBatch(changes)
+  refreshPreview()
+  populateKeyInspector()
+  updateDirty()
 }
 
 /** 移除当前 GLOBAL 字体：删掉各主题下的字体文件，并清掉所有 CSS 里的引用（可撤销）。 */
@@ -270,19 +166,9 @@ export function removeSelectedFont(): void {
     before: archive.getBytes(path)?.slice(),
     after: undefined,
   }))
-  const texts = new Map(styles.map((path) => {
-    const text = archive.getText(path)
-    const cleared = withFontReferencesCleared(text, path, archive.names(), removed, stem) ?? text
-    return [path, archive.format === "bds" ? withoutBakedStyles(cleared) ?? cleared : cleared]
-  }))
-  if (archive.format === "bds") for (const path of styles) {
-    replaceBytes(changes, `${bakedImageBase(path)}.png`, undefined)
-    replaceBytes(changes, `${bakedImageBase(path)}.til`, undefined)
-  }
   for (const path of styles) {
     const text = archive.getText(path)
-    const after = texts.get(path)
-    replaceText(changes, path, text, after === text ? undefined : after)
+    replaceText(changes, path, text, withFontReferencesCleared(text, path, archive.names(), removed, stem))
   }
   if (!changes.length) {
     showStatus("当前字体没有需要移除的文件或引用")
@@ -322,7 +208,16 @@ export async function importFontFile(file: File): Promise<void> {
       themeFonts.set(theme, path)
       changes.push({ kind: "bytes", path, before: undefined, after: bytes.slice() })
     }
-    if (!await commitFontChange(changes, themeFonts, bytes)) return
+    for (const path of styles) {
+      const target = themeFonts.get(themeOfPath(path))
+      if (!target) continue
+      const text = archive.getText(path)
+      replaceText(changes, path, text, withGlobalFontPath(text, relativeArchivePath(path, target)))
+    }
+    commitBatch(changes)
+    refreshPreview()
+    populateKeyInspector()
+    updateDirty()
     showStatus(`已导入字体 ${fileName}`)
   } catch (error) {
     showError(error, "导入字体")

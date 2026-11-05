@@ -1,6 +1,6 @@
 // 预览按 CSS 的 res 目录解析 FONT_PATH / FONT_NAME，并和真机一样按皮肤格式区分：
-// BDS（Android 旧 CSS）虽加载 [GLOBAL] FONT_PATH，按键文字仍被重置为系统字体，[STYLE*] 的 FONT_NAME 与
-// 样式级 FONT_PATH 没有分支（StyleParam.v()）；BDI（iOS）仍支持 GLOBAL、FONT_NAME 与样式级 FONT_PATH。
+// BDS（Android 旧 CSS）只解析 [GLOBAL] FONT_PATH（CssLoader.t()），[STYLE*] 的 FONT_NAME 与
+// 样式级 FONT_PATH 没有分支（StyleParam.v()）；BDI（iOS）仍支持 FONT_NAME 与样式级 FONT_PATH。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { strToU8, zipSync } from 'fflate'
@@ -49,13 +49,13 @@ function resolverFor(archive) {
   return new AtlasResolver(archive, 'light', 'port')
 }
 
-test('BDS key text stays on the system font even with a GLOBAL FONT_PATH', async () => {
+test('BDS GLOBAL FONT_PATH is embedded and used as the default text font', async () => {
   assert.equal(bdsArchive.format, 'bds')
   const resolver = resolverFor(bdsArchive)
   await resolver.ready()
-  // 百度安卓每次初始化键盘都把画笔重置为系统字体，GLOBAL FONT_PATH 不作用于按键文字（真机复现）。
-  assert.equal(resolver.resolveStyleText('1', false)?.fontName, undefined)
-  assert.equal(canvasFontFamily(undefined), 'system-ui')
+  const fontName = resolver.resolveStyleText('1', false)?.fontName
+  assert.match(fontName ?? '', /^BdiEmbeddedFont\d+$/)
+  assert.match(canvasFontFamily(fontName), /BdiEmbeddedFont/)
 })
 
 test('BDS ignores [STYLE*] FONT_NAME instead of embedding it', () => {
@@ -66,9 +66,11 @@ test('BDS ignores [STYLE*] FONT_NAME instead of embedding it', () => {
   assert.equal(resolver.resolveStyleText('3', false)?.fontName, 'PingFang SC')
 })
 
-test('BDS ignores style-level FONT_PATH', () => {
+test('BDS ignores style-level FONT_PATH and keeps the GLOBAL font', () => {
   const resolver = resolverFor(bdsArchive)
-  assert.equal(resolver.resolveStyleText('4', false)?.fontName, undefined)
+  const globalFamily = resolver.resolveStyleText('1', false)?.fontName
+  assert.match(globalFamily ?? '', /^BdiEmbeddedFont\d+$/)
+  assert.equal(resolver.resolveStyleText('4', false)?.fontName, globalFamily)
 })
 
 test('BDI embeds [STYLE*] FONT_NAME with and without an extension', async () => {

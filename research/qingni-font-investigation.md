@@ -54,4 +54,4 @@
 
 MuMu 模拟器 + 百度输入法 13.3.18.31 反编译确认：W5.ttf 确实被加载进内存，但每次初始化键盘 `StyleParam.x(FontUtils.k())` 都把画笔重置为系统字体或 `keymap.ttf`，`[STYLE*] FONT_NAME` 完全忽略。同一皮肤里用图片（`letter.til`）的数字面板显示正常，文字样式的拼音九键显示默认字体。
 
-处理：BDS 导入 / 选择字体时把按键前景的 `SHOW` 文字烘焙成图片（`src/font-bake.ts`，图集 `keyskin_font.png/.til`），原字段以 `BAKED_*` 保留以便重烘与还原；画布预览对 BDS 不再套用 GLOBAL 字体。烘焙后的皮肤尚未在真机复测。
+处理：导出 BDS 时把按键前景的 `SHOW` 文字用 GLOBAL 字体切成图片（`src/font-bake.ts`、`src/app/font-bake-export.ts`，图集 `keyskin_font.png/.til`），原字段以 `BAKED_*` 保留；编辑器里保持文字，打开切过片的皮肤时询问是否还原。烘焙后的皮肤尚未在真机复测。

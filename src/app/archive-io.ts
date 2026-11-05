@@ -15,6 +15,7 @@ import { aiDesignStatus, aiDesignPanel, theme, device, canvasBackground, canvasW
 import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
 import { applyModeState, syncSegmentedControls } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
+import { bakeExportedBds, offerBakedFontRestore } from "./font-bake-export"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
 import { recordRecentFile } from "./recent-files"
 import { dismissLayoutOverview } from "./layout-overview"
@@ -75,6 +76,7 @@ export async function loadArchive(
     void flushClientLogs()
     throw error
   }
+  await offerBakedFontRestore(nextArchive)
   if (nextArchive.format === "bda" && !appState.bdaBase) {
     updateFileOperationProgress(52, "正在加载 BDA 基础布局…")
     appState.bdaBase = await SkinArchive.openAsync(await loadBdaBase())
@@ -345,11 +347,17 @@ function exportTargetLabel(format: ExportFormat): string {
 /** 降级提示对话框最多列几行，其余折成一句“另有 N 条”。 */
 const DOWNGRADE_LINES = 8
 
-export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<{
-  bytes: Uint8Array
-  converted: boolean
-  warnings: string[]
-} | undefined> {
+type ExportResult = { bytes: Uint8Array; converted: boolean; warnings: string[] }
+
+/** 生成导出字节；BDS 另把按键文字用皮肤字体切成图片（百度安卓不按皮肤字体画按键文字）。 */
+export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
+  const result = await exportArchiveBytes(format, targetBdaPlatform)
+  if (!result || format !== "bds") return result
+  updateFileOperationProgress(88, "正在把按键文字切成字体图片…")
+  return { ...result, bytes: await bakeExportedBds(result.bytes) }
+}
+
+async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
   if (!canExport(appState.archive.format, format)) throw new Error(`${appState.archive.format.toUpperCase()} 皮肤不能导出为 ${format.toUpperCase()}`)
