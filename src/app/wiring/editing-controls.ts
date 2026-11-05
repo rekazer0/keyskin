@@ -35,7 +35,7 @@ import { type LayoutImageConfig } from "../types"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
-  fontFileSelect.addEventListener("change", () => void setGlobalFont(fontFileSelect.value))
+  fontFileSelect.addEventListener("change", () => setGlobalFont(fontFileSelect.value))
   fontImportButton.addEventListener("click", () => {
     if (!isEditing()) return
     fontImportInput.value = ""

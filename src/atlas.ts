@@ -381,16 +381,17 @@ export class AtlasResolver {
       ...this.resourceRoots.map((root) => `${root}/default.css`),
     ].find((candidate) => archive.getBytes(candidate) !== undefined)
     if (path) this.styles = IniDocument.parse(archive.getText(path))
-    // 百度安卓（13.3 反编译与真机复现）虽然加载 [GLOBAL] FONT_PATH，但每次初始化键盘都用
-    // StyleParam.x(FontUtils.k()) 把画笔字体重置为系统字体，[STYLE*] FONT_NAME / FONT_PATH 也不解析，
-    // 所以 BDS 的按键文字在真机上一律是系统字体；要显示皮肤字体只能烘焙成图片（font-bake.ts）。
-    // 预览与真机保持一致，BDS 不内嵌任何字体；BDI 仍按手册支持 GLOBAL 与样式级字体。
-    const fontPath = path && this.styles && archive.format !== "bds"
+    const fontPath = path && this.styles
       ? embeddedFontPath(archive.names(), path, this.styles.get("GLOBAL", "FONT_PATH"))
       : undefined
     const embeddedFont = fontPath ? loadEmbeddedFont(archive, fontPath) : undefined
     this.embeddedFontFamily = embeddedFont?.family
     const fonts = [embeddedFont?.ready]
+    // Android 的旧 CSS 引擎只解析 [GLOBAL] FONT_PATH（CssLoader.t()），[STYLE*] 的 FONT_NAME 和
+    // 样式级 FONT_PATH 都没有分支（StyleParam.v()）。BDS 预览只内嵌 GLOBAL 字体，样式里的
+    // FONT_NAME 保持系统字体名的回退处理；BDI 仍按手册支持这两项。
+    // 真机上 GLOBAL 字体也不作用于按键文字，导出 BDS 时会用它把按键文字切成图片（font-bake-export.ts），
+    // 所以这里按 GLOBAL 字体预览的就是导出后的样子。
     if (path && this.styles && archive.format !== "bds") {
       // iOS 专有的 [STYLE*] FONT_PATH：皮肤里已经写了才支持，内嵌字体优先于 FONT_NAME。
       for (const { section, key, value } of this.styles.entries()) {
