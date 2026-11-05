@@ -127,6 +127,12 @@ export function initDisclosureReveal(root: HTMLElement): void {
 
 /** 整窗换色（浅色 / 深色）：交给 View Transitions 交叉淡化；不支持、后台或时长为 0 时直接切换。 */
 export function crossfade(update: () => void): void {
-  if ("startViewTransition" in document && document.visibilityState === "visible" && timing("slow", "standard")) document.startViewTransition(update)
-  else update()
+  if (!("startViewTransition" in document) || document.visibilityState !== "visible" || !timing("slow", "standard")) {
+    update()
+    return
+  }
+  // 窗口尺寸变化等会中止过渡：主题已经换好，只是不播放淡化，中止不算错误。
+  const transition = document.startViewTransition(update)
+  transition.ready.catch(() => {})
+  transition.finished.catch(() => {})
 }
