@@ -108,7 +108,8 @@ try {
         const bounds = stage.getBoundingClientRect(), canvas = stage.querySelector('canvas').getBoundingClientRect()
         return canvas.top >= bounds.top - 1 && canvas.bottom <= bounds.bottom + 1 && canvas.left >= bounds.left - 1 && canvas.right <= bounds.right + 1
       })), '预览画布完整位于舞台内')
-      await group().screenshot({ path: `${process.env.PI_SCRATCH_DIR}/layout-animation-${colorScheme}-${width}.png` })
+      // 只在指定了截图目录时留图供人工比对，否则会在仓库里建出名为 undefined 的目录。
+      if (process.env.PI_SCRATCH_DIR) await group().screenshot({ path: `${process.env.PI_SCRATCH_DIR}/layout-animation-${colorScheme}-${width}.png` })
     }
   }
   assert.deepEqual(errors, [])
