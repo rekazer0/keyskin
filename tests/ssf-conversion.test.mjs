@@ -424,6 +424,10 @@ test('ssf → BDA: panel background, candidate bar and key sounds', async () => 
   assert.equal(decodePng(archive.getBytes(`light/skin/res/${bar.normalImage.resource.resourceID}.png`)).height, 126)
   const candidateText = appearance.textStyles.get(panel.cand.cellForeStyle.key)
   assert.equal(candidateText.normalColor, Number.parseInt(TEXT.light.candidate, 16))
+  // 有候选时的底图、首选字颜色、拼音输入区背景：模板分别是透明、蓝色、白色。
+  assert.deepEqual(panel.cand.candOnBarStyle, panel.cand.candBarStyle)
+  assert.equal(appearance.textStyles.get(panel.cand.firstCellForeStyle.key).normalColor, Number.parseInt(TEXT.light.candidate, 16))
+  assert.equal(appearance.colorStyles.get(panel.input.backStyle.key).normalColor, 0xFFE9E9E9)
   const list = [...appearance.panels.get('py_9').lists.values()][0]
   const listImage = (ref) => decodePng(archive.getBytes(`light/skin/res/${appearance.imageStyles.get(ref.key).normalImage.resource.resourceID}.png`))
   assert.deepEqual(rgb(listImage(list.backStyle), 0, 0), COLORS.light.codeBack)
@@ -432,7 +436,11 @@ test('ssf → BDA: panel background, candidate bar and key sounds', async () => 
   assert.equal(sounds.keySounds.get('default').resourceID, 's_code.wav')
   assert.equal(sounds.keySounds.get('KEY_F36').resourceID, 's_del.wav')
   assert.ok(archive.getBytes('light/skin/res/s_del.wav'))
-  assert.match(archive.getText('Info.txt'), /^AtomSkinName=light,dark$/m)
+  // 百度安卓 13.3：双主题 BDA 缺任一项都提示“兼容问题”。
+  assert.match(archive.getText('Info.txt'), /^AtomSkinName=light,dark\r$/m)
+  assert.match(archive.getText('Info.txt'), /^MinImeCode=3\r$/m)
+  assert.match(archive.getText('Info.txt'), /^SupportDarkMode=1\r$/m)
+  assert.ok(!/[^\r]\n/.test(archive.getText('Info.txt')))
 })
 
 // —— Baidu → Sogou ——

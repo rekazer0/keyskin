@@ -246,6 +246,10 @@ class BdaThemeConverter {
     const candRef = cand ? writer.imageStyle({ normal: cand, pressed: cand }) : undefined
     const candidateText = this.look.color("TextStyle_Candidate")
     const candidateColors = candidateText ? { normal: candidateText, pressed: this.look.color("TextStyle_Candidate_Highlight") ?? candidateText } : undefined
+    // The pinyin row above the bar: Sogou's ComposingView background and composing text colour.
+    const composing = this.look.color("ComposingView", "BG_COLOR")
+    const inputBack = composing ? writer.colorStyle(composing) : undefined
+    const composingText = this.look.color("TextStyle_Composing")
     const list = this.look.list()
     const listBack = list.back && writer.imageStyle(list.back)
     const listCell = list.cell && writer.imageStyle(list.cell)
@@ -272,11 +276,29 @@ class BdaThemeConverter {
       if ((field.number === 7 || field.number === 10) && panelRef) return encodedField(field.number, 2, panelRef)
       if (field.number === 4 && field.bytes) {
         let candBytes = field.bytes
-        if (candRef) candBytes = replaceField(candBytes, 1, 2, candRef)
-        const fore = rawFields(candBytes).find((item) => item.number === 4)
-        const recoloured = candidateColors && fore && refType(fore) === STYLE_TYPES.text ? writer.recolouredText(refKey(fore), candidateColors) : undefined
-        if (recoloured) candBytes = replaceField(candBytes, 4, 2, recoloured)
+        // 1 is the idle toolbar, 2 the bar while candidates show; the template leaves 2 transparent.
+        if (candRef) candBytes = replaceField(replaceField(candBytes, 1, 2, candRef), 2, 2, candRef)
+        // 4 colours every candidate, 5 the first one (the template's is blue).
+        for (const number of [4, 5]) {
+          const fore = rawFields(candBytes).find((item) => item.number === number)
+          const recoloured = candidateColors && fore && refType(fore) === STYLE_TYPES.text ? writer.recolouredText(refKey(fore), candidateColors) : undefined
+          if (recoloured) candBytes = replaceField(candBytes, number, 2, recoloured)
+        }
         return encodedField(4, 2, this.toolbarKeys(writer, candBytes))
+      }
+      // The symbol grid (`panel.more`): its cell text follows the list text, as BDS does with [MORE] FORE_STYLE.
+      if (field.number === 6 && field.bytes && list.text) {
+        const fore = rawFields(field.bytes).find((item) => item.number === 2)
+        const recoloured = fore && refType(fore) === STYLE_TYPES.text ? writer.recolouredText(refKey(fore), { normal: list.text, pressed: list.text }) : undefined
+        return recoloured ? encodedField(6, 2, replaceField(field.bytes, 2, 2, recoloured)) : original
+      }
+      if (field.number === 5 && field.bytes) {
+        let input = field.bytes
+        if (inputBack) input = replaceField(input, 1, 2, inputBack)
+        const fore = rawFields(input).find((item) => item.number === 2)
+        const recoloured = composingText && fore && refType(fore) === STYLE_TYPES.text ? writer.recolouredText(refKey(fore), { normal: composingText, pressed: composingText }) : undefined
+        if (recoloured) input = replaceField(input, 2, 2, recoloured)
+        return encodedField(5, 2, input)
       }
       return original
     })))
@@ -361,12 +383,13 @@ export function convertSsfToBda(pkg: SsfPackage, template: SkinArchive): SsfConv
   if ([...pkg.files.keys()].some((name) => /(^|\/)anim\.ini$/i.test(name))) warnings.push("按键动画（anim.ini）暂不转换为 BDA 动效，已忽略；转为 BDS/BDI 可保留")
 
   const info = new TextDecoder().decode(template.getBytes("Info.txt") ?? new Uint8Array())
-    .split(/\r?\n/).filter((line) => line && !/^(Name|Author|AtomSkinName)=/i.test(line))
+    .split(/\r?\n/).filter((line) => line && !/^(Name|Author|AtomSkinName|MinImeCode|SupportDarkMode)=/i.test(line))
   info.unshift(`Name=${pkg.info.name}`)
   if (pkg.info.author) info.push(`Author=${pkg.info.author}`)
   const dual = pkg.themes.size > 1
-  if (dual) info.push("AtomSkinName=light,dark")
-  const raw: Record<string, Uint8Array> = { "Info.txt": new TextEncoder().encode(`${info.join("\n")}\n`) }
+  // Baidu Android 13.3 rejects a light/dark BDA ("兼容问题") without CRLF lines, MinImeCode=3 (0 fails) and SupportDarkMode=1.
+  if (dual) info.push("MinImeCode=3", "SupportDarkMode=1", "AtomSkinName=light,dark")
+  const raw: Record<string, Uint8Array> = { "Info.txt": new TextEncoder().encode(`${info.join("\r\n")}\r\n`) }
   const preview = ssfPreview(pkg)
   if (preview) raw["demo.png"] = preview
   for (const [path, bytes] of canonical) {
