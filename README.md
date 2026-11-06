@@ -1,4 +1,4 @@
-# 键设 KeySkin
+<img width="528" height="373" alt="image" src="https://github.com/user-attachments/assets/21f6d7f1-e165-486d-b403-c1f44dee5694" /># 键设 KeySkin
 
 一个面向百度输入法 iOS `.bdi` / Android `.bds`、`.bda`，搜狗手机输入法 `.ssf` / `.mssf` 与手心输入法 `.sxi` 皮肤的可视化编辑器，支持 macOS、Windows 与 Android，并提供可在手机浏览器中使用的在线版本。它将皮肤文件、键盘布局、按键样式和图片资源集中到同一个实时预览工作流中，并提供新建、编辑、撤销/重做、保存、跨格式转换与分享能力。
 
@@ -177,7 +177,11 @@ npm run tauri build -- --bundles nsis
 
 QQ群：228040912
 
-## 鸣谢
+## 捐赠&鸣谢
+如果这个开源项目对你有所帮助，欢迎通过捐赠支持项目的持续开发与维护！
+
+捐赠后，请联系群主并提供你的昵称，我们将在项目的 GitHub README 中公开鸣谢，感谢每一位支持者的认可与鼓励！
+你的每一份支持，都是项目持续更新与完善的动力！
 
 感谢以下朋友对本项目的帮助与支持：
 
