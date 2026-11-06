@@ -1,5 +1,5 @@
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
@@ -16,6 +16,7 @@ import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
 import { applyModeState, syncSegmentedControls } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
 import { bakeExportedBds, offerBakedFontRestore } from "./font-bake-export"
+import { completeBdsPackage } from "../bds-package.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
 import { recordRecentFile } from "./recent-files"
 import { dismissLayoutOverview } from "./layout-overview"
@@ -349,12 +350,12 @@ const DOWNGRADE_LINES = 8
 
 type ExportResult = { bytes: Uint8Array; converted: boolean; warnings: string[] }
 
-/** 生成导出字节；BDS 另把按键文字用皮肤字体切成图片（百度安卓不按皮肤字体画按键文字）。 */
+/** 生成导出字节；BDS 另把按键文字用皮肤字体切成图片（百度安卓不按皮肤字体画按键文字），并补齐百度安卓启用前检查的结构。 */
 export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
   const result = await exportArchiveBytes(format, targetBdaPlatform)
   if (!result || format !== "bds") return result
   updateFileOperationProgress(88, "正在把按键文字切成字体图片…")
-  return { ...result, bytes: await bakeExportedBds(result.bytes) }
+  return { ...result, bytes: await completeBdsPackage(await bakeExportedBds(result.bytes), composeAtlasPng) }
 }
 
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {

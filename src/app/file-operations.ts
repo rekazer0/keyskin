@@ -25,6 +25,7 @@ import { replaceImagePreviewURL } from "../image-preview.ts"
 import { clearImagePreviewError } from "./resource-inspector"
 import { createIcon } from "../icons.ts"
 import { type TileRect } from "../tiles.ts"
+import { pngBitmap } from "../atlas.ts"
 
 export async function resizePng(bytes: Uint8Array, xRatio: number, yRatio: number): Promise<Uint8Array> {
   const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes).buffer], { type: "image/png" }))
@@ -57,6 +58,16 @@ export async function composePng(width: number, height: number, layers: Readonly
     canvas.toBlob((value) => value ? resolve(value) : reject(new Error("PNG 缩放失败")), "image/png")
   })
   return new Uint8Array(await blob.arrayBuffer())
+}
+
+/** 把多张 PNG 按坐标拼成一张图集（导出 BDS 合图用）。 */
+export async function composeAtlasPng(width: number, height: number, parts: ReadonlyArray<{ png: Uint8Array; x: number; y: number }>): Promise<Uint8Array> {
+  const layers = await Promise.all(parts.map(async ({ png, x, y }) => {
+    const image = await pngBitmap(png)
+    if (!image) throw new Error("图片解码失败，无法合成图集")
+    return { image, rect: [x, y, image.width, image.height] as TileRect }
+  }))
+  return composePng(width, height, layers)
 }
 
 // 按面板精确尺寸拉伸素材图
