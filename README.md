@@ -180,7 +180,7 @@ QQ群：228040912
 ## 捐赠&鸣谢
 如果这个开源项目对你有所帮助，欢迎通过捐赠支持项目的持续开发与维护！
 
-<img width="300" height="300" alt="9c150bcf40915689d373613775945a18" src="https://github.com/user-attachments/assets/b65464e8-61cf-4f33-83df-5661ae7e5838" />
+<img width="200" height="200" alt="9c150bcf40915689d373613775945a18" src="https://github.com/user-attachments/assets/b65464e8-61cf-4f33-83df-5661ae7e5838" />
 
 捐赠后，请联系群主并提供你的昵称，我们将在项目的 GitHub README 中公开鸣谢，感谢每一位支持者的认可与鼓励！
 你的每一份支持，都是项目持续更新与完善的动力！
