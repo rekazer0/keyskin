@@ -127,6 +127,8 @@ const documentPairAffixes: Record<string, [string, string]> = {
   FIX_SIZE: ["W", "H"],
 }
 
+const SWITCH_STYLE_KEYS = ["NML_BACK_STYLE", "SEL_BACK_STYLE", "NML_FONT_STYLE", "SEL_FONT_STYLE"]
+
 /** X,Y,W,H 拆成「位置」「尺寸」两行（DESIGN.md §10）。 */
 const documentRectFields = new Set(["VIEW_RECT", "NON_SPLIT_PANEL_REGION"])
 /** 四边存储序是 左,上,右,下；显示一律 ↑ → ↓ ←。 */
@@ -273,13 +275,24 @@ export function populateDocumentInspector(): void {
   if (appState.selectedPath === appState.layoutPath && appState.selectedDocument.get("PANEL", "ANIM_STYLE") === undefined) {
     entries.push({ section: "PANEL", key: "ANIM_STYLE", value: "" })
   }
+  // F14 容器里的工具栏图标由 [SWITCH] 的背景 / 图标样式决定，选中容器时一并编辑。
+  const document = appState.selectedDocument
+  if ([...toolbarSections].some((name) => /^ICON\d+$/i.test(name) && document.get(name, "KEY")?.trim().toUpperCase() === "F14")) {
+    const existing = document.entries().filter((entry) => entry.section === "SWITCH")
+    entries.push(...existing, ...SWITCH_STYLE_KEYS
+      .filter((key) => !existing.some((entry) => entry.key === key))
+      .map((key) => ({ section: "SWITCH", key, value: "" })))
+  }
   documentFieldsGroup.hidden = entries.length === 0
   if (!entries.length) return
 
   const update = (section: string, key: string, value: string): void => {
     if (!appState.selectedDocument || appState.selectedPath !== documentFieldsGroup.dataset.path) return
     const before = appState.selectedDocument.toString()
-    if (!appState.selectedDocument.set(section, key, value)) return
+    if (!appState.selectedDocument.sections().includes(section)) {
+      if (!value) return
+      appState.selectedDocument.appendSection(section, [{ key, value }])
+    } else if (!appState.selectedDocument.set(section, key, value)) return
     const text = appState.selectedDocument.toString()
     commitText(appState.selectedPath, before, text)
     setSourceValue(text)
