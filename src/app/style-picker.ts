@@ -9,7 +9,7 @@ import { commitText, isEditing, updateDirty } from "./edit-history"
 import { updateBdaRefs } from "./key-inspector"
 import { bdaImageResourceID } from "./tile-editing"
 import { theme, orientation } from "./dom"
-import { openImageSlicePicker, imageDataURL, showPickerWindow, closePickerWindow, emitToPicker } from "./image-pickers"
+import { openImageSlicePicker, imageDataURL, showPickerWindow, closePickerWindow, emitToPicker, clearImageSlicePicker } from "./image-pickers"
 import { type Visual, type VisualResolver } from "../atlas.ts"
 import { afterNextPaint } from "./canvas-interaction"
 import { selectFile } from "./navigation"
@@ -175,6 +175,18 @@ export function styleLibraryCategories(): Map<string, Set<string>> {
 export function applyStyleLibrarySelection(): void {
   const target = appState.stylePickerTarget
   const selected = appState.styleLibrarySelected
+  const imageTarget = appState.pickerTarget
+  if (imageTarget?.selectImage && selected && isEditing()) {
+    if (selected.imagePath) openImageSlicePicker(selected.imagePath, imageTarget)
+    else if (selected.styleID && styleKind(selected.styleID) === "image") {
+      void visualResolver()?.resolve(selected.styleID, false).then(visual => {
+        if (!visual?.imagePath || appState.pickerTarget !== imageTarget || !isEditing()) return
+        clearImageSlicePicker()
+        imageTarget.selectImage!(visual.imagePath, visual.source)
+      })
+    }
+    return
+  }
   if (!target || target.disabled || !selected || !isEditing()) return
   if (selected.styleID) {
     const ref = bdaStyleRef(selected.styleID)
@@ -220,13 +232,14 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false): v
 
 function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayload | undefined> {
   const target = appState.stylePickerTarget
-  if (!appState.archive || !target) return Promise.resolve(undefined)
+  const imageSelection = Boolean(appState.pickerTarget?.selectImage)
+  if (!appState.archive || !target && !imageSelection) return Promise.resolve(undefined)
   const source = appState.archive
-  const key = styleReferenceKey(target)
+  const key = target ? styleReferenceKey(target) : "FORE_STYLE"
   const soundOnly = key === "SOUND_STYLE"
   const styles = styleConfigDocument()
-  const currentID = target.value.split(",")[0]?.trim() ?? ""
-  const targetType = appState.archive.format === "bda" ? target.dataset.bdaStyleType : undefined
+  const currentID = target?.value.split(",")[0]?.trim() ?? ""
+  const targetType = appState.archive.format === "bda" ? target?.dataset.bdaStyleType : undefined
   const bitmaps: Record<string, string> = {}
   const bitmapKeys = new Map<ImageBitmap, string>()
   // 位图不能跨窗口传：有归档路径就直接编码原始 PNG，否则（如 BDA 基础皮肤里的图）画到画布再导出。
@@ -251,7 +264,8 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
   }
   const payload = {
     sliceBack,
-    editable: isEditing() && !target.disabled,
+    imageSelection,
+    editable: isEditing() && !target?.disabled,
     canAdd: canAddStyle(),
     soundOnly,
     foreground: styleReferenceForeground(key),
@@ -308,7 +322,7 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
         info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
         kind,
         categories: [...categories],
-        compatible: !targetType || bdaStyleRef(styleID)?.type === targetType,
+        compatible: imageSelection ? kind === "image" : !targetType || bdaStyleRef(styleID)?.type === targetType,
         uses: payload.canAdd ? styleUsages(styleID).length : undefined,
         imagePaths: visuals.flatMap((visual) => visual?.imagePath ? [visual.imagePath] : []),
         animationSections: animation?.sections,

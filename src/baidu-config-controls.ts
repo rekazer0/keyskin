@@ -1,9 +1,10 @@
 // 百度教程 V6：同名字段按所属分区解释，不推测未记载的枚举。控件由 property-rows.ts 的 field() 按种类自动选择。
 type Choice = readonly [value: string, label: string, icon?: string]
 type ConfigControl =
-  | { kind: "choice"; options: readonly Choice[]; layout?: "grid3" | "select" }
+  | { kind: "choice"; options: readonly Choice[]; layout?: "select" }
   | { kind: "switch"; on: string; off: string; defaultValue?: string }
   | { kind: "multiple"; options: readonly Choice[]; separator: string; defaultValue?: string }
+  | { kind: "text" }
   | { kind: "color" }
   /** 几个维度编码成一个数：值 = 各维度所选值之和（LIST TYPE = 位置 0 / 2 + 时机 0 / 1）。 */
   | { kind: "sum"; parts: ReadonlyArray<{ label: string; options: readonly Choice[] }> }
@@ -36,11 +37,6 @@ const animation: Record<string, ConfigControl> = {
   BUILD_METHOD: { kind: "choice", options: [["0", "同时"], ["1", "接续"]] },
   EMIT_TYPE: { kind: "choice", options: [["0", "依次"], ["1", "同时"]] },
 }
-const ANCHORS: readonly Choice[] = [
-  ["1", "左上", "arrow-up-left"], ["2", "上中", "arrow-up"], ["3", "右上", "arrow-up-right"],
-  ["4", "左中", "arrow-left"], ["5", "中心", "circle-dot"], ["6", "右中", "arrow-right"],
-  ["7", "左下", "arrow-down-left"], ["8", "下中", "arrow-down"], ["9", "右下", "arrow-down-right"],
-]
 const COLOR_VALUE = /^(?:#|0x)?[0-9a-f]{6}(?:[0-9a-f]{2})?$/i
 
 export function baiduConfigControl(section: string, key: string, value = ""): ConfigControl | undefined {
@@ -51,7 +47,7 @@ export function baiduConfigControl(section: string, key: string, value = ""): Co
   if (key === "VERSION" && /^GLOBAL$/i.test(section)) return SWITCH
   if (key === "ANCHOR_TYPE") {
     if (/^BAR\d*$/i.test(section)) return { kind: "choice", options: [["1", "中间对齐"], ["2", "两边对齐"]] }
-    if (/^ICON\d+$/i.test(section)) return { kind: "choice", layout: "grid3", options: ANCHORS }
+    if (/^ICON\d+$/i.test(section)) return { kind: "text" }
   }
   if (key === "PERSIST" && /^ICON\d+$/i.test(section)) return { kind: "choice", options: [["0", "隐藏"], ["1", "无候选"], ["2", "有候选"], ["3", "始终"]] }
   if (key === "TYPE") {

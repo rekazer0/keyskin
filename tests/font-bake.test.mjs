@@ -112,3 +112,18 @@ test('layouts resolve to their orientation CSS, falling back to the skin res CSS
   assert.deepEqual(layoutsUsingStyle(names, 'light/skin/res/default.css'), ['light/skin/land/py_9.ini'])
   assert.equal(bakedImageBase('light/skin/port/res/default.css'), `light/skin/port/res/${BAKED_IMAGE}`)
 })
+
+test('previously baked styles are flagged so they are baked again without a font', () => {
+  const baked = withBakedStyles(css, [{ id: '1', normal: 1, highlight: 2 }])
+  const styles = bakeableStyles(baked, new Set(['5']))
+  assert.equal(styles.find(({ id }) => id === '1').baked, true)
+  assert.equal(styles.find(({ id }) => id === '5').baked, undefined)
+})
+
+test('FONT_WEIGHT reads 100–900 and bold / normal, anything else is unset', async () => {
+  const { fontWeight } = await import('../src/atlas.ts')
+  assert.equal(fontWeight('700'), 700)
+  assert.equal(fontWeight(' bold '), 700)
+  assert.equal(fontWeight('normal'), 400)
+  for (const value of [undefined, '', '0', '950', '450.5', 'heavy']) assert.equal(fontWeight(value), undefined)
+})

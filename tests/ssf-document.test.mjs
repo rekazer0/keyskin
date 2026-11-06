@@ -164,9 +164,8 @@ test('ssf document: legacy toolbar logo, symbol text and double-pinyin function 
   const resolver = new AtlasResolver(baidu, 'light', 'port')
   await resolver.ready()
   const py9 = read('light/skin/port/py_9.ini')
-  // BDS（Android 旧 CSS）不解析 [STYLE*] FONT_NAME（StyleParam.v()），转换后的样式字体在真机
-  // 走系统字体回退，预览也不再把它内嵌成 BdiEmbeddedFont。
-  assert.equal(resolver.resolveText(py9.get('LIST', 'FORE_STYLE'), false).fontName, 'symbols.ttf')
+  // 转换后的样式字体真机不解析，导出 BDS 时按它切片，预览同样内嵌它。
+  assert.match(resolver.resolveText(py9.get('LIST', 'FORE_STYLE'), false).fontName, /^BdiEmbeddedFont\d+$/)
   assert.deepEqual([...archive.changed], [])
 })
 
@@ -251,14 +250,14 @@ test('ssf conversion: key, candidate and composing text take the skin size, type
   const style = `STYLE${layout.get(w, 'FORE_STYLE').split(',')[0]}`
   assert.equal(css.get(style, 'FONT_SIZE'), '54')
   assert.equal(css.get(style, 'FONT_NAME'), 'skin.ttf')
-  assert.equal(css.get(style, 'SSF_BOLD'), '1')
+  assert.equal(css.get(style, 'FONT_WEIGHT'), '700')
   assert.ok(preview.has('light/skin/res/skin.ttf'))
   const resolver = new AtlasResolver(SkinArchive.open(zipSync({ 'light/skin/res/default.css': strToU8(css.toString()) })), 'light', 'port')
-  assert.equal(resolver.resolveText(style.slice(5), false)?.bold, true, 'the canvas draws the label bold')
+  assert.equal(resolver.resolveText(style.slice(5), false)?.weight, 700, 'the canvas draws the label bold')
   const gen = read('light/skin/port/gen.ini')
   const candidates = read(`light/skin/port/${gen.get('CAND', 'LAYOUT_NAME')}.cnd`)
   const candidate = `STYLE${candidates.get('CAND', 'FORE_STYLE')}`
   assert.equal(css.get(candidate, 'FONT_SIZE'), '48')
-  assert.equal(css.get(candidate, 'SSF_BOLD'), '1')
+  assert.equal(css.get(candidate, 'FONT_WEIGHT'), '700')
   assert.equal(css.get(`STYLE${gen.get('INPUT', 'FORE_STYLE')}`, 'FONT_SIZE'), '32')
 })

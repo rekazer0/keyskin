@@ -3,6 +3,7 @@
 // into a bar slice and a panel slice therefore loses the top of the panel slice on iPhone, hidden behind the bar.
 import { strFromU8, strToU8 } from "fflate"
 import { IniDocument } from "./ini.ts"
+import { candidateInputBackgroundStyle, candidateInputSizeForeground, inputBarMetrics } from "./candidate-style.ts"
 import { appendStyle } from "./ios-toolbar.ts"
 import { addZipEntry } from "./skin-zip.ts"
 import { cropImage, decodePng, encodePng, resizeImage, type RgbaImage } from "./ssf/ssf-png.ts"
@@ -50,6 +51,9 @@ export function adaptIosPanelBackground(files: Map<string, Uint8Array>, warnings
     const barStyle = cand.get("CAND", "BACK_STYLE")?.trim()
     const bar = picture(barStyle)
     if (!bar) continue
+    const input = picture(candidateInputBackgroundStyle(gen, cand, true))
+    const inputFont = Number(css.get(`STYLE${candidateInputSizeForeground(gen, cand)}`, "FONT_SIZE"))
+    const inputHeight = input ? inputBarMetrics(inputFont, barWidth, input).height : 0
 
     const stacked = new Map<string, string>()
     for (const layoutPath of [...files.keys()]) {
@@ -62,13 +66,16 @@ export function adaptIosPanelBackground(files: Map<string, Uint8Array>, warnings
       const key = `${style},${panelWidth},${panelHeight}`
       let id = stacked.get(key)
       if (!id) {
-        // Both slices at the panel slice's pixels per skin unit, bar above panel.
+        const barPicture = withoutBottomSeam(bar, panel)
+        // iOS has an inline input row above the toolbar; omitting it lifts the bar's bottom seam into the toolbar.
         const width = panel.width
+        const inputRows = Math.round(inputHeight * width / barWidth)
         const top = Math.round(barHeight * width / barWidth)
         const bottom = Math.round(panelHeight * width / panelWidth)
-        const image = { width, height: top + bottom, data: new Uint8Array(width * (top + bottom) * 4) }
-        image.data.set(resizeImage(bar, width, top).data)
-        image.data.set(resizeImage(panel, width, bottom).data, width * top * 4)
+        const image = { width, height: inputRows + top + bottom, data: new Uint8Array(width * (inputRows + top + bottom) * 4) }
+        if (input && inputRows > 0) image.data.set(resizeImage(input, width, inputRows).data)
+        image.data.set(resizeImage(barPicture, width, top).data, width * inputRows * 4)
+        image.data.set(resizeImage(panel, width, bottom).data, width * (inputRows + top) * 4)
         let name: string
         let index = stacked.size
         do name = `ios_keyboard_${orientation}${++index}`
@@ -91,4 +98,18 @@ export function adaptIosPanelBackground(files: Map<string, Uint8Array>, warnings
     adapted = true
   }
   if (adapted) warnings?.push("iPhone 会把键盘背景铺满整个键盘（含工具栏）：已把工具栏背景与键盘背景拼成一张整图，工具栏背景改为透明")
+}
+
+/** A flat bar over the same flat panel needs no baked bottom separator on iOS. Keep artwork untouched. */
+function withoutBottomSeam(bar: RgbaImage, panel: RgbaImage): RgbaImage {
+  const color = panel.data.subarray(0, 4)
+  if (color[3] !== 255 || !panel.data.every((value, index) => value === color[index % 4])) return bar
+  const edgeRows = Math.max(2, Math.ceil(bar.height / 100))
+  if (bar.height <= edgeRows) return bar
+  const edge = bar.width * (bar.height - edgeRows) * 4
+  if (!bar.data.subarray(0, edge).every((value, index) => value === color[index % 4])) return bar
+  if (bar.data.subarray(edge).every((value, index) => value === color[index % 4])) return bar
+  const data = bar.data.slice()
+  for (let offset = edge; offset < data.length; offset += 4) data.set(color, offset)
+  return { ...bar, data }
 }

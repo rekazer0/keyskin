@@ -13,6 +13,7 @@ function configSpec(config: Config, value: string, label: string): FieldSpec | u
       return { kind: "flags", values: baiduConfigTokens(value, config.separator, config.defaultValue), options: config.options,
         keepOne: config.defaultValue ? `${label}至少保留一项；空值表示默认全部支持` : undefined }
     case "choice": return { kind: "choice", value, options: config.options, layout: config.layout }
+    case "text": return { kind: "text", value }
     case "color": return { kind: "color", value, codec: "argb" }
     case "sum": return undefined
   }

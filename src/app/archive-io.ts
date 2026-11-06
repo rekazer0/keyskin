@@ -15,7 +15,7 @@ import { aiDesignStatus, aiDesignPanel, theme, device, canvasBackground, canvasW
 import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
 import { applyModeState, syncSegmentedControls } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
-import { bakeExportedBds, offerBakedFontRestore } from "./font-bake-export"
+import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
 import { recordRecentFile } from "./recent-files"
@@ -350,12 +350,14 @@ const DOWNGRADE_LINES = 8
 
 type ExportResult = { bytes: Uint8Array; converted: boolean; warnings: string[] }
 
-/** 生成导出字节；BDS 另把按键文字用皮肤字体切成图片（百度安卓不按皮肤字体画按键文字），并补齐百度安卓启用前检查的结构。 */
+/** 导出百度皮肤时切片按键文字；BDS 另补齐百度安卓启用前检查的结构。 */
 export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
   const result = await exportArchiveBytes(format, targetBdaPlatform)
-  if (!result || format !== "bds") return result
+  if (!result || format !== "bds" && format !== "bdi") return result
   updateFileOperationProgress(88, "正在把按键文字切成字体图片…")
-  return { ...result, bytes: await completeBdsPackage(await bakeExportedBds(result.bytes), composeAtlasPng) }
+  await waitForInterfacePaint()
+  const bytes = await bakeExportedFonts(result.bytes, format)
+  return { ...result, bytes: format === "bds" ? await completeBdsPackage(bytes, composeAtlasPng) : bytes }
 }
 
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
@@ -431,6 +433,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   }
   if (appState.archive.format !== "bda" || format === "bda" || format === "sxi") {
     updateFileOperationProgress(35, `正在打包 ${format.toUpperCase()} 皮肤包…`)
+    await waitForInterfacePaint()
     const soundWarnings: string[] = []
     const adjustments: string[] = []
     const bytes = await appState.archive.toBytesAsync(format, soundWarnings, adjustments)

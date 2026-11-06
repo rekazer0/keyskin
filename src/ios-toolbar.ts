@@ -43,9 +43,15 @@ export function logoImageConfig(normal: string, highlight: string): string {
   return plist([`<dict><key>Name</key><string>0</string><key>Images</key><dict><key>Normal</key>${states}<key>Theme</key>${states}</dict></dict>`])
 }
 
+/** Native iOS function entry, shared by BDS and SSF exports. */
+export function toolbarMenuItem(id: string, title: string, position: string, normal: string, highlight: string): string {
+  const states = `<dict><key>Normal</key><string>${normal}</string><key>Highlight</key><string>${highlight}</string><key>Selected</key><string>${normal}</string></dict>`
+  return `<dict><key>Position</key><string>${position}</string><key>Name</key><string>${id}</string><key>Titles</key><dict><key>Normal</key><dict><key>Normal</key><string>${title}</string><key>Selected</key><string>${title}</string></dict></dict><key>Images</key><dict><key>Normal</key>${states}<key>Theme</key>${states}</dict></dict>`
+}
+
 /**
  * Gives an Android-authored package the iOS toolbar entry points: [LOGO] with logo.ini coloured like the CND logo key,
- * and the logo artwork when that key is an image. Packages that already declare [LOGO] keep their own configuration.
+ * and native function artwork from the Android menu atlas. Existing iOS values and plists are preserved.
  */
 export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: string[]): void {
   const text = (path: string) => {
@@ -64,7 +70,7 @@ export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: strin
     const cssPath = `${root}res/default.css`
     const candText = text(candPath)
     const cssText = text(cssPath)
-    if (gen.sections().includes("LOGO") || !candText || !cssText) continue
+    if (!candText || !cssText) continue
     const cand = IniDocument.parse(candText)
     const css = IniDocument.parse(cssText)
     const slice = sliceReader(root, (path) => files.get(path))
@@ -78,9 +84,19 @@ export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: strin
     const back = backs.get(`${root}${candBack}`) ?? solidColorStyle(css, candBack, slice)
     backs.set(`${root}${candBack}`, back)
     files.set(cssPath, strToU8(css.toString()))
-    gen.appendSection("LOGO", [{ key: "LAYOUT_NAME", value: "logo" }])
+    const layout = gen.get("LOGO", "LAYOUT_NAME")?.trim() || "logo"
+    const logoPath = `${root}${orientation}/${layout}.ini`
+    const menu = IniDocument.parse(text(logoPath) ?? "")
+    const defaults = IniDocument.parse(logoLayout(back, textStyle))
+    for (const section of defaults.sections()) {
+      if (!menu.sections().includes(section)) menu.appendSection(section, [])
+      for (const { key, value } of defaults.entries(section)) if (!menu.get(section, key)) menu.set(section, key, value)
+    }
+    if (!gen.sections().includes("LOGO")) gen.appendSection("LOGO", [])
+    gen.set("LOGO", "LAYOUT_NAME", layout)
     files.set(path, strToU8(gen.toString()))
-    addZipEntry(files, `${root}${orientation}/logo.ini`, strToU8(logoLayout(back, textStyle)))
+    addZipEntry(files, logoPath, strToU8(menu.toString()))
+    writeMenuFiles(files, root, cand, css, slice)
 
     const configPath = `${root}res/logo/customImageConfig.plist`
     if (!logo || files.has(configPath)) continue
@@ -139,4 +155,34 @@ function logoFiles(root: string, css: IniDocument, logo: string, slice: SliceRea
   if (!normal) return []
   files.push([`${root}res/logo/customImageConfig.plist`, strToU8(logoImageConfig(normal, image("HL_IMG") ?? normal))])
   return files
+}
+
+/** Android bitmap indexes (LogoIconSource) → iOS function IDs; order matches the editor's toolbar preview. */
+function writeMenuFiles(files: Map<string, Uint8Array>, root: string, cand: IniDocument, css: IniDocument, slice: SliceReader): void {
+  const paths = ["com.baidu.inputmethod.toolbarMenuItems.plist", "com.baidu.inputmethod.toolbarMenuItems.nijigen.plist"].map((name) => `${root}res/logo/${name}`)
+  if (paths.every((path) => files.has(path))) return
+  const items = [
+    [26, "F7", "19", "表情"], [27, "F13", "17", "键盘类型"],
+    [29, "F72", "23", "语音输入"], [31, "F82", "26", "搜索"],
+    [25, "", "18", "光标"], [50, "", "35", "剪贴板"], [62, "F68", "45", "AI侃侃"],
+  ] as const
+  const entries: string[] = []
+  for (const [index, action, id, title] of items) {
+    const style = action && foreStyle(cand, action)
+    const image = (state: "NM_IMG" | "HL_IMG") => {
+      const [resource, tile] = (style && css.get(`STYLE${style}`, state)?.split(",").map((part) => part.trim())) || []
+      return (resource ? slice(resource, tile) : undefined) ?? slice("logo/pop_menu_icons", String(index))
+    }
+    const normal = image("NM_IMG")
+    if (!normal) continue
+    const write = (found: Slice, state: string) => {
+      const name = `toolbar-menu-${id}-${state}`
+      addZipEntry(files, `${root}res/logo/${name}_iphone@3x.png`, encodePng(cropImage(decodePng(found.bytes), ...found.rect as [number, number, number, number])))
+      return name
+    }
+    const name = write(normal, "normal")
+    const pressed = style && css.get(`STYLE${style}`, "HL_IMG") ? write(image("HL_IMG") ?? normal, "highlight") : name
+    entries.push(toolbarMenuItem(id, title, "toolbar", name, pressed))
+  }
+  if (entries.length) for (const path of paths) if (!files.has(path)) addZipEntry(files, path, strToU8(plist(entries)))
 }

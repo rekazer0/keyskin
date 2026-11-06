@@ -19,8 +19,8 @@ export type TextVisual = {
   fontName?: string
   color?: string
   clearType?: number
-  /** Only Sogou styles have a weight (the preview's `SSF_BOLD`). */
-  bold?: boolean
+  /** CSS 字重（100–900）：样式的 FONT_WEIGHT，或搜狗 / 手心皮肤的粗细。 */
+  weight?: number
 }
 
 export type StyleTextVisual = TextVisual & { text: string }
@@ -79,8 +79,15 @@ export function canvasFontFamily(fontName: string | undefined): string {
   return `"${name.replaceAll('"', '\\"')}", system-ui`
 }
 
+/** FONT_WEIGHT 的值：100–900，或 bold / normal；其他写法当作未设置。 */
+export function fontWeight(value: string | undefined): number | undefined {
+  const text = value?.trim().toLowerCase()
+  const weight = text === "bold" ? 700 : text === "normal" ? 400 : Number(text)
+  return text && Number.isInteger(weight) && weight >= 100 && weight <= 900 ? weight : undefined
+}
+
 export function canvasFont(size: number, visual: TextVisual | undefined): string {
-  return `${visual?.bold ? "bold " : ""}${size}px ${canvasFontFamily(visual?.fontName)}`
+  return `${visual?.weight ? `${visual.weight} ` : ""}${size}px ${canvasFontFamily(visual?.fontName)}`
 }
 
 export function drawVisualText(
@@ -213,8 +220,8 @@ function resolveTextVisual(
       if (result.fontName === undefined && fontName) result.fontName = fontName
       if (result.clearType === undefined && Number.isFinite(clearType)) result.clearType = clearType
       if (result.color === undefined && color) result.color = color
-      const bold = styles.get(section, "SSF_BOLD")
-      if (result.bold === undefined && bold) result.bold = bold === "1"
+      const weight = fontWeight(styles.get(section, "FONT_WEIGHT"))
+      if (result.weight === undefined && weight) result.weight = weight
     }
   }
   if (result.fontName === undefined && defaultFontName) result.fontName = defaultFontName
@@ -326,7 +333,7 @@ let embeddedFontID = 0
 // 这里会加载新的 FontFace，预览不会继续用旧字形。
 const embeddedFonts = new WeakMap<SkinArchive, Map<string, { bytes: Uint8Array; font: EmbeddedFont }>>()
 
-function embeddedFontPath(
+export function embeddedFontPath(
   names: readonly string[],
   stylePath: string,
   reference: string | undefined,
@@ -388,12 +395,11 @@ export class AtlasResolver {
     this.embeddedFontFamily = embeddedFont?.family
     const fonts = [embeddedFont?.ready]
     // Android 的旧 CSS 引擎只解析 [GLOBAL] FONT_PATH（CssLoader.t()），[STYLE*] 的 FONT_NAME 和
-    // 样式级 FONT_PATH 都没有分支（StyleParam.v()）。BDS 预览只内嵌 GLOBAL 字体，样式里的
-    // FONT_NAME 保持系统字体名的回退处理；BDI 仍按手册支持这两项。
-    // 真机上 GLOBAL 字体也不作用于按键文字，导出 BDS 时会用它把按键文字切成图片（font-bake-export.ts），
-    // 所以这里按 GLOBAL 字体预览的就是导出后的样子。
-    if (path && this.styles && archive.format !== "bds") {
-      // iOS 专有的 [STYLE*] FONT_PATH：皮肤里已经写了才支持，内嵌字体优先于 FONT_NAME。
+    // 样式级 FONT_PATH 都没有分支（StyleParam.v()），GLOBAL 字体也不作用于按键文字。导出 BDS 时按
+    // 下面同样的规则把按键文字切成图片（font-bake-export.ts），所以 BDS 预览的就是导出后的样子：
+    // 指向皮肤字体文件的 FONT_PATH / FONT_NAME 生效，系统字体名无法切片，不生效。
+    if (path && this.styles) {
+      // [STYLE*] FONT_PATH：皮肤里已经写了才支持，内嵌字体优先于 FONT_NAME。
       for (const { section, key, value } of this.styles.entries()) {
         if (key !== "FONT_PATH" || section === "GLOBAL") continue
         const source = embeddedFontPath(archive.names(), path, value)
@@ -403,13 +409,15 @@ export class AtlasResolver {
         fonts.push(font.ready)
       }
       // FONT_NAME 可以写 benxu、DROIDSANSFALLBACK.ttf 或系统字体名；只有落到归档文件才内嵌，
-      // 系统字体名保持原样，由 canvasFontFamily 走系统字体回退。
+      // BDI 的系统字体名保持原样，由 canvasFontFamily 走系统字体回退。
       for (const { section, key, value } of this.styles.entries()) {
-        if (key !== "FONT_NAME" || section === "GLOBAL") continue
+        if (key !== "FONT_NAME" || section === "GLOBAL" || value.startsWith("BdiEmbeddedFont")) continue
         const source = embeddedFontPath(archive.names(), path, value, true)
         const font = source && loadEmbeddedFont(archive, source)
-        if (!font) continue
-        if (this.styles.get(section, key) === font.family) continue
+        if (!font) {
+          if (archive.format === "bds") this.styles.remove(section, key)
+          continue
+        }
         this.styles.set(section, key, font.family)
         fonts.push(font.ready)
       }

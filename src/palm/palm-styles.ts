@@ -187,7 +187,7 @@ export class PalmStyles implements VisualResolver {
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined {
     for (const id of foreground.split(",")) {
       const text = this.text(id, highlighted)
-      if (text) return { fontSize: text.size, color: text.color, ...text.font ? { fontName: text.font } : {}, ...text.weight ? { bold: text.weight >= 600 } : {} }
+      if (text) return { fontSize: text.size, color: text.color, ...text.font ? { fontName: text.font } : {}, ...text.weight ? { weight: text.weight } : {} }
     }
   }
 

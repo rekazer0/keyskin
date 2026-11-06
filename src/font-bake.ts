@@ -1,7 +1,8 @@
 // 字体烘焙：百度安卓（13.3 反编译与真机复现）每次初始化键盘都把画笔字体重置为系统字体或 keymap.ttf，
 // [GLOBAL] FONT_PATH 只加载进内存、不作用于按键文字，[STYLE*] FONT_NAME 完全不解析。
+// 字重（FONT_WEIGHT）百度格式里没有，同样只能切片。
 // 唯一能在真机上显示皮肤字体的办法是把按键上的固定文字（STYLE 的 SHOW）画成图片，样式改用 NM_IMG / HL_IMG。
-// 只在导出 BDS 时切片（app/font-bake-export.ts）。原来的文字字段改名为 BAKED_* 留在样式里（安卓忽略不认识的键），
+// 导出 BDI/BDS 时切片（app/font-bake-export.ts）。原来的文字字段改名为 BAKED_* 留在样式里，
 // 再次导出时据此重新切片，打开皮肤时可据此还原成文字。
 import { IniDocument } from "./ini.ts"
 import { type TileRect } from "./tiles.ts"
@@ -18,6 +19,8 @@ export type BakeStyle = {
   id: string
   /** 烘焙前的文字字段（SHOW、FONT_SIZE、NM_COLOR……）。 */
   fields: Record<string, string>
+  /** 之前导出时切过：不论现在有没有字体都要重切，不然会留下旧字形。 */
+  baked?: boolean
 }
 
 /** 布局里按键前景（[KEYn] FORE_STYLE，可逗号分隔多层）引用到的样式编号。 */
@@ -52,7 +55,7 @@ export function bakeableStyles(css: string, foregroundIDs: ReadonlySet<string>):
     if (!id) continue
     const baked = bakedFields(document, section)
     if (baked.SHOW?.trim()) {
-      styles.push({ id, fields: baked })
+      styles.push({ id, fields: baked, baked: true })
       continue
     }
     const show = document.get(section, "SHOW")?.trim()

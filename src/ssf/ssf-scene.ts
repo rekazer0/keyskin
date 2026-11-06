@@ -234,6 +234,12 @@ async function builtInLayers(styles: SsfStyles, skeleton: SsfSkeleton, section: 
     const layer = scaled(labelColor ? await tintedVisual(glyph, labelColor) : glyph, scale, ...at)
     if (layer) layers.push(layer)
   }
+  // User-symbol keys are supplied by Sogou at runtime and have no static skeleton foreground.
+  const action = skeleton.layout.get(section, "CENTER")?.trim() ?? ""
+  if (!foreStyles.length && [...action].length === 1 && fg("LABEL_VISIBLE")?.[0] !== 0) {
+    write(texts[0] ?? action, label, labelColor ?? "#373737", labelBox, centre(rect), 0.055 * styles.sogouWidth * scale)
+    count++
+  }
   const digit = binding.sections.map((name) => NINE_KEY_DIGITS[name]).find(Boolean)
   if (digit && count === 1 && minorBox) write(texts[1] ?? digit, minorText, minorColor ?? "#373737", minorBox, centre(minorBox), minorBox.height)
   return layers

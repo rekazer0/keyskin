@@ -1,6 +1,6 @@
 // 预览按 CSS 的 res 目录解析 FONT_PATH / FONT_NAME，并和真机一样按皮肤格式区分：
-// BDS（Android 旧 CSS）只解析 [GLOBAL] FONT_PATH（CssLoader.t()），[STYLE*] 的 FONT_NAME 与
-// 样式级 FONT_PATH 没有分支（StyleParam.v()）；BDI（iOS）仍支持 FONT_NAME 与样式级 FONT_PATH。
+// BDS（Android 旧 CSS）只解析 [GLOBAL] FONT_PATH（CssLoader.t()），样式字体只能靠导出时切片，
+// 所以只认指向皮肤字体文件的 FONT_NAME / FONT_PATH；BDI（iOS）原生支持 FONT_NAME 与样式级 FONT_PATH。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { strToU8, zipSync } from 'fflate'
@@ -58,19 +58,15 @@ test('BDS GLOBAL FONT_PATH is embedded and used as the default text font', async
   assert.match(canvasFontFamily(fontName), /BdiEmbeddedFont/)
 })
 
-test('BDS ignores [STYLE*] FONT_NAME instead of embedding it', () => {
-  const resolver = resolverFor(bdsArchive)
-  // Android 不解析样式 FONT_NAME；未知字体名保持系统字体回退，不能变成内嵌字体。
-  assert.equal(resolver.resolveStyleText('2', false)?.fontName, 'benxu')
-  assert.equal(canvasFontFamily('benxu'), '"benxu", system-ui')
-  assert.equal(resolver.resolveStyleText('3', false)?.fontName, 'PingFang SC')
-})
-
-test('BDS ignores style-level FONT_PATH and keeps the GLOBAL font', () => {
+test('BDS previews [STYLE*] FONT_NAME / FONT_PATH that name skin fonts, like the exported font slices', () => {
   const resolver = resolverFor(bdsArchive)
   const globalFamily = resolver.resolveStyleText('1', false)?.fontName
-  assert.match(globalFamily ?? '', /^BdiEmbeddedFont\d+$/)
-  assert.equal(resolver.resolveStyleText('4', false)?.fontName, globalFamily)
+  // 真机不解析样式字体，但导出 BDS 时会按皮肤字体文件切片，预览与导出一致。
+  assert.match(resolver.resolveStyleText('2', false)?.fontName ?? '', /^BdiEmbeddedFont\d+$/)
+  assert.match(resolver.resolveStyleText('4', false)?.fontName ?? '', /^BdiEmbeddedFont\d+$/)
+  assert.notEqual(resolver.resolveStyleText('4', false)?.fontName, globalFamily)
+  // 系统字体名无法切片，真机也不认：落回 GLOBAL 字体。
+  assert.equal(resolver.resolveStyleText('3', false)?.fontName, globalFamily)
 })
 
 test('BDI embeds [STYLE*] FONT_NAME with and without an extension', async () => {

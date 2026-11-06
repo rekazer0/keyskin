@@ -30,6 +30,7 @@ export type StyleLibraryPayload = {
   sliceBack: boolean
   editable: boolean
   canAdd: boolean
+  imageSelection?: boolean
   soundOnly: boolean
   foreground: boolean
   bda: boolean
@@ -243,7 +244,7 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   }
   $("#style-library-preview-title").textContent = selected.imagePath?.split("/").pop() ?? `样式 ${style?.label ?? selected.styleID}`
   $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? "")
-  const compatible = selected.imagePath ? library.imagesCompatible : Boolean(style?.compatible ?? sound)
+  const compatible = selected.imagePath ? library.imagesCompatible : library.imageSelection ? style?.kind === "image" : Boolean(style?.compatible ?? sound)
   libraryApply.disabled = !compatible || !library.editable
   // 不兼容时只禁用并说明原因，不改按钮文字。
   libraryApply.title = compatible ? "" : "样式类型不兼容"
@@ -356,7 +357,7 @@ function renderLibrary(): void {
   libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => { libraryKind = value; renderLibrary() }))
   libraryFilters.replaceChildren(styleFilterButtons(styleUsageOptions, "libraryFilter", libraryFilter, value => { libraryFilter = value; renderLibrary() }))
   libraryKinds.hidden = images || sound
-  libraryFilters.hidden = sound || chooser
+  libraryFilters.hidden = sound
   const query = search.value.trim().toLowerCase().replace(/^#/, "")
   const cards = libraryCards(payload, chooser, images, query)
   libraryGrid.replaceChildren(...cards)
@@ -386,7 +387,7 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
   if (payload) {
     library = payload
     releaseLibraryBitmaps()
-    libraryMode = "styles"
+    libraryMode = payload.imageSelection ? "images" : "styles"
     libraryKind = payload.kind
     libraryFilter = "all"
   } else if (reset) library = undefined

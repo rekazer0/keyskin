@@ -189,8 +189,8 @@ class ThemeConverter {
     return {
       ...text.fontSize ? { FONT_SIZE: String(text.fontSize) } : {},
       ...text.font ? { FONT_NAME: text.font.name } : {},
-      // Baidu styles have no weight; the preview reads this and the export strips it with the other SSF_ fields.
-      ...text.bold ? { SSF_BOLD: "1" } : {},
+      // 百度安卓不认字重，导出 BDS 时按它把按键文字切成图片（font-bake-export.ts）。
+      ...text.bold ? { FONT_WEIGHT: "700" } : {},
     }
   }
 
@@ -225,6 +225,15 @@ class ThemeConverter {
         // The size is the main label's; a second layer (中/英's 英) keeps its own smaller size.
         const text = (index: number) => look.labelText && (index ? { ...look.labelText, fontSize: undefined } : look.labelText)
         if (templateFore?.length) layout.set(section, "FORE_STYLE", templateFore.map((id, index) => this.tintedTemplateStyle(id, look.label, false, look.texts[index], text(index)) ?? id).join(","))
+        else if ([...action].length === 1) {
+          // Sogou runtime symbol keys have an action but no static foreground in the skeleton.
+          layout.set(section, "FORE_STYLE", this.resources.derivedStyle("", {
+            SHOW: look.texts[0] ?? action,
+            FONT_SIZE: String(Math.max(1, Math.round(boardWidth * 0.055))),
+            ...look.label ? { NM_COLOR: look.label.normal, HL_COLOR: look.label.pressed } : {},
+            ...this.textFields(look.labelText),
+          }))
+        }
       }
       const sound = this.soundStyle(this.look.sound(look.binding))
       if (sound) layout.set(section, "SOUND_STYLE", sound)

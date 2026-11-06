@@ -1,7 +1,7 @@
 // Baidu draws the candidate bar's function icons in a native F14 container, not in arbitrary CND ICON slots.
 // iOS (BDI) reads their images from res/logo plists; Android (BDS) from the res/logo/pop_menu_icons atlas.
 import { IniDocument } from "../ini.ts"
-import { logoImageConfig, logoLayout, plist, solidColorStyle } from "../ios-toolbar.ts"
+import { logoImageConfig, logoLayout, plist, solidColorStyle, toolbarMenuItem } from "../ios-toolbar.ts"
 import type { SkinArchive } from "../skin.ts"
 import { cropImage, decodePng, encodePng, placeImage, type RgbaImage } from "./ssf-png.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
@@ -31,10 +31,6 @@ const ANDROID_ICONS: Array<[source: string, index: number]> = [
   ["ime_function_textedit", 25], ["ime_function_clipboard", 50],
 ]
 
-const images = (normal: string, pressed: string) => {
-  const states = `<dict><key>Normal</key><string>${normal}</string><key>Highlight</key><string>${pressed}</string><key>Selected</key><string>${normal}</string></dict>`
-  return `<key>Images</key><dict><key>Normal</key>${states}<key>Theme</key>${states}</dict>`
-}
 
 /** Adapts only SSF exports; existing BDI/BDS documents keep their authored toolbar configuration. */
 export function adaptSsfNativeToolbar(archive: SkinArchive, source: SsfPackage, format: "bdi" | "bds", warnings: string[]): void {
@@ -118,7 +114,7 @@ function writeIosLogo(archive: SkinArchive, prefix: string, source: SsfPackage, 
   const entries = IOS_ITEMS.map(([action, id, title], index) => {
     const normal = write(action, "NM_IMG", `ssf-toolbar-${index}-normal`)
     const pressed = write(action, "HL_IMG", `ssf-toolbar-${index}-pressed`)
-    return `<dict><key>Position</key><string>toolbar</string><key>Name</key><string>${id}</string><key>Titles</key><dict><key>Normal</key><dict><key>Normal</key><string>${title}</string><key>Selected</key><string>${title}</string></dict></dict>${images(normal, pressed)}</dict>`
+    return toolbarMenuItem(id, title, "toolbar", normal, pressed)
   })
   for (const [id, title, file, position] of IOS_MENU_FILES) {
     const normal = source.file(theme, `${file}.png`)
@@ -126,7 +122,7 @@ function writeIosLogo(archive: SkinArchive, prefix: string, source: SsfPackage, 
     const name = `ssf-menu-${id}`
     archive.setBytes(`${prefix}res/logo/${name}_iphone@3x.png`, normal)
     archive.setBytes(`${prefix}res/logo/${name}-pressed_iphone@3x.png`, source.file(theme, `${file}_p.png`) ?? normal)
-    entries.push(`<dict><key>Position</key><string>${position}</string><key>Name</key><string>${id}</string><key>Titles</key><dict><key>Normal</key><dict><key>Normal</key><string>${title}</string></dict></dict>${images(name, `${name}-pressed`)}</dict>`)
+    entries.push(toolbarMenuItem(id, title, position, name, `${name}-pressed`))
   }
   for (const name of ["com.baidu.inputmethod.toolbarMenuItems.plist", "com.baidu.inputmethod.toolbarMenuItems.nijigen.plist"]) {
     archive.setText(`${prefix}res/logo/${name}`, plist(entries))

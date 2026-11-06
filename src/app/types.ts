@@ -38,6 +38,7 @@ export type StyleImagePickerTarget = {
   document?: IniDocument
   path?: string
   sections?: string[]
+  selectImage?(path: string, source?: TileSlice["source"]): void
 }
 
 export type NativeImagePickerPayload = {

@@ -21,6 +21,7 @@ import { keyAnimationItems, keyboardPlayback, selectAnimation, selectAnimationSt
 import { bdaAnimationBindingsForKey, bdaBindingEffects } from "../preview-animation.ts"
 import { configField } from "./config-value-control"
 import { field, section, type FieldSpec } from "./property-rows"
+import { toolbarIconSection } from "./toolbar-icon-inspector"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -51,6 +52,7 @@ export const documentFieldLabels: Record<string, string> = {
   SCAND_STYLE: "云输入样式",
   FONT_NAME: "字体名称",
   FONT_SIZE: "字号",
+  FONT_WEIGHT: "字重",
   FONT_CLEARTYPE: "字体平滑",
   NM_COLOR: "正常颜色",
   HL_COLOR: "按下颜色",
@@ -136,7 +138,7 @@ const EDGE_ORDER = [1, 2, 3, 0]
 
 const documentNumericFields = new Set([
   "KEY_NUM", "TIP_NUM", "LIST_NUM", "OFFSET_NUM", "ANIM_NUM", "BUILD_NUM",
-  "REPEAT_CNT", "FONT_SIZE", "BORDER_SIZE", "STYLE_NUM", "TILE_NUM", "VERSION",
+  "REPEAT_CNT", "FONT_SIZE", "FONT_WEIGHT", "BORDER_SIZE", "STYLE_NUM", "TILE_NUM", "VERSION",
   "CELL_W", "FIRST_GAP", "ICON_NUM", "ICON_INDEX", "EVENT_NUM", "ANCHOR_TYPE",
   "PERSIST", "SCROLL_SIDE", "HINT_TYPE", "ANIM_LEVEL", "HOLDFLAG", "IDLE_TIME",
 ])
@@ -275,9 +277,10 @@ export function populateDocumentInspector(): void {
   if (appState.selectedPath === appState.layoutPath && appState.selectedDocument.get("PANEL", "ANIM_STYLE") === undefined) {
     entries.push({ section: "PANEL", key: "ANIM_STYLE", value: "" })
   }
-  // F14 容器里的工具栏图标由 [SWITCH] 的背景 / 图标样式决定，选中容器时一并编辑。
+  // F14 的原生图标图片与 SWITCH 的通用样式分别编辑。
   const document = appState.selectedDocument
   if ([...toolbarSections].some((name) => /^ICON\d+$/i.test(name) && document.get(name, "KEY")?.trim().toUpperCase() === "F14")) {
+    documentFields.append(toolbarIconSection())
     const existing = document.entries().filter((entry) => entry.section === "SWITCH")
     entries.push(...existing, ...SWITCH_STYLE_KEYS
       .filter((key) => !existing.some((entry) => entry.key === key))

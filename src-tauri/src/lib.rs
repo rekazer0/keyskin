@@ -8,6 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::window::{Effect, EffectsBuilder};
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
+mod adb;
+use adb::{pair_adb_device, share_skin_adb, test_adb_connection};
 mod model_oauth;
 #[cfg(target_os = "macos")]
 mod window_material;
@@ -1727,6 +1729,9 @@ pub fn run() {
         append_client_log,
         read_client_logs,
         share_file,
+        share_skin_adb,
+        test_adb_connection,
+        pair_adb_device,
         take_opened_files,
         quit_app,
         window_material_kind,
@@ -1767,6 +1772,9 @@ pub fn run() {
         append_client_log,
         read_client_logs,
         share_file,
+        share_skin_adb,
+        test_adb_connection,
+        pair_adb_device,
         take_opened_files,
         quit_app,
         window_material_kind,

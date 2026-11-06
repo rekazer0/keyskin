@@ -29,9 +29,7 @@ test("颜色键只有值是色值时才用色块", () => {
 
 test("同名 TYPE 和 ANCHOR_TYPE 按分区解释，未知语义不猜测", () => {
   assert.equal(baiduConfigControl("BAR", "ANCHOR_TYPE").options.length, 2)
-  assert.equal(baiduConfigControl("ICON3", "ANCHOR_TYPE").options.length, 9)
-  assert.equal(baiduConfigControl("ICON3", "ANCHOR_TYPE").layout, "grid3")
-  assert.ok(baiduConfigControl("ICON3", "ANCHOR_TYPE").options.every(([, , icon]) => icon), "九宫格每格一个方位图标")
+  assert.deepEqual(baiduConfigControl("ICON3", "ANCHOR_TYPE"), { kind: "text" }, "图标锚点使用普通输入框，保留原始数值")
   const list = baiduConfigControl("LIST2", "TYPE")
   assert.deepEqual(list.parts.map(({ label }) => label), ["位置", "时机"])
   assert.deepEqual(["0", "1", "2", "3"].map((value) => baiduConfigSumParts(list, value)), [["0", "0"], ["0", "1"], ["2", "0"], ["2", "1"]], "位置 × 时机，编码不变")

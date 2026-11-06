@@ -219,7 +219,7 @@ function ssfCandidateText(archive: SkinArchive, width: number): CandidateText | 
       ...color ? { color } : {},
       ...look.size ? { fontSize: look.size } : {},
       ...look.font ? { fontName: look.font } : {},
-      ...look.weight ? { bold: look.weight >= 700 } : {},
+      ...look.weight ? { weight: look.weight } : {},
     }
     return Object.keys(visual).length ? visual : undefined
   }

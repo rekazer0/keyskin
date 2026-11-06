@@ -50,6 +50,14 @@ function selectedStyleImageSections(source: "BACK_STYLE" | "FORE_STYLE"): { docu
 
 export function updateSelectedImageReference(target: StyleImagePickerTarget | undefined, value: string): boolean {
   if (!appState.archive || !target) return false
+  if (target.selectImage) {
+    if (!isEditing()) return false
+    const source = appState.pickerSlices.find(slice => slice.index === appState.pickerSelectedIndex)?.source
+    const imagePath = appState.pickerPath
+    clearImageSlicePicker()
+    target.selectImage(imagePath, source)
+    return true
+  }
   const { document, path, sections } = target
   if (appState.archive.format === "sxi") {
     if (!isEditing()) return false

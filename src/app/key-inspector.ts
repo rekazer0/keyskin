@@ -436,7 +436,7 @@ export function populateKeyInspector(): void {
       const refs = bdaTextRefs
       const values = info ? refs.map((ref) => bdaStyleValue(info.appearance, ref, property)) : []
       // updateBdaStyle adds a missing field, so every text style can take every property.
-      const available = Boolean(info && (refs.length || bdaTextCreatable))
+      const available = Boolean(info && (refs.length || bdaTextCreatable)) && property !== "FONT_WEIGHT"
       bdaTextPropertyAvailability.set(property, available)
       const common = values.length && values.every((value) => value === values[0]) ? values[0] : ""
       field.disabled = !available

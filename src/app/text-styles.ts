@@ -18,7 +18,7 @@ import { fontFileField, textStyleGroup, textStyleNote, textStyleRows, textStyleT
 import { palmSharedTextCount, palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
 import { createIcon } from "../icons"
 
-export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "NM_COLOR" | "HL_COLOR"
+export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "FONT_WEIGHT" | "NM_COLOR" | "HL_COLOR"
 
 type TextTarget = {
   id: string
@@ -33,8 +33,12 @@ type TextTarget = {
   summary?: string
 }
 
-const LABELS: Record<TextProperty, string> = { FONT_NAME: "字体名称", FONT_SIZE: "字号", NM_COLOR: "颜色", HL_COLOR: "按下颜色" }
+type PalmProperty = Exclude<TextProperty, "FONT_WEIGHT">
+
+const LABELS: Record<TextProperty, string> = { FONT_NAME: "字体名称", FONT_SIZE: "字号", FONT_WEIGHT: "字重", NM_COLOR: "颜色", HL_COLOR: "按下颜色" }
 const KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "NM_COLOR", "HL_COLOR"]
+// 百度 CSS 没有字重，BDS 导出时切成图片（font-bake-export.ts）；BDA / 手心的文字样式不支持。
+const CSS_KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "NM_COLOR", "HL_COLOR"]
 // 真机候选字用用户字体（candidate-style.ts），皮肤只能改字号与颜色。
 const CANDIDATE_PROPERTIES: TextProperty[] = ["FONT_SIZE", "NM_COLOR", "HL_COLOR"]
 const CANDIDATE_NOTE = "真机候选字使用用户字体，皮肤只能改字号与颜色"
@@ -150,8 +154,8 @@ function cssTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } 
   return {
     scope: "layout",
     targets: [
-      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, css: label, summary: label.length ? summary(label) : "无文字层", note: label.length ? note(label) : "本布局的按键没有文字层（字画在图片里）；选中按键修改文字会为它新建文字层" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, css: hint, summary: summary(hint), note: note(hint) }] : [],
+      { id: "label", label: "按键文字", properties: CSS_KEY_PROPERTIES, css: label, summary: label.length ? summary(label) : "无文字层", note: label.length ? note(label) : "本布局的按键没有文字层（字画在图片里）；选中按键修改文字会为它新建文字层" },
+      ...hint.length ? [{ id: "hint", label: "提示文字", properties: CSS_KEY_PROPERTIES, css: hint, summary: summary(hint), note: note(hint) }] : [],
     ],
   }
 }
@@ -225,7 +229,8 @@ function textTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] }
 }
 
 function targetValues(target: TextTarget, property: TextProperty): string[] {
-  if (target.palm) return palmTextValues(target.palm, property)
+  // 手心与 BDA 的目标只列 KEY_PROPERTIES，不会有 FONT_WEIGHT。
+  if (target.palm) return palmTextValues(target.palm, property as PalmProperty)
   if (target.bda) {
     const info = currentBdaAppearance()
     return info ? target.bda.map((ref) => bdaStyleValue(info.appearance, ref, property)) : []
@@ -234,7 +239,7 @@ function targetValues(target: TextTarget, property: TextProperty): string[] {
 }
 
 function writeTarget(target: TextTarget, property: TextProperty, value: string): void {
-  if (target.palm) writePalmText(target.palm, property, value)
+  if (target.palm) writePalmText(target.palm, property as PalmProperty, value)
   else if (target.bda?.length) updateBdaRefs(target.bda, property, value)
   else if (target.bdaCreate) createBdaPanelTextStyle(target.bdaCreate.path, target.bdaCreate.copyFrom, property, value)
   else writeTextRefs(target.css ?? [], property, value)
@@ -251,6 +256,7 @@ function valueRow(target: TextTarget, property: TextProperty, values: string[]):
   const editable = isEditing() && writable(target)
   const options = { key: property, label: LABELS[property], name: `${target.label}${LABELS[property]}`, mixed: new Set(values).size > 1, editable,
     commit: (value: string) => writeTarget(target, property, value) }
+  if (property === "FONT_WEIGHT") return field({ ...options, spec: { kind: "number", value: common, min: 100, step: 100 } })
   return property === "FONT_SIZE"
     ? field({ ...options, spec: { kind: "number", value: common, unit: "px", min: 1, step: 1, range: "fontSize" } })
     : field({ ...options, spec: { kind: "text", value: common, suggestions: skinFontNameOptions() } })

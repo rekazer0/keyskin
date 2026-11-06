@@ -1,3 +1,4 @@
+import { adbShareButton } from "./dom"
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
 import { newButton, openButton, saveButton, mobileShareButton, eventLog, fileOperationDialog, fileOperationProgress, fileOperationPercent, fileOperationDetail, fileOperationTitle, fileOperationIcon, fileOperationResult, fileOperationClose, workspaceImage, assetImage, deviceShell, workspaceImageFigure, sourceEditor, asset, sourceName, assetBackButton } from "./dom"
@@ -110,6 +111,7 @@ function setFileOperationBusy(busy: boolean): void {
   openButton.disabled = busy
   saveButton.disabled = busy || !appState.archive
   mobileShareButton.disabled = busy || !appState.archive
+  adbShareButton.disabled = busy || !appState.archive
   updatePanelToolButtons()
   updateSourceFileActions()
   for (const button of exportButtons) {

@@ -18,6 +18,40 @@ export const saveButton = $("#save") as HTMLButtonElement
 
 export const mobileShareButton = $("#mobile-share") as HTMLButtonElement
 
+export const adbShareButton = $("#adb-share") as HTMLButtonElement
+
+export const settingsAdbNav = $("#settings-adb-nav") as HTMLButtonElement
+
+export const settingsAdbPanel = $("#settings-panel-adb")
+
+export const adbExecutable = $("#adb-executable") as HTMLInputElement
+
+export const adbSerial = $("#adb-serial") as HTMLInputElement
+
+export const adbHost = $("#adb-host") as HTMLInputElement
+
+export const adbPort = $("#adb-port") as HTMLInputElement
+
+export const adbPairPort = $("#adb-pair-port") as HTMLInputElement
+
+export const adbPairCode = $("[data-adb-pair-code]") as HTMLInputElement
+
+export const adbPairButton = $("#adb-pair") as HTMLButtonElement
+
+export const adbPairStatus = $("#adb-pair-status")
+
+export const adbDirectory = $("#adb-directory") as HTMLInputElement
+
+export const adbPackage = $("#adb-package") as HTMLInputElement
+
+export const adbPreviewActivity = $("#adb-preview-activity") as HTMLInputElement
+
+export const adbActivity = $("#adb-activity") as HTMLInputElement
+
+export const adbTestButton = $("#adb-test") as HTMLButtonElement
+
+export const adbTestStatus = $("#adb-test-status")
+
 export const undoButton = $("#undo") as HTMLButtonElement
 
 export const redoButton = $("#redo") as HTMLButtonElement
