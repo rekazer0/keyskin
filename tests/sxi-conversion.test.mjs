@@ -72,24 +72,21 @@ test("an .sxi exports to BDA on the official template", async () => {
   assert.deepEqual(motion.targets, [], "unbound source animations stay unbound")
 })
 
-test("an .sxi keeps the toolbar plist and menu atlas the export folds into skin.json", () => {
+test("a Baidu skin's toolbar art is not folded into the .sxi", () => {
   const files = unzipSync(bdsFixture())
   const toolbar = `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><array><dict><key>Position</key><string>toolbar</string><key>Name</key><string>23</string><key>Titles</key><dict><key>Normal</key><dict><key>Normal</key><string>语音&amp;输入</string><key>Selected</key><string>语音</string></dict></dict><key>Images</key><dict><key>Normal</key><dict><key>Normal</key><string>lg/yuyin</string></dict><key>Theme</key><dict><key>Normal</key><string>lg/yuyin</string></dict></dict></dict></array></plist>`
   files["light/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist"] = strToU8(toolbar)
   files["light/res/logo/lg/yuyin_iphone@3x.png"] = files["light/res/btn.png"]
   files["light/res/logo/pop_menu_icons.til"] = strToU8("[IMG26]\nSOURCE_RECT=0,0,2,2\n")
   files["light/res/logo/pop_menu_icons.png"] = files["light/res/btn.png"]
-  const archive = SkinArchive.open(buildSxiZip(SkinArchive.open(zipSync(files))).bytes, "sxi")
+  const converted = buildSxiZip(SkinArchive.open(zipSync(files)))
+  const archive = SkinArchive.open(converted.bytes, "sxi")
   const plistPath = "light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist"
-  // The .sxi keeps them in skin.json only; the Baidu export writes them out as files again.
+  // 手心画自己的工具栏；百度 iOS 的菜单与图集照搬会画出对不上的图标，所以导出时丢掉。
   const skin = JSON.parse(archive.getText("skin.json")).default
-  assert.equal(skin.menu.flat().find((item) => item.Position === "toolbar").Titles.Normal.Normal, "语音&输入")
-  assert.deepEqual(skin.a_m.find((tile) => tile.id === "IMG26").rect1, [[0, 0], [2, 2]])
+  assert.equal(skin.menu, undefined)
+  assert.equal(skin.a_m, undefined)
+  assert.deepEqual(skin.r_logo, [])
   assert.equal(archive.getBytes(plistPath), undefined)
-  const baidu = sxiToBaiduArchive(archive)
-  const [item] = parseXmlPlist(baidu.getBytes(plistPath))
-  assert.equal(item.Position, "toolbar")
-  assert.equal(item.Titles.Normal.Normal, "语音&输入")
-  assert.equal(item.Images.Normal.Normal, "lg/yuyin")
-  assert.equal(IniDocument.parse(baidu.getText("light/skin/res/logo/pop_menu_icons.til")).get("IMG26", "SOURCE_RECT"), "0,0,2,2")
+  assert.ok(converted.warnings.some((text) => text.includes("工具栏")))
 })

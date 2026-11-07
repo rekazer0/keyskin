@@ -601,8 +601,13 @@ export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings
     throw new Error("BDA 皮肤需要先转换为 BDI/BDS 布局再导出手心皮肤（.sxi）")
   }
 
-  const entries = collectConverterEntries(archive)
   const warnings: string[] = []
+  // 手心的工具栏图标由手心自己绘制（官方手心皮肤没有工具栏图标包，也没有那个 menu 列表）。百度皮肤的工具栏图
+  // 存在 res/logo 的 plist 与 1.0 图里，照搬给手心只会画出百度 iOS 的美术，位置和数量都对不上，所以不转换。
+  const baiduToolbar = archive.format === "bdi" || archive.format === "bds"
+  const sourceEntries = collectConverterEntries(archive)
+  const entries = baiduToolbar ? sourceEntries.filter((entry) => !/(^|\/)res\/logo\//.test(entry.path)) : sourceEntries
+  if (entries.length < sourceEntries.length) warnings.push("手心的工具栏图标使用手心自带的图标，百度皮肤的工具栏图标不随转换导入")
   const context: ExportContext = {
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),
     warnings,
