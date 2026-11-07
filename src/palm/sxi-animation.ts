@@ -96,7 +96,7 @@ const LABELS: Record<string, string> = {
   pos: "画面偏移", psr: "三段播放速率", rr: "空闲时恢复", pm: "路径模式", rm: "中断方式",
   sp: "起始位置", rp: "恢复位置", sd: "启动延迟", iri: "空闲恢复间隔", fs: "跟随速度",
   // a4.
-  rate: "发射速率", clean: "结束后清理", remove: "清理发射物", m_up: "镜像方向",
+  rate: "发射速率", emit_type: "发射方式", clean: "结束后清理", remove: "清理发射物", m_up: "镜像方向",
   aera: "发射区域", use_touch: "跟随触摸", i_p: "粒子图片", paths: "粒子路径",
   life: "寿命范围", rotation: "初始旋转", spin: "旋转速度", scale: "初始缩放",
   s_scale: "缩放速度", alpha: "初始透明度", s_alpha: "透明度速度", velocity: "初速度",
@@ -146,6 +146,7 @@ const SELECTS: Record<string, AnimationOption[]> = {
   rm: [["0", "模式 0"], ["1", "模式 1（默认）"]],
   l: [["0", "下层"], ["1", "上层"]],
   m_up: [["0", "关闭"], ["1", "开启"]],
+  emit_type: [["0", "依次"], ["1", "同时"]],
   mode: [["0", "模式 0"], ["1", "模式 1"], ["2", "模式 2"]],
   r: [0, 1, 2, 3, 4].map((value) => [String(value), `区域 ${value}`]),
 }
@@ -223,7 +224,7 @@ const FAMILY_GROUPS: Record<string, (model: JsonObject) => AnimationGroup[]> = {
     group("位置与层级", [["r", "select"], ["pos", "point"], ["l", "select"]]),
   ],
   a4: () => [
-    group("发射", [["rate", "number"], ["count", "number"], ["aera", "rect"], ["i_p", "list"], ["paths", "list"],
+    group("发射", [["rate", "number"], ["emit_type", "select"], ["count", "number"], ["aera", "rect"], ["i_p", "list"], ["paths", "list"],
       ["use_touch", "bool"], ["m_up", "select"]]),
     group("运动", [["life", "point"], ["velocity", "point"], ["v_direction", "point"],
       ["acceleration", "point"], ["a_direction", "point"]]),

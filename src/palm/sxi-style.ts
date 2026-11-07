@@ -90,7 +90,7 @@ export const ANIMATION_FIELDS: Record<string, Array<[string, string, FieldKind]>
   ],
   af2: [
     ["type", "MODIFY", "number"],
-    ["file", "SOURCE_FILE", "string"],
+    ["file", "ANIM_PATH", "string"],
     ["d", "DURATION", "number"],
     ["delay", "DELAY", "number"],
     ["l", "LEVEL", "number"],
@@ -108,6 +108,7 @@ export const ANIMATION_FIELDS: Record<string, Array<[string, string, FieldKind]>
     ["duration", "DURATION", "number"],
     ["delay", "DELAY", "number"],
     ["count", "TOTAL_NUMBER", "number"],
+    ["emit_type", "EMIT_TYPE", "number"],
     ["i_p", "PARTICLE_IMAGE", "list"],
     ["paths", "PARTICLE_PATH", "list"],
     ["life", "LIFE", "point"],
@@ -243,9 +244,14 @@ export const FLOATER_FIELDS: Array<[string, string, FieldKind]> = [
 const GROUP_METHODS: Record<string, string> = { simultaneous: "0", sequential: "1", random: "2" }
 
 // `buildAnimationWrap` (`ss_2`): exactly one of `a1`..`a14` per wrap.
-export function animationsIni(value: Json): IniWriter {
+export function animationsIni(value: Json, pathSections?: Json): IniWriter {
   const writer = new IniWriter()
-  for (const [index, wrap] of Object.entries(asObject(value) ?? {})) {
+  const animations = Object.entries(asObject(value) ?? {}).filter(([, value]) => {
+    const model = asObject(value)
+    return Boolean(asObject(model?.a3) || Object.keys(ANIMATION_FIELDS).some((key) => asObject(model?.[key])))
+  })
+  if (animations.length || hasPathSections(pathSections)) writer.section("GLOBAL").set("ANIM_NUM", String(animations.length))
+  for (const [index, wrap] of animations) {
     const model = asObject(wrap) ?? {}
     const entries = writer.section(typeof model.id === "string" ? model.id : `ANIM${index}`)
     const group = asObject(model.a3)
@@ -253,7 +259,7 @@ export function animationsIni(value: Json): IniWriter {
       const list = Array.isArray(group.animations) ? group.animations : []
       put(entries, "CATEGORY", "1")
       put(entries, "BUILD_METHOD", GROUP_METHODS[String(group.a_method)] ?? "0")
-      put(entries, "BUILD_NUM", String(new Set(list).size))
+      put(entries, "BUILD_NUM", String(list.length))
       put(entries, "BUILD_LIST", listText(list))
       continue
     }
@@ -262,7 +268,7 @@ export function animationsIni(value: Json): IniWriter {
     if (!kind || !animation) continue
     const base = asObject(animation.b) ?? {}
     putFields(entries, base, BASE_FIELDS)
-    put(entries, "REPEAT_MODE", base.back === true ? "1" : undefined)
+    put(entries, "REPEAT_MODE", base.back === true ? "1" : "0")
     putFields(entries, animation, ANIMATION_FIELDS[kind])
     if (kind === "a11") {
       const rect = rectParts(animation.collision_rect)
@@ -277,7 +283,17 @@ export function animationsIni(value: Json): IniWriter {
       }
     }
   }
+  for (const [name, section] of Object.entries(asObject(pathSections) ?? {})) {
+    const entries = writer.section(name)
+    for (const [key, value] of Object.entries(asObject(section) ?? {})) {
+      if (typeof value === "string") put(entries, key, value)
+    }
+  }
   return writer
+}
+
+function hasPathSections(value: Json): boolean {
+  return Object.keys(asObject(value) ?? {}).length > 0
 }
 
 // `skinInfoJson` (`info`) of the skin, as Info.txt.

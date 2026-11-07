@@ -37,6 +37,11 @@ function cgPointValue(text: string | undefined): PalmJSONValue | undefined {
   return point === undefined ? undefined : [point[0], point[1]]
 }
 
+function particleRange(text: string | undefined): PalmJSONValue | undefined {
+  const scalar = toDouble(text)
+  return scalar === undefined ? cgPointValue(text) : [scalar, scalar]
+}
+
 // CoreGraphics types encode as nested arrays: points as `[x, y]`, rects as
 // `[[x, y], [w, h]]` (origin then size).
 function rectValue(rect: [[number, number], [number, number]] | undefined): PalmJSONValue | undefined {
@@ -55,9 +60,10 @@ function animationBase(entries: PalmIniEntries): PalmAnimationBase {
 
   // `SkinAnimationModel.init(entries:)` falls back to the group category when the
   // BUILD_* trio is present, then to 0.
-  if (category === undefined && entries["BUILD_NUM"] !== undefined
-    && entries["BUILD_LIST"] !== undefined && entries["BUILD_METHOD"] !== undefined) {
-    category = 1
+  if (category === undefined) {
+    if (entries["BUILD_NUM"] !== undefined && entries["BUILD_LIST"] !== undefined && entries["BUILD_METHOD"] !== undefined) category = 1
+    else if (entries["ANIM_PATH"] !== undefined) category = 2
+    else if (entries["PARTICLE_IMAGE"] !== undefined) category = 3
   }
 
   return {
@@ -130,7 +136,7 @@ function geometryAnimation(entries: PalmIniEntries, base: PalmAnimationBase): Pa
 function frameAnimation(entries: PalmIniEntries, base: PalmAnimationBase): PalmJSONValue {
   const model: Record<string, PalmJSONValue> = { b: animationBaseJSON(base) }
   const modify = toInt(entries["MODIFY"])
-  const file = entries["SOURCE_FILE"]
+  const file = entries["ANIM_PATH"] ?? entries["SOURCE_FILE"]
   const duration = toDouble(entries["DURATION"])
   const delay = toDouble(entries["DELAY"])
   const level = animationLevel(entries)
@@ -166,8 +172,7 @@ function combAnimationValid(entries: PalmIniEntries): { method: number; list: nu
   const count = toInt(entries["BUILD_NUM"])
   if (method === undefined || count === undefined || entries["BUILD_LIST"] === undefined) return undefined
   const list = toIntArray(entries["BUILD_LIST"])
-  const unique = new Set(list)
-  if (unique.size !== count) return undefined
+  if (list.length !== count) return undefined
   return { method, list }
 }
 
@@ -181,6 +186,8 @@ function particleAnimation(entries: PalmIniEntries, base: PalmAnimationBase): Pa
     aera: rectValue(toRect(entries["EMIT_REGION"])) ?? [[0, 0], [1, 1]],
     use_touch: toBool(entries["USE_TOUCH"]) ?? false,
   }
+  const emitType = toInt(entries["EMIT_TYPE"])
+  if (emitType !== undefined) model.emit_type = emitType
   if (entries["REMOVE"] === undefined) {
     // `SkinParticleAnimationModel` forces removal when the skin does not say otherwise.
     model.b = { ...(model.b as Record<string, PalmJSONValue>), clear: true }
@@ -190,17 +197,17 @@ function particleAnimation(entries: PalmIniEntries, base: PalmAnimationBase): Pa
   const total = toInt(entries["TOTAL_NUMBER"])
   const particles = entries["PARTICLE_IMAGE"] === undefined ? undefined : toIntArray(entries["PARTICLE_IMAGE"])
   const paths = entries["PARTICLE_PATH"] === undefined ? undefined : toIntArray(entries["PARTICLE_PATH"])
-  const life = cgPointValue(entries["LIFE"])
-  const rotation = cgPointValue(entries["INIT_ROTATE"])
-  const spin = cgPointValue(entries["ROTATE_SPEED"])
-  const scale = cgPointValue(entries["INIT_SCALE"])
-  const scaleSpeed = cgPointValue(entries["SCALE_SPEED"])
-  const alpha = cgPointValue(entries["INIT_ALPHA"])
-  const alphaSpeed = cgPointValue(entries["ALPHA_SPEED"])
-  const velocity = cgPointValue(entries["VELOCITY"])
-  const velocityDirection = cgPointValue(entries["VELOCITY_DIRECTION"])
-  const acceleration = cgPointValue(entries["ACCELERATION"])
-  const accelerationDirection = cgPointValue(entries["ACCELERATION_DIRECTION"])
+  const life = particleRange(entries["LIFE"])
+  const rotation = particleRange(entries["INIT_ROTATE"])
+  const spin = particleRange(entries["ROTATE_SPEED"])
+  const scale = particleRange(entries["INIT_SCALE"])
+  const scaleSpeed = particleRange(entries["SCALE_SPEED"])
+  const alpha = particleRange(entries["INIT_ALPHA"])
+  const alphaSpeed = particleRange(entries["ALPHA_SPEED"])
+  const velocity = particleRange(entries["VELOCITY"])
+  const velocityDirection = particleRange(entries["VELOCITY_DIRECTION"])
+  const acceleration = particleRange(entries["ACCELERATION"])
+  const accelerationDirection = particleRange(entries["ACCELERATION_DIRECTION"])
   if (duration !== undefined) model.duration = duration
   if (delay !== undefined) model.delay = delay
   if (total !== undefined) model.count = total

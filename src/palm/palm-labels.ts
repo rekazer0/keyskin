@@ -108,6 +108,7 @@ const FIELD_LABELS: Record<string, string> = {
   base_pa: "面板动画",
   base_fa: "前景动画",
   base_a: "前景动画",
+  sym_layout: "符号面板布局",
   k: "动作",
   v: "手势",
   // Board parts.

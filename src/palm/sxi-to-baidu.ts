@@ -15,7 +15,7 @@ import { convertSsfToBda } from "../ssf/ssf-to-bda.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 import { parseSkinJson, same } from "./sxi-json.ts"
 import { boardFileName, boardIni, bubbleIni, candidateIni } from "./sxi-layout.ts"
-import { ANIMATION_FIELDS, animationsIni, infoIni, stylesIni, tilesIni } from "./sxi-style.ts"
+import { ANIMATION_FIELDS, FLOATER_FIELDS, animationsIni, infoIni, stylesIni, tilesIni } from "./sxi-style.ts"
 
 type Converted = { bytes: Uint8Array; warnings: string[] }
 
@@ -105,8 +105,9 @@ export function sxiBaiduFiles(skin: JsonObject): Map<string, string> {
       if (hasEntries(style.ss_1) && (own || !same(style.ss_1, shared?.ss_1))) {
         add(`${directory}/default.css`, stylesIni(style.ss_1))
       }
-      if (asObject(style.ss_2) && (own || !same(style.ss_2, shared?.ss_2))) {
-        add(`${directory}/anim.ini`, animationsIni(style.ss_2))
+      if ((asObject(style.ss_2) !== undefined || hasEntries(style.ss_2_paths))
+        && (own || !same(style.ss_2, shared?.ss_2) || !same(style.ss_2_paths, shared?.ss_2_paths))) {
+        add(`${directory}/anim.ini`, animationsIni(style.ss_2, style.ss_2_paths))
       }
       const sharedTiles = asObject(shared?.info)
       for (const [name, tiles] of Object.entries(asObject(style.info) ?? {})) {
@@ -182,32 +183,49 @@ export async function convertSxiToBaidu(archive: SkinArchive, format: "bdi" | "b
   const converted = sxiToBaiduArchive(archive)
   const warnings: string[] = []
   const bytes = await converted.platformBytesAsync(format, warnings)
-  return { bytes, warnings }
+  return { bytes, warnings: [...new Set([...warnings, ...palmMotionWarnings(archive, "baidu")])] }
 }
 
 // Some Palm-only model fields never reach anim.ini. Report them here rather than silently claiming
 // that the intermediate legacy file contained the complete animation model.
-function palmMotionWarnings(archive: SkinArchive): string[] {
+function palmMotionWarnings(archive: SkinArchive, target: "baidu" | "bda" = "bda"): string[] {
   const warnings = new Set<string>()
   const skin = parseSkinJson(archive.getText("skin.json"))
+  const families: Array<keyof typeof ANIMATION_FIELDS | "a3"> = target === "bda"
+    ? ["a1", "a3", "a4", "af2"]
+    : ["a1", "a3", ...Object.keys(ANIMATION_FIELDS) as Array<keyof typeof ANIMATION_FIELDS>]
+  const targetLabel = target === "bda" ? "BDA" : "百度"
   for (const [themeKey] of THEMES_BY_KEY) {
     const struct = asObject(skin[themeKey])
     for (const styleKey of ["s_info", "s_port", "s_land"]) {
       const animations = asObject(asObject(struct?.[styleKey])?.ss_2)
       for (const [id, value] of Object.entries(animations ?? {})) {
         const wrap = asObject(value) ?? {}
-        const known = new Set(["id", "a1", "a3", "a4", "af2"])
-        for (const key of Object.keys(wrap)) if (!known.has(key)) warnings.add(`${themeKey}/${styleKey} 动画 ${id} 的 ${key} 未映射到 BDA`)
-        for (const family of ["a1", "a3", "a4", "af2"]) {
+        const known = new Set(["id", ...families])
+        for (const key of Object.keys(wrap)) if (!known.has(key)) warnings.add(`${themeKey}/${styleKey} 动画 ${id} 的 ${key} 未映射到 ${targetLabel}`)
+        for (const family of families) {
           const model = asObject(wrap[family])
-          const fields = new Set(family === "a3" ? ["method", "a_method", "animations"] : ["b", ...ANIMATION_FIELDS[family].map(([key]) => key)])
+          const fields = new Set(family === "a3"
+            ? ["method", "a_method", "animations"]
+            : ["b", ...ANIMATION_FIELDS[family].map(([key]) => key),
+              ...(family === "a1" ? ["c_delay"] : []),
+              ...(family === "a11" ? ["collision_rect"] : []),
+              ...(family === "a12" ? ["floaters"] : [])])
           for (const key of Object.keys(model ?? {})) {
-            if (!fields.has(key) && !(family === "a1" && key === "c_delay" && model?.[key] === 0)) {
-              warnings.add(`动画 ${id} ${family}.${key} 未映射到 BDA`)
+            if (!fields.has(key) || family === "a1" && key === "c_delay" && model?.[key] !== 0) {
+              warnings.add(`动画 ${id} ${family}.${key} 未映射到 ${targetLabel}`)
             }
           }
           for (const key of Object.keys(asObject(model?.b) ?? {})) {
-            if (!["t", "c", "count", "back", "clear"].includes(key)) warnings.add(`动画 ${id} ${family}.b.${key} 未映射到 BDA`)
+            if (!["t", "c", "count", "back", "clear"].includes(key)) warnings.add(`动画 ${id} ${family}.b.${key} 未映射到 ${targetLabel}`)
+          }
+          if (family === "a12") {
+            const fields = new Set(FLOATER_FIELDS.map(([key]) => key))
+            for (const [index, floater] of (Array.isArray(model?.floaters) ? model.floaters : []).entries()) {
+              for (const key of Object.keys(asObject(floater) ?? {})) {
+                if (!fields.has(key)) warnings.add(`动画 ${id} floaters[${index}].${key} 未映射到 ${targetLabel}`)
+              }
+            }
           }
         }
       }

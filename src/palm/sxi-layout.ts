@@ -187,6 +187,7 @@ export function boardIni(value: Json): IniWriter {
       ["i_c", "CELL_STYLE_INDEX", "number"],
       ["i_l", "LOCK_STYLE_INDEX", "number"],
       ["i_b", "BORDER_STYLE_INDEX", "number"],
+      ["sym_layout", "SYM_LAYOUT", "string"],
       ["l_color", "LINE_COLOR", "string"],
     ])
     if (typeof part.file === "string") put(entries, "LAYOUT_NAME", boardFileName(part.file).replace(/\.ini$/, ""))

@@ -24,17 +24,6 @@ import type { PalmJSONValue } from "./palm-json.ts"
 type Json = PalmJSONValue
 type Ini = Record<string, string>
 
-function unique(values: number[]): number[] {
-  const seen = new Set<number>()
-  const result: number[] = []
-  for (const value of values) {
-    if (seen.has(value)) continue
-    seen.add(value)
-    result.push(value)
-  }
-  return result
-}
-
 // CoreGraphics values encode as nested arrays: points as `[x, y]`, rects as
 // `[[x, y], [w, h]]`.
 function pointJson(value: [number, number] | undefined): Json {
@@ -105,7 +94,7 @@ export function indexKey(sectionName: string, prefix: string): number | undefine
 
 // `SkinBaseModel.init(entries:)`.
 export function baseModel(entries: Ini): Json {
-  const foreStyle = entries["FORE_STYLE"] === undefined ? undefined : unique(toIntArray(entries["FORE_STYLE"]))
+  const foreStyle = entries["FORE_STYLE"] === undefined ? undefined : toIntArray(entries["FORE_STYLE"])
   const offsets = entries["POS_TYPE"] === undefined ? undefined : toIntArray(entries["POS_TYPE"])
   return {
     base_b: toInt(entries["BACK_STYLE"]),
@@ -245,6 +234,7 @@ export function additionModel(entries: Ini): Json {
     i_b: toInt(entries["BORDER_STYLE_INDEX"]),
     file_info: {},
     file: mapped ?? layoutName,
+    sym_layout: entries["SYM_LAYOUT"],
     l_color: entries["LINE_COLOR"],
   }
 }
@@ -304,6 +294,8 @@ export function boardDrawModel(entries: Ini): Json {
     bd: border === undefined ? undefined : { b: border },
   }
   const baseRecord = base as Record<string, Json>
+  // Palm plays panel particles through base_pa, including Baidu's panel ANIM_STYLE.
+  baseRecord.base_pa ??= toInt(entries["ANIM_STYLE"])
   if (baseRecord.base_ba === undefined || baseRecord.base_ba === null) {
     baseRecord.base_ba = toInt(entries["ANIM_STYLE"])
   }
