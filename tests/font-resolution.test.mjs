@@ -24,6 +24,15 @@ const css = [
   '[STYLE4]',
   'SHOW=D',
   'FONT_PATH=symbols.ttf',
+  '[STYLE5]',
+  'SHOW=E',
+  'FONT_SIZE=30',
+  'BORDER_COLOR=9DFFFFFF',
+  'BORDER_SIZE=4',
+  '[STYLE6]',
+  'SHOW=F',
+  'BORDER_COLOR=00b6b6b6',
+  'BORDER_SIZE=2',
   '',
 ].join('\n')
 
@@ -88,6 +97,17 @@ test('BDI supports the iOS-only per-style FONT_PATH', () => {
   assert.match(symbolsFamily ?? '', /^BdiEmbeddedFont\d+$/)
   // symbols.ttf 与 GLOBAL 的 benxu.ttf 不是同一份字体，样式级 FONT_PATH 生效。
   assert.notEqual(symbolsFamily, globalFamily)
+})
+
+test('text shadows come from BORDER_COLOR / BORDER_SIZE, transparent ones are ignored', () => {
+  const resolver = resolverFor(bdsArchive)
+  const shadow = resolver.resolveStyleText('5', false)
+  assert.equal(shadow?.shadowSize, 4)
+  assert.equal(shadow?.shadowColor, 'rgba(255, 255, 255, 0.616)')
+  // 旧皮肤常用 00xxxxxx 的透明边框占位，不能当成阴影。
+  const transparent = resolver.resolveStyleText('6', false)
+  assert.equal(transparent?.shadowSize, 2)
+  assert.equal(transparent?.shadowColor, undefined)
 })
 
 test('BDS candidate words and input code stay on the user font', () => {

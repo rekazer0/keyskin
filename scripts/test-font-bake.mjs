@@ -33,6 +33,26 @@ try {
   assert.ok(progress.seen.includes('正在打包 BDI 皮肤包…'))
   assert.ok(progress.seen.includes('正在把按键文字切成字体图片…'))
   assert.match(progress.css, /BAKED_SHOW=Test/)
+  // 只设了文字阴影（客户端新版不绘制）也要自动切片；透明的 BORDER_* 是旧皮肤占位，不切。
+  const shadows = await page.evaluate(async (bytes) => {
+    const { SkinArchive } = await import('/src/skin.ts')
+    const { bakeExportedFonts } = await import('/src/app/font-bake-export.ts')
+    const bake = async (extra) => {
+      const archive = SkinArchive.open(new Uint8Array(bytes), 'bds')
+      archive.setText('light/skin/res/default.css', `[GLOBAL]\n[STYLE900]\nSHOW=Test\nFONT_SIZE=24\nNM_COLOR=ffffff\n${extra}`)
+      archive.setText('light/skin/port/py_9.ini', '[KEY1]\nFORE_STYLE=900\n')
+      const baked = await bakeExportedFonts(await archive.toBytesAsync('bds'), 'bds')
+      return SkinArchive.open(baked, 'bds').getText('light/skin/res/default.css')
+    }
+    return {
+      opaque: await bake('BORDER_COLOR=FF000000\nBORDER_SIZE=6\n'),
+      transparent: await bake('BORDER_COLOR=00b6b6b6\nBORDER_SIZE=2\n'),
+    }
+  }, [...bdsFixture()])
+  assert.match(shadows.opaque, /BAKED_BORDER_SIZE=6/)
+  assert.match(shadows.opaque, /NM_IMG=keyskin_font,1/)
+  assert.doesNotMatch(shadows.transparent, /NM_IMG=keyskin_font/)
+
   for (const format of ['bdi', 'bds']) {
     const result = await page.evaluate(async ({ bytes, format }) => {
       const { SkinArchive } = await import('/src/skin.ts')

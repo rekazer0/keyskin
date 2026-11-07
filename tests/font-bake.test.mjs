@@ -90,6 +90,18 @@ test('removing the bake restores the original style', () => {
   assert.equal(withoutBakedStyles(css), undefined)
 })
 
+test('text shadow fields are baked into the image and restored from BAKED_*', () => {
+  const shadow = ['[STYLE1]', 'SHOW=AB', 'FONT_SIZE=20', 'BORDER_COLOR=FF000000', 'BORDER_SIZE=6', ''].join('\r\n')
+  const bakedText = withBakedStyles(shadow, [{ id: '1', normal: 1, highlight: 1 }])
+  const baked = IniDocument.parse(bakedText)
+  assert.equal(baked.get('STYLE1', 'BORDER_COLOR'), undefined)
+  assert.equal(baked.get('STYLE1', 'BAKED_BORDER_COLOR'), 'FF000000')
+  assert.equal(baked.get('STYLE1', 'BAKED_BORDER_SIZE'), '6')
+  const restored = IniDocument.parse(withoutBakedStyles(bakedText))
+  assert.equal(restored.get('STYLE1', 'BORDER_COLOR'), 'FF000000')
+  assert.equal(restored.get('STYLE1', 'BORDER_SIZE'), '6')
+})
+
 test('tiles are packed in rows and listed in the .til', () => {
   const { rects, width, height } = packTiles([{ width: 600, height: 40 }, { width: 600, height: 30 }, { width: 100, height: 20 }])
   assert.deepEqual(rects, [[0, 0, 600, 40], [0, 42, 600, 30], [602, 42, 100, 20]])

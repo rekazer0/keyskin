@@ -1,6 +1,6 @@
 // 字体烘焙：百度安卓（13.3 反编译与真机复现）每次初始化键盘都把画笔字体重置为系统字体或 keymap.ttf，
 // [GLOBAL] FONT_PATH 只加载进内存、不作用于按键文字，[STYLE*] FONT_NAME 完全不解析。
-// 字重（FONT_WEIGHT）百度格式里没有，同样只能切片。
+// 字重（FONT_WEIGHT）百度格式里没有、文字阴影（BORDER_*）只有旧版安卓绘制，同样只能切片。
 // 唯一能在真机上显示皮肤字体的办法是把按键上的固定文字（STYLE 的 SHOW）画成图片，样式改用 NM_IMG / HL_IMG。
 // 导出 BDI/BDS 时切片（app/font-bake-export.ts）。原来的文字字段改名为 BAKED_* 留在样式里，
 // 再次导出时据此重新切片，打开皮肤时可据此还原成文字。
@@ -10,7 +10,7 @@ import { type TileRect } from "./tiles.ts"
 /** 烘焙图集的资源名：写在 CSS 同目录的 res 里（`<name>.png` + `<name>.til`）。 */
 export const BAKED_IMAGE = "keyskin_font"
 
-const TEXT_KEYS = ["SHOW", "FONT_SIZE", "FONT_NAME", "FONT_PATH", "FONT_WEIGHT", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR"]
+const TEXT_KEYS = ["SHOW", "FONT_SIZE", "FONT_NAME", "FONT_PATH", "FONT_WEIGHT", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR", "BORDER_COLOR", "BORDER_SIZE"]
 const BAKED_PREFIX = "BAKED_"
 const TILE_GAP = 2
 const ATLAS_WIDTH = 1024
