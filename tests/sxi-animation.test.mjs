@@ -76,7 +76,7 @@ const FAMILY_MODELS = {
   },
   a4: {
     b: { t: 0, c: 3, count: 1, back: false, clear: true },
-    rate: 4, clean: true, remove: false, m_up: 1, aera: [[0, 0], [10, 20]], use_touch: true,
+    rate: 4, emit_type: 1, clean: true, remove: false, m_up: 1, aera: [[0, 0], [10, 20]], use_touch: true,
     duration: 600, delay: 0, count: 12, i_p: [7, 8], paths: [1, 2],
     life: [300, 600], rotation: [0, 90], spin: [10, 20], scale: [0.5, 1], s_scale: [0, 0.2],
     alpha: [180, 255], s_alpha: [-10, 0], velocity: [0, 120], v_direction: [0, 180],

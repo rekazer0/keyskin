@@ -18,6 +18,7 @@
 import { zipSync } from "fflate"
 import type { SkinArchive } from "../skin.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
+import { fitCandidateIcons } from "./palm-export-layout.ts"
 import { boardTypeFromIniFileName } from "./palm-board-types.ts"
 import { NATIVE_LAYOUT_JSON } from "./palm-native-layout.ts"
 import { decodeSkinText, parseIniSections, toBool, toInt, type IniSection } from "./palm-ini.ts"
@@ -46,6 +47,7 @@ import {
 } from "./palm-models.ts"
 import { parseXmlPlist, type PalmPlistValue } from "./palm-plist.ts"
 import { fixTouchRects } from "./palm-touch-rect.ts"
+import { animationsIni } from "./sxi-style.ts"
 import {
   PalmVirtualRoot,
   comparePalmDirectoryPaths,
@@ -300,6 +302,7 @@ function layoutJson(context: ExportContext, paths: string[] | undefined): Json {
     }
   }
   fixTouchRects(maps)
+  fitCandidateIcons(maps, cands)
   return { b: maps, c: cands, h: hints }
 }
 
@@ -309,6 +312,7 @@ function layoutJson(context: ExportContext, paths: string[] | undefined): Json {
 function styleJson(context: ExportContext, res: string[] | undefined): Json {
   const skinStyles: Record<string, Json> = {}
   const animStyles: Record<string, Json> = {}
+  const animationPaths: Record<string, Json> = {}
   let skinTileMap: Record<string, Json> | undefined
 
   for (const section of readResource(context, res, "default.css") ?? []) {
@@ -319,9 +323,33 @@ function styleJson(context: ExportContext, res: string[] | undefined): Json {
   }
 
   for (const section of readResource(context, res, "anim.ini") ?? []) {
-    if (!section.name.startsWith("ANIM") && !section.name.startsWith("BUILD_NUM")) continue
+    if (section.name === "GLOBAL") {
+      const unmapped = Object.keys(section.entries).filter((key) => key !== "ANIM_NUM")
+      if (unmapped.length) context.warnings.push(`[GLOBAL] 的 ${unmapped.join("、")} 无法完整转换为手心皮肤`)
+      continue
+    }
+    if (/^PATH\d+$/.test(section.name)) {
+      animationPaths[section.name] = section.entries
+      continue
+    }
+    if (!/^ANIM\d+$/.test(section.name)) {
+      context.warnings.push(`动画附加段 ${section.name} 在手心皮肤中无法保留`)
+      continue
+    }
     const wrap = buildAnimationWrap(section)
-    if (wrap === undefined) continue
+    if (wrap === undefined) {
+      context.warnings.push(`${section.name} 动画结构无法解析，转手心时已忽略`)
+      continue
+    }
+    const generated = parseIniSections(animationsIni({ [section.name]: wrap }).toString())
+      .find((item) => item.name === section.name)?.entries ?? {}
+    const frame = Number(section.entries["CATEGORY"]) === 2 || section.entries["ANIM_PATH"] !== undefined
+    const unmapped = Object.entries(section.entries).filter(([key, value]) => {
+      const target = key === "SOURCE_FILE" && frame ? "ANIM_PATH" : key
+      return generated[target] === undefined || !(sameIniValue(value, generated[target])
+        || generated.CATEGORY === "3" && sameIniValue(`${value},${value}`, generated[target]))
+    }).map(([key]) => key)
+    if (unmapped.length) context.warnings.push(`${section.name} 的 ${unmapped.join("、")} 无法完整转换为手心皮肤`)
     const index = indexKey(section.name, "ANIM")
     if (index === undefined) continue
     animStyles[String(index)] = wrap
@@ -338,7 +366,25 @@ function styleJson(context: ExportContext, res: string[] | undefined): Json {
     skinTileMap = map
   }
 
-  return { ss_1: skinStyles, ss_2: animStyles, ss_3: [], ss_4: [], ss_5: [], info: skinTileMap }
+  return {
+    ss_1: skinStyles,
+    ss_2: animStyles,
+    ...(Object.keys(animationPaths).length ? { ss_2_paths: animationPaths } : {}),
+    ss_3: [], ss_4: [], ss_5: [], info: skinTileMap,
+  }
+}
+
+function sameIniValue(left: string, right: string): boolean {
+  if (left === right) return true
+  const boolean = (value: string) => /^(?:1|true)$/i.test(value) ? true : /^(?:0|false)$/i.test(value) ? false : undefined
+  const leftBoolean = boolean(left)
+  const rightBoolean = boolean(right)
+  if (leftBoolean !== undefined && rightBoolean !== undefined) return leftBoolean === rightBoolean
+  const numbers = (value: string) => value.split(",").map((part) => part.trim())
+  const leftParts = numbers(left)
+  const rightParts = numbers(right)
+  return leftParts.length === rightParts.length && leftParts.every((part, index) =>
+    part !== "" && rightParts[index] !== "" && Number.isFinite(Number(part)) && Number(part) === Number(rightParts[index]))
 }
 
 /* ------------------------------------------------------------------ toolbar */
@@ -473,6 +519,7 @@ function skinFileJson(context: ExportContext, struct: SkinStruct): Json {
   const landRes = removeUselessPath(struct.landRes)
   const logo = struct.logo.filter((path) => !path.endsWith(".plist"))
   const styles = styleSets(context, struct)
+  const menu = toolbarMenu(context, struct.logo)
   const model: Record<string, Json> = {
     land_layout: layoutJson(context, struct.land),
     port_layout: layoutJson(context, struct.port),
@@ -486,7 +533,7 @@ function skinFileJson(context: ExportContext, struct: SkinStruct): Json {
     dir: "",
     // `menu`/`a_m`/`a_i` are built during `parseINIFiles`, before `removeUselessPath()`
     // drops the `.plist` entries from `r_logo`, so they see the unfiltered list.
-    menu: toolbarMenu(context, struct.logo),
+    menu,
     a_m: menuIcon(context, struct.logo, "pop_menu_icons.til"),
     a_i: menuIcon(context, struct.logo, "pop_input_icons.til"),
   }
