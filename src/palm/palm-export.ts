@@ -17,6 +17,7 @@
 
 import { zipSync } from "fflate"
 import type { SkinArchive } from "../skin.ts"
+import { decodePng, encodePng, resizeImage } from "../ssf/ssf-png.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
 import { fitCandidateIcons } from "./palm-export-layout.ts"
 import { boardTypeFromIniFileName } from "./palm-board-types.ts"
@@ -616,6 +617,20 @@ function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
   return entries
 }
 
+/** 手心的图标按设备分三种后缀，真机皮肤里三张图都是 88×88；百度 iOS 只给 iphone@3x 的 80×80。 */
+const PALM_ICON_SIZE = 88
+
+function normalizeToolbarIcons(entries: ConverterEntry[]): void {
+  for (const entry of entries.filter((item) => !item.directory && /\/res\/logo\/.+_iphone@3x\.png$/.test(item.path))) {
+    const image = entry.bytes ? decodePng(entry.bytes) : undefined
+    if (!image) continue
+    entry.bytes = encodePng(image.width === PALM_ICON_SIZE && image.height === PALM_ICON_SIZE ? image : resizeImage(image, PALM_ICON_SIZE, PALM_ICON_SIZE))
+    for (const suffix of ["_ipad", "_ipad@2x"]) {
+      entries.push({ path: entry.path.replace(/_iphone@3x\.png$/, `${suffix}.png`), directory: false, bytes: entry.bytes })
+    }
+  }
+}
+
 // Folders that survive the deletion passes with no file left inside them still need an
 // explicit zip entry: the real `.sxi` keeps, for example, `light/skin/land/`.
 function emptyDirectories(entries: ConverterEntry[], written: Iterable<string>): string[] {
@@ -648,13 +663,9 @@ export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings
     throw new Error("BDA 皮肤需要先转换为 BDI/BDS 布局再导出手心皮肤（.sxi）")
   }
 
+  const entries = collectConverterEntries(archive)
+  if (archive.format === "bdi" || archive.format === "bds") normalizeToolbarIcons(entries)
   const warnings: string[] = []
-  // 手心的工具栏图标由手心自己绘制（官方手心皮肤没有工具栏图标包，也没有那个 menu 列表）。百度皮肤的工具栏图
-  // 存在 res/logo 的 plist 与 1.0 图里，照搬给手心只会画出百度 iOS 的美术，位置和数量都对不上，所以不转换。
-  const baiduToolbar = archive.format === "bdi" || archive.format === "bds"
-  const sourceEntries = collectConverterEntries(archive)
-  const entries = baiduToolbar ? sourceEntries.filter((entry) => !/(^|\/)res\/logo\//.test(entry.path)) : sourceEntries
-  if (entries.length < sourceEntries.length) warnings.push("手心的工具栏图标使用手心自带的图标，百度皮肤的工具栏图标不随转换导入")
   const context: ExportContext = {
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),
     warnings,

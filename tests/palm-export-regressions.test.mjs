@@ -7,7 +7,7 @@ import { parseSkinJson } from '../src/palm/sxi-json.ts'
 import { PalmBoard } from '../src/palm/palm-board.ts'
 import { animationsIni } from '../src/palm/sxi-style.ts'
 import { IniDocument } from '../src/ini.ts'
-import { encodePng } from '../src/ssf/ssf-png.ts'
+import { decodePng, encodePng } from '../src/ssf/ssf-png.ts'
 import { plist, toolbarMenuItem } from '../src/ios-toolbar.ts'
 
 function convert(files) {
@@ -53,9 +53,13 @@ test('Baidu toolbar preserves its authored region while fitting oversized edge h
     assert.deepEqual(icons[3].rect, { x: 172.5, y: 33, width: 780, height: 58 }, 'F14 retains its authored size and centres in the Palm bar, independent of artwork size')
     assert.deepEqual(skin[theme][`${orientation}_layout`].c.cand1.icon_list.map((icon) => icon.keep), [1, 1, 2, 1])
   }
-  // 百度皮肤的工具栏美术不导入手心：手心用它自己的工具栏图标，位置和数量才和设备一致。
-  assert.equal(archive.getBytes('light/skin/res/logo/1.0/keyboard_iphone@3x.png'), undefined)
-  assert.ok(warnings.some((text) => text.includes('工具栏')))
+  // 百度 iOS 只给 iphone@3x 的 80×80；手心按设备分三种后缀，真机皮肤里三张图都是 88×88。
+  for (const suffix of ['_ipad.png', '_ipad@2x.png', '_iphone@3x.png']) {
+    const bytes = archive.getBytes(`light/skin/res/logo/1.0/keyboard${suffix}`)
+    assert.ok(bytes, `图标补齐了 ${suffix}`)
+    const size = decodePng(bytes)
+    assert.deepEqual([size.width, size.height], [88, 88])
+  }
 })
 
 test('valid anchored icons and layouts without candidate geometry are preserved', () => {
