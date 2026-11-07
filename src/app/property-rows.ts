@@ -56,6 +56,8 @@ type Commit<S extends FieldSpec> = (value: Values[S["kind"]], edit: Edit) => voi
 type FieldOptions<S extends FieldSpec> = {
   key: string
   label: string
+  /** 标签与控件的悬停说明：写清这个属性的来源或不生效的条件。 */
+  hint?: string
   /** 控件的无障碍名称（默认同标签），标签之外还要带上对象时用，如「候选字字号」。 */
   name?: string
   spec: S
@@ -78,10 +80,10 @@ export function bindFieldServices(next: typeof services): void {
 }
 
 /** 标签列；`key` 是原始字段名，供筛选与悬停提示。 */
-export function fieldCaption(row: HTMLElement, key: string, label: string): void {
+export function fieldCaption(row: HTMLElement, key: string, label: string, hint?: string): void {
   row.dataset.documentKey = key
   const span = element("span", "document-field-caption")
-  span.title = label === key ? key : `${label}（${key}）`
+  span.title = hint ?? (label === key ? key : `${label}（${key}）`)
   const name = element("span", "document-field-name")
   name.textContent = label
   span.append(name)
@@ -97,7 +99,7 @@ export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElemen
   // 只有一个输入控件时整行是 label；分段、卡片这类含按钮的行用 div，点标签不会误按第一个按钮。
   const single = ["text", "number", "switch"].includes(spec.kind) || spec.kind === "choice" && control.classList.contains("ui-select")
   const row = element(single ? "label" : "div", "ui-field")
-  fieldCaption(row, options.key, options.label)
+  fieldCaption(row, options.key, options.label, options.hint)
   row.append(control)
   if (spec.kind === "style" || spec.kind === "image") {
     row.classList.add("style-reference-field")
@@ -173,6 +175,8 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
       input.setAttribute("role", "switch")
       input.setAttribute("aria-label", label)
       input.checked = spec.checked
+      // 多目标值不一致：画成开关的中间态，切换一次后统一写回。
+      input.indeterminate = Boolean(state.mixed)
       input.disabled = disabled
       input.addEventListener("change", () => send(input.checked, {}))
       return input
@@ -186,7 +190,7 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
         const values = [...spec.values]
         values[index] = next
         send(values, { index, merge })
-      })))
+      }, index ? "按下" : "正常")))
       return pair
     }
     case "style": {
@@ -422,7 +426,7 @@ function encodeColor(codec: ColorCodec, { rgb, alpha }: Rgba): string {
 
 let openPopover: { close(): void } | undefined
 
-function colorControl(value: string, codec: ColorCodec, label: string, disabled: boolean, mixed: boolean, commit: (value: string, merge: (current: string) => string) => void): HTMLElement {
+function colorControl(value: string, codec: ColorCodec, label: string, disabled: boolean, mixed: boolean, commit: (value: string, merge: (current: string) => string) => void, state?: string): HTMLElement {
   const current = mixed ? undefined : decodeColor(value)
   const root = element("span", "ui-color-field")
   const swatch = element("button", "ui-swatch ui-checker")
@@ -431,7 +435,8 @@ function colorControl(value: string, codec: ColorCodec, label: string, disabled:
   swatch.setAttribute("aria-label", label)
   swatch.setAttribute("aria-haspopup", "dialog")
   swatch.setAttribute("aria-expanded", "false")
-  swatch.title = mixed ? "混合" : value || "未设置"
+  // 正常 | 按下两个色块只有位置区分：悬停提示写清这是哪个状态、当前是什么颜色。
+  swatch.title = `${state ? `${state} · ` : ""}${mixed ? "混合" : value || "未设置"}`
   const fill = element("canvas")
   fill.width = fill.height = 1
   fill.setAttribute("aria-hidden", "true")

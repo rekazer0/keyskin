@@ -32,7 +32,7 @@ import { populateDocumentInspector, populateBdaConfigInspector } from "./documen
 import { populateFontControls } from "./skin-fonts"
 import { renderForeLayerFields } from "./fore-layer-fields"
 import { renderKeyTextColor } from "./text-styles"
-import { populateTextStyleGroup, selectedKeyTextRefs, textRefValues, writeTextRefs, type TextProperty } from "./text-styles"
+import { populateTextStyleGroup, renderKeyTextShadow, selectedKeyTextRefs, textRefValues, writeTextRefs, type TextProperty } from "./text-styles"
 import { canCreateBdaKeyText, createBdaKeyText, renderBdaTextLayerSwitch, selectedBdaTextRefs } from "./bda-key-text"
 import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
@@ -436,7 +436,7 @@ export function populateKeyInspector(): void {
       const refs = bdaTextRefs
       const values = info ? refs.map((ref) => bdaStyleValue(info.appearance, ref, property)) : []
       // updateBdaStyle adds a missing field, so every text style can take every property.
-      const available = Boolean(info && (refs.length || bdaTextCreatable)) && property !== "FONT_WEIGHT"
+      const available = Boolean(info && (refs.length || bdaTextCreatable)) && property !== "FONT_WEIGHT" && property !== "FONT_CLEARTYPE"
       bdaTextPropertyAvailability.set(property, available)
       const common = values.length && values.every((value) => value === values[0]) ? values[0] : ""
       field.disabled = !available
@@ -449,10 +449,23 @@ export function populateKeyInspector(): void {
     hasTextStyle ||= Boolean(styles && keyTextRefs.some((ref) => textStyleSections(styles, ref.foreground).length))
     const common = values.every((value) => value === values[0]) ? values[0] ?? "" : ""
     field.disabled = !hasSelection || !isEditing()
+    if (field.type === "checkbox") {
+      // 字体平滑不写时按开启：勾选状态看生效值，多个文字样式不一致时画中间态。
+      const effective = values.map((value) => value || "1")
+      field.checked = effective.every((value) => value === "1")
+      field.indeterminate = new Set(effective).size > 1
+      continue
+    }
     field.placeholder = !hasSelection ? "" : !common && new Set(values).size > 1 ? "混合" : "未设置"
     field.value = common
   }
   renderKeyTextColor($("#key-text-color"))
+  // BORDER_COLOR / BORDER_SIZE 只属于百度 CSS 的文字样式；BDA、搜狗、手心没有这组字段。
+  const keyTextShadow = $("#key-text-shadow")
+  const cssText = appState.archive?.format === "bdi" || appState.archive?.format === "bds"
+  keyTextShadow.hidden = !cssText
+  if (cssText) renderKeyTextShadow(keyTextShadow)
+  else keyTextShadow.replaceChildren()
   for (const label of textStyleLabels) {
     if (!hasSelection || bdaSelected && !hasTextStyle && !bdaTextCreatable) {
       label.hidden = true
@@ -469,7 +482,8 @@ export function populateKeyInspector(): void {
       continue
     }
     const property = label.querySelector<HTMLInputElement>("[data-style-field]")?.dataset.styleField ?? ""
-    label.hidden = !bdaTextPropertyAvailability.get(property)
+    // BDA 的文字样式只认 styleFields 里登记过的属性；CSS 专属的字体平滑等没有登记，不要漏出来。
+    label.hidden = bdaTextPropertyAvailability.get(property) !== true
   }
   const textNote = $("#key-text-note")
   textNote.title = !hasSelection || hasTextStyle ? ""
@@ -748,11 +762,12 @@ export function updateSelectedKey(field: HTMLInputElement): void {
 export function updateSelectedStyle(field: HTMLInputElement): void {
   const property = field.dataset.styleField ?? ""
   if (field.type === "number" && field.value && !field.checkValidity()) return
+  const value = field.type === "checkbox" ? (field.checked ? "1" : "0") : field.value.trim()
   if (appState.archive?.format === "bda") {
     const refs = selectedBdaTextRefs()
-    if (refs.length) updateBdaRefs(refs, property, field.value)
-    else createBdaKeyText(property, field.value)
+    if (refs.length) updateBdaRefs(refs, property, value)
+    else createBdaKeyText(property, value)
     return
   }
-  writeTextRefs(selectedKeyTextRefs(), property as TextProperty, field.value.trim())
+  writeTextRefs(selectedKeyTextRefs(), property as TextProperty, value)
 }

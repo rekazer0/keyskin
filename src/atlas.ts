@@ -21,6 +21,10 @@ export type TextVisual = {
   clearType?: number
   /** CSS 字重（100–900）：样式的 FONT_WEIGHT，或搜狗 / 手心皮肤的粗细。 */
   weight?: number
+  /** 文字样式下的 BORDER_COLOR 是向下阴影颜色。 */
+  shadowColor?: string
+  /** 文字样式下的 BORDER_SIZE 是向下阴影大小（像素）。 */
+  shadowSize?: number
 }
 
 export type StyleTextVisual = TextVisual & { text: string }
@@ -31,6 +35,7 @@ export type VisualResolver = {
   sourceSize?(styleID: string, highlighted: boolean): { width: number; height: number } | undefined
   resolveResource?(resourceID: string): Promise<Visual | undefined>
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined
+  resolveListText?(foreground: string, highlighted: boolean): TextVisual | undefined
   resolveStyleText?(styleID: string, highlighted: boolean): StyleTextVisual | undefined
   resolveToolbarImages(limit?: number): Promise<Visual[]>
 }
@@ -90,6 +95,30 @@ export function canvasFont(size: number, visual: TextVisual | undefined): string
   return `${visual?.weight ? `${visual.weight} ` : ""}${size}px ${canvasFontFamily(visual?.fontName)}`
 }
 
+/**
+ * 文字样式的向下阴影（BORDER_COLOR / BORDER_SIZE）：参数取自百度安卓 StyleParam
+ * setShadowLayer(size / 5, 0, size, color)。客户端只在 Android 7.1 以下绘制，导出时由
+ * font-bake-export 按同一参数切进图片，所以预览按切片后的样子显示。
+ */
+export function withTextShadow<T>(
+  context: CanvasRenderingContext2D,
+  visual: Pick<TextVisual, "shadowColor" | "shadowSize"> | undefined,
+  draw: () => T,
+): T {
+  if (!visual) return draw()
+  const { shadowColor } = visual
+  const shadowSize = visual.shadowSize ?? 0
+  if (!shadowColor || shadowSize <= 0 || isTransparentColor(shadowColor)) return draw()
+  context.save()
+  context.shadowColor = shadowColor
+  context.shadowBlur = shadowSize / 5
+  context.shadowOffsetX = 0
+  context.shadowOffsetY = shadowSize
+  const result = draw()
+  context.restore()
+  return result
+}
+
 export function drawVisualText(
   context: CanvasRenderingContext2D,
   visual: Pick<Visual, "text">,
@@ -101,7 +130,9 @@ export function drawVisualText(
   context.font = `${destination.height * 0.55}px ${canvasFontFamily(visual.text.fontName)}`
   context.textAlign = "center"
   context.textBaseline = "middle"
-  context.fillText(visual.text.text, destination.x + destination.width / 2, destination.y + destination.height / 2, destination.width * 0.9)
+  withTextShadow(context, visual.text, () =>
+    context.fillText(visual.text!.text, destination.x + destination.width / 2, destination.y + destination.height / 2, destination.width * 0.9),
+  )
   context.restore()
 }
 
@@ -219,6 +250,10 @@ function resolveTextVisual(
       if (result.fontSize === undefined && Number.isFinite(fontSize)) result.fontSize = fontSize
       if (result.fontName === undefined && fontName) result.fontName = fontName
       if (result.clearType === undefined && Number.isFinite(clearType)) result.clearType = clearType
+      const shadowSize = Number(styles.get(section, "BORDER_SIZE"))
+      const shadowColor = parseColor(styles.get(section, "BORDER_COLOR"))
+      if (result.shadowSize === undefined && Number.isFinite(shadowSize) && shadowSize > 0) result.shadowSize = shadowSize
+      if (result.shadowColor === undefined && shadowColor && !isTransparentColor(shadowColor)) result.shadowColor = shadowColor
       if (result.color === undefined && color) result.color = color
       const weight = fontWeight(styles.get(section, "FONT_WEIGHT"))
       if (result.weight === undefined && weight) result.weight = weight
@@ -530,15 +565,29 @@ export class AtlasResolver {
     const tiles = IniDocument.parse(this.archive.getText(`${path}.til`))
     const image = await this.bitmap(`${path}.png`)
     if (!image) return []
-    return [26, 27, 29, 31, 25, 50].flatMap((index) => {
+    const sources = [26, 27, 29, 31, 25, 50].flatMap((index) => {
       const source = numbers(tiles.get(`IMG${index}`, "SOURCE_RECT"))
-      return source ? [{ image, imagePath: `${path}.png`, source }] : []
+      return source ? [source] : []
     }).slice(0, Math.max(0, limit))
+    // ImginiLoader crops each icon before scaling; sampling the atlas directly bleeds adjacent tiles.
+    return Promise.all(sources.map(async ([x, y, width, height]) => ({
+      image: await createImageBitmap(image, x, y, width, height),
+      imagePath: `${path}.png`,
+      source: [0, 0, width, height] as [number, number, number, number],
+    })))
   }
 
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined {
     if (!this.styles) return
     return resolveTextVisual(this.styles, foreground, highlighted, this.embeddedFontFamily)
+  }
+
+  resolveListText(foreground: string, highlighted: boolean): TextVisual | undefined {
+    const visual = this.resolveText(foreground, highlighted)
+    if (!visual || this.archive.format !== "bds") return visual
+    // SubList.n()/u(): LIST has its own user-font paint; fixed NAMES use 1.2× text size.
+    // shortcut: runtime skin-font injection depends on the phone's font settings; preview the default paint.
+    return { ...visual, fontName: undefined, weight: undefined, fontSize: visual.fontSize === undefined ? undefined : visual.fontSize * 1.2 }
   }
 
   resolveStyleText(styleID: string, highlighted: boolean): StyleTextVisual | undefined {

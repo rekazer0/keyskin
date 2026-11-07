@@ -1,4 +1,4 @@
-import { canvasFont, retinaThumbnail, type VisualResolver } from "./atlas.ts"
+import { canvasFont, retinaThumbnail, withTextShadow, type VisualResolver } from "./atlas.ts"
 import { element, iconButton } from "./dom-element.ts"
 import { releaseOnRemove } from "./dom-lifecycle.ts"
 import { createIcon } from "./icons.ts"
@@ -62,7 +62,7 @@ export async function textStyleSample(canvas: HTMLCanvasElement, resolver: Visua
   if (fit < 1) context.font = canvasFont(size * fit, visual)
   context.textAlign = "center"
   context.textBaseline = "middle"
-  context.fillText(sample, canvas.width / 2, canvas.height / 2)
+  withTextShadow(context, visual, () => context.fillText(sample, canvas.width / 2, canvas.height / 2))
   canvas.setAttribute("aria-label", `${highlighted ? "按下" : "正常"}文字示例：${text?.text || "键设 Aa"}`)
 }
 

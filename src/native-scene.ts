@@ -43,6 +43,8 @@ export type SceneKey = {
 export type NativeScene = {
   background: SceneLayer[]
   keys: SceneKey[]
+  /** Native controls can replace just part of a legacy toolbar. */
+  partial?: boolean
   effects?: SceneEffects
 }
 

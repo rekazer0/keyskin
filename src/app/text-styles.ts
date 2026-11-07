@@ -18,7 +18,7 @@ import { fontFileField, textStyleGroup, textStyleNote, textStyleRows, textStyleT
 import { palmSharedTextCount, palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
 import { createIcon } from "../icons"
 
-export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "FONT_WEIGHT" | "NM_COLOR" | "HL_COLOR"
+export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "FONT_WEIGHT" | "FONT_CLEARTYPE" | "NM_COLOR" | "HL_COLOR" | "BORDER_COLOR" | "BORDER_SIZE"
 
 type TextTarget = {
   id: string
@@ -33,12 +33,22 @@ type TextTarget = {
   summary?: string
 }
 
-type PalmProperty = Exclude<TextProperty, "FONT_WEIGHT">
+type PalmProperty = Exclude<TextProperty, "FONT_WEIGHT" | "FONT_CLEARTYPE" | "BORDER_COLOR" | "BORDER_SIZE">
 
-const LABELS: Record<TextProperty, string> = { FONT_NAME: "字体名称", FONT_SIZE: "字号", FONT_WEIGHT: "字重", NM_COLOR: "颜色", HL_COLOR: "按下颜色" }
+const LABELS: Record<TextProperty, string> = { FONT_NAME: "字体名称", FONT_SIZE: "字号", FONT_WEIGHT: "字重", FONT_CLEARTYPE: "字体平滑", NM_COLOR: "颜色", HL_COLOR: "按下颜色", BORDER_COLOR: "阴影颜色", BORDER_SIZE: "阴影大小" }
+/** 悬停说明：写清格式支持与生效条件，标签本身不再带括号说明。 */
+const HINTS: Partial<Record<TextProperty, string>> = {
+  FONT_NAME: "字体名称（FONT_NAME）：这个文字样式使用的字体，可填系统字体名（iOS，如 PingFang SC）或皮肤内字体文件名；Android 真机只认皮肤内字体文件",
+  FONT_WEIGHT: "字重（FONT_WEIGHT）：百度真机不解析，导出 BDS 时按它把按键文字切成图片",
+  FONT_CLEARTYPE: "字体平滑（FONT_CLEARTYPE）：百度 CSS 的平滑字体开关，写回皮肤；编辑器预览始终平滑",
+  BORDER_COLOR: "阴影颜色（BORDER_COLOR）：文字样式下的 BORDER_COLOR 是向下阴影的颜色",
+  BORDER_SIZE: "阴影大小（BORDER_SIZE）：配合阴影颜色使用，0 为无阴影；百度新版安卓不绘制文字阴影，导出时按这个设置切片",
+}
+/** 字重只有 100–900 这九档；有自然范围，按设计规范配滑块 + 数值。 */
+const WEIGHT_RANGE = { min: 100, step: 100 } as const
 const KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "NM_COLOR", "HL_COLOR"]
 // 百度 CSS 没有字重，BDS 导出时切成图片（font-bake-export.ts）；BDA / 手心的文字样式不支持。
-const CSS_KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "NM_COLOR", "HL_COLOR"]
+const CSS_KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR", "BORDER_COLOR", "BORDER_SIZE"]
 // 真机候选字用用户字体（candidate-style.ts），皮肤只能改字号与颜色。
 const CANDIDATE_PROPERTIES: TextProperty[] = ["FONT_SIZE", "NM_COLOR", "HL_COLOR"]
 const CANDIDATE_NOTE = "真机候选字使用用户字体，皮肤只能改字号与颜色"
@@ -251,15 +261,50 @@ function writable(target: TextTarget): boolean {
   return target.bda ? target.bda.length > 0 || Boolean(target.bdaCreate) : (target.css ?? []).some((ref) => ref.owner || ref.foreground)
 }
 
+function commonValue(values: string[]): string {
+  return values.every((value) => value === values[0]) ? values[0] ?? "" : ""
+}
+
 function valueRow(target: TextTarget, property: TextProperty, values: string[]): HTMLElement {
-  const common = values.every((value) => value === values[0]) ? values[0] ?? "" : ""
+  const common = commonValue(values)
+  const mixed = new Set(values).size > 1
   const editable = isEditing() && writable(target)
-  const options = { key: property, label: LABELS[property], name: `${target.label}${LABELS[property]}`, mixed: new Set(values).size > 1, editable,
-    commit: (value: string) => writeTarget(target, property, value) }
-  if (property === "FONT_WEIGHT") return field({ ...options, spec: { kind: "number", value: common, min: 100, step: 100 } })
+  const options = { key: property, label: LABELS[property], hint: HINTS[property], name: `${target.label}${LABELS[property]}`, mixed, editable }
+  if (property === "FONT_WEIGHT") {
+    return field({ ...options, spec: { kind: "number", value: common, ...WEIGHT_RANGE, range: "weight" },
+      commit: (value) => writeTarget(target, property, value) })
+  }
+  if (property === "FONT_CLEARTYPE") {
+    // 缺省值是开启（Android StyleParam.f = 1）：没写这一项的样式按开启显示；重置交回原值，不补写 0。
+    const effective = values.map((value) => value || "1")
+    return field({ ...options, mixed: new Set(effective).size > 1, baseline: common,
+      spec: { kind: "switch", checked: effective.every((value) => value === "1") },
+      commit: (checked) => writeTarget(target, property, checked ? "1" : "0"),
+      reset: (value) => writeTarget(target, property, String(value ?? "")) })
+  }
+  if (property === "BORDER_SIZE") {
+    return field({ ...options, spec: { kind: "number", value: common, unit: "px", min: 0, step: 1, range: "border" },
+      commit: (value) => writeTarget(target, property, value) })
+  }
   return property === "FONT_SIZE"
-    ? field({ ...options, spec: { kind: "number", value: common, unit: "px", min: 1, step: 1, range: "fontSize" } })
-    : field({ ...options, spec: { kind: "text", value: common, suggestions: skinFontNameOptions() } })
+    ? field({ ...options, spec: { kind: "number", value: common, unit: "px", min: 1, step: 1, range: "fontSize" },
+      commit: (value) => writeTarget(target, property, value) })
+    : field({ ...options, spec: { kind: "text", value: common, suggestions: skinFontNameOptions() },
+      commit: (value) => writeTarget(target, property, value) })
+}
+
+/** 单色阴影字段（BORDER_COLOR）：有值时带不透明度，点色块取色。 */
+function borderColorRow(target: TextTarget, values: string[]): HTMLElement {
+  return field({
+    key: "BORDER_COLOR",
+    label: LABELS.BORDER_COLOR,
+    hint: HINTS.BORDER_COLOR,
+    name: `${target.label}阴影颜色`,
+    spec: { kind: "color", value: commonValue(values), codec: "argb" },
+    mixed: new Set(values).size > 1,
+    editable: isEditing() && writable(target),
+    commit: (value) => writeTarget(target, "BORDER_COLOR", value),
+  })
 }
 
 /** 正常 | 按下两个色块一行；改色相时保留原透明度的精确字节。 */
@@ -268,12 +313,22 @@ function colorRow(target: TextTarget, values: Record<"NM_COLOR" | "HL_COLOR", st
   return field({
     key: "NM_COLOR HL_COLOR",
     label: "文字颜色",
+    hint: "左边是正常状态的颜色，右边是按下状态的颜色（NM_COLOR / HL_COLOR）",
     name: `${target.label}颜色`,
     spec: { kind: "colorPair", values: [common(values.NM_COLOR), common(values.HL_COLOR)], codec: "argb" },
     mixed: new Set(values.NM_COLOR).size > 1 || new Set(values.HL_COLOR).size > 1,
     editable: isEditing() && writable(target),
     commit: (next, { index = 0 }) => writeTarget(target, index ? "HL_COLOR" : "NM_COLOR", next[index]),
   })
+}
+
+/** 选中按键的文字阴影两行（BORDER_COLOR / BORDER_SIZE），与整体布局的文字组用同一套控件。 */
+export function renderKeyTextShadow(container: HTMLElement): void {
+  container.replaceChildren()
+  const refs = selectedKeyTextRefs()
+  const target: TextTarget = { id: "key-shadow", label: "按键文字", properties: ["BORDER_COLOR", "BORDER_SIZE"], css: refs }
+  if (!refs.length) return
+  container.append(borderColorRow(target, textRefValues(refs, "BORDER_COLOR")), valueRow(target, "BORDER_SIZE", textRefValues(refs, "BORDER_SIZE")))
 }
 
 /** 按键文字覆盖的「正常 | 按下」一行两个色块：改隐藏的原输入框，写回沿用 updateSelectedStyle。 */
@@ -318,6 +373,10 @@ export function populateTextStyleGroup(): void {
     })
     textStyleTargetSwitch.append(button)
   }
-  textStyleRows.append(...target.properties.filter((property) => !property.endsWith("COLOR")).map((property) => valueRow(target, property, targetValues(target, property))))
-  if (target.properties.includes("NM_COLOR")) textStyleRows.append(colorRow(target, { NM_COLOR: targetValues(target, "NM_COLOR"), HL_COLOR: targetValues(target, "HL_COLOR") }))
+  textStyleRows.append(...target.properties.flatMap((property): HTMLElement[] => {
+    if (property === "HL_COLOR") return []
+    if (property === "NM_COLOR") return [colorRow(target, { NM_COLOR: targetValues(target, "NM_COLOR"), HL_COLOR: targetValues(target, "HL_COLOR") })]
+    if (property === "BORDER_COLOR") return [borderColorRow(target, targetValues(target, "BORDER_COLOR"))]
+    return [valueRow(target, property, targetValues(target, property))]
+  }))
 }
