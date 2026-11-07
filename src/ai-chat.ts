@@ -16,11 +16,20 @@ export type AiChatRunResult = {
 
 type AiChatRun = (prompt: string, hooks: AiChatRunHooks, files: readonly File[]) => Promise<AiChatRunResult>
 
+export type AiChatSnapshot = {
+  messages: ReturnType<DeepChat["getMessages"]>
+  input: string
+  attachments: File[]
+  timelines: { group: number; position: number; node: HTMLElement }[]
+}
+
 export type AiChatController = {
   clear: () => void
   focus: () => void
   setEnabled: (enabled: boolean) => void
   setInput: (text: string) => void
+  snapshot: () => AiChatSnapshot
+  restore: (snapshot: AiChatSnapshot) => void
 }
 
 type StepKind = "thinking" | "reading" | "editing" | "done" | "error"
@@ -665,6 +674,29 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
     },
   }
   return {
+    snapshot: () => {
+      const groups = [...(chat.shadowRoot?.querySelector("#messages")?.children ?? [])].filter((node) => node.id !== "scroll-button" && !node.classList.contains("intro-panel"))
+      return {
+        messages: chat.getMessages().map((message) => ({ ...message })),
+        input: chat.shadowRoot?.querySelector<HTMLElement>("#text-input")?.innerText ?? "",
+        attachments: [...attachments],
+        timelines: [...(chat.shadowRoot?.querySelectorAll<HTMLElement>(".ai-run-holder") ?? [])].map((node) => ({
+          group: groups.indexOf(node.parentElement!), position: [...node.parentElement!.children].indexOf(node), node,
+        })),
+      }
+    },
+    restore: (snapshot) => {
+      for (const message of snapshot.messages) chat.addMessage(message)
+      const groups = [...(chat.shadowRoot?.querySelector("#messages")?.children ?? [])].filter((node) => node.id !== "scroll-button" && !node.classList.contains("intro-panel"))
+      for (const { group, position, node } of snapshot.timelines) groups[group]?.insertBefore(node, groups[group]!.children[position] ?? null)
+      attachments = [...snapshot.attachments]
+      paintAttachments()
+      const input = chat.shadowRoot?.querySelector<HTMLElement>("#text-input")
+      if (input) {
+        input.innerText = snapshot.input
+        input.dispatchEvent(new Event("input", { bubbles: true }))
+      }
+    },
     clear: () => {
       generation += 1
       activeController?.abort()

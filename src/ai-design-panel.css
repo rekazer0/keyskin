@@ -14,6 +14,7 @@
   min-height: 0;
   overflow: hidden;
   container-type: inline-size;
+  position: relative;
   background: var(--material-panel);
 }
 #ai-design-panel[hidden] { display: none; }
@@ -78,31 +79,21 @@
 #ai-design-panel .ai-scope[aria-pressed="true"]:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
 }
 
-#ai-design-panel .ai-new-session {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 8px 0 6px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--secondary);
-  font: 500 var(--font-size-xs) var(--font-ui);
-  cursor: default;
+#ai-design-panel .ai-sessions:not([hidden]) {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: min(85%, var(--inspector-width));
+  padding: var(--space-lg);
+  border-inline-start: 1px solid var(--line);
+  background: var(--floating);
+  box-shadow: var(--shadow-lg);
 }
-#ai-design-panel .ai-new-session svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
-@media (hover: hover) {
-#ai-design-panel .ai-new-session:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-}
+#ai-design-panel .ai-sessions[hidden] { display: none; }
 
 /* —— 结果提示：只报告结果，过程在对话时间线里 —— */
 #ai-design-panel .ai-design-status {

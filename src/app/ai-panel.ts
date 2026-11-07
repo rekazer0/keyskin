@@ -27,6 +27,10 @@ import { sxiPartAddresses } from "../palm/sxi-panel-copy.ts"
 import { palmOrientation, palmTheme, PALM_SHARED_BOARD, sxiBoardAddress, sxiPointer } from "./sxi-documents"
 import { palmTileSlices } from "../palm/palm-style-edit.ts"
 import { tileSlices } from "../tiles.ts"
+import { invoke } from "@tauri-apps/api/core"
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core"
+import { modelThinking, modelThinkingLevel } from "../model-thinking"
+import { syncAiSessionControls } from "./ai-sessions"
 
 /** Files a panel-scoped request may change: a Sogou look keeps every key class in its own folder. */
 function aiPanelFiles(target: SkinArchive): Set<string | undefined> {
@@ -224,18 +228,17 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
   if (!appState.archive) {
     throw new Error("请先打开一个皮肤项目。")
   }
-  if (!isEditing()) {
-    throw new Error("请先切换到编辑模式。")
-  }
   if (!prompt.trim()) throw new Error("请填写设计要求。")
   if (appState.aiDesignBusy) throw new Error("上一轮设计尚未结束，请稍候。")
   if (appState.aiDesignDraft) throw new Error("请先应用或丢弃待确认的草稿，再继续对话。")
-  source.commit()
+  if (isEditing()) source.commit()
   const target = appState.archive
+  const previewOnly = !isEditing()
   const configuration = appState.savedModels[Number(aiDesignModel.value)]
   if (!configuration) {
     throw new Error("请先配置 AI 模型。")
   }
+  if (appState.aiThinkingPending.has(configuration)) throw new Error("请等待模型能力获取完成。")
   if (appState.aiDesignConversationTarget !== target) {
     appState.aiDesignConversationTarget = target
     appState.aiDesignConversation = []
@@ -278,7 +281,7 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
       history: appState.aiDesignConversation,
       variantCount,
       intensity: mode === "refine" || mode === "bold" ? mode : "balanced",
-      thinkingLevel: aiDesignThinking.value as "off" | "low" | "medium" | "high",
+      thinkingLevel: aiDesignThinking.value as ThinkingLevel,
       signal: hooks.signal,
       onStatus: async (kind, text) => {
         if (hooks.signal.aborted || appState.archive !== target) return
@@ -289,6 +292,12 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
     })
     if (hooks.signal.aborted) throw new DOMException("AI 设计已取消", "AbortError")
     if (appState.archive !== target) throw new Error("AI 运行期间已切换皮肤项目，本轮草稿未应用")
+    if (previewOnly) {
+      appState.aiDesignConversation = result.conversation
+      aiDesignPanel.dataset.state = "done"
+      aiDesignStatus.textContent = "交互预览仅支持 AI 分析，不能修改皮肤"
+      return { fallback: result.response || "AI 分析完成。交互预览不能修改皮肤。" }
+    }
     if (!isEditing()) throw new Error("已退出编辑模式，本轮草稿未应用")
     if (result.variants?.length) {
       const variants = result.variants.flatMap<AiDraftVariant>((variant) => {
@@ -551,11 +560,15 @@ export function ensureAiChat(): Promise<AiChatController> {
 export function syncAiDesignControls(): void {
   aiDesignModel.disabled = appState.aiDesignBusy || appState.savedModels.length === 0
   aiDesignThinking.disabled = aiDesignIntensity.disabled = aiDesignModel.disabled
+  const configuration = appState.savedModels[Number(aiDesignModel.value)]
+  const fetchingThinking = Boolean(configuration && appState.aiThinkingPending.has(configuration))
+  aiDesignThinking.disabled ||= fetchingThinking
   aiDesignScope.disabled = appState.aiDesignBusy
   aiNewSession.disabled = appState.aiDesignBusy || Boolean(appState.aiDesignDraft)
+  syncAiSessionControls()
   // A pending draft must be applied or discarded first; deep-chat keeps its stop
   // button during a run, so only the idle submit state is affected.
-  appState.aiChatController?.setEnabled(!appState.aiDesignDraft && appState.savedModels.length > 0)
+  appState.aiChatController?.setEnabled(!appState.aiDesignDraft && !fetchingThinking && appState.savedModels.length > 0)
   aiDraftApply.disabled = appState.aiDesignBusy || !isEditing() || Boolean(appState.aiDesignDraft?.variants?.length)
   aiDraftCancel.disabled = appState.aiDesignBusy
 }
@@ -568,6 +581,36 @@ export function rememberAiDesignModel(): void {
   try {
     if (selected) localStorage.setItem(AI_DESIGN_MODEL_KEY, modelConfigurationKey(selected))
   } catch {}
+  syncAiDesignThinking()
+}
+
+export function syncAiDesignThinking(): void {
+  const configuration = appState.savedModels[Number(aiDesignModel.value)]
+  if (!configuration) return
+  let preferred = "medium"
+  try { preferred = localStorage.getItem("ai-thinking-level") || "medium" } catch {}
+  const { levels } = modelThinking(configuration)
+  aiDesignThinking.replaceChildren(...levels.map((level) => new Option(level, level)))
+  aiDesignThinking.value = modelThinkingLevel(configuration, preferred)
+  aiDesignThinking.title = "模型支持的思考等级"
+  syncAiDesignControls()
+  const key = modelConfigurationKey(configuration)
+  if (!isTauri() || configuration.provider !== "chatgpt-subscription" || configuration.thinkingLevels || appState.aiThinkingRequests.has(key)) return
+  appState.aiThinkingRequests.add(key)
+  appState.aiThinkingPending.add(configuration)
+  aiDesignThinking.title = "正在从官方接口获取模型思考等级"
+  syncAiDesignControls()
+  void invoke<ThinkingLevel[] | null>("fetch_model_thinking_levels", { configuration }).then((supported) => {
+    if (supported?.length) configuration.thinkingLevels = supported
+    if (appState.savedModels[Number(aiDesignModel.value)] !== configuration) return
+    if (supported?.length) syncAiDesignThinking()
+  }).catch((error) => {
+    if (appState.savedModels[Number(aiDesignModel.value)] === configuration) aiDesignThinking.title = `获取思考等级失败：${String(error)}`
+    appState.aiThinkingRequests.delete(key)
+  }).finally(() => {
+    appState.aiThinkingPending.delete(configuration)
+    syncAiDesignControls()
+  })
 }
 
 function syncModelProfiles(all: ModelConfiguration[]): void {
@@ -597,6 +640,8 @@ function syncModelProfiles(all: ModelConfiguration[]): void {
   aiDesignModel.hidden = models.length === 0
   aiDesignThinking.hidden = aiDesignIntensity.hidden = aiDesignModel.hidden
   aiModelSettings.hidden = models.length > 0
+  appState.aiThinkingRequests.clear()
+  syncAiDesignThinking()
   syncAiDesignControls()
 }
 

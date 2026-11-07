@@ -19,15 +19,10 @@ import { AI_DESIGN_DIRECTIONS, SUBAGENT_GUIDE, SUBAGENT_RULES, aiDesignSystemPro
 import { AiSkinImages, base64 } from "./ai-skin-images.ts"
 import { AiSkinWorkspace, type AiSkinDraftChange } from "./ai-skin-workspace.ts"
 import { modelProviderPreset, type ModelProtocol } from "./model-providers.ts"
-import { subscriptionModels } from "./model-settings.ts"
+import { modelThinking, modelThinkingLevel } from "./model-thinking.ts"
+import type { ModelConfiguration } from "./model-settings.ts"
 
-type AiDesignConfiguration = {
-  provider: string
-  protocol: ModelProtocol
-  apiUrl: string
-  model: string
-  apiKey: string
-}
+type AiDesignConfiguration = ModelConfiguration
 
 type AiDesignResult = {
   changes: AiSkinDraftChange[]
@@ -115,7 +110,7 @@ function configuredModel(config: AiDesignConfiguration, thinkingLevel: ThinkingL
   const api = modelApi(config.protocol)
   const id = config.model.trim()
   // Subscription models keep pi-ai's compat flags (adaptive thinking, effort names); the rest is ours.
-  const known = subscriptionModels(config.provider).find((model) => model.id === id)
+  const { known, levels, thinkingLevelMap } = modelThinking(config)
   return {
     ...known,
     id,
@@ -124,8 +119,8 @@ function configuredModel(config: AiDesignConfiguration, thinkingLevel: ThinkingL
     provider: "keyskin",
     // Settings keep the /v1 that model listing needs; the Anthropic SDK adds /v1/messages itself.
     baseUrl: api === "anthropic-messages" ? normalizedUrl(config.apiUrl).replace(/\/v1$/, "") : normalizedUrl(config.apiUrl),
-    // The user picks the effort; "off" sends no reasoning parameters at all.
-    reasoning: thinkingLevel !== "off",
+    reasoning: levels.some((level) => level !== "off"),
+    thinkingLevelMap,
     input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128_000,
@@ -590,7 +585,7 @@ async function runDesignAgent(
   options: AiDesignOptions,
 ): Promise<AiDesignResult> {
   const workspace = new AiSkinWorkspace(project.files)
-  const thinkingLevel = options.thinkingLevel ?? "off"
+  const thinkingLevel = modelThinkingLevel(config, options.thinkingLevel ?? "medium")
   const model = configuredModel(config, thinkingLevel)
   const api = apiStreams(config.protocol)
   const models = createModels()

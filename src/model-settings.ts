@@ -1,4 +1,4 @@
-import type { Api, Model } from "@earendil-works/pi-ai"
+import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai"
 import { ANTHROPIC_MODELS } from "@earendil-works/pi-ai/providers/anthropic.models"
 import { OPENAI_CODEX_MODELS } from "@earendil-works/pi-ai/providers/openai-codex.models"
 import { invoke } from "@tauri-apps/api/core"
@@ -13,6 +13,7 @@ export interface ModelConfiguration {
   apiKey: string
   /** "image" marks the single image-generation model used by AI design. */
   kind?: "image"
+  thinkingLevels?: ModelThinkingLevel[]
 }
 
 interface ModelConfigurationState {
@@ -43,7 +44,7 @@ function presetProvider(id = "openai"): ModelProvider {
 }
 
 /** Models a subscription account can use: pi-ai's catalog without dated snapshots. */
-export function subscriptionModels(provider: string): Model<Api>[] {
+function subscriptionModels(provider: string): Model<Api>[] {
   const catalog = provider === "claude-subscription" ? ANTHROPIC_MODELS : provider === "chatgpt-subscription" ? OPENAI_CODEX_MODELS : {}
   return (Object.values(catalog) as Model<Api>[]).filter((model) => !/-\d{8}$/.test(model.id))
 }
@@ -108,12 +109,6 @@ export function validateModelProviders(providers: ModelProvider[], accounts: Rea
   }
 }
 
-/**
- * Image models a ChatGPT subscription answers with, newest first. Its model listing carries chat
- * models only, so these stand in for it (the ids PI-Desktop verified against the Codex backend).
- */
-const CHATGPT_IMAGE_MODELS = ["gpt-image-2.5", "gpt-image-2"]
-
 /** Keeps the image models of a /models listing, which also carries the service's chat models. */
 export function imageModelIds(models: readonly string[]): string[] {
   return models.filter((model) => /image|dall-e|imagen|seedream|seededit|cogview|flux|wanx|kolors|diffusion/i.test(model))
@@ -168,12 +163,10 @@ export function initializeModelSettings(section: HTMLElement, options: {
   const imageAccountRow = $<HTMLElement>("image-model-account-row")
   const imageAccountText = $<HTMLElement>("image-model-account-text")
   const imageAccountAction = $<HTMLButtonElement>("image-model-account-action")
-  const imageChoiceRow = $<HTMLElement>("image-model-choice-row")
-  const imageChoice = $<HTMLSelectElement>("image-model-choice")
   const imageRefresh = $<HTMLButtonElement>("refresh-image-model-list")
   const imageOptions = $<HTMLDataListElement>("image-model-options")
   const imageStatus = $<HTMLElement>("image-model-status")
-  const imageKeyRows = [imageApiUrl, imageApiKey, imageName].map((input) => input.closest<HTMLElement>(".settings-row")!)
+  const imageKeyRows = [imageApiUrl, imageApiKey].map((input) => input.closest<HTMLElement>(".settings-row")!)
 
   let saved: ModelConfiguration[] = []
   let draft: ModelProvider[] = []
@@ -181,7 +174,7 @@ export function initializeModelSettings(section: HTMLElement, options: {
   let active = -1
   // Models fetched from the open provider's API; offered as choices but not saved.
   let fetched: string[] = []
-  // Image models found in the image subscription's own listing, if it ever carries any.
+  // Image models returned by the selected service.
   let imageFetched: string[] = []
   let loadError = ""
   // Signed-in subscriptions (provider id → email). Signing in and out apply at once, like any account.
@@ -425,7 +418,10 @@ export function initializeModelSettings(section: HTMLElement, options: {
       if (report) setImageStatus("请在桌面应用中连接模型服务", "error")
       return
     }
-    if (imageModelPreset(image.provider)?.subscription && !accounts.has(image.provider)) return
+    if (imageModelPreset(image.provider)?.subscription && !accounts.has(image.provider)) {
+      if (report) setImageStatus("请先登录账号后获取模型列表", "error")
+      return
+    }
     if (report) setImageStatus("正在从 API 获取模型…", "busy")
     imageRefresh.disabled = true
     try {
@@ -433,17 +429,17 @@ export function initializeModelSettings(section: HTMLElement, options: {
       if (imageDraft !== image) return
       imageFetched = models
       renderImage()
-      if (report) setImageStatus(models.length ? `已获取 ${models.length} 个生图模型` : "服务商没有返回生图模型，请手动输入模型名称", models.length ? "success" : "idle")
+      setImageStatus(models.length ? `已获取 ${models.length} 个生图模型` : "官方接口未返回生图模型，请手动输入模型 ID", models.length ? "success" : "idle")
     } catch (error) {
-      // A subscription keeps offering its known image models when its listing fails.
-      if (report) setImageStatus(`获取模型失败：${String(error)}`, "error")
+      if (imageDraft === image) setImageStatus(`获取模型失败：${String(error)}`, "error")
     } finally {
-      imageRefresh.disabled = false
+      if (imageDraft === image) imageRefresh.disabled = false
     }
   }
   imageRefresh.addEventListener("click", () => void fetchImageModels(true))
 
   function renderImage(): void {
+    imageRefresh.disabled = false
     imageProvider.value = imageDraft?.provider ?? ""
     imageFields.hidden = !imageDraft
     imageApiUrl.value = imageDraft?.apiUrl ?? ""
@@ -452,12 +448,8 @@ export function initializeModelSettings(section: HTMLElement, options: {
     // A subscription uses the signed-in account and picks from image models only.
     const subscription = Boolean(imageDraft && imageModelPreset(imageDraft.provider)?.subscription)
     for (const row of imageKeyRows) row.hidden = subscription
-    imageAccountRow.hidden = imageChoiceRow.hidden = !subscription
+    imageAccountRow.hidden = !subscription
     imageOptions.replaceChildren(...imageFetched.map((model) => new Option(model)))
-    if (imageDraft && subscription) {
-      imageChoice.replaceChildren(...[...new Set([imageDraft.model, ...imageFetched, ...CHATGPT_IMAGE_MODELS])].filter(Boolean).map((model) => new Option(model)))
-      imageChoice.value = imageDraft.model
-    }
     renderAccount()
   }
 
@@ -579,10 +571,6 @@ export function initializeModelSettings(section: HTMLElement, options: {
     notify()
     // Signed in for chat already: nothing more to do. Otherwise sign in right here.
     if (next?.subscription) void (accounts.has(next.id) ? fetchImageModels() : login(next.id))
-  })
-  imageChoice.addEventListener("change", () => {
-    if (imageDraft) imageDraft.model = imageChoice.value
-    notify()
   })
   for (const [input, field] of [[imageApiUrl, "apiUrl"], [imageApiKey, "apiKey"], [imageName, "model"]] as const) {
     input.addEventListener("input", () => {
