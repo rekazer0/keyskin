@@ -1,24 +1,26 @@
-// Direct animation editing on a real third-party skin (not committed): FLOWER_BDI, default demo/assets/flower.bdi.
+// Direct animation editing on a generated BDI fixture; no external skin sample is required.
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { bdsFixture } from '../tests/helpers/baidu-fixture.mjs'
+import { SkinArchive } from '../src/skin.ts'
 
-const sample = process.env.FLOWER_BDI ?? fileURLToPath(new URL('../demo/assets/flower.bdi', import.meta.url))
-if (!existsSync(sample)) {
-  console.log(`skip direct animation: 没有样本 ${sample}（设置 FLOWER_BDI 指向 flower.bdi）`)
-  process.exit(0)
-}
-const bytes = await readFile(sample)
+const PATH = 'light/skin/res/anim.ini'
+const archive = SkinArchive.open(bdsFixture())
+archive.setText(PATH, [
+  '[ANIM1]', 'CATEGORY=0', 'TYPE=4', 'DURATION=70', 'FROM=100,100', 'TO=85,85', 'REPEAT_MODE=1', 'INTPOL=1',
+  '[ANIM572]', 'CATEGORY=3', 'TYPE=0', 'PARTICLE_IMAGE=2', 'TOTAL_NUMBER=5', 'BIRTH_RATE=5',
+  'LIFE=1000,1500', 'DURATION=200', 'VELOCITY=30,100', 'VELOCITY_DIRECTION=-120,-60',
+  'EMIT_REGION=20,50,70,40', 'ALPHA_CURVE=255,0', '',
+].join('\n'))
+const bytes = await archive.platformBytesAsync('bdi')
+assert.equal(SkinArchive.open(bytes, 'bdi').getText(PATH), archive.getText(PATH), 'fixture is a generated BDI with the expected animations')
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41869, strictPort: false, hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const errors = []
 page.on('pageerror', error => errors.push(error.message))
-const PATH = 'light/skin/res/anim.ini'
 const fingerprint = () => page.evaluate(async path => {
   const { appState } = await import('/src/app/state.ts')
   return { text: appState.archive.getText(path), undo: appState.undoStack.length, revision: appState.archive.revision }
@@ -43,7 +45,7 @@ const drag = async (name, dx, dy = 0, cancel = false) => {
 }
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-  await page.locator('#browser-open').setInputFiles({ name: 'flower.bdi', mimeType: 'application/octet-stream', buffer: bytes })
+  await page.locator('#browser-open').setInputFiles({ name: 'animation-test.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible()) await close.click()
@@ -124,5 +126,5 @@ try {
   assert.deepEqual(await fingerprint(), beforeFrameCancel)
   assert.equal(await sample(), frameBefore, 'frame image is retained after cancelled duration edit')
   assert.deepEqual(errors, [])
-  console.log('main-project direct animation: real skin artwork, mouse/key gestures, single undo, cancel, duration/curve, particles and save/reopen passed')
+  console.log('main-project direct animation: generated BDI, mouse/key gestures, single undo, cancel, duration/curve, particles and save/reopen passed')
 } finally { await browser.close(); await server.close() }

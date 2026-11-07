@@ -43,6 +43,9 @@ try {
 
   // Backspace only has an image: its first size edit adds a text layer copied from the panel's key text.
   await selectKey('F36')
+  // BDA 的文字样式没有字体平滑 / 阴影字段；旧版百度 CSS 才有。
+  assert.equal(await typography.locator('[data-style-field="FONT_CLEARTYPE"]').isVisible(), false)
+  assert.equal(await page.locator('#key-text-shadow').isHidden(), true)
   assert.deepEqual((await appearanceKey('KEY_F36')).layers.map((ref) => ref.type), ['image'])
   assert.ok(await style('FONT_SIZE').isVisible(), 'text fields are offered for an image-only key')
   await change(style('FONT_SIZE'), '44')

@@ -9,13 +9,15 @@
 - 没用的代码直接删掉；不导出没人用的函数；新代码先找现有 helper 复用。
 - 单个 TS 文件不超过 800 行。
 
-## 提交前
+## 验证
 
 ```bash
-npm run typecheck
-npm test            # 单元测试 + 设计规范检查（任何违规都失败）
-npm run test:e2e    # 端到端（改了交互时必须跑）
-npm run test:ui     # 界面快照比对（改了样式时必须跑，逐条确认变化都是有意的）
+npm run typecheck   # 修改 TypeScript 时运行
+node --test tests/<受影响模块>.test.mjs
+node scripts/test-<受影响流程>.mjs  # 修改交互时运行对应专项 E2E
+npm run test:ui     # 修改样式时运行，逐条确认变化都是有意的
 ```
+
+每次修改按功能模块定向验证，只运行覆盖改动的单测和专项 E2E；不要默认运行 `npm test` 或 `npm run test:e2e`，它们会执行全量测试。只有用户明确要求，或改动横跨多个模块且定向测试无法覆盖集成行为时，才运行全量测试。
 
 规范检查失败时，修改代码去符合规范，不要修改测试来放行。

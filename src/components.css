@@ -316,6 +316,8 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 }
 .ui-switch:checked, :where(.ui-form) :where(input[type="checkbox"][role="switch"]:checked) { background: var(--accent); }
 .ui-switch:checked::after, :where(.ui-form) :where(input[type="checkbox"][role="switch"]:checked)::after { transform: translateX(12px); }
+/* 多目标值不一致：开关停在中间，表示「混合」，切换一次后统一写回。 */
+.ui-switch:indeterminate::after, :where(.ui-form) :where(input[type="checkbox"][role="switch"]:indeterminate)::after { transform: translateX(6px); }
 
 /* —— 滑块 —— */
 .ui-slider, :where(.ui-form) :where(input[type="range"]) { width: 100%; margin: 0; accent-color: var(--accent); }

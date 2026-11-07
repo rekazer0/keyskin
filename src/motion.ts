@@ -1,6 +1,6 @@
 /**
- * 动效辅助（DESIGN.md §6）：时长与曲线从 tokens.css 读取，只动 opacity / transform，交给合成线程。
- * prefers-reduced-motion 下 tokens 把时长归零，这里随之跳过，不再单独判断。
+ * 动效辅助（DESIGN.md §6）：时长与曲线从 tokens.css 读取；原生 progress.value 由 animateProgress 插值。
+ * prefers-reduced-motion 下 tokens 把时长归零，动画随之跳过。
  */
 
 type Duration = "fast" | "base" | "slow"
@@ -14,6 +14,50 @@ function timing(duration: Duration, ease: Ease): KeyframeAnimationOptions | unde
 }
 
 const entering = new WeakMap<Element, Animation>()
+
+type ProgressMotion = { frame: number; target: number; updated: (value: number) => void }
+const progressMotions = new WeakMap<HTMLProgressElement, ProgressMotion>()
+
+/** Progress events often arrive in chunks; keep one token-timed frame loop and retarget it. */
+export function animateProgress(progress: HTMLProgressElement, target: number, updated: (value: number) => void): void {
+  let motion = progressMotions.get(progress)
+  if (!motion) {
+    motion = { frame: 0, target, updated }
+    progressMotions.set(progress, motion)
+  }
+  motion.target = target
+  motion.updated = updated
+  if (target >= progress.max) {
+    if (motion.frame) cancelAnimationFrame(motion.frame)
+    motion.frame = 0
+    progress.value = target
+    updated(target)
+    return
+  }
+  if (motion.frame) return
+
+  const duration = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--duration-base"))
+  if (!(duration > 0)) {
+    progress.value = target
+    updated(target)
+    return
+  }
+
+  let previous = 0
+  const tick = (now: number) => {
+    const elapsed = previous ? Math.min(64, now - previous) : 16
+    previous = now
+    const difference = motion!.target - progress.value
+    const value = Math.abs(difference) < 0.1
+      ? motion!.target
+      : progress.value + difference * (1 - Math.exp(-3 * elapsed / duration))
+    const settled = Math.abs(motion!.target - value) < 0.1
+    progress.value = settled ? motion!.target : value
+    motion!.updated(progress.value)
+    motion!.frame = settled ? 0 : requestAnimationFrame(tick)
+  }
+  motion.frame = requestAnimationFrame(tick)
+}
 
 /** 内容换了一批（换选择对象、换设置页）时淡入；连续触发时只保留最后一次。 */
 export function playEnter(element: Element | null | undefined): void {

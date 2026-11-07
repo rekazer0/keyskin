@@ -25,6 +25,7 @@
             <button id="recent-files" class="ui-list-item" type="button" role="menuitem" aria-label="最近打开"><span class="system-symbol" data-icon="history" aria-hidden="true"></span><span>最近打开</span></button>
             <button id="save" class="ui-list-item" type="button" role="menuitem" disabled aria-label="保存皮肤"><span class="system-symbol" data-icon="hard-drive" aria-hidden="true"></span><span>保存皮肤</span></button>
             <button id="adb-share" class="ui-list-item" type="button" role="menuitem" hidden disabled aria-label="分享到 ADB"><span class="system-symbol" data-icon="plug" aria-hidden="true"></span><span>分享到 ADB</span></button>
+            <button id="mobile-share" class="ui-list-item" type="button" role="menuitem" disabled aria-label="分享皮肤"><span class="system-symbol" data-icon="share" aria-hidden="true"></span><span>分享皮肤</span></button>
             <hr class="ui-menu-separator">
             <button class="ui-list-item" type="button" role="menuitem" data-export-format="bdi" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 iOS 皮肤 (.bdi)</span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-export-format="bds" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 Android 皮肤 (.bds)</span></button>
@@ -36,8 +37,6 @@
             <button id="panel-scale" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span><span>面板复制…</span></button>
             <button id="replace-layout-image" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="image-down" aria-hidden="true"></span><span>替换键盘样式…</span></button>
             <button id="adapt-ios26" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26 透明背景</span></button>
-            <hr class="ui-menu-separator">
-            <button id="mobile-share" class="ui-list-item" type="button" role="menuitem" disabled aria-label="分享皮肤"><span class="system-symbol" data-icon="share" aria-hidden="true"></span><span>分享皮肤</span></button>
             <hr class="ui-menu-separator">
             <button id="undo" class="ui-list-item" type="button" role="menuitem" disabled aria-label="撤销"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span><span>撤销</span></button>
             <button id="redo" class="ui-list-item" type="button" role="menuitem" disabled aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span><span>重做</span></button>
@@ -439,7 +438,7 @@
             <h3>文字<span id="text-style-targets" class="ui-segmented" data-size="sm" role="group" aria-label="文字对象"></span></h3>
             <p id="text-style-note" class="inspector-group-subtitle"></p>
             <div class="inspector-grid">
-              <div id="font-file-field" class="ui-field" title="GLOBAL FONT_PATH：按键前景内嵌字体，会写入每份 CSS；STYLE 级 FONT_PATH 仅 iOS（手册第 163 页）。百度安卓按系统字体绘制按键文字，导出 BDS 时会把按键文字用该字体切成图片"><span>字体</span><span class="font-file-controls"><span class="ui-input ui-select"><select id="font-file-select" aria-label="字体文件"></select></span><button id="font-import" class="ui-icon-button" type="button" title="导入字体文件（.ttf / .otf / .ttc）" aria-label="导入字体文件" data-icon="upload"></button><button id="font-remove" class="ui-icon-button" type="button" title="移除皮肤字体" aria-label="移除皮肤字体" data-icon="trash-2" disabled></button></span></div>
+              <div id="font-file-field" class="ui-field" title="皮肤字体（GLOBAL FONT_PATH）：整份皮肤共用的内嵌字体文件；Android 真机不直接使用，导出 BDS 时用它把按键文字切成图片，iOS 用它作为按键文字的字体"><span>皮肤字体</span><span class="font-file-controls"><span class="ui-input ui-select"><select id="font-file-select" aria-label="皮肤字体文件"></select></span><button id="font-import" class="ui-icon-button" type="button" title="导入字体文件（.ttf / .otf / .ttc）" aria-label="导入字体文件" data-icon="upload"></button><button id="font-remove" class="ui-icon-button" type="button" title="移除皮肤字体" aria-label="移除皮肤字体" data-icon="trash-2" disabled></button></span></div>
               <input id="font-import-input" type="file" accept=".ttf,.otf,.ttc" hidden>
               <div id="text-style-rows" class="inspector-grid"></div>
             </div>
@@ -535,11 +534,13 @@
             </div>
             <div class="appearance-typography-fields">
               <label class="ui-field" data-text-style data-bda-text title="contentText"><span>显示文字</span><input data-style-field="CONTENT_TEXT" aria-label="显示文字" /></label>
-              <label class="ui-field" data-text-style title="FONT_NAME：字体名称，可填皮肤内字体文件名或系统字体名；Android 13.3.16.2 的 CSS 样式不解析此键，内嵌字体优先用全局字体"><span>字体名称</span><input data-style-field="FONT_NAME" aria-label="字体名称" list="skin-font-names" /></label>
+              <label class="ui-field" data-text-style title="字体名称（FONT_NAME）：这个文字样式使用的字体，可填系统字体名（iOS，如 PingFang SC）或皮肤内字体文件名；Android 真机只认皮肤内字体文件"><span>字体名称</span><input data-style-field="FONT_NAME" aria-label="字体名称" list="skin-font-names" /></label>
               <datalist id="skin-font-names"></datalist>
               <label class="ui-field" data-text-style><span>字号</span><input data-style-field="FONT_SIZE" type="number" min="1" step="1" /></label>
               <label class="ui-field" data-text-style title="FONT_WEIGHT：字重 100–900，700 为粗体；百度格式没有字重，导出 BDS 时会把按键文字切成图片"><span>字重</span><input data-style-field="FONT_WEIGHT" type="number" min="100" max="900" step="100" /></label>
+              <label class="ui-field" data-text-style title="字体平滑（FONT_CLEARTYPE）：是否开启平滑字体（0 关闭 / 1 开启），不写时按开启；写回百度 CSS，编辑器预览始终平滑"><span>字体平滑</span><input data-style-field="FONT_CLEARTYPE" type="checkbox" role="switch" aria-label="字体平滑" /></label>
               <div id="key-text-color" class="color-pair-field" data-text-style><input type="hidden" data-style-field="NM_COLOR" /><input type="hidden" data-style-field="HL_COLOR" /></div>
+              <div id="key-text-shadow" class="inspector-grid"></div>
             </div>
           </section>
           <section class="ui-section key-only key-gesture-fields" data-inspector-group-label="手势">
@@ -653,8 +654,13 @@
               <span id="ai-context-preview" class="ai-chip" title="每次请求都会附带当前画布预览图">画布</span>
               <span id="ai-context-key" class="ai-chip" title="当前选中的按键会告诉模型" hidden></span>
             </div>
-            <button id="ai-new-session" class="ai-new-session" type="button" title="清空当前对话，不影响已应用的修改" data-icon="plus">新对话</button>
+            <button id="ai-new-session" class="ui-button" data-variant="quiet" type="button" aria-controls="ai-sessions" aria-expanded="false"><span class="system-symbol" data-icon="message-square" aria-hidden="true"></span>会话</button>
           </header>
+          <section id="ai-sessions" class="ai-sessions" aria-label="会话" hidden>
+            <header class="ui-pane-header"><h2>会话</h2><span class="ui-pane-header-actions"><button id="ai-sessions-close" class="ui-icon-button" type="button" aria-label="关闭会话列表"><span class="system-symbol" data-icon="x" aria-hidden="true"></span></button></span></header>
+            <button id="ai-session-create" class="ui-button" type="button"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span>新建会话</button>
+            <div id="ai-session-list" class="ui-listbox" role="listbox" aria-label="会话列表" data-size="fill"></div>
+          </section>
           <p id="ai-design-status" class="ai-design-status" role="status" aria-live="polite"></p>
           <div class="ai-design-composer">
             <deep-chat id="ai-design-chat" aria-label="AI 设计对话">
@@ -681,7 +687,7 @@
             <footer class="ai-design-toolbar">
               <select id="ai-design-intensity" aria-label="设计力度" title="设计力度：精修只改点名的地方；大胆会重塑整体风格；3 个方向会并行生成三套方案供选择" disabled hidden><option value="refine">精修</option><option value="balanced">均衡</option><option value="bold">大胆</option><option value="variants">3 个方向</option></select>
               <select id="ai-design-model" aria-label="选择对话模型" title="对话模型" disabled hidden><option value="">请先配置模型</option></select>
-              <select id="ai-design-thinking" aria-label="思考强度" title="思考强度：越高越慢，模型不支持时会被忽略或报错" disabled hidden><option value="off">不思考</option><option value="low">思考 · 低</option><option value="medium">思考 · 中</option><option value="high">思考 · 高</option></select>
+              <select id="ai-design-thinking" aria-label="思考强度" title="模型支持的思考等级" disabled hidden><option value="medium" selected>medium</option></select>
               <button class="ai-design-settings" type="button" data-app-dialog="settings">配置模型…</button>
             </footer>
           </div>
@@ -745,7 +751,7 @@
           <progress id="file-operation-progress" aria-labelledby="file-operation-title" aria-describedby="file-operation-detail" max="100" value="0">0%</progress>
         </div>
         <p id="file-operation-result" aria-live="assertive" hidden></p>
-        <footer class="ui-dialog-footer"><button id="file-operation-close" class="ui-button" data-variant="primary" data-size="lg" value="close" disabled>关闭</button></footer>
+        <footer class="ui-dialog-footer"><button id="file-operation-cancel" class="ui-button" data-size="lg" type="button" hidden>取消</button><button id="file-operation-close" class="ui-button" data-variant="primary" data-size="lg" value="close" disabled>关闭</button></footer>
       </form>
     </dialog>
 
@@ -813,11 +819,15 @@
         <header class="ui-dialog-header settings-header"><div><h2 id="settings-title">设置</h2></div></header>
         <div class="settings-layout">
           <nav class="settings-sidebar" role="tablist" aria-label="设置分类">
+            <span class="settings-nav-heading" role="presentation" aria-hidden="true">界面</span>
             <button class="ui-list-item settings-nav-item" type="button" data-settings-page="appearance" role="tab" id="settings-tab-appearance" aria-controls="settings-panel-appearance" aria-selected="true"><span class="system-symbol" data-icon="paintbrush" aria-hidden="true"></span><span>外观</span></button>
             <button class="ui-list-item settings-nav-item" type="button" data-settings-page="canvas" role="tab" id="settings-tab-canvas" aria-controls="settings-panel-canvas" aria-selected="false"><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>预览与画布</span><small data-settings-summary="canvas">画布</small></button>
+            <span class="settings-nav-heading" role="presentation" aria-hidden="true">工作流</span>
             <button class="ui-list-item settings-nav-item" type="button" data-settings-page="source" role="tab" id="settings-tab-source" aria-controls="settings-panel-source" aria-selected="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源代码</span></button>
             <button id="settings-model-nav" class="ui-list-item settings-nav-item" type="button" data-settings-page="model" role="tab" aria-controls="settings-model-section" aria-selected="false" hidden><span class="system-symbol" data-icon="sparkles" aria-hidden="true"></span><span>AI 模型</span><small data-settings-summary="model"></small></button>
+            <span class="settings-nav-heading" role="presentation" aria-hidden="true">设备</span>
             <button id="settings-adb-nav" class="ui-list-item settings-nav-item" type="button" data-settings-page="adb" role="tab" aria-controls="settings-panel-adb" aria-selected="false" hidden><span class="system-symbol" data-icon="plug" aria-hidden="true"></span><span>ADB 预览</span></button>
+            <span class="settings-nav-heading" role="presentation" aria-hidden="true">其他</span>
             <button class="ui-list-item settings-nav-item" type="button" data-settings-page="about" role="tab" id="settings-tab-about" aria-controls="settings-panel-about" aria-selected="false"><span class="system-symbol" data-icon="info" aria-hidden="true"></span><span>关于</span></button>
           </nav>
           <div class="settings-content">
@@ -916,7 +926,6 @@
               <label class="settings-row"><span>服务商</span><span class="ui-input ui-select"><select id="image-model-provider" aria-describedby="image-model-hint"></select></span></label>
               <div id="image-model-fields" hidden>
                 <div id="image-model-account-row" class="settings-row" hidden><span>账号</span><span class="model-account"><small id="image-model-account-text"></small><button id="image-model-account-action" class="ui-button" type="button"></button></span></div>
-                <label id="image-model-choice-row" class="settings-row" hidden><span>模型</span><span class="ui-input ui-select"><select id="image-model-choice"></select></span></label>
                 <label class="settings-row"><span>API 地址</span><input id="image-model-api-url" type="url" autocomplete="url" spellcheck="false"></label>
                 <label class="settings-row"><span>API 密钥</span><span class="ui-input settings-secret"><input id="image-model-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"><button id="toggle-image-model-api-key" class="ui-icon-button" data-size="sm" type="button" title="显示 API 密钥" aria-label="显示 API 密钥"><span class="system-symbol" data-icon="eye" aria-hidden="true"></span></button></span></label>
                 <div class="settings-row"><span>模型</span><span class="model-image-name"><input id="image-model-name" type="text" list="image-model-options" autocomplete="off" spellcheck="false" aria-label="生图模型"><button id="refresh-image-model-list" class="ui-button" type="button" title="从服务商获取生图模型列表"><span class="system-symbol" data-icon="rotate-cw" aria-hidden="true"></span>获取列表</button></span><datalist id="image-model-options"></datalist></div>
@@ -929,15 +938,14 @@
           <section class="settings-page" data-settings-panel="adb" role="tabpanel" id="settings-panel-adb" aria-labelledby="settings-adb-nav" data-platform-hidden hidden>
             <section class="settings-group" aria-labelledby="settings-adb-title">
               <h3 id="settings-adb-title">连接与预览</h3>
-              <p class="settings-group-note">安装 Android Platform Tools，连接设备并允许调试；分享前请先在系统设置中将百度输入法设为当前输入法。分享会启动百度输入法预览页以准备键盘服务，再导出并推送当前皮肤，不会覆盖本机文件。
+              <p class="settings-group-note">安装 Android Platform Tools，连接设备并允许调试；分享前请先在系统设置中将目标输入法设为当前输入法。分享会导出并推送当前皮肤到设备安装启用，不会覆盖本机文件。
               <label class="settings-row"><span>ADB 路径<small>支持 adb / adb.exe 或完整路径</small></span><input id="adb-executable" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="adb"></label>
               <label class="settings-row"><span>设备 IP<small>网络 ADB 填写 IP；USB 连接留空</small></span><input id="adb-host" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <label class="settings-row"><span>连接端口<small>填写设备显示的 ADB 连接端口</small></span><input id="adb-port" class="ui-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <label class="settings-row"><span>设备序列号<small>仅 USB / 已连接设备使用；留空选择唯一设备</small></span><input id="adb-serial" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <label class="settings-row"><span>设备目录<small>留空使用输入法专属目录；保留当前皮肤文件名</small></span><input id="adb-directory" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
-              <label class="settings-row"><span>输入法包名<small>定制版请填写对应包名</small></span><input id="adb-package" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="com.baidu.input"></label>
-              <label class="settings-row"><span>导入 Activity<small>百度皮肤导入入口；留空自动解析</small></span><input id="adb-activity" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
-              <label class="settings-row"><span>预览 Activity<small>导入完成后打开；留空仅使用输入法自带流程</small></span><input id="adb-preview-activity" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
+              <label class="settings-row"><span>输入法包名<small>百度 / 搜狗 / 手心按包名识别；定制版请填写对应包名</small></span><input id="adb-package" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="com.baidu.input"></label>
+              <label class="settings-row"><span>导入 Activity<small>留空按输入法用各自入口（百度 .ImeUpdateActivity、手心 .FTInputSettingsActivity）</small></span><input id="adb-activity" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <div class="settings-row"><span>连接状态<small id="adb-test-status" role="status">尚未测试连接</small></span><button id="adb-test" class="ui-button" type="button">测试连接</button></div>
             </section>
             <section class="settings-group" aria-labelledby="settings-adb-pair-title">

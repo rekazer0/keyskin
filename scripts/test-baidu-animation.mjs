@@ -42,6 +42,16 @@ try {
   // —— 第一部分：BDA animationConfig 的可视化检查器 / 编辑 / 导出 ——
   const bda = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true })
   bda.on("pageerror", (error) => errors.push(`BDA: ${error.message}`))
+  await bda.addInitScript(() => {
+    window.downgradeProgressStates = []
+    new MutationObserver(() => {
+      for (const dialog of document.querySelectorAll('dialog[open]:not([id])')) {
+        if (dialog.dataset.progressRecorded) continue
+        dialog.dataset.progressRecorded = ""
+        window.downgradeProgressStates.push(Boolean(document.querySelector("#file-operation-dialog[open]")))
+      }
+    }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] })
+  })
   await acceptAskDialogs(bda)
   await openSkin(bda, "动效测试.bda", bdaAnimatedSkinBytes())
   await bda.evaluate(async () => {
@@ -90,9 +100,11 @@ try {
   // 导出 Android 旧版皮肤：动效要变成 anim.ini + 样式引用，而不是丢掉。
   const bdsBytes = await bda.evaluate(async () => {
     const { exportArchive } = await import("/src/app/archive-io.ts")
+    window.downgradeProgressStates = []
     const result = await exportArchive("bds")
     return Array.from(result.bytes)
   })
+  assert.deepEqual(await bda.evaluate(() => window.downgradeProgressStates), [false], "downgrade confirmation appears before the export progress dialog")
   const bdsFiles = unzipSync(new Uint8Array(bdsBytes))
   assert.ok("light/port/res/anim.ini" in bdsFiles, "导出的 BDS 缺少 anim.ini")
   const animIni = new TextDecoder().decode(bdsFiles["light/port/res/anim.ini"])

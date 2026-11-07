@@ -16,6 +16,26 @@ try {
   const close = page.locator("#file-operation-close")
   if (await dialog.isVisible()) await close.click()
 
+  const progressSamples = await page.evaluate(async () => {
+    const progress = document.querySelector("#file-operation-progress")
+    progress.value = 0
+    const { updateFileOperationProgress } = await import("/src/app/file-operations.ts")
+    updateFileOperationProgress(80, "测试进度")
+    const samples = []
+    for (let index = 0; index < 5; index += 1) {
+      await new Promise(requestAnimationFrame)
+      samples.push(progress.value)
+    }
+    return samples
+  })
+  assert.ok(progressSamples[0] > 0 && progressSamples[0] < 100, "progress animates between reported values")
+  assert.ok(progressSamples.every((value, index) => index === 0 || value >= progressSamples[index - 1]), "progress moves monotonically")
+  await page.evaluate(async () => {
+    const { updateFileOperationProgress } = await import("/src/app/file-operations.ts")
+    updateFileOperationProgress(100, "测试完成")
+  })
+  await page.waitForFunction(() => document.querySelector("#file-operation-progress").value === 100)
+
   // Keep the real archive writer; control when the browser confirms the write.
   await page.evaluate(() => {
     window.showSaveFilePicker = async () => ({
@@ -33,6 +53,7 @@ try {
   })
   await page.waitForFunction(() => typeof window.finishWrite === "function")
   assert.equal(await dialog.isVisible(), true, "show progress until writable.close resolves")
+  await page.waitForFunction(() => document.querySelector("#file-operation-progress").value === 90)
   assert.equal(await page.locator("#file-operation-progress").evaluate((meter) => meter.value), 90)
   assert.equal(await page.locator("#file-operation-detail").textContent(), "正在写入文件…")
   assert.ok(await page.evaluate(() => window.writtenSize > 0))
