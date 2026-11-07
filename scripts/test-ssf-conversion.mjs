@@ -58,7 +58,7 @@ const snapshot = async (name) => {
         return [{ image, source: [0, 0, image.width, image.height] }]
       }
       // points: iOS draws @3x toolbar art at its point size; the canvas measures it on an iPhone 17 Pro Max (440 × 956pt).
-      const compose = async (middle, points = 1) => {
+      const compose = async (middle, points = 1, android = false) => {
         const nativeCanvas = document.createElement("canvas")
         nativeCanvas.width = canvas.width
         nativeCanvas.height = canvas.height
@@ -76,7 +76,9 @@ const snapshot = async (name) => {
           const slot = { x: side + index * middleWidth, y: 0, width: middleWidth, height: toolbarPreview.panelHeight }
           const [, , width, height] = visual.source
           const scale = Math.min(points, slot.width / width, slot.height / height)
-          drawVisual(nativeContext, visual, { x: slot.x + (slot.width - width * scale) / 2, y: slot.y + (slot.height - height * scale) / 2, width: width * scale, height: height * scale }, true)
+          const w = android ? Math.trunc(width * scale) : width * scale
+          const h = android ? Math.trunc(height * scale) : height * scale
+          drawVisual(nativeContext, visual, { x: slot.x + (slot.width - w) / 2, y: slot.y + (slot.height - h) / 2, width: w, height: h }, true)
         }
         for (const key of [icons[0], icons.at(-1)]) {
           const visual = await toolbarPreview.resolveVisual(key.foreStyle, false)
@@ -92,7 +94,7 @@ const snapshot = async (name) => {
       const { orientation } = await import('/src/app/dom.ts')
       native.bdi = await compose([...fixed, ...cursor].slice(0, 4), toolbarPreview.panelWidth / 3 / (orientation.value === 'port' ? 440 : 956))
       // Android pop_menu_icons: 表情 26, 输入方式 27, 语音 29, 搜索 31, 编辑 25, 剪贴板 50 (灵犀 has no Android function).
-      native.bds = await compose([...fixed.slice(0, 4), ...cursor, ...await menuArt('ime_function_clipboard')])
+      native.bds = await compose([...fixed.slice(0, 4), ...cursor, ...await menuArt('ime_function_clipboard')], 0.82, true)
     }
     return {
       panel: [preview.panelWidth, preview.panelHeight],

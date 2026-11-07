@@ -320,6 +320,37 @@ test('ssf → BDS: symbol column and key sounds', async () => {
   assert.equal(css.get('GLOBAL', 'STYLE_NUM'), String(css.sections().filter((name) => /^STYLE\d+$/.test(name)).length))
 })
 
+test('ssf -> BDS: all keyboard layouts keep their template gesture actions', async () => {
+  const { archive } = convertSsfToBaidu(await SsfPackage.open(ssfFixture()), bdsTemplate)
+  const expected = {
+    py_26: ['q', { UP: '1', LEFT: '1', RIGHT: '1' }],
+    en_26: ['a', { UP: '!', LEFT: '!', RIGHT: '!' }],
+    en_26s: ['i', { UP: '8' }],
+    py_9: ['q', { UP: '7', DOWN: 's', LEFT: 'p', RIGHT: 'r' }],
+    en_9: ['q', { UP: '7', DOWN: 's', LEFT: 'p', RIGHT: 'r' }],
+    bh: ['B6', { UP: '6' }],
+    hw_full: ['F1', { UP: 'F7', HOLD: 'F7' }],
+  }
+  for (const [layoutName, [action, fields]] of Object.entries(expected)) {
+    const layout = IniDocument.parse(archive.getText(`light/skin/port/${layoutName}.ini`))
+    const section = layout.sections().find((name) => layout.get(name, 'CENTER') === action)
+    assert.ok(section, `${layoutName}:${action}`)
+    for (const [field, value] of Object.entries(fields)) assert.equal(layout.get(section, field), value, `${layoutName}:${action}:${field}`)
+  }
+  const pinyin = IniDocument.parse(archive.getText('light/skin/port/py_26.ini'))
+  const h = pinyin.sections().find((section) => pinyin.get(section, 'CENTER') === 'h')
+  assert.deepEqual(Object.fromEntries(['UP', 'LEFT', 'RIGHT'].map((field) => [field, pinyin.get(h, field)])), { UP: '&', LEFT: '&', RIGHT: '&' })
+})
+
+test('ssf -> BDS: nine-key swipe actions are preserved in the exported layout', async () => {
+  const { archive } = convertSsfToBaidu(await SsfPackage.open(ssfFixture()), bdsTemplate)
+  const layout = IniDocument.parse(archive.getText('light/skin/port/py_9.ini'))
+  const key = layout.sections().find((section) => layout.get(section, 'CENTER') === 'k')
+  assert.deepEqual(Object.fromEntries(['CENTER', 'UP', 'LEFT', 'RIGHT', 'DOWN', 'SHOW'].map((field) => [field, layout.get(key, field)])), {
+    CENTER: 'k', UP: '5', LEFT: 'j', RIGHT: 'l', DOWN: undefined, SHOW: '5',
+  })
+})
+
 test('BDS → ssf keeps per-key sound overrides as Sogou key-class sounds', async () => {
   const files = unzipSync(bdsTemplate.toBytes())
   const gen = IniDocument.parse(strFromU8(files['port/gen.ini']))
@@ -352,7 +383,17 @@ test('ssf → BDS: a one-look skin becomes a single-theme package', async () => 
   assert.doesNotMatch(archive.getText('Info.txt'), /SupportDarkMode/)
   assert.ok(Object.keys(unzipSync(archive.toBytes())).includes('port/py_26.ini'))
 })
-
+test('ssf -> BDI: nine-key swipe actions survive platform packaging', async () => {
+  const { bytes } = await convertSsfBytes(ssfFixture(), 'bdi')
+  const archive = SkinArchive.open(bytes, 'bdi')
+  const layoutPath = archive.names().find((name) => /(?:^|\/)py_9\.ini$/.test(name))
+  assert.ok(layoutPath, archive.names().filter((name) => /py_9/.test(name)).join(', '))
+  const layout = IniDocument.parse(archive.getText(layoutPath))
+  const key = layout.sections().find((section) => layout.get(section, 'CENTER') === 'k')
+  assert.equal(layout.get(key, 'UP'), '5')
+  assert.equal(layout.get(key, 'LEFT'), 'j')
+  assert.equal(layout.get(key, 'RIGHT'), 'l')
+})
 test('ssf → BDS: missing images are reported, not fatal', async () => {
   const files = unzipSync(ssfFixture())
   delete files['1080/status1/26keyq.png']

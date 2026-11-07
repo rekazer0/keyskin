@@ -9,6 +9,7 @@ import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
 import { SsfBaiduMotion } from "./ssf-anim-to-baidu.ts"
 import { cached, fingerprint } from "./ssf-cache.ts"
+import { ssfKeyActions } from "./ssf-keymap.ts"
 import { SsfLook, type LookColors, type LookImage, type LookPair, type LookText } from "./ssf-look.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
 import { copySsfSkeleton, ssfSkeletonScale } from "./ssf-skeleton.ts"
@@ -213,6 +214,9 @@ class ThemeConverter {
     for (const section of layout.sections().filter((name) => /^KEY\d+$/.test(name))) {
       const action = layout.get(section, "CENTER")?.trim()
       if (!action) continue
+      for (const [field, value] of Object.entries(ssfKeyActions(layoutName, action, layout.get(section, "SSF_SECTION")))) {
+        if (layout.get(section, field) === undefined) layout.set(section, field, value)
+      }
       const [, , width, height] = numbers(layout.get(section, "VIEW_RECT"))
       const look = this.look.key(layoutName, action, landscape, width > 0 && height > 0 ? [width, height] : undefined, layout.get(section, "SSF_SECTION"), layout.get(section, "SSF_BG"))
       if (look.back) layout.set(section, "BACK_STYLE", this.resources.imageStyle(look.back))

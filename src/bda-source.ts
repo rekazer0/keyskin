@@ -232,7 +232,7 @@ export function sameJson(left: unknown, right: unknown): boolean {
     key === rightKeys[index] && sameJson(leftObject[key], rightObject[key]))
 }
 
-type PanelPatchKind = "style" | "styleList" | "message" | "stringMap" | "boolean" | "number" | "color"
+type PanelPatchKind = "style" | "styleList" | "offset" | "offsetList" | "message" | "stringMap" | "boolean" | "number" | "color"
 
 type PanelPatchField = { field: number; kind: PanelPatchKind; schema?: PanelPatchSchema }
 
@@ -241,12 +241,15 @@ type PanelPatchSchema = Record<string, PanelPatchField>
 const keyPatchSchema: PanelPatchSchema = {
   backStyle: { field: 1, kind: "style" },
   foreStyles: { field: 2, kind: "styleList" },
+  foreStyleOffsets: { field: 3, kind: "offsetList" },
   backStyleState: { field: 4, kind: "style" },
 }
 
 const hintPatchSchema: PanelPatchSchema = {
+  offset: { field: 1, kind: "offset" },
   backStyle: { field: 2, kind: "style" },
   barStyle: { field: 3, kind: "style" },
+  barOffset: { field: 4, kind: "offset" },
   foreStyle: { field: 5, kind: "style" },
   cellStyle: { field: 6, kind: "style" },
 }
@@ -256,6 +259,7 @@ const listPatchSchema: PanelPatchSchema = {
   cellBackStyle: { field: 2, kind: "style" },
   cellForeStyle: { field: 3, kind: "style" },
   foreStyles: { field: 4, kind: "styleList" },
+  foreStyleOffsets: { field: 5, kind: "offsetList" },
 }
 
 const inputPatchSchema: PanelPatchSchema = {
@@ -320,6 +324,23 @@ function patchStyleRef(bytes: Uint8Array, value: unknown): Uint8Array {
   return replaceField(replaceField(bytes, 1, 0, encodeVarint(type)), 2, 0, encodeVarint(ref.key))
 }
 
+/** `BdaScaledOffset` (`float` x = 1, y = 2), patched in place or from an empty message. */
+function patchScaledOffset(bytes: Uint8Array, value: unknown): Uint8Array {
+  const offset = jsonObject(value)
+  if (typeof offset?.x !== "number" || typeof offset.y !== "number") throw new Error("BDA 偏移无效")
+  return replaceFloat(replaceFloat(bytes, 1, offset.x), 2, offset.y)
+}
+
+function replaceFloat(bytes: Uint8Array, fieldNumber: number, value: number): Uint8Array {
+  const payload = new Uint8Array(4)
+  new DataView(payload.buffer).setFloat32(0, value, true)
+  const field = rawFields(bytes).find((item) => item.number === fieldNumber)
+  const replacement = encodedField(fieldNumber, 5, payload)
+  return field
+    ? join([bytes.slice(0, field.start), replacement, bytes.slice(field.end)])
+    : join([bytes, replacement])
+}
+
 function replaceRepeatedMessage(bytes: Uint8Array, fieldNumber: number, index: number, payload: Uint8Array): Uint8Array {
   const field = rawFields(bytes).filter((item) => item.number === fieldNumber)[index]
   if (!field) throw new Error(`BDA 重复字段不存在：${fieldNumber}[${index}]`)
@@ -340,32 +361,43 @@ function appendRepeatedMessage(bytes: Uint8Array, fieldNumber: number, payload: 
   return join([bytes.slice(0, at), encodedField(fieldNumber, 2, payload), bytes.slice(at)])
 }
 
+/** Adds a new map entry (`{ key, value }`) alongside the existing ones of `fieldNumber`. */
+function appendStringMapEntry(bytes: Uint8Array, fieldNumber: number, key: string, value: Uint8Array): Uint8Array {
+  return appendRepeatedMessage(bytes, fieldNumber, join([
+    encodedField(1, 2, new TextEncoder().encode(key)),
+    encodedField(2, 2, value),
+  ]))
+}
+
 function patchPanelMessage(bytes: Uint8Array, desired: JsonObject, current: JsonObject, schema: PanelPatchSchema): Uint8Array {
   let output = bytes
   for (const [property, spec] of Object.entries(schema)) {
     const wanted = desired[property]
     const old = current[property]
     if (sameJson(wanted, old)) continue
-    if (wanted === undefined && spec.kind !== "styleList") throw new Error(`暂不支持删除 BDA 面板字段：${property}`)
-    if (spec.kind === "style") {
+    if (wanted === undefined && spec.kind !== "styleList" && spec.kind !== "offsetList") throw new Error(`暂不支持删除 BDA 面板字段：${property}`)
+    if (spec.kind === "style" || spec.kind === "offset") {
       const original = rawFields(output).find((field) => field.number === spec.field)?.bytes ?? new Uint8Array()
-      output = replaceField(output, spec.field, 2, patchStyleRef(original, wanted))
+      output = replaceField(output, spec.field, 2, spec.kind === "style" ? patchStyleRef(original, wanted) : patchScaledOffset(original, wanted))
       continue
     }
-    if (spec.kind === "styleList") {
+    if (spec.kind === "styleList" || spec.kind === "offsetList") {
       // The decoded source leaves an empty list out.
       const wantedList = wanted ?? []
       const oldList = old ?? []
-      if (!Array.isArray(wantedList) || !Array.isArray(oldList)) throw new Error(`BDA 样式引用列表无效：${property}`)
+      if (!Array.isArray(wantedList) || !Array.isArray(oldList)) {
+        throw new Error(spec.kind === "offsetList" ? `BDA 偏移列表无效：${property}` : `BDA 样式引用列表无效：${property}`)
+      }
+      const encode = spec.kind === "offsetList" ? patchScaledOffset : patchStyleRef
       for (let index = oldList.length - 1; index >= wantedList.length; index--) output = removeRepeatedMessage(output, spec.field, index)
       wantedList.forEach((value, index) => {
         if (index >= oldList.length) {
-          output = appendRepeatedMessage(output, spec.field, patchStyleRef(new Uint8Array(), value))
+          output = appendRepeatedMessage(output, spec.field, encode(new Uint8Array(), value))
           return
         }
         if (sameJson(value, oldList[index])) return
         const original = rawFields(output).filter((field) => field.number === spec.field)[index]?.bytes ?? new Uint8Array()
-        output = replaceRepeatedMessage(output, spec.field, index, patchStyleRef(original, value))
+        output = replaceRepeatedMessage(output, spec.field, index, encode(original, value))
       })
       continue
     }
@@ -385,10 +417,19 @@ function patchPanelMessage(bytes: Uint8Array, desired: JsonObject, current: Json
         const oldValue = oldMap[key]
         if (sameJson(wantedValue, oldValue)) continue
         const wantedObject = jsonObject(wantedValue)
+        if (!wantedObject) throw new Error(`BDA 面板项无效：${key}`)
+        // A new entry starts from an empty message and patches its fields in.
+        if (oldValue === undefined) {
+          output = appendStringMapEntry(output, spec.field, key, patchPanelMessage(new Uint8Array(), wantedObject, {}, spec.schema))
+          continue
+        }
         const oldObject = jsonObject(oldValue)
-        if (!wantedObject || !oldObject) throw new Error(`暂不支持增删 BDA 面板项：${key}`)
+        if (!oldObject) throw new Error(`BDA 面板项无效：${key}`)
         output = updateStringMapValue(output, spec.field, key, (value) =>
           patchPanelMessage(value, wantedObject, oldObject, spec.schema!))
+      }
+      for (const key of Object.keys(oldMap)) {
+        if (wantedMap[key] === undefined) throw new Error(`暂不支持删除 BDA 面板项：${key}`)
       }
       continue
     }
@@ -515,7 +556,7 @@ export function applyDecodedBdaSource(path: string, bytes: Uint8Array, text: str
     if (wantedEffect && actualEffect) wantedEffect.sequence = actualEffect.sequence
   }
   if (!sameJson(actual, desired)) {
-    throw new Error("该 BDA JSON 改动暂不支持；可修改设计宽度、样式资源/字体/颜色、动画帧、动画效果参数和按键音")
+    throw new Error("该 BDA JSON 改动暂不支持；可修改设计宽度、样式资源/字体/颜色、面板项、动画帧、动画效果参数和按键音")
   }
   return output
 }

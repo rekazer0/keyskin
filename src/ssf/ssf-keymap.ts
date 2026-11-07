@@ -42,6 +42,65 @@ export function ssfQwerty(layout: string): boolean {
   return isQwerty(ssfBoard(layout))
 }
 
+/** Default actions carried by Baidu layouts but supplied by Sogou at runtime. */
+export function ssfKeyActions(layout: string, action: string, sourceSection?: string): Record<string, string> {
+  const board = ssfBoard(layout)
+  const name = layout.replace(/\.ini$/i, "").split("/").pop()!.toLowerCase()
+  const handwritingFull = name === "hw_full" || name === "handwriting_full"
+  const handwritingGrid = name === "hw_grid" || name === "handwriting_grid"
+  const letter = action.toLowerCase()
+  const section = sourceSection?.toLowerCase() ?? ""
+  if (name === "en_26s" && letter === "i") return { UP: "8" }
+  const qwertyIndex = "qwertyuiop".indexOf(letter)
+  if ((board === "py26" || board === "en26") && qwertyIndex >= 0) {
+    const digit = "1234567890"[qwertyIndex]
+    return { UP: digit, LEFT: digit, RIGHT: digit }
+  }
+  if (board === "py26") {
+    if (action === "，") return { UP: "!" }
+    if (action === "。") return { UP: "?" }
+  }
+  if (board === "en26" && action === ".") return { UP: "," }
+  if (board === "py26" || board === "en26") {
+    const symbolIndex = "asdfghjklzxcvbnm".indexOf(letter)
+    if (symbolIndex >= 0) {
+      const symbol = "!@#$%&*()~/-_:;?"[symbolIndex]
+      return { UP: symbol, LEFT: symbol, RIGHT: symbol }
+    }
+  }
+  if (board === "en9" && section.match(/^key_(abc|def|ghi|jkl|mno|pqrs|tuv|wxyz)_multi$/)) {
+    const group = section.match(/^key_(abc|def|ghi|jkl|mno|pqrs|tuv|wxyz)_multi$/)![1]
+    const index = NINE_KEY_GROUPS.findIndex((value) => value.toLowerCase() === group)
+    return { UP: String(index + 2), LEFT: group[0], RIGHT: group[2], ...group[3] ? { DOWN: group[3] } : {}, SHOW: String(index + 2) }
+  }
+  if (board === "en9" && section === "key_punct_multi") return { UP: "1", LEFT: "@", RIGHT: "/", HOLD: "1", SHOW: "1" }
+  if (board === "py9" || board === "en9") {
+    const index = NINE_KEY_GROUPS.findIndex((group) => group[1].toLowerCase() === letter)
+    if (index >= 0) {
+      const group = NINE_KEY_GROUPS[index].toLowerCase()
+      return { UP: String(index + 2), LEFT: group[0], RIGHT: group[2], ...group[3] ? { DOWN: group[3] } : {}, SHOW: String(index + 2) }
+    }
+    if (action === "'" || action === "…" || action === "*") {
+      return { UP: "1", ...board === "en9" ? { LEFT: "@", RIGHT: "/" } : {}, HOLD: "1", SHOW: "1" }
+    }
+    if (action === "F38") return { UP: "0" }
+  }
+  if (board === "bh") {
+    const stroke = action.match(/^B([1-6])$/)?.[1]
+    if (stroke) return { UP: stroke }
+    if (action === "'") return { UP: "7" }
+    if (action === "：") return { UP: "8" }
+    if (action === "；") return { UP: "9" }
+    if (action === "F38") return { UP: "0" }
+  }
+  if (action === "F36") return { LEFT: handwritingFull ? "40" : "F40" }
+  if ((board === "py26" || board === "py9" || board === "bh" || handwritingFull) && action === "F16") return { UP: "F16" }
+  if ((board === "en26" || board === "en9") && action === "F15") return { UP: "F15" }
+  if ((board === "py26" || board === "en26" || handwritingFull) && action === "F1") return { UP: "F7", HOLD: "F7" }
+  if (handwritingGrid && action === "，") return { UP: "。" }
+  return {}
+}
+
 /** Function keys whose Sogou class only differs by the `_Qwerty` suffix on 26-key boards. */
 const FUNCTION_KEYS: Record<string, [qwerty: string[], nine: string[]]> = {
   F36: [["Key_Backspace_Qwerty"], ["Key_Backspace"]],
