@@ -117,7 +117,8 @@ export const preview = new Preview(
   (sections) => {
     appState.selectedCandidate = false
     syncCandidateSelection()
-    if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview")
+    // 选中按键只是换选择对象：右侧停在源代码 / AI 设计时保持该选项，不跳回属性。
+    if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview", "document", true)
     appState.selectedKeySections = sections
     if (!sections.length) source.collapseSelection()
     if (sections.length && mobilePortraitQuery.matches) setMobilePane("inspector")
@@ -255,7 +256,7 @@ export function scheduleSelectionInspectorSync(canvasPreview: Preview): void {
 export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections) => {
   const path = toolbarStrip.dataset.path
   if (!path) return
-  if (appState.selectedPath !== path) selectFile(path, "overview")
+  if (appState.selectedPath !== path) selectFile(path, "overview", "document", true)
   appState.selectedToolbarSections = sections
   toolbarPreview.setSelected(sections)
   syncCandidateSelection()

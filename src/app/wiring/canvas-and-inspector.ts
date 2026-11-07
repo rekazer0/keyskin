@@ -25,7 +25,7 @@ import { renameDocumentTitle } from "../key-inspector"
 import { runFileOperation } from "../file-operations"
 import { sourceTargetFolder, commitSourceUploads, sourceSelection, setSourceTransfer } from "../source-files"
 import { writeToChosenFile } from "../archive-io"
-import { rememberAiDesignModel, setAiDesignScope } from "../ai-panel"
+import { rememberAiDesignModel, syncAiDesignThinking, setAiDesignScope } from "../ai-panel"
 import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 
@@ -98,8 +98,7 @@ export function wireCanvasAndInspector(): void {
     syncSidebarProjectName()
     new MutationObserver(syncSidebarProjectName).observe(documentName, { childList: true, characterData: true, subtree: true })
   }
-  aiDesignThinking.value = localStorage.getItem("ai-thinking-level") || "off"
-  if (!aiDesignThinking.value) aiDesignThinking.value = "off"
+  syncAiDesignThinking()
   aiDesignThinking.addEventListener("change", () => localStorage.setItem("ai-thinking-level", aiDesignThinking.value))
   aiDesignIntensity.value = localStorage.getItem("ai-design-intensity") || "balanced"
   if (!aiDesignIntensity.value) aiDesignIntensity.value = "balanced"
@@ -324,6 +323,7 @@ export function wireCanvasAndInspector(): void {
   window.addEventListener("keydown", (event) => {
     const step = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, [number, number]>)[event.key]
     if (event.isComposing || document.querySelector("dialog[open]")) return
+    if (keyEventElement(event.target)?.closest("#ai-sessions")) return
     const typing = Boolean(keyEventElement(event.target)?.closest("input, textarea, select, [contenteditable], .cm-editor"))
     if (appState.layoutOverview) {
       if (typing) return

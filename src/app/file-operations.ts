@@ -1,7 +1,7 @@
 import { adbShareButton } from "./dom"
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
-import { newButton, openButton, saveButton, mobileShareButton, eventLog, fileOperationDialog, fileOperationProgress, fileOperationPercent, fileOperationDetail, fileOperationTitle, fileOperationIcon, fileOperationResult, fileOperationClose, workspaceImage, assetImage, deviceShell, workspaceImageFigure, sourceEditor, asset, sourceName, assetBackButton } from "./dom"
+import { newButton, openButton, saveButton, mobileShareButton, eventLog, fileOperationDialog, fileOperationProgress, fileOperationPercent, fileOperationDetail, fileOperationTitle, fileOperationIcon, fileOperationResult, fileOperationClose, fileOperationCancel, workspaceImage, assetImage, deviceShell, workspaceImageFigure, sourceEditor, asset, sourceName, assetBackButton } from "./dom"
 import { alphaMask } from "../layout-scan.ts"
 import { updatePanelToolButtons } from "./mobile-layout"
 import { renderFiles } from "./file-tree"
@@ -14,7 +14,7 @@ import { canExport, type ExportFormat } from "../export.ts"
 import { operationError, operationErrorDetail } from "../operations.ts"
 import { clientLog, flushClientLogs } from "../client-log.ts"
 import { ask } from "./ask.ts"
-import { closeDialog } from "../motion.ts"
+import { animateProgress, closeDialog } from "../motion.ts"
 import { invoke, Channel } from "@tauri-apps/api/core"
 import { adaptIos26Variant, adaptIos26KeyboardLayout } from "../ios26.ts"
 import { adaptSxiForIos26 } from "../palm/sxi-ios26.ts"
@@ -137,9 +137,10 @@ export function showError(error: unknown, action = "操作"): void {
 }
 
 export function updateFileOperationProgress(value: number, detail: string): void {
-  fileOperationProgress.value = Math.max(0, Math.min(100, value))
-  fileOperationProgress.textContent = `${Math.round(fileOperationProgress.value)}%`
-  fileOperationPercent.textContent = fileOperationProgress.textContent
+  animateProgress(fileOperationProgress, Math.max(0, Math.min(100, value)), (current) => {
+    fileOperationProgress.textContent = `${Math.round(current)}%`
+    fileOperationPercent.textContent = fileOperationProgress.textContent
+  })
   fileOperationDetail.textContent = detail
 }
 
@@ -253,6 +254,7 @@ export function adaptArchiveForIos26(): boolean {
 export async function runFileOperation(
   action: string,
   operation: () => boolean | Promise<boolean>,
+  cancelOperation?: () => void | Promise<void>,
 ): Promise<void> {
   if (appState.fileOperationRunning) {
     // 拖入、最近打开、模板卡片在上一个操作结束前也能触发：给出提示，不再静默忽略。
@@ -269,11 +271,37 @@ export async function runFileOperation(
   fileOperationResult.hidden = true
   fileOperationResult.textContent = ""
   fileOperationClose.disabled = true
+  let cancelling = false
+  const requestCancel = async () => {
+    if (!cancelOperation || cancelling) return
+    cancelling = true
+    fileOperationCancel.disabled = true
+    fileOperationCancel.textContent = "正在取消…"
+    fileOperationDetail.textContent = "正在取消…"
+    clientLog.info("operation.cancel", { action })
+    try {
+      await cancelOperation()
+    } catch (error) {
+      clientLog.error("operation.cancel.error", { action }, error)
+    }
+  }
+  fileOperationCancel.textContent = "取消"
+  fileOperationCancel.disabled = false
+  fileOperationCancel.hidden = !cancelOperation
+  if (cancelOperation) fileOperationCancel.addEventListener("click", requestCancel)
   updateFileOperationProgress(2, "正在准备…")
   const started = performance.now()
   clientLog.info("operation.start", { action })
   try {
-    const completed = await operation()
+    let completed: boolean
+    try {
+      completed = await operation()
+      if (cancelling) completed = false
+    } catch (error) {
+      // 取消会让后端以错误结束；用户主动取消不算失败。
+      if (!cancelling) throw error
+      completed = false
+    }
     clientLog.info("operation.finish", {
       action,
       outcome: completed ? "completed" : "cancelled",
@@ -302,6 +330,9 @@ export async function runFileOperation(
       fileOperationResult.hidden = false
     }
   } finally {
+    fileOperationCancel.hidden = true
+    fileOperationCancel.textContent = "取消"
+    fileOperationCancel.removeEventListener("click", requestCancel)
     setFileOperationBusy(false)
     if (appState.fileOperationProgressVisible) {
       fileOperationClose.disabled = false

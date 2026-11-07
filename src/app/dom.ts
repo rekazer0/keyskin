@@ -44,7 +44,6 @@ export const adbDirectory = $("#adb-directory") as HTMLInputElement
 
 export const adbPackage = $("#adb-package") as HTMLInputElement
 
-export const adbPreviewActivity = $("#adb-preview-activity") as HTMLInputElement
 
 export const adbActivity = $("#adb-activity") as HTMLInputElement
 
@@ -242,6 +241,7 @@ export const fileOperationPercent = $("#file-operation-percent")
 export const fileOperationResult = $("#file-operation-result")
 
 export const fileOperationClose = $("#file-operation-close") as HTMLButtonElement
+export const fileOperationCancel = $("#file-operation-cancel") as HTMLButtonElement
 
 export const panelStatus = $("#panel-status")
 
@@ -395,6 +395,11 @@ export const aiDraftFiles = $("#ai-draft-files") as HTMLElement
 export const aiDraftApply = $("#ai-draft-apply") as HTMLButtonElement
 
 export const aiDraftCancel = $("#ai-draft-cancel") as HTMLButtonElement
+
+export const aiSessions = $("#ai-sessions") as HTMLElement
+export const aiSessionsClose = $("#ai-sessions-close") as HTMLButtonElement
+export const aiSessionCreate = $("#ai-session-create") as HTMLButtonElement
+export const aiSessionList = $("#ai-session-list") as HTMLElement
 
 export const aiNewSession = $("#ai-new-session") as HTMLButtonElement
 

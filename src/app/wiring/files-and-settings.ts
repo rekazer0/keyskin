@@ -1,7 +1,8 @@
+import { wireAiSessions } from "../ai-sessions"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
 import { requestEditMode } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiNewSession, aiDesignStatus, aiDesignPanel, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, mobilePreviewPosition, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, mobilePreviewPosition, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
 import { sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelection, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
@@ -17,7 +18,7 @@ import { type ExportFormat } from "../../export.ts"
 import { type BdaPlatform } from "../../bda-platform.ts"
 import { refreshUpdateStatus, settingsController, showSettingsPage, nativeSettings, savedDefaultDevice, applyCanvasBackground, initialCanvasBackground, applyEditorCrosshairSetting, applyAppTheme, systemTheme, savedSourceFontSize, applySourceFontSize, saveSourceFontSize, initializeWindowMaterial, handleWindowMaterialError, applyWindowMaterialWithRetry, currentWindowMaterialOpacity, applyWindowMaterialOpacity, startWindowsWindowDrag, restoreWindowMaterialAfterDrag, applySidebarViewVisibility, applyInspectorTabsVisibility, applySourceEditorFeatures, setCanvasDropState } from "../preferences"
 import { clientLogZip, clientLog } from "../../client-log.ts"
-import { syncAiDesignControls, applyAiDesignDraft, discardAiDesignDraft } from "../ai-panel"
+import { applyAiDesignDraft, discardAiDesignDraft } from "../ai-panel"
 import { activateSourceWorkspace, chooseAndroidSourceDirectory, applySourceDirectory } from "../source-workspace"
 import { open } from "@tauri-apps/plugin-dialog"
 import { canvasDeviceValue, type CanvasBackground } from "../../canvas-background.ts"
@@ -240,15 +241,7 @@ export function wireFilesAndSettings(): void {
   $(".welcome-recent")!.toggleAttribute("data-platform-hidden", !nativeSettings)
   $('[data-inspector-tab="ai"]')!.hidden = !nativeSettings
   showSettingsPage("appearance")
-  aiNewSession.addEventListener("click", () => {
-    if (appState.aiDesignBusy || appState.aiDesignDraft) return
-    appState.aiChatController?.clear()
-    appState.aiDesignConversation = []
-    aiDesignStatus.textContent = "已开始新对话 · 已应用的修改不受影响"
-    aiDesignPanel.dataset.state = "idle"
-    syncAiDesignControls()
-    appState.aiChatController?.focus()
-  })
+  wireAiSessions()
   aiDraftApply.addEventListener("click", () => applyAiDesignDraft())
   aiDraftCancel.addEventListener("click", () => {
     discardAiDesignDraft("草稿已丢弃 · 本轮未修改皮肤，可调整要求后重试")

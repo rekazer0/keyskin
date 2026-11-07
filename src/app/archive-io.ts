@@ -1,3 +1,4 @@
+import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
 import { showSkinLoadProgress, showFileOperationProgress, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
@@ -107,11 +108,15 @@ export async function loadArchive(
   const ssfWarnings = rebuildSsfPreview()
   if (ssfWarnings.length) clientLog.info("ssf.preview.warning", { warnings: ssfWarnings.join("；") })
   appState.aiDesignConversationTarget = nextArchive
+  appState.aiSessions = []
+  appState.aiSessionId = ""
   appState.aiDesignConversation = []
   aiDesignStatus.textContent = ""
   aiDesignPanel.dataset.state = "idle"
   setAiDesignDraft(undefined)
   appState.aiChatController?.clear()
+  aiSessions.hidden = true
+  aiNewSession.setAttribute("aria-expanded", "false")
   if (pendingSourceDirectory !== undefined) appState.sourceWorkspacePendingArchive = nextArchive
   appState.sourceTransfer = undefined
   // A Sogou skin's looks are the skeleton's themes; the other formats keep theirs in `<theme>/skin/`.
@@ -353,7 +358,9 @@ type ExportResult = { bytes: Uint8Array; converted: boolean; warnings: string[] 
 /** 导出百度皮肤时切片按键文字；BDS 另补齐百度安卓启用前检查的结构。 */
 export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
   const result = await exportArchiveBytes(format, targetBdaPlatform)
-  if (!result || format !== "bds" && format !== "bdi") return result
+  if (!result) return
+  showFileOperationProgress()
+  if (format !== "bds" && format !== "bdi") return result
   updateFileOperationProgress(88, "正在把按键文字切成字体图片…")
   await waitForInterfacePaint()
   const bytes = await bakeExportedFonts(result.bytes, format)
@@ -364,7 +371,6 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
   if (!canExport(appState.archive.format, format)) throw new Error(`${appState.archive.format.toUpperCase()} 皮肤不能导出为 ${format.toUpperCase()}`)
-  showFileOperationProgress()
   updateFileOperationProgress(22, `正在生成 ${format.toUpperCase()} 皮肤包…`)
   await waitForInterfacePaint()
   if (appState.archive.format === "ssf" && format === "sxi" || appState.archive.format === "sxi" && format === "ssf") {
@@ -388,7 +394,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     }
     await report(0.75, "正在打包手心皮肤…")
     const result = buildSxiZip(source)
-    if (result.warnings.length) clientLog.info("sxi.export.warning", { warnings: result.warnings.join("；") })
+    if (!await acceptDowngrade("百度皮肤转换为手心皮肤时将降级以下内容", result.warnings)) return
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
   if (appState.archive.format === "ssf" && format !== "ssf" && format !== "sxi") {
@@ -418,7 +424,10 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     return { bytes, converted: true, warnings: result.warnings }
   }
   if (format === "ssf") {
-    if (appState.archive.format === "ssf") return { bytes: await appState.archive.toBytesAsync("ssf"), converted: false, warnings: [] }
+    if (appState.archive.format === "ssf") {
+      showFileOperationProgress()
+      return { bytes: await appState.archive.toBytesAsync("ssf"), converted: false, warnings: [] }
+    }
     const report = conversionProgress(22, 78, "正在导出搜狗皮肤…")
     await report(0.3)
     const result = await exportSsf(appState.archive, appState.bdaBase)
@@ -428,11 +437,13 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   if (appState.archive.format === "bda" && format === "bda" && targetBdaPlatform) {
     const report = conversionProgress(22, 78, `正在生成 ${format.toUpperCase()} 皮肤包…`)
     await report(0.3)
+    showFileOperationProgress()
     const result = convertBdaPlatform(appState.archive, targetBdaPlatform)
     return { bytes: await result.toBytesAsync(), converted: true, warnings: bdaCompatibilityWarnings(appState.archive) }
   }
   if (appState.archive.format !== "bda" || format === "bda" || format === "sxi") {
     updateFileOperationProgress(35, `正在打包 ${format.toUpperCase()} 皮肤包…`)
+    showFileOperationProgress()
     await waitForInterfacePaint()
     const soundWarnings: string[] = []
     const adjustments: string[] = []
@@ -453,11 +464,9 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
 }
 
 /**
- * 转换类导出先弹出进度框并让出一帧：转换本身是同步的重活，没有这一步用户只会看到窗口没反应。
- * 返回的回调按 0–1 报告阶段，映射到给定的百分比区间。
+ * 转换阶段先收集降级提示；确认后才显示进度窗。回调按 0–1 报告阶段并映射到百分比区间。
  */
 function conversionProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => Promise<void> {
-  showFileOperationProgress()
   updateFileOperationProgress(start, detail)
   return async (fraction, stage) => {
     updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
@@ -481,16 +490,21 @@ function reportExportWarnings(sounds: string[], adjustments: string[] = []): voi
 
 /** 转换会降级内容时先问一次；没有降级时直接继续。 */
 async function acceptDowngrade(title: string, warnings: string[]): Promise<boolean> {
-  if (!warnings.length) return true
+  if (!warnings.length) {
+    showFileOperationProgress()
+    return true
+  }
   // 一枚搜狗皮肤能产出上千条按键级提示，全塞进对话框读不下去：只列前几条，完整清单进诊断日志。
   clientLog.info("export.downgrade", { count: warnings.length, detail: warnings.join("；") })
-  return await ask({
+  const accepted = await ask({
     title,
     detail: warnings.length > DOWNGRADE_LINES
       ? [...warnings.slice(0, DOWNGRADE_LINES), `……另有 ${warnings.length - DOWNGRADE_LINES} 条同类提示，已写入诊断日志`].join("\n")
       : warnings.join("\n"),
     actions: [{ value: "cancel", label: "取消" }, { value: "continue", label: "继续导出", variant: "primary" }],
   }) === "continue"
+  if (accepted) showFileOperationProgress()
+  return accepted
 }
 
 async function exportForSave(format: ExportFormat) {
@@ -693,9 +707,10 @@ export async function shareArchiveToMobile(): Promise<boolean> {
   if (!appState.archive) return false
   const ios = isIOSWeb()
   if (!isAndroidTauri()) {
-    // Small exports also need visible preparation and error feedback on mobile.
-    showFileOperationProgress()
-    if (!navigator.share) throw new Error("当前浏览器不支持系统文件分享")
+    if (!navigator.share) {
+      showFileOperationProgress()
+      throw new Error("当前浏览器不支持系统文件分享")
+    }
   }
   // .ssf and .sxi go to the Sogou and Palm apps in their own format; Baidu on iOS reads .bdi and iOS .bda.
   const ownFormat = appState.archive.format === "ssf" || appState.archive.format === "sxi"

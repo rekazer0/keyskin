@@ -1,3 +1,4 @@
+import type { AiSession } from "./ai-sessions"
 // 编辑器的全部可变状态（原 main.ts 顶层 let）。各模块通过 appState.x 读写。
 import { SkinArchive } from "../skin.ts"
 import { type UnwatchFn } from "@tauri-apps/plugin-fs"
@@ -81,7 +82,11 @@ export const appState = {
   aiDesignBusy: false,
   savedModels: [] as ModelConfiguration[],
   savedImageModel: undefined as ModelConfiguration | undefined,
-  // keep three exchanges in memory; persist sessions only if cross-restart chat is needed.
+  // shortcut: sessions stay in memory for this skin, persist them if cross-restart history is needed.
+  aiSessions: [] as AiSession[],
+  aiSessionId: "",
+  aiThinkingRequests: new Set<string>(),
+  aiThinkingPending: new Set<ModelConfiguration>(),
   aiDesignConversation: [] as AiDesignConversation,
   aiChatController: undefined as AiChatController | undefined,
   aiChatInitialization: undefined as Promise<AiChatController> | undefined,

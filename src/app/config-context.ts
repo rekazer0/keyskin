@@ -324,7 +324,11 @@ export function refreshToolbarPreview(
     ? IniDocument.parse(`[INPUT]\nFORE_STYLE=${bdaStyleID(bdaPanel.input.textStyle)}\n`)
     : gen
   const inputStyle = resolveCandidateInputStyle(inputGeneral, resolver, width, document, inputBarInKeyboard())
-  const inputHeight = inputStyle.height
+  const hasInlineStyle = [document, gen].some((config) =>
+    config?.get("SCAND", "BACK_STYLE") || config?.get("SCAND", "INPUT_STYLE"),
+  )
+  const inputHeight = !composing && appState.archive.format === "bdi" && inputBarInKeyboard() && !hasInlineStyle
+    ? 0 : inputStyle.height
   const backgroundStyle = appState.archive?.format === "bda"
     ? bdaStyleID(bdaPanel?.backStyle)
     : document.get("CAND", "BACK_STYLE")?.split(",")[0] ??
@@ -342,7 +346,7 @@ export function refreshToolbarPreview(
   const inputBackgroundStyle = bdaPanel?.input
     ? bdaStyleID(bdaPanel.input.backStyle)
     : candidateInputBackgroundStyle(gen, document, inputBarInKeyboard())
-  showCandidateInputBar(resolver, inputStyle, width, inputBackgroundStyle)
+  showCandidateInputBar(resolver, { ...inputStyle, height: inputHeight }, width, inputBackgroundStyle)
   toolbarCanvas.style.setProperty("--toolbar-width", String(width))
   toolbarCanvas.style.setProperty("--toolbar-height", String(height))
   toolbarCanvas.style.setProperty("--candidate-input-height", String(inputHeight))

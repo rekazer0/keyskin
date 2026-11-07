@@ -36,6 +36,8 @@ test('every settings category has a unique panel and all existing controls remai
   const dialog = html.slice(html.indexOf('<dialog id="settings-dialog"'), html.indexOf('</dialog>', html.indexOf('<dialog id="settings-dialog"')))
   const ids = [...dialog.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])
   assert.equal(new Set(ids).size, ids.length)
+  const categoryHeadings = [...dialog.matchAll(/class="settings-nav-heading"[^>]*>([^<]+)</g)].map(match => match[1])
+  assert.deepEqual(categoryHeadings, ['界面', '工作流', '设备', '其他'])
   const panels = [...dialog.matchAll(/data-settings-panel="([^"]+)"/g)].map(match => match[1])
   const pages = [...dialog.matchAll(/data-settings-page="([^"]+)"/g)].map(match => match[1])
   assert.deepEqual([...pages].sort(), [...panels].sort())

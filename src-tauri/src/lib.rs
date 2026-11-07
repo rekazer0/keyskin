@@ -1264,9 +1264,18 @@ async fn fetch_model_list(
         configuration.provider.as_str(),
         "claude-subscription" | "chatgpt-subscription"
     ) {
-        return model_oauth::subscription_models(app, configuration.provider).await;
+        return model_oauth::subscription_models(app, configuration.provider, configuration.kind == "image").await;
     }
     request_model_list(&configuration).await
+}
+
+#[tauri::command]
+async fn fetch_model_thinking_levels(
+    app: tauri::AppHandle,
+    configuration: ModelConfiguration,
+) -> Result<Option<Vec<String>>, String> {
+    if configuration.provider != "chatgpt-subscription" { return Ok(None); }
+    model_oauth::subscription_thinking_levels(app, configuration.provider, &configuration.model).await
 }
 
 #[tauri::command]
@@ -1730,6 +1739,7 @@ pub fn run() {
         read_client_logs,
         share_file,
         share_skin_adb,
+        adb::cancel_adb_share,
         test_adb_connection,
         pair_adb_device,
         take_opened_files,
@@ -1742,6 +1752,7 @@ pub fn run() {
         load_model_configuration,
         save_model_configuration,
         fetch_model_list,
+        fetch_model_thinking_levels,
         test_model_connection,
         model_http_request,
         model_oauth_accounts,
@@ -1773,6 +1784,7 @@ pub fn run() {
         read_client_logs,
         share_file,
         share_skin_adb,
+        adb::cancel_adb_share,
         test_adb_connection,
         pair_adb_device,
         take_opened_files,
@@ -1785,6 +1797,7 @@ pub fn run() {
         load_model_configuration,
         save_model_configuration,
         fetch_model_list,
+        fetch_model_thinking_levels,
         test_model_connection,
         model_http_request,
         model_oauth_accounts,
