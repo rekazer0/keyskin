@@ -1,8 +1,17 @@
-import { type StyleTextVisual, type Visual, canvasFont, isTransparentColor } from "./atlas.ts"
+import { type StyleTextVisual, type Visual, canvasFont, isTransparentColor, withTextShadow } from "./atlas.ts"
 import { type Rect } from "./preview-items.ts"
 
-
-
+export function toolbarImageRect(visual: Visual, slot: Rect, panelWidth: number, devicePointWidth?: number): Rect {
+  const [, , width, height] = visual.source ?? [0, 0, slot.width, slot.height]
+  const android = /\/logo\/pop_menu_icons\.png$/i.test(visual.imagePath ?? "")
+  // CandHandler.g1()/r3(): normal Android toolbar foregrounds use 0.82×, truncated to pixels.
+  const points = android ? 0.82
+    : /@3x\.png$/i.test(visual.imagePath ?? "") && devicePointWidth ? panelWidth / 3 / devicePointWidth : 1
+  const scale = Math.min(points, slot.width / width, slot.height / height)
+  const w = android ? Math.trunc(width * scale) : width * scale
+  const h = android ? Math.trunc(height * scale) : height * scale
+  return { x: slot.x + (slot.width - w) / 2, y: slot.y + (slot.height - h) / 2, width: w, height: h }
+}
 
 type NineSliceCanvas = Pick<HTMLCanvasElement, "width" | "height" | "getContext">
 
@@ -331,5 +340,5 @@ export function drawStyleText(
   context.font = canvasFont(visual.fontSize ?? 24, visual)
   context.textAlign = "center"
   context.textBaseline = "middle"
-  context.fillText(visual.text, point.x, point.y)
+  withTextShadow(context, visual, () => context.fillText(visual.text, point.x, point.y))
 }

@@ -351,6 +351,7 @@ export function refreshSimulationPreview(): void {
     )
     updateCanvasCandidateGeometry(candidateHeight)
   }
+  if (appState.archive.format === "bdi") refreshNativeScenes()
 }
 
 // 每次切换布局都会把全部布局文件重新解析（BDA 还要按当前布局逐个合成）来统计皮肤状态；内容不变时复用结果。

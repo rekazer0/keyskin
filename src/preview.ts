@@ -49,6 +49,7 @@ export class Preview {
   panelStyle = ""
   panelWidth = DEFAULT_PANEL_WIDTH
   panelHeight = DEFAULT_PANEL_HEIGHT
+  panelTopInset = 0
   private surfaceKeys?: PreviewItem[]
   private surfaceHeightValue = DEFAULT_PANEL_HEIGHT
   theme: "light" | "dark" = "light"
@@ -490,9 +491,15 @@ export class Preview {
     this.panelAnimationStyle = animationStyle
     this.panelWidth = width
     this.panelHeight = height
+    this.panelTopInset = 0
     this.keys = this.layoutItems()
     this.fitCanvas()
     syncLegacyPanelAnimation(this, animationChanged)
+    void this.draw()
+  }
+
+  setPanelTopInset(height: number): void {
+    this.panelTopInset = height
     void this.draw()
   }
 

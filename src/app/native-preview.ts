@@ -6,6 +6,8 @@
 import { AtlasResolver, type TextVisual } from "../atlas.ts"
 import { inputBarMetrics } from "../candidate-style.ts"
 import { IniDocument } from "../ini.ts"
+import { iosCandidateBackground, iosDefaultToolbarScene } from "../ios-preview.ts"
+import { previewItems } from "../preview-items.ts"
 import type { NativeScene, SceneLayer } from "../native-scene.ts"
 import { PalmBoard, type PalmOrientation, type PalmTheme } from "../palm/palm-board.ts"
 import { palmBoardScene, palmCandidateScene, palmHint } from "../palm/palm-scene.ts"
@@ -16,9 +18,9 @@ import type { SkinArchive } from "../skin.ts"
 import type { SsfTheme } from "../ssf/ssf-package.ts"
 import { animateSsfScene } from "../ssf/ssf-motion.ts"
 import { SsfStyles, ssfBoardScene, ssfCandidateScene } from "../ssf/ssf-scene.ts"
-import { visualResolver } from "./bda-documents"
+import { textDocument, visualResolver } from "./bda-documents"
 import { candidateBackgroundPreview, preview, toolbarPreview } from "./canvas-interaction"
-import { applyCandidateSpacing, hideCandidateInputBar, showCandidateInputBar, toolbarConfigPath } from "./config-context"
+import { applyCandidateSpacing, genConfigPath, hideCandidateInputBar, showCandidateInputBar, toolbarConfigPath } from "./config-context"
 import { candidateArea, candidateBackgroundCanvas, candidateInput, candidateWords, hintPreviewEnabled, theme as themeInput, toolbarCanvas, toolbarStrip } from "./dom"
 import { canvasEditable } from "./edit-history"
 import { applyCandidateTextVisual, applyDeviceKeyboardGeometry, devicePreviewTransparent, inputBarInKeyboard, updatePanelTools } from "./preview-render"
@@ -205,6 +207,30 @@ export function refreshNativeScenes(): void {
   for (const canvas of [preview, toolbarPreview, candidateBackgroundPreview]) canvas.setNativeItems(undefined)
   if (archive?.format === "ssf" && ssfScenes(archive)) return
   for (const canvas of [preview, toolbarPreview, candidateBackgroundPreview]) canvas.setScene(undefined)
+  preview.setPanelTopInset(0)
+  if (archive?.format !== "bdi" || !inputBarInKeyboard() || candidateArea.hidden) return
+  const resolver = visualResolver()
+  const path = toolbarConfigPath()
+  const candidate = path && textDocument(path)
+  if (!resolver || !path || !candidate) return
+  const general = textDocument(genConfigPath())
+  const width = preview.panelWidth
+  const height = toolbarPreview.panelHeight
+  const inputHeight = appState.candidateInputBar?.metrics.height ?? 0
+  preview.setPanelTopInset(height + inputHeight)
+  const logoRoot = path.replace(/\/(port|land)\/[^/]+$/, "/res/logo/")
+  const nativeFunctions = candidate.sections().some((section) => candidate.get(section, "KEY")?.trim() === "F14")
+  if (nativeFunctions && !general?.get("LOGO", "LAYOUT_NAME") && !archive.isText(`${logoRoot}com.baidu.inputmethod.toolbarMenuItems.plist`)) {
+    const items = [...new Map([
+      ...previewItems(candidate, width, height, general),
+      ...previewItems(candidate, width, height, general, true),
+    ].map((item) => [item.section, item])).values()]
+    toolbarPreview.setScene(() => iosDefaultToolbarScene(general, candidate, resolver, items, width, height))
+  }
+  candidateBackgroundPreview.setScene(() => iosCandidateBackground(
+    resolver, preview.panelStyle, candidateBackgroundPreview.panelStyle,
+    width, preview.surfaceHeight, height, inputHeight,
+  ))
 }
 
 function ssfCandidateText(archive: SkinArchive, width: number): CandidateText | undefined {

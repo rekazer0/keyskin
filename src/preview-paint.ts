@@ -29,7 +29,7 @@ import { paddedRect } from "./preview-items.ts"
 import { foregroundLayerRect } from "./preview-draw.ts"
 import { foregroundTextPoint } from "./preview-draw.ts"
 import { drawStyleText } from "./preview-draw.ts"
-import { canvasFont } from "./atlas.ts"
+import { canvasFont, withTextShadow } from "./atlas.ts"
 import { previewFallbackText } from "./preview-items.ts"
 import { drawListText } from "./preview-draw.ts"
 import { isLegacyHintInputKey } from "./preview-hints.ts"
@@ -40,6 +40,7 @@ import { dynamicToolbarRect, keyAnimationStyles } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { drawSceneLayer, type SceneLayer } from "./native-scene.ts"
+import { toolbarImageRect } from "./preview-draw.ts"
 
 export async function paintPreview(self: Preview): Promise<void> {
   const drawID = ++self.drawID
@@ -129,7 +130,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   let visuals: Array<{ back: Visual | undefined; fore: Array<Visual | undefined>; text: TextVisual | undefined; styleTexts: Array<StyleTextVisual | undefined> }>
   let toolbarImages: Visual[]
 
-  if (scene) {
+  if (scene && !scene.partial) {
     panel = undefined
     visuals = keys.map(() => ({ back: undefined, fore: [], text: undefined, styleTexts: [] }))
     toolbarImages = []
@@ -156,7 +157,9 @@ export async function paintPreview(self: Preview): Promise<void> {
               fore: await Promise.all(
                 key.foreStyles.map((style) => self.resolveVisual(style, highlighted).catch(() => undefined)),
               ),
-              text: self.resolver?.resolveText(key.foreStyles.join(","), highlighted),
+              text: key.section.startsWith("LIST:") && self.resolver?.resolveListText
+                ? self.resolver.resolveListText(key.foreStyles.join(","), highlighted)
+                : self.resolver?.resolveText(key.foreStyles.join(","), highlighted),
               styleTexts: key.foreStyles.map((style) =>
                 self.resolver?.resolveStyleText?.(style, highlighted)
               ),
@@ -210,7 +213,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   else drawVisual(
     context,
     panel,
-    { x: 0, y: 0, width: self.panelWidth, height: self.surfaceHeight },
+    { x: 0, y: -self.panelTopInset, width: self.panelWidth, height: self.surfaceHeight + self.panelTopInset },
     true,
   )
 
@@ -235,7 +238,7 @@ export async function paintPreview(self: Preview): Promise<void> {
       ? legacyAnimationOpacity(self.legacyAnimation, backAnimationStyle, animationElapsed)
       : bdaBack.opacity
     const sceneKey = sceneKeys.get(key.section)
-    if (scene) {
+    if (scene && (!scene.partial || sceneKey)) {
       const press = self.nativePress?.section === key.section ? self.nativePress : undefined
       const pressed = Boolean(press) || self.active?.key.section === key.section || self.keyPressed(key)
       const layers = sceneKey?.layers(pressed)
@@ -343,8 +346,10 @@ export async function paintPreview(self: Preview): Promise<void> {
       withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
         const centerX = area.x + area.width / 2
         const centerY = area.y + area.height / 2
-        if (key.section.startsWith("LIST:")) drawListText(context, fallbackText, centerX, centerY)
-        else context.fillText(fallbackText, centerX, centerY)
+        withTextShadow(context, textVisual, () => {
+          if (key.section.startsWith("LIST:")) drawListText(context, fallbackText, centerX, centerY)
+          else context.fillText(fallbackText, centerX, centerY)
+        })
       })
     }
 
@@ -451,20 +456,16 @@ export async function paintPreview(self: Preview): Promise<void> {
   const toolbarRect = self.document
     ? dynamicToolbarRect(self.document, self.panelWidth, self.panelHeight)
     : undefined
-  if (toolbarRect && toolbarImages.length) {
+  if (!scene && toolbarRect && toolbarImages.length) {
     const slotWidth = toolbarRect.width / toolbarImages.length
     toolbarImages.forEach((visual, index) => {
-      // iOS 把 @3x 图标按「像素 ÷ 3」pt 画，不随键盘缩放：面板宽 / 3 对应 375pt，屏越宽图标相对越小。
-      // 再按槽位等比缩小，只缩不放。
-      const [, , sw, sh] = visual.source ?? [0, 0, slotWidth, toolbarRect.height]
-      const points = /@3x\.png$/i.test(visual.imagePath ?? "") && self.devicePointWidth ? self.panelWidth / 3 / self.devicePointWidth : 1
-      const scale = Math.min(points, slotWidth / sw, toolbarRect.height / sh)
-      drawVisual(context, visual, {
-        x: toolbarRect.x + index * slotWidth + (slotWidth - sw * scale) / 2,
-        y: toolbarRect.y + (toolbarRect.height - sh * scale) / 2,
-        width: sw * scale,
-        height: sh * scale,
-      }, true)
+      const destination = toolbarImageRect(visual, {
+        x: toolbarRect.x + index * slotWidth,
+        y: toolbarRect.y,
+        width: slotWidth,
+        height: toolbarRect.height,
+      }, self.panelWidth, self.devicePointWidth)
+      drawVisual(context, visual, destination, true)
     })
   }
 
