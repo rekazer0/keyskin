@@ -2,7 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import type { ExportFormat } from "./export.ts"
 import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
-import { adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
+import { adaptAndroidToolbar, adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
 import { adaptIosPanelBackground } from "./ios-panel-background.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
@@ -543,6 +543,9 @@ export class SkinArchive {
       adaptIosPanelBackground(files, notes)
       sortIosTiles(files)
     }
+    // An iOS BDI on Android: Android draws the candidate bar's function icons from res/logo/pop_menu_icons,
+    // which only the iOS plists and 1.0 artwork describe. Without it Baidu draws an empty function bar.
+    if (format === "bds" && this.format === "bdi") adaptAndroidToolbar(files, notes)
     const adapted = await adaptPackageSounds(files, format)
     warnings?.push(...adapted.warnings)
     return zipSync(Object.fromEntries(files), { level: 6 })

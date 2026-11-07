@@ -2,7 +2,8 @@
 // skins style them with. It tints them from logo.ini (V6 p160); with no [LOGO] the icons fall back to a faint default.
 import { strFromU8, strToU8 } from "fflate"
 import { IniDocument } from "./ini.ts"
-import { cropImage, decodePng, encodePng } from "./ssf/ssf-png.ts"
+import { parseXmlPlist, type PalmPlistValue } from "./palm/palm-plist.ts"
+import { cropImage, decodePng, encodePng, placeImage, type RgbaImage } from "./ssf/ssf-png.ts"
 import { addZipEntry } from "./skin-zip.ts"
 import type { SkinArchive } from "./skin.ts"
 
@@ -30,6 +31,80 @@ export function appendStyle(css: IniDocument, entries: Array<{ key: string; valu
   css.appendSection(`STYLE${id}`, entries)
   css.set("GLOBAL", "STYLE_NUM", id)
   return id
+}
+
+/** Android bitmap index (LogoIconSource) → the iOS plist function ID that names the same function. */
+const TOOLBAR_FUNCTIONS = [
+  [26, "F7", "19", "表情"], [27, "F13", "17", "键盘类型"],
+  [29, "F72", "23", "语音输入"], [31, "F82", "26", "搜索"],
+  [25, "", "18", "光标"], [50, "", "35", "剪贴板"], [62, "F68", "45", "AI侃侃"],
+] as const
+
+/**
+ * Gives an iOS-authored package the Android function bar: Baidu Android draws the candidate bar's F14 icons from
+ * res/logo/pop_menu_icons, which an iOS skin does not ship (its artwork is the plists plus the 1.0 pictures).
+ * Which functions the phone shows, and in what order, stays the client's setting.
+ */
+export function adaptAndroidToolbar(files: Map<string, Uint8Array>, warnings?: string[]): void {
+  let icons = 0
+  for (const path of [...files.keys()]) {
+    const match = path.match(/^(.*?)res\/logo\/com\.baidu\.inputmethod\.toolbarMenuItems\.plist$/)
+    if (!match) continue
+    const root = match[1]
+    // A hand-made Android atlas wins over anything re-cut from the iOS artwork.
+    if (files.has(`${root}res/logo/pop_menu_icons.png`)) continue
+    const entries = parseXmlPlist(files.get(path)!)
+    if (!Array.isArray(entries)) continue
+    const tiles: Array<{ index: number; image: RgbaImage }> = []
+    for (const value of entries) {
+      const item = typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, PalmPlistValue> : undefined
+      if (item?.Position !== "toolbar") continue
+      const index = TOOLBAR_FUNCTIONS.find(([, , id]) => id === String(item.Name ?? ""))?.[0]
+      const name = toolbarImageName(item.Images)
+      const image = index === undefined || !name ? undefined : logoImage(files, `${root}res/logo/`, name)
+      if (index === undefined || !image) continue
+      tiles.push({ index, image })
+    }
+    if (!tiles.length) continue
+    writeAndroidMenuAtlas(files, `${root}res/logo`, tiles)
+    icons += tiles.length
+  }
+  if (icons) warnings?.push(`Android 百度的工具栏图标按功能位图索引写入 res/logo/pop_menu_icons（${icons} 个）；显示哪些功能、数量和顺序由百度客户端设置决定`)
+}
+
+/** The plist's Images dict: the Normal state's picture is the icon; Highlight only shows while pressed. */
+function toolbarImageName(images: PalmPlistValue | undefined): string | undefined {
+  if (typeof images !== "object" || images === null || Array.isArray(images)) return
+  const states = (images as Record<string, PalmPlistValue>)["Normal"]
+  if (typeof states !== "object" || states === null || Array.isArray(states)) return
+  const normal = (states as Record<string, PalmPlistValue>)["Normal"]
+  return typeof normal === "string" ? normal : undefined
+}
+
+/** The client appends "_iphone@3x.png" to a plist image name; files written by this editor inline the suffix. */
+function logoImage(files: Map<string, Uint8Array>, dir: string, name: string): RgbaImage | undefined {
+  const candidates = name.endsWith(".png")
+    ? [`${dir}${name}`, `${dir}${name.slice(0, -4)}_iphone@3x.png`]
+    : [`${dir}${name}_iphone@3x.png`, `${dir}${name}@3x.png`, `${dir}${name}.png`]
+  const bytes = candidates.map((path) => files.get(path)).find((value) => value !== undefined)
+  return bytes ? decodePng(bytes) : undefined
+}
+
+/** Tiles stack vertically; TILE_NUM must exceed the highest index or LogoIconSource stops reading at it. */
+function writeAndroidMenuAtlas(files: Map<string, Uint8Array>, dir: string, tiles: Array<{ index: number; image: RgbaImage }>): void {
+  const ordered = [...tiles].sort((a, b) => a.index - b.index)
+  const width = Math.max(...ordered.map(({ image }) => image.width))
+  const height = ordered.reduce((total, { image }) => total + image.height, 0)
+  const data = new Uint8Array(width * height * 4)
+  const lines = ["[GLOBAL]", "USE_ALPHA=1", `TILE_NUM=${ordered.at(-1)!.index + 1}`, ""]
+  let y = 0
+  for (const { index, image } of ordered) {
+    data.set(placeImage(image, width, image.height, 0, 0).data, y * width * 4)
+    lines.push(`[IMG${index}]`, `SOURCE_RECT=0,${y},${image.width},${image.height}`, "")
+    y += image.height
+  }
+  addZipEntry(files, `${dir}/pop_menu_icons.png`, encodePng({ width, height, data }))
+  addZipEntry(files, `${dir}/pop_menu_icons.til`, strToU8(lines.join("\n")))
 }
 
 export function logoLayout(back: string, text: string): string {
@@ -161,13 +236,8 @@ function logoFiles(root: string, css: IniDocument, logo: string, slice: SliceRea
 function writeMenuFiles(files: Map<string, Uint8Array>, root: string, cand: IniDocument, css: IniDocument, slice: SliceReader): void {
   const paths = ["com.baidu.inputmethod.toolbarMenuItems.plist", "com.baidu.inputmethod.toolbarMenuItems.nijigen.plist"].map((name) => `${root}res/logo/${name}`)
   if (paths.every((path) => files.has(path))) return
-  const items = [
-    [26, "F7", "19", "表情"], [27, "F13", "17", "键盘类型"],
-    [29, "F72", "23", "语音输入"], [31, "F82", "26", "搜索"],
-    [25, "", "18", "光标"], [50, "", "35", "剪贴板"], [62, "F68", "45", "AI侃侃"],
-  ] as const
   const entries: string[] = []
-  for (const [index, action, id, title] of items) {
+  for (const [index, action, id, title] of TOOLBAR_FUNCTIONS) {
     const style = action && foreStyle(cand, action)
     const image = (state: "NM_IMG" | "HL_IMG") => {
       const [resource, tile] = (style && css.get(`STYLE${style}`, state)?.split(",").map((part) => part.trim())) || []

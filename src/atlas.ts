@@ -498,7 +498,9 @@ export class AtlasResolver {
 
   async resolveToolbarImages(limit?: number): Promise<Visual[]> {
     const plistPath = `${this.theme}/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`
-    if (!this.archive.isText(plistPath)) return this.resolveAndroidToolbarImages(limit)
+    // Android reads res/logo/pop_menu_icons, never the plist; a BDS this editor exports keeps the iOS plist as well,
+    // so the archive format decides — otherwise the preview would promise icons the phone does not draw.
+    if (this.archive.format === "bds" || !this.archive.isText(plistPath)) return this.resolveAndroidToolbarImages(limit)
     const names = this.archive.names()
     const paths = toolbarImagePaths(this.archive.getText(plistPath), limit).flatMap((base) => {
       const prefix = `${this.theme}/skin/res/logo/${base}`
