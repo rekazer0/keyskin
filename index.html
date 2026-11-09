@@ -938,14 +938,14 @@
           <section class="settings-page" data-settings-panel="adb" role="tabpanel" id="settings-panel-adb" aria-labelledby="settings-adb-nav" data-platform-hidden hidden>
             <section class="settings-group" aria-labelledby="settings-adb-title">
               <h3 id="settings-adb-title">连接与预览</h3>
-              <p class="settings-group-note">安装 Android Platform Tools，连接设备并允许调试；分享前请先在系统设置中将目标输入法设为当前输入法。分享会导出并推送当前皮肤到设备安装启用，不会覆盖本机文件。
+              <p class="settings-group-note">安装 Android Platform Tools，连接设备并允许调试；分享前请先在系统设置中将目标输入法设为当前输入法。分享会导出并推送当前皮肤到设备安装启用，不会覆盖本机文件；手心通过 .piska 文件直接导入。
               <label class="settings-row"><span>ADB 路径<small>支持 adb / adb.exe 或完整路径</small></span><input id="adb-executable" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="adb"></label>
               <label class="settings-row"><span>设备 IP<small>网络 ADB 填写 IP；USB 连接留空</small></span><input id="adb-host" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <label class="settings-row"><span>连接端口<small>填写设备显示的 ADB 连接端口</small></span><input id="adb-port" class="ui-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <label class="settings-row"><span>设备序列号<small>仅 USB / 已连接设备使用；留空选择唯一设备</small></span><input id="adb-serial" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
-              <label class="settings-row"><span>设备目录<small>留空使用输入法专属目录；保留当前皮肤文件名</small></span><input id="adb-directory" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
+              <label class="settings-row"><span>设备目录<small>留空使用输入法专属目录；手心的 .piska 导入入口从「下载」目录读取</small></span><input id="adb-directory" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <label class="settings-row"><span>输入法包名<small>百度 / 搜狗 / 手心按包名识别；定制版请填写对应包名</small></span><input id="adb-package" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="com.baidu.input"></label>
-              <label class="settings-row"><span>导入 Activity<small>留空按输入法用各自入口（百度 .ImeUpdateActivity、手心 .FTInputSettingsActivity）</small></span><input id="adb-activity" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
+              <label class="settings-row"><span>导入 Activity<small>留空使用目标输入法默认入口；手心为 .FTInputSettingsActivity</small></span><input id="adb-activity" class="ui-input" type="text" autocomplete="off" spellcheck="false" placeholder="未设置"></label>
               <div class="settings-row"><span>连接状态<small id="adb-test-status" role="status">尚未测试连接</small></span><button id="adb-test" class="ui-button" type="button">测试连接</button></div>
             </section>
             <section class="settings-group" aria-labelledby="settings-adb-pair-title">

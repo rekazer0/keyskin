@@ -11,7 +11,7 @@ import { scrollSelectedSource } from "../config-context"
 import { applyExactGap, moveMixedCoordinate, applyLayoutAction, copySelectedKeys, deleteSelectedKeys } from "../key-editing"
 import { shouldClearMixedInput } from "../../mixed-input.ts"
 import { syncCandidateSelection, updateDevicePreview, refreshPreview, setGuidesVisible } from "../preview-render"
-import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode } from "../mobile-layout"
+import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode, revealInspectorGroup } from "../mobile-layout"
 import { ensureAiChat, aiDesignErrorMessage } from "../ai-panel"
 import { switchSsfPreviewLayout } from "../ssf-preview"
 import { switchPalmLayout } from "../sxi-documents"
@@ -22,7 +22,7 @@ import { IniDocument } from "../../ini.ts"
 import { importFontFile, removeSelectedFont, setGlobalFont } from "../skin-fonts"
 import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, updateSelectedTile, nextSliceIndex } from "../tile-editing"
 import { canvasEditable, isEditing } from "../edit-history"
-import { selectStyleResource, showResourceList, renderResourceInspector } from "../resource-inspector"
+import { selectStyleResource, showResourceList, renderResourceInspector, renderStyleResourceDetail } from "../resource-inspector"
 import { revealSourceFile } from "../source-files"
 import { type BdaAppearanceStyleGroup } from "../../bda.ts"
 import { tileSliceAt, boundedTileRect, moveTileRect } from "../../tiles.ts"
@@ -194,7 +194,11 @@ export function wireEditingControls(): void {
   }
   mode.addEventListener("change", () => {
     applyModeState()
-    if (appState.resourceConfigActive) populateTileInspector()
+    if (appState.resourceConfigActive) {
+      renderResourceInspector()
+      if (appState.resourceInspectorMode === "style" && appState.selectedStyleID) void renderStyleResourceDetail()
+      populateTileInspector()
+    }
     else populateKeyInspector()
     eventLog.textContent = ""
   })
@@ -471,6 +475,10 @@ export function wireEditingControls(): void {
       return
     }
     const path = toolbarStrip.dataset.path
-    if (path) selectFile(path)
+    if (!path) return
+    const inputRegion = event.target instanceof Element && Boolean(event.target.closest("#candidate-input"))
+    selectFile(path)
+    // 输入码区域定位到它的「输入区」分组；候选栏其它位置仍从候选栏开始。
+    if (inputRegion) revealInspectorGroup("INPUT")
   })
 }

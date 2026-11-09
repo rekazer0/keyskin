@@ -15,8 +15,33 @@ import { layoutLabel } from "./file-tree"
 
 type Group = { label: string; blocks: SsfBlock[]; code?: string; key?: string }
 
+const IMAGE_KEYS = ["NORMAL", "PRESSED"]
+const FG_STYLE_KEYS = ["LABEL_STYLE", "LABEL_POSITION", "LABEL_VISIBLE", "LABEL_ORIENTATION", "LABEL_HORIZONTAL_OFFSET", "MINOR_LABEL_STYLE", "MINOR_LABEL_POSITION", "MINOR_LABEL_VISIBLE", "MINOR_LABEL_HORIZONTAL_OFFSET", "ICON_RECT"]
+const KEY_KEYS = ["LABEL", "MINOR_LABEL", "L_KEY", "TYPE"]
+const VIEW_KEYS = ["BG_STYLE", "BG_COLOR", "MARGINS", "PADDINGS"]
+
+/** Known model fields stay available when their INI values are absent. */
+function supportedFields(path: string, section: string): string[] {
+  if (path === "phoneTheme.ini") return section === "General" ? ["skin_name", "skin_author", "skin_contact", "skin_tip", "skin_version", "skin_version_self", "skin_id", "skin_type", "supports-screens", "preview_square", "preview_comp"] : []
+  if (path === SSF_SOUNDS_PATH) return ["sound"]
+  if (/^TextStyle(?:_|$)/.test(section)) return TEXT_KEYS
+  const document = ssfDocument(path)
+  const namedBy = (keys: string[]) => document.entries().some((entry) => keys.includes(entry.key) && firstValue(entry.value) === section)
+  if (/^FGStyle(?:_|$)/.test(section) || namedBy(["FG_STYLE"])) return FG_STYLE_KEYS
+  if (/^(?:KeyBg_|SMA_|Foground_)/.test(section) || namedBy(["BG_IMAGE", "BG_IMAGES", "FG_IMAGES"])) return IMAGE_KEYS
+  if (/^Key_/.test(section)) return /(?:^|\/)keys\.ini$/i.test(path) ? ["FG_IMAGES", "FG_RECT", "ANIM_STYLE"] : [...KEY_KEYS, "BG_IMAGES", "FG_STYLE", "ICON", "ICON_PRESSED"]
+  if (section === "RootView") return [...VIEW_KEYS, "BG_IMAGE", "BG_FUNCTION_COLOR"]
+  if (/^(?:CandidateView|CandidateCodeView|CandidateGridViewContainer|CloudView|ComposingView)/.test(section)) return [...VIEW_KEYS, "TEXT_STYLE", "TEXT_HIGHLIGHT_STYLE"]
+  if (section === "General") return ["ICON_COLOR", "HIGH_LIGHT_ICON_COLOR", "POPUP_BG_COLOR", "POPUP_OFFSET_VERTICAL"]
+  return []
+}
+
 function renderGroup(label: string, blocks: SsfBlock[], code?: string): Group | undefined {
-  const shown = blocks.filter((block) => block.template || block.expect || ssfDocument(block.path).sections().includes(block.section))
+  const shown = blocks.map((block) => {
+    const expected = [...new Set([...block.expect ?? [], ...supportedFields(block.path, block.section).filter((key) => !block.only || block.only.includes(key))])]
+      .filter((key) => !block.omit?.includes(key))
+    return expected.length ? { ...block, expect: expected } : block
+  }).filter((block) => block.template || block.expect || ssfDocument(block.path).sections().includes(block.section))
   return shown.length ? { label, blocks: shown, code } : undefined
 }
 
@@ -32,11 +57,19 @@ function backgroundGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBin
   const background = ssfBackground(skin, binding)
   if (!background) {
     const owner = ownSection(skin, binding)
+    const add = ssfButton("添加背景图", "square-plus", () => openImageResourceChooser((resourceID) => {
+      const file = /\.\w+$/.test(resourceID) ? resourceID : `${resourceID}.png`
+      editSsfFile(skinPath, (document) => {
+        const images = firstValue(document.get(owner, "BG_IMAGES")) ?? freeSectionName(document, `SMA_${owner}`)
+        setSsfValue(document, images, "NORMAL", file)
+        setSsfValue(document, owner, "BG_IMAGES", images)
+      })
+    }))
     return renderGroup("背景", [{
       path: skinPath,
       section: owner,
       title: "背景",
-      template: [{ key: "BG_IMAGES", value: freeSectionName(skin, `SMA_${owner}`) }],
+      only: [], template: [], actions: [add],
     }])
   }
   if (background.owner) {
@@ -71,10 +104,10 @@ function foregroundGroup(skinPath: string, keysPath: string, skin: IniDocument, 
   if (foreground?.kind === "keys") {
     blocks.push(
       { path: keysPath, section: foreground.images, title: "前景图", reference: { path: keysPath, section: foreground.owner, key: "FG_IMAGES" } },
-      { path: keysPath, section: foreground.owner, title: "前景位置", omit: ["FG_IMAGES", "ANIM_STYLE"] },
+      { path: keysPath, section: foreground.owner, title: "前景位置", omit: ["FG_IMAGES", "ANIM_STYLE"], expect: ["FG_RECT"] },
     )
   } else if (foreground) {
-    blocks.push({ path: skinPath, section: foreground.owner, title: "图标", only: ["ICON", "ICON_PRESSED"] })
+    blocks.push({ path: skinPath, section: foreground.owner, title: "图标", only: ["ICON", "ICON_PRESSED"], expect: ["ICON", "ICON_PRESSED"] })
   } else {
     const add = ssfButton("添加前景图", "square-plus", () => openImageResourceChooser((resourceID) => {
       const file = /\.\w+$/.test(resourceID) ? resourceID : `${resourceID}.png`
@@ -90,8 +123,13 @@ function foregroundGroup(skinPath: string, keysPath: string, skin: IniDocument, 
     blocks.push({ path: skinPath, section: owner, title: "前景", actions: [add], only: [], template: [] })
   }
   // FG_STYLE places the icon and labels inside the key.
-  const fgStyle = binding.sections.map((section) => firstValue(skin.get(section, "FG_STYLE"))).find(Boolean)
-  if (fgStyle) blocks.push({ path: skinPath, section: fgStyle, title: "前景布局" })
+  const owner = binding.sections.find((section) => firstValue(skin.get(section, "FG_STYLE"))) ?? ownSection(skin, binding)
+  const fgStyle = firstValue(skin.get(owner, "FG_STYLE"))
+  blocks.push({
+    path: skinPath, section: fgStyle ?? freeSectionName(skin, `FGStyle_${owner}`), title: "前景布局", expect: FG_STYLE_KEYS,
+    create: [{ key: "LABEL_STYLE", value: ssfTextSections(binding, ssfQwertyBoard())[0] }],
+    bind: { section: owner, key: "FG_STYLE" },
+  })
   return renderGroup("前景", blocks)
 }
 
@@ -185,7 +223,7 @@ function keyGroup(skinPath: string, binding: SsfKeyBinding): Group | undefined {
     .map((section) => ({ path: skinPath, section, omit: handled }))
   // The key's own labels (parseimpl/a.java LABEL / MINOR_LABEL) can be set even when it has none.
   if (!blocks.length) blocks.push({ path: skinPath, section: ownSection(ssfDocument(skinPath), binding), omit: handled })
-  blocks[0].expect = ["LABEL", "MINOR_LABEL"]
+  blocks[0].expect = KEY_KEYS
   return renderGroup("按键", blocks)
 }
 
@@ -204,6 +242,22 @@ function keyGroups(binding: SsfKeyBinding): Group[] {
   ].filter((group): group is Group => Boolean(group))
 }
 
+function imageBlocks(skinPath: string, skin: IniDocument, section: string, key: string, title: string): SsfBlock[] {
+  const block = (name: string, extra: Partial<SsfBlock> = {}): SsfBlock => ({ path: skinPath, section: name, ...extra })
+  const target = firstValue(skin.get(section, key))
+  if (target && !/\.\w+$/.test(target)) return [block(target, { title, reference: { path: skinPath, section, key }, expect: IMAGE_KEYS })]
+  if (target) return []
+  const add = ssfButton(`添加${title}`, "square-plus", () => openImageResourceChooser((resourceID) => {
+    const file = /\.\w+$/.test(resourceID) ? resourceID : `${resourceID}.png`
+    editSsfFile(skinPath, (document) => {
+      const images = freeSectionName(document, `Bg_${section}`)
+      document.appendSection(images, [{ key: "NORMAL", value: file }])
+      setSsfValue(document, section, key, images, [{ key: "BG_STYLE", value: "1" }])
+    })
+  }))
+  return [block(section, { title, only: [], template: [], actions: [add] })]
+}
+
 /** What every key of the current board shares: backgrounds, candidate bar, default classes, colours. */
 function boardGroups(): Group[] {
   const skinPath = ssfSkinPath()
@@ -212,15 +266,12 @@ function boardGroups(): Group[] {
   const qwerty = ssfQwertyBoard()
   const nineKey = appState.layoutDocument?.sections().includes("LIST")
   const block = (section: string, extra: Partial<SsfBlock> = {}): SsfBlock => ({ path: skinPath, section, ...extra })
-  const referenced = (section: string, key: string, title: string): SsfBlock[] => {
-    const target = firstValue(skin.get(section, key))
-    return target && !/\.\w+$/.test(target) ? [block(target, { title, reference: { path: skinPath, section, key } })] : []
-  }
+  const referenced = (section: string, key: string, title: string) => imageBlocks(skinPath, skin, section, key, title)
   const candidate = orientation.value === "land" && skin.sections().includes("CandidateViewLand") ? "CandidateViewLand" : "CandidateView"
   const groups: Array<[string, SsfBlock[]]> = [
     // Sogou skips RootView / CandidateView without BG_STYLE (frame/b0.java), so a new one starts with it.
     ["键盘背景", [block("RootView", { expect: ["BG_STYLE", "BG_IMAGE", "BG_COLOR", "BG_FUNCTION_COLOR"], create: [{ key: "BG_STYLE", value: "1" }] }), ...skin.sections().includes("WALLPAPER") ? [block("WALLPAPER")] : []]],
-    ["候选栏", [block(candidate, { expect: ["BG_STYLE", "BG_IMAGE", "BG_COLOR", "MARGINS"], create: [{ key: "BG_STYLE", value: "1" }] }), ...referenced(candidate, "BG_IMAGE", "候选栏背景")]],
+    ["候选栏", [block(candidate, { omit: /\.\w+$/.test(firstValue(skin.get(candidate, "BG_IMAGE")) ?? "") ? [] : ["BG_IMAGE"], expect: ["BG_STYLE", "BG_COLOR", "MARGINS"], create: [{ key: "BG_STYLE", value: "1" }] }), ...referenced(candidate, "BG_IMAGE", "候选栏背景")]],
     ["候选字", [textBlock(skinPath, "TextStyle_Candidate", CANDIDATE_TEXT_KEYS), textBlock(skinPath, "TextStyle_Candidate_Highlight", ["TEXT_COLOR"])]],
     ["输入码", [block("ComposingView", { expect: ["BG_STYLE", "BG_COLOR"], create: [{ key: "BG_STYLE", value: "2" }] }), textBlock(skinPath, "TextStyle_Composing", CANDIDATE_TEXT_KEYS)]],
     ["按键背景", (qwerty ? ["KeyBg_Default_Latin", "KeyBg_Function_Qwerty", "KeyBg_Space_Qwerty"] : ["KeyBg_Default", "KeyBg_Function", "KeyBg_Space"]).map((section) => block(section, { expect: ["NORMAL", "PRESSED"] }))],
@@ -232,7 +283,7 @@ function boardGroups(): Group[] {
       block("General", { expect: ["ICON_COLOR", "HIGH_LIGHT_ICON_COLOR", "POPUP_BG_COLOR"] }),
     ]],
     ...nineKey ? [["符号列", [
-      block("CandidateCodeView"),
+      block("CandidateCodeView", { omit: ["BG_IMAGE", "BG_IMAGES"].filter((key) => !/\.\w+$/.test(firstValue(skin.get("CandidateCodeView", key)) ?? "")), create: [{ key: "BG_STYLE", value: "1" }] }),
       ...referenced("CandidateCodeView", "BG_IMAGE", "符号列背景"),
       ...referenced("CandidateCodeView", "BG_IMAGES", "符号列单元格"),
       textBlock(skinPath, firstValue(skin.get("CandidateCodeView", "TEXT_STYLE")) ?? "TextStyle_Text", CANDIDATE_TEXT_KEYS),
@@ -248,9 +299,33 @@ function boardGroups(): Group[] {
 /** Every section of a Sogou INI file, one group each. */
 function fileGroups(path: string): Group[] {
   const document = ssfDocument(path)
-  return document.sections().flatMap((section) => {
+  const sections = [...new Set([...document.sections(), .../phoneSkin\.ini$/i.test(path) ? ["RootView", "CandidateView", "ComposingView", "General"] : []])]
+  const references = new Map<string, Array<{ key: string; target: string }>>()
+  for (const section of sections) {
+    for (const key of ["BG_IMAGE", "BG_IMAGES", "FG_IMAGES"]) {
+      const target = firstValue(document.get(section, key))
+      if (target && !/\.\w+$/.test(target)) {
+        const list = references.get(section) ?? []
+        list.push({ key, target })
+        references.set(section, list)
+      }
+    }
+  }
+  const referencedSections = new Set([...references.values()].flatMap((items) => items.map(({ target }) => target)))
+  return sections.flatMap((section) => {
+    if (referencedSections.has(section)) return []
     const label = path === "phoneTheme.ini" && section === "General" ? "皮肤信息" : ssfSectionLabel(section)
-    const group = renderGroup(label, [{ path, section }], section)
+    const refs = references.get(section) ?? []
+    const backgroundMode = section === "ComposingView" ? "2" : /^(?:RootView|CandidateView|CandidateViewLand|CandidateCodeView)$/.test(section) ? "1" : undefined
+    const blocks: SsfBlock[] = [{ path, section, omit: refs.map(({ key }) => key), ...(backgroundMode ? { create: [{ key: "BG_STYLE", value: backgroundMode }] } : {}) }]
+    for (const { key, target } of refs) blocks.push({ path, section: target, title: ssfSectionLabel(target), expect: IMAGE_KEYS, reference: { path, section, key } })
+    if (/^CandidateView/.test(section) && !firstValue(document.get(section, "BG_IMAGE"))) blocks.push(...imageBlocks(path, document, section, "BG_IMAGE", "候选栏背景"))
+    if (section === "CandidateCodeView") {
+      for (const [key, title] of [["BG_IMAGE", "符号列背景"], ["BG_IMAGES", "符号列单元格"]]) {
+        if (!firstValue(document.get(section, key))) blocks.push(...imageBlocks(path, document, section, key, title))
+      }
+    }
+    const group = renderGroup(label, blocks, section)
     return group ? [{ ...group, key: section }] : []
   })
 }
@@ -277,9 +352,9 @@ function commonKeyGroups(selections: Group[][]): Group[] {
       if (matches.some((match) => !match || (match.title ?? "") !== (block.title ?? ""))) return []
       const entries = matches.map((match) => ssfEntries(match.path, match.section).filter((entry) => !match.omit?.includes(entry.key) && (!match.only || match.only.includes(entry.key))))
       const only = entries[0].filter((entry) => entries.every((list) => list.some((item) => item.key === entry.key))).map((entry) => entry.key)
-      return only.length || block.expect ? [{ path: block.path, section: block.section, title: block.title, only, options: block.options, expect: block.expect, create: block.create,
+      return only.length || block.expect ? [{ path: block.path, section: block.section, title: block.title, only, options: block.options, expect: block.expect, create: block.create, bind: block.bind,
         note: "作用于所有选中按键",
-        peers: matches.slice(1).map(({ path, section }) => ({ path, section })),
+        peers: matches.slice(1).map(({ path, section, create, bind }) => ({ path, section, create, bind })),
       }] : []
     })
     return blocks.length ? [{ label: group.label, blocks }] : []

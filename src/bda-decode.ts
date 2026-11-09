@@ -226,7 +226,7 @@ export function gamePanel(field: ProtoField | undefined): BdaGamePanel | undefin
 
 function switchStyle(field: ProtoField | undefined): BdaSwitch | undefined {
   const value = message(field)
-  return value.length ? {
+  return field?.bytes ? {
     normalBack: styleRef(first(value, 1)),
     selectBack: styleRef(first(value, 2)),
     normalFore: styleRef(first(value, 3)),
@@ -236,7 +236,7 @@ function switchStyle(field: ProtoField | undefined): BdaSwitch | undefined {
 
 export function cand(field: ProtoField | undefined): BdaCand | undefined {
   const value = message(field)
-  return value.length ? {
+  return field?.bytes ? {
     candBarStyle: styleRef(first(value, 1)),
     candOnBarStyle: styleRef(first(value, 2)),
     cellBackStyle: styleRef(first(value, 3)),
@@ -284,7 +284,7 @@ export function hint(field: ProtoField | undefined): BdaHint {
 
 function inputTile(field: ProtoField | undefined): BdaInputTile | undefined {
   const value = message(field)
-  return value.length ? {
+  return field?.bytes ? {
     backStyle: styleRef(first(value, 1)),
     textStyle: styleRef(first(value, 2)),
   } : undefined
@@ -292,7 +292,7 @@ function inputTile(field: ProtoField | undefined): BdaInputTile | undefined {
 
 export function grid(field: ProtoField | undefined): BdaGrid | undefined {
   const value = message(field)
-  return value.length ? {
+  return field?.bytes ? {
     backStyle: styleRef(first(value, 1)),
     cellForeStyle: styleRef(first(value, 2)),
     cellBackStyle: styleRef(first(value, 3)),

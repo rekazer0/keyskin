@@ -18,7 +18,7 @@ import { selectFile } from "./navigation"
 import { previewStyleAnimation } from "./animation-resource"
 import { updateBdaAppearanceStyleRef } from "./key-inspector"
 import { styleAnimationReferenceStates } from "./legacy-animation-inspector"
-import { keySoundSample } from "./style-card-preview"
+import { keySoundSample, palmStyleAnimationStates } from "./style-card-preview"
 import { styleKindIcon, styleReferenceCard, type StyleReferenceState } from "../style-card"
 import { palmStyleLocation } from "../palm/palm-style-edit.ts"
 import { palmFieldLabel } from "../palm/palm-labels.ts"
@@ -34,7 +34,7 @@ export function styleReferenceKey(input: HTMLInputElement): string {
 
 export function isStyleReferenceKey(key: string): boolean {
   if (key === "STAT_STYLE") return false
-  return key === "styleID" || /(?:^|\.)(?:[A-Z0-9_]*STYLE|FIRST_BACK|FIRST_FORE|PARTICLE_IMAGE)$/i.test(key)
+  return key === "styleID" || /(?:^|\.)(?:[A-Z0-9_]*STYLE(?:_INDEX)?|FIRST_BACK|FIRST_FORE|PARTICLE_IMAGE)$/i.test(key)
 }
 
 function soundPathForStyle(styleID: string): string | undefined {
@@ -109,7 +109,7 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
       const path = soundPathForStyle(styleID)
       states = [{ label: "音效", content: keySoundSample(path?.split("/").pop() ?? styleSoundFile(styleID), path), onClick: (edit) => edit ? openStyleReferenceEditor(styleID) : choose() }]
     } else if (animationReference && !empty) {
-      states = styleAnimationReferenceStates(styleID, styles ?? IniDocument.parse(""), () => choose())
+      states = appState.archive?.format === "sxi" ? palmStyleAnimationStates(styleID, () => choose()) : styleAnimationReferenceStates(styleID, styles ?? IniDocument.parse(""), () => choose())
     } else if (!empty) {
       states = [false, true].map((highlighted) => ({
         label: highlighted ? "按下" : "正常",

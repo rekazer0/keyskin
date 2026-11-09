@@ -75,7 +75,8 @@ try {
   await color.locator('input[type=number]').fill('0')
   await color.locator('input[type=number]').press('Tab')
   assert.equal(await value('STYLE1', 'NM_COLOR'), '00ABCDEF', 'zero alpha remains transparent')
-  assert.equal(await page.locator('#document-fields [data-document-key=SIZE]').last().locator('input').inputValue(), '1/3,2/3')
+  // 能力表会给每个分区各补一行尺寸：这里只看布局自己的 [EXTRA] 分区。
+  assert.equal(await page.locator('#document-fields > section').filter({ hasText: /^EXTRA/ }).locator('[data-document-key=SIZE] input').inputValue(), '1/3,2/3')
   await page.locator('.inspector-reset').click()
   assert.equal(await value('LIST1', 'LIST_ORDER'), '1')
   assert.equal(await value('ICON1', 'PERSIST'), '3')

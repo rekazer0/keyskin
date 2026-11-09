@@ -65,7 +65,10 @@ function decorateSections(): void {
   if (!root) return
   for (const section of headedSections(root)) {
     const heading = section.querySelector<HTMLElement>(":scope > h3")
-    if (heading && !heading.title) heading.title = SECTION_HINTS[sectionName(section)] ?? ""
+    if (!heading || heading.title) continue
+    const name = sectionName(section)
+    // 分区动画分组按分区命名（面板动画、列表动画…），沿用「动画」的字段说明。
+    heading.title = SECTION_HINTS[name] ?? (/动画$/.test(name) ? SECTION_HINTS["动画"] : "") ?? ""
   }
   for (const handle of Array.from(root.querySelectorAll<HTMLElement>(SCRUB_HANDLES))) {
     handle.toggleAttribute("data-scrub", Boolean(scrubbableField(handle)))

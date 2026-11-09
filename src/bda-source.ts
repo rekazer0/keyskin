@@ -1,6 +1,6 @@
 import { type BdaAppearance, type BdaStyleRef, type BdaImageAtom, type BdaKey, type BdaHint, type BdaList, type BdaCand, type BdaPanel, type BdaAppearancePart } from "./bda.ts"
 import { bdaColorHex } from "./bda-resolver.ts"
-import { rawFields, rawString, replaceField, encodeVarint, join, encodedField, updateStringMapValue, colorValue, updateBdaDesignWidth, updateBdaStyle, updateBdaAnimationFrame, applyBdaAnimationEffects, updateBdaKeySound } from "./bda-encode.ts"
+import { rawFields, rawString, replaceField, removeFields, encodeVarint, join, encodedField, updateStringMapValue, colorValue, updateBdaDesignWidth, updateBdaStyle, updateBdaAnimationFrame, applyBdaAnimationEffects, updateBdaKeySound } from "./bda-encode.ts"
 import { decodeBdaAppearance, decodeBdaAnimation, decodeBdaSoundConfig } from "./bda-decode.ts"
 
 function mapObject<K extends string | number, V>(
@@ -372,9 +372,15 @@ function appendStringMapEntry(bytes: Uint8Array, fieldNumber: number, key: strin
 function patchPanelMessage(bytes: Uint8Array, desired: JsonObject, current: JsonObject, schema: PanelPatchSchema): Uint8Array {
   let output = bytes
   for (const [property, spec] of Object.entries(schema)) {
+    // Decoded new messages include empty maps even when the first edit only sets a style.
+    if (spec.kind === "stringMap" && desired[property] === undefined && current[property] === undefined) desired[property] = {}
     const wanted = desired[property]
     const old = current[property]
     if (sameJson(wanted, old)) continue
+    if (wanted === undefined && spec.kind === "style") {
+      output = removeFields(output, new Set([spec.field]))
+      continue
+    }
     if (wanted === undefined && spec.kind !== "styleList" && spec.kind !== "offsetList") throw new Error(`暂不支持删除 BDA 面板字段：${property}`)
     if (spec.kind === "style" || spec.kind === "offset") {
       const original = rawFields(output).find((field) => field.number === spec.field)?.bytes ?? new Uint8Array()
@@ -411,7 +417,7 @@ function patchPanelMessage(bytes: Uint8Array, desired: JsonObject, current: Json
     }
     if (spec.kind === "stringMap") {
       const wantedMap = jsonObject(wanted)
-      const oldMap = jsonObject(old)
+      const oldMap = jsonObject(old) ?? {}
       if (!wantedMap || !oldMap || !spec.schema) throw new Error(`BDA 面板映射无效：${property}`)
       for (const [key, wantedValue] of Object.entries(wantedMap)) {
         const oldValue = oldMap[key]

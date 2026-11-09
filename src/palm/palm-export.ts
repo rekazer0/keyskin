@@ -17,9 +17,11 @@
 
 import { zipSync } from "fflate"
 import type { SkinArchive } from "../skin.ts"
-import { decodePng, encodePng, resizeImage } from "../ssf/ssf-png.ts"
+import { writeIosToolbarMenu } from "../ios-toolbar.ts"
+import { decodePng, encodePng, placeImage, resizeImage } from "../ssf/ssf-png.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
 import { fitCandidateIcons } from "./palm-export-layout.ts"
+import { separateOrientationResources } from "./palm-export-resources.ts"
 import { boardTypeFromIniFileName } from "./palm-board-types.ts"
 import { NATIVE_LAYOUT_JSON } from "./palm-native-layout.ts"
 import { decodeSkinText, parseIniSections, toBool, toInt, type IniSection } from "./palm-ini.ts"
@@ -90,6 +92,7 @@ type ExportContext = {
   root: PalmVirtualRoot
   warnings: string[]
   sections: Map<string, IniSection[] | undefined>
+  entries: ConverterEntry[]
 }
 
 /* ------------------------------------------------------------------ helpers */
@@ -303,8 +306,30 @@ function layoutJson(context: ExportContext, paths: string[] | undefined): Json {
     }
   }
   fixTouchRects(maps)
-  fitCandidateIcons(maps, cands)
+  fitCandidateIcons(maps, cands, context.warnings)
+  mergeGlobalBoardModels(maps)
   return { b: maps, c: cands, h: hints }
+}
+
+/** Baidu keeps the shared bars and list-cell style in `gen.ini`; Palm expects them on every board. */
+function mergeGlobalBoardModels(maps: Record<string, Json>): void {
+  const global = asBoard(maps.defaultGlobal)
+  if (!global) return
+  const boards = Object.entries(maps)
+    .filter(([name]) => name !== "defaultGlobal")
+    .map(([, board]) => asBoard(board))
+    .filter((board): board is Record<string, Json> => board !== undefined)
+  // Palm only loads a skin when the global board has the list-cell model Baidu never writes there.
+  if (global.list === undefined) global.list = boards.find((board) => board.list !== undefined)?.list
+  for (const board of boards) {
+    for (const key of ["cand", "input", "more", "hint", "top_cand", "list"]) {
+      if (board[key] === undefined && global[key] !== undefined) board[key] = global[key]
+    }
+  }
+}
+
+function asBoard(value: Json): Record<string, Json> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, Json> : undefined
 }
 
 /* -------------------------------------------------------------------- style */
@@ -540,6 +565,7 @@ function skinFileJson(context: ExportContext, struct: SkinStruct): Json {
   }
   if (styles.port !== undefined) model.s_port = styles.port
   if (styles.land !== undefined) model.s_land = styles.land
+  separateOrientationResources(model, context.entries)
   return model
 }
 
@@ -608,6 +634,8 @@ function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
     if (!path) continue
     // Single-theme Baidu packages keep resources at the root; Palm resolves them in the default theme.
     if (/^(?:port|land|res)(?:\/|$)/.test(path)) path = `light/skin/${path}`
+    // Palm reads a theme's artwork from `<theme>/skin/`; Baidu Android keeps it at `<theme>/`.
+    path = path.replace(/^(dark|light)\/(?!skin\/)/, "$1/skin/")
     entries.push({
       path,
       directory: item.directory,
@@ -621,10 +649,26 @@ function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
 const PALM_ICON_SIZE = 88
 
 function normalizeToolbarIcons(entries: ConverterEntry[]): void {
+  // Palm loads toolbar functions from menu images, not Baidu Android's atlas alone.
+  const files = new Map(entries.flatMap((entry) => entry.bytes ? [[entry.path, entry.bytes] as const] : []))
+  for (const path of [...files.keys()]) {
+    if (!path.endsWith("res/logo/pop_menu_icons.til")) continue
+    const root = path.slice(0, -"res/logo/pop_menu_icons.til".length)
+    if ([...files.keys()].some((name) => name.startsWith(`${root}res/logo/`) && name.includes("toolbarMenuItems"))) continue
+    writeIosToolbarMenu(files, root)
+  }
+  const existing = new Set(entries.map((entry) => entry.path))
+  for (const [path, bytes] of files) {
+    if (!existing.has(path)) entries.push({ path, bytes, directory: path.endsWith("/") })
+  }
   for (const entry of entries.filter((item) => !item.directory && /\/res\/logo\/.+_iphone@3x\.png$/.test(item.path))) {
     const image = entry.bytes ? decodePng(entry.bytes) : undefined
     if (!image) continue
-    entry.bytes = encodePng(image.width === PALM_ICON_SIZE && image.height === PALM_ICON_SIZE ? image : resizeImage(image, PALM_ICON_SIZE, PALM_ICON_SIZE))
+    const scale = PALM_ICON_SIZE / Math.max(image.width, image.height)
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+    entry.bytes = encodePng(placeImage(resizeImage(image, width, height), PALM_ICON_SIZE, PALM_ICON_SIZE,
+      Math.floor((PALM_ICON_SIZE - width) / 2), Math.floor((PALM_ICON_SIZE - height) / 2)))
     for (const suffix of ["_ipad", "_ipad@2x"]) {
       entries.push({ path: entry.path.replace(/_iphone@3x\.png$/, `${suffix}.png`), directory: false, bytes: entry.bytes })
     }
@@ -669,6 +713,7 @@ export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings
   const context: ExportContext = {
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),
     warnings,
+    entries,
     sections: new Map(),
   }
 

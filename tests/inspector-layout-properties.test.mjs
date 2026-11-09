@@ -37,7 +37,7 @@ test("unknown INI properties keep their source names", () => {
   assert.match(main, /const known = documentFieldLabels\[key\] \?\? LEGACY_ANIMATION_FIELDS\[key\]\?\.label \?\? sourceKeyLabels\[key\]/)
   assert.match(main, /documentSectionLabels\[section\] \?\? section/)
   // 译文之外的原始键名留在悬停提示里，属性行始终能对应回 ini 的键。
-  assert.match(main, /span\.title = label === key \? key : `\$\{label\}（\$\{key\}）`/)
+  assert.match(main, /span\.title = hint \?\? \(label === key \? key : `\$\{label\}（\$\{key\}）`\)/)
 })
 
 test("document inspector labels cover the keys real skins use", () => {
@@ -83,7 +83,7 @@ test("document sections and category rail stay readable", () => {
 
 test("numeric fields never hide a non-numeric value", () => {
   assert.match(main, /function looksNumeric\(value: string\): boolean \{\s*return \/\^-\?\\d\+\(\?:\\\.\\d\+\)\?\$\/\.test\(value\.trim\(\)\)/)
-  assert.match(main, /if \(documentNumericFields\.has\(entry\.key\) && looksNumeric\(entry\.value\)\) \{/)
+  assert.match(main, /if \(documentNumericFields\.has\(entry\.key\) && \(!entry\.value\.trim\(\) \|\| looksNumeric\(entry\.value\)\)\) \{/)
 })
 
 test("style reference thumbnails are redrawn when their group becomes visible", () => {

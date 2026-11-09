@@ -84,11 +84,17 @@ const PART_LABELS: Record<string, string> = {
   key_fix: "状态按键",
   offset: "偏移",
   force: "按压力度",
+  bd: "边框动画",
   switch: "切换按钮",
   icon_list: "图标",
   fix: "状态按键",
   icon_info: "图标",
   info: "皮肤信息",
+  s_1: "文字与颜色",
+  s_2: "图片",
+  s_3: "边框",
+  s_4: "音效",
+  s_5: "动画",
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -123,6 +129,8 @@ const FIELD_LABELS: Record<string, string> = {
   extend: "动画扩展",
   level: "动画层级",
   a_insets: "动画内边距",
+  a: "动画样式",
+  r: "播放范围",
   pos: "位置",
   p: "位置",
   s: "尺寸",
@@ -163,6 +171,11 @@ const FIELD_LABELS: Record<string, string> = {
   i_c: "单元样式",
   i_l: "锁定样式",
   i_b: "边框样式",
+  i_f: "前景样式",
+  i_last: "末项样式",
+  b_b: "图标背景",
+  b_f: "图标前景",
+  b_t: "图标文字",
   i_scroll: "滚动条样式",
   i_i: "输入样式",
   s_i: "候选样式",
@@ -179,6 +192,11 @@ const FIELD_LABELS: Record<string, string> = {
   c_hl: "按下颜色",
   c_type: "清晰字体",
   for_back: "用作背景",
+  normal: "正常图片",
+  hl: "按下图片",
+  path_1: "按下音效",
+  path_2: "显示音效",
+  path_3: "隐藏音效",
   // Skin info (`info`).
   name: "名称",
   description: "描述",
@@ -195,10 +213,18 @@ const FIELD_LABELS: Record<string, string> = {
  * Fields holding a style of `ss_1` and how the style card draws it: as a background, a foreground
  * (text and icons), a list cell or a sound. `base_f` is a list of foreground layers.
  */
-const STYLE_REFERENCES: Record<string, "BACK_STYLE" | "FORE_STYLE" | "CELL_STYLE" | "SOUND_STYLE"> = {
+type StyleReference = "BACK_STYLE" | "FORE_STYLE" | "CELL_STYLE" | "SOUND_STYLE" | "ANIM_STYLE" | "BACK_ANIM_STYLE" | "FORE_ANIM_STYLE" | "PRESS_STYLE"
+
+const STYLE_REFERENCES: Record<string, StyleReference> = {
   base_b: "BACK_STYLE",
   base_f: "FORE_STYLE",
   base_s: "SOUND_STYLE",
+  asi: "ANIM_STYLE",
+  base_ba: "BACK_ANIM_STYLE",
+  base_fa: "FORE_ANIM_STYLE",
+  base_a: "ANIM_STYLE",
+  base_pa: "PRESS_STYLE",
+  bar_a: "ANIM_STYLE",
   i_cell: "CELL_STYLE",
   i_c: "CELL_STYLE",
   i_mask: "BACK_STYLE",
@@ -210,6 +236,11 @@ const STYLE_REFERENCES: Record<string, "BACK_STYLE" | "FORE_STYLE" | "CELL_STYLE
   i_v: "BACK_STYLE",
   i_l: "BACK_STYLE",
   i_b: "BACK_STYLE",
+  i_f: "FORE_STYLE",
+  i_last: "CELL_STYLE",
+  b_b: "BACK_STYLE",
+  b_f: "FORE_STYLE",
+  b_t: "FORE_STYLE",
   i_scroll: "BACK_STYLE",
   i_f_f: "FORE_STYLE",
   i_cand: "FORE_STYLE",
@@ -232,6 +263,6 @@ export function palmFieldLabel(key: string): string {
   return FIELD_LABELS[key] ?? PART_LABELS[key] ?? key
 }
 
-export function palmStyleReference(key: string): "BACK_STYLE" | "FORE_STYLE" | "CELL_STYLE" | "SOUND_STYLE" | undefined {
+export function palmStyleReference(key: string): StyleReference | undefined {
   return STYLE_REFERENCES[key]
 }

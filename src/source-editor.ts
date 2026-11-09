@@ -230,7 +230,6 @@ export class SourceCodeEditor extends EventTarget {
   private language: SourceEditorLanguage = "ini"
   private isDisabled = true
   private isReadOnly = false
-  private suppressInput = false
   private changedSinceCommit = false
   private features = { completion: false, valueHints: false, explanations: false }
   private valueRanges: SourceEditorValueRange[] = []
@@ -265,7 +264,7 @@ export class SourceCodeEditor extends EventTarget {
                 }))
               }
             }
-            if (!update.docChanged || this.suppressInput) return
+            if (!update.docChanged) return
             this.changedSinceCommit = true
             this.dispatchEvent(new Event("input"))
             if (this.features.completion) this.refreshCompletion()
@@ -402,13 +401,14 @@ export class SourceCodeEditor extends EventTarget {
 
   set value(value: string) {
     if (value === this.value) return
-    this.suppressInput = true
-    this.view.dispatch({
+    // Rebuild the viewport: mapping a hidden view over a large replacement can overflow CodeMirror's height scaler.
+    this.view.setState(this.view.state.update({
       changes: { from: 0, to: this.view.state.doc.length, insert: value },
       selection: { anchor: 0 },
       annotations: [Transaction.addToHistory.of(false), programmaticSelection.of(true)],
-    })
-    this.suppressInput = false
+    }).state)
+    this.rebuildSectionScrollbar()
+    this.refreshExplanation()
     this.changedSinceCommit = false
   }
 

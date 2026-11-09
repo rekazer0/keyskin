@@ -22,10 +22,10 @@ import { styleAnimationSources, styleAnimationSummary } from "./legacy-animation
 import { nextStyleID } from "../layout-image.ts"
 import { addPalmStyle, removePalmStyle } from "../palm/palm-style-edit.ts"
 import { editSxi } from "./sxi-fields"
-import { palmOrientation, palmTheme } from "./sxi-documents"
+import { openPalmSkin, palmOrientation, palmTheme } from "./sxi-documents"
 import { setSourceValue } from "./config-context"
 import { refreshPreview } from "./preview-render"
-import { type JsonObject } from "../palm/sxi-ini.ts"
+import { asObject, type JsonObject } from "../palm/sxi-ini.ts"
 
 export function stylePickerLabel(styleID: string): string {
   return appState.archive?.format === "bda" ? String(bdaStyleRef(styleID)?.key ?? styleID) : styleID
@@ -73,7 +73,7 @@ export function styleSoundFile(styleID: string, styles = styleConfigDocument()):
 /** Whether new styles can be added: BDI/BDS to their default.css, Palm to skin.json; BDA styles are typed. */
 export function canAddStyle(): boolean {
   const archive = appState.archive
-  return archive?.format === "sxi" ? Boolean(palmStyleIDs().length) : Boolean(archive?.isText(styleConfigPath()) && archive.format !== "bda")
+  return archive?.format === "sxi" ? Boolean(asObject(openPalmSkin()?.[palmTheme()])) : Boolean(archive?.isText(styleConfigPath()) && archive.format !== "bda")
 }
 
 export function styleConfigDocument(): IniDocument | undefined {

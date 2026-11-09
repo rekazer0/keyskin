@@ -105,6 +105,13 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
   }
 }
 
+/** 选中画布上的区域后，把分类栏定位到该区域对应的分组（例如输入码区域 → 输入区）。 */
+export function revealInspectorGroup(key: string): void {
+  const group = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
+    .find((el) => mobileInspectorGroupKey(el) === key)
+  if (group) setMobileInspectorGroup(group.dataset.mobileInspectorGroup ?? "", true)
+}
+
 /** 分类栏放不下时自己滚动：只滚分类栏让当前项露出来，不带动属性列表。 */
 function revealActiveRailButton(): void {
   const rail = mobileInspectorGroups.parentElement
@@ -227,8 +234,8 @@ export function syncMobileInspectorGroups(): void {
     const label = railLabels.get(group) ?? mobileInspectorGroupLabel(group)
     const text = document.createElement("span")
     text.className = "inspector-group-label"
-    // 分类栏一行放得下 4 个字：「时间与循环」这类长名只在「与」之后换行，不截成「时间与…」。
-    const [head, tail] = label.length > 4 ? label.split(/(?<=与)/) : [label]
+    // 分类栏一行放得下 4 个字：「时间与循环」在「与」之后换行，「更多面板动画」在「动画」之前换行，不截成「…」。
+    const [head, tail] = label.length > 4 ? label.split(/(?<=与)|(?=动画$)/) : [label]
     text.append(head, ...tail ? [document.createElement("wbr"), tail] : [])
     button.append(groupIcon(label), text)
     button.title = railCodes.has(group) ? `${label}（${railCodes.get(group)}）` : label

@@ -24,6 +24,17 @@ test("an .sxi exports to Baidu formats and Sogou through conversion", () => {
   assert.ok(canExport("bds", "sxi"))
 })
 
+test("an .sxi conversion nests the theme under skin/ and fills the global board models", () => {
+  const archive = sxi()
+  assert.ok(archive.names().includes("light/skin/res/btn.png"), "Baidu theme artwork lands under light/skin")
+  assert.ok(!archive.names().some((path) => path.startsWith("light/res/")), "no flat light/res entries")
+  const skin = JSON.parse(archive.getText("skin.json")).default
+  assert.ok(skin.r_info.every((path) => path.startsWith("light/skin/")), "skin.json points at the nested files")
+  // Palm falls back to the default skin when the global board misses what Baidu keeps in gen.ini.
+  assert.ok(skin.port_layout.b.defaultGlobal.list, "global board carries the list-cell model")
+  assert.equal(skin.port_layout.b.full26Pinyin.cand.file, "cand1", "per-board bars inherit the global models")
+})
+
 test("an .sxi becomes a BDS package with the same layouts, styles and resources", async () => {
   const archive = sxi()
   const converted = sxiToBaiduArchive(archive)
@@ -83,6 +94,7 @@ test("an .sxi keeps the toolbar plist and menu atlas the export folds into skin.
   const plistPath = "light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist"
   // The .sxi keeps them in skin.json only; the Baidu export writes them out as files again.
   const skin = JSON.parse(archive.getText("skin.json")).default
+  assert.equal(skin.menu.length, 1, 'an authored menu is not supplemented with a different atlas-derived menu')
   assert.equal(skin.menu.flat().find((item) => item.Position === "toolbar").Titles.Normal.Normal, "语音&输入")
   assert.deepEqual(skin.a_m.find((tile) => tile.id === "IMG26").rect1, [[0, 0], [2, 2]])
   assert.equal(archive.getBytes(plistPath), undefined)

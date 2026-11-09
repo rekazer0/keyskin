@@ -1,13 +1,9 @@
-import { animationPlayer } from "../animation-player.ts"
 import { type AnimationStyleItem, type AnimationStyleList } from "../animation-inspector.ts"
 import { section } from "./property-rows"
 import { PALM_ANIMATION_EVENTS } from "../palm/sxi-animation.ts"
 import { element } from "../dom-element.ts"
 import { styleCard } from "../style-card.ts"
-import { palmPreviewClip } from "../palm/palm-preview-clip.ts"
 import { asObject } from "../palm/sxi-ini.ts"
-import { PalmStyles } from "../palm/palm-styles.ts"
-import { visualResolver } from "./bda-documents"
 import { styleConfigPath } from "./config-context"
 import { documentFields, selectedKeyName, selectedKeyContext, selectedKeyPreview, mode } from "./dom"
 import { createIcon } from "../icons.ts"
@@ -24,21 +20,7 @@ import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { palmStyle, palmStylePointer } from "./sxi-styles"
 import { syncInspectorRows } from "../inspector-shell.ts"
 import { appState } from "./state"
-
-
-function palmPlayers(id: string): HTMLElement[] {
-  const skin = openPalmSkin()
-  const pointer = sxiPointer(appState.selectedPath)
-  if (!skin || !pointer) return []
-  const themed = asObject(skin[pointer[0]])
-  const table = { ...asObject(asObject(themed?.s_info)?.ss_2), ...asObject(asObject(themed?.[pointer[1]])?.ss_2) }
-  const bindings = asObject(palmStyle(id)?.s_5)
-  const resolver = visualResolver()
-  return [...new Set(Object.values(bindings ?? {}).map(String))].map(animation => animationPlayer({
-    clip: palmPreviewClip(table, animation), key: `${appState.selectedPath}|${animation}`, resolver, thumbnail: true,
-    readFile: resolver instanceof PalmStyles ? file => resolver.bytes(file) : undefined,
-  }))
-}
+import { palmStyleAnimationStates } from "./style-card-preview"
 
 /** The same card component and samplers as the style configuration gallery. */
 export function animationStyleCard(item: AnimationStyleItem): HTMLElement {
@@ -49,7 +31,7 @@ export function animationStyleCard(item: AnimationStyleItem): HTMLElement {
     id: item.id, label: item.title, kind,
     animationPreview: true,
     summary: styles ? styleAnimationSummary(item.id, styles) : item.detail,
-    animation: () => appState.archive?.format === "sxi" ? palmPlayers(item.id) : styles ? styleAnimationPlayers(item.id, styles, true) : [],
+    animation: () => appState.archive?.format === "sxi" ? palmStyleAnimationStates(item.id, () => {}).map(state => state.content) : styles ? styleAnimationPlayers(item.id, styles, true) : [],
     note,
   })
   card.title = `${item.title} · ${note}`

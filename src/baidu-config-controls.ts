@@ -23,6 +23,7 @@ const metadata: Record<string, ConfigControl> = {
 const fields: Record<string, ConfigControl> = {
   NO_BLUR: SWITCH,
   FONT_CLEARTYPE: SWITCH,
+  SYMBOL_FULL_SCREEN: SWITCH,
   LIST_ORDER: { kind: "choice", options: [["0", "竖排"], ["1", "横排"]] },
   LIST_LEVEL: { kind: "choice", options: [["0", "主列表"], ["1", "副列表"]] },
   SCROLL_SIDE: { kind: "choice", options: [["0", "向内"], ["1", "向外"]] },

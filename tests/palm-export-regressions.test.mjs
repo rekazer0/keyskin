@@ -10,10 +10,10 @@ import { IniDocument } from '../src/ini.ts'
 import { decodePng, encodePng } from '../src/ssf/ssf-png.ts'
 import { plist, toolbarMenuItem } from '../src/ios-toolbar.ts'
 
-function convert(files) {
+function convert(files, format = 'bdi') {
   const source = SkinArchive.open(zipSync(Object.fromEntries(Object.entries({
     'Info.txt': 'Name=Issue 30 regression\n', ...files,
-  }).map(([path, value]) => [path, typeof value === 'string' ? strToU8(value) : value]))), 'bdi')
+  }).map(([path, value]) => [path, typeof value === 'string' ? strToU8(value) : value]))), format)
   const before = source.toBytes()
   const result = buildSxiZip(source)
   assert.deepEqual(source.toBytes(), before, 'conversion leaves the source archive untouched')
@@ -51,6 +51,8 @@ test('Baidu toolbar preserves its authored region while fitting oversized edge h
     }
     assert.deepEqual(icons[2].rect, { x: 1020, y: 20, width: 105, height: 104 }, 'valid icon placement is preserved')
     assert.deepEqual(icons[3].rect, { x: 172.5, y: 33, width: 780, height: 58 }, 'F14 retains its authored size and centres in the Palm bar, independent of artwork size')
+    assert.equal(icons[0].rect.width, 160, 'Palm native function slots use a safe logo width')
+    assert.equal(icons[1].rect.width, 160, 'hide key fits the last native toolbar slot')
     assert.deepEqual(skin[theme][`${orientation}_layout`].c.cand1.icon_list.map((icon) => icon.keep), [1, 1, 2, 1])
   }
   // 百度 iOS 只给 iphone@3x 的 80×80；手心按设备分三种后缀，真机皮肤里三张图都是 88×88。
@@ -59,6 +61,61 @@ test('Baidu toolbar preserves its authored region while fitting oversized edge h
     assert.ok(bytes, `图标补齐了 ${suffix}`)
     const size = decodePng(bytes)
     assert.deepEqual([size.width, size.height], [88, 88])
+  }
+})
+
+test('BDS atlas becomes Palm menu images in both themes without moving or resizing the toolbar', () => {
+  const tiles = [26, 27, 29, 31, 25, 50]
+  const files = {}
+  for (const [theme, green] of [['light', 30], ['dark', 90]]) {
+    const data = new Uint8Array(78 * 78 * tiles.length * 4)
+    tiles.forEach((tile, index) => {
+      for (let pixel = index * 78 * 78; pixel < (index + 1) * 78 * 78; pixel++) data.set([tile, green, 0, 255], pixel * 4)
+    })
+    files[`${theme}/res/logo/pop_menu_icons.png`] = encodePng({ width: 78, height: 78 * tiles.length, data })
+    // A rectangular icon must retain its aspect ratio inside Palm's square device images.
+    files[`${theme}/res/logo/pop_menu_icons.til`] = tiles.map((tile, index) => `[IMG${tile}]\nSOURCE_RECT=0,${index * 78},${tile === 27 ? 39 : 78},78\n`).join('')
+    for (const [orientation, width, height, side] of [['port', 1080, 120, 154], ['land', 1920, 122, 274]]) {
+      files[`${theme}/${orientation}/gen.ini`] = `[PANEL]\nSIZE=${width},600\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,${width},${height}\n`
+      files[`${theme}/${orientation}/cand1.cnd`] = [
+        '[CAND]', '[ICON1]', `SIZE=${side},${height}`, 'POS=0,0', 'KEY=F31', 'PERSIST=1',
+        '[ICON2]', `SIZE=${width - side * 2},${height}`, `POS=${-(width - side * 2) / 2},${-height / 2}`, 'ANCHOR_TYPE=5', 'KEY=F14', 'PERSIST=1',
+        '[ICON3]', `SIZE=${side},${height}`, `POS=${-side},0`, 'ANCHOR_TYPE=3', 'KEY=F8', 'PERSIST=1',
+      ].join('\n')
+    }
+  }
+  const { skin, archive, warnings } = convert(files, 'bds')
+  assert.deepEqual(warnings, [])
+  for (const [theme, directory, green] of [['default', 'light', 30], ['night', 'dark', 90]]) {
+    const [menu] = skin[theme].menu
+    assert.deepEqual(menu.map(({ Name }) => Name), ['19', '17', '23', '26', '18', '35'])
+    // Palm's toolbar looks its buttons up by these function names (Baidu iOS uses the same ones).
+    const palmNames = { 26: 'Emoji', 27: 'KBSwitch', 29: 'Voice', 31: 'Search', 25: 'MoveCursor', 50: 'pasteBoard' }
+    assert.deepEqual(menu.map(({ Images }) => Images.Normal.Normal), tiles.map((tile) => `1.0/toolbarMenuItem_${palmNames[tile]}_Normal`))
+    assert.equal(menu.length, tiles.length)
+    for (const [index, entry] of menu.entries()) {
+      assert.equal(entry.Position, 'toolbar')
+      for (const suffix of ['_iphone@3x', '_ipad', '_ipad@2x']) {
+        const image = decodePng(archive.getBytes(`${directory}/skin/res/logo/${entry.Images.Normal.Normal}${suffix}.png`))
+        assert.deepEqual([image.width, image.height], [88, 88])
+        assert.deepEqual([...image.data.slice((44 * 88 + 44) * 4, (44 * 88 + 44) * 4 + 4)], [tiles[index], green, 0, 255])
+        if (tiles[index] === 27) {
+          const painted = Array.from({ length: 88 }, (_, x) => image.data[(44 * 88 + x) * 4 + 3]).filter(Boolean).length
+          assert.equal(painted, 44, 'rectangular icon stays centred and keeps its 1:2 aspect ratio')
+          assert.equal(image.data[(44 * 88 + 21) * 4 + 3], 0)
+          assert.equal(image.data[(44 * 88 + 66) * 4 + 3], 0)
+        }
+      }
+    }
+    assert.ok(archive.getBytes(`${directory}/skin/res/logo/pop_menu_icons.png`), 'the source atlas is kept')
+    for (const [orientation, width, height, side] of [['port', 1080, 120, 154], ['land', 1920, 122, 274]]) {
+      const icons = new PalmBoard(skin, theme, orientation, 'defaultGlobal').icons()
+      assert.deepEqual(icons.map(({ rect }) => rect), [
+        { x: 0, y: 0, width: side, height },
+        { x: side, y: 0, width: width - side * 2, height },
+        { x: width - side, y: 0, width: side, height },
+      ])
+    }
   }
 })
 
@@ -98,4 +155,65 @@ test('panel show particles keep their binding and scalar parameter ranges (issue
   assert.deepEqual(warnings, [], 'scalar ranges do not produce spurious loss warnings')
   const ini = IniDocument.parse(animationsIni(night.s_port.ss_2).toString())
   assert.equal(ini.get('ANIM1101', 'ALPHA_SPEED'), '50,50')
+})
+
+test('off-screen native toolbar remains hidden behind a custom candidate row', () => {
+  const { skin } = convert({
+    'light/skin/port/gen.ini': '[PANEL]\nSIZE=1080,525\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1080,111\n',
+    'light/skin/port/cand1.cnd': '[CAND]\n[ICON1]\nSIZE=700,60\nANCHOR_TYPE=5\nPOS=-1500,-30\nKEY=F14\nPERSIST=1\n',
+  })
+  assert.deepEqual(skin.default.port_layout.c.cand1.icon_list[0].p, [-1500, -30])
+})
+
+test('orientation images and styles remain paired in Palm Android global lookups', () => {
+  const png = encodePng({ width: 20, height: 20, data: new Uint8Array(20 * 20 * 4).fill(255) })
+  const { skin, archive } = convert({
+    'light/skin/res/bj.png': png,
+    'light/skin/res/bj.til': '[IMG1]\nSOURCE_RECT=0,0,10,10\n',
+    'light/skin/res/default.css': '[STYLE1]\nNM_IMG=bj,1\n',
+    'light/skin/land/res/bj.png': png,
+    'light/skin/land/res/bj.til': '[IMG1]\nSOURCE_RECT=0,0,20,20\n',
+    'light/skin/port/gen.ini': '[PANEL]\nSIZE=100,100\nBACK_STYLE=1\n',
+    'light/skin/land/gen.ini': '[PANEL]\nSIZE=200,100\nBACK_STYLE=1\n',
+  })
+  const theme = skin.default
+  assert.equal(theme.port_layout.b.defaultGlobal.board.b.base_b, 1)
+  const land = theme.land_layout.b.defaultGlobal.board.b.base_b
+  assert.notEqual(land, 1)
+  assert.equal(theme.s_info.ss_1[land].s_2.normal, 'land_bj,1')
+  assert.ok(archive.getBytes('light/skin/land/res/land_bj.png'))
+  assert.deepEqual(theme.s_info.info.land_bj[0].rect1, [[0, 0], [20, 20]])
+  assert.deepEqual(theme.s_info.info.bj[0].rect1, [[0, 0], [10, 10]])
+  assert.ok(!theme.r_land.includes('light/skin/land/res/bj.png'))
+  assert.equal(theme.s_land.info.bj, undefined, 'landscape tiles cannot override the portrait image')
+})
+
+test('unsupported custom candidate switches report the native-toolbar fallback once', () => {
+  const { warnings } = convert({
+    'light/skin/port/gen.ini': '[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1080,111\n',
+    'light/skin/port/cand1.cnd': '[CAND]\n[ICON1]\nKEY=F16\nSIZE=214,91\n[ICON2]\nKEY=F6\nSIZE=214,91\n',
+    'light/skin/land/gen.ini': '[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1920,111\n',
+    'light/skin/land/cand1.cnd': '[CAND]\n[ICON1]\nKEY=F15\nSIZE=214,91\n',
+  })
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /手心原生工具栏/)
+})
+
+test('orientation resource separation keeps a fallback shared table and avoids existing basenames', () => {
+  const png = encodePng({ width: 2, height: 2, data: new Uint8Array(16).fill(255) })
+  const { skin, archive } = convert({
+    'light/skin/res/port_bj.png': png,
+    'light/skin/port/res/bj.png': png,
+    'light/skin/port/res/bj.til': '[IMG1]\nSOURCE_RECT=0,0,2,2\n',
+    'light/skin/port/res/default.css': '[STYLE1]\nNM_IMG=bj,1\n',
+    'light/skin/port/gen.ini': '[PANEL]\nSIZE=100,100\nBACK_STYLE=1\n',
+    'light/skin/land/gen.ini': '[PANEL]\nSIZE=200,100\nBACK_STYLE=1\n',
+  })
+  const theme = skin.default
+  const port = theme.port_layout.b.defaultGlobal.board.b.base_b
+  assert.equal(theme.s_info.ss_1[port].s_2.normal, '_port_bj,1')
+  assert.ok(archive.getBytes('light/skin/port/res/_port_bj.png'))
+  assert.ok(theme.s_info.info.bj, 'fallback shared tiles remain intact')
+  assert.ok(theme.s_info.info._port_bj)
+  assert.equal(theme.s_info.ss_1[1].s_2.normal, 'bj,1', 'fallback shared styles remain intact')
 })

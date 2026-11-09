@@ -41,31 +41,25 @@ function prepareSogouShare(bytes: Uint8Array): { bytes: Uint8Array; name: string
 }
 
 /**
- * 手心 Android 4.4.2 的导入校验要求根级 skin.ini / skin.proto / preview.png，但渲染仍读取 SXI 自己的
- * skin.json 与 light、dark 资源。保留导出包内容，只补上校验文件，皮肤外观才是用户当前编辑的皮肤。
+ * 手心 Android 的 .piska 导入入口（FTInputSettingsActivity 的 ACTION_VIEW）会校验旧版皮肤包根级的
+ * skin.ini / skin.proto / preview.png / preview_small.png，缺任何一项就提示「皮肤包缺失关键文件」，
+ * 而渲染仍读取 SXI 自己的 skin.json 与 light、dark 资源。保留导出包内容，只补上校验文件。
  */
-async function prepareShouXinShare(bytes: Uint8Array): Promise<Uint8Array> {
+async function prepareShouXinShare(bytes: Uint8Array): Promise<{ bytes: Uint8Array; name: string }> {
   const source = unzipSync(bytes)
   const template = unzipSync(await loadBuiltInProjectTemplate("palm-harmony"))
   const proto = template["light/res/skin.proto"]
   const preview = source["preview.png"] ?? source["light/preview.png"] ?? source["dark/preview.png"] ?? template["preview.png"]
   if (!source["skin.json"] || !proto || !preview) throw new Error("手心皮肤缺少 skin.json 或模板资源，无法分享到手机")
+  const id = `keyskin-${Date.now().toString(36)}`
   const files: Record<string, Uint8Array> = { ...source }
   files["skin.proto"] = proto
   files["preview.png"] = preview
   files["preview_small.png"] = preview
-  let skinName = "KeySkin"
-  try {
-    const info = JSON.parse(strFromU8(source["info.json"] ?? new Uint8Array()))
-    if (typeof info.name === "string" && info.name.trim()) skinName = info.name.trim()
-  } catch {
-    // info.json is optional for import; the Android package still gets a valid name.
-  }
-  const id = `keyskin-${Date.now().toString(36)}`
-  const safeName = `${skinName} ${id}`.replace(/[\r\n]/g, " ").slice(0, 80)
+  // 手心按 GBK 读取 skin.ini，写中文会变成乱码；名字只用于手机端皮肤列表，保持英文。
   files["skin.ini"] = strToU8([
     "[skin]",
-    `name = ${safeName}`,
+    `name = KeySkin ${id.slice("keyskin-".length)}`,
     "author = KeySkin",
     "email =",
     "major_version = 1",
@@ -73,7 +67,7 @@ async function prepareShouXinShare(bytes: Uint8Array): Promise<Uint8Array> {
     `build = ${id}`,
     "",
   ].join("\n"))
-  return zipSync(Object.fromEntries(withDirectoryEntries(Object.entries(files))), { level: 6 })
+  return { bytes: zipSync(Object.fromEntries(withDirectoryEntries(Object.entries(files))), { level: 6 }), name: `${id}.piska` }
 }
 
 /** Windows/macOS only: web and mobile clients must not expose native process execution. */
@@ -177,7 +171,9 @@ export function wireAdbShare(): void {
         bytes = prepared.bytes
         name = prepared.name
       } else if (format === "sxi") {
-        bytes = await prepareShouXinShare(bytes)
+        const prepared = await prepareShouXinShare(bytes)
+        bytes = prepared.bytes
+        name = prepared.name
       }
       if (cancelRequested) return false
       const progress = new Channel<string>()

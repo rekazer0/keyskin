@@ -35,9 +35,9 @@ export function appendStyle(css: IniDocument, entries: Array<{ key: string; valu
 
 /** Android bitmap index (LogoIconSource) → the iOS plist function ID that names the same function. */
 const TOOLBAR_FUNCTIONS = [
-  [26, "F7", "19", "表情"], [27, "F13", "17", "键盘类型"],
-  [29, "F72", "23", "语音输入"], [31, "F82", "26", "搜索"],
-  [25, "", "18", "光标"], [50, "", "35", "剪贴板"], [62, "F68", "45", "AI侃侃"],
+  [26, "F7", "19", "表情", "Emoji"], [27, "F13", "17", "键盘类型", "KBSwitch"],
+  [29, "F72", "23", "语音输入", "Voice"], [31, "F82", "26", "搜索", "Search"],
+  [25, "", "18", "光标", "MoveCursor"], [50, "", "35", "剪贴板", "pasteBoard"], [62, "F68", "45", "AI侃侃", "AIKankan"],
 ] as const
 
 /**
@@ -171,7 +171,7 @@ export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: strin
     gen.set("LOGO", "LAYOUT_NAME", layout)
     files.set(path, strToU8(gen.toString()))
     addZipEntry(files, logoPath, strToU8(menu.toString()))
-    writeMenuFiles(files, root, cand, css, slice)
+    writeIosToolbarMenu(files, root, cand, css)
 
     const configPath = `${root}res/logo/customImageConfig.plist`
     if (!logo || files.has(configPath)) continue
@@ -233,26 +233,29 @@ function logoFiles(root: string, css: IniDocument, logo: string, slice: SliceRea
 }
 
 /** Android bitmap indexes (LogoIconSource) → iOS function IDs; order matches the editor's toolbar preview. */
-function writeMenuFiles(files: Map<string, Uint8Array>, root: string, cand: IniDocument, css: IniDocument, slice: SliceReader): void {
+export function writeIosToolbarMenu(files: Map<string, Uint8Array>, root: string, cand?: IniDocument, css?: IniDocument): void {
   const paths = ["com.baidu.inputmethod.toolbarMenuItems.plist", "com.baidu.inputmethod.toolbarMenuItems.nijigen.plist"].map((name) => `${root}res/logo/${name}`)
   if (paths.every((path) => files.has(path))) return
+  const slice = sliceReader(root, (path) => files.get(path))
   const entries: string[] = []
-  for (const [index, action, id, title] of TOOLBAR_FUNCTIONS) {
-    const style = action && foreStyle(cand, action)
+  // Palm's own toolbar buttons load `1.0/toolbarMenuItem_<function>_Normal` by name; any other
+  // file name leaves the whole bar on its built-in icons.
+  for (const [index, action, id, title, functionName] of TOOLBAR_FUNCTIONS) {
+    const style = action && cand && foreStyle(cand, action)
     const image = (state: "NM_IMG" | "HL_IMG") => {
-      const [resource, tile] = (style && css.get(`STYLE${style}`, state)?.split(",").map((part) => part.trim())) || []
+      const [resource, tile] = (style && css?.get(`STYLE${style}`, state)?.split(",").map((part) => part.trim())) || []
       return (resource ? slice(resource, tile) : undefined) ?? slice("logo/pop_menu_icons", String(index))
     }
     const normal = image("NM_IMG")
     if (!normal) continue
     const write = (found: Slice, state: string) => {
-      const name = `toolbar-menu-${id}-${state}`
+      const name = `1.0/toolbarMenuItem_${functionName}_${state}`
       addZipEntry(files, `${root}res/logo/${name}_iphone@3x.png`, encodePng(cropImage(decodePng(found.bytes), ...found.rect as [number, number, number, number])))
       return name
     }
-    const name = write(normal, "normal")
-    const pressed = style && css.get(`STYLE${style}`, "HL_IMG") ? write(image("HL_IMG") ?? normal, "highlight") : name
-    entries.push(toolbarMenuItem(id, title, "toolbar", name, pressed))
+    const name = write(normal, "Normal")
+    const selected = write(image("HL_IMG") ?? normal, "Select")
+    entries.push(toolbarMenuItem(id, title, "toolbar", name, selected))
   }
   if (entries.length) for (const path of paths) if (!files.has(path)) addZipEntry(files, path, strToU8(plist(entries)))
 }

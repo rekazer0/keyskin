@@ -4,12 +4,15 @@
 
 import { isListCell } from "../layout.ts"
 import { palmBoardLabel, palmPartLabel } from "../palm/palm-labels.ts"
+import { palmInspectorCollection, palmInspectorModel } from "../palm/palm-inspector.ts"
+import { addPalmStyle } from "../palm/palm-style-edit.ts"
 import { asObject, type Json, type JsonObject } from "../palm/sxi-ini.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
-import { element } from "../dom-element.ts"
+import { element, listToolbar } from "../dom-element.ts"
 import { appState } from "./state"
-import { gestureRows, renderSxiGroup, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
-import { openPalmSkin, sxiPointer } from "./sxi-documents"
+import { editSxi, gestureRows, renderSxiGroup, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
+import { openPalmSkin, palmTheme, sxiPointer } from "./sxi-documents"
+import { isEditing } from "./edit-history"
 import { palmStylePointer } from "./sxi-styles"
 import { populateSxiAnimationInspector, sxiAnimationInspectorTitle } from "./sxi-animation-inspector"
 
@@ -70,11 +73,16 @@ const isModel = (value: Json): boolean => Boolean(asObject(value)) && !["top", "
  * a dictionary or list of models gets one subsection per entry.
  */
 function modelGroups(pointer: SxiPointer, model: JsonObject, label: string, omit: string[] = []): Array<HTMLElement | undefined> {
-  const parts = Object.keys(model).filter((key) => key !== "b" && !omit.includes(key) && (isModel(model[key]) || isModelList(model[key])))
+  const supported = { ...palmInspectorModel(pointer), ...Object.fromEntries(Object.entries(model).filter(([, value]) => value !== null)) }
+  const parts = Object.keys(supported).filter((key) => key !== "b" && !omit.includes(key) && (palmInspectorCollection(pointer, key) || isModel(supported[key]) || isModelList(supported[key])))
   const groups = [renderSxiGroup(label, [{ targets: [pointer], omit: [...omit, ...parts] }], { code: pointer.slice(1).join(".") || String(pointer[0]) })]
   for (const part of parts) {
-    const value = model[part]
+    const value = supported[part]
     const name = palmPartLabel(part)
+    if (palmInspectorCollection(pointer, part)) {
+      groups.push(renderSxiGroup(name, [{ targets: [pointer], only: [part] }], { code: part }))
+      continue
+    }
     const entries = isDictionary(value) ? Object.keys(asObject(value)!) : Array.isArray(value) ? value.map((_, index) => index) : undefined
     const blocks: SxiBlock[] = entries
       ? entries.map((entry) => ({ targets: [[...pointer, part, entry]], title: `${name} ${typeof entry === "number" ? entry + 1 : entry}`, code: `${part}.${entry}` }))
@@ -88,11 +96,12 @@ function modelGroups(pointer: SxiPointer, model: JsonObject, label: string, omit
 function textBlocks(skin: JsonObject, models: SxiPointer[]): SxiBlock[] {
   const ids = [...new Set(models.flatMap((model) => {
     const layers = sxiValue(skin, [...model, "b", "base_f"])
-    return Array.isArray(layers) ? layers.map(String) : []
+    return (Array.isArray(layers) ? layers : typeof layers === "number" ? [layers] : []).map(String)
   }))]
   return ids.flatMap((id) => {
     const style = palmStylePointer(id, skin)
-    return style && asObject(sxiValue(skin, [...style, "s_1"])) ? [{
+    const text = style && asObject(sxiValue(skin, [...style, "s_1"]))
+    return style && text && text.for_back !== true ? [{
       targets: [[...style, "s_1"]],
       title: `前景样式 ${id}`,
       code: `${style.slice(1).join(".")}.s_1`,
@@ -119,7 +128,19 @@ function palmKeyGroups(skin: JsonObject, models: SxiPointer[]): Array<HTMLElemen
     renderSxiGroup("样式", [{ targets: models, only: STYLE_FIELDS, expect: ["b.base_b", "b.base_f"], keyForeground: true }]),
     text.length
       ? renderSxiGroup("文字", text.map((block, index) => index ? block : { ...block, note: "共享：可能被多个按键共用" }))
-      : renderSxiGroup("文字", [{ targets: models, only: [], note: "没有文字样式" }]),
+      : renderSxiGroup("文字", [], { extra: [listToolbar({ create: {
+        label: "新建文字样式", disabled: !isEditing(),
+        run: () => editSxi((skin) => {
+          const id = Number(addPalmStyle(skin, palmTheme(), { s_1: {} }))
+          for (const pointer of models) {
+            const model = asObject(sxiValue(skin, pointer))
+            if (!model) throw new Error(`skin.json 中缺少 ${pointer.join(".")}`)
+            const base = asObject(model.b) ?? {}
+            const layers = Array.isArray(base.base_f) ? base.base_f : typeof base.base_f === "number" ? [base.base_f] : []
+            model.b = { ...base, base_f: [...layers, id] }
+          }
+        }),
+      } })] }),
     gestureGroup,
     renderSxiGroup("状态", [{ targets: models, only: ["fix_a"] }]),
     renderSxiGroup("其他", [{ targets: models, omit: ["id", "values", "b", ...LAYOUT_FIELDS, "fix_a"] }]),

@@ -3,10 +3,12 @@
 // skin.json as one undo step; the canvas and the source view are then rebuilt from the edited skin.
 
 import { actionDescription } from "../actions.ts"
-import { element } from "../dom-element.ts"
+import { element, listToolbar } from "../dom-element.ts"
 import { createIcon } from "../icons"
 import { ACTION_CODES } from "../palm/palm-ini.ts"
 import { palmFieldLabel, palmStyleReference } from "../palm/palm-labels.ts"
+import { palmInspectorCollection, palmInspectorKind, palmInspectorModel } from "../palm/palm-inspector.ts"
+import { PALM_ANIMATION_EVENTS } from "../palm/sxi-animation.ts"
 import { actionText, actionValue, asObject, numberText, numberValue, type Json, type JsonObject } from "../palm/sxi-ini.ts"
 import { SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "../palm/sxi-json.ts"
 import { commitText, isEditing } from "./edit-history"
@@ -34,13 +36,12 @@ export type SxiBlock = {
   note?: string
   /** Foreground cards of the selected canvas keys, which may add a new image style to them. */
   keyForeground?: boolean
+  remove?: () => void
 }
 
 const SIZE_KEYS = new Set(["size", "f_size", "c_size", "s"])
 // Flat lists that happen to hold two numbers (`fix_a` = [state, tips], `base_o` = position types) are not points.
 const LIST_KEYS = new Set(["fix_a", "base_o", "base_fa", "info", "t", "values", "v", "titles", "scales"])
-// Fields offered before the model has them need to know what they will hold.
-const NUMBER_KEYS = new Set(["f_s", "f_w"])
 const isColorKey = (key: string) => /color|^c_/.test(key)
 const PALM_COLOR = /^(?:[0-9a-f]{6}|[0-9a-f]{8})$/i
 // `SkinButtonType`: what a key does on each gesture (palm-models.ts BUTTON_TYPES).
@@ -70,8 +71,10 @@ export function editSxi(change: (skin: JsonObject) => void, coalesce = false): v
   const before = archive.getText(SXI_SKIN_PATH)
   try {
     const skin = parseSkinJson(before)
+    const baseline = encodeSkinJson(skin)
     change(skin)
-    commitText(SXI_SKIN_PATH, before, encodeSkinJson(skin), coalesce)
+    const after = encodeSkinJson(skin)
+    if (after !== baseline) commitText(SXI_SKIN_PATH, before, after, coalesce)
   } catch (error) {
     showError(error, "修改 skin.json")
   }
@@ -85,16 +88,24 @@ export function editSxi(change: (skin: JsonObject) => void, coalesce = false): v
 export function writeSxiValue(targets: SxiPointer[], path: string[], next: Json | ((current: Json, index: number) => Json)): void {
   editSxi((skin) => {
     for (const [index, target] of targets.entries()) {
-      let model = asObject(sxiValue(skin, target))
-      if (!model) throw new Error(`skin.json 中缺少 ${target.join(".")}`)
-      for (const step of path.slice(0, -1)) {
-        model[step] = asObject(model[step]) ?? {}
-        model = model[step] as JsonObject
+      const full = [...target, ...path]
+      const current = sxiValue(skin, full)
+      const value = typeof next === "function" ? next(current, index) : next
+      if (sameJson(current, value)) continue
+      let model: Json = skin
+      for (const [position, step] of full.slice(0, -1).entries()) {
+        const object = asObject(model)
+        if (object && typeof step === "string") {
+          object[step] ??= typeof full[position + 1] === "number" ? [] : {}
+          model = object[step]
+        } else if (Array.isArray(model) && typeof step === "number" && step in model) model = model[step]
+        else throw new Error(`skin.json 中无法创建 ${full.slice(0, position + 1).join(".")}`)
       }
-      const key = path[path.length - 1]
-      const value = typeof next === "function" ? next(model[key], index) : next
-      if (value === undefined) delete model[key]
-      else model[key] = value
+      const object = asObject(model)
+      const key = String(full[full.length - 1])
+      if (!object) throw new Error(`skin.json 中缺少 ${full.slice(0, -1).join(".")}`)
+      if (value === undefined) delete object[key]
+      else object[key] = value
     }
   })
 }
@@ -187,10 +198,10 @@ function listRow(block: SxiBlock, path: string[], label: string, values: Json[])
   const row = palmRow("label", block, path, label, values)
   const { value, mixed } = sharedValue(values)
   const list = isPrimitiveList(value) ? value : []
-  const spaced = list.some((item) => typeof item === "string")
+  const spaced = list.some((item) => typeof item === "string") || palmInspectorKind([...block.targets[0], ...path.slice(0, -1)], path.at(-1)!) === "strings"
   row.append(fieldControl({ kind: "text", value: list.join(spaced ? " " : ",") }, label, (next) => {
     const parts = next.split(spaced ? /\s+/ : ",").map((part) => part.trim()).filter(Boolean)
-    writeSxiValue(block.targets, path, parts.map((part) => !spaced && Number.isFinite(Number(part)) ? Number(part) : part))
+    writeSxiValue(block.targets, path, parts.length ? parts.map((part) => !spaced && Number.isFinite(Number(part)) ? Number(part) : part) : undefined)
   }, { editable: isEditing(), mixed }))
   return row
 }
@@ -270,6 +281,40 @@ function insetsRow(block: SxiBlock, path: string[], label: string, values: Json[
   })
 }
 
+function borderRangeRows(block: SxiBlock, path: string[], label: string, values: Json[]): HTMLElement[] {
+  const control = palmRow("div", block, path, label, values)
+  control.append(listToolbar({ create: {
+    label: `添加${label}`, disabled: !isEditing(),
+    run: () => writeSxiValue(block.targets, path, (current) => [...Array.isArray(current) ? current : [], [0, 1]]),
+  } }))
+  const ranges = values.map((value) => Array.isArray(value) ? value : [])
+  const rows = [control]
+  for (let index = 0; index < Math.min(...ranges.map((value) => value.length)); index++) {
+    const pairs = ranges.map((value) => value[index])
+    const { parts, mixed } = palmParts(pairs, (value) => isPoint(value) ? value : undefined, 2)
+    const row = partsRow(block, path, `${label} ${index + 1}`, ["起", "止"], values, parts, mixed, (part, value, current) => {
+      const next = Array.isArray(current) ? [...current] : []
+      const existing = next[index]
+      const pair = isPoint(existing) ? [...existing] : [0, 1]
+      pair[part] = value
+      next[index] = pair
+      return next
+    }, { key: index, saved: pairs, restore: (current, saved) => {
+      if (!Array.isArray(current) || index >= current.length) return current
+      const next = [...current]
+      if (saved === null || saved === undefined) next.splice(index, 1)
+      else next[index] = saved
+      return next
+    } })
+    row.append(listToolbar({ remove: {
+      label: `删除${label} ${index + 1}`, disabled: !isEditing(),
+      run: () => writeSxiValue(block.targets, path, (current) => Array.isArray(current) ? current.filter((_, at) => at !== index) : current),
+    } }))
+    rows.push(row)
+  }
+  return rows
+}
+
 /** A style of `ss_1` (or a list of them) drawn as the shared style card. */
 function styleRow(block: SxiBlock, path: string[], label: string, reference: string, values: Json[]): HTMLElement {
   const row = palmRow("label", block, path, label, values)
@@ -281,9 +326,11 @@ function styleRow(block: SxiBlock, path: string[], label: string, reference: str
   input.disabled = !isEditing()
   input.setAttribute("aria-label", label)
   if (block.keyForeground && reference === "FORE_STYLE") input.dataset.keyField = "FORE_STYLE"
-  const listed = path[path.length - 1] === "base_f" || Array.isArray(values.find((item) => item !== undefined))
+  const listed = ["base_f", "base_fa"].includes(path[path.length - 1]) || Array.isArray(values.find((item) => item !== undefined))
   input.addEventListener("change", () => {
-    const list = input.value.split(",").map((part) => part.trim()).filter(Boolean).map(Number)
+    // Native foreground animation arrays use 0 for an empty layer; keep later layers in place.
+    const parts = input.value.split(",").map((part) => part.trim())
+    const list = input.value.trim() ? (reference === "FORE_ANIM_STYLE" ? parts : parts.filter(Boolean)).map(Number) : []
     if (list.some((id) => !Number.isSafeInteger(id) || id < 0)) {
       showError(new Error("样式编号必须是非负整数"), label)
       return refreshSxiDocument()
@@ -352,17 +399,20 @@ export function gestureRows(block: SxiBlock, path: string[], values: Json[]): HT
     return node
   }
   grid.append(...CROSS.map(([button, name, label, icon]) => cell(button, "label", name, label, icon)))
-  // Buttons besides the cross only show when a key sets them.
-  const others = OTHER_BUTTONS.filter(([button]) => values.some((list) => gestureAction(list, button) !== undefined))
-  if (!others.length) return [grid]
-  return [grid, ...others.map(([button, label]) => cell(button, "label", "", label))]
+  return [grid, ...OTHER_BUTTONS.map(([button, label]) => cell(button, "label", "", label))]
 }
 
 /** Fields a block shows, as paths: the base model `b` is opened up into its own fields. */
 function blockPaths(block: SxiBlock, models: JsonObject[]): string[][] {
   const first = models[0] ?? {}
-  const paths = Object.keys(first).flatMap((key) => key === "b" && asObject(first.b) ? Object.keys(asObject(first.b)!).map((base) => ["b", base]) : [[key]])
+  const supported = palmInspectorModel(block.targets[0])
+  const base = asObject(first.b) ?? asObject(supported.b)
+  const paths = Object.keys(first).flatMap((key) => key === "b" && base ? Object.keys(base).map((base) => ["b", base]) : [[key]])
     .filter((path) => models.every((model) => sxiValue(model, path) !== undefined))
+  for (const key of Object.keys(supported)) {
+    const fields = key === "b" && asObject(supported.b) ? Object.keys(asObject(supported.b)!).map((base) => ["b", base]) : [[key]]
+    for (const field of fields) if (!paths.some((path) => path.join(".") === field.join("."))) paths.push(field)
+  }
   for (const expected of block.expect ?? []) {
     if (!paths.some((path) => path.join(".") === expected)) paths.push(expected.split("."))
   }
@@ -378,29 +428,58 @@ function blockRows(block: SxiBlock, skin: JsonObject): { rows: HTMLElement[]; ne
   const nested: SxiBlock[] = []
   for (const path of blockPaths(block, models)) {
     const key = path[path.length - 1]
-    const label = palmFieldLabel(key)
+    const label = (block.targets[0].at(-1) === "s_5" ? PALM_ANIMATION_EVENTS.find(([event]) => event === key)?.[1] : undefined) ?? palmFieldLabel(key)
     const values = models.map((model) => sxiValue(model, path))
-    const sample = values.find((value) => value !== undefined)
-    const reference = palmStyleReference(key)
-    if (reference && (sample === undefined || typeof sample === "number" || isPrimitiveList(sample))) rows.push(styleRow(block, path, label, reference, values))
+    const sample = values.find((value) => value !== undefined && value !== null)
+    const kind = sample === undefined ? palmInspectorKind([...block.targets[0], ...path.slice(0, -1)], key) : undefined
+    const supported = sxiValue(palmInspectorModel(block.targets[0]), path)
+    const border = block.targets[0].at(-1) === "bd" && path[0] === "b"
+    const reference = border && key === "a" ? "BACK_ANIM_STYLE" : palmStyleReference(key)
+    const collection = palmInspectorCollection(block.targets[0], key)
+    if (key === "v" && ["key_fix", "fix"].includes(String(block.targets[0].at(-2)))) rows.push(...gestureRows(block, path, values))
+    else if (collection) {
+      const entries = collection === "array" ? Array.isArray(sample) ? sample.map((_, index) => index) : [] : Object.keys(asObject(sample) ?? {})
+      const control = palmRow("div", block, path, label, values)
+      control.append(listToolbar({ create: {
+        label: `添加${palmFieldLabel(key)}`, disabled: !isEditing(),
+        run: () => writeSxiValue(block.targets, path, (current) => {
+          if (collection === "array") return [...Array.isArray(current) ? current : [], {}]
+          const dictionary = asObject(current) ?? {}
+          const id = String(Math.max(0, ...Object.keys(dictionary).filter((item) => /^\d+$/.test(item)).map(Number)) + 1)
+          return { ...dictionary, [id]: {} }
+        }),
+      } }))
+      rows.push(control)
+      for (const entry of entries) nested.push({
+        targets: block.targets.map((target) => [...target, ...path, entry]),
+        title: `${palmFieldLabel(key)} ${typeof entry === "number" ? entry + 1 : entry}`, code: `${key}.${entry}`,
+        remove: () => writeSxiValue(block.targets, path, (current) => {
+          if (Array.isArray(current) && typeof entry === "number") return current.filter((_, index) => index !== entry)
+          const dictionary = { ...asObject(current) }
+          delete dictionary[entry]
+          return dictionary
+        }),
+      })
+    } else if (border && key === "r") rows.push(...borderRangeRows(block, path, label, values))
+    else if (reference && (sample === undefined || typeof sample === "number" || isPrimitiveList(sample))) rows.push(styleRow(block, path, label, reference, values))
     else if (isRect(sample) || key === "rect" || key === "hit_rect") {
       const fallback = key === "hit_rect" ? models.map((model) => model.rect) : undefined
       const labels: [string, string] = key === "rect" ? ["位置", "尺寸"] : key === "hit_rect" ? ["触摸位置", "触摸尺寸"] : [`${label}位置`, `${label}尺寸`]
       rows.push(...rectRows(block, path, labels, values, fallback))
-    } else if (isPoint(sample) && !LIST_KEYS.has(key)) rows.push(pointRow(block, path, label, values))
-    else if (isInsets(sample ?? null)) rows.push(insetsRow(block, path, label, values))
-    else if (typeof sample === "boolean") rows.push(switchRow(block, path, label, values))
-    else if (typeof sample === "number" || sample === undefined && NUMBER_KEYS.has(key)) rows.push(numberRow(block, path, label, values))
+    } else if (isPoint(sample) && !LIST_KEYS.has(key) || kind === "point") rows.push(pointRow(block, path, label, values))
+    else if (isInsets(sample ?? null) || kind === "insets") rows.push(insetsRow(block, path, label, values))
+    else if (typeof sample === "boolean" || kind === "switch") rows.push(switchRow(block, path, label, values))
+    else if (typeof sample === "number" || kind === "number") rows.push(numberRow(block, path, label, values))
     else if (isColorKey(key) && (sample === undefined || typeof sample === "string" && PALM_COLOR.test(sample))) rows.push(palmColorRow(block, path, label, values))
-    else if (typeof sample === "string" || sample === undefined) rows.push(textRow(block, path, label, values))
-    else if (isPrimitiveList(sample)) rows.push(listRow(block, path, label, values))
+    else if (isPrimitiveList(sample) || kind === "list" || kind === "strings") rows.push(listRow(block, path, label, values))
+    else if (asObject(sample) || sample === undefined && asObject(supported)) {
+      nested.push({ targets: block.targets.map((target) => [...target, ...path]), title: label, code: path.join(".") })
+    } else if (typeof sample === "string" || sample === undefined) rows.push(textRow(block, path, label, values))
     else if (Array.isArray(sample)) {
       const length = Math.min(...values.map((value) => Array.isArray(value) ? value.length : 0))
       for (let index = 0; index < length; index += 1) {
         nested.push({ targets: block.targets.map((target) => [...target, ...path, index]), title: `${label} ${index + 1}`, code: `${path.join(".")}[${index}]` })
       }
-    } else if (asObject(sample)) {
-      nested.push({ targets: block.targets.map((target) => [...target, ...path]), title: label, code: path.join(".") })
     }
   }
   return { rows, nested }
@@ -434,6 +513,7 @@ export function renderSxiGroup(label: string, blocks: SxiBlock[], options: { cod
     if (!rows.length && !block.note) continue
     const subsection = element("div", "ui-subsection")
     if (block.title && (many || nested.length || !blocks.includes(block) || block.title !== label)) subsection.append(palmBlockHeading(block.title, block.code))
+    if (block.remove) subsection.append(listToolbar({ remove: { label: `删除${block.title}`, run: block.remove, disabled: !isEditing() } }))
     if (block.note) {
       const note = element("p", "inspector-group-subtitle")
       note.textContent = block.note

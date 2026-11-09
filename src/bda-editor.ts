@@ -11,7 +11,7 @@ import { configField } from "./app/config-value-control.ts"
 import { styleKindIcon, styleReferenceCard, type StyleReferenceState } from "./style-card.ts"
 
 type BdaStyleChange = (ref: BdaStyleRef, property: string, value: string) => void
-export type BdaLayoutScope = "panel" | "candidate"
+type BdaLayoutScope = "panel" | "candidate"
 
 type LayoutEditorOptions = {
   appearance: BdaAppearance
@@ -61,13 +61,6 @@ type MetadataEditorOptions = {
   /** 与百度文档检查器共用的中文标签。 */
   label: (key: string) => string
   onChange: (key: string, value: string) => void
-}
-
-const bdaEntryNames: Record<string, string> = { short: "短按", long: "长按", port: "竖屏", land: "横屏" }
-
-/** BDA 提示 / 列表条目用内部键名（short、port…），界面上显示对应的中文。 */
-export function bdaEntryLabel(key: string): string {
-  return bdaEntryNames[key] ?? key
 }
 
 function inspectorSection<T extends HTMLElement>(node: T, label: string): T {

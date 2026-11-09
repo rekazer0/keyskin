@@ -37,7 +37,7 @@ function normalizedKey(key: string): string {
 function isStyleKey(key: string): boolean {
   const normalized = normalizedKey(key)
   if (normalized === "STAT_STYLE") return false
-  return normalized === "STYLE" || normalized === "STYLE_ID" || normalized === "FIRST_BACK" || normalized === "FIRST_FORE" || /(?:^|_)STYLE(?:S|_ID)?$/.test(normalized)
+  return normalized === "STYLE" || normalized === "STYLE_ID" || normalized === "FIRST_BACK" || normalized === "FIRST_FORE" || /(?:^|_)STYLE(?:S|_ID|_INDEX)?$/.test(normalized)
 }
 
 function isColorKey(key: string): boolean {

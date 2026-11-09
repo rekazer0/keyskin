@@ -27,6 +27,7 @@ type SsfEntry = { key: string; value: string }
 /** State images that follow NORMAL / PRESSED when those are replaced and still show the same file. */
 const LINKED_STATES: Record<string, string[]> = { NORMAL: ["DISABLED", "NORMAL_ON"], PRESSED: ["PRESSED_ON"] }
 const IMAGE_STATES = ["NORMAL", "PRESSED", "DISABLED", "NORMAL_ON", "PRESSED_ON", "FOCUSED"]
+const IMAGE_FIELDS = new Set([...IMAGE_STATES, "BG_IMAGE", "ICON", "ICON_PRESSED", "pic_path", "keyboard_bg", "preview_square", "preview_comp"])
 const QUADS: Record<string, string[]> = {
   FG_RECT: ["←", "↑", "→", "↓"],
   ICON_RECT: ["←", "↑", "→", "↓"],
@@ -49,7 +50,7 @@ export function editSsfFile(path: string, change: (document: IniDocument) => voi
 type TextChange = Extract<Change, { kind: "text" }>
 
 /** A section rows write to; `create` is what a missing section starts with (RootView needs BG_STYLE). */
-type SsfLocation = { path: string; section: string; create?: SsfEntry[] }
+type SsfLocation = { path: string; section: string; create?: SsfEntry[]; bind?: { section: string; key: string } }
 
 function editTargets(targets: SsfLocation[], change: (document: IniDocument, target: SsfLocation) => void): void {
   const archive = appState.archive
@@ -57,7 +58,13 @@ function editTargets(targets: SsfLocation[], change: (document: IniDocument, tar
   const changes = [...new Set(targets.map((target) => target.path))].flatMap((path) => {
     const before = archive.isText(path) ? archive.getText(path) : ""
     const document = IniDocument.parse(before)
-    for (const target of targets.filter((target) => target.path === path)) change(document, target)
+    for (const target of targets.filter((target) => target.path === path)) {
+      const previous = document.toString()
+      change(document, target)
+      if (target.bind && document.toString() !== previous && document.entries(target.section).length) {
+        setSsfValue(document, target.bind.section, target.bind.key, withFile(document.get(target.bind.section, target.bind.key), target.section))
+      }
+    }
     const after = document.toString()
     return before === after ? [] : [{ kind: "text" as const, path, before, after }]
   })
@@ -79,8 +86,11 @@ function writeValue(targets: SsfLocation[], key: string, value: string): void {
 
 /** Sets a value, adding the section (with `create` first) at the end of the file when it does not exist yet. */
 export function setSsfValue(document: IniDocument, section: string, key: string, value: string, create: readonly SsfEntry[] = []): void {
-  if (document.sections().includes(section)) document.set(section, key, value)
-  else document.appendSection(section, [...create.filter((entry) => entry.key !== key), { key, value }])
+  if (document.sections().includes(section)) {
+    // A sparse view section still needs the parser's required defaults on its first edit.
+    for (const entry of create) if (entry.key !== key && document.get(section, entry.key) === undefined) document.set(section, entry.key, entry.value)
+    document.set(section, key, value)
+  } else document.appendSection(section, [...create.filter((entry) => entry.key !== key), { key, value }])
 }
 
 /** One value per key: duplicate sections are read like IniDocument.get, the first definition wins. */
@@ -118,11 +128,11 @@ function stateImage(document: IniDocument, section: string, key: string): string
 
 /** Replace one state's file while preserving each target's own stretch band and linked states. */
 function replaceImage(targets: SsfLocation[], key: string, file: string): void {
-  editTargets(targets, (document, { section }) => {
+  editTargets(targets, (document, { section, create }) => {
     const current = stateImage(document, section, key)
     for (const linked of [key, ...LINKED_STATES[key] ?? []]) {
       const old = document.get(section, linked)
-      if (linked === key || old !== undefined && old === current) setSsfValue(document, section, linked, withFile(old ?? current, file))
+      if (linked === key || old !== undefined && old === current) setSsfValue(document, section, linked, withFile(old ?? current, file), create)
     }
   })
 }
@@ -133,6 +143,36 @@ function chooseImage(targets: SsfLocation[], key: string): void {
 }
 
 type CardReference = { path: string; section: string; key: string }
+
+/** A Sogou field that names another image section: show the reference as a card, not a text input. */
+function referenceCard(label: string, reference: CardReference, target: SsfLocation): HTMLElement {
+  const owner = ssfDocument(reference.path)
+  const section = owner.get(reference.section, reference.key)?.split(",")[0] ?? ""
+  const name = element("input", "ui-style-ref-name")
+  name.value = section
+  name.placeholder = "未设置"
+  name.disabled = !isEditing()
+  name.spellcheck = false
+  name.setAttribute("aria-label", label)
+  name.addEventListener("change", () => editTargets([{ path: reference.path, section: reference.section }], (document, target) => {
+    const next = name.value.trim()
+    if (next) setSsfValue(document, target.section, reference.key, withFile(document.get(target.section, reference.key), next))
+    else document.remove(target.section, reference.key)
+  }))
+  const image = ssfDocument(target.path)
+  const states = ["NORMAL", "PRESSED"].map((key) => ({
+    label: `${key === "PRESSED" ? "按下" : "正常"}${label}`,
+    draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await imageVisual(stateImage(image, target.section, key))], false),
+    onClick: isEditing() ? () => chooseImage([target], key) : undefined,
+  }))
+  const row = element("div", "ui-field style-reference-field")
+  caption(row, reference.key, label)
+  row.append(styleReferenceCard({ name, kind: styleKindIcon("image"), states, disabled: !isEditing(), remove: {
+    label: `移除${label}`,
+    run: () => editTargets([{ path: reference.path, section: reference.section }], (document, target) => document.remove(target.section, reference.key)),
+  } }))
+  return row
+}
 
 /**
  * The style card (DESIGN.md §10): file names and type on the left, one preview per state on the right.
@@ -182,18 +222,18 @@ function ssfNumberParts(row: HTMLElement, key: string, affixes: string[], values
 }
 
 /** The stretch band shared by a section's state images: Sogou's order is left, right, top, bottom. */
-function stretchField(path: string, section: string, targets = [{ path, section }]): HTMLElement | undefined {
+function stretchField(path: string, section: string, targets = [{ path, section }]): HTMLElement {
   const document = ssfDocument(path)
   const stretch = parseSsfImage(document.get(section, "NORMAL"))?.stretch
-  if (!stretch) return
   const row = element("div", "ui-field")
   row.dataset.stack = ""
   caption(row, "STRETCH", "拉伸区域")
   row.title = "九宫格可拉伸的像素区间：左、右、上、下"
-  ssfNumberParts(row, "STRETCH", ["左", "右", "上", "下"], stretch.map(String), (values) => {
+  ssfNumberParts(row, "STRETCH", ["左", "右", "上", "下"], stretch?.map(String) ?? ["", "", "", ""], (values) => {
     const bands = targets.map((target) => {
       const current = parseSsfImage(ssfDocument(target.path).get(target.section, "NORMAL"))?.stretch
-      return values.map((value, index) => value === "" ? current?.[index] : Number(value)) as SsfStretch
+      const defaults = [0, 1, 0, 1]
+      return values.map((value, index) => value === "" ? current?.[index] ?? defaults[index] : Number(value)) as SsfStretch
     })
     if (bands.some((next) => next.some((value) => !Number.isInteger(value)) || next[0] >= next[1] || next[2] >= next[3])) return
     editTargets(targets, (target, { path, section }) => {
@@ -241,7 +281,7 @@ function textField(key: string, value: string, targets: SsfLocation[], options?:
   caption(row, key)
   const write = (next: string) => writeValue(targets, key, next)
   // TEXT_SIZE up to 1 is a fraction of the screen width (0.045) and steps by 0.001; above 1 it is pixels.
-  const numeric = NUMERIC_FIELDS.has(key) && /^-?\d+(?:\.\d+)?$/.test(value) || !value && key === "TEXT_SIZE"
+  const numeric = NUMERIC_FIELDS.has(key) && (/^-?\d+(?:\.\d+)?$/.test(value) || !value && key !== "TYPEFACE")
   const step = key === "TEXT_SIZE" ? (Number(value || 0) <= 1 ? 0.001 : 1) : value.includes(".") ? undefined : 1
   row.append(numeric
     ? fieldControl({ kind: "number", value, step }, ssfFieldLabel(key), write, { editable: isEditing() })
@@ -256,19 +296,19 @@ function ssfField(entry: SsfEntry, targets: SsfLocation[], options?: string[]): 
   const { key, value } = entry
   const quad = QUADS[key]
   const parts = value.split(",").map((part) => part.trim())
-  if (quad && parts.length === quad.length && parts.every((part) => part !== "" && Number.isFinite(Number(part)))) {
+  if (quad && (!value || parts.length === quad.length && parts.every((part) => part !== "" && Number.isFinite(Number(part))))) {
     const row = element("div", "ui-field")
     row.dataset.stack = ""
     caption(row, key)
-    ssfNumberParts(row, key, quad, parts, (values) => editTargets(targets, (document, target) => {
-      const current = document.get(target.section, key)!.split(",")
-      setSsfValue(document, target.section, key, values.map((value, index) => value || current[index]).join(","))
+    ssfNumberParts(row, key, quad, value ? parts : quad.map(() => ""), (values) => editTargets(targets, (document, target) => {
+      const current = document.get(target.section, key)?.split(",") ?? (/POSITION|RECT/.test(key) ? ["0", "0", "1", "1"] : ["0", "0", "0", "0"])
+      setSsfValue(document, target.section, key, values.map((value, index) => value || current[index]).join(","), target.create)
     }))
     return row
   }
   if (key === "BOLD") return switchField(key, value, targets)
   if (/COLOR/i.test(key) && (COLOR_VALUE.test(value.trim()) || !value)) return colorField(key, value, targets)
-  if (parseSsfImage(value)) return imageCard(ssfFieldLabel(key), [key], targets)
+  if (parseSsfImage(value) || !value && IMAGE_FIELDS.has(key)) return imageCard(ssfFieldLabel(key), [key], targets)
   return textField(key, value, targets, options)
 }
 
@@ -292,6 +332,8 @@ export type SsfBlock = {
   expect?: string[]
   /** Entries a missing section starts with when one of its rows is first written. */
   create?: SsfEntry[]
+  /** A missing style is bound to its key only when a field is first edited. */
+  bind?: SsfLocation["bind"]
   /** Matching sections of the other selected keys. */
   peers?: SsfLocation[]
 }
@@ -441,25 +483,27 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
   }
   if (!exists && !block.expect) return nodes
   const entries = exists ? ssfEntries(block.path, block.section).filter((entry) => !block.only || block.only.includes(entry.key)) : []
-  const keys = new Set(entries.map((entry) => entry.key))
+  const keys = new Set([...entries.map((entry) => entry.key), ...block.expect ?? []])
   const grid = element("div")
-  const targets = [{ path: block.path, section: block.section, create: block.create }, ...block.peers ?? []]
+  const targets = [{ path: block.path, section: block.section, create: block.create, bind: block.bind }, ...block.peers ?? []]
   const used = new Set(block.omit ?? [])
   const rowTargets = new Map<HTMLElement, SsfLocation[]>()
   if (block.reference) {
     const ref = block.reference
     const locations = [{ path: ref.path, section: ref.section }]
-    const row = ssfField({ key: ref.key, value: ssfDocument(ref.path).get(ref.section, ref.key) ?? "" }, locations)
+    const row = referenceCard(ssfFieldLabel(ref.key), ref, block)
     rowTargets.set(row, locations)
     grid.append(row)
+    used.add("NORMAL").add("PRESSED")
+    grid.append(stretchField(block.path, block.section, targets))
   }
   for (const [normal, pressed, label] of [["NORMAL", "PRESSED", "图片"], ["ICON", "ICON_PRESSED", "图标"]] as const) {
-    if (used.has(normal) || !keys.has(normal) || !parseSsfImage(entries.find((entry) => entry.key === normal)?.value)) continue
+    const value = entries.find((entry) => entry.key === normal)?.value
+    if (used.has(normal) || !keys.has(normal) || value && !parseSsfImage(value)) continue
     grid.append(imageCard(label, [normal, pressed], targets))
     used.add(normal).add(pressed)
     if (normal === "NORMAL") {
-      const stretch = stretchField(block.path, block.section, targets)
-      if (stretch) grid.append(stretch)
+      grid.append(stretchField(block.path, block.section, targets))
     }
   }
   for (const entry of entries) {
@@ -467,7 +511,7 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
     grid.append(ssfField(entry, targets, block.options?.[entry.key]))
   }
   for (const key of block.expect ?? []) {
-    if (!used.has(key) && !keys.has(key)) grid.append(ssfField({ key, value: "" }, targets, block.options?.[key]))
+    if (!used.has(key) && !entries.some((entry) => entry.key === key)) grid.append(ssfField({ key, value: "" }, targets, block.options?.[key]))
   }
   for (const row of Array.from(grid.children) as HTMLElement[]) {
     const band = row.dataset.documentKey === "STRETCH"
@@ -475,7 +519,10 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
     const rowKeys = band ? IMAGE_STATES : row.dataset.documentKey!.split(" ")
     const savedKeys = rowKeys.flatMap((key) => [key, ...LINKED_STATES[key] ?? []])
     const locations = rowTargets.get(row) ?? targets
-    const saved = locations.map((target) => ({ ...target, values: Object.fromEntries(savedKeys.map((key) => {
+    const sources = locations.map((target) => ({ target, keys: [...new Set([...savedKeys, ...target.create?.map(({ key }) => key) ?? []])] }))
+    if (rowTargets.has(row)) sources.push(...targets.map((target) => ({ target, keys: IMAGE_STATES })))
+    for (const target of targets) if (target.bind) sources.push({ target: { path: target.path, section: target.bind.section }, keys: [target.bind.key] })
+    const saved = sources.map(({ target, keys }) => ({ path: target.path, section: target.section, exists: ssfDocument(target.path).sections().includes(target.section), values: Object.fromEntries(keys.map((key) => {
       const value = ssfDocument(target.path).get(target.section, key)
       return [key, value === undefined ? null : band ? value.split(",").slice(1).join(",") : card ? value.split(",")[0] : value]
     })) }))
@@ -491,9 +538,10 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
             if (band) {
               if (current) document.set(target.section, key, [current.split(",")[0], ...value ? value.split(",") : []].join(","))
             } else if (value === null) document.remove(target.section, key)
-            else if (card && savedKeys.includes(key)) setSsfValue(document, target.section, key, withFile(current, value))
+            else if (card) setSsfValue(document, target.section, key, withFile(current, value))
             else setSsfValue(document, target.section, key, value)
           }
+          if (!item.exists && !document.entries(target.section).length) document.removeSections([target.section])
         }
       })
     })

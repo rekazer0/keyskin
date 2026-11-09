@@ -39,3 +39,68 @@ test('SSF edits to multiple files commit together and preview only after committ
   assert.equal(IniDocument.parse(files.get('two')).get('B', 'TYPE'), '3')
   assert.deepEqual(events, ['batch', 'preview'])
 })
+
+test('SSF first edit fills required defaults in existing sparse sections without replacing values', () => {
+  const context = run(declarations('setSsfValue'))
+  const document = IniDocument.parse('[CandidateView]\nBG_COLOR=0x12345678\n')
+  context.setSsfValue(document, 'CandidateView', 'MARGINS', '1,2,3,4', [
+    { key: 'BG_STYLE', value: '1' }, { key: 'BG_COLOR', value: '0xffffffff' },
+  ])
+  assert.equal(document.get('CandidateView', 'BG_STYLE'), '1')
+  assert.equal(document.get('CandidateView', 'BG_COLOR'), '0x12345678')
+  assert.equal(document.get('CandidateView', 'MARGINS'), '1,2,3,4')
+})
+
+test('SSF choosing an image creates the required view defaults', () => {
+  const document = IniDocument.parse('[RootView]\n')
+  const context = run(declarations('replaceImage', 'stateImage', 'withFile', 'setSsfValue'), {
+    LINKED_STATES: { NORMAL: ['DISABLED', 'NORMAL_ON'] },
+    editTargets: (targets, change) => targets.forEach((target) => change(document, target)),
+  })
+  context.replaceImage([{ section: 'RootView', create: [{ key: 'BG_STYLE', value: '1' }] }], 'BG_IMAGE', 'background.png')
+  assert.equal(document.get('RootView', 'BG_STYLE'), '1')
+  assert.equal(document.get('RootView', 'BG_IMAGE'), 'background.png')
+})
+
+test('SSF first foreground layout edit creates and binds a usable style in one commit', () => {
+  let text = '[Key_Q]\nCUSTOM=keep\n'
+  let commits = 0
+  const context = run(declarations('editTargets', 'setSsfValue', 'withFile'), {
+    IniDocument, archive: { format: 'ssf', isText: () => true, getText: () => text }, isEditing: () => true,
+    commitText: (_path, _before, after) => { text = after; commits += 1 },
+    selectedPath: '', sourceEditPath: () => '', resolutionTwins: () => [],
+    refreshPreview() {}, populateKeyInspector() {}, updateDirty() {},
+  })
+  const target = { path: 'phoneSkin.ini', section: 'FGStyle_Key_Q', bind: { section: 'Key_Q', key: 'FG_STYLE' }, create: [{ key: 'LABEL_STYLE', value: 'TextStyle_Qwerty' }] }
+  context.editTargets([target], () => {})
+  assert.equal(commits, 0, 'a no-op does not create a reference')
+  context.editTargets([target], (document, location) => context.setSsfValue(document, location.section, 'LABEL_POSITION', '0.2,0,1,1', location.create))
+  const document = IniDocument.parse(text)
+  assert.equal(commits, 1)
+  assert.equal(document.get('Key_Q', 'FG_STYLE'), 'FGStyle_Key_Q')
+  assert.equal(document.get('FGStyle_Key_Q', 'LABEL_STYLE'), 'TextStyle_Qwerty')
+  assert.equal(document.get('FGStyle_Key_Q', 'LABEL_POSITION'), '0.2,0,1,1')
+  assert.equal(document.get('Key_Q', 'CUSTOM'), 'keep')
+})
+
+test('SSF source file groups render image section references as cards with their image controls', () => {
+  const document = IniDocument.parse('[RootView]\nBG_IMAGE=keyboard.png\n[CandidateView]\nBG_IMAGE=BgCandidate,stretch\n[BgCandidate]\nNORMAL=bar.png\n')
+  const groups = []
+  const context = run(declarations('fileGroups'), {
+    IMAGE_KEYS: ['NORMAL', 'PRESSED'],
+    ssfDocument: () => document,
+    firstValue: (value) => value?.split(',')[0],
+    ssfSectionLabel: (section) => section,
+    renderGroup: (label, blocks, code) => { const group = { label, blocks, code }; groups.push(group); return group },
+  })
+  context.fileGroups('phoneSkin.ini')
+  const candidate = JSON.parse(JSON.stringify(groups.find(({ label }) => label === 'CandidateView')))
+  assert.deepEqual(candidate.blocks[0].omit, ['BG_IMAGE'])
+  assert.deepEqual(candidate.blocks[1], {
+    path: 'phoneSkin.ini', section: 'BgCandidate', title: 'BgCandidate', expect: ['NORMAL', 'PRESSED'],
+    reference: { path: 'phoneSkin.ini', section: 'CandidateView', key: 'BG_IMAGE' },
+  })
+  assert.equal(groups.some(({ label }) => label === 'BgCandidate'), false)
+  assert.equal(groups.find(({ label }) => label === 'RootView').blocks[0].omit.length, 0, 'file paths remain image fields')
+  assert.equal(groups.find(({ label }) => label === 'RootView').blocks[0].create[0].value, '1', 'raw INI view edits create the required background mode')
+})

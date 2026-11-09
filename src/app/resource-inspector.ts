@@ -165,13 +165,14 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
   const stylesDocument = IniDocument.parse(archive.getText(path))
   fieldsHost.replaceChildren(...animated && !embedded ? styleAnimationPlayers(styleID, stylesDocument) : [])
   const existing = stylesDocument.entries(section)
-  const common = animated ? [] : ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "SHOW", "INFO"]
-  const keys = [...new Set([...common, ...embedded ? STYLE_ANIM_FIELDS : [], ...existing.map((entry) => entry.key).filter((key) => key !== "NM_IMG" && key !== "HL_IMG")])]
+  const common = ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "FONT_CLEARTYPE", "SHOW", "INFO", "BORDER_COLOR", "BORDER_SIZE", "PRESS_SOUND_PATH"]
+  const keys = [...new Set([...common, ...STYLE_ANIM_FIELDS, ...existing.map((entry) => entry.key).filter((key) => key !== "NM_IMG" && key !== "HL_IMG")])]
   const groups = [
     ["colors", "状态颜色", (key: string) => key === "NM_COLOR" || key === "HL_COLOR"],
     ["typography", "字体", (key: string) => key.startsWith("FONT_")],
     ["content", "内容与说明", (key: string) => key === "SHOW" || key === "INFO"],
     ["animation", "动画", (key: string) => /ANIM|^EVENT\d+$/.test(key)],
+    ["sound", "音效", (key: string) => key.endsWith("SOUND_PATH")],
     ["advanced", "边框与扩展", () => true],
   ] as const
   const groupRows = new Map<string, HTMLElement[]>(groups.map(([id]) => [id, []]))
@@ -181,9 +182,10 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
     const label = translatedConfigLabel(key)
     const value = stylesDocument.get(section, key) ?? ""
     const commit = (next: string) => {
-      if (!appState.archive?.isText(path)) return
+      if (!appState.archive?.isText(path) || !isEditing()) return
       const current = IniDocument.parse(appState.archive.getText(path))
       const before = current.toString()
+      if (current.get(section, key) === undefined && !next) return
       if (!current.set(section, key, next)) return
       commitText(path, before, current.toString())
       if (!embedded) setSourceValue(current.toString())

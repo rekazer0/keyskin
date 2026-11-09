@@ -1,4 +1,5 @@
 import { sourceKeyLabels } from "../config-labels.ts"
+import { baiduInspectorEntries, baiduInspectorTuple } from "../baidu-inspector-fields.ts"
 import { LEGACY_ANIMATION_FIELDS } from "../legacy-animation.ts"
 import { visualResolver, isBdaLayoutPath, currentBdaAppearance, bdaAppearancePart, refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
 import { documentFields, documentFieldsGroup, skinFields, toolbarFields, bdaConfigFields, bdaConfigFieldsGroup } from "./dom"
@@ -89,6 +90,14 @@ export const documentFieldLabels: Record<string, string> = {
   PERSIST: "显示时机",
   CELL_W: "候选字间距",
   FIRST_GAP: "首项间距",
+  MORE_W: "更多候选宽度",
+  MASK_STYLE: "遮罩样式",
+  SCROLL_STYLE: "滚动条样式",
+  PANEL_BACK_STYLE_INDEX: "面板背景样式",
+  TAB_BACK_STYLE_INDEX: "标签背景样式",
+  TEXT_STYLE_INDEX: "文字样式",
+  BOTTOM_LINE: "底部线条",
+  SYMBOL_FULL_SCREEN: "符号全屏",
   NML_BACK_STYLE: "正常背景样式",
   SEL_BACK_STYLE: "选中背景样式",
   NML_FONT_STYLE: "正常文字样式",
@@ -127,6 +136,7 @@ const documentPairAffixes: Record<string, [string, string]> = {
   POS: ["X", "Y"],
   CELL_SIZE: ["W", "H"],
   FIX_SIZE: ["W", "H"],
+  GRID: ["W", "H"],
 }
 
 const SWITCH_STYLE_KEYS = ["NML_BACK_STYLE", "SEL_BACK_STYLE", "NML_FONT_STYLE", "SEL_FONT_STYLE"]
@@ -139,8 +149,9 @@ const EDGE_ORDER = [1, 2, 3, 0]
 const documentNumericFields = new Set([
   "KEY_NUM", "TIP_NUM", "LIST_NUM", "OFFSET_NUM", "ANIM_NUM", "BUILD_NUM",
   "REPEAT_CNT", "FONT_SIZE", "FONT_WEIGHT", "BORDER_SIZE", "STYLE_NUM", "TILE_NUM", "VERSION",
-  "CELL_W", "FIRST_GAP", "ICON_NUM", "ICON_INDEX", "EVENT_NUM", "ANCHOR_TYPE",
+  "CELL_W", "FIRST_GAP", "MORE_W", "ICON_NUM", "ICON_INDEX", "EVENT_NUM", "ANCHOR_TYPE",
   "PERSIST", "SCROLL_SIDE", "HINT_TYPE", "ANIM_LEVEL", "HOLDFLAG", "IDLE_TIME",
+  "BOTTOM_LINE",
 ])
 
 /** number 输入框会清空非数字值，只有纯数字才切换到数字类型。 */
@@ -267,31 +278,31 @@ export function populateDocumentInspector(): void {
       specialized.add(`${key ? section : "CAND"}\u0000${key || section}`)
     }
   }
-  const entries = appState.selectedDocument.entries().filter((entry) =>
+  // 整体布局（选中当前布局、没选按键）只展开这个布局自己的分组：候选栏、输入区、更多面板等
+  // 各自有入口，选中对应区域或文件时才出现，不在每个布局里重复一遍。
+  const overallLayout = appState.selectedPath === appState.layoutPath
+  const entries = baiduInspectorEntries(appState.selectedDocument, appState.selectedPath, overallLayout).filter((entry) =>
     !/^KEY\d+$/.test(entry.section) &&
     !isHiddenConfigEntry(entry.section, entry.key, isToolbarPath(appState.selectedPath)) &&
     (!toolbarSections.size || toolbarSections.has(entry.section)) &&
     !specialized.has(`${entry.section}\u0000${entry.key}`),
   )
-  // 缺少可选字段不等于不支持；只补检查器条目，不在查看时写入文档。
-  if (appState.selectedPath === appState.layoutPath && appState.selectedDocument.get("PANEL", "ANIM_STYLE") === undefined) {
-    entries.push({ section: "PANEL", key: "ANIM_STYLE", value: "" })
-  }
   // F14 的原生图标图片与 SWITCH 的通用样式分别编辑。
   const document = appState.selectedDocument
   if ([...toolbarSections].some((name) => /^ICON\d+$/i.test(name) && document.get(name, "KEY")?.trim().toUpperCase() === "F14")) {
     documentFields.append(toolbarIconSection())
-    const existing = document.entries().filter((entry) => entry.section === "SWITCH")
+    const existing = document.entries().filter((entry) => entry.section === "SWITCH" && !entries.some((item) => item.section === entry.section && item.key === entry.key))
     entries.push(...existing, ...SWITCH_STYLE_KEYS
-      .filter((key) => !existing.some((entry) => entry.key === key))
+      .filter((key) => !entries.some((entry) => entry.section === "SWITCH" && entry.key === key) && !existing.some((entry) => entry.key === key))
       .map((key) => ({ section: "SWITCH", key, value: "" })))
   }
   documentFieldsGroup.hidden = entries.length === 0
   if (!entries.length) return
 
   const update = (section: string, key: string, value: string): void => {
-    if (!appState.selectedDocument || appState.selectedPath !== documentFieldsGroup.dataset.path) return
+    if (!appState.selectedDocument || appState.selectedPath !== documentFieldsGroup.dataset.path || !isEditing()) return
     const before = appState.selectedDocument.toString()
+    if (appState.selectedDocument.get(section, key) === undefined && !value) return
     if (!appState.selectedDocument.sections().includes(section)) {
       if (!value) return
       appState.selectedDocument.appendSection(section, [{ key, value }])
@@ -312,31 +323,35 @@ export function populateDocumentInspector(): void {
       commit: commitValue as (value: unknown) => void, rowKey: extra.key === undefined ? rowKey : [...rowKey, extra.key],
     })
     if (isStyleReferenceKey(entry.key)) return [row({ kind: "style", value: entry.value, reference: entry.key }, commit)]
+    if (/^SWITCH\d*$/i.test(entry.section) && entry.key === "PADDING" && (!entry.value.trim() || looksNumeric(entry.value))) {
+      return [row({ kind: "number", value: entry.value }, commit)]
+    }
     // 只改动的那几格写回，其余格保持原值；不重绘，所以就地更新。
-    const values = entry.value.split(",").map((value) => value.trim())
-    const numeric = values.every(looksNumeric)
+    const count = documentPairAffixes[entry.key] ? 2 : documentRectFields.has(entry.key) || entry.key === "PADDING" ? 4 : 1
+    const values = entry.value.trim() ? entry.value.split(",").map((value) => value.trim()) : Array<string>(count).fill("")
+    const numeric = values.every((value) => !value || looksNumeric(value))
     const pair = documentPairAffixes[entry.key]
     if (numeric && pair && values.length === 2) {
-      return [row({ kind: "parts", affixes: pair, values }, (next: string[]) => commit(next.join(",")))]
+      return [row({ kind: "parts", affixes: pair, values }, (next: string[]) => commit(baiduInspectorTuple(next)))]
     }
     if (numeric && documentRectFields.has(entry.key) && values.length === 4) {
       return ([["位置", ["X", "Y"], 0], ["尺寸", ["W", "H"], 2]] as const).map(([name, affixes, start]) =>
         row({ kind: "parts", affixes, values: values.slice(start, start + 2) }, (next: string[]) => {
           values.splice(start, 2, ...next)
-          commit(values.join(","))
+          commit(baiduInspectorTuple(values))
         }, { label: name, key: start }))
     }
     if (numeric && entry.key === "PADDING" && values.length === 4) {
       return [row({ kind: "parts", affixes: ["↑", "→", "↓", "←"], values: EDGE_ORDER.map((index) => values[index]), columns: 4 }, (next: string[]) => {
         EDGE_ORDER.forEach((index, position) => { values[index] = next[position] })
-        commit(values.join(","))
+        commit(baiduInspectorTuple(values))
       })]
     }
     // 百度配置值的类型化控件（开关、分段、九宫格、颜色）。
     const typed = configField(entry.section, entry.key, label, entry.value, isEditing(), commit)
     if (typed) return [typed]
     // 值不是数字时保持文本输入：number 输入框会清空显示，用户一编辑就丢原值。
-    if (documentNumericFields.has(entry.key) && looksNumeric(entry.value)) {
+    if (documentNumericFields.has(entry.key) && (!entry.value.trim() || looksNumeric(entry.value))) {
       return [row({ kind: "number", value: entry.value, unit: entry.key === "IDLE_TIME" ? "ms" : undefined, range: entry.key === "FONT_SIZE" ? "fontSize" : undefined }, commit)]
     }
     return [row({ kind: "text", value: entry.value }, commit)]
@@ -348,7 +363,8 @@ export function populateDocumentInspector(): void {
       code: sectionName && title !== sectionName ? sectionName : undefined,
     }))
     const animations = sectionEntries.filter((entry) => layoutAnimationFields.has(entry.key))
-    if (animations.length) documentFields.append(section("动画", animations.flatMap(renderEntry)))
+    // 动画字段单独成组，组名带上分区名：同一个文档有多个分区时不会出现一串「动画 2 / 动画 3」。
+    if (animations.length) documentFields.append(section(sectionName ? `${title}动画` : "动画", animations.flatMap(renderEntry), { code: sectionName || undefined }))
   }
   documentFieldsGroup.dataset.path = appState.selectedPath
 }

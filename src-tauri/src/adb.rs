@@ -125,16 +125,15 @@ impl SkinTarget {
             _ => "'*/*'",
         }
     }
-
 }
 
 /// 默认放在输入法自己的外部目录：没有存储权限的输入法也能读。
 fn skin_directory(settings: &AdbSettings) -> String {
     if settings.directory.is_empty() {
-        if SkinTarget::of(&settings.package) == SkinTarget::Sogou {
-            format!("/sdcard/Android/data/{}/files/sga/wallpaper", settings.package)
-        } else {
-            format!("/sdcard/Android/data/{}/files/KeySkin", settings.package)
+        match SkinTarget::of(&settings.package) {
+            SkinTarget::Sogou => format!("/sdcard/Android/data/{}/files/sga/wallpaper", settings.package),
+            // .piska 的 ACTION_VIEW 入口按 file:// 读取，放输入法自己的目录才不需要存储权限。
+            _ => format!("/sdcard/Android/data/{}/files/KeySkin", settings.package),
         }
     } else {
         settings.directory.trim_end_matches('/').to_owned()
@@ -345,8 +344,8 @@ pub async fn test_adb_connection(settings: AdbSettings) -> Result<String, String
         .map_err(|e| e.to_string())?
 }
 
-fn valid_skin_name(name: &str, format: &str) -> bool {
-    name.ends_with(&format!(".{format}"))
+fn valid_skin_name(name: &str, extension: &str) -> bool {
+    name.ends_with(&format!(".{extension}"))
         && name.len() <= 240
         && !name.starts_with('.')
         && !name
@@ -575,7 +574,9 @@ fn share(
             target.formats().join(" / ").to_uppercase()
         ));
     }
-    if !valid_skin_name(&name, &format) {
+    // 手心「本地皮肤」是 .piska 压缩包，其余输入法用导出的原格式扩展名。
+    let extension = if target == SkinTarget::ShouXin { "piska" } else { format.as_str() };
+    if !valid_skin_name(&name, extension) {
         return Err("皮肤文件名无效，请使用不含路径的皮肤文件名".into());
     }
     let serial = connect(&settings)?;
@@ -642,6 +643,10 @@ fn share(
                 target.name()
             ))?;
         }
+        // 手心导入成功后会用自己的弹窗询问是否应用；不模拟点击，交给设备端确认。
+        if target == SkinTarget::ShouXin {
+            progress("已导入手心输入法，请在手机弹窗点「确定」应用皮肤");
+        }
         // 百度导入成功即启用新皮肤：等导入页退出后直接调起键盘确认效果。
         if target == SkinTarget::Baidu {
             progress(&format!(
@@ -684,15 +689,6 @@ fn share(
         if target == SkinTarget::Sogou {
             progress("正在搜狗「我的皮肤」里启用刚推送的皮肤…");
             apply_sogou_skin(&adb)?;
-        } else if target == SkinTarget::ShouXin {
-            progress("等待手心确认导入并应用…");
-            let started = Instant::now();
-            while started.elapsed() < Duration::from_secs(15) {
-                if tap_ui_text(&adb, "确定")? {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(500));
-            }
         }
         Ok(serial.clone())
     })();
@@ -783,6 +779,14 @@ mod tests {
         );
         assert_eq!(
             skin_directory(&AdbSettings {
+                directory: String::new(),
+                package: "com.xinshuru.inputmethod".into(),
+                ..settings()
+            }),
+            "/sdcard/Android/data/com.xinshuru.inputmethod/files/KeySkin"
+        );
+        assert_eq!(
+            skin_directory(&AdbSettings {
                 directory: "/sdcard/Download/Skin/".into(),
                 ..settings()
             }),
@@ -803,6 +807,66 @@ mod tests {
         assert!(share(settings(), "ssf".into(), "a.ssf".into(), vec![1], &AtomicBool::new(false), |_| {})
             .unwrap_err()
             .contains("BDS / BDA"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shouxin_share_opens_the_piska_view_entry_without_ui_automation() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!(
+            "keyskin-shouxin-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&root).unwrap();
+        let executable = root.join("adb");
+        let calls = root.join("calls");
+        fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\necho \"$@\" >> '{}'\ncase \"$1\" in\ndevices) printf 'dev\\tdevice\\n';;\n-s) case \"$4\" in pm) echo package:/shouxin.apk;; settings) echo com.xinshuru.inputmethod/.ImeService;; esac;;\nesac\n",
+                calls.display()
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        let config = AdbSettings {
+            executable: executable.to_str().unwrap().into(),
+            directory: String::new(),
+            package: "com.xinshuru.inputmethod".into(),
+            ..settings()
+        };
+        let messages = std::cell::RefCell::new(Vec::new());
+        assert_eq!(
+            share(
+                config,
+                "sxi".into(),
+                "keyskin-test.piska".into(),
+                vec![1],
+                &AtomicBool::new(false),
+                |detail| messages.borrow_mut().push(detail.to_owned())
+            )
+            .unwrap(),
+            "dev"
+        );
+        let written = fs::read_to_string(&calls).unwrap();
+        // 手心从自己的外部目录读取 .piska，再由 FTInputSettingsActivity 的 ACTION_VIEW 导入。
+        assert!(written.contains(
+            "/sdcard/Android/data/com.xinshuru.inputmethod/files/KeySkin/keyskin-test.piska"
+        ));
+        assert!(written.contains(
+            "shell am start -W -a android.intent.action.VIEW -d file:///sdcard/Android/data/com.xinshuru.inputmethod/files/KeySkin/keyskin-test.piska -t '*/*' -f 0x10008000 -n com.xinshuru.inputmethod/.FTInputSettingsActivity"
+        ));
+        assert!(messages
+            .borrow()
+            .iter()
+            .any(|message| message.contains("请在手机弹窗点「确定」")));
+        assert!(!written.contains("uiautomator"));
+        assert!(!written.contains("input tap"));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]
@@ -1116,4 +1180,15 @@ mod tests {
             Some("/data/local/tmp/keyskin-window.xml")
         );
     }
+    #[test]
+    #[ignore]
+    fn verify_conversion_matrix_on_device() {
+        let path = std::env::var("KEYSKIN_VERIFY_REQUEST").unwrap();
+        let request: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        let settings: AdbSettings = serde_json::from_value(request["settings"].clone()).unwrap();
+        let data = fs::read(request["dataPath"].as_str().unwrap()).unwrap();
+        share(settings, request["format"].as_str().unwrap().into(), request["name"].as_str().unwrap().into(), data,
+            &AtomicBool::new(false), |detail| println!("{detail}")).unwrap();
+    }
+
 }

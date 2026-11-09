@@ -1,0 +1,95 @@
+import assert from "node:assert/strict"
+import { chromium } from "playwright"
+import { createServer } from "vite"
+import { SkinArchive } from "../src/skin.ts"
+import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
+
+const archive = SkinArchive.open(bdsFixture())
+const GEN = "light/skin/port/gen.ini"
+const CAND = "light/skin/port/cand1.cnd"
+const LAYOUT = "light/skin/port/py_26.ini"
+archive.setText(GEN, "[PANEL]\nSIZE=1080,600\nBACK_STYLE=1\n")
+archive.setText(CAND, "[CAND]\n[ICON1]\nKEY=F14\n[SWITCH]\n")
+archive.setText(LAYOUT, "[PANEL]\nSIZE=1080,600\n[LIST]\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=a\n")
+const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { host: "127.0.0.1", port: 41944, strictPort: false, hmr: false } })
+await server.listen()
+const browser = await chromium.launch()
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+const errors = []
+page.on("pageerror", (error) => errors.push(error.message))
+const select = (path) => page.evaluate(async (path) => { await (await import("/src/app/navigation.ts")).selectFile(path) }, path)
+const source = (path) => page.evaluate(async (path) => (await import("/src/app/state.ts")).appState.archive.getText(path), path)
+const history = () => page.evaluate(async () => (await import("/src/app/state.ts")).appState.undoStack.length)
+const value = (section, key) => page.evaluate(async ({ section, key }) => (await import("/src/app/state.ts")).appState.selectedDocument.get(section, key), { section, key })
+const group = (code) => page.locator("#document-fields > section").filter({ has: page.locator(`.document-section-code:text-is("${code}")`) })
+const sectionCodes = () => page.locator("#document-fields > section .document-section-code").evaluateAll((nodes) => [...new Set(nodes.map((node) => node.textContent.trim()))])
+const railTitles = () => page.locator("#mobile-inspector-groups button").evaluateAll((nodes) => nodes.map((node) => node.title))
+const row = (code, key) => group(code).locator(`[data-document-key="${key}"]`)
+const edit = async (input, next) => { await input.fill(next); await input.press("Tab") }
+try {
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await page.locator("#browser-open").setInputFiles({ name: "sparse.bds", mimeType: "application/octet-stream", buffer: Buffer.from(archive.toBytes("bds")) })
+  await page.waitForFunction(() => !document.querySelector("#open").disabled)
+  const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+  if (await close.isVisible()) await close.click()
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  await select(GEN)
+  const before = await source(GEN), undo = await history()
+  assert.equal(await row("INPUT", "POS").locator("input[type=number]").count(), 2)
+  assert.equal(await row("LIST", "CELL_SIZE").locator("input[type=number]").count(), 2)
+  assert.equal(await row("CAND", "CELL_W").locator("input[type=number]").count(), 1)
+  assert.equal(await row("CAND", "VIEW_RECT").count(), 2)
+  assert.equal(await row("CAND", "LAYOUT_NAME").locator("input").count(), 1)
+  assert.equal(await row("GLOBAL", "SYMBOL_FULL_SCREEN").getByRole("switch").count(), 1)
+  assert.equal(await row("EMOJI", "PANEL_BACK_STYLE_INDEX").locator(".ui-style-ref").count(), 1)
+  assert.equal(await row("PANEL", "NO_BLUR").getByRole("switch").count(), 1)
+  assert.equal(await source(GEN), before, "discovering capabilities does not write defaults")
+  assert.equal(await history(), undo)
+  await edit(row("INPUT", "POS").getByRole("spinbutton", { name: "位置Y", exact: true }), "18")
+  assert.equal(await value("INPUT", "POS"), "0,18")
+  assert.equal(await history(), undo + 1)
+  await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
+  assert.equal(await source(GEN), before, "undo removes a newly created input section")
+  await page.evaluate(async () => (await import("/src/app/edit-history.ts")).redo())
+  assert.equal(await value("INPUT", "POS"), "0,18")
+  await select(LAYOUT)
+  const layoutBefore = await source(LAYOUT)
+  // 整体布局只列这个布局自己的分区：候选栏、输入区、更多面板等由各自的入口提供。
+  assert.deepEqual(await sectionCodes(), ["PANEL", "LIST"])
+  // 动画分组按分区命名，不出现「动画 2」「动画 3」这类重名编号。
+  assert.deepEqual(await railTitles(), ["文字", "面板（PANEL）", "面板动画（PANEL）", "列表（LIST）", "列表动画（LIST）"])
+  assert.equal(await row("LIST", "CELL_SIZE").locator("input[type=number]").count(), 2)
+  assert.equal(await row("LIST", "LIST_NUM").getByRole("spinbutton").count(), 1)
+  await row("LIST", "LIST_ORDER").getByRole("button", { name: "横排", exact: true }).click()
+  assert.equal(await value("LIST", "LIST_ORDER"), "1")
+  await edit(row("LIST", "CELL_SIZE").getByRole("spinbutton", { name: "单元格尺寸W", exact: true }), "100")
+  assert.equal(await value("LIST", "CELL_SIZE"), "100,0")
+  await page.evaluate(async () => { const history = await import("/src/app/edit-history.ts"); history.undo(); history.undo() })
+  assert.equal(await source(LAYOUT), layoutBefore)
+  await select(CAND)
+  const candBefore = await source(CAND), candUndo = await history()
+  assert.equal(await row("CAND", "MORE_W").getByRole("spinbutton").count(), 1)
+  assert.equal(await row("ICON1", "SIZE").getByRole("spinbutton").count(), 2)
+  assert.equal(await row("ICON1", "PERSIST").getByRole("button", { name: "始终", exact: true }).count(), 1)
+  assert.equal(await row("SWITCH", "NML_FONT_STYLE").locator(".ui-style-ref").count(), 1)
+  assert.equal(await row("SWITCH", "PADDING").getByRole("spinbutton").count(), 1)
+  // 候选栏文件带输入区（输入码），顺序是候选栏 → 输入区 → 工具栏 → 工具按钮。
+  assert.equal(await row("INPUT", "FORE_STYLE").locator(".ui-style-ref").count(), 1)
+  assert.deepEqual(await sectionCodes(), ["CAND", "INPUT", "SWITCH", "ICON1"])
+  // 点画布上的输入码区域时，分类栏停在它的「输入区」分组。
+  await page.locator("#candidate-input-box").dispatchEvent("click")
+  await page.waitForFunction(() => (document.querySelector('#mobile-inspector-groups button[aria-pressed="true"]')?.textContent ?? "").includes("输入区"))
+  assert.equal(await source(CAND), candBefore)
+  assert.equal(await history(), candUndo)
+  await edit(row("ICON1", "SIZE").getByRole("spinbutton", { name: "尺寸W", exact: true }), "80")
+  assert.equal(await value("ICON1", "SIZE"), "80,0")
+  await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
+  assert.equal(await source(CAND), candBefore)
+  await page.getByRole("button", { name: "交互预览", exact: true }).click()
+  assert.equal(await row("ICON1", "SIZE").getByRole("spinbutton").first().isDisabled(), true)
+  assert.deepEqual(errors, [])
+  console.log("Baidu sparse inspector: complete panel/candidate/input/list/icon controls, first edit, no view writes, undo/redo and read-only passed")
+} finally {
+  await browser.close()
+  await server.close()
+}

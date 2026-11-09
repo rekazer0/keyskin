@@ -210,7 +210,7 @@ try {
       })
       const shouxin = await share(6)
       assert.equal(shouxin.format, 'sxi')
-      assert.equal(shouxin.name, '测试 皮肤.sxi')
+      assert.match(shouxin.name, /^keyskin-[a-z0-9]+\.piska$/)
       assert.equal(shouxin.settings.package, 'com.xinshuru.inputmethod')
       assert.ok(shouxin.bytes > 0)
       const shouxinFiles = await page.evaluate(async () => {
@@ -218,10 +218,14 @@ try {
         const { unzipSync } = await import('/node_modules/fflate/esm/browser.js')
         return Object.keys(unzipSync(args.data)).sort()
       })
-      for (const file of ['skin.ini', 'skin.proto', 'preview.png', 'preview_small.png', 'skin.json', 'info.json']) {
-        assert.ok(shouxinFiles.includes(file), `ShouXin Android package contains ${file}`)
+      for (const file of ['skin.json', 'info.json', 'native.layout', 'preview.png', 'preview_small.png']) {
+        assert.ok(shouxinFiles.includes(file), `ShouXin piska contains ${file}`)
       }
-      assert.ok(shouxinFiles.some(file => file.startsWith('light/')), 'ShouXin share keeps the SXI resources')
+      // 手心 .piska 导入入口要求根级旧版校验文件，缺一项就提示「皮肤包缺失关键文件」。
+      for (const file of ['skin.ini', 'skin.proto']) {
+        assert.ok(shouxinFiles.includes(file), `ShouXin piska contains the key file ${file}`)
+      }
+      assert.ok(shouxinFiles.some(file => file.startsWith('light/')), 'ShouXin piska keeps the SXI resources')
       // 分享进行中可取消：按钮只在可取消的操作里出现，取消会调用后端命令并按「已取消」收尾。
       await page.evaluate(async () => {
         const { appState } = await import('/src/app/state.ts')

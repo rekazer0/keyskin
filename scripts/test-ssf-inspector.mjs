@@ -74,11 +74,11 @@ try {
   await page.locator('#inspector-filter').press('Escape')
   // A composite edit preserves its other coordinates; reset survives inspector reconstruction.
   const coord = () => row('FG_RECT').locator('input')
-  // A section's normal and pressed images share one Baidu-style card: two names, normal then pressed preview.
+  // A section reference has one editable name and normal / pressed previews that edit its images.
   const backgroundCard = fields.locator('[data-inspector-group-label="背景"] .ui-style-ref')
   assert.equal(await backgroundCard.count(), 1)
   assert.deepEqual(await backgroundCard.locator('.ui-style-state').evaluateAll((states) => states.map((state) => state.dataset.state)), ['normal', 'pressed'])
-  assert.equal(await backgroundCard.locator('.ui-style-ref-name').count(), 2)
+  assert.equal(await backgroundCard.locator('.ui-style-ref-name').count(), 1)
   // Boards are picked in the overview, not a 9 / 26 key switch; on phones a swipe that starts on a
   // thumbnail still scrolls the inspector, and a crowded category rail scrolls by itself.
   assert.equal(await page.locator('#layout').isHidden(), true)
@@ -148,10 +148,10 @@ try {
   assert.equal(await page.locator('.inspector-changes').textContent(), '已改 1')
   await page.locator('.inspector-reset').click()
   assert.equal(await read(skin, 'SMA_Key26Bg_Q', 'NORMAL'), '26keyq.png,2,96,3,139')
-  await change(background.locator('.ui-style-ref input').first(), '26fn.png')
-  assert.equal(await read(skin, 'SMA_Key26Bg_Q', 'NORMAL'), '26fn.png,2,96,3,139')
+  await change(background.locator('.ui-style-ref input').first(), 'KeyBg_Function_Qwerty')
+  assert.equal(await read(skin, 'Key_Q', 'BG_IMAGES'), 'KeyBg_Function_Qwerty')
   await page.locator('.inspector-reset').click()
-  assert.equal(await read(skin, 'SMA_Key26Bg_Q', 'NORMAL'), '26keyq.png,2,96,3,139')
+  assert.equal(await read(skin, 'Key_Q', 'BG_IMAGES'), 'SMA_Key26Bg_Q')
   // 单独设置 copies the label style and the FG_STYLE naming it, so only Q changes.
   await fields.locator('[data-inspector-group-label="文字"]').getByRole('button', { name: '单独设置' }).click()
   assert.equal(await read(skin, 'Key_Q', 'FG_STYLE'), 'FGStyle_Key_Q')
