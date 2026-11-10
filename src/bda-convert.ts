@@ -143,7 +143,6 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
       else if (existing !== animation) motionConflicts.add(`${styleID}:${prop}`)
       motionRefs.set(styleID, props)
     }
-    let conflicts = 0
     for (const name of ["Info.txt", "demo.png"] as const) {
       const bytes = source.getBytes(`${theme}/skin/${name}`) ?? source.getBytes(name)
       if (bytes) output.set(`${theme}/skin/${name}`, bytes)
@@ -240,9 +239,8 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
 
       const addStyle = (header: string, lines: string[]) => {
         directionStyles.set(header, [...lines])
-        const existing = themeStyles.get(header)
-        if (!existing) themeStyles.set(header, lines)
-        else if (existing.join("\n") !== lines.join("\n")) conflicts++
+        // Each orientation reads its own default.css, so a style that differs between them loses nothing.
+        if (!themeStyles.has(header)) themeStyles.set(header, lines)
       }
       const copied = new Map<string, string>()
       const imageSpec = (atom: BdaImageAtom | undefined): string | undefined => {
@@ -410,7 +408,6 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
     appendMotionRefs(themeStyles, motionRefs, motionConflicts, theme, warnings)
     const sections = [...themeStyles].flatMap(([header, lines]) => [header, ...lines, ""])
     output.set(`${theme}/skin/res/default.css`, strToU8(`[GLOBAL]\nSTYLE_NUM=${themeStyles.size}\n\n${sections.join("\n")}`))
-    if (conflicts) warnings.push(`${theme} 的横竖屏有 ${conflicts} 个同号样式内容不同，已分别保存在方向资源目录`)
   }
 
   if (!output.size) throw new Error("BDA 中没有可转换的外观配置")

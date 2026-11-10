@@ -55,3 +55,12 @@ test('Baidu export writes bound Sogou animations and every decoration image', as
   assert.ok(pkg.file('light', file))
   assert.ok(anim.sections().some(section => anim.get(section, 'VALUE') === '1,0.9'))
 })
+
+test('Baidu export takes the symbol column styles a board inherits from gen.ini', async () => {
+  const source = SkinArchive.open(read('templates/iqoo-rounded-black.bds'))
+  assert.equal(IniDocument.parse(source.getText('light/skin/port/py_9.ini')).get('LIST', 'FORE_STYLE'), undefined)
+  const pkg = await SsfPackage.open((await convertBaiduToSsf(source)).bytes)
+  const skin = pkg.skin('light')
+  assert.equal(skin.get('TextStyle_Text', 'TEXT_COLOR'), '0xFFFFFFFF')
+  assert.ok(skin.get('CandidateCodeView', 'BG_IMAGE') || skin.get('CandidateCodeView', 'BG_IMAGES'))
+})

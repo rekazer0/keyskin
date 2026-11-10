@@ -516,14 +516,16 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
   // The 9-key symbol column is Sogou's candidate code view.
   const nine = `${theme}/skin/port/py_9.ini`
   const list = archive.isText(nine) ? IniDocument.parse(archive.getText(nine)) : undefined
-  const listBack = styles.resolve(list?.get("LIST", "BACK_STYLE"))
-  const listCell = styles.resolve(list?.get("LIST", "CELL_STYLE"))
+  // A board's [LIST] usually only places the column; its styles are inherited from gen.ini.
+  const listStyle = (key: string) => firstStyle(styles, [...(list ? [list] : []), ...styleSources(archive, theme).panel], "LIST", key)
+  const listBack = listStyle("BACK_STYLE")
+  const listCell = listStyle("CELL_STYLE")
   const codeView = [
     ...(listBack && writer.stateSection("BgCodeView", listBack) ? [{ key: "BG_IMAGE", value: "BgCodeView" }] : []),
     ...(listCell && writer.stateSection("BgCodeViewCell", listCell) ? [{ key: "BG_IMAGES", value: "BgCodeViewCell" }] : []),
   ]
   if (codeView.length) writer.skin.appendSection("CandidateCodeView", codeView)
-  const listText = styles.resolve(list?.get("LIST", "FORE_STYLE"))?.color
+  const listText = listStyle("FORE_STYLE")?.color
   if (listText) writer.skin.appendSection("TextStyle_Text", [{ key: "TEXT_COLOR", value: listText }])
   if (animations) convertAnimations(archive, theme, writer, folder, output, warnings)
   writer.write()
