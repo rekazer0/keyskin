@@ -162,7 +162,8 @@ export async function paintPreview(self: Preview): Promise<void> {
               text: key.section.startsWith("LIST:") && self.resolver?.resolveListText
                 ? self.resolver.resolveListText(key.foreStyles.join(","), highlighted)
                 : self.resolver?.resolveText(key.foreStyles.join(","), highlighted),
-              styleTexts: key.foreStyles.map((style) =>
+              // A list cell shows its own entry (NAMES); a label carried by its shared style is not the cell's text.
+              styleTexts: key.section.startsWith("LIST:") ? [] : key.foreStyles.map((style) =>
                 self.resolver?.resolveStyleText?.(style, highlighted)
               ),
             }

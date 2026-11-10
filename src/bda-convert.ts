@@ -78,6 +78,40 @@ function dropUnknownStyles(document: IniDocument, styles: Map<string, string[]>)
   }
 }
 
+/**
+ * FORE_OFFSET is how the editor lays a BDA key's layers on the base layout; the legacy format only
+ * places a layer through POS_TYPE, an index into gen.ini's [OFFSETn].
+ */
+function namedOffsets(documents: IniDocument[], general: IniDocument): void {
+  const indexes = new Map<string, number>()
+  let last = 0
+  for (const section of general.sections()) {
+    const index = Number(/^OFFSET(\d+)$/.exec(section)?.[1])
+    if (!index) continue
+    last = Math.max(last, index)
+    const position = general.get(section, "POS")?.replace(/\s/g, "")
+    if (position && !indexes.has(position)) indexes.set(position, index)
+  }
+  for (const document of documents) {
+    for (const { section, key, value } of document.entries()) {
+      if (key !== "FORE_OFFSET") continue
+      const types = value.split(";").map((part) => {
+        const position = part.replace(/\s/g, "")
+        let index = indexes.get(position)
+        if (!index) {
+          index = ++last
+          indexes.set(position, index)
+          general.appendSection(`OFFSET${index}`, [{ key: "POS", value: position }])
+        }
+        return index
+      })
+      document.set(section, "POS_TYPE", types.join(","))
+      document.remove(section, "FORE_OFFSET")
+    }
+  }
+  if (last) general.set("PANEL", "OFFSET_NUM", String(last))
+}
+
 /** 面板级动效目标（面板、候选栏、气泡、列表）覆盖到的样式。 */
 function panelMotionStyles(panelName: string, panel: BdaPanel | undefined, target: string): BdaStyleRef[] {
   if (!panel) return []
@@ -311,6 +345,12 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
           `HL_COLOR=${bdaColorHex(style.highlightColor ?? style.normalColor ?? 0)}`,
         ])
       }
+      // Only a key's own text is its label; a list, candidate or bubble style's text is a sample of the cells it styles.
+      const labelStyles = new Set([...appearance.panels.values()]
+        .flatMap((panel) => [...panel.keys.values(), ...(panel.cand?.candKeys.values() ?? [])])
+        .flatMap((key) => key.foreStyles)
+        .filter((ref) => ref.type === "text")
+        .map((ref) => ref.key))
       for (const [key, style] of appearance.textStyles) {
         const reference = style.resource?.resourceID || style.fontName
         const path = reference && resolveFontReference(source.names(), reference, [
@@ -331,7 +371,7 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
         } else if (style.resource?.resourceID) warnings.push(`${theme}/${orientation} 缺少字体：${reference}`)
         addStyle(`[STYLE${bdaStyleID({ type: "text", key })}]`, [
           // A BDA text style carries the label itself; legacy styles keep it in SHOW.
-          ...(style.contentText && !/[\r\n]/.test(style.contentText) ? [`SHOW=${style.contentText}`] : []),
+          ...(style.contentText && labelStyles.has(key) && !/[\r\n]/.test(style.contentText) ? [`SHOW=${style.contentText}`] : []),
           ...(fontName ? [`FONT_NAME=${fontName}`] : []),
           ...(style.fontSize ? [`FONT_SIZE=${style.fontSize}`] : []),
           `NM_COLOR=${bdaColorHex(style.normalColor ?? 0)}`,
@@ -395,10 +435,10 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
         warnings.push(`${theme}/${orientation} 的动效目标 ${[...unmatched].join("、")} 在导出布局里找不到对应按键或样式，已跳过`)
       }
       for (const [filename, styleID] of soundStyles) directionStyles.set(`[STYLE${styleID}]`, [`PRESS_SOUND_PATH=${filename}`])
-      for (const [path, document] of documents) {
-        dropUnknownStyles(document, directionStyles)
-        output.set(path, strToU8(document.toString()))
-      }
+      for (const document of documents.values()) dropUnknownStyles(document, directionStyles)
+      const general = documents.get(`${targetPrefix}gen.ini`)
+      if (general) namedOffsets([...documents.values()], general)
+      for (const [path, document] of documents) output.set(path, strToU8(document.toString()))
       appendMotionRefs(directionStyles, directionRefs, new Set(), theme, warnings)
       const localSections = [...directionStyles].flatMap(([header, lines]) => [header, ...lines, ""])
       output.set(`${targetPrefix}res/default.css`, strToU8(`[GLOBAL]\nSTYLE_NUM=${directionStyles.size}\n\n${localSections.join("\n")}`))

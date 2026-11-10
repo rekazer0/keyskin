@@ -56,6 +56,12 @@ test('the official BDA converts with its key labels and with every layout style 
   // Candidate bars and bubbles come from the base layout; they take the BDA's styles, not the base skin's numbers.
   const candidate = IniDocument.parse(archive.getText('light/skin/port/cand1.cnd'))
   assert.equal(candidate.get('CAND', 'BACK_STYLE'), String(1000000 + appearance.panels.get('py_26').cand.candBarStyle.key))
+  // Layer offsets are written the legacy way: POS_TYPE names an [OFFSETn] of gen.ini.
+  const general = IniDocument.parse(archive.getText('light/skin/port/gen.ini'))
+  const nine = IniDocument.parse(archive.getText('light/skin/port/py_9.ini'))
+  const layered = nine.sections().find(section => /^KEY\d+$/.test(section) && nine.get(section, 'FORE_STYLE')?.includes(','))
+  assert.equal(nine.get(layered, 'FORE_OFFSET'), undefined)
+  for (const type of nine.get(layered, 'POS_TYPE').split(',')) assert.match(general.get(`OFFSET${type}`, 'POS'), /^-?\d+,-?\d+$/)
   const defined = new Set(styles.sections())
   for (const path of archive.names().filter(name => /^light\/skin\/port\/[^/]+\.(?:ini|cnd|pop)$/.test(name))) {
     const document = IniDocument.parse(archive.getText(path))
