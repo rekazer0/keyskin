@@ -68,6 +68,69 @@ try {
   assert.equal((await inspect()).inset, 0, 'Android fits the panel picture below the bar')
   await page.locator('#device').selectOption('canvas-checkerboard')
   assert.ok((await inspect()).inset > 0, 'returning to canvas restores BDI rendering')
+
+  const solid = (width, height, color) => encodePng({ width, height, data: Uint8Array.from({ length: width * height * 4 }, (_, i) => color[i % 4]) })
+  const native = {
+    'skin/res/default.css': strToU8('[STYLE1]\nNM_IMG=bar,1\n[STYLE2]\nNM_IMG=edge,1\nHL_IMG=edge,2\n[STYLE3]\nNM_IMG=input,1\n[STYLE4]\nFONT_SIZE=43\nNM_COLOR=285f47\n'),
+    'skin/res/bar.png': solid(1125, 90, [255, 255, 255, 255]),
+    'skin/res/bar.til': strToU8('[IMG1]\nSOURCE_RECT=0,0,1125,90\nINNER_RECT=270,22,550,1\n'),
+    'skin/res/edge.png': solid(136, 220, [90, 150, 100, 255]),
+    'skin/res/edge.til': strToU8('[IMG1]\nSOURCE_RECT=0,0,136,110\n[IMG2]\nSOURCE_RECT=0,110,136,110\n'),
+    'skin/res/input.png': solid(1125, 30, [220, 230, 220, 255]),
+    'skin/res/input.til': strToU8('[IMG1]\nSOURCE_RECT=0,0,1125,30\n'),
+    'skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist': strToU8('<plist><array><dict><key>Position</key><string>toolbar</string><key>Name</key><string>17</string><key>Images</key><dict><key>Normal</key><dict><key>Normal</key><string>function</string></dict></dict></dict></array></plist>'),
+    'skin/res/logo/function_iphone@3x.png': solid(80, 80, [20, 110, 80, 255]),
+  }
+  for (const orientation of ['port', 'land']) {
+    native[`skin/${orientation}/gen.ini`] = strToU8('[PANEL]\nSIZE=1125,592\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1125,124\n[INPUT]\nFORE_STYLE=4\n[SCAND]\nBACK_STYLE=3\nINPUT_STYLE=4\n[LOGO]\nLAYOUT_NAME=logo\n')
+    native[`skin/${orientation}/py_26.ini`] = strToU8('[PANEL]\nKEY_NUM=1\n[KEY1]\nVIEW_RECT=0,0,1125,592\nCENTER=a\n')
+    native[`skin/${orientation}/cand1.cnd`] = strToU8('[CAND]\nBACK_STYLE=1\n[ICON1]\nSIZE=229,186\nPOS=0,20\nANCHOR_TYPE=1\nFIX_SIZE=50,52\nFORE_STYLE=2\nKEY=F31\n[ICON2]\nSIZE=780,58\nPOS=-390,43\nANCHOR_TYPE=2\nKEY=F14\n')
+  }
+  await page.locator('#browser-open').setInputFiles({ name: 'native-toolbar.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(native)) })
+  await page.waitForFunction(() => !document.querySelector('#open').disabled)
+  if (await close.isVisible()) await close.click()
+  await page.locator('#layout').selectOption('py_26.ini', { force: true })
+  await page.evaluate(async () => {
+    const { toolbarPreview, candidateBackgroundPreview } = await import('/src/app/canvas-interaction.ts')
+    const { appState } = await import('/src/app/state.ts')
+    window.iosToolbarProbe = { toolbarPreview, candidateBackgroundPreview, appState }
+  })
+  const nativeGeometry = async (expectedHeight) => {
+    const result = await page.waitForFunction((expectedHeight) => {
+      const { toolbarPreview, candidateBackgroundPreview, appState } = window.iosToolbarProbe
+      if (Math.abs(toolbarPreview.panelHeight - expectedHeight) > 0.000001) return false
+      const android = document.querySelector('#device').value === 'pixel-10-pro'
+      const background = candidateBackgroundPreview.drawnScene?.background.at(-1)
+      const scene = toolbarPreview.drawnScene
+      if (android ? scene : !scene?.keys.length || background?.rect.height !== toolbarPreview.panelHeight) return false
+      return {
+        height: toolbarPreview.panelHeight, input: appState.candidateInputBar?.metrics.height,
+        backgroundHeight: background?.rect.height,
+        layers: scene?.keys.flatMap(key => key.layers(false).fore.map(layer => layer.rect)),
+        revision: appState.archive.revision,
+      }
+    }, expectedHeight)
+    return result.jsonValue()
+  }
+  for (const [device, points] of [['canvas-checkerboard', 440], ['iphone-17-pro', 402], ['iphone-17-pro-max', 440]]) {
+    await page.locator('#device').selectOption(device)
+    const scale = 1125 / (3 * points)
+    const geometry = await nativeGeometry(124 * scale)
+    assert.ok(Math.abs(geometry.height - 124 * scale) < 0.000001, `${device}: native toolbar keeps its fixed point height`)
+    assert.ok(Math.abs(geometry.input - 30 * scale) < 0.000001, `${device}: input row uses the same density`)
+    assert.equal(geometry.backgroundHeight, geometry.height)
+    assert.equal(geometry.layers.length, 2, 'fixed logo and native functions both render')
+    for (const rect of geometry.layers) assert.ok(rect.y >= 0 && rect.y + rect.height <= geometry.height, 'all artwork remains inside the visible toolbar')
+    assert.equal(geometry.revision, 0, 'preview calibration leaves the archive unchanged')
+  }
+  await page.locator('#orientation').selectOption('land', { force: true })
+  const landscape = await nativeGeometry(124 * 1125 / (3 * 956))
+  assert.ok(Math.abs(landscape.height - 124 * 1125 / (3 * 956)) < 0.000001, `landscape uses its own point width: ${JSON.stringify(landscape)}`)
+  await page.locator('#orientation').selectOption('port', { force: true })
+  await page.locator('#device').selectOption('pixel-10-pro')
+  assert.equal((await nativeGeometry(124)).height, 124, 'Android keeps the skin coordinate height')
+  await page.locator('#device').selectOption('canvas-checkerboard')
+  assert.ok(Math.abs((await nativeGeometry(124 * 1125 / 1320)).height - 124 * 1125 / 1320) < 0.000001, 'returning to canvas restores native sizing')
   assert.deepEqual(errors, [])
   console.log('iOS background, native toolbar, input and device-switch checks passed')
 } finally {

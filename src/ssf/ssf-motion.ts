@@ -46,7 +46,7 @@ function ranged(range: number[], share: number, reference: number, unit: number)
   return Math.abs(value) <= 1 ? value * reference : value * unit
 }
 
-class SsfMotion {
+export class SsfMotion {
   private readonly anim: IniDocument
   private readonly styles: SsfStyles
   private readonly images = new Map<string, Visual>()
@@ -62,10 +62,10 @@ class SsfMotion {
   }
 
   /** The theme's anim.ini with every decoration image decoded; none without the file. */
-  static async load(styles: SsfStyles, board: Size): Promise<SsfMotion | undefined> {
+  static async load(styles: SsfStyles, board: Size, document?: IniDocument): Promise<SsfMotion | undefined> {
     const path = styles.pkg.path(styles.theme, "anim.ini")
-    if (!path) return
-    const motion = new SsfMotion(styles.pkg.ini(path), styles, board)
+    if (!path && !document) return
+    const motion = new SsfMotion(document ?? styles.pkg.ini(path!), styles, board)
     const files = new Set(motion.anim.sections().map((section) => firstValue(motion.anim.get(section, "IMG"))).filter((file): file is string => Boolean(file)))
     await Promise.all([...files].map(async (file) => {
       const visual = await styles.file(file)
@@ -191,19 +191,20 @@ class SsfMotion {
   }
 
   /** The press animations of a board's `keys`. */
-  effects(keys: Array<{ section: string; rect: Rect; binding: SsfKeyBinding }>): SceneEffects | undefined {
-    const styleOf = (binding: SsfKeyBinding) => ssfAnimStyle(this.anim, this.styles.skin, this.styles.keys, binding)
+  effects(keys: Array<{ section: string; rect: Rect; binding: SsfKeyBinding }>, override?: { section: string; field?: string }): SceneEffects | undefined {
+    const styleOf = (binding: SsfKeyBinding) => override?.section ?? ssfAnimStyle(this.anim, this.styles.skin, this.styles.keys, binding)
+    const animation = (style: string, field: string) => override?.field ? field === override.field ? override.section : undefined : this.value(style, field)
     const bySection = new Map(keys.map((key) => [key.section, key]))
     const press = (section: string, seed: number) => {
       const key = bySection.get(section)
       const style = key && styleOf(key.binding)
       if (!key || !style) return
-      const deco = Number(this.value(style, "DECO_ANIM_NUMBER"))
+      const deco = override?.field ? -1 : Number(this.value(style, "DECO_ANIM_NUMBER"))
       return {
         key,
-        back: this.parts(this.value(style, "BG_ANIM"), seed),
-        fore: this.parts(this.value(style, "FG_ANIM"), seed),
-        deco: this.parts(this.value(style, "DECO_ANIM"), seed, Number.isFinite(deco) ? deco : -1),
+        back: this.parts(animation(style, "BG_ANIM"), seed),
+        fore: this.parts(animation(style, "FG_ANIM"), seed),
+        deco: this.parts(animation(style, "DECO_ANIM"), seed, Number.isFinite(deco) ? deco : -1),
       }
     }
     if (!keys.some((key) => styleOf(key.binding))) return
@@ -239,32 +240,36 @@ const POPUP_BOXES = {
 async function popup(styles: SsfStyles, key: SceneKey, binding: SsfKeyBinding, action: string, caps: boolean, qwerty: boolean, unit: number, panelWidth: number): Promise<SceneLayer[] | undefined> {
   const skin = styles.skin
   const background = [qwerty ? "PopupBG_Qwerty" : "PopupBG_Phone", "PopupBG"].map((section) => firstValue(skin.get(section, "BG_IMAGE"))).find(Boolean)
-  const visual = background ? await styles.image(skin.get(background, "NORMAL")) : undefined
+  const visual = background ? await styles.image(skin.get(background, "NORMAL") ?? background) : undefined
   // The key's own label texts; a key drawn with an image pops its label as text all the same.
   const fore = key.layers(false).fore.flatMap((layer) => layer.kind === "text" ? [layer.text] : [])
   const group = binding.sections.find((section) => NINE_KEY_DIGITS[section])
   const labels = fore.length ? fore.map(({ text }) => text) : group ? [group.slice(4), NINE_KEY_DIGITS[group]] : [caps ? action.toUpperCase() : action]
   const texts = labels.map((text, index) => ({ ...fore[index], text }))
-  if (!visual) return
-  const [, , imageWidth, imageHeight] = visual.source!
+  // shortcut: 无背景图时按键尺寸估算气泡，取得搜狗系统气泡尺寸后校准。
+  const [, , imageWidth, imageHeight] = visual?.source ?? [0, 0, key.rect.width / unit, key.rect.height * 1.5 / unit]
   const width = Math.max(key.rect.width, imageWidth * unit)
   const height = Math.max(key.rect.height, imageHeight * unit)
-  const rect = { x: Math.max(0, Math.min(panelWidth - width, key.rect.x + (key.rect.width - width) / 2)), y: key.rect.y - height, width, height }
-  const fg = [qwerty ? "FGStyle_Popup_Qwerty" : "FGStyle_Phone_Popup", "FGStyle_Popup"].find((section) => skin.get(section, "LABEL_POSITION"))
+  const offset = Number(skin.get("General", "POPUP_OFFSET_VERTICAL")) || 0
+  const rect = { x: Math.max(0, Math.min(panelWidth - width, key.rect.x + (key.rect.width - width) / 2)), y: key.rect.y - height + offset * unit, width, height }
+  const fg = [qwerty ? "FGStyle_Popup_Qwerty" : "FGStyle_Phone_Popup", "FGStyle_Popup"].find((section) => skin.sections().includes(section))
   const position = (field: "LABEL_POSITION" | "MINOR_LABEL_POSITION") => fg && skin.get(fg, field) ? numbers(skin.get(fg, field)) : POPUP_BOXES[qwerty ? "qwerty" : "phone"][field]
   const labelBox = box(rect, position("LABEL_POSITION")) ?? rect
-  const layers: SceneLayer[] = [{ kind: "image", rect, visual }]
+  const layers: SceneLayer[] = [visual ? { kind: "image", rect, visual } : { kind: "fill", rect, color: styles.color("General", "POPUP_BG_COLOR") ?? "#ffffff" }]
   const styleChain = (minor: boolean) => minor
     ? ["TextStyle_Popup_Phone_Minor", "TextStyle_Popup"]
     : [qwerty ? "TextStyle_Popup_Qwerty" : "TextStyle_Popup_Phone", "TextStyle_Popup"]
   texts.slice(0, 2).forEach((text, index) => {
+    if (fg && skin.get(fg, index ? "MINOR_LABEL_VISIBLE" : "LABEL_VISIBLE")?.trim() === "0") return
     const area = index ? box(rect, position("MINOR_LABEL_POSITION")) : labelBox
     if (!area) return
-    const chain = styleChain(index > 0)
+    const reference = fg && firstValue(skin.get(fg, index ? "MINOR_LABEL_STYLE" : "LABEL_STYLE"))
+    const chain = [...reference ? [reference] : [], ...styleChain(index > 0)]
     const look = styles.text(chain, unit)
     const weight = look.weight ?? text.weight ?? 700
     const font = look.font ?? text.font
-    const [x, y] = centre(area)
+    const [centerX, y] = centre(area)
+    const x = centerX + (Number(fg && skin.get(fg, index ? "MINOR_LABEL_HORIZONTAL_OFFSET" : "LABEL_HORIZONTAL_OFFSET")) || 0) * unit
     const color = chain.map((section) => styles.color(section)).find(Boolean) ?? text.color ?? "#373737"
     layers.push({ kind: "text", text: { text: text.text, x, y, weight, color, size: look.size ?? fitText(text.text, area, font, weight), ...font ? { font } : {} } })
   })

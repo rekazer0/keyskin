@@ -9,8 +9,10 @@
 
 import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
-import { offsetFromSection } from "../preview-items.ts"
-import type { SkinArchive } from "../skin.ts"
+import { resolveCandidateRect } from "../candidate-style.ts"
+import { parseXmlPlist } from "../palm/palm-plist.ts"
+import { offsetFromSection, previewItems } from "../preview-items.ts"
+import { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
 import { soundAsWav, soundPathForFilename } from "../sounds.ts"
 import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
@@ -318,17 +320,31 @@ function firstStyle(styles: BaiduStyles, documents: IniDocument[], section: stri
 }
 
 /** Stacks the candidate bar strip above the keyboard panel the way Sogou's single background does. */
-function keyboardBackground(styles: BaiduStyles, archive: SkinArchive, theme: Theme): { background?: RgbaImage; bar?: RgbaImage } {
+function keyboardBackground(styles: BaiduStyles, archive: SkinArchive, theme: Theme, warnings: string[]): { background?: RgbaImage; bar?: RgbaImage } {
   const sources = styleSources(archive, theme)
   const fill = (pair: StylePair | undefined, height: number) => {
     if (pair?.normal) return resizeImage(pair.normal.image, SOGOU_WIDTH, height)
     return pair?.color ? resizeImage(solid(pair.color), SOGOU_WIDTH, height) : undefined
   }
-  const panel = fill(firstStyle(styles, sources.panel, "PANEL", "BACK_STYLE"), SOGOU_KEYBOARD_HEIGHT)
-  const bar = fill(firstStyle(styles, sources.cand, "CAND", "BACK_STYLE"), SOGOU_BAR_HEIGHT)
+  const native = sources.panel[0]?.get("LOGO", "LAYOUT_NAME") || archive.getBytes(`${theme}/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`)
+  // Native toolbar artwork follows the 1080-wide Sogou skeleton, not the older 126/720 image canvas.
+  const barHeight = native ? 120 : SOGOU_BAR_HEIGHT
+  const panelHeight = native ? 642 : SOGOU_KEYBOARD_HEIGHT
+  const panel = fill(firstStyle(styles, sources.panel, "PANEL", "BACK_STYLE"), panelHeight)
+  const height = native ? Math.max(1, Math.min(barHeight,
+    Math.round(resolveCandidateRect(sources.cand[0], sources.panel[0]).height * styles.scale))) : SOGOU_BAR_HEIGHT
+  let bar = fill(firstStyle(styles, sources.cand, "CAND", "BACK_STYLE"), height)
+  if (bar && height !== barHeight) {
+    const input = firstStyle(styles, sources.panel, "SCAND", "BACK_STYLE")
+    const under = fill(input ?? firstStyle(styles, sources.panel, "PANEL", "BACK_STYLE"), barHeight)
+    const y = input ? barHeight - height : Math.floor((barHeight - height) / 2)
+    const placed = placeImage(bar, SOGOU_WIDTH, barHeight, 0, y)
+    bar = under ? compositeImage(under, placed) : placed
+    warnings.push("搜狗工具栏高度由客户端原生布局决定；已按百度的可见高度保留背景图案比例，剩余区域填充输入区或键盘背景")
+  }
   if (!panel) return { bar }
   // CandidateView draws bar.png over RootView; its strip stays transparent to avoid doubling alpha.
-  return { background: placeImage(panel, SOGOU_WIDTH, SOGOU_BAR_HEIGHT + SOGOU_KEYBOARD_HEIGHT, 0, SOGOU_BAR_HEIGHT), bar }
+  return { background: placeImage(panel, SOGOU_WIDTH, barHeight + panelHeight, 0, barHeight), bar }
 }
 
 function candidateColors(archive: SkinArchive, theme: Theme, styles: BaiduStyles): StylePair | undefined {
@@ -351,6 +367,34 @@ function toolbarImages(archive: SkinArchive, theme: Theme, styles: BaiduStyles, 
         const scale = slice.stretch ? 1 : styles.scale
         writer.file(resizeImage(slice.image, Math.max(1, Math.round(slice.image.width * scale)), Math.max(1, Math.round(slice.image.height * scale))), filename)
       }
+    }
+  }
+  const root = `${theme}/skin/res/logo/`
+  const plist = archive.getBytes(`${root}com.baidu.inputmethod.toolbarMenuItems.plist`)
+  const menu = plist && parseXmlPlist(plist)
+  if (!Array.isArray(menu)) return
+  const nativeNames: Record<string, string> = {
+    '19': names.F7, '17': names.F13, '23': names.F72, '26': names.F82,
+    '18': "ime_function_textedit.png", '35': "ime_function_clipboard.png", '45': names.F68,
+  }
+  const sources = styleSources(archive, theme)
+  const containers = sources.cand.flatMap((document) => {
+    const { width, height } = resolveCandidateRect(document, sources.panel[0])
+    return previewItems(document, width, height).filter(({ center, rect }) => center === "F14"
+      && rect.x < width && rect.x + rect.width > 0 && rect.y < height && rect.y + rect.height > 0)
+      .map(({ rect }) => rect.height)
+  })
+  for (const value of menu) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue
+    const filename = nativeNames[String(value.Name)]
+    const states = (value.Images as { Normal?: { Normal?: string; Highlight?: string } } | undefined)?.Normal
+    if (!filename || !states?.Normal) continue
+    for (const [name, output] of [[states.Normal, filename], [states.Highlight ?? states.Normal, filename.replace(/\.png$/, "_p.png")]]) {
+      const bytes = [name, `${name}_iphone@3x.png`, `${name}.png`].map((name) => archive.getBytes(`${root}${name}`)).find(Boolean)
+      if (!bytes) continue
+      const image = decodePng(bytes)
+      const scale = Math.min(1, Math.min(...containers) / image.height) * styles.scale
+      writer.file(resizeImage(image, Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale))), output)
     }
   }
 }
@@ -454,7 +498,7 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
     writer.skin.appendSection(style, [{ key: "TEXT_COLOR", value: normal }, { key: "TEXT_COLOR_PRESSED", value: pressed }])
   }
 
-  const { background, bar } = keyboardBackground(styles, archive, theme)
+  const { background, bar } = keyboardBackground(styles, archive, theme, warnings)
   if (background) writer.skin.appendSection("RootView", [{ key: "BG_STYLE", value: "1" }, { key: "BG_IMAGE", value: writer.file(background, "bg.png") }])
   else warnings.push(`${theme === "dark" ? "深色" : "浅色"}外观没有可转换的键盘背景`)
   if (bar) {
@@ -489,6 +533,9 @@ function infoValue(archive: SkinArchive, key: string): string | undefined {
   const bytes = archive.getBytes("Info.txt")
   return bytes ? new TextDecoder().decode(bytes).match(new RegExp(`^\\uFEFF?${key}=(.*)$`, "mi"))?.[1].trim() : undefined
 }
+
+/** Panel-level sounds; Sogou only has the per-key-class `sound`, so converting drops these. */
+const PANEL_SOUND_FIELDS = ["PANEL_SHOW_SOUND_PATH", "PANEL_HIDE_SOUND_PATH"]
 
 /** Sogou has one default sound plus per-key-class overrides; map Baidu layout keys to that table. */
 async function soundFiles(archive: SkinArchive, themes: Theme[], output: Map<string, Uint8Array>, warnings: string[]): Promise<void> {
@@ -529,6 +576,10 @@ async function soundFiles(archive: SkinArchive, themes: Theme[], output: Map<str
       const genPath = `${prefix}gen.ini`
       const gen = archive.isText(genPath) ? IniDocument.parse(archive.getText(genPath)) : undefined
       const styles = new BaiduStyles(archive, theme, orientation, warnings).styles
+      // Sogou plays one sound per key class; a Baidu palette's panel show/hide sounds have nowhere to go.
+      if (PANEL_SOUND_FIELDS.some((field) => styles.sections().some((section) => /^STYLE\d+$/.test(section) && styles.get(section, field)?.trim()))) {
+        warnings.push("面板显示/隐藏音效在搜狗皮肤中没有对应，已忽略")
+      }
       const soundForStyle = async (id: string | undefined) => {
         const filename = id && styles.get(`STYLE${id.split(",")[0].trim()}`, "PRESS_SOUND_PATH")?.trim()
         return filename ? copySound(theme, orientation, filename.split(/[\\/]/).pop()!) : undefined
@@ -548,10 +599,12 @@ async function soundFiles(archive: SkinArchive, themes: Theme[], output: Map<str
           if (!action) continue
           const binding = ssfKeyBinding(layoutName, action, orientation === "land")
           const explicit = layout.get(section, "SOUND_STYLE")?.trim()
-          const sound = explicit ? await soundForStyle(explicit) : panelSound
           const priority = explicit ? 2 : panelSound ? 1 : 0
           const key = binding.sections[0]
-          if (!sound || !key || !priority) continue
+          // A key Sogou has no section for would only leave the copied file unreferenced in the package.
+          if (!key || !priority) continue
+          const sound = explicit ? await soundForStyle(explicit) : panelSound
+          if (!sound) continue
           const previous = keySounds.get(key)
           if (!previous || priority > previous.priority) keySounds.set(key, { ...sound, theme, priority })
           else if (priority === previous.priority && (previous.bytes.length !== sound.bytes.length || !previous.bytes.every((byte, index) => byte === sound.bytes[index]))) {
@@ -578,6 +631,7 @@ async function soundFiles(archive: SkinArchive, themes: Theme[], output: Map<str
 /** Converts a Baidu BDS/BDI skin to Sogou `.ssf` bytes. */
 export async function convertBaiduToSsf(archive: SkinArchive, options: { animations?: boolean } = {}): Promise<{ bytes: Uint8Array; warnings: string[] }> {
   if (archive.format === "bda") throw new Error("BDA 需要先转换为 BDS 再导出搜狗皮肤")
+  if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
   const warnings: string[] = []
   const output = new Map<string, Uint8Array>()
   const themes = (["light", "dark"] as const).filter((theme) =>

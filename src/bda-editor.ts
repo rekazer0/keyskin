@@ -5,10 +5,10 @@ import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from ".
 import { renderBdaAnimationEditor, type BdaAnimationView } from "./bda-animation-editor.ts"
 import type { KeyboardPlayback } from "./animation-player.ts"
 import { bdaLayoutStyleGroups, NEW_FORE_LAYER, type BdaLayoutStyleItem } from "./bda-layout-styles.ts"
-import { element, emptyState, iconButton, shortcutLabel } from "./dom-element.ts"
+import { element, emptyState, shortcutLabel } from "./dom-element.ts"
 import { field, section } from "./app/property-rows.ts"
 import { configField } from "./app/config-value-control.ts"
-import { styleKindIcon, styleReferenceCard, type StyleReferenceState } from "./style-card.ts"
+import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "./style-card.ts"
 
 type BdaStyleChange = (ref: BdaStyleRef, property: string, value: string) => void
 type BdaLayoutScope = "panel" | "candidate"
@@ -321,7 +321,7 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
       options.onStyleRefChange?.(item.paths ?? [item.path], ref, field)
     }
     keyInput.addEventListener("change", commit)
-    // 单击换样式，⌘ 单击编辑样式；没有引用时只画一张紧凑虚线卡。
+    // 单击换样式，⌘ 单击编辑样式；没有引用时从标题添加。
     const act = (edit: boolean) => {
       const ref = currentRef()
       if (edit && !ref) return
@@ -340,19 +340,18 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
       field.classList.add("bda-fore-style-add")
       caption.textContent = "前景"
       field.append(caption)
-      if (options.editable) {
-        const add = iconButton("plus", "添加前景", () => act(false))
-        add.classList.add("ui-style-ref-append")
-        add.dataset.size = "sm"
-        caption.append(add)
-      }
+      caption.append(styleReferenceAddButton("添加前景", () => act(false), !options.editable))
       return field
     }
-    field.append(caption, styleReferenceCard({
+    field.append(caption)
+    if (!ref && !item.mixed) {
+      caption.append(styleReferenceAddButton(`添加${item.label}`, () => act(false), !options.editable))
+      return field
+    }
+    field.append(styleReferenceCard({
       name: keyInput,
       kind: ref || item.mixed ? styleKindIcon(item.type) : undefined,
       states,
-      empty: { icon: "plus", label: "选择样式", onClick: () => act(false) },
       remove: ref || item.mixed ? { label: "移除", run: () => options.onStyleRefChange?.(item.paths ?? [item.path], undefined, field) } : undefined,
       disabled: !options.editable,
     }))

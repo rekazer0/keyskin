@@ -14,7 +14,7 @@ import {
   withBakedStyles,
   withoutBakedStyles,
 } from "../font-bake.ts"
-import { composePng } from "./file-operations"
+import { composePng, updateFileOperationProgress, waitForInterfacePaint } from "./file-operations"
 import { ask } from "./ask"
 
 /** 文字样式的向下阴影（BORDER_COLOR / BORDER_SIZE）：客户端只在旧版安卓绘制，切片时按同一参数画进图片。 */
@@ -76,6 +76,8 @@ async function bakeStyle(archive: SkinArchive, path: string): Promise<number> {
     return font || weight || shadow || style.baked ? [{ ...style, font, weight, shadow }] : []
   })
   if (!styles.length) return 0
+  updateFileOperationProgress(88, "正在把按键文字切成字体图片…")
+  await waitForInterfacePaint()
   await Promise.all(styles.map(({ font }) => font?.ready))
   const fallbackColor = themeOfPath(path) === "dark" ? "#f5f5f7" : "#17191c"
   const labels: HTMLCanvasElement[] = []

@@ -1,6 +1,10 @@
 import { IniDocument } from "./ini.ts"
 import { SkinArchive } from "./skin.ts"
 import { fontSearchDirectories, resolveFontReference } from "./font-files.ts"
+import { TOOLBAR_FUNCTIONS, toolbarFunctionLabel } from "./ios-toolbar.ts"
+import { parseXmlPlist } from "./palm/palm-plist.ts"
+import { asObject } from "./palm/sxi-ini.ts"
+import { bdiMenuIcons } from "./ios-toolbar-menu.ts"
 
 export type Visual = {
   image?: ImageBitmap
@@ -29,6 +33,14 @@ export type TextVisual = {
 
 export type StyleTextVisual = TextVisual & { text: string }
 
+export type ToolbarVisual = Visual & {
+  label?: string
+  defaultIcon?: string
+  menu?: { path: string; id: string; image: string; position: string }
+  /** 裁切后的预览仍需保留原图坐标，供检查器只替换对应切片。 */
+  imageSource?: [number, number, number, number]
+}
+
 export type VisualResolver = {
   ready?(): Promise<void>
   resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined>
@@ -37,7 +49,7 @@ export type VisualResolver = {
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined
   resolveListText?(foreground: string, highlighted: boolean): TextVisual | undefined
   resolveStyleText?(styleID: string, highlighted: boolean): StyleTextVisual | undefined
-  resolveToolbarImages(limit?: number): Promise<Visual[]>
+  resolveToolbarImages(limit?: number): Promise<ToolbarVisual[]>
 }
 
 type VisualSpec = {
@@ -313,51 +325,21 @@ export function pngBitmap(bytes: Uint8Array): Promise<ImageBitmap | undefined> {
   return image
 }
 
-function topLevelDicts(plist: string): string[] {
-  const dictionaries: string[] = []
-  let depth = 0
-  let start = -1
-  for (const match of plist.matchAll(/<\/?dict>/g)) {
-    if (match[0] === "<dict>") {
-      if (depth === 0) start = match.index
-      depth++
-      continue
-    }
-    depth--
-    if (depth === 0 && start >= 0) dictionaries.push(plist.slice(start, match.index + match[0].length))
-  }
-  return dictionaries
-}
-
-function dictAfterKey(source: string, key: string): string | undefined {
-  const marker = `<key>${key}</key>`
-  const index = source.indexOf(marker)
-  return index < 0 ? undefined : topLevelDicts(source.slice(index + marker.length))[0]
-}
-
-function stringAfterKey(source: string | undefined, key: string): string | undefined {
-  if (!source) return
-  const marker = `<key>${key}</key>`
-  const index = source.indexOf(marker)
-  return index < 0
-    ? undefined
-    : source.slice(index + marker.length).match(/^\s*<string>\s*([^<]+?)\s*<\/string>/)?.[1]
-}
-
 function normalizedToolbarImagePath(path: string | undefined): string | undefined {
   return path?.trim().replace(/^\/+/, "").replace(/\.png$/i, "") || undefined
 }
 
 // iOS 的 F14 容器只放前 4 个 toolbar 功能、均分容器宽度（真机实测，plist 列了 5 个也只显示 4 个）。
-function toolbarImagePaths(plist: string, limit = 4): string[] {
-  const paths = topLevelDicts(plist)
-    .filter((entry) => /<key>Position<\/key>\s*<string>toolbar<\/string>/.test(entry))
-    .flatMap((entry) => {
-      const images = dictAfterKey(entry, "Images")
-      const normalImages = dictAfterKey(images ?? "", "Normal")
-      const path = normalizedToolbarImagePath(stringAfterKey(normalImages, "Normal"))
-      return path ? [path] : []
-    })
+function toolbarImages(plist: Uint8Array, limit = 4): Array<{ path: string; label: string }> {
+  const entries = parseXmlPlist(plist)
+  if (!Array.isArray(entries)) return []
+  const paths = entries.map(asObject).filter((item) => item?.Position === "toolbar").flatMap((item) => {
+    const name = asObject(asObject(item?.Images)?.Normal)?.Normal
+    const path = normalizedToolbarImagePath(typeof name === "string" ? name : undefined)
+    const title = asObject(asObject(item?.Titles)?.Normal)?.Normal
+    const label = typeof title === "string" && title.trim() ? title.trim() : toolbarFunctionLabel(String(item?.Name ?? ""), path ?? "")
+    return path ? [{ path, label }] : []
+  })
   return paths.slice(0, Math.max(0, limit))
 }
 
@@ -531,13 +513,25 @@ export class AtlasResolver {
     return { image: bitmap, imagePath, source, inner, scale, color: spec.color, borderColor: spec.borderColor }
   }
 
-  async resolveToolbarImages(limit?: number): Promise<Visual[]> {
+  async resolveToolbarImages(limit?: number): Promise<ToolbarVisual[]> {
     const plistPath = `${this.theme}/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`
+    if (this.archive.format === "bdi" && limit === Number.POSITIVE_INFINITY) {
+      return Promise.all(bdiMenuIcons(this.archive.getBytes(plistPath)).map(async (item) => {
+        const prefix = `${this.theme}/skin/res/logo/${item.path}`
+        const path = [`${prefix}_iphone@3x.png`, `${prefix}@3x.png`, `${prefix}.png`].find((name) => this.archive.getBytes(name)) ?? `${prefix}_iphone@3x.png`
+        const image = await this.bitmap(path)
+        return {
+          label: item.label, defaultIcon: item.icon, imagePath: path,
+          menu: { path: plistPath, id: item.id, image: item.path, position: item.position },
+          ...image ? { image, source: [0, 0, image.width, image.height] as [number, number, number, number] } : {},
+        }
+      }))
+    }
     // Android reads res/logo/pop_menu_icons, never the plist; a BDS this editor exports keeps the iOS plist as well,
     // so the archive format decides — otherwise the preview would promise icons the phone does not draw.
     if (this.archive.format === "bds" || !this.archive.isText(plistPath)) return this.resolveAndroidToolbarImages(limit)
     const names = this.archive.names()
-    const paths = toolbarImagePaths(this.archive.getText(plistPath), limit).flatMap((base) => {
+    const paths = toolbarImages(this.archive.getBytes(plistPath)!, limit).flatMap(({ path: base, label }) => {
       const prefix = `${this.theme}/skin/res/logo/${base}`
       const candidates = [
         `${prefix}_iphone@3x.png`,
@@ -545,13 +539,13 @@ export class AtlasResolver {
         `${prefix}.png`,
       ]
       const path = candidates.find((candidate) => names.includes(candidate))
-      return path ? [path] : []
+      return path ? [{ path, label }] : []
     })
-    const visuals: Array<Visual | undefined> = await Promise.all(paths.map(async (path) => {
+    const visuals: Array<ToolbarVisual | undefined> = await Promise.all(paths.map(async ({ path, label }) => {
       const image = await this.bitmap(path)
-      return image ? { image, imagePath: path, source: [0, 0, image.width, image.height] as [number, number, number, number] } : undefined
+      return image ? { image, imagePath: path, label, source: [0, 0, image.width, image.height] as [number, number, number, number] } : undefined
     }))
-    return visuals.filter((visual): visual is Visual => Boolean(visual))
+    return visuals.filter((visual): visual is ToolbarVisual => Boolean(visual))
   }
 
   /**
@@ -559,20 +553,23 @@ export class AtlasResolver {
    * of res/logo/pop_menu_icons (Baidu 13.3.18.31 LogoIconSource). The preview shows the toolbar functions the atlas
    * covers — 表情 26, 输入方式 27, 语音 29, 搜索 31, 编辑 25, 剪贴板 50 — since the real list lives on the phone.
    */
-  private async resolveAndroidToolbarImages(limit = Number.POSITIVE_INFINITY): Promise<Visual[]> {
+  private async resolveAndroidToolbarImages(limit?: number): Promise<ToolbarVisual[]> {
     const path = `${this.theme}/skin/res/logo/pop_menu_icons`
     if (!this.archive.isText(`${path}.til`)) return []
     const tiles = IniDocument.parse(this.archive.getText(`${path}.til`))
     const image = await this.bitmap(`${path}.png`)
     if (!image) return []
-    const sources = [26, 27, 29, 31, 25, 50].flatMap((index) => {
+    // 默认预览沿用六个常用功能；检查器传 Infinity 展示全部已知工具栏功能。
+    const sources = TOOLBAR_FUNCTIONS.filter(([index]) => index !== 62 || limit === Number.POSITIVE_INFINITY).flatMap(([index, , , label]) => {
       const source = numbers(tiles.get(`IMG${index}`, "SOURCE_RECT"))
-      return source ? [source] : []
-    }).slice(0, Math.max(0, limit))
+      return source ? [{ source, label }] : []
+    }).slice(0, Math.max(0, limit ?? Number.POSITIVE_INFINITY))
     // ImginiLoader crops each icon before scaling; sampling the atlas directly bleeds adjacent tiles.
-    return Promise.all(sources.map(async ([x, y, width, height]) => ({
+    return Promise.all(sources.map(async ({ source: [x, y, width, height], label }) => ({
       image: await createImageBitmap(image, x, y, width, height),
       imagePath: `${path}.png`,
+      imageSource: [x, y, width, height] as [number, number, number, number],
+      label,
       source: [0, 0, width, height] as [number, number, number, number],
     })))
   }

@@ -11,7 +11,7 @@ import {
   type AnimationListItem,
 } from "../animation-inspector.ts"
 import { baiduConfigControl } from "../baidu-config-controls.ts"
-import { field, section, type FieldSpec } from "./property-rows"
+import { field, fieldControl, section, type FieldSpec } from "./property-rows"
 import { decodeFrames } from "../native-motion.ts"
 import { createIcon } from "../icons.ts"
 import {
@@ -48,7 +48,7 @@ import { appState } from "./state"
 import { animationKeySample } from "./animation-key-sample"
 import type { PreviewItem } from "../preview-items.ts"
 import { animationStyleActions, animationStyleCard } from "./animation-style-inspector"
-import { styleKindIcon, styleReferenceCard, type StyleReferenceState } from "../style-card.ts"
+import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "../style-card.ts"
 
 const KIND_ICONS: Record<LegacyAnimationKind, string> = { basic: "blend", combination: "layers", frame: "list-video", particle: "sparkles" }
 const TYPE_ICONS = ["blend", "rotate-cw", "move", "scaling", "scaling", "rotate-3d"]
@@ -450,14 +450,28 @@ export function decorateStyleAnimationField(row: HTMLElement, key: string, value
     content: animationPlayer({ thumbnail: true, clip: iniPreviewClip(document!, entry.section, { fillBefore: true }), key: `${path}|${entry.section}`, resolver: visualResolver(), readFile: readSkinFile }),
     onClick: () => openAnimation(path, entry.kind === "particle", entry.section),
   } : { label: `anim.ini 里没有动画 ${id}`, content: createIcon("image-off", 16) })
+  row.classList.add("style-reference-field")
+  if (!animations.length) {
+    const control = input.closest<HTMLElement>(".ui-input") ?? input
+    control.hidden = true
+    const add = styleReferenceAddButton("添加动画", () => {
+      const entries = parseLegacyAnimationFile(appState.archive!.getText(path)).entries
+      const select = fieldControl({ kind: "choice", value: "", options: entries.map(entry => [String(entry.index), `动画 ${entry.index} · ${kindLabel(entry)}`]), layout: "select", unset: true }, "选择动画", (value) => {
+        input.value = value
+        input.dispatchEvent(new Event("change", { bubbles: true }))
+      }, { editable: !input.disabled })
+      add.replaceWith(select)
+      select.focus()
+    }, input.disabled)
+    row.firstElementChild?.append(add)
+    return
+  }
   ;(input.closest(".ui-input") ?? input).replaceWith(styleReferenceCard({
     name: input,
-    kind: animations.length ? styleKindIcon("anim") : undefined,
+    kind: styleKindIcon("anim"),
     states,
-    empty: { icon: "clapperboard", label: "输入动画编号", onClick: () => input.focus() },
     disabled: input.disabled,
   }))
-  row.classList.add("style-reference-field")
 }
 
 /** 对象头：动效设计 / 粒子设计与文件位置。 */

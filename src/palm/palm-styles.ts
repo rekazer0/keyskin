@@ -6,7 +6,8 @@
 // Also the canvas's resolver for Palm documents, so hint bubbles, particles and the inspector's style
 // previews read the same data the scene does.
 
-import { pngBitmap, type StyleTextVisual, type TextVisual, type Visual, type VisualResolver } from "../atlas.ts"
+import { pngBitmap, type StyleTextVisual, type TextVisual, type Visual, type VisualResolver, type ToolbarVisual } from "../atlas.ts"
+import { TOOLBAR_FUNCTIONS, toolbarFunctionLabel } from "../ios-toolbar.ts"
 import { argbColor, imageAt, type SceneLayer, type SceneText } from "../native-scene.ts"
 import type { Rect } from "../preview-items.ts"
 import type { SkinArchive } from "../skin.ts"
@@ -20,7 +21,7 @@ type Paint = { visual?: Visual; fill?: string; border?: { color: string; width: 
 // 语音 29, 搜索 31, 编辑 25, 剪贴板 50 (Baidu LogoIconSource); the real list lives on the phone.
 const ANDROID_TOOLBAR_TILES = [26, 27, 29, 31, 25, 50]
 // The toolbar entries of the `menu` Palm's own skins ship with the `logo/1.0` icon pack.
-const DEFAULT_TOOLBAR = ["KBSwitch", "MoveCursor", "Search", "Emoji", "NewWords"]
+const DEFAULT_TOOLBAR = [["KBSwitch", "keyboard"], ["MoveCursor", "arrow-left-right"], ["Search", "search"], ["Emoji", "smile"], ["NewWords", "message-square"]]
 
 async function fileImage(archive: SkinArchive, path: string | undefined): Promise<Visual | undefined> {
   const bytes = path && archive.getBytes(path)
@@ -145,26 +146,36 @@ export class PalmStyles implements VisualResolver {
   }
 
   /** The toolbar functions' icons: iOS menu items placed on the toolbar, else the Android atlas tiles. */
-  async toolbarImages(): Promise<Visual[]> {
+  async toolbarImages(all = false, includeMissing = all): Promise<ToolbarVisual[]> {
     const struct = asObject(this.skin[this.theme]) ?? {}
     const logo = `${THEME_DIRECTORY[this.theme]}/skin/res/logo`
     const menus = list(struct.menu).filter(Array.isArray) as Json[][]
     // Without a `menu`, a skin carrying Palm's icon pack shows the pack's default toolbar.
     const menu = menus.find((items) => items.some((item) => asObject(item)?.Position === "toolbar")) ?? menus[0]
-      ?? (struct.a_m === undefined ? DEFAULT_TOOLBAR.map((name) => ({ Position: "toolbar", Images: { Normal: { Normal: `1.0/toolbarMenuItem_${name}_Normal` } } })) : undefined)
-    const visuals = menu
-      ? await Promise.all(menu.map(asObject).filter((item) => item?.Position === "toolbar").map((item) => {
-          const name = asObject(asObject(item?.Images ?? null)?.Normal ?? null)?.Normal
+      ?? (struct.a_m === undefined ? DEFAULT_TOOLBAR.map(([name]) => ({ Position: "toolbar", Images: { Normal: { Normal: `1.0/toolbarMenuItem_${name}_Normal` } } })) : undefined)
+    const visuals: Array<ToolbarVisual | undefined> = menu
+      ? await Promise.all(menu.map(asObject).filter((item) => (item?.Position === "toolbar" || all && item?.Position === "menu")).map(async (item) => {
+          const imageName = asObject(asObject(item?.Images ?? null)?.Normal ?? null)?.Normal
+          const name = typeof imageName === "string" ? imageName.trim().replace(/^\/+/, "").replace(/\.png$/i, "") : undefined
           const path = typeof name === "string"
             ? [`${logo}/${name}_iphone@3x.png`, `${logo}/${name}@3x.png`, `${logo}/${name}.png`].find((candidate) => this.archive.getBytes(candidate))
             : undefined
-          return fileImage(this.archive, path)
+          const functionLabel = toolbarFunctionLabel(String(item?.Name ?? ""), String(name ?? ""))
+          const label = asObject(asObject(item?.Titles)?.Normal)?.Normal
+          return {
+            ...await fileImage(this.archive, path),
+            imagePath: path ?? (typeof name === "string" ? `${logo}/${name}_iphone@3x.png` : undefined),
+            defaultIcon: DEFAULT_TOOLBAR.find(([key]) => name?.endsWith(`toolbarMenuItem_${key}_Normal`))?.[1],
+            label: typeof label === "string" && (functionLabel.startsWith("功能 ") || functionLabel === "未知功能") ? label : functionLabel,
+          }
         }))
       : Array.isArray(struct.a_m)
-        ? await Promise.all(ANDROID_TOOLBAR_TILES.map((tile) =>
-            new PalmStyles(this.archive, this.skin, this.theme, "port", { pop_menu_icons: struct.a_m }).image(`pop_menu_icons,${tile}`)))
+        ? await Promise.all((all ? TOOLBAR_FUNCTIONS.map(([tile]) => tile) : ANDROID_TOOLBAR_TILES).map(async (tile) => {
+            const visual = await new PalmStyles(this.archive, this.skin, this.theme, "port", { pop_menu_icons: struct.a_m }).image(`pop_menu_icons,${tile}`)
+            return visual && { ...visual, label: TOOLBAR_FUNCTIONS.find(([index]) => index === tile)?.[3] }
+          }))
         : []
-    return visuals.filter((visual): visual is Visual => Boolean(visual))
+    return visuals.filter((visual): visual is ToolbarVisual => Boolean(visual && (includeMissing || visual.image)))
   }
 
   // VisualResolver: the canvas's hint bubbles, particles and the inspector's previews.
@@ -197,7 +208,7 @@ export class PalmStyles implements VisualResolver {
     return text?.text && visual ? { ...visual, text: text.text } : undefined
   }
 
-  async resolveToolbarImages(limit = Number.POSITIVE_INFINITY): Promise<Visual[]> {
-    return (await this.toolbarImages()).slice(0, Math.max(0, limit))
+  async resolveToolbarImages(limit?: number): Promise<ToolbarVisual[]> {
+    return (await this.toolbarImages(limit === Number.POSITIVE_INFINITY)).slice(0, Math.max(0, limit ?? Number.POSITIVE_INFINITY))
   }
 }

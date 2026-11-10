@@ -28,7 +28,7 @@ const SECTION_HINTS: Record<string, string> = {
 }
 const SECTION_SELECTOR = ".ui-section"
 /** 一条属性行：筛选、改动标记和恢复都以它为单位。 */
-const ROW_SELECTOR = ".ui-field, .inspector-gesture"
+const ROW_SELECTOR = ".ui-field, .inspector-gesture, .ui-toolbar-icon"
 const SCRUB_HANDLES = ".ui-input > .ui-input-affix, .ui-field > span:first-child, .document-field-caption"
 const baselines = new WeakMap<HTMLElement, string>()
 const keyedBaselines = new Map<string, string>()

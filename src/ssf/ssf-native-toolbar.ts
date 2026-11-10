@@ -3,7 +3,7 @@
 import { IniDocument } from "../ini.ts"
 import { logoImageConfig, logoLayout, plist, solidColorStyle, toolbarMenuItem } from "../ios-toolbar.ts"
 import type { SkinArchive } from "../skin.ts"
-import { cropImage, decodePng, encodePng, placeImage, type RgbaImage } from "./ssf-png.ts"
+import { cropImage, decodePng, encodePng, placeImage, resizeImage, type RgbaImage } from "./ssf-png.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
 
 /** Sogou toolbar slot (cand1.cnd KEY) → iOS plist Name and title. */
@@ -140,7 +140,11 @@ function writeAndroidMenuIcons(archive: SkinArchive, prefix: string, source: Ssf
     if (/^F\d+$/.test(from)) return [{ index, image: slice(from, "NM_IMG").image }]
     const bytes = source.file(theme, `${from}.png`)
     return bytes ? [{ index, image: decodePng(bytes) }] : []
-  })
+  }).map(({ index, image }) => ({
+    index,
+    // CandHandler shrinks F14 icons to 82% and truncates; round up to preserve the SSF display size.
+    image: index === 67 ? image : resizeImage(image, Math.ceil(image.width / 0.82), Math.ceil(image.height / 0.82)),
+  }))
   const width = Math.max(...icons.map(({ image }) => image.width))
   const height = icons.reduce((total, { image }) => total + image.height, 0)
   const atlas = placeImage({ width: 0, height: 0, data: new Uint8Array() }, width, height, 0, 0)

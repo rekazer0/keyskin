@@ -34,11 +34,18 @@ export function appendStyle(css: IniDocument, entries: Array<{ key: string; valu
 }
 
 /** Android bitmap index (LogoIconSource) → the iOS plist function ID that names the same function. */
-const TOOLBAR_FUNCTIONS = [
+export const TOOLBAR_FUNCTIONS = [
   [26, "F7", "19", "表情", "Emoji"], [27, "F13", "17", "键盘类型", "KBSwitch"],
   [29, "F72", "23", "语音输入", "Voice"], [31, "F82", "26", "搜索", "Search"],
   [25, "", "18", "光标", "MoveCursor"], [50, "", "35", "剪贴板", "pasteBoard"], [62, "F68", "45", "AI侃侃", "AIKankan"],
 ] as const
+
+/** plist 缺少标题时，按功能 ID 或原生图片名识别功能。 */
+export function toolbarFunctionLabel(id: string, path: string): string {
+  const name = path.match(/toolbarMenuItem_(.+?)_Normal/)?.[1]
+  return TOOLBAR_FUNCTIONS.find((entry) => entry[2] === id || entry[4] === name)?.[3]
+    ?? (name === "NewWords" ? "常用语" : id ? `功能 ${id}` : "未知功能")
+}
 
 /**
  * Gives an iOS-authored package the Android function bar: Baidu Android draws the candidate bar's F14 icons from

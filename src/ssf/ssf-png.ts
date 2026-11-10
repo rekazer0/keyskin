@@ -1,6 +1,6 @@
 // Minimal PNG codec for skin conversion: Sogou foregrounds need transparent padding and Baidu atlas
 // slices need cropping into standalone files. Conversion also runs in Node tests, so it cannot rely on
-// canvas. Decoding covers every PNG colour type, bit depth and Adam7; encoding always writes RGBA8.
+// canvas. Encoding keeps an exact palette when possible, otherwise RGBA8; no colour quantisation.
 
 import { unzlibSync, zlibSync } from "fflate"
 
@@ -187,23 +187,55 @@ function chunk(type: string, body: Uint8Array): Uint8Array {
 export function encodePng(image: RgbaImage): Uint8Array {
   const { width, height, data } = image
   if (data.length !== width * height * 4) throw new Error("RGBA 数据长度与尺寸不一致")
+  const colors = new Map<number, number>()
+  const pixels = new DataView(data.buffer, data.byteOffset, data.byteLength)
+  for (let offset = 0; offset < data.length && colors.size <= 256; offset += 4) {
+    const color = pixels.getUint32(offset)
+    if (!colors.has(color)) colors.set(color, colors.size)
+  }
+  const indexed = colors.size <= 256
+  const samples = indexed ? new Uint8Array(width * height) : data
+  const palette = new Uint8Array(indexed ? colors.size * 3 : 0)
+  const alpha = new Uint8Array(indexed ? colors.size : 0)
+  if (indexed) {
+    for (const [color, index] of colors) {
+      palette.set([color >>> 24, (color >>> 16) & 255, (color >>> 8) & 255], index * 3)
+      alpha[index] = color & 255
+    }
+    for (let offset = 0; offset < data.length; offset += 4) samples[offset / 4] = colors.get(pixels.getUint32(offset))!
+  }
   const header = new Uint8Array(13)
   const view = new DataView(header.buffer)
   view.setUint32(0, width)
   view.setUint32(4, height)
-  header.set([8, 6, 0, 0, 0], 8)
-  // Filter 1 (Sub) on every row: cheap and compresses flat key art far better than no filter.
-  const stride = width * 4
+  header.set([8, indexed ? 3 : 6, 0, 0, 0], 8)
+  const bpp = indexed ? 1 : 4
+  const stride = width * bpp
   const raw = new Uint8Array((stride + 1) * height)
+  const candidates = [new Uint8Array(stride), new Uint8Array(stride), new Uint8Array(stride)]
+  const filters = [1, 2, 4]
   for (let y = 0; y < height; y++) {
     const target = y * (stride + 1)
-    raw[target] = 1
-    for (let x = 0; x < stride; x++) {
-      const value = data[y * stride + x]
-      raw[target + 1 + x] = (value - (x >= 4 ? data[y * stride + x - 4] : 0)) & 0xff
+    const scores = [0, 0, 0]
+    for (let index = 0; index < filters.length; index++) {
+      for (let x = 0; x < stride; x++) {
+        const at = y * stride + x
+        const left = x >= bpp ? samples[at - bpp] : 0
+        const up = y ? samples[at - stride] : 0
+        const upLeft = y && x >= bpp ? samples[at - stride - bpp] : 0
+        const predictor = index === 0 ? left : index === 1 ? up : paeth(left, up, upLeft)
+        const residual = (samples[at] - predictor) & 255
+        candidates[index][x] = residual
+        scores[index] += Math.min(residual, 256 - residual)
+      }
     }
+    const best = scores.indexOf(Math.min(...scores))
+    raw[target] = filters[best]
+    raw.set(candidates[best], target + 1)
   }
-  const parts = [new Uint8Array(SIGNATURE), chunk("IHDR", header), chunk("IDAT", zlibSync(raw, { level: 6 })), chunk("IEND", new Uint8Array())]
+  const parts = [new Uint8Array(SIGNATURE), chunk("IHDR", header),
+    ...indexed ? [chunk("PLTE", palette), chunk("tRNS", alpha)] : [],
+    chunk("IDAT", zlibSync(raw, { level: 6 })), chunk("IEND", new Uint8Array())]
   const output = new Uint8Array(parts.reduce((total, part) => total + part.length, 0))
   parts.reduce((offset, part) => (output.set(part, offset), offset + part.length), 0)
   return output
@@ -321,4 +353,34 @@ export function whiteMask(image: RgbaImage): RgbaImage {
     data[offset + 3] = data[offset + 3] ? Math.max(0, Math.round((light - 64) * 255 / 191)) : 0
   }
   return { width: image.width, height: image.height, data }
+}
+
+/** Paints the atlas borders at their design size and stretches only the inner band. */
+function axis(size: number, leading: number, trailing: number): [number, number, number, number] {
+  const scale = leading + trailing > size ? size / (leading + trailing) : 1
+  const first = Math.round(leading * scale)
+  return [0, first, Math.max(first, Math.round(size - trailing * scale)), size]
+}
+
+export function nineSliceImage(image: RgbaImage, source: readonly number[], inner: readonly number[], width: number, height: number): RgbaImage {
+  const [x, y, sw, sh] = source
+  const [ix, iy, iw, ih] = inner
+  const xs = [0, ix - x, ix - x + iw, sw]
+  const ys = [0, iy - y, iy - y + ih, sh]
+  const dx = axis(width, xs[1], sw - xs[2])
+  const dy = axis(height, ys[1], sh - ys[2])
+  const data = new Uint8Array(width * height * 4)
+  for (let row = 0; row < 3; row++) for (let column = 0; column < 3; column++) {
+    const sourceWidth = xs[column + 1] - xs[column]
+    const sourceHeight = ys[row + 1] - ys[row]
+    const targetWidth = dx[column + 1] - dx[column]
+    const targetHeight = dy[row + 1] - dy[row]
+    if (Math.min(sourceWidth, sourceHeight, targetWidth, targetHeight) <= 0) continue
+    const tile = resizeImage(cropImage(image, x + xs[column], y + ys[row], sourceWidth, sourceHeight), targetWidth, targetHeight)
+    for (let yy = 0; yy < targetHeight; yy++) {
+      data.set(tile.data.subarray(yy * targetWidth * 4, (yy + 1) * targetWidth * 4),
+        ((dy[row] + yy) * width + dx[column]) * 4)
+    }
+  }
+  return { width, height, data }
 }

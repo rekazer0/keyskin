@@ -19,10 +19,11 @@ import { isConfiguredSymbolLayout } from "../actions.ts"
 import { resolveCandidateRect, resolveCandidateInputStyle, candidateInputBackgroundStyle, inputBarBox, type InputBarMetrics } from "../candidate-style.ts"
 import { drawInputBarBackground, setCanvasSize } from "../preview-draw.ts"
 import { bdaStyleID } from "../bda.ts"
-import { devicePreviewTransparent, inputBarInKeyboard } from "./preview-render"
+import { devicePreviewTransparent, inputBarInKeyboard, toolbarDevicePointWidth } from "./preview-render"
 import { canvasEditable } from "./edit-history"
 import { isSsfBoardPath, ssfSelectedBindings, ssfSkeleton } from "./ssf-documents"
 import type { SkinArchive } from "../skin.ts"
+import { iosToolbarScale } from "../ios-toolbar-geometry.ts"
 
 export function selectedSourceSections(): string[] {
   if (appState.resourceConfigActive && appState.selectedResourcePath) {
@@ -34,7 +35,9 @@ export function selectedSourceSections(): string[] {
   const toolbarSections = isToolbarPath(appState.selectedPath) ? effectiveToolbarSections() : []
   if (toolbarSections.length) return toolbarSections
   // A Sogou board's source is its phoneSkin.ini: the selected key's classes are what to reveal.
-  if (isSsfBoardPath(appState.selectedPath)) return ssfSelectedBindings().flatMap(({ binding }) => binding.sections)
+  if (isSsfBoardPath(appState.selectedPath)) return appState.selectedCandidate
+    ? ["CandidateView", "CandidateViewLand", "CandidateIMEFunctionView", "TextStyle_Candidate", "TextStyle_Candidate_Highlight", "ComposingView", "TextStyle_Composing"]
+    : ssfSelectedBindings().flatMap(({ binding }) => binding.sections)
   return appState.selectedPath === appState.layoutPath ? effectiveSelectedSections() : []
 }
 
@@ -319,7 +322,15 @@ export function refreshToolbarPreview(
   toolbarPreview.setPersistentOnly(composing)
   toolbarPreview.setTheme(theme.value === "dark" ? "dark" : "light")
   toolbarPreview.setTransparent(true)
-  const { width, height } = resolveCandidateRect(document, gen)
+  const candidateRect = resolveCandidateRect(document, gen)
+  const { width } = candidateRect
+  const pointWidth = toolbarDevicePointWidth()
+  toolbarPreview.setDevicePointWidth(pointWidth)
+  const nativeToolbar = gen?.get("LOGO", "LAYOUT_NAME") || appState.archive.isText(path.replace(/\/(port|land)\/[^/]+$/, "/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist"))
+  // shortcut: native iOS toolbar height is calibrated against iPhone screenshots; recheck when its layout changes.
+  const scale = appState.archive.format === "bdi" && inputBarInKeyboard() && nativeToolbar
+    ? iosToolbarScale(width, pointWidth) : 1
+  const height = candidateRect.height * scale
   const inputGeneral = bdaPanel?.input?.textStyle
     ? IniDocument.parse(`[INPUT]\nFORE_STYLE=${bdaStyleID(bdaPanel.input.textStyle)}\n`)
     : gen
@@ -328,7 +339,7 @@ export function refreshToolbarPreview(
     config?.get("SCAND", "BACK_STYLE") || config?.get("SCAND", "INPUT_STYLE"),
   )
   const inputHeight = !composing && appState.archive.format === "bdi" && inputBarInKeyboard() && !hasInlineStyle
-    ? 0 : inputStyle.height
+    ? 0 : inputStyle.height * scale
   const backgroundStyle = appState.archive?.format === "bda"
     ? bdaStyleID(bdaPanel?.backStyle)
     : document.get("CAND", "BACK_STYLE")?.split(",")[0] ??

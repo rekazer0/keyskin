@@ -9,8 +9,9 @@ import { decodeBdaAppearance } from '../src/bda-decode.ts'
 import { strFromU8 } from 'fflate'
 import { convertSsfDocument, documentPackage, ssfDocumentBytes } from '../src/ssf/ssf-convert.ts'
 import { ssfToBaiduFiles } from '../src/ssf/ssf-to-baidu.ts'
-import { decodePng, cropImage } from '../src/ssf/ssf-png.ts'
-import { ssfFixture } from './helpers/ssf-fixture.mjs'
+import { decodePng, cropImage, encodePng, resizeImage } from '../src/ssf/ssf-png.ts'
+import { toolbarImageRect } from '../src/preview-draw.ts'
+import { ssfFixture, solid } from './helpers/ssf-fixture.mjs'
 
 const read = (path) => new Uint8Array(readFileSync(new URL(path, import.meta.url)))
 const templates = {
@@ -132,16 +133,42 @@ test('SSF → BDS gives Android the native F14 toolbar and the Sogou icons in th
     // MenuFunction bitmap indexes of Baidu 13.3.18.31; LogoIconSource reads IMG<n> only for n < TILE_NUM.
     assert.equal(til.get('GLOBAL', 'TILE_NUM'), '68')
     const slice = (index) => cropImage(atlas, ...til.get(`IMG${index}`, 'SOURCE_RECT').split(',').map(Number))
+    const enlarged = (image) => resizeImage(image, Math.ceil(image.width / 0.82), Math.ceil(image.height / 0.82))
     const reference = IniDocument.parse(canvasText(`${prefix}port/cand1.cnd`))
     const css = IniDocument.parse(canvasText(`${prefix}res/default.css`))
     for (const [action, index] of [['F7', 26], ['F13', 27], ['F72', 29], ['F82', 31], ['F8', 67]]) {
       const section = reference.sections().find((name) => reference.get(name, 'KEY') === action)
       const [resource, tile] = css.get(`STYLE${reference.get(section, 'FORE_STYLE')}`, 'NM_IMG').split(',')
       const rect = IniDocument.parse(canvasText(`${prefix}res/${resource}.til`)).get(`IMG${tile}`, 'SOURCE_RECT').split(',').map(Number)
-      assert.deepEqual(slice(index), cropImage(decodePng(canvas.get(`${prefix}res/${resource}.png`)), ...rect), `${theme} ${action} → IMG${index}`)
+      const original = cropImage(decodePng(canvas.get(`${prefix}res/${resource}.png`)), ...rect)
+      assert.deepEqual(slice(index), index === 67 ? original : enlarged(original), `${theme} ${action} → IMG${index}`)
     }
     for (const [file, index] of [['ime_function_textedit', 25], ['ime_function_clipboard', 50]]) {
-      assert.deepEqual(slice(index), decodePng(source.getBytes(`1080/${folder}/${file}.png`)), `${theme} ${file} → IMG${index}`)
+      assert.deepEqual(slice(index), enlarged(decodePng(source.getBytes(`1080/${folder}/${file}.png`))), `${theme} ${file} → IMG${index}`)
+    }
+  }
+})
+
+test('SSF → BDS keeps middle toolbar icons at the SSF size after Android native scaling', async () => {
+  const source = SkinArchive.open(await ssfDocumentBytes(ssfFixture()), 'ssf')
+  const icons = [
+    ['ime_function_expression', 26, 78, 78], ['ime_function_switch', 27, 61, 43],
+    ['ime_function_voice', 29, 37, 55], ['ime_function_sousou', 31, 1, 1],
+    ['ime_function_textedit', 25, 72, 48], ['ime_function_clipboard', 50, 88, 88],
+  ]
+  for (const folder of ['status1', 'status2']) for (const [name, , width, height] of icons) {
+    source.setBytes(`1080/${folder}/${name}.png`, encodePng(solid(width, height, [90, 120, 150])))
+  }
+  const bds = SkinArchive.open((await convertSsfDocument(source, 'bds', templates)).bytes, 'bds')
+  for (const theme of ['light', 'dark']) {
+    const til = IniDocument.parse(bds.getText(`${theme}/skin/res/logo/pop_menu_icons.til`))
+    for (const [name, index, width, height] of icons) {
+      const source = til.get(`IMG${index}`, 'SOURCE_RECT').split(',').map(Number)
+      const rect = toolbarImageRect({ source, imagePath: `${theme}/skin/res/logo/pop_menu_icons.png` },
+        { x: 0, y: 0, width: 128, height: 126 }, 1080)
+      assert.deepEqual([rect.width, rect.height], [width, height], `${theme} ${name}: source dimensions survive native scaling`)
+      assert.equal(rect.x, (128 - width) / 2)
+      assert.equal(rect.y, (126 - height) / 2)
     }
   }
 })

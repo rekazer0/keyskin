@@ -41,7 +41,9 @@
 
   /* 版式 */
   --content-max-width: 1100px;  /* 欢迎页等整页内容的最大宽度 */
+  --dialog-max-height: 480px;
   --style-card-width: 160px; /* 样式库与动画列表卡片的最小宽度，随容器拉伸并自动加列 */
+  --toolbar-icon-card-width: 72px;
   --skin-preview-size: 96px;
 
   /* 控件高度：3 档 */

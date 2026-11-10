@@ -37,7 +37,7 @@ const context = withAppState(vm.createContext({
   styleKind: () => 'image',
   styleKindIcon: kind => kind,
   styleReferenceCard: options => ({ options }),
-  iconButton: (icon, label, onAdd) => ({ add: onAdd, classList: { add() {} }, dataset: {} }),
+  styleReferenceAddButton: (label, onAdd, disabled) => ({ add: onAdd, disabled }),
   styleAnimationReferenceStates: (styleID, styles, choose) => [{ label: `动画 ${styleID}`, onClick: choose }],
   openStyleReferenceEditor: id => edited.push(id),
   openStylePicker: (target, highlighted) => { picker = { target, highlighted } },
@@ -92,22 +92,31 @@ assert.equal(back.add(), undefined)
 back.cards()[0].remove.run()
 assert.equal(back.input.value, '')
 
-// 空引用：一张紧凑虚线卡，点了打开样式库
+// 空引用：没有占位卡，从添加入口选择后才写入
 const empty = field('BACK_STYLE', '')
-assert.equal(empty.cards()[0].states.length, 0)
-empty.cards()[0].empty.onClick()
+assert.equal(empty.cards().length, 0)
+assert.equal(empty.input.value, '')
+empty.add().add()
+assert.equal(empty.input.value, '', '打开选择器不写配置')
 choose('9')
 assert.equal(empty.input.value, '9')
 
-// 动画槽位按位置保留：0 是空槽（clapperboard），移除写 0 不挪动后面的槽位
+// 动画空槽不占位，移除仍写 0，不挪动后面的槽位
 const anim = field('FORE_ANIM_STYLE', '0,7,8')
-assert.deepEqual(anim.cards().map(card => card.states.length), [0, 1, 1])
-assert.equal(anim.cards()[0].empty.icon, 'clapperboard')
-assert.equal(anim.cards()[0].remove, undefined)
-anim.cards()[1].remove.run()
+assert.deepEqual(anim.cards().map(card => card.name.value), ['7', '8'])
+anim.cards()[0].remove.run()
 assert.equal(anim.input.value, '0,0,8')
 // 前景动画也有追加；移除最后一层时去掉末尾的空槽位
 assert.ok(anim.add())
-anim.cards()[2].remove.run()
+anim.cards()[0].remove.run()
 assert.equal(anim.input.value, '0')
+anim.add().add()
+choose('9')
+assert.equal(anim.input.value, '9')
+assert.equal(anim.cards().length, 1)
+for (const key of ['ANIM_STYLE', 'BACK_ANIM_STYLE', 'PRESS_STYLE', 'SOUND_STYLE', 'FORE_STYLE', 'PARTICLE_IMAGE']) {
+  const row = field(key, '')
+  assert.equal(row.cards().length, 0, key)
+  assert.ok(row.add(), key)
+}
 console.log('Style reference rows: per-slot cards, state click opens the picker, ⌘ click edits, typed numbers, remove / append and animation slots passed')

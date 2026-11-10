@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
 
-const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 0 } })
+const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41868, strictPort: false } })
 await server.listen()
 let browser
 try {
@@ -58,11 +58,14 @@ try {
   assert.equal(await page.locator("#file-operation-detail").textContent(), "正在写入文件…")
   assert.ok(await page.evaluate(() => window.writtenSize > 0))
   await page.evaluate(async () => { window.finishWrite(); await window.pendingSave })
-  await dialog.waitFor({ state: "hidden" })
+  await dialog.waitFor({ state: "visible" })
   assert.equal(await page.locator("#file-operation-progress").evaluate((meter) => meter.value), 100)
-  // 成功不弹模态框：只在状态栏写结果。
-  assert.equal(await dialog.isVisible(), false, "success never opens a modal")
+  assert.equal(await page.locator("#file-operation-title").textContent(), "保存完成")
+  assert.equal(await page.locator("#file-operation-result").textContent(), "文件：保存反馈.bds\n保存位置：浏览器中选择的文件夹")
+  assert.equal(await page.locator("#file-operation-result").isVisible(), true)
   assert.equal(await page.locator("#event-log").textContent(), "保存完成")
+  await close.click()
+  await dialog.waitFor({ state: "hidden" })
 
   for (const outcome of ["cancel", "error"]) {
     await page.evaluate(async (outcome) => {
@@ -91,12 +94,18 @@ try {
         const { runFileOperation, showFileOperationProgress } = await import("/src/app/file-operations.ts")
         await runFileOperation(action, () => { if (progress) showFileOperationProgress(); return true })
       }, { action, progress })
-      // 进度框开着时随结果一起关闭（带退出动效）；成功从不弹模态框。
+      if (action === "保存" || action === "导出") {
+        assert.equal(await dialog.isVisible(), true, `${action} keeps its completion dialog`)
+        assert.equal(await page.locator("#file-operation-title").textContent(), `${action}完成`)
+        assert.equal(await page.locator("#file-operation-progress").evaluate(meter => meter.value), 100)
+        assert.equal(await page.locator("#file-operation-result").isVisible(), false, 'a new operation clears the previous path')
+        await close.click()
+      }
       await dialog.waitFor({ state: "hidden" })
       assert.equal(await page.locator("#event-log").textContent(), `${action}完成`, `${action} with progress=${progress}`)
     }
   }
-  console.log("PASS: export progress, confirmed writes, cancellation, write failure, and status-bar completion")
+  console.log("PASS: save/export retain 100% progress and destination after confirmed writes; cancellation and failure remain separate")
 } finally {
   await browser?.close()
   await server.close()

@@ -89,6 +89,12 @@ export function inputBarInKeyboard(): boolean {
   return Boolean(appState.archive && skinPlatform(appState.archive) === "ios")
 }
 
+export function toolbarDevicePointWidth(): number | undefined {
+  const device = currentDeviceValue()
+  const frame = deviceSpec(device === "canvas" ? "iphone-17-pro-max" : device)?.frame
+  return frame && (orientation.value === "port" ? frame.viewportWidth : frame.viewportHeight)
+}
+
 /** 拼音栏作为键盘的一行常驻显示（iOS）。 */
 export function keyboardInputRowShown(): boolean {
   return !candidateArea.hidden && !candidateInput.hidden && inputBarInKeyboard()
@@ -551,8 +557,7 @@ export function updateDevicePreview(): void {
   deviceShell.classList.toggle("canvas-only", deviceValue === "canvas")
   const spec = deviceSpec(deviceValue)
   // 画布模式没有机型，按真机测试用的 iPhone 17 Pro Max 算工具栏图标的 pt 尺寸。
-  const pointFrame = (deviceValue === "canvas" ? deviceSpec("iphone-17-pro-max") : spec)?.frame
-  toolbarPreview.setDevicePointWidth(pointFrame && (orientation.value === "port" ? pointFrame.viewportWidth : pointFrame.viewportHeight))
+  toolbarPreview.setDevicePointWidth(toolbarDevicePointWidth())
   const referenceFrame = spec?.family === "iphone" && orientation.value === "port"
   deviceShell.dataset.referenceFrame = String(referenceFrame)
   deviceShell.dataset.accessories = showsKeyboardAccessories(spec, orientation.value)
@@ -609,7 +614,7 @@ export function setGuidesVisible(enabled: boolean): void {
 }
 
 export function syncCandidateSelection(): void {
-  const selected = appState.selectedCandidate && appState.archive?.format === "bda" && appState.selectedPath === appState.layoutPath
+  const selected = appState.selectedCandidate && (appState.selectedPath === appState.layoutPath || appState.selectedPath === toolbarStrip.dataset.path)
     || appState.archive?.format !== "bda" && isToolbarPath(appState.selectedPath) && !appState.selectedToolbarSections.length
   candidateArea.classList.toggle("candidate-selected", selected)
   candidateArea.setAttribute("aria-selected", String(selected))

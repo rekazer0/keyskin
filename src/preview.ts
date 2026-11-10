@@ -92,6 +92,8 @@ export class Preview {
     holdTriggered: boolean
     direction: "center" | "up" | "down" | "left" | "right" | "hold"
     holdTimer?: number
+    hintIndex?: number
+    hintCellWidth?: number
   }
   selected = new Set<string>()
   /**

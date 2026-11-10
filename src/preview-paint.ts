@@ -5,7 +5,7 @@ import { scheduleNativeFrame } from "./preview-native.ts"
 import { bdaAnimationBindingsForKey } from "./preview-animation.ts"
 import { bdaBindingEffects } from "./preview-animation.ts"
 import { bdaParticleEmitter } from "./preview-animation.ts"
-import { legacyHintCandidates } from "./preview-hints.ts"
+import { legacyHintCandidates, legacyHintSelectedIndex } from "./preview-hints.ts"
 import { legacyHintIconID } from "./preview-hints.ts"
 import { previewDrawOrder } from "./preview-items.ts"
 import { visiblePreviewItems } from "./preview-items.ts"
@@ -115,11 +115,13 @@ export async function paintPreview(self: Preview): Promise<void> {
   const hintCandidates = self.active && (
     hintDirection === "hold" || hintDirection === "up" && hintConfig?.upIcon
   )
-    ? legacyHintCandidates(self.active.key, hintDirection, self.bdaHints)
+    ? legacyHintCandidates(self.active.key, hintDirection, Boolean(self.stateDocument) || self.bdaHints || Boolean(hintConfig?.defaultCandidates))
     : []
-  const hintBar = hintCandidates.length > 1 && Boolean(hintConfig?.barIcon)
+  const hintBar = hintCandidates.length > 0 && Boolean(hintConfig?.barIcon)
   const hintIconID = hintBar ? hintConfig?.barIcon : legacyHintIconID(hintConfig, hintDirection)
   const hintIcon = hintIconID ? hintConfig?.icons.get(hintIconID) : undefined
+  const hintCellStyle = hintIcon?.cellStyle ?? hintConfig?.cellStyle
+  const hintCellSize = hintIcon?.cellSize ?? hintConfig?.cellSize
   const keys = previewDrawOrder(visiblePreviewItems(self.keys, self.skinState)
     .map((key) =>
       self.stateDocument ? effectivePreviewItem(self.stateDocument, key, self.skinState ?? 0) : key,
@@ -199,10 +201,10 @@ export async function paintPreview(self: Preview): Promise<void> {
       : Promise.resolve([undefined, undefined]),
     hintIcon ? self.resolver?.resolveText(hintIcon.foreStyle, false) : undefined,
     hintIcon ? self.resolver?.resolveText(hintIcon.foreStyle, true) : undefined,
-    hintBar && hintConfig?.cellStyle
+    hintBar && hintCellStyle
       ? Promise.all([
-          self.resolveVisual(hintConfig.cellStyle, false).catch(() => undefined),
-          self.resolveVisual(hintConfig.cellStyle, true).catch(() => undefined),
+          self.resolveVisual(hintCellStyle, false).catch(() => undefined),
+          self.resolveVisual(hintCellStyle, true).catch(() => undefined),
         ])
       : Promise.resolve([undefined, undefined]),
   ])
@@ -363,7 +365,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   scheduleNativeFrame(self, scene)
 
   const popup = self.active ? sceneKeys.get(self.active.key.section)?.popup : undefined
-  const shouldDrawHint = Boolean(popup?.length || self.active && isLegacyHintInputKey(self.active.key) && hintIcon)
+  const shouldDrawHint = Boolean(popup?.length || self.active && (isLegacyHintInputKey(self.active.key) || hintCandidates.length) && hintIcon)
   let hintContext = context
   if (self.hintCanvas && (shouldDrawHint || self.hintVisible)) {
     const overlayBounds = self.hintCanvas.getBoundingClientRect()
@@ -395,8 +397,11 @@ export async function paintPreview(self: Preview): Promise<void> {
     const [offsetX, offsetY] = hintIcon.position
     const key = self.active.key
     const [left, top, right, bottom] = hintIcon.padding
-    const cellWidth = self.bdaHints ? self.panelWidth / 14 : self.panelWidth / 24
-    const width = hintBar ? Math.max(baseWidth, left + right + hintCandidates.length * cellWidth) : baseWidth
+    const desiredCellWidth = hintCellSize?.[0] && hintCellSize[0] > 0 ? hintCellSize[0] : Math.max(
+      self.panelWidth / (self.stateDocument || self.bdaHints ? 14 : 24), hintTextVisual?.fontSize ?? 0, hintCellVisuals[1]?.source?.[2] ?? 0,
+    )
+    const width = hintBar ? Math.min(self.panelWidth, Math.max(baseWidth, left + right + hintCandidates.length * desiredCellWidth)) : baseWidth
+    const cellWidth = hintBar ? (width - left - right) / hintCandidates.length : desiredCellWidth
     const x = Math.max(0, Math.min(self.panelWidth - width, key.rect.x + (key.rect.width - width) / 2 + offsetX))
     const bdaNineKeyBar = self.bdaHints && hintDirection === "hold" && /^\d$/.test(key.up) && hintCandidates.length > 3
     const rect = { x, y: bdaNineKeyBar ? -height + offsetY : key.rect.y - height + offsetY, width, height }
@@ -405,10 +410,9 @@ export async function paintPreview(self: Preview): Promise<void> {
     if (hintBar) {
       const selected = hintDirection === "up"
         ? 0
-        : self.bdaHints && /^\d$/.test(key.up) && hintCandidates.includes(key.up)
-          ? hintCandidates.indexOf(key.up)
-          : Math.max(0, hintCandidates.lastIndexOf(key.center))
-      const cellHeight = height - top - bottom
+        : self.active.hintIndex ?? legacyHintSelectedIndex(key, hintCandidates)
+      self.active.hintCellWidth = cellWidth
+      const cellHeight = hintCellSize?.[1] && hintCellSize[1] > 0 ? Math.min(hintCellSize[1], height - top - bottom) : height - top - bottom
       hintCandidates.forEach((action, index) => {
         const cell = { x: rect.x + left + index * cellWidth, y: rect.y + top, width: cellWidth, height: cellHeight }
         drawVisual(hintContext, hintCellVisuals[index === selected ? 1 : 0], cell, true)
@@ -456,7 +460,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   const toolbarRect = self.document
     ? dynamicToolbarRect(self.document, self.panelWidth, self.panelHeight)
     : undefined
-  if (!scene && toolbarRect && toolbarImages.length) {
+  if (toolbarRect && toolbarImages.length && (!scene || scene.partial && !keys.some((key) => key.center.trim() === "F14" && sceneKeys.has(key.section)))) {
     const slotWidth = toolbarRect.width / toolbarImages.length
     toolbarImages.forEach((visual, index) => {
       const destination = toolbarImageRect(visual, {

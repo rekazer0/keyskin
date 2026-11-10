@@ -253,16 +253,24 @@ export type StyleReferenceState = {
   onClick?(edit: boolean): void
 }
 
+/** 引用字段标题右侧的添加入口，选择后才写入配置。 */
+export function styleReferenceAddButton(label: string, run: () => void, disabled = false): HTMLButtonElement {
+  const add = iconButton("plus", label, run)
+  add.classList.add("ui-style-ref-append")
+  add.dataset.size = "sm"
+  add.disabled = disabled
+  return add
+}
+
 /**
  * 检查器里的样式引用卡（.ui-style-ref，DESIGN.md §10）：左侧可直接输入的编号与类型图标，右侧并排的状态预览
- * 或单格内容。没有引用时画一张同高的虚线卡（`empty`）；多值字段的卡片右侧有一条 `trash-2` 移除区。
+ * 或单格内容。未配置时从字段标题添加；每张已绑定的卡都可移除。
  */
 export function styleReferenceCard(options: {
   /** The editable number; Sogou cards have one file name per state. */
   name: HTMLInputElement | HTMLInputElement[]
   kind?: HTMLElement
   states: StyleReferenceState[]
-  empty?: { icon: string; label: string; onClick(): void }
   remove?: { label: string; run(): void }
   disabled?: boolean
 }): HTMLElement {
@@ -286,15 +294,6 @@ export function styleReferenceCard(options: {
   }
   const canvases: HTMLCanvasElement[] = []
   const draws: Array<(canvas: HTMLCanvasElement) => void | Promise<void>> = []
-  if (!options.states.length && options.empty) {
-    card.dataset.variant = "empty"
-    const empty = element("span", "ui-style-ref-empty")
-    empty.title = options.empty.label
-    empty.setAttribute("aria-label", options.empty.label)
-    empty.append(createIcon(options.empty.icon, 16))
-    action(empty, options.disabled ? undefined : options.empty.onClick)
-    states.append(empty)
-  }
   for (const [index, item] of options.states.entries()) {
     const state = element("span", "ui-style-state")
     state.dataset.state = options.states.length === 1 ? "single" : index ? "pressed" : "normal"

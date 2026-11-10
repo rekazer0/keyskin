@@ -30,6 +30,7 @@ export function bindDialog(dialog: HTMLDialogElement, cancel = () => closeDialog
 export function ask(options: { title: string; detail?: string; actions: AskAction[] }): Promise<string> {
   const dialog = element("dialog", "ui-dialog")
   dialog.dataset.size = "sm"
+  dialog.dataset.variant = "ask"
   dialog.setAttribute("aria-label", options.title)
   const form = element("form")
   form.method = "dialog"
@@ -37,9 +38,15 @@ export function ask(options: { title: string; detail?: string; actions: AskActio
   const title = element("h2")
   title.textContent = options.title
   text.append(title)
-  if (options.detail) text.append(Object.assign(element("p"), { textContent: options.detail }))
   const header = element("header", "ui-dialog-header")
   header.append(text)
+  form.append(header)
+  if (options.detail) {
+    const body = element("div", "ui-dialog-body")
+    body.tabIndex = 0
+    body.append(Object.assign(element("p"), { textContent: options.detail }))
+    form.append(body)
+  }
   const footer = element("footer", "ui-dialog-footer")
   for (const action of options.actions) {
     const button = element("button", "ui-button")
@@ -48,13 +55,13 @@ export function ask(options: { title: string; detail?: string; actions: AskActio
     if (action.variant) button.dataset.variant = action.variant
     footer.append(button)
   }
-  form.append(header, footer)
+  form.append(footer)
   dialog.append(form)
   bindDialog(dialog)
   document.body.append(dialog)
   dialog.showModal()
   const buttons = [...footer.querySelectorAll("button")]
-  ;(buttons.find((button) => button.value === "cancel") ?? buttons.find((button) => button.dataset.variant === "primary") ?? buttons[0])?.focus()
+  ;(buttons.find((button) => button.value === "cancel") ?? buttons.find((button) => button.dataset.variant === "primary") ?? buttons[0])?.focus({ preventScroll: true })
   return new Promise((resolve) => dialog.addEventListener("close", () => {
     dialog.remove()
     resolve(dialog.returnValue || "cancel")

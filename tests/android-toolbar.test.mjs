@@ -80,11 +80,14 @@ test('the toolbar preview follows the format: BDS reads the Android atlas, BDI t
     assert.ok(bds.getBytes('light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist'))
     assert.deepEqual([...new Set(android.map((visual) => visual.imagePath?.split('/').pop()))], ['pop_menu_icons.png'])
     assert.deepEqual(android.map((visual) => visual.source), [[0, 0, 8, 8], [0, 0, 6, 4], [0, 0, 8, 8]])
+    assert.deepEqual(android.map((visual) => visual.label), ['表情', '键盘类型', '搜索'])
+    assert.deepEqual(android.map((visual) => visual.imageSource), [[0, 0, 8, 8], [0, 8, 6, 4], [0, 12, 8, 8]])
 
     const bdi = iosSkin()
     const ios = await new AtlasResolver(bdi, 'light', 'port').resolveToolbarImages()
     assert.ok(ios.every((visual) => visual.imagePath.endsWith('_iphone@3x.png')))
     assert.ok(ios.length > 0)
+    assert.deepEqual(ios.map((visual) => visual.label), ['表情', '键盘类型', '搜索'])
   } finally {
     globalThis.createImageBitmap = original
   }
@@ -98,6 +101,23 @@ test('a BDS without the atlas previews no toolbar icons, like the phone', async 
   globalThis.createImageBitmap = async () => ({ width: 8, height: 8 })
   try {
     assert.deepEqual(await new AtlasResolver(SkinArchive.open(zipSync(converted), 'bds'), 'light', 'port').resolveToolbarImages(), [])
+  } finally {
+    globalThis.createImageBitmap = original
+  }
+})
+
+test('the inspector includes AI toolbar artwork beyond the default preview functions', async () => {
+  const files = unzipSync(await iosSkin().toBytesAsync('bds'))
+  const path = 'light/res/logo/pop_menu_icons.til'
+  files[path] = strToU8(`${new TextDecoder().decode(files[path])}\n[IMG62]\nSOURCE_RECT=0,0,8,8\n`)
+  const original = globalThis.createImageBitmap
+  globalThis.createImageBitmap = async (source) => ({ width: source?.width ?? 8, height: source?.height ?? 8 })
+  try {
+    const resolver = new AtlasResolver(SkinArchive.open(zipSync(files), 'bds'), 'light', 'port')
+    assert.equal((await resolver.resolveToolbarImages()).length, 3)
+    const icons = await resolver.resolveToolbarImages(Number.POSITIVE_INFINITY)
+    assert.deepEqual(icons.map(icon => icon.label), ['表情', '键盘类型', '搜索', 'AI侃侃'])
+    assert.deepEqual(icons.at(-1).imageSource, [0, 0, 8, 8])
   } finally {
     globalThis.createImageBitmap = original
   }

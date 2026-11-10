@@ -3,6 +3,7 @@ import { bdaStyleRef, bdaStyleID } from "../bda.ts"
 import { currentBdaAppearance, visualResolver } from "./bda-documents"
 import { styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
+import { cachedIniDocument } from "./style-document"
 import { type StyleKind } from "./types"
 import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, openStyleReferenceStateImage, refreshStyleReferenceThumbnail, layoutAnimationFields, styleUsages } from "./style-references"
 import { commitText, isEditing, updateDirty } from "./edit-history"
@@ -43,9 +44,7 @@ export function availableStyleIDs(): string[] {
     ]
   }
   if (appState.archive.format === "sxi") return palmStyleIDs()
-  const path = styleConfigPath()
-  if (!appState.archive.isText(path)) return []
-  return IniDocument.parse(appState.archive.getText(path)).sections()
+  return (styleConfigDocument()?.sections() ?? [])
     .flatMap((section) => section.match(/^STYLE(\d+)$/)?.[1] ?? [])
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
 }
@@ -76,9 +75,9 @@ export function canAddStyle(): boolean {
   return archive?.format === "sxi" ? Boolean(asObject(openPalmSkin()?.[palmTheme()])) : Boolean(archive?.isText(styleConfigPath()) && archive.format !== "bda")
 }
 
+/** default.css 的只读视图：检查器一次重建会问几十次，交给 style-document.ts 的缓存。 */
 export function styleConfigDocument(): IniDocument | undefined {
-  const path = styleConfigPath()
-  return appState.archive?.isText(path) ? IniDocument.parse(appState.archive.getText(path)) : undefined
+  return cachedIniDocument(styleConfigPath())
 }
 
 /**
@@ -224,7 +223,7 @@ export function editStyleLibrarySelection(): void {
 
 export function openStylePicker(input: HTMLInputElement, highlighted = false): void {
   appState.styleLibraryHighlighted = highlighted
-  if (input.disabled || !availableStyleIDs().length) return
+  if (input.disabled) return
   appState.stylePickerTarget = input
   appState.styleLibrarySelected = undefined
   void showPickerWindow("styles", "全部样式", 1100, 760)

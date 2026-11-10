@@ -13,6 +13,7 @@ try {
     const { SkinArchive } = await import('/src/skin.ts')
     const { appState } = await import('/src/app/state.ts')
     const { exportArchive } = await import('/src/app/archive-io.ts')
+    const { showFileOperationProgress } = await import('/src/app/file-operations.ts')
     const archive = SkinArchive.open(new Uint8Array(bytes), 'bds')
     archive.setText('light/skin/res/default.css', '[GLOBAL]\n[STYLE900]\nSHOW=Test\nFONT_SIZE=24\nFONT_WEIGHT=700\n')
     archive.setText('light/skin/port/py_9.ini', '[KEY1]\nFORE_STYLE=900\n')
@@ -25,6 +26,7 @@ try {
       requestAnimationFrame(sample)
     }
     requestAnimationFrame(sample)
+    showFileOperationProgress()
     const result = await exportArchive('bdi')
     running = false
     document.querySelector('#file-operation-dialog').close()
@@ -33,6 +35,34 @@ try {
   assert.ok(progress.seen.includes('正在打包 BDI 皮肤包…'))
   assert.ok(progress.seen.includes('正在把按键文字切成字体图片…'))
   assert.match(progress.css, /BAKED_SHOW=Test/)
+  const withoutBake = await page.evaluate(async (bytes) => {
+    const { SkinArchive } = await import('/src/skin.ts')
+    const { appState } = await import('/src/app/state.ts')
+    const { exportArchive } = await import('/src/app/archive-io.ts')
+    const results = []
+    for (const fields of ['FONT_WEIGHT=700\nNM_IMG=fore1,1\n', '']) {
+      const archive = SkinArchive.open(new Uint8Array(bytes), 'bds')
+      archive.setText('light/skin/res/default.css', `[GLOBAL]\n[STYLE900]\nSHOW=Test\nFONT_SIZE=24\n${fields}`)
+      archive.setText('light/skin/port/py_9.ini', '[KEY1]\nFORE_STYLE=900\n')
+      appState.archive = archive
+      const seen = []
+      const observer = new MutationObserver(() => seen.push(document.querySelector('#file-operation-detail').textContent))
+      observer.observe(document.querySelector('#file-operation-detail'), { childList: true, subtree: true })
+      try {
+        const result = await exportArchive('bdi')
+        results.push({ seen, css: SkinArchive.open(result.bytes, 'bdi').getText('light/skin/res/default.css') })
+      } finally {
+        observer.disconnect()
+        document.querySelector('#file-operation-dialog').close()
+      }
+    }
+    return results
+  }, [...bdsFixture()])
+  for (const result of withoutBake) {
+    assert.ok(result.seen.includes('正在检查字体兼容性…'))
+    assert.ok(!result.seen.includes('正在把按键文字切成字体图片…'))
+    assert.doesNotMatch(result.css, /BAKED_SHOW/)
+  }
   // 只设了文字阴影（客户端新版不绘制）也要自动切片；透明的 BORDER_* 是旧皮肤占位，不切。
   const shadows = await page.evaluate(async (bytes) => {
     const { SkinArchive } = await import('/src/skin.ts')

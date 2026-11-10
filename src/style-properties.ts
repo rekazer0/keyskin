@@ -10,7 +10,6 @@ function stylePropertySource(
   foreground: string,
   property: string,
 ): StylePropertySource | undefined {
-  const sections = new Set(document.sections())
   const visited = new Set<string>()
   const tokens = foreground.split(",").map((token) => token.trim()).filter(Boolean)
   for (const token of tokens) {
@@ -18,7 +17,7 @@ function stylePropertySource(
     const candidates = [`STYLE${token}`]
     if (Number.isFinite(value)) candidates.push(`STYLE${Math.floor(value / 100)}`)
     for (const section of candidates) {
-      if (!sections.has(section) || visited.has(section)) continue
+      if (!document.hasSection(section) || visited.has(section)) continue
       visited.add(section)
       const propertyValue = document.get(section, property)
       if (propertyValue !== undefined) return { section, value: propertyValue }
@@ -41,12 +40,11 @@ export function resolveStylePropertyLayers(
  * layers (NM_IMG / HL_IMG). New text properties are written here when no layer has them yet.
  */
 export function textStyleSections(document: IniDocument, foreground: string): string[] {
-  const sections = new Set(document.sections())
   const found = new Set<string>()
   for (const token of foreground.split(",").map((part) => part.trim()).filter(Boolean)) {
     const value = Number(token)
     const section = [`STYLE${token}`, ...Number.isFinite(value) ? [`STYLE${Math.floor(value / 100)}`] : []]
-      .find((name) => sections.has(name))
+      .find((name) => document.hasSection(name))
     if (section && document.get(section, "NM_IMG") === undefined && document.get(section, "HL_IMG") === undefined) found.add(section)
   }
   return [...found]

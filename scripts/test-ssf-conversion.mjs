@@ -55,7 +55,7 @@ const snapshot = async (name) => {
         const bytes = documentPackage(appState.archive).file(toolbarPreview.theme, `${file}.png`)
         if (!bytes) return []
         const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
-        return [{ image, source: [0, 0, image.width, image.height] }]
+        return [{ image, bytes, source: [0, 0, image.width, image.height] }]
       }
       // points: iOS draws @3x toolbar art at its point size; the canvas measures it on an iPhone 17 Pro Max (440 × 956pt).
       const compose = async (middle, points = 1, android = false) => {
@@ -74,11 +74,22 @@ const snapshot = async (name) => {
         const middleWidth = (toolbarPreview.panelWidth - side * 2) / middle.length
         for (const [index, visual] of middle.entries()) {
           const slot = { x: side + index * middleWidth, y: 0, width: middleWidth, height: toolbarPreview.panelHeight }
-          const [, , width, height] = visual.source
+          let artwork = visual
+          if (android) {
+            // Export compensates Android's native shrink; build the reference from the SSF pixels.
+            const { cropImage, decodePng, resizeImage, encodePng } = await import('/src/ssf/ssf-png.ts')
+            const [x, y, width, height] = visual.source
+            const bytes = visual.bytes ?? appState.ssfSkeleton.boards.getBytes(visual.imagePath)
+            const tile = cropImage(decodePng(bytes), x, y, width, height)
+            const enlarged = resizeImage(tile, Math.ceil(width / 0.82), Math.ceil(height / 0.82))
+            const image = await createImageBitmap(new Blob([encodePng(enlarged)], { type: 'image/png' }))
+            artwork = { image, source: [0, 0, image.width, image.height] }
+          }
+          const [, , width, height] = artwork.source
           const scale = Math.min(points, slot.width / width, slot.height / height)
           const w = android ? Math.trunc(width * scale) : width * scale
           const h = android ? Math.trunc(height * scale) : height * scale
-          drawVisual(nativeContext, visual, { x: slot.x + (slot.width - w) / 2, y: slot.y + (slot.height - h) / 2, width: w, height: h }, true)
+          drawVisual(nativeContext, artwork, { x: slot.x + (slot.width - w) / 2, y: slot.y + (slot.height - h) / 2, width: w, height: h }, true)
         }
         for (const key of [icons[0], icons.at(-1)]) {
           const visual = await toolbarPreview.resolveVisual(key.foreStyle, false)
@@ -169,6 +180,11 @@ try {
   await page.addInitScript(() => {
     delete window.showSaveFilePicker
     window.showSaveFilePicker = undefined
+    // Keep baked labels when reopening exports so the pixel comparison uses the exported artwork.
+    new MutationObserver(() => {
+      const dialog = [...document.querySelectorAll('dialog[open]:not([id])')].find((item) => item.textContent.includes('还原按键文字？'))
+      dialog?.querySelector('button[value="cancel"]')?.click()
+    }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] })
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   let reported

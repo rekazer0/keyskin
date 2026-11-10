@@ -133,15 +133,17 @@ const pngSize = (png: Uint8Array) => {
 /** 图片超过 MAX_IMAGE_FILES 张时，把 res 根目录的图片合成几张图集，并改写 til 与样式引用。 */
 async function packImages(archive: SkinArchive, theme: string, compose: ComposeAtlas): Promise<boolean> {
   const res = `${theme}/skin/res/`
-  const images = archive.names()
+  const paths = archive.names()
     .filter((path) => path.startsWith(res) && /^[^/]+\.png$/i.test(path.slice(res.length)))
+  const images = paths
     .map((path) => ({ name: path.slice(res.length, -4), png: archive.getBytes(path)!, til: archive.getBytes(path.replace(/\.png$/i, ".til")) }))
     .filter((image) => image.til && !image.name.startsWith(BAKED_IMAGE))
     .flatMap((image) => {
       const size = pngSize(image.png)
       return size ? [{ ...image, ...size, tiles: IniDocument.parse(archive.getText(`${res}${image.name}.til`)) }] : []
     })
-  if (images.length <= MAX_IMAGE_FILES) return false
+  const available = MAX_IMAGE_FILES - (paths.length - images.length)
+  if (images.length <= available) return false
 
   // 按高度分组，每组排成一张不超过 ATLAS_MAX_HEIGHT 的图。
   const groups: (typeof images)[] = []
@@ -150,9 +152,15 @@ async function packImages(archive: SkinArchive, theme: string, compose: ComposeA
     if (group && packTiles([...group, image]).height <= ATLAS_MAX_HEIGHT) group.push(image)
     else groups.push([image])
   }
+  // 给图集预留槽位，其余槽位保留较大的原 PNG，避免全部重编码丢失索引色。
+  const kept = new Set([...images].sort((a, b) => b.png.byteLength - a.png.byteLength)
+    .slice(0, Math.max(0, available - groups.length)))
+  const packedGroups = groups.map((group) => group.filter((image) => !kept.has(image))).filter((group) => group.length)
   const renamed = new Map<string, string>()
-  for (const [index, group] of groups.entries()) {
-    const atlas = `${ATLAS_NAME}${index + 1}`
+  let nextAtlas = 1
+  for (const group of packedGroups) {
+    let atlas: string
+    do { atlas = `${ATLAS_NAME}${nextAtlas++}` } while (archive.getBytes(`${res}${atlas}.png`) || archive.getBytes(`${res}${atlas}.til`))
     const { rects, width, height } = packTiles(group)
     const til = IniDocument.parse("")
     let tile = 0

@@ -10,7 +10,7 @@
 // - labels in the TextStyle the key's FG_STYLE names, placed in FG_STYLE's LABEL_POSITION and, when
 //   MINOR_LABEL_VISIBLE is on, the nine-key digit in MINOR_LABEL_POSITION.
 
-import { AtlasResolver, canvasFontFamily, loadEmbeddedFont, pngBitmap, type Visual } from "../atlas.ts"
+import { AtlasResolver, canvasFontFamily, loadEmbeddedFont, pngBitmap, type Visual, type ToolbarVisual } from "../atlas.ts"
 import type { IniDocument } from "../ini.ts"
 import { argbColor, imageAt, sceneKey, tintedVisual, type NativeScene, type SceneKey, type SceneLayer, type SceneText } from "../native-scene.ts"
 import { offsetFromSection, parseOffset, parseRect, type Rect } from "../preview-items.ts"
@@ -61,6 +61,21 @@ export class SsfStyles {
       ? [stretch[0], stretch[2], stretch[1] - stretch[0], stretch[3] - stretch[2]] as [number, number, number, number]
       : undefined
     return { image: bitmap, source: [0, 0, bitmap.width, bitmap.height], ...inner ? { inner } : {} }
+  }
+
+  /** 原生固定文件名；缺图时只展示默认图标，确认更换才写入资源。 */
+  async toolbarImages(): Promise<ToolbarVisual[]> {
+    const icons = [
+      ["logo.png", "菜单", "menu"], ["ime_function_expression.png", "表情", "smile"],
+      ["ime_function_switch.png", "键盘类型", "keyboard"], ["ime_function_voice.png", "语音输入", "mic"],
+      ["ime_function_sousou.png", "搜索", "search"], ["ime_function_fanlingxi.png", "灵犀", "sparkles"],
+      ["ime_function_textedit.png", "移动光标", "arrow-left-right"], ["ime_function_clipboard.png", "剪贴板", "clipboard-paste"],
+      ["close.png", "收起键盘", "chevron-down"],
+    ]
+    return Promise.all(icons.map(async ([name, label, defaultIcon]) => {
+      const file = name === "logo.png" && !this.pkg.file(this.theme, name) && this.pkg.file(this.theme, "ime_function_multimedia.png") ? "ime_function_multimedia.png" : name
+      return { ...await this.file(file), imagePath: this.pkg.path(this.theme, file) ?? `${this.pkg.folder(this.theme)}${file}`, label, defaultIcon }
+    }))
   }
 
   async image(value: string | undefined): Promise<Visual | undefined> {

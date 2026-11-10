@@ -14,6 +14,13 @@ import { asObject, type JsonObject } from "./sxi-ini.ts"
 // What shows through a transparent skin: the Palm keyboard's own backdrop, sampled from Palm previews.
 const BACKDROP: Record<PalmTheme, string> = { default: "#d0d3d9", night: "#212121" }
 
+/** `rect` scaled down (never up) and centred inside `box`: Palm's fit for a candidate-bar icon with no `f_size`. */
+function contain(rect: Rect, box: Rect): Rect {
+  const scale = Math.min(1, box.width / rect.width, box.height / rect.height)
+  const width = rect.width * scale
+  const height = rect.height * scale
+  return { x: box.x + (box.width - width) / 2, y: box.y + (box.height - height) / 2, width, height }
+}
 async function keyLayers(styles: PalmStyles, board: PalmBoard, base: PalmBase, rect: Rect, pressed: boolean): Promise<SceneLayers> {
   const fore: SceneLayer[] = []
   const groups: number[] = []
@@ -69,12 +76,15 @@ export function palmHint(model: JsonObject): LegacyHint | undefined {
     const insets = asObject(icon.insets ?? null) ?? {}
     const inset = (side: string) => typeof insets[side] === "number" ? insets[side] as number : 0
     const base = baseOf(icon)
+    const cellSize = numbers(icon.c_size ?? null)
     icons.set(id, {
       backStyle: base.back === undefined ? "" : String(base.back),
       foreStyle: base.fores.map(String).join(","),
       size: [size[0], size[1]],
       position: position?.length === 2 ? [position[0], position[1]] : [0, 0],
       padding: [inset("left"), inset("top"), inset("right"), inset("bottom")],
+      ...icon.i_cell === undefined ? {} : { cellStyle: String(icon.i_cell) },
+      ...cellSize?.length === 2 ? { cellSize: [cellSize[0], cellSize[1]] as const } : {},
     })
   }
   if (!icons.size) return
@@ -85,6 +95,7 @@ export function palmHint(model: JsonObject): LegacyHint | undefined {
   }
   return {
     icons,
+    defaultCandidates: true,
     holdIcon: slots.get(0),
     barIcon: slots.get(1),
     upIcon: slots.get(2),
@@ -97,7 +108,8 @@ export function palmHint(model: JsonObject): LegacyHint | undefined {
 
 /**
  * The candidate bar of a board: its backdrop and icons. The switch container (F14) holds the toolbar
- * functions, evenly spaced and only ever shrunk.
+ * functions at their bitmap size, shrunk by slot width. Android ignores F14's height; Baidu exports
+ * therefore resize the menu bitmaps to the authored height before packaging them.
  */
 export async function palmCandidateScene(board: PalmBoard, styles: PalmStyles, state: number | undefined): Promise<{ bar: SceneLayer[]; icons: NativeScene }> {
   const size = board.candidateSize
@@ -110,7 +122,7 @@ export async function palmCandidateScene(board: PalmBoard, styles: PalmStyles, s
         const slot = rect.width / Math.max(1, images.length)
         return { back: [], fore: images.map((visual, at) => {
           const [, , width, height] = visual.source!
-          const scale = Math.min(1, slot / width, rect.height / height)
+          const scale = Math.min(1, slot / width)
           return { kind: "image", visual, rect: {
             x: rect.x + at * slot + (slot - width * scale) / 2,
             y: rect.y + (rect.height - height * scale) / 2,
@@ -124,10 +136,15 @@ export async function palmCandidateScene(board: PalmBoard, styles: PalmStyles, s
       const fore: SceneLayer[] = []
       for (const id of base.fores) {
         const layer = await styles.fore(id, pressed, rect, undefined)
-        if (!layer) continue
-        fore.push(fixed && layer.kind === "image"
-          ? { ...layer, rect: { x: rect.x + (rect.width - fixed[0]) / 2, y: rect.y + (rect.height - fixed[1]) / 2, width: fixed[0], height: fixed[1] } }
-          : layer)
+        if (!layer || layer.kind !== "image") {
+          if (layer) fore.push(layer)
+          continue
+        }
+        // `f_size` pins the icon; without it Palm fits the art into the icon's own box instead of drawing
+        // it at its natural size (a bigger Baidu tile then overflows the bar and gets clipped).
+        fore.push({ ...layer, rect: fixed
+          ? { x: rect.x + (rect.width - fixed[0]) / 2, y: rect.y + (rect.height - fixed[1]) / 2, width: fixed[0], height: fixed[1] }
+          : contain(layer.rect, rect) })
       }
       return { back: base.back === undefined ? [] : await styles.back(base.back, pressed, rect), fore }
     })
@@ -161,6 +178,14 @@ async function builtInToolbar(board: PalmBoard, styles: PalmStyles): Promise<Sce
     await image.decode()
     const bitmap = await createImageBitmap(image)
     return { kind: "image", visual: { image: bitmap, source: [0, 0, bitmap.width, bitmap.height] }, rect: { x: x - side / 2, y: (size.height - side) / 2, width: side, height: side } }
+  }
+  if ((await styles.toolbarImages()).length) {
+    const images = await styles.toolbarImages(false, true)
+    return Promise.all(images.map((visual, index) => {
+      const x = size.width * (index + 0.5) / images.length
+      if (!visual.image) return icon(visual.defaultIcon ?? "image-off", x)
+      return { kind: "image", visual, rect: contain({ x: 0, y: 0, width: visual.source![2], height: visual.source![3] }, { x: x - slot / 2, y: 0, width: slot, height: size.height }) } as SceneLayer
+    }))
   }
   return Promise.all([...BUILT_IN_TOOLBAR.map((name, index) => icon(name, slot * (index + 0.5))), icon("chevron-down", size.width - slot / 2)])
 }

@@ -5,6 +5,7 @@ import { isTouchLongPress } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { isAdditiveSelection } from "./preview-items.ts"
 import { snapRectDelta } from "./layout.ts"
+import { legacyHintCandidates, legacyHintHasHold, legacyHintSelectedIndex } from "./preview-hints.ts"
 
 export function pointerDown(self: Preview, event: PointerEvent): void {
   if (self.pointerInteractionLocked || event.button !== 0) return
@@ -91,7 +92,7 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
     holdTriggered: false,
     direction: "center",
   }
-  if (self.active.clearOnHold || key.hold || key.holdSymbols || self.bdaHints) {
+  if (self.active.clearOnHold || legacyHintHasHold(key, self.longHint ?? self.shortHint, Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))) {
     const active = self.active
     active.holdTimer = window.setTimeout(() => {
       if (self.active !== active) return
@@ -110,11 +111,21 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
 export function pointerMove(self: Preview, event: PointerEvent): void {
   if (self.active && event.pointerId === self.active.pointerId) {
     const point = self.point(event)
+    if (self.active.direction === "hold" && self.active.hintCellWidth && !self.active.clearOnHold) {
+      const candidates = legacyHintCandidates(self.active.key, "hold", Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))
+      const index = Math.max(0, Math.min(candidates.length - 1, legacyHintSelectedIndex(self.active.key, candidates)
+        + Math.round((point.x - self.active.startX) / self.active.hintCellWidth)))
+      if (self.active.hintIndex !== index) {
+        self.active.hintIndex = index
+        void self.draw()
+      }
+      return
+    }
     const direction = gestureDirection(
       point.x - self.active.startX,
       point.y - self.active.startY,
       Date.now() - self.active.startedAt,
-      Boolean(self.active.key.hold || self.active.key.holdSymbols) || self.active.clearOnHold || self.bdaHints,
+      legacyHintHasHold(self.active.key, self.longHint ?? self.shortHint, Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates)) || self.active.clearOnHold,
     )
     if (direction !== self.active.direction) {
       self.active.direction = direction
@@ -207,18 +218,20 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
   const dx = point.x - startX
   const dy = point.y - startY
   const clearOnHold = key.center.trim() === "F36"
-  const direction = gestureDirection(
+  const direction = active.direction === "hold" && active.hintCellWidth ? "hold" : gestureDirection(
     dx,
     dy,
     Date.now() - startedAt,
-    Boolean(key.hold || key.holdSymbols) || clearOnHold || self.bdaHints,
+    legacyHintHasHold(key, self.longHint ?? self.shortHint, Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates)) || clearOnHold,
   )
-  const code = direction === "hold" && clearOnHold ? "F48" : key[direction]
+  const candidates = direction === "hold" ? legacyHintCandidates(key, "hold", Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates)) : []
+  const index = active.hintIndex ?? legacyHintSelectedIndex(key, candidates)
+  const code = direction === "hold" && clearOnHold ? "F48" : direction === "hold" && candidates.length ? candidates[index] : key[direction]
   self.onEvent({
     section: key.section,
     direction,
     code,
-    holdSymbols: direction === "hold" ? key.holdSymbols : undefined,
+    holdSymbols: direction === "hold" && !active.hintCellWidth ? key.holdSymbols : undefined,
   })
   const release = () => {
     if (self.active !== active) return

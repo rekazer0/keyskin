@@ -243,7 +243,7 @@ function translatedSectionLabel(section: string): string {
 }
 
 function isHiddenConfigEntry(section: string, key: string, showTips = false): boolean {
-  if (/^OFFSET\d*$/i.test(section) || /^OFFSET(?:_|\d|$)/i.test(key)) return true
+  if (/^(?:MORE|OFFSET)\d*$/i.test(section) || /^OFFSET(?:_|\d|$)/i.test(key)) return true
   return !showTips && (/^TIP\d*$/i.test(section) || /^TIP(?:_|\d|$)/i.test(key))
 }
 
@@ -278,11 +278,11 @@ export function populateDocumentInspector(): void {
       specialized.add(`${key ? section : "CAND"}\u0000${key || section}`)
     }
   }
-  // 整体布局（选中当前布局、没选按键）只展开这个布局自己的分组：候选栏、输入区、更多面板等
-  // 各自有入口，选中对应区域或文件时才出现，不在每个布局里重复一遍。
+  // 整体布局（选中当前布局、没选按键）不重复展开候选栏和输入区。
   const overallLayout = appState.selectedPath === appState.layoutPath
   const entries = baiduInspectorEntries(appState.selectedDocument, appState.selectedPath, overallLayout).filter((entry) =>
     !/^KEY\d+$/.test(entry.section) &&
+    (/\.pop$/i.test(appState.selectedPath) || !/^ICON\d+$/i.test(entry.section) || toolbarSections.has(entry.section)) &&
     !isHiddenConfigEntry(entry.section, entry.key, isToolbarPath(appState.selectedPath)) &&
     (!toolbarSections.size || toolbarSections.has(entry.section)) &&
     !specialized.has(`${entry.section}\u0000${entry.key}`),
@@ -358,7 +358,9 @@ export function populateDocumentInspector(): void {
   }
   for (const sectionName of [...new Set(entries.map((entry) => entry.section))]) {
     const sectionEntries = entries.filter((item) => item.section === sectionName)
-    const title = sectionName ? translatedSectionLabel(sectionName).replace(/\s*[（(][^）)]*[）)]\s*$/, "") : "基本信息"
+    const title = /\.pop$/i.test(appState.selectedPath) && /^ICON\d+$/i.test(sectionName)
+      ? `气泡图案 ${sectionName.slice(4)}`
+      : sectionName ? translatedSectionLabel(sectionName).replace(/\s*[（(][^）)]*[）)]\s*$/, "") : "基本信息"
     documentFields.append(section(title, sectionEntries.filter((entry) => !layoutAnimationFields.has(entry.key)).flatMap(renderEntry), {
       code: sectionName && title !== sectionName ? sectionName : undefined,
     }))

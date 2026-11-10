@@ -72,15 +72,20 @@
 .ui-dialog-header { display: flex; align-items: flex-start; gap: var(--space-md); }
 .ui-dialog-header > div { flex: 1; min-width: 0; }
 .ui-dialog-header h2 { margin: 0 0 var(--space-xs); font-size: var(--font-size-lg); font-weight: 600; line-height: 1.5; }
-.ui-dialog-header p { margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-line; }
+.ui-dialog-header p, .ui-dialog[data-variant="ask"] .ui-dialog-body > p { margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-line; }
 .ui-dialog-header > .ui-icon-button { flex: none; margin: calc(var(--space-xs) * -1) calc(var(--space-xs) * -1) 0 0; }
 .ui-dialog-body { display: grid; gap: var(--space-md); min-height: 0; }
+.ui-dialog-body[hidden] { display: none; }
 .ui-dialog-footer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-sm); padding-top: var(--space-lg); border-top: 1px solid var(--line-soft); }
 .ui-dialog-status { flex: 1; min-width: 0; color: var(--secondary); font-size: var(--font-size-xs); }
 .ui-dialog-footer > .ui-button { flex-shrink: 0; min-width: 64px; }
+.ui-dialog:is([data-variant="ask"], [data-variant="operation"]) { max-height: none; overflow: hidden; }
+.ui-dialog:is([data-variant="ask"], [data-variant="operation"]) > form { display: flex; flex-direction: column; max-height: min(var(--dialog-max-height), calc(var(--viewport-height) - var(--space-2xl))); }
+.ui-dialog:is([data-variant="ask"], [data-variant="operation"]) :is(.ui-dialog-header, .ui-dialog-footer, .ui-dialog-meter) { flex-shrink: 0; }
+.ui-dialog:is([data-variant="ask"], [data-variant="operation"]) .ui-dialog-body { overflow-y: auto; overscroll-behavior: contain; }
 @keyframes ui-dialog-in { from { opacity: 0; transform: scale(0.98); } }
 @keyframes ui-fade-in { from { opacity: 0; } }
-/* 文件操作（data-variant="operation"）：只给长进度与失败，状态由 data-outcome 表示；成功 / 取消只写状态栏 */
+/* 文件操作（data-variant="operation"）：进度、降级确认、结果共用同一个窗口 */
 .ui-dialog-icon {
   display: grid;
   place-items: center;
@@ -94,7 +99,7 @@
 .ui-dialog[data-outcome="error"] .ui-dialog-icon { background: color-mix(in srgb, var(--state-danger) 12%, transparent); color: var(--state-danger); }
 .ui-dialog[data-outcome="error"] #file-operation-result { color: var(--state-danger); }
 .ui-dialog[data-variant="operation"]:not([data-outcome="progress"]) .ui-dialog-meter { display: none; }
-.ui-dialog[data-variant="operation"] > form > p { margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.6; overflow-wrap: anywhere; }
+.ui-dialog[data-variant="operation"] > form > p { margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.6; overflow-wrap: anywhere; white-space: pre-line; }
 .ui-dialog-progress-label { display: flex; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-sm); color: var(--secondary); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .ui-dialog-meter > progress { display: block; width: 100%; height: 6px; overflow: hidden; border: 0; border-radius: var(--radius-full); background: var(--control); accent-color: var(--accent); }
 .ui-dialog-meter > progress::-webkit-progress-bar { background: var(--control); }
@@ -336,7 +341,7 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 .ui-field > :first-child { color: var(--secondary); font-size: var(--font-size-sm); }
 .ui-field[data-stack] { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
 .ui-field-pair { display: grid; grid-template-columns: repeat(var(--_columns, 2), minmax(0, 1fr)); gap: var(--space-sm); }
-.ui-field-pair[hidden], .ui-field[hidden] { display: none; }
+.ui-field-pair[hidden], .ui-field[hidden], .ui-field > [hidden] { display: none; }
 .ui-field-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
 .ui-field-note:empty { display: none; }
 .ui-field-error { margin: 0; color: var(--state-danger); font-size: var(--font-size-xs); }
@@ -613,6 +618,20 @@ body {
 .ui-style-card > .ui-list-item-meta { min-width: 0; min-height: var(--control-height-sm); }
 .ui-style-card > .ui-field-note { margin: 0; }
 .ui-style-filters { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+/* —— 检查器的工具栏图标：方形预览，下方功能名，整张按钮更换图片 —— */
+.ui-toolbar-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--toolbar-icon-card-width)), 1fr)); align-items: start; gap: var(--space-sm); min-width: 0; }
+.ui-toolbar-icon { display: grid; gap: var(--space-xs); min-width: 0; padding: 0; border: 0; background: none; color: var(--secondary); font: inherit; font-size: var(--font-size-xs); cursor: default; border-radius: var(--radius-lg); transition: color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard); }
+.ui-toolbar-icon-preview { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; box-sizing: border-box; padding: var(--space-md); overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); }
+.ui-toolbar-icon-preview::after { content: ""; position: absolute; inset: 0; background: transparent; transition: background-color var(--duration-fast) var(--ease-standard); }
+.ui-toolbar-icon-preview > canvas { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+.ui-toolbar-icon-label { overflow-wrap: anywhere; text-align: center; }
+@media (hover: hover) { .ui-toolbar-icon:enabled:hover { color: var(--text); } .ui-toolbar-icon:enabled:hover > .ui-toolbar-icon-preview::after { background: var(--hover); } }
+.ui-toolbar-icon:enabled:active { transform: scale(0.99); }
+.ui-toolbar-icon:enabled:active > .ui-toolbar-icon-preview::after { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.ui-toolbar-icon:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+.ui-form[data-readonly="true"] .ui-toolbar-icon:disabled { opacity: 1; pointer-events: auto; }
+.ui-toolbar-icon > span { pointer-events: none; }
+
 /* —— 样式引用卡（检查器，styleReferenceCard()）：左侧可输入的编号与类型图标，右侧正常 | 按下两格预览或单格内容 —— */
 .ui-style-ref-list { display: grid; gap: var(--space-xs); min-width: 0; }
 .ui-style-ref-list > input { display: none; }
@@ -627,14 +646,9 @@ body {
 .ui-style-ref .ui-style-state { place-items: center; padding: var(--space-2xs); overflow: hidden; border-radius: var(--radius-md); color: var(--tertiary); font-size: var(--font-size-xs); transition: background-color var(--duration-fast) var(--ease-standard); }
 .ui-style-ref .ui-style-state > :is(canvas, .ui-animation-player) { width: 100%; height: 100%; }
 .ui-style-ref .ui-style-state > .ui-style-sound { width: 100%; box-sizing: border-box; }
-.ui-style-ref-empty { display: grid; place-items: center; height: 100%; border-radius: var(--radius-md); color: var(--tertiary); transition: background-color var(--duration-fast) var(--ease-standard); }
-@media (hover: hover) { .ui-style-ref :is(.ui-style-state, .ui-style-ref-empty)[tabindex="0"]:hover { background: var(--hover); } }
-.ui-style-ref :is(.ui-style-state, .ui-style-ref-empty)[tabindex="0"]:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
-.ui-style-ref :is(.ui-style-state, .ui-style-ref-empty):focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--accent); }
-/* 没有引用：与已绑定的卡同高的虚线卡，编号仍可直接输入 */
-.ui-style-ref[data-variant="empty"] { border-style: dashed; border-color: var(--line); background: none; }
-.ui-style-ref[data-variant="empty"] > .ui-style-ref-meta { border-right: 0; }
-.ui-style-ref[data-variant="empty"] > .ui-style-ref-meta > input { font-size: var(--font-size-sm); }
+@media (hover: hover) { .ui-style-ref .ui-style-state[tabindex="0"]:hover { background: var(--hover); } }
+.ui-style-ref .ui-style-state[tabindex="0"]:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.ui-style-ref .ui-style-state:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--accent); }
 /* 移除条（removeStrip()）：样式卡、样式引用卡右边缘叠一条窄的 trash-2 区，不占布局；鼠标不在卡片上时连背景一起隐藏，
    悬停卡片时半透明出现，悬停自身时加宽并变为实色红底（触屏常显）。被引用时禁用（不变红）。 */
 .ui-style-card { position: relative; }

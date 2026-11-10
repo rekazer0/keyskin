@@ -16,6 +16,8 @@ import { isEditing } from "./edit-history"
 import { palmStylePointer } from "./sxi-styles"
 import { populateSxiAnimationInspector, sxiAnimationInspectorTitle } from "./sxi-animation-inspector"
 
+import { toolbarIconSection } from "./toolbar-icon-inspector"
+
 // Board parts a canvas selection can stand for, by the section the renderer gives them.
 const PART_SECTIONS: Record<string, string> = {
   PANEL: "board", GLOBAL: "comm", INPUT: "input", CAND: "cand", HINT: "hint", LOGO: "logo", EMOJI: "emoji",
@@ -162,7 +164,13 @@ export function populateSxiInspector(container: HTMLElement): boolean {
     : selected.kind === "board"
       ? modelGroups(selected.board, asObject(sxiValue(skin, selected.board)) ?? {}, "键盘", ["keys", "type"])
       : modelGroups(selected.pointer, asObject(sxiValue(skin, selected.pointer)) ?? {}, partTitle(selected.pointer))
+  if (selected.kind === "part" && selected.pointer[2] === "h") {
+    const icons = asObject(sxiValue(skin, [...selected.pointer, "icon_info"])) ?? {}
+    const text = textBlocks(skin, Object.keys(icons).map((id) => [...selected.pointer, "icon_info", id]))
+    if (text.length) groups.push(renderSxiGroup("气泡文字", text))
+  }
   container.append(...groups.filter((group): group is HTMLElement => Boolean(group)))
+  if (selected.kind === "part" && selected.pointer[2] === "c") container.append(toolbarIconSection())
   container.dataset.path = appState.selectedPath
   return container.childElementCount > 0
 }

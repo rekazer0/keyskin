@@ -30,3 +30,15 @@ test('cached parses are isolated from each other', () => {
   assert.equal(second.toString(), SOURCE)
   assert.ok(!first.sections().includes('MUTATED'))
 })
+
+test('section set stays valid across appends and structural edits', () => {
+  const document = IniDocument.parse(SOURCE)
+  assert.equal(document.hasSection('KEY3'), true)
+  assert.equal(document.hasSection('KEY9'), false)
+  document.appendSection('KEY9', [{ key: 'X', value: '9' }])
+  assert.equal(document.hasSection('KEY9'), true, 'appended sections join the cached set')
+  assert.equal(document.sectionSet().has('KEY1'), true)
+  document.removeSections(['KEY9'])
+  assert.equal(document.hasSection('KEY9'), false, 'removed sections leave the cached set')
+  assert.equal(document.hasSection('KEY3'), true)
+})

@@ -52,6 +52,10 @@ try {
   ready.catch(() => {})
   if (await Promise.race([pending, ready]) === 'tap') await tap.click()
   const exported = SkinArchive.open(readFileSync(await (await pending).path()), 'bdi')
+  await page.waitForFunction(() => !document.querySelector('#open').disabled)
+  assert.equal(await page.locator('#file-operation-dialog').isVisible(), true)
+  assert.equal(await page.locator('#file-operation-progress').evaluate(meter => meter.value), 100)
+  assert.match(await page.locator('#file-operation-result').textContent(), /文件：backgrounds.bdi\n保存位置：浏览器下载目录（以浏览器设置为准）/)
   assert.deepEqual(await page.evaluate(() => window.exportDialogTitles), [], 'export completes without an adjustment dialog, including text-logo warnings')
   for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
     const path = `${theme}/skin/${orientation}/`

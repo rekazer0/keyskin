@@ -21,6 +21,70 @@ function convert(files, format = 'bdi') {
   return { ...result, archive, skin: parseSkinJson(archive.getText('skin.json')) }
 }
 
+test('English enter fills the hidden redundant suggestion key and keeps its language-key gesture', () => {
+  const files = {}
+  const image = encodePng({ width: 8, height: 8, data: new Uint8Array(8 * 8 * 4).fill(255) })
+  const layout = [
+    '[KEY1]', 'VIEW_RECT=0,0,60,20', 'CENTER=F15', 'UP=F25',
+    '[KEY2]', 'VIEW_RECT=60,0,10,20', 'CENTER=F25',
+    '[KEY3]', 'VIEW_RECT=70,0,30,20', 'TOUCH_RECT=70,0,30,20', 'CENTER=F39', 'UP=F76', 'BACK_STYLE=1',
+    '[KEY4]', 'VIEW_RECT=68,0,34,22', 'BACK_STYLE=1',
+  ].join('\n')
+  for (const theme of ['light', 'dark']) {
+    files[`${theme}/skin/res/default.css`] = '[STYLE1]\nNM_IMG=key,1\n'
+    files[`${theme}/skin/res/key.png`] = image
+    files[`${theme}/skin/res/key.til`] = '[IMG1]\nSOURCE_RECT=0,0,8,8\nINNER_RECT=2,2,4,4\n'
+    for (const orientation of ['port', 'land']) {
+      files[`${theme}/skin/${orientation}/gen.ini`] = '[PANEL]\nSIZE=100,20\n'
+      for (const name of ['en_26', 'en_26s', 'py_26']) files[`${theme}/skin/${orientation}/${name}.ini`] = layout
+    }
+  }
+  const { skin, archive } = convert(files, 'bds')
+  for (const theme of ['default', 'night']) for (const orientation of ['port', 'land']) {
+    const boards = skin[theme][`${orientation}_layout`].b
+    for (const type of ['full26EnglishLower', 'full26EnglishUpper']) {
+      const keys = boards[type].keys
+      assert.equal(keys.length, 3)
+      const enter = keys.find((key) => key.id === '3')
+      assert.deepEqual(enter.rect, [[60, 0], [40, 20]])
+      assert.deepEqual(enter.hit_rect, [[60, 0], [40, 20]])
+      assert.deepEqual(enter.values, [0, 'startClipboardBoard', 4, 'enter'])
+      assert.deepEqual(keys.find((key) => key.id === '1').values, [0, 'toggleLettersSuggestions', 4, 'switchToChinese'])
+      assert.deepEqual(keys.find((key) => key.id === '4').rect, [[58, 0], [44, 22]])
+      const [name] = skin[theme].s_info.ss_1[enter.b.base_b].s_2.normal.split(',')
+      const png = decodePng(archive.getBytes(`${theme === 'night' ? 'dark' : 'light'}/skin/res/${name}.png`))
+      assert.deepEqual([png.width, png.height], [40, 20], 'background is baked after the key grows')
+    }
+    assert.deepEqual(boards.full26Pinyin.keys.find((key) => key.id === '3').rect, [[70, 0], [30, 20]])
+  }
+  const noAlternative = convert({
+    'light/skin/port/gen.ini': '[PANEL]\nSIZE=100,20\n',
+    'light/skin/port/en_26.ini': layout.replace('UP=F25\n', ''),
+  }, 'bds').skin.default.port_layout.b.full26EnglishLower
+  assert.equal(noAlternative.keys.length, 4, 'a unique suggestion action is never removed')
+  for (const extra of ['UP=F76', 'STAT_STYLE=S4_1\n[TIP1]\nCENTER=F76']) {
+    const withUniqueAction = convert({
+      'light/skin/port/gen.ini': '[PANEL]\nSIZE=100,20\n',
+      'light/skin/port/en_26.ini': layout.replace('CENTER=F25\n', `CENTER=F25\n${extra}\n`),
+    }, 'bds').skin.default.port_layout.b.full26EnglishLower
+    assert.equal(withUniqueAction.keys.length, 4, 'other gestures and conditional actions are never discarded')
+  }
+})
+
+test('custom panel jumps report the Android limitation once while preserving their source actions', () => {
+  const files = {}
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    files[`${theme}/skin/${orientation}/gen.ini`] = '[PANEL]\nSIZE=100,100\n'
+    files[`${theme}/skin/${orientation}/py_9.ini`] = '[KEY1]\nVIEW_RECT=0,0,20,20\nCENTER=y\nDOWN=Z+9tool4\nSTAT_STYLE=S4_1\n[TIP1]\nDOWN=Z+9tool4\n'
+    files[`${theme}/skin/${orientation}/9tool4.ini`] = '[KEY1]\nVIEW_RECT=0,0,20,20\nCENTER=1\n'
+  }
+  const { skin, warnings } = convert(files, 'bds')
+  assert.equal(warnings.filter((warning) => warning.includes('Z+')).length, 1)
+  assert.match(warnings[0], /手心 Android.*无法在 Android 调起/)
+  assert.deepEqual(skin.default.port_layout.b.t9Pinyin.keys[0].values, [1, 'Z+9tool4', 4, 'y'])
+  assert.ok(skin.default.port_layout.b['9tool4'], 'unsupported Android routing does not destroy the authored panel')
+})
+
 test('Baidu toolbar preserves its authored region while fitting oversized edge hit boxes (issue 30)', () => {
   const image = encodePng({ width: 80, height: 80, data: new Uint8Array(80 * 80 * 4).fill(255) })
   const files = {}
@@ -32,7 +96,7 @@ test('Baidu toolbar preserves its authored region while fitting oversized edge h
     for (const orientation of ['port', 'land']) {
       files[`${theme}/skin/${orientation}/gen.ini`] = '[PANEL]\nSIZE=1125,592\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1125,124\n'
       files[`${theme}/skin/${orientation}/cand1.cnd`] = [
-        '[CAND]', 'BACK_STYLE=1101',
+        '[CAND]', 'BACK_STYLE=1101', 'CELL_W=62',
         '[ICON1]', 'FORE_STYLE=1301', 'SIZE=229,186', 'ANCHOR_TYPE=1', 'POS=0,20', 'KEY=F31', 'PERSIST=1', 'FIX_SIZE=50,52',
         '[ICON2]', 'SIZE=229,186', 'ANCHOR_TYPE=3', 'POS=-229,0', 'KEY=F8', 'PERSIST=1', 'FIX_SIZE=50,52',
         '[ICON3]', 'SIZE=105,104', 'ANCHOR_TYPE=3', 'POS=-105,20', 'KEY=F9', 'PERSIST=2',
@@ -49,18 +113,22 @@ test('Baidu toolbar preserves its authored region while fitting oversized edge h
       assert.ok(rect.y >= 0 && rect.y + rect.height <= 124)
       if (fixed) assert.ok(fixed[1] <= rect.height && fixed[0] <= rect.width)
     }
-    assert.deepEqual(icons[2].rect, { x: 1020, y: 20, width: 105, height: 104 }, 'valid icon placement is preserved')
-    assert.deepEqual(icons[3].rect, { x: 172.5, y: 33, width: 780, height: 58 }, 'F14 retains its authored size and centres in the Palm bar, independent of artwork size')
-    assert.equal(icons[0].rect.width, 160, 'Palm native function slots use a safe logo width')
-    assert.equal(icons[1].rect.width, 160, 'hide key fits the last native toolbar slot')
-    assert.deepEqual(skin[theme][`${orientation}_layout`].c.cand1.icon_list.map((icon) => icon.keep), [1, 1, 2, 1])
+    const models = skin[theme][`${orientation}_layout`].c.cand1.icon_list
+    assert.deepEqual(models.map((icon) => icon.k), ['logoMenu', 'switchContainer', 'hideBoard', 'moreCandidates'])
+    const byAction = Object.fromEntries(models.map((icon, index) => [icon.k, icons[index]]))
+    assert.deepEqual(byAction.moreCandidates.rect, { x: 1020, y: 20, width: 105, height: 104 }, 'valid icon placement is preserved')
+    assert.deepEqual(byAction.switchContainer.rect, { x: 172.5, y: 33, width: 780, height: 58 }, 'F14 retains its authored size and centres in the Palm bar, independent of artwork size')
+    assert.equal(byAction.logoMenu.rect.width, 129, 'logo width includes room for the CELL_W/2 Android adds to each native slot')
+    assert.equal(byAction.hideBoard.rect.width, 129, 'hide key fits the last native toolbar slot')
+    assert.ok(7 * (byAction.logoMenu.rect.width + 62 / 2) <= 1125, 'native slots cannot crowd out the final function')
+    assert.deepEqual(models.map((icon) => icon.keep), [1, 1, 1, 2])
   }
-  // 百度 iOS 只给 iphone@3x 的 80×80；手心按设备分三种后缀，真机皮肤里三张图都是 88×88。
+  // Android ignores F14's height, so all device images must fit its authored 58px region themselves.
   for (const suffix of ['_ipad.png', '_ipad@2x.png', '_iphone@3x.png']) {
     const bytes = archive.getBytes(`light/skin/res/logo/1.0/keyboard${suffix}`)
     assert.ok(bytes, `图标补齐了 ${suffix}`)
     const size = decodePng(bytes)
-    assert.deepEqual([size.width, size.height], [88, 88])
+    assert.deepEqual([size.width, size.height], [58, 58])
   }
 })
 
@@ -126,13 +194,34 @@ test('valid anchored icons and layouts without candidate geometry are preserved'
       'light/port/gen.ini': `[PANEL]\nSIZE=500,300\n[CAND]\nLAYOUT_NAME=cand1\n${rect}`,
       'light/port/cand1.cnd': icons,
     })
-    const icon = skin.default.port_layout.c.cand1.icon_list[0]
+    const models = skin.default.port_layout.c.cand1.icon_list
+    const icon = models.find((icon) => icon.k === 'hideBoard')
     assert.deepEqual(icon.s, [40, 40])
     assert.deepEqual(icon.p, [-40, -40])
     assert.deepEqual(icon.f_size, [10, 10])
-    const toolbar = skin.default.port_layout.c.cand1.icon_list[1]
+    const toolbar = models.find((icon) => icon.k === 'switchContainer')
     assert.deepEqual(toolbar.s, [100, 40])
     assert.deepEqual(toolbar.p, [-50, 18], "a toolbar without oversized hit boxes keeps its authored placement")
+  }
+})
+
+test('Baidu candidate words stay centred without changing horizontal padding or the separate input row', () => {
+  const files = {}
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    files[`${theme}/skin/${orientation}/gen.ini`] = '[PANEL]\nSIZE=1125,592\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1125,151\nPADDING=0,45,0,0\n'
+    files[`${theme}/skin/${orientation}/py_9.ini`] = '[INPUT]\n[CAND]\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=q\n'
+    files[`${theme}/skin/${orientation}/cand1.cnd`] = '[CAND]\nPADDING=8,25,105,4\nFORE_STYLE=1\nFIRST_FORE=2\nFIRST_GAP=4\nCELL_W=62\n[ICON1]\nSIZE=105,89\nANCHOR_TYPE=3\nPOS=-105,17\nKEY=F9\nPERSIST=2\n'
+  }
+  const { skin } = convert(files, 'bds')
+  for (const theme of ['default', 'night']) for (const orientation of ['port', 'land']) {
+    const layout = skin[theme][`${orientation}_layout`]
+    const cand = layout.c.cand1
+    assert.deepEqual(cand.insets, { left: 8, top: 0, right: 105, bottom: 0 })
+    assert.equal(layout.b.defaultGlobal.cand.insets.top, 45, 'the input-code row is kept')
+    assert.deepEqual([cand.i_cand, cand.i_f_f, cand.f_gap, cand.gap], [1, 2, 4, 62])
+    const board = new PalmBoard(skin, theme, orientation, 't9Pinyin')
+    assert.deepEqual(board.candidateSize, { width: 1125, height: 106 })
+    assert.deepEqual(board.icons(undefined, true)[0].rect, { x: 1020, y: 17, width: 105, height: 89 })
   }
 })
 

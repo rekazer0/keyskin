@@ -1,6 +1,7 @@
 import { IniDocument } from "../ini.ts"
 import { resolveStylePropertyLayers, textStyleSections } from "../style-properties.ts"
 import { appState } from "./state"
+import { cachedIniDocument } from "./style-document"
 import { styleConfigPath, effectiveKeyValue, isSkinInfoPath, isToolbarPath, effectiveToolbarSections, currentSkinState, genConfigPath, keyboardContext, listGeometryDocument, effectiveKeySection, setSourceValue } from "./config-context"
 import { isListCell, listCellValue, setListCellValue } from "../layout.ts"
 import { type BdaStyleRef, bdaStyleRef, type BdaAppearance } from "../bda.ts"
@@ -330,9 +331,7 @@ export function populateKeyInspector(): void {
     field.disabled = !skinSelected || !isEditing()
     syncSkinConfigControl(field)
   }
-  const general = appState.archive?.isText(genConfigPath())
-    ? IniDocument.parse(appState.archive.getText(genConfigPath()))
-    : undefined
+  const general = cachedIniDocument(genConfigPath())
   const toolbarGen = toolbarSelected ? general : undefined
   for (const field of toolbarFields) {
     const [section, key] = (field.dataset.toolbarField ?? "").split(".")

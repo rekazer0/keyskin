@@ -14,7 +14,7 @@ import { legacyAnimationConfigPath, setSourceValue } from "./config-context"
 import { tileSlices } from "../tiles.ts"
 import { updateSourceHighlight } from "./source-panel"
 import { populateTileInspector, drawAtlas, loadTiles } from "./tile-editing"
-import { refreshPreview } from "./preview-render"
+import { refreshPreview, syncCandidateSelection } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
 import { renderFiles } from "./file-tree"
 import { isBdaAppearancePartPath, refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
@@ -158,6 +158,7 @@ function refreshSnapshotViews(): void {
 }
 
 function refreshHistorySelection(): void {
+  const candidate = appState.selectedCandidate
   const path = appState.selectedResourcePath
   const index = appState.selectedTileIndex
   const resourceMode = appState.resourceConfigActive ? appState.resourceInspectorMode : "document"
@@ -177,6 +178,11 @@ function refreshHistorySelection(): void {
     sxiPointer(appState.selectedPath) || isSsfBoardPath(appState.selectedPath)
   )) {
     selectFile(appState.selectedPath, appState.sidebarView, resourceMode)
+  }
+  if (candidate) {
+    appState.selectedCandidate = true
+    syncCandidateSelection()
+    populateKeyInspector()
   }
   updateHistoryButtons()
 }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { pickStyleReference } from '../tests/helpers/style-reference-picker.mjs'
 import { strToU8, zipSync } from 'fflate'
 import { createServer } from 'vite'
 import { chromium } from 'playwright'
@@ -13,7 +14,7 @@ const skin = {
       c: { cand1: { extension: 'keep-candidate' } },
     },
     s_info: {
-      ss_1: { 7: { id: 'STYLE7', s_1: { for_back: true, c_normal: 'FF223344' } }, 8: { id: 'STYLE8', s_5: { 1: 100 } } },
+      ss_1: { 7: { id: 'STYLE7', s_1: { for_back: true, c_normal: 'FF223344' } }, 8: { id: 'STYLE8', s_5: { 1: 100 } }, 9: { id: 'STYLE9', s_4: { path_1: 'click.wav' } } },
       ss_2: { 100: { a1: { b: { t: 3, count: 1 }, from_p: [100, 100], to_p: [75, 75], duration: 300 } } },
     },
     s_port: { ss_2: { 100: { a1: { b: { t: 3, count: 1 }, from_p: [100, 100], to_p: [50, 50], duration: 650 } } } },
@@ -56,6 +57,17 @@ const checkChange = async (change, verify) => {
   await history('undo')
 }
 const checkEdit = (input, value, verify) => checkChange(() => enter(input, value), verify)
+const enterStyle = async (row, value) => {
+  if (value.includes(',')) {
+    // Seed sparse references through the backing field; empty slots no longer have editable cards.
+    await row.locator('.ui-style-ref-list > input').evaluate((input, value) => {
+      input.value = value
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    }, value)
+  } else if (await row.locator('.ui-style-ref input').count()) await enter(row.locator('.ui-style-ref input').first(), value)
+  else await pickStyleReference(page, row, value)
+}
+const checkStyleEdit = (row, value, verify) => checkChange(() => enterStyle(row, value), verify)
 
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`)
@@ -73,9 +85,9 @@ try {
   for (const key of ['rect.origin', 'rect.size', 'f_size']) assert.equal(await row(key, candidateGroup).locator('input[type="number"]').count(), 2, `${key} keeps paired number controls when absent`)
   assert.equal(await row('insets', candidateGroup).locator('input[type="number"]').count(), 4, 'absent candidate padding has four number controls')
   assert.equal(await row('gap', candidateGroup).locator('input[type="number"]').count(), 1, 'absent candidate gap is numeric')
-  for (const key of ['b.base_b', 'b.base_f']) assert.equal(await row(key, candidateGroup).locator('.ui-style-ref').count(), 1, `${key} exposes an empty style card`)
+  for (const key of ['b.base_b', 'b.base_f']) assert.equal(await row(key, candidateGroup).locator('.ui-style-ref-append').count(), 1, `${key} exposes an add button`)
   const switchGroup = fields.locator('[data-inspector-group-label="切换按钮"]')
-  assert.equal(await row('i_normal', switchGroup).locator('.ui-style-ref').count(), 1, 'a missing switch exposes its background style')
+  assert.equal(await row('i_normal', switchGroup).locator('.ui-style-ref-append').count(), 1, 'a missing switch exposes its add button')
   assert.equal(await row('insets', switchGroup).locator('input[type="number"]').count(), 1, 'switch padding stays scalar')
   for (const label of ['添加图标', '添加状态按键']) assert.equal(await fields.getByRole('button', { name: label, exact: true }).isDisabled(), true, 'collection creation respects preview mode')
   assert.deepEqual(await state(), opened, 'browsing supported capabilities does not create configuration or history')
@@ -85,7 +97,7 @@ try {
   await checkEdit(row('f_size', candidateGroup).locator('input[type="number"]').first(), '1080', (next) => assert.deepEqual(next.default.port_layout.c.cand1.f_size, [1080, 0]))
   await checkEdit(row('insets', candidateGroup).locator('input[type="number"]').nth(1), '8', (next) => assert.deepEqual(next.default.port_layout.c.cand1.insets, { top: 0, right: 8, bottom: 0, left: 0 }))
   await checkEdit(row('rect.size', candidateGroup).locator('input[type="number"]').first(), '1080', (next) => assert.deepEqual(next.default.port_layout.c.cand1.rect, [[0, 0], [1080, 0]]))
-  await checkEdit(row('i_normal', switchGroup).locator('.ui-style-ref input').first(), '7', (next) => assert.equal(next.default.port_layout.c.cand1.switch.i_normal, 7))
+  await checkStyleEdit(row('i_normal', switchGroup), '7', (next) => assert.equal(next.default.port_layout.c.cand1.switch.i_normal, 7))
   const icons = fields.locator('[data-inspector-group-label="图标"]')
   await checkChange(() => icons.getByRole('button', { name: '添加图标', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.c.cand1.icon_list, [{}]))
   await icons.getByRole('button', { name: '添加图标', exact: true }).click()
@@ -111,8 +123,8 @@ try {
   await checkEdit(row('gap', boardCandidate).locator('input[type="number"]'), '12', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.cand, { gap: 12 }))
   const panel = fields.locator('[data-inspector-group-label="面板"]')
   await checkChange(() => row('exact', panel).locator('input[role="switch"]').check(), (next) => assert.equal(next.default.port_layout.b.full26Pinyin.board.exact, true))
-  assert.equal(await row('b.a', panel).locator('.ui-style-ref').count(), 1, 'an absent border animation exposes its style card')
-  await checkEdit(row('b.a', panel).locator('.ui-style-ref input').first(), '8', (next) => assert.equal(next.default.port_layout.b.full26Pinyin.board.bd.b.a, 8))
+  assert.equal(await row('b.a', panel).locator('.ui-style-ref-append').count(), 1, 'an absent border animation exposes its add button')
+  await checkStyleEdit(row('b.a', panel), '8', (next) => assert.equal(next.default.port_layout.b.full26Pinyin.board.bd.b.a, 8))
   await checkChange(() => panel.getByRole('button', { name: '添加播放范围', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.board.bd.b.r, [[0, 1]]))
   await panel.getByRole('button', { name: '添加播放范围', exact: true }).click()
   await checkEdit(row('b.r', panel).locator('input[type="number"]').first(), '0.25', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.board.bd.b.r, [[0.25, 1]]))
@@ -131,14 +143,14 @@ try {
     populateKeyInspector()
   })
   for (const key of ['b.base_s', 'b.asi', 'b.base_ba', 'b.base_fa', 'b.base_pa', 'fix_a']) assert.equal(await row(key).count(), 1, `${key} is available on an unconfigured key`)
-  for (const key of ['b.asi', 'b.base_ba', 'b.base_fa', 'b.base_pa']) assert.equal(await row(key).locator('.ui-style-ref[data-variant="empty"]').count(), 1, `${key} exposes an empty animation card`)
+  for (const key of ['b.asi', 'b.base_ba', 'b.base_fa', 'b.base_pa']) assert.equal(await row(key).locator('.ui-style-ref-append').count(), 1, `${key} exposes an animation add button`)
   for (const label of ['显示', '长按符号', '符号栏', '符号栏选中']) assert.equal(await fields.getByLabel(`${label}动作`, { exact: true }).count(), 1, `${label} is available before it is configured`)
   await checkEdit(fields.getByLabel('长按符号动作', { exact: true }), 'abc', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.keys[0].values, [7, 'abc']))
   await checkChange(() => fields.getByRole('button', { name: '新建文字样式', exact: true }).click(), (next) => {
     const id = next.default.port_layout.b.full26Pinyin.keys[0].b.base_f[0]
     assert.deepEqual(next.default.s_info.ss_1[id].s_1, {}, 'a key without text can create and bind a text style')
   })
-  await enter(row('b.base_f').locator('.ui-style-ref input').first(), '7')
+  await enterStyle(row('b.base_f'), '7')
   await checkChange(() => fields.getByRole('button', { name: '新建文字样式', exact: true }).click(), (next) => {
     const layers = next.default.port_layout.b.full26Pinyin.keys[0].b.base_f
     assert.equal(layers[0], 7, 'creating text preserves an existing fill foreground')
@@ -153,8 +165,8 @@ try {
     appState.selectedKeySections = ['KEY1']
     ;(await import('/src/app/key-inspector.ts')).populateKeyInspector()
   })
-  await checkEdit(row('b.asi').locator('.ui-style-ref input').first(), '8', (next) => assert.equal(next.default.port_layout.b.full26Pinyin.keys[0].b.asi, 8))
-  await enter(row('b.asi').locator('.ui-style-ref input').first(), '8')
+  await checkStyleEdit(row('b.asi'), '8', (next) => assert.equal(next.default.port_layout.b.full26Pinyin.keys[0].b.asi, 8))
+  await enterStyle(row('b.asi'), '8')
   const animationCard = row('b.asi').getByRole('button', { name: '动画 100', exact: true })
   assert.equal(await animationCard.locator('.ui-animation-player[data-variant="thumbnail"]').count(), 1, 'Palm animation references render a real thumbnail')
   const beforePicker = await state()
@@ -168,17 +180,17 @@ try {
   assert.match(await page.locator('#animation-stage .ui-animation-time').textContent(), /650 ms/, 'animation cards use the orientation override')
   await keySelected()
   await history('undo')
-  await checkEdit(row('b.base_fa').locator('.ui-style-ref input').first(), ',8,0,8', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.keys[0].b.base_fa, [0, 8, 0, 8]))
-  await enter(row('b.base_fa').locator('.ui-style-ref input').first(), ',8,0,8')
-  assert.equal(await row('b.base_fa').locator('.ui-style-ref').count(), 4)
+  await checkStyleEdit(row('b.base_fa'), ',8,0,8', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.keys[0].b.base_fa, [0, 8, 0, 8]))
+  await enterStyle(row('b.base_fa'), ',8,0,8')
+  assert.equal(await row('b.base_fa').locator('.ui-style-ref').count(), 2)
   const firstBoundSlot = row('b.base_fa').getByRole('textbox', { name: '前景 2 动画样式编号', exact: true })
   await enter(firstBoundSlot, '')
   assert.deepEqual((await state()).skin.default.port_layout.b.full26Pinyin.keys[0].b.base_fa, [0, 0, 0, 8], 'clearing an animation keeps later foreground layers in place')
   await history('undo')
   await history('undo')
-  await checkEdit(row('b.base_s').locator('.ui-style-ref input').first(), '7', (next) => assert.equal(next.default.port_layout.b.full26Pinyin.keys[0].b.base_s, 7))
+  await checkStyleEdit(row('b.base_s'), '9', (next) => assert.equal(next.default.port_layout.b.full26Pinyin.keys[0].b.base_s, 9))
   await checkEdit(row('fix_a').locator('input').first(), '1,2', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.keys[0].fix_a, [1, 2]))
-  await enter(row('b.base_s').locator('.ui-style-ref input').first(), '7')
+  await enterStyle(row('b.base_s'), '9')
   const edited = await state()
   assert.equal(edited.skin.default.port_layout.b.full26Pinyin.extension, 'keep-board')
   assert.equal(edited.skin.default.port_layout.b.full26Pinyin.keys[0].extension, 'keep-key')
@@ -199,7 +211,7 @@ try {
   assert.equal(await row('f_size', candidateGroup).locator('input[type="number"]').count(), 2, 'null candidate sizes keep paired controls')
   assert.equal(await row('insets', candidateGroup).locator('input[type="number"]').count(), 4, 'null padding keeps four controls')
   assert.equal(await row('b.base_b', candidateGroup).count(), 1, 'a null base exposes one style card without duplicate nested controls')
-  assert.equal(await row('i_normal', switchGroup).locator('.ui-style-ref').count(), 1, 'a null switch keeps its style controls')
+  assert.equal(await row('i_normal', switchGroup).locator('.ui-style-ref-append').count(), 1, 'a null switch keeps its add button')
   await checkEdit(row('gap', candidateGroup).locator('input[type="number"]'), '4', (next) => assert.equal(next.default.port_layout.c.cand1.gap, 4))
   await select(boardPath)
   await checkEdit(row('gap', boardCandidate).locator('input[type="number"]'), '6', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.cand, { gap: 6 }))

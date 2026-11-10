@@ -2,6 +2,7 @@
 // BDA 写 appearanceConfig 的文字样式，手心直接写 skin.json 样式的 s_1（sxi-text.ts）；
 // 搜狗皮肤的文字由 ssf-inspector.ts 处理。皮肤没有的文字样式在第一次修改时新建。
 import { appState } from "./state"
+import { cachedIniDocument } from "./style-document"
 import { IniDocument } from "../ini.ts"
 import { textStyleSections, textStyleValue, writeTextStyleProperty, type TextStyleRef } from "../style-properties.ts"
 import { candidateFirstForeground, candidateInputForegroundStyle, candidateInputSizeForeground, candidateWordsForeground } from "../candidate-style.ts"
@@ -53,6 +54,7 @@ const CSS_KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "FONT_WEIG
 const CANDIDATE_PROPERTIES: TextProperty[] = ["FONT_SIZE", "NM_COLOR", "HL_COLOR"]
 const CANDIDATE_NOTE = "真机候选字使用用户字体，皮肤只能改字号与颜色"
 
+/** 写回用的文档：每次新解析一份，改动不会串到检查器读的那份缓存。 */
 function iniDocument(path: string): IniDocument | undefined {
   return appState.archive?.isText(path) ? IniDocument.parse(appState.archive.getText(path)) : undefined
 }
@@ -68,7 +70,7 @@ export function selectedKeyTextRefs(): TextStyleRef[] {
 
 /** What `refs` show for `property` in the current default.css, read like the preview. */
 export function textRefValues(refs: readonly TextStyleRef[], property: TextProperty): string[] {
-  const styles = iniDocument(styleConfigPath())
+  const styles = cachedIniDocument(styleConfigPath())
   return styles ? refs.map((ref) => textStyleValue(styles, ref, property)) : []
 }
 
@@ -101,7 +103,7 @@ function otherLayoutTextStyles(styles: IniDocument): Set<string> {
   const used = new Set<string>()
   for (const path of appState.archive?.names() ?? []) {
     if (path === appState.layoutPath || !path.startsWith(folder) || !/^[^/]+\.ini$/i.test(path.slice(folder.length))) continue
-    const document = iniDocument(path)
+    const document = cachedIniDocument(path)
     for (const section of document?.sections() ?? []) {
       for (const style of textStyleSections(styles, document!.get(section, "FORE_STYLE") ?? "")) used.add(style)
     }
@@ -110,12 +112,12 @@ function otherLayoutTextStyles(styles: IniDocument): Set<string> {
 }
 
 function cssTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } | undefined {
-  const styles = iniDocument(styleConfigPath())
+  const styles = cachedIniDocument(styleConfigPath())
   if (!styles) return
   if (isToolbarPath(appState.selectedPath)) {
     if (effectiveToolbarSections().length) return
     const candidate = appState.selectedDocument
-    const general = iniDocument(genConfigPath())
+    const general = cachedIniDocument(genConfigPath())
     const cnd = { path: appState.selectedPath, section: "CAND" }
     const words = candidateWordsForeground(candidate, general)
     const input = candidateInputForegroundStyle(general, candidate)

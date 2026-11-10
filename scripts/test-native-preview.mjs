@@ -89,6 +89,38 @@ const selectLayout = (path) => page.evaluate(async (path) => {
   const { selectFile } = await import('/src/app/navigation.ts')
   selectFile(path)
 }, path)
+const history = (action) => page.evaluate(async (action) => (await import('/src/app/edit-history.ts'))[action](), action)
+const enter = async (input, value) => { await input.fill(value); await input.press('Enter') }
+const bubbleGroup = () => page.locator('#document-fields [data-inspector-group-label="气泡"]')
+const popup = () => page.evaluate(async () => {
+  const { preview } = await import('/src/app/canvas-interaction.ts')
+  return (await preview.sceneForState()).keys.find((key) => key.section === 'KEY2').popup
+})
+async function pressBubble(hold = false) {
+  const point = await page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    await preview.whenDrawn()
+    window.__nativePreview = preview
+    const context = preview.hintCanvas.getContext('2d')
+    if (!window.__bubbleHooked) {
+      window.__bubbleHooked = true
+      const fillText = context.fillText.bind(context)
+      const clearRect = context.clearRect.bind(context)
+      context.clearRect = (...args) => { window.__bubbleTexts = []; clearRect(...args) }
+      context.fillText = (text, ...args) => { window.__bubbleTexts.push({ text, font: context.font, color: context.fillStyle }); fillText(text, ...args) }
+    }
+    const key = preview.keys.find((key) => key.section === 'KEY2')
+    const box = preview.canvas.getBoundingClientRect()
+    return { x: box.left + (key.rect.x + key.rect.width / 2) * box.width / preview.panelWidth, y: box.top + (key.rect.y + key.rect.height / 2) * box.height / preview.surfaceHeight }
+  })
+  await page.mouse.move(point.x, point.y)
+  await page.mouse.down()
+  await page.waitForFunction((hold) => window.__nativePreview.hintVisible && (!hold || window.__nativePreview.active?.direction === 'hold' && window.__nativePreview.active?.hintCellWidth > 0), hold)
+  const result = await page.evaluate(() => ({ texts: window.__bubbleTexts, width: window.__nativePreview.active?.hintCellWidth }))
+  await page.mouse.up()
+  await page.waitForFunction(() => !window.__nativePreview.active && !window.__nativePreview.hintVisible)
+  return result
+}
 /** The panel scene for the current state: its texts, whether its sections match the canvas, and a pixel. */
 const scene = (state, point) => page.evaluate(async ({ state, point }) => {
   const { preview } = await import('/src/app/canvas-interaction.ts')
@@ -208,6 +240,27 @@ try {
   assert.deepEqual(palmPress.back.scale, [0.75, 0.75])
   assert.equal(palmPress.after, undefined)
   assert.ok(palmPress.hints > 0, 'the board’s `h` bubble layout is read')
+  assert.deepEqual((await pressBubble(true)).texts.map(({ text }) => text), ['A', 'B', 'C', '2', 'a', 'b', 'c'], 'Palm shows its implicit long-press candidates')
+  await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  await selectLayout('skin.json/default/port_layout/h/hint1')
+  const icons = page.locator('#document-fields [data-inspector-group-label="图标"]')
+  await enter(icons.locator('[data-document-key="pos"] input[type=number]').last(), '-50')
+  const palmPosition = () => page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).preview.longHint.icons.get('2').position[1])
+  assert.equal(await palmPosition(), -50, 'Palm icon edits rebuild the active board hint')
+  await history('undo')
+  assert.equal(await palmPosition(), -30)
+  await history('redo')
+  assert.equal(await palmPosition(), -50)
+  await enter(icons.locator('[data-document-key="c_size"] input[type=number]').nth(2), '60')
+  await enter(icons.locator('[data-document-key="c_size"] input[type=number]').last(), '32')
+  const bubbleText = page.locator('#document-fields [data-inspector-group-label="气泡文字"]')
+  await enter(bubbleText.locator('[data-document-key="f_s"] input[type=number]').last(), '26')
+  await page.getByRole('button', { name: '交互预览', exact: true }).click()
+  await selectLayout('skin.json/default/port_layout/b/t9Pinyin')
+  const editedPalm = await pressBubble(true)
+  assert.equal(editedPalm.width, 60, 'Palm reads CELL_SIZE from the bar icon')
+  assert.ok(editedPalm.texts.every(({ font }) => font.includes('26px')), 'Palm bubble text edits reach the canvas')
+  for (let index = 0; index < 4; index++) await history('undo')
 
   // Sogou presses play anim.ini; a tap pops the key's label on PopupBG.
   await open('animated.ssf', animatedSogou())
@@ -234,9 +287,57 @@ try {
   assert.deepEqual(sogouPress.sprite.translation, [0, -100], 'v·t after 200 ms')
   assert.deepEqual(sogouPress.popup[0], { x: sogouPress.key.x, y: sogouPress.key.y - 184, width: sogouPress.key.width, height: 184 })
   assert.deepEqual(sogouPress.popup.slice(1), [{ text: 'ABC', color: 'rgba(17, 34, 51, 1)' }, { text: '2', color: 'rgba(17, 34, 51, 1)' }])
+  assert.deepEqual((await pressBubble()).texts.map(({ text }) => text), ['ABC', '2'], 'Sogou pointer presses draw the native popup')
+  await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  const beforeSogou = await popup()
+  await enter(bubbleGroup().locator('[data-document-key="POPUP_OFFSET_VERTICAL"] input[type=number]'), '-24')
+  assert.equal((await popup())[0].rect.y, beforeSogou[0].rect.y - 24, 'Sogou offset edits update the scene immediately')
+  await history('undo')
+  assert.equal((await popup())[0].rect.y, beforeSogou[0].rect.y)
+  await history('redo')
+  assert.equal((await popup())[0].rect.y, beforeSogou[0].rect.y - 24)
+  await enter(bubbleGroup().locator('[data-document-key="TEXT_SIZE"] input[type=number]'), '52')
+  assert.ok((await popup()).filter((layer) => layer.kind === 'text').every(({ text }) => text.size === 52))
+  // Remove the image through the same mutation path; authored colours still provide a popup.
+  await page.evaluate(async () => {
+    const { editSsfFile, setSsfValue } = await import('/src/app/ssf-fields.ts')
+    editSsfFile('1080/status1/phoneSkin.ini', (document) => {
+      setSsfValue(document, 'PopupBG', 'BG_IMAGE', '')
+      setSsfValue(document, 'General', 'POPUP_BG_COLOR', '0xFF225588')
+      setSsfValue(document, 'FGStyle_Phone_Popup', 'LABEL_STYLE', 'TextStyle_CustomPopup')
+      setSsfValue(document, 'TextStyle_CustomPopup', 'TEXT_COLOR', '0xFF778899')
+    })
+  })
+  const colorPopup = await popup()
+  assert.equal(colorPopup[0].kind, 'fill')
+  assert.equal(colorPopup[0].color, 'rgba(34, 85, 136, 1)')
+  assert.equal(colorPopup[1].text.color, 'rgba(119, 136, 153, 1)', 'Sogou respects the popup foreground’s text-style reference')
+  await page.getByRole('button', { name: '交互预览', exact: true }).click()
+  assert.ok((await pressBubble()).texts.some(({ color }) => color === '#778899'))
+  await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  await page.evaluate(async () => {
+    const { editSsfFile, setSsfValue } = await import('/src/app/ssf-fields.ts')
+    editSsfFile('1080/status1/phoneSkin.ini', (document) => {
+      setSsfValue(document, 'PopupBG', 'BG_IMAGE', 'pop.png')
+      setSsfValue(document, 'FGStyle_Phone_Popup', 'LABEL_VISIBLE', '0')
+      setSsfValue(document, 'FGStyle_Phone_Popup', 'MINOR_LABEL_HORIZONTAL_OFFSET', '12')
+    })
+  })
+  const directPopup = await popup()
+  assert.equal(directPopup[0].kind, 'image', 'PopupBG accepts a direct image as well as an image section')
+  assert.equal(directPopup.length, 2, 'the foreground visibility flag hides the main label')
+  assert.equal(directPopup[1].text.text, '2')
+  assert.equal(directPopup[1].text.x, directPopup[0].rect.x + directPopup[0].rect.width / 2 + 12)
+  await page.getByRole('button', { name: '交互预览', exact: true }).click()
+  await page.evaluate(async () => {
+    const { hintPreviewEnabled } = await import('/src/app/dom.ts')
+    hintPreviewEnabled.checked = false
+    hintPreviewEnabled.dispatchEvent(new Event('change'))
+  })
+  assert.equal(await popup(), undefined, 'the popup switch also disables Sogou scenes')
 
   assert.deepEqual(errors, [])
-  console.log('native preview: Palm and Sogou scenes match the canvas keys and the skins’ own data, and animate and pop from it')
+  console.log('native preview: Palm and Sogou scenes, animations, pointer bubbles, native bubble fields, editing and undo/redo passed')
 } finally {
   await browser.close()
   await server.close()

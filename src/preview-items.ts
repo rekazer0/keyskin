@@ -96,7 +96,7 @@ export function effectivePreviewItem(
   const tip = stateTipSection(item.statStyle, state)
   if (tip === undefined) return item
   const section = `TIP${tip}`
-  const hasTip = document.sections().includes(section)
+  const hasTip = document.hasSection(section)
   const fallbackText = hasTip ? undefined : skinStateFallbackText(state)
   if (fallbackText) {
     return {
@@ -167,7 +167,7 @@ export function previewStateImpact(
     return tip === undefined ? [] : [tip]
   })
   if (!tips.length) return { mapped: false, resolved: false }
-  const sections = new Set(document.sections())
+  const sections = document.sectionSet()
   return {
     mapped: true,
     resolved: Boolean(skinStateFallbackText(state)) || tips.some((tip) => sections.has(`TIP${tip}`)),
@@ -328,7 +328,7 @@ function previewItemSections(document: IniDocument, section: string): string[] {
   if (!/^ICON\d+$/i.test(section)) return [section]
   const tips = [...(document.get(section, "STAT_STYLE") ?? "").matchAll(/(?:^|\|)S\d+_(\d+)(?=\||$)/g)]
     .map((match) => `TIP${match[1]}`)
-    .filter((tip, index, values) => document.sections().includes(tip) && values.indexOf(tip) === index)
+    .filter((tip, index, values) => document.hasSection(tip) && values.indexOf(tip) === index)
   return [section, ...tips]
 }
 
@@ -464,7 +464,8 @@ export function dynamicToolbarRect(
   panelHeight: number,
 ): Rect | undefined {
   const section = document.sections().find((name) =>
-    /^ICON\d+$/i.test(name) && document.get(name, "KEY")?.trim().toUpperCase() === "F14"
+    /^ICON\d+$/i.test(name) && document.get(name, "KEY")?.trim().toUpperCase() === "F14" &&
+    persistVisible(document.get(name, "PERSIST"), false)
   )
   if (!section) return
   const size = document.get(section, "SIZE")?.split(",").map(Number)

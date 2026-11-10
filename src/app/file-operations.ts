@@ -26,7 +26,7 @@ import { replaceImagePreviewURL } from "../image-preview.ts"
 import { clearImagePreviewError } from "./resource-inspector"
 import { createIcon } from "../icons.ts"
 import { type TileRect } from "../tiles.ts"
-import { pngBitmap } from "../atlas.ts"
+import { decodePng, encodePng, MAX_PIXELS } from "../ssf/ssf-png.ts"
 
 export async function resizePng(bytes: Uint8Array, xRatio: number, yRatio: number): Promise<Uint8Array> {
   const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes).buffer], { type: "image/png" }))
@@ -63,12 +63,17 @@ export async function composePng(width: number, height: number, layers: Readonly
 
 /** 把多张 PNG 按坐标拼成一张图集（导出 BDS 合图用）。 */
 export async function composeAtlasPng(width: number, height: number, parts: ReadonlyArray<{ png: Uint8Array; x: number; y: number }>): Promise<Uint8Array> {
-  const layers = await Promise.all(parts.map(async ({ png, x, y }) => {
-    const image = await pngBitmap(png)
-    if (!image) throw new Error("图片解码失败，无法合成图集")
-    return { image, rect: [x, y, image.width, image.height] as TileRect }
-  }))
-  return composePng(width, height, layers)
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width * height > MAX_PIXELS) throw new Error("PNG 尺寸无效")
+  const data = new Uint8Array(width * height * 4)
+  // 直接复制切片像素，避免 Canvas 的预乘透明度舍入与 PNG 重编码膨胀。
+  for (const { png, x, y } of parts) {
+    const image = decodePng(png)
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x + image.width > width || y + image.height > height) throw new Error("图片超出图集范围")
+    for (let row = 0; row < image.height; row++) {
+      data.set(image.data.subarray(row * image.width * 4, (row + 1) * image.width * 4), ((y + row) * width + x) * 4)
+    }
+  }
+  return encodePng({ width, height, data })
 }
 
 // 按面板精确尺寸拉伸素材图
@@ -153,6 +158,11 @@ export function showSkinLoadProgress(size: number): boolean {
 export function showFileOperationProgress(): void {
   appState.fileOperationProgressVisible = true
   if (!fileOperationDialog.open) fileOperationDialog.showModal()
+}
+
+export function showFileOperationResult(detail: string): void {
+  fileOperationResult.textContent = detail
+  fileOperationResult.hidden = false
 }
 
 export async function readBrowserSkinFile(file: File): Promise<Uint8Array> {
@@ -307,9 +317,13 @@ export async function runFileOperation(
       outcome: completed ? "completed" : "cancelled",
       durationMs: Math.round(performance.now() - started),
     })
-    // 成功 / 取消不弹模态框（DESIGN.md §7）：结果只写状态栏，开着的进度框随之关闭。
     showStatus(completed ? `${action}完成` : `${action}已取消`)
-    if (appState.fileOperationProgressVisible) {
+    if (completed && (action === "保存" || action === "导出")) {
+      showFileOperationProgress()
+      fileOperationTitle.textContent = `${action}完成`
+      fileOperationIcon.replaceChildren(createIcon("check", 20))
+      updateFileOperationProgress(100, `${action}完成`)
+    } else if (appState.fileOperationProgressVisible) {
       if (completed) updateFileOperationProgress(100, `${action}完成`)
       closeDialog(fileOperationDialog)
       appState.fileOperationProgressVisible = false

@@ -267,15 +267,17 @@ export async function soundAsWav(bytes: Uint8Array): Promise<Uint8Array> {
 /** Baidu skins use AIFF on iOS and Ogg Vorbis on Android; retain originals while adding native copies. */
 const NATIVE_SOUND_EXTENSION = { bdi: "aiff", bds: "ogg" } as const
 
+/** MP3 is neither platform's format and cannot be decoded here, so it is reported instead of shipped silently. */
 function soundNeedsTranscode(path: string, format: "bdi" | "bds"): boolean {
-  return format === "bdi" ? /\.(?:ogg|wav)$/i.test(path) : /\.(?:aiff?|caf|wav)$/i.test(path)
+  return format === "bdi" ? /\.(?:ogg|wav|mp3)$/i.test(path) : /\.(?:aiff?|caf|wav|mp3)$/i.test(path)
 }
 
 /**
  * Rewrites every PRESS/PANEL_SHOW/PANEL_HIDE_SOUND_PATH in each theme's default.css (light and dark each have their own)
- * that needs a native copy: Ogg/WAV → AIFF for BDI, AIFF/CAF/WAV → Ogg for BDS.
+ * that needs a native copy: Ogg/WAV/MP3 → AIFF for BDI, AIFF/CAF/WAV/MP3 → Ogg for BDS.
  * A same-named file in the target format next to that css is used as is; otherwise the referenced
- * file is transcoded. Original files are kept, matching official packages that bundle both formats.
+ * file is transcoded, and a sound the decoder cannot read (MP3) is reported in `warnings`.
+ * Original files are kept, matching official packages that bundle both formats.
  */
 export async function adaptPackageSounds(
   files: Map<string, Uint8Array>,

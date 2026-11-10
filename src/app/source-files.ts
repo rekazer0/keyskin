@@ -94,6 +94,7 @@ export function setSourceTransfer(mode: SourceTransfer["mode"]): void {
 
 export function refreshAfterSourceMutation(preferredPath?: string): void {
   if (!appState.archive) return
+  const scrollTop = files.scrollTop
   const selectedStillExists = appState.archive.getBytes(appState.selectedPath)
   renderFiles()
   setSidebarView("source")
@@ -104,8 +105,9 @@ export function refreshAfterSourceMutation(preferredPath?: string): void {
       : appState.archive.names().find((path) => appState.archive?.isText(path) || appState.archive?.isImage(path) || appState.archive?.isBdaConfig(path))
   if (next) {
     selectFile(next, "source")
-    revealSourceFile(next)
+    if (preferredPath) revealSourceFile(next)
   }
+  if (!preferredPath) files.scrollTo({ top: scrollTop, behavior: "instant" })
   refreshPreview()
   updateDirty()
 }

@@ -106,8 +106,44 @@ try {
   await page.locator('.source-file-row[data-path="phoneTheme 副本.ini"]').waitFor({ state: 'detached' })
   await page.locator('#desktop-undo').click()
   await page.locator('.source-file-row[data-path="phoneTheme 副本.ini"]').waitFor({ state: 'visible' })
+  await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    const { renderFiles } = await import('/src/app/file-tree.ts')
+    const { ensureSourcePathRendered } = await import('/src/app/source-files.ts')
+    for (let index = 0; index < 80; index++) {
+      const extension = index === 0 || index === 40 ? 'txt' : 'bin'
+      appState.archive.setText(`000-scroll/file-${index}.${extension}`, 'scroll test')
+    }
+    appState.archive.setText('000-scroll/group/remove.bin', 'folder test')
+    appState.archive.setText('zzz-scroll.txt', 'bottom test')
+    renderFiles()
+    ensureSourcePathRendered('000-scroll/file-0.txt')
+  })
+  for (const [path, folder, position] of [
+    ['000-scroll/file-0.txt', false, 'top'],
+    ['000-scroll/file-40.txt', false, 'middle'],
+    ['000-scroll/group', true, 'top'],
+    ['zzz-scroll.txt', false, 'bottom'],
+  ]) {
+    const row = page.locator(folder ? `.source-folder-row[data-folder-path="${path}"]` : `.source-file-row[data-path="${path}"]`)
+    await row.click()
+    const beforeScroll = await page.locator('#files').evaluate((list, position) => {
+      const maximum = list.scrollHeight - list.clientHeight
+      list.scrollTo({ top: position === 'top' ? 0 : position === 'bottom' ? maximum : maximum / 2, behavior: 'instant' })
+      return list.scrollTop
+    }, position)
+    if (position !== 'top') assert.ok(beforeScroll > 0, `${position} scenario must scroll`)
+    await page.locator('#source-delete').click()
+    await row.waitFor({ state: 'detached' })
+    const afterScroll = await page.locator('#files').evaluate(async (list) => {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      return { top: list.scrollTop, maximum: list.scrollHeight - list.clientHeight }
+    })
+    assert.ok(Math.abs(afterScroll.top - Math.min(beforeScroll, afterScroll.maximum)) <= 1,
+      `deleting ${path} must preserve scroll position: ${beforeScroll} -> ${afterScroll.top}`)
+  }
   assert.deepEqual(errors, [])
-  console.log('Source file actions: preview prompt, cancel without mutation, keyboard activation, edit, paste, delete and undo passed')
+  console.log('Source file actions: preview prompt, cancel without mutation, keyboard activation, edit, paste, delete, undo and deletion scroll position passed')
 } finally {
   await browser.close()
   await server.close()

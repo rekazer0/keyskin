@@ -45,11 +45,10 @@ try {
   await bda.addInitScript(() => {
     window.downgradeProgressStates = []
     new MutationObserver(() => {
-      for (const dialog of document.querySelectorAll('dialog[open]:not([id])')) {
-        if (dialog.dataset.progressRecorded) continue
-        dialog.dataset.progressRecorded = ""
-        window.downgradeProgressStates.push(Boolean(document.querySelector("#file-operation-dialog[open]")))
-      }
+      const dialog = document.querySelector('#file-operation-dialog[open]')
+      if (!dialog || dialog.dataset.progressRecorded || !Array.from(dialog.querySelectorAll('button')).some(button => button.textContent === '继续导出')) return
+      dialog.dataset.progressRecorded = ""
+      window.downgradeProgressStates.push(true)
     }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] })
   })
   await acceptAskDialogs(bda)
@@ -104,7 +103,7 @@ try {
     const result = await exportArchive("bds")
     return Array.from(result.bytes)
   })
-  assert.deepEqual(await bda.evaluate(() => window.downgradeProgressStates), [false], "downgrade confirmation appears before the export progress dialog")
+  assert.deepEqual(await bda.evaluate(() => window.downgradeProgressStates), [true], "downgrade confirmation appears inside the export progress dialog")
   const bdsFiles = unzipSync(new Uint8Array(bdsBytes))
   assert.ok("light/port/res/anim.ini" in bdsFiles, "导出的 BDS 缺少 anim.ini")
   const animIni = new TextDecoder().decode(bdsFiles["light/port/res/anim.ini"])

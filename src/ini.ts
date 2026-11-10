@@ -30,6 +30,9 @@ export class IniDocument {
   // 样式库对每个段调用 entries(section)，几千个段时逐行扫描会变成平方级，按段分组索引行。
   private sectionLines?: Map<string, Line[]>
   private sectionList?: string[]
+  // 检查器每次重建都要判断几百次“这个段在不在”（style-properties.ts）；按段建一次集合，
+  // 不要每次都从 sections() 复制几千个段名再建 Set。
+  private sectionSetCache?: Set<string>
 
   private constructor(lines: Line[]) {
     this.lines = lines
@@ -39,6 +42,7 @@ export class IniDocument {
     this.index = undefined
     this.sectionLines = undefined
     this.sectionList = undefined
+    this.sectionSetCache = undefined
   }
 
   private lookup(section: string, key: string): Line | undefined {
@@ -170,6 +174,16 @@ export class IniDocument {
     return [...this.sectionList]
   }
 
+  /** `sections()` 的集合形式：要判断多个段在不在时用它，别每次复制段名数组再建 Set。 */
+  sectionSet(): ReadonlySet<string> {
+    this.sectionSetCache ??= new Set(this.sections())
+    return this.sectionSetCache
+  }
+
+  hasSection(section: string): boolean {
+    return this.sectionSet().has(section)
+  }
+
   appendSection(section: string, entries: readonly { key: string; value: string }[]): void {
     const ending = this.lines.find((line) => line.ending)?.ending ?? "\n"
     if (this.lines.length && this.lines.at(-1)?.ending === "") {
@@ -180,6 +194,7 @@ export class IniDocument {
     this.lines.push({ raw: `[${section}]${ending}`, ending, section })
     // Writers append thousands of sections between reads, so the index is extended instead of rebuilt.
     if (this.sectionList && !this.sectionList.includes(section)) this.sectionList.push(section)
+    this.sectionSetCache?.add(section)
     for (const entry of entries) {
       const line: Line = {
         raw: `${entry.key}=${entry.value}${ending}`,

@@ -9,9 +9,11 @@ import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground, 
 import { orientation } from "./dom"
 import { editSsfFile, renderGroup as renderSsfGroup, setSsfValue, ssfButton, ssfEntries, ssfFontImportButton, ssfFontOptions, type SsfBlock } from "./ssf-fields"
 import { openImageResourceChooser } from "./resource-inspector"
-import { isSsfBoardPath, ssfDocument, ssfKeysPath, ssfPackage, ssfQwertyBoard, ssfSelectedBindings, ssfSkinPath, ssfThemeFolder, SSF_SOUNDS_PATH } from "./ssf-documents"
+import { isSsfBoardPath, ssfDocument, ssfKeysPath, ssfPackage, ssfQwertyBoard, ssfSelectedBindings, ssfSkinPath, SSF_SOUNDS_PATH } from "./ssf-documents"
 import { appState } from "./state"
 import { layoutLabel } from "./file-tree"
+
+import { toolbarIconSection } from "./toolbar-icon-inspector"
 
 type Group = { label: string; blocks: SsfBlock[]; code?: string; key?: string }
 
@@ -24,7 +26,9 @@ const VIEW_KEYS = ["BG_STYLE", "BG_COLOR", "MARGINS", "PADDINGS"]
 function supportedFields(path: string, section: string): string[] {
   if (path === "phoneTheme.ini") return section === "General" ? ["skin_name", "skin_author", "skin_contact", "skin_tip", "skin_version", "skin_version_self", "skin_id", "skin_type", "supports-screens", "preview_square", "preview_comp"] : []
   if (path === SSF_SOUNDS_PATH) return ["sound"]
+  if (/^Anim_Style(?:_|$)/.test(section)) return ["BG_ANIM", "FG_ANIM", "SET_PRESSED", "DECO_ANIM", "DECO_ANIM_NUMBER"]
   if (/^TextStyle(?:_|$)/.test(section)) return TEXT_KEYS
+  if (/^PopupBG(?:_|$)/.test(section)) return ["BG_IMAGE"]
   const document = ssfDocument(path)
   const namedBy = (keys: string[]) => document.entries().some((entry) => keys.includes(entry.key) && firstValue(entry.value) === section)
   if (/^FGStyle(?:_|$)/.test(section) || namedBy(["FG_STYLE"])) return FG_STYLE_KEYS
@@ -43,14 +47,6 @@ function renderGroup(label: string, blocks: SsfBlock[], code?: string): Group | 
     return expected.length ? { ...block, expect: expected } : block
   }).filter((block) => block.template || block.expect || ssfDocument(block.path).sections().includes(block.section))
   return shown.length ? { label, blocks: shown, code } : undefined
-}
-
-/** Sound names Sogou can play: the WAV / OGG / MP3 files in default/, without extension. */
-function soundOptions(): string[] {
-  return [...new Set((appState.archive?.names() ?? []).flatMap((path) => {
-    const match = path.match(/^default\/(?:res\/)?([^/]+)\.(?:wav|ogg|mp3)$/i)
-    return match ? [match[1]] : []
-  }))].sort()
 }
 
 function backgroundGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBinding): Group | undefined {
@@ -178,30 +174,23 @@ function textGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBinding):
 function animationGroup(keysPath: string, binding: SsfKeyBinding): Group | undefined {
   const keys = ssfDocument(keysPath)
   const owner = binding.sections.find((section) => keys.get(section, "ANIM_STYLE")) ?? ownSection(keys, binding)
-  const style = firstValue(keys.get(owner, "ANIM_STYLE"))
-  const animPath = `${ssfThemeFolder()}anim.ini`
   const blocks: SsfBlock[] = [{
     path: keysPath,
     section: owner,
-    title: "动画引用",
-    omit: ["FG_IMAGES", "FG_RECT"],
+    only: ["ANIM_STYLE"],
     expect: ["ANIM_STYLE"],
-    options: { ANIM_STYLE: ssfDocument(animPath).sections() },
   }]
-  if (style) blocks.push({ path: animPath, section: style, title: "动画样式" })
   return renderGroup("动画", blocks)
 }
 
 function soundGroup(binding: SsfKeyBinding | undefined): Group | undefined {
   const sounds = ssfDocument(SSF_SOUNDS_PATH)
   const section = ssfSoundSection(sounds, binding)
-  const options = { sound: soundOptions() }
   if (section) {
     return renderGroup("音效", [{
       path: SSF_SOUNDS_PATH,
       section,
       note: binding && section === "Key" ? "使用默认按键音效" : undefined,
-      options,
     }], section)
   }
   const owner = binding ? binding.sections.find((name) => !/_Land/.test(name)) ?? binding.sections[0] : "Key"
@@ -210,7 +199,6 @@ function soundGroup(binding: SsfKeyBinding | undefined): Group | undefined {
     section: owner,
     title: "按键音效",
     expect: ["sound"],
-    options,
     note: binding && sounds.get("Key", "sound") ? `使用默认按键音效 ${sounds.get("Key", "sound")}` : undefined,
   }])
 }
@@ -258,6 +246,24 @@ function imageBlocks(skinPath: string, skin: IniDocument, section: string, key: 
   return [block(section, { title, only: [], template: [], actions: [add] })]
 }
 
+function bubbleGroup(path: string, skin: IniDocument): Group | undefined {
+  const qwerty = ssfQwertyBoard()
+  const existing = (sections: string[]) => sections.find((name) => skin.sections().includes(name)) ?? sections[0]
+  const backgrounds = [qwerty ? "PopupBG_Qwerty" : "PopupBG_Phone", "PopupBG"]
+  const background = backgrounds.find((name) => firstValue(skin.get(name, "BG_IMAGE"))) ?? existing(backgrounds)
+  const foreground = existing([qwerty ? "FGStyle_Popup_Qwerty" : "FGStyle_Phone_Popup", "FGStyle_Popup"])
+  const text = existing([qwerty ? "TextStyle_Popup_Qwerty" : "TextStyle_Popup_Phone", "TextStyle_Popup"])
+  const minor = existing(["TextStyle_Popup_Phone_Minor", "TextStyle_Popup"])
+  return renderGroup("气泡", [
+    { path, section: "General", only: ["POPUP_BG_COLOR", "POPUP_OFFSET_VERTICAL"], expect: ["POPUP_BG_COLOR", "POPUP_OFFSET_VERTICAL"] },
+    { path, section: background, only: ["BG_IMAGE"], expect: ["BG_IMAGE"] },
+    ...imageBlocks(path, skin, background, "BG_IMAGE", "气泡背景"),
+    { path, section: foreground, only: FG_STYLE_KEYS.filter((key) => !["ICON_RECT", "LABEL_ORIENTATION"].includes(key)), expect: ["LABEL_POSITION", ...qwerty ? [] : ["MINOR_LABEL_POSITION"]] },
+    textBlock(path, firstValue(skin.get(foreground, "LABEL_STYLE")) ?? text),
+    ...qwerty || text === minor && !skin.get(foreground, "MINOR_LABEL_STYLE") ? [] : [textBlock(path, firstValue(skin.get(foreground, "MINOR_LABEL_STYLE")) ?? minor)],
+  ])
+}
+
 /** What every key of the current board shares: backgrounds, candidate bar, default classes, colours. */
 function boardGroups(): Group[] {
   const skinPath = ssfSkinPath()
@@ -280,7 +286,7 @@ function boardGroups(): Group[] {
       textBlock(skinPath, qwerty ? "TextStyle_FuncKey_26char" : "TextStyle_FuncKey_T9"),
       textBlock(skinPath, "TextStyle_Space_Label"),
       textBlock(skinPath, "TextStyle"),
-      block("General", { expect: ["ICON_COLOR", "HIGH_LIGHT_ICON_COLOR", "POPUP_BG_COLOR"] }),
+      block("General", { only: ["ICON_COLOR", "HIGH_LIGHT_ICON_COLOR"], expect: ["ICON_COLOR", "HIGH_LIGHT_ICON_COLOR"] }),
     ]],
     ...nineKey ? [["符号列", [
       block("CandidateCodeView", { omit: ["BG_IMAGE", "BG_IMAGES"].filter((key) => !/\.\w+$/.test(firstValue(skin.get("CandidateCodeView", key)) ?? "")), create: [{ key: "BG_STYLE", value: "1" }] }),
@@ -292,6 +298,7 @@ function boardGroups(): Group[] {
   ]
   return [
     ...groups.map(([label, blocks]) => renderGroup(label, blocks)),
+    bubbleGroup(skinPath, skin),
     soundGroup(undefined),
   ].filter((group): group is Group => Boolean(group))
 }
@@ -336,6 +343,7 @@ export function ssfInspectorTitle(): { name: string; context: string } | undefin
   const skinPath = ssfSkinPath()
   if (!skinPath || !isSsfBoardPath(path) || path !== appState.layoutPath) return
   const bindings = ssfSelectedBindings()
+  if (appState.selectedCandidate) return { name: "候选栏与工具栏", context: skinPath }
   if (!appState.selectedKeySections.length) return { name: layoutLabel(path.split("/").pop()!), context: skinPath }
   const primary = bindings[0]?.binding.sections.find((section) => !/_Land/.test(section)) ?? bindings[0]?.binding.sections[0]
   const name = appState.selectedKeySections.length > 1 ? `已选 ${appState.selectedKeySections.length} 个按键` : primary ? ssfSectionLabel(primary) : "按键"
@@ -372,7 +380,7 @@ export function populateSsfInspector(container: HTMLElement): boolean {
   let groups: Group[] = []
   if (isSsfBoardPath(path) && path === appState.layoutPath) {
     const bindings = ssfSelectedBindings()
-    groups = bindings.length > 1 ? commonKeyGroups(bindings.map(({ binding }) => keyGroups(binding))) : bindings.length ? keyGroups(bindings[0].binding) : boardGroups()
+    groups = appState.selectedCandidate ? boardGroups().filter(({ label }) => ["候选栏", "候选字", "输入码"].includes(label)) : bindings.length > 1 ? commonKeyGroups(bindings.map(({ binding }) => keyGroups(binding))) : bindings.length ? keyGroups(bindings[0].binding) : boardGroups()
   } else if (appState.archive?.isText(path) && /\.ini$/i.test(path)) {
     groups = fileGroups(path)
   }
@@ -380,6 +388,7 @@ export function populateSsfInspector(container: HTMLElement): boolean {
     const group = renderSsfGroup(label, blocks, code, key)
     return group ? [group] : []
   }))
+  if (appState.selectedCandidate || /phoneSkin\.ini$/i.test(path)) container.append(toolbarIconSection())
   container.dataset.path = path
   return groups.length > 0
 }

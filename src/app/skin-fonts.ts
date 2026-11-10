@@ -1,7 +1,7 @@
 // 皮肤字体替换：导入 / 移除字体文件，并把 [GLOBAL] FONT_PATH 与 [STYLE*] FONT_NAME
 // 同步到皮肤的每份 CSS（light/dark × port/land 或单布局），真机与预览都读同一套路径。
 import { appState } from "./state"
-import { IniDocument } from "../ini.ts"
+import { cachedIniDocument } from "./style-document"
 import { commitBatch, isEditing, updateDirty } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
@@ -31,10 +31,7 @@ function fontStylePaths(): string[] {
 }
 
 function styleFontReference(): string {
-  const archive = appState.archive
-  const path = styleConfigPath()
-  if (!archive?.isText(path)) return ""
-  return IniDocument.parse(archive.getText(path)).get("GLOBAL", "FONT_PATH")?.trim() ?? ""
+  return cachedIniDocument(styleConfigPath())?.get("GLOBAL", "FONT_PATH")?.trim() ?? ""
 }
 
 function resolveStyleFont(reference: string): string | undefined {

@@ -1,4 +1,4 @@
-import { source, keyboardFields, layoutActionButtons, preview, inspectorTabButtons, mobilePortraitQuery, activateSkinState } from "../canvas-interaction"
+import { source, keyboardFields, layoutActionButtons, preview, inspectorTabButtons, mobilePortraitQuery, activateSkinState, selectNativeToolbar } from "../canvas-interaction"
 import { bindDialog } from "../ask.ts"
 import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
@@ -461,6 +461,7 @@ export function wireEditingControls(): void {
   })
   candidateArea.addEventListener("click", (event) => {
     if (!canvasEditable()) return
+    if (appState.archive?.format === "ssf" || appState.archive?.format === "sxi") return selectNativeToolbar()
     if (event.target === toolbarCanvas && appState.selectedToolbarSections.length) return
     if (appState.archive?.format === "bda") {
       if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview")

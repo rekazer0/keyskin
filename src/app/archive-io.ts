@@ -1,6 +1,6 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
@@ -12,12 +12,13 @@ import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
-import { aiDesignStatus, aiDesignPanel, theme, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationClose } from "./dom"
+import { aiDesignStatus, aiDesignPanel, theme, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationClose, fileOperationDetail, fileOperationResult } from "./dom"
 import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
 import { applyModeState, syncSegmentedControls } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
 import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
+import { bakeBdsBackgrounds } from "../bds-backgrounds.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
 import { recordRecentFile } from "./recent-files"
 import { dismissLayoutOverview } from "./layout-overview"
@@ -350,24 +351,27 @@ function exportTargetLabel(format: ExportFormat): string {
   return format === "sxi" ? "手心皮肤" : format === "ssf" ? "搜狗皮肤" : `${format.toUpperCase()} 皮肤`
 }
 
-/** 降级提示对话框最多列几行，其余折成一句“另有 N 条”。 */
-const DOWNGRADE_LINES = 8
-
 type ExportResult = { bytes: Uint8Array; converted: boolean; warnings: string[] }
 
 /** 导出百度皮肤时切片按键文字；BDS 另补齐百度安卓启用前检查的结构。 */
 export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
-  const result = await exportArchiveBytes(format, targetBdaPlatform)
-  if (!result) return
   showFileOperationProgress()
+  await waitForInterfacePaint()
+  const result = await exportArchiveBytes(format, targetBdaPlatform)
+  result.warnings = [...new Set(result.warnings)]
+  if (result.converted && !await acceptDowngrade(`转换为${exportTargetLabel(format)}时将降级以下内容`, result.warnings)) return
   if (format !== "bds" && format !== "bdi") return result
-  updateFileOperationProgress(88, "正在把按键文字切成字体图片…")
+  updateFileOperationProgress(88, "正在检查字体兼容性…")
   await waitForInterfacePaint()
   const bytes = await bakeExportedFonts(result.bytes, format)
-  return { ...result, bytes: format === "bds" ? await completeBdsPackage(bytes, composeAtlasPng) : bytes }
+  if (format !== "bds") return { ...result, bytes }
+  updateFileOperationProgress(88, "正在适配并打包 BDS 图片…")
+  await waitForInterfacePaint()
+  // Bake before the image-count pass so generated variants are packed together with the source images.
+  return { ...result, bytes: await completeBdsPackage(bakeBdsBackgrounds(bytes), composeAtlasPng) }
 }
 
-async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
+async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
   if (!canExport(appState.archive.format, format)) throw new Error(`${appState.archive.format.toUpperCase()} 皮肤不能导出为 ${format.toUpperCase()}`)
@@ -377,32 +381,30 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const report = conversionProgress(22, 78, `正在转换为${exportTargetLabel(format)}…`)
     await report(0.2)
     const result = await convertSsfSxi(appState.archive, appState.archive.format === "ssf" ? await ssfTemplates() : undefined)
-    if (!await acceptDowngrade(`转换为${exportTargetLabel(format)}时将降级以下内容`, result.warnings)) return
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
   if (format === "sxi" && appState.archive.format !== "sxi") {
     const report = conversionProgress(22, 78, "正在导出手心皮肤…")
     await report(0.2)
     let source: SkinArchive = appState.archive
+    const warnings: string[] = []
     // `.sxi` is INI-based, so a BDA source needs the official INI base layout first.
     if (appState.archive.format === "bda") {
       if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
       await report(0.45, "正在转换 BDA 配置…")
       const converted = convertBdaArchive(appState.archive, appState.bdaBase)
-      if (!await acceptDowngrade(`BDA 转换为手心皮肤时将降级以下内容`, converted.warnings)) return
       source = converted.archive
+      warnings.push(...converted.warnings)
     }
     await report(0.75, "正在打包手心皮肤…")
     const result = buildSxiZip(source)
-    if (!await acceptDowngrade("百度皮肤转换为手心皮肤时将降级以下内容", result.warnings)) return
-    return { bytes: result.bytes, converted: true, warnings: result.warnings }
+    return { bytes: result.bytes, converted: true, warnings: [...warnings, ...result.warnings] }
   }
   if (appState.archive.format === "ssf" && format !== "ssf" && format !== "sxi") {
     const report = conversionProgress(22, 80, `正在准备 ${format.toUpperCase()} 模板…`)
     await report(0.02)
     const templates = await ssfTemplates()
     const result = await convertSsfDocument(appState.archive, format, templates, (fraction, detail) => report(0.05 + fraction * 0.9, detail))
-    if (!await acceptDowngrade(`搜狗皮肤转换为 ${format.toUpperCase()} 时将降级以下内容`, result.warnings)) return
     // The converter writes Android BDA; iOS gets the same platform conversion as any BDA.
     const bytes = format === "bda" && targetBdaPlatform === "ios"
       ? await report(0.97, "正在生成 iOS 皮肤包…").then(() => convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync())
@@ -416,7 +418,6 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const result = format === "bda"
       ? await convertSxiToBda(appState.archive, (await ssfTemplates()).bda)
       : await convertSxiToBaidu(appState.archive, format)
-    if (!await acceptDowngrade(`手心皮肤转换为 ${format.toUpperCase()} 时将降级以下内容`, result.warnings)) return
     // The BDA writer emits the Android package; iOS gets the usual platform conversion.
     const bytes = format === "bda" && targetBdaPlatform === "ios"
       ? await report(0.97, "正在生成 iOS 皮肤包…").then(() => convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync())
@@ -425,25 +426,21 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   }
   if (format === "ssf") {
     if (appState.archive.format === "ssf") {
-      showFileOperationProgress()
       return { bytes: await appState.archive.toBytesAsync("ssf"), converted: false, warnings: [] }
     }
     const report = conversionProgress(22, 78, "正在导出搜狗皮肤…")
     await report(0.3)
     const result = await exportSsf(appState.archive, appState.bdaBase)
-    if (!await acceptDowngrade(`转换为搜狗皮肤时将降级以下内容`, result.warnings)) return
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
   if (appState.archive.format === "bda" && format === "bda" && targetBdaPlatform) {
     const report = conversionProgress(22, 78, `正在生成 ${format.toUpperCase()} 皮肤包…`)
     await report(0.3)
-    showFileOperationProgress()
     const result = convertBdaPlatform(appState.archive, targetBdaPlatform)
     return { bytes: await result.toBytesAsync(), converted: true, warnings: bdaCompatibilityWarnings(appState.archive) }
   }
   if (appState.archive.format !== "bda" || format === "bda" || format === "sxi") {
     updateFileOperationProgress(35, `正在打包 ${format.toUpperCase()} 皮肤包…`)
-    showFileOperationProgress()
     await waitForInterfacePaint()
     const soundWarnings: string[] = []
     const adjustments: string[] = []
@@ -455,7 +452,6 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   const report = conversionProgress(22, 80, "正在转换 BDA 配置…")
   await report(0.2)
   const result = convertBdaArchive(appState.archive, appState.bdaBase, format)
-  if (!await acceptDowngrade(`BDA 转换为 ${format.toUpperCase()} 时将降级以下内容`, result.warnings)) return
   await report(0.6, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
   const soundWarnings: string[] = []
   const bytes = await result.archive.platformBytesAsync(format, soundWarnings)
@@ -464,7 +460,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
 }
 
 /**
- * 转换阶段先收集降级提示；确认后才显示进度窗。回调按 0–1 报告阶段并映射到百分比区间。
+ * 转换阶段在进度窗中收集降级提示。回调按 0–1 报告阶段并映射到百分比区间。
  */
 function conversionProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => Promise<void> {
   updateFileOperationProgress(start, detail)
@@ -481,20 +477,13 @@ function reportExportWarnings(sounds: string[], adjustments: string[] = []): voi
 
 /** 转换会降级内容时先问一次；没有降级时直接继续。 */
 async function acceptDowngrade(title: string, warnings: string[]): Promise<boolean> {
-  if (!warnings.length) {
-    showFileOperationProgress()
-    return true
-  }
-  // 一枚搜狗皮肤能产出上千条按键级提示，全塞进对话框读不下去：只列前几条，完整清单进诊断日志。
+  if (!warnings.length) return true
   clientLog.info("export.downgrade", { count: warnings.length, detail: warnings.join("；") })
-  const accepted = await ask({
-    title,
-    detail: warnings.length > DOWNGRADE_LINES
-      ? [...warnings.slice(0, DOWNGRADE_LINES), `……另有 ${warnings.length - DOWNGRADE_LINES} 条同类提示，已写入诊断日志`].join("\n")
-      : warnings.join("\n"),
-    actions: [{ value: "cancel", label: "取消" }, { value: "continue", label: "继续导出", variant: "primary" }],
-  }) === "continue"
-  if (accepted) showFileOperationProgress()
+  showFileOperationResult(warnings.join("\n"))
+  fileOperationResult.scrollTop = 0
+  const accepted = await waitForTap(title, "继续导出")
+  fileOperationResult.hidden = true
+  fileOperationResult.textContent = ""
   return accepted
 }
 
@@ -508,18 +497,14 @@ async function exportForSave(format: ExportFormat) {
 
 async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: string): Promise<boolean> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
-  let exported: Awaited<ReturnType<typeof exportForSave>>
+  const exported = await exportForSave(format)
+  if (!exported) return false
   let path = appState.currentPath
   if (saveAs || !path || (!path.startsWith("content://") && exportFormatFromPath(path) !== format)) {
-    const written = await writeToChosenFile(suggestedName, async () => {
-      exported = await exportForSave(format)
-      return exported?.bytes
-    }, exportTargetLabel(format))
-    if (!written || !exported) return false
+    const written = await writeToChosenFile(suggestedName, exported.bytes, exportTargetLabel(format))
+    if (!written) return false
     path = written
   } else {
-    exported = await exportForSave(format)
-    if (!exported) return false
     try {
       await writeNativePath(path, exported.bytes)
     } catch (error) {
@@ -557,9 +542,10 @@ export async function writeNativePath(path: string, bytes: Uint8Array): Promise<
   updateFileOperationProgress(90, "正在写入文件…")
   if (path.startsWith("content://")) {
     await writeFile(path, bytes)
-    return
+  } else {
+    await invoke("write_file", { path, data: bytes })
   }
-  await invoke("write_file", { path, data: bytes })
+  showFileOperationResult(`保存位置：${path}`)
 }
 
 /**
@@ -619,25 +605,35 @@ export async function writeToChosenFile(
     if (navigator.userActivation && !navigator.userActivation.isActive) {
       const confirmed = await waitForTap(`${filename} 已生成，轻点“下载”继续`, "下载", download)
       revoke()
-      return confirmed ? filename : undefined
+      if (!confirmed) return
+    } else {
+      download()
+      revoke()
     }
-    download()
-    revoke()
+    showFileOperationResult(`文件：${filename}\n保存位置：浏览器下载目录（以浏览器设置为准）`)
     return filename
   }
-  let file: BrowserSaveFileHandle
-  try {
-    file = await picker.call(window, {
-      suggestedName: filename,
-      types: extension ? [{
-        description,
-        accept: { "application/octet-stream": [`.${extension}`] },
-      }] : undefined,
-    })
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") return
-    throw error
+  let file: BrowserSaveFileHandle | undefined
+  const pick = async () => {
+    try {
+      file = await picker.call(window, {
+        suggestedName: filename,
+        types: extension ? [{
+          description,
+          accept: { "application/octet-stream": [`.${extension}`] },
+        }] : undefined,
+      })
+      return true
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return false
+      throw error
+    }
   }
+  // 转换和确认可能耗尽浏览器的点击授权，重新点击后再打开系统保存窗口。
+  if (navigator.userActivation && !navigator.userActivation.isActive) {
+    if (!await waitForTap(`${filename} 已生成，轻点“保存”选择保存位置`, "保存", pick)) return
+  } else if (!await pick()) return
+  if (!file) return
   let bytes: Uint8Array | undefined
   try {
     bytes = await produce()
@@ -653,17 +649,16 @@ export async function writeToChosenFile(
   const writable = await file.createWritable()
   await writable.write(bytes)
   await writable.close()
+  showFileOperationResult(`文件：${file.name}\n保存位置：浏览器中选择的文件夹`)
   return file.name
 }
 
 async function downloadArchive(format: ExportFormat, suggestedName: string): Promise<boolean> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
-  let exported: Awaited<ReturnType<typeof exportForSave>>
-  const path = await writeToChosenFile(suggestedName, async () => {
-    exported = await exportForSave(format)
-    return exported?.bytes
-  }, exportTargetLabel(format))
-  if (!path || !exported) return false
+  const exported = await exportForSave(format)
+  if (!exported) return false
+  const path = await writeToChosenFile(suggestedName, exported.bytes, exportTargetLabel(format))
+  if (!path) return false
   if (!exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
     documentName.textContent = suggestedName
@@ -683,9 +678,11 @@ export async function saveArchive(
   const currentName = documentName.textContent?.trim() ?? ""
   const suggestedName = exportName(currentName, format)
   if (targetBdaPlatform) {
+    const exported = await exportArchive(format, targetBdaPlatform)
+    if (!exported) return false
     return Boolean(await writeToChosenFile(
       suggestedName,
-      async () => (await exportArchive(format, targetBdaPlatform))?.bytes,
+      exported.bytes,
       `${targetBdaPlatform === "ios" ? "iOS" : "Android"} BDA 皮肤`,
     ))
   }
@@ -745,37 +742,45 @@ export async function shareArchiveToMobile(): Promise<boolean> {
 export function waitForTap(detail: string, label: string, onTap?: () => void | Promise<boolean>): Promise<boolean> {
   return new Promise((resolve, reject) => {
     showFileOperationProgress()
-    updateFileOperationProgress(90, detail)
+    fileOperationDetail.textContent = detail
     const share = document.createElement("button")
     share.type = "button"
     share.className = "ui-button"
     share.dataset.variant = "primary"
     share.dataset.size = "lg"
     share.textContent = label
-    fileOperationClose.before(share)
+    fileOperationClose.after(share)
     fileOperationClose.dataset.variant = "quiet"
+    fileOperationClose.textContent = "取消"
     fileOperationClose.disabled = false
     const finish = (confirmed: boolean) => {
       share.remove()
       fileOperationClose.disabled = true
+      fileOperationClose.dataset.variant = "primary"
+      fileOperationClose.textContent = "关闭"
       fileOperationClose.removeEventListener("click", cancel)
       fileOperationDialog.removeEventListener("close", cancel)
+      fileOperationDialog.removeEventListener("cancel", cancel)
       resolve(confirmed)
     }
-    const cancel = () => finish(false)
+    const cancel = (event: Event) => { event.preventDefault(); finish(false) }
     share.addEventListener("click", async () => {
       try {
         finish(await onTap?.() ?? true)
       } catch (error) {
         share.remove()
         fileOperationClose.disabled = true
+        fileOperationClose.dataset.variant = "primary"
+        fileOperationClose.textContent = "关闭"
         fileOperationClose.removeEventListener("click", cancel)
         fileOperationDialog.removeEventListener("close", cancel)
+        fileOperationDialog.removeEventListener("cancel", cancel)
         reject(error)
       }
     }, { once: true })
     fileOperationClose.addEventListener("click", cancel, { once: true })
     fileOperationDialog.addEventListener("close", cancel, { once: true })
-    share.focus()
+    fileOperationDialog.addEventListener("cancel", cancel, { once: true })
+    fileOperationClose.focus({ preventScroll: true })
   })
 }

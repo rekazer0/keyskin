@@ -14,13 +14,14 @@ import { refreshPreview } from "./preview-render"
 import { openImageResourceChooser } from "./resource-inspector"
 import { sourceEditPath, ssfDocument, ssfPackage, ssfTheme } from "./ssf-documents"
 import { appState } from "./state"
-import { styleKindIcon, styleReferenceCard } from "../style-card"
+import { styleKindIcon, styleReferenceAddButton, styleReferenceCard } from "../style-card"
 import { element } from "../dom-element.ts"
 import { sanitizeFontFileName, skinFontFiles, uniqueFontFileName } from "../font-files.ts"
 import { type Change } from "../history.ts"
 import { showError, showStatus } from "./file-operations"
 import { validateFont } from "./skin-fonts"
 import { fieldCaption, fieldControl, numberParts, section } from "./property-rows"
+import { ssfMediaField } from "./ssf-media-fields"
 
 type SsfEntry = { key: string; value: string }
 
@@ -37,7 +38,7 @@ const QUADS: Record<string, string[]> = {
   PADDINGS: ["←", "↑", "→", "↓"],
 }
 const COLOR_VALUE = /^(?:0x|#)?([0-9a-f]{6}|[0-9a-f]{8})$/i
-const NUMERIC_FIELDS = new Set(["BG_STYLE", "TEXT_SIZE", "TYPEFACE", "TYPE", "LABEL_VISIBLE", "MINOR_LABEL_VISIBLE", "LABEL_ORIENTATION", "LABEL_HORIZONTAL_OFFSET", "MINOR_LABEL_HORIZONTAL_OFFSET", "POPUP_OFFSET_VERTICAL", "LOOP_TYPE", "START", "END", "loop_count"])
+const NUMERIC_FIELDS = new Set(["BG_STYLE", "TEXT_SIZE", "TYPEFACE", "TYPE", "LABEL_VISIBLE", "MINOR_LABEL_VISIBLE", "LABEL_ORIENTATION", "LABEL_HORIZONTAL_OFFSET", "MINOR_LABEL_HORIZONTAL_OFFSET", "POPUP_OFFSET_VERTICAL", "LOOP_TYPE", "START", "END", "loop_count", "DECO_ANIM_NUMBER"])
 
 /**
  * Applies `change` to one Sogou file as a single undo step, then redraws the canvas from the edited
@@ -213,7 +214,9 @@ function imageCard(label: string, keys: readonly string[], targets: SsfLocation[
       onClick: isEditing() ? () => chooseImage(targets, key) : undefined,
     }
   })
-  row.append(styleReferenceCard({ name: names, kind: styleKindIcon("image"), states, disabled: !isEditing() }))
+  const configured = targets.some(target => keys.some(key => parseSsfImage(stateImage(ssfDocument(target.path), target.section, key))?.file))
+  if (configured) row.append(styleReferenceCard({ name: names, kind: styleKindIcon("image"), states, disabled: !isEditing() }))
+  else row.firstElementChild?.append(styleReferenceAddButton(`添加${label}`, () => chooseImage(targets, keys[0]), !isEditing()))
   return row
 }
 
@@ -265,12 +268,13 @@ function colorField(key: string, value: string, targets: SsfLocation[]): HTMLEle
   return row
 }
 
-/** `BOLD=true` or no key at all (Sogou reads only "true"). */
+/** BOLD uses true / absence; SET_PRESSED uses 1 / 0. */
 function switchField(key: string, value: string, targets: SsfLocation[]): HTMLElement {
   const row = element("label", "ui-field")
   caption(row, key)
-  row.append(fieldControl({ kind: "switch", checked: value.trim() === "true" }, ssfFieldLabel(key), (checked) => editTargets(targets, (document, target) => {
-    if (checked) setSsfValue(document, target.section, key, "true", target.create)
+  const on = key === "BOLD" ? "true" : "1"
+  row.append(fieldControl({ kind: "switch", checked: value.trim() === on }, ssfFieldLabel(key), (checked) => editTargets(targets, (document, target) => {
+    if (checked || key === "SET_PRESSED") setSsfValue(document, target.section, key, checked ? on : "0", target.create)
     else document.remove(target.section, key)
   }), { editable: isEditing() }))
   return row
@@ -294,6 +298,11 @@ function textField(key: string, value: string, targets: SsfLocation[], options?:
 /** One row for any Sogou value, chosen by what the value is. `options` suggests values (sound names). */
 function ssfField(entry: SsfEntry, targets: SsfLocation[], options?: string[]): HTMLElement {
   const { key, value } = entry
+  const media = ssfMediaField(targets[0].path, key, value || targets.slice(1).map(target => ssfDocument(target.path).get(target.section, key)).find(Boolean) || "", next => editTargets(targets, (document, target) => {
+    if (next) setSsfValue(document, target.section, key, next, target.create)
+    else document.remove(target.section, key)
+  }))
+  if (media) return media
   const quad = QUADS[key]
   const parts = value.split(",").map((part) => part.trim())
   if (quad && (!value || parts.length === quad.length && parts.every((part) => part !== "" && Number.isFinite(Number(part))))) {
@@ -306,7 +315,7 @@ function ssfField(entry: SsfEntry, targets: SsfLocation[], options?: string[]): 
     }))
     return row
   }
-  if (key === "BOLD") return switchField(key, value, targets)
+  if (key === "BOLD" || key === "SET_PRESSED") return switchField(key, value, targets)
   if (/COLOR/i.test(key) && (COLOR_VALUE.test(value.trim()) || !value)) return colorField(key, value, targets)
   if (parseSsfImage(value) || !value && IMAGE_FIELDS.has(key)) return imageCard(ssfFieldLabel(key), [key], targets)
   return textField(key, value, targets, options)
@@ -437,6 +446,13 @@ function markMixed(row: HTMLElement, targets: SsfLocation[], keys: string[]): vo
   if (row.classList.contains("style-reference-field")) {
     const names = row.querySelectorAll<HTMLInputElement>(".ui-style-ref-name")
     const states = row.querySelectorAll<HTMLElement>(".ui-style-ref .ui-style-state")
+    if (["sound", "ANIM_STYLE", "BG_ANIM", "FG_ANIM", "DECO_ANIM"].includes(keys[0])) {
+      if (values.some(value => value !== values[0])) {
+        if (names[0]) { names[0].value = ""; names[0].placeholder = "混合" }
+        for (const state of states) state.replaceChildren("混合")
+      }
+      return
+    }
     for (const [index, key] of keys.entries()) {
       const files = targets.map(({ path, section }) => parseSsfImage(stateImage(ssfDocument(path), section, key))?.file)
       if (files.every((file) => file === files[0])) continue

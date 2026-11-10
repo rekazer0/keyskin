@@ -3,8 +3,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { IniDocument } from '../src/ini.ts'
-import { encodePng } from '../src/ssf/ssf-png.ts'
+import { decodePng, encodePng } from '../src/ssf/ssf-png.ts'
 import { completeBdsPackage, globalFirst, MAX_IMAGE_FILES, symbolLayoutFrom, withInheritedSections, withMoreDefaults } from '../src/bds-package.ts'
+import { bakeBdsBackgrounds } from '../src/bds-backgrounds.ts'
 
 const py9 = [
   '[PANEL]', 'SIZE=1080,642', 'KEY_NUM=4', 'BACK_STYLE=1',
@@ -59,21 +60,69 @@ test('整包修复：CRLF Info、补 symbol.ini，图片超过上限时合成图
   const composed = []
   const out = unzipSync(await completeBdsPackage(zipSync(files), async (width, height, parts) => {
     composed.push({ width, height, parts: parts.length })
-    return png
+    return encodePng({ width, height, data: new Uint8Array(width * height * 4).fill(0x80) })
   }))
   const text = (path) => strFromU8(out[path])
   assert.equal(text('Info.txt'), 'Name=t\r\nSupportPlatform=A\r\n')
   assert.ok(out['light/port/symbol.ini'])
   assert.ok(text('light/port/py_9.ini').startsWith('[INPUT]\n[CAND]\n[MORE]\n'))
   assert.ok(!text('light/port/logo.ini').includes('[CAND]'))
-  assert.deepEqual(composed.map(({ parts }) => parts), [MAX_IMAGE_FILES + 2])
   const images = Object.keys(out).filter((path) => /^light\/res\/[^/]+\.png$/.test(path))
-  assert.deepEqual(images, ['light/res/keyskin_atlas1.png'])
+  assert.ok(images.length <= MAX_IMAGE_FILES)
+  const kept = images.filter((path) => !path.includes('keyskin_atlas'))
+  assert.ok(kept.length > 0, 'only the surplus images are packed; original PNGs retain their encoding')
+  assert.equal(composed.reduce((sum, { parts }) => sum + parts, 0) + kept.length, MAX_IMAGE_FILES + 2)
+  for (const path of kept) assert.deepEqual(out[path], files[path])
   const css = IniDocument.parse(text('light/res/default.css'))
   assert.equal(css.sections()[0], 'GLOBAL')
-  const [, tile] = css.get('STYLE2', 'NM_IMG').split(',')
-  const til = IniDocument.parse(text('light/res/keyskin_atlas1.til'))
+  const [image, tile] = css.get('STYLE2', 'NM_IMG').split(',')
+  const til = IniDocument.parse(text(`light/res/${image}.til`))
   const [x] = til.get(`IMG${tile}`, 'SOURCE_RECT').split(',').map(Number)
-  assert.ok(x > 0)
   assert.equal(til.get(`IMG${tile}`, 'INNER_RECT'), `${x + 1},${til.get(`IMG${tile}`, 'SOURCE_RECT').split(',')[1]},2,2`)
+})
+
+test('BDS 按键背景按布局尺寸烘焙 INNER_RECT，避免百度亮色路径整图拉伸', () => {
+  const data = new Uint8Array(4 * 4 * 4)
+  for (let i = 0; i < data.length; i += 4) data.set([i / 4, 80, 120, 255], i)
+  const files = {
+    'Info.txt': strToU8('Name=t\nSupportPlatform=A\n'),
+    'light/port/gen.ini': strToU8('[PANEL]\nSIZE=8,6\n'),
+    'light/port/py_9.ini': strToU8('[KEY1]\nBACK_STYLE=1\nVIEW_RECT=0,0,8,6\n'),
+    'light/res/default.css': strToU8('[GLOBAL]\nSTYLE_NUM=2\n[STYLE1]\nNM_IMG=key,1\n'),
+    'light/res/key.png': encodePng({ width: 4, height: 4, data }),
+    'light/res/key.til': strToU8('[IMG1]\nSOURCE_RECT=0,0,4,4\nINNER_RECT=1,1,2,2\n'),
+  }
+  const out = unzipSync(bakeBdsBackgrounds(zipSync(files)))
+  const css = IniDocument.parse(strFromU8(out['light/res/default.css']))
+  const style = css.get('STYLE2', 'NM_IMG')
+  assert.ok(style)
+  assert.equal(css.get('STYLE1', 'NM_IMG'), 'key,1')
+  assert.deepEqual([...decodePng(out[`light/res/${style.split(',')[0]}.png`]).data.slice(0, 8)], [0, 80, 120, 255, 1, 80, 120, 255])
+  const til = IniDocument.parse(strFromU8(out[`light/res/${style.split(',')[0]}.til`]))
+  assert.equal(til.get('IMG1', 'SOURCE_RECT'), '0,0,8,6')
+  assert.equal(til.get('IMG1', 'INNER_RECT'), undefined)
+  assert.equal(IniDocument.parse(strFromU8(out['light/port/py_9.ini'])).get('KEY1', 'BACK_STYLE'), '2')
+})
+
+test('部分合图为字体图片预留数量，并保留已有图集，避免再次导出覆盖资源', async () => {
+  const png = encodePng({ width: 4, height: 2, data: new Uint8Array(32).fill(0x80) })
+  const oldAtlas = encodePng({ width: 64, height: 64, data: Uint8Array.from({ length: 64 * 64 * 4 }, (_, i) => (Math.imul(i, 65537) >>> 8) & 255) })
+  const tile = strToU8('[GLOBAL]\nTILE_NUM=1\n[IMG1]\nSOURCE_RECT=0,0,4,2\n')
+  const files = {
+    'light/res/default.css': strToU8('[STYLE1]\nNM_IMG=keyskin_atlas1,1\n[STYLE2]\nNM_IMG=keyskin_font,1\n'),
+    'light/res/keyskin_atlas1.png': oldAtlas,
+    'light/res/keyskin_atlas1.til': tile,
+    'light/res/keyskin_font.png': png,
+    'light/res/keyskin_font.til': tile,
+  }
+  for (let i = 0; i < MAX_IMAGE_FILES; i++) {
+    files[`light/res/img${i}.png`] = png
+    files[`light/res/img${i}.til`] = tile
+  }
+  const out = unzipSync(await completeBdsPackage(zipSync(files), async (width, height) =>
+    encodePng({ width, height, data: new Uint8Array(width * height * 4) })))
+  assert.ok(Object.keys(out).filter(path => /^light\/res\/[^/]+\.png$/.test(path)).length <= MAX_IMAGE_FILES)
+  for (const path of ['light/res/keyskin_atlas1.png', 'light/res/keyskin_atlas1.til', 'light/res/keyskin_font.png', 'light/res/keyskin_font.til']) assert.deepEqual(out[path], files[path])
+  assert.ok(out['light/res/keyskin_atlas2.png'])
+  assert.equal(IniDocument.parse(strFromU8(out['light/res/default.css'])).get('STYLE1', 'NM_IMG'), 'keyskin_atlas1,1')
 })

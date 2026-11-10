@@ -24,6 +24,9 @@ type KeyLook = { binding: SsfKeyBinding; back?: LookPair; fore?: LookPair; label
 
 type Foreground = { normal: string; pressed: string; rect?: number[] }
 
+/** Sogou's `sound=` value has no extension; skins ship any of these next to the INI. */
+const SOUND_EXTENSIONS = ["wav", "ogg", "mp3", "aiff", "aif", "caf"]
+
 export class SsfLook {
   readonly theme: SsfTheme
   private readonly pkg: SsfPackage
@@ -375,7 +378,7 @@ export class SsfLook {
     const section = ssfSoundSection(this.sounds, binding)
     const sound = section && this.sounds.get(section, "sound")?.trim()
     if (!sound) return
-    const filename = [`${sound}.wav`, `${sound}.ogg`, `${sound}.mp3`, sound].find((name) => this.pkg.file(this.theme, name))
+    const filename = [...SOUND_EXTENSIONS.map((extension) => `${sound}.${extension}`), sound].find((name) => this.pkg.file(this.theme, name))
     const bytes = filename && this.pkg.file(this.theme, filename)
     // Writers put the sound in their own res/ folder, so only the file name is kept.
     return filename && bytes ? { filename: filename.split(/[\\/]/).pop()!, bytes } : undefined

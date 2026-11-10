@@ -98,9 +98,13 @@ async function closeOperationDialog(page) {
   if (await close.isVisible().catch(() => false)) await close.click()
 }
 
-/** 保存 / 导出成功不弹模态框（DESIGN.md §7），结果只写状态栏。 */
-async function expectStatusOnly(page, text) {
+/** 保存 / 导出完成后显示 100% 进度和保存位置，由用户关闭。 */
+async function expectSaveResult(page, text) {
   await page.waitForFunction((text) => document.querySelector("#event-log")?.textContent === text, text, { timeout: 60000 })
+  assert.equal(await page.locator("#file-operation-title").textContent(), text)
+  assert.equal(await page.locator("#file-operation-progress").evaluate(meter => meter.value), 100)
+  assert.match(await page.locator("#file-operation-result").textContent(), /保存位置：/)
+  await page.locator("#file-operation-close").click()
   await page.locator("#file-operation-dialog").waitFor({ state: "hidden" })
 }
 
@@ -696,7 +700,7 @@ await check("file: rename, save, export every format and unsaved prompt", () => 
         await item.click()
       })
       names.push(file.suggestedFilename().split(".").pop())
-      await expectStatusOnly(page, "导出完成")
+      await expectSaveResult(page, "导出完成")
     }
     return names
   }
@@ -714,7 +718,7 @@ await check("file: rename, save, export every format and unsaved prompt", () => 
     await page.locator("#save").click()
   })
   assert.match(saved.suggestedFilename(), /\.bds$/)
-  await expectStatusOnly(page, "保存完成")
+  await expectSaveResult(page, "保存完成")
   await x.fill(String(Number(await x.inputValue()) + 1))
   await x.press("Enter")
   // 先选模板，替换当前皮肤前才提示未保存。
@@ -741,7 +745,7 @@ await check("file: a BDA skin exports to every format", () => withPage(async (pa
     tapped.catch(() => {})
     if ((await Promise.race([pending, tapped])) === "tap") await tap.click()
     formats.push((await pending).suggestedFilename().split(".").pop())
-    await expectStatusOnly(page, "导出完成")
+    await expectSaveResult(page, "导出完成")
   }
   assert.deepEqual(formats, ["bdi", "bds", "bda", "bda", "sxi", "ssf"])
 }))

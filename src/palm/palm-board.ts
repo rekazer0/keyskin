@@ -315,8 +315,10 @@ export class PalmBoard {
 
   /** The bubble layout (`h.<file>`) the board's keys pop. */
   get hint(): JsonObject | undefined {
-    const file = this.part("hint")?.file
-    return typeof file === "string" ? asObject(asObject(this.layout.h)?.[file]) : undefined
+    const hint = this.part("hint")
+    if (!hint) return
+    const referenced = typeof hint.file === "string" ? asObject(asObject(this.layout.h)?.[hint.file]) : undefined
+    return { ...referenced, ...hint }
   }
 
   /** Keyboard states some key of this theme and orientation swaps for (`fix_a`). */

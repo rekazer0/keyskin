@@ -9,6 +9,8 @@ import { legacyParticleFrames } from "./preview-animation.ts"
 import { drawVisual } from "./preview-draw.ts"
 import type { Rect } from "./preview-items.ts"
 import { releaseOnRemove } from "./dom-lifecycle.ts"
+import { drawSceneLayer, type SceneKey } from "./native-scene.ts"
+import { drawSprite, type SceneEffects } from "./native-motion.ts"
 
 export type AnimationPlayerOptions = {
   clip: PreviewClip
@@ -22,6 +24,7 @@ export type AnimationPlayerOptions = {
   /** A card-sized player: no transport, loops while visible, one frame every 30 ms. */ thumbnail?: boolean | "slow"
   direct?: AnimationDirectEdit
   sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
+  native?: () => Promise<{ key: SceneKey; effects: SceneEffects } | undefined>
 }
 
 /** The keyboard canvas beside the player. */
@@ -55,7 +58,7 @@ function stageTracks(tracks: readonly Track[]): Track[] {
 }
 
 /** Local playback state belongs to the generated component, never to the skin document. */
-export function animationPlayer({ clip, key, resolver, resourceParticles, readFile, keyboard, thumbnail = false, direct, sample }: AnimationPlayerOptions): HTMLElement {
+export function animationPlayer({ clip, key, resolver, resourceParticles, readFile, keyboard, thumbnail = false, direct, sample, native }: AnimationPlayerOptions): HTMLElement {
   const root = element("div", "ui-animation-player")
   if (thumbnail) root.dataset.variant = "thumbnail"
   const stage = element("div", "ui-animation-stage")
@@ -109,7 +112,8 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const thumbnailEvents = new AbortController()
   let loading = true
   let fit = 1
-  const hasContent = tracks.length + clip.particles.length + clip.images.length > 0
+  let nativeScene: Awaited<ReturnType<NonNullable<AnimationPlayerOptions["native"]>>>
+  let hasContent = tracks.length + clip.particles.length + clip.images.length > 0
   let controls: ReturnType<typeof animationDirectControls> | undefined
   const timelineExtent = direct ? Math.max(400, duration * 1.5) : duration
   /** Every particle position sampled over the whole clip: the stage shows the trajectories even while paused. */
@@ -190,18 +194,27 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     const include = (x: number, y: number) => {
       left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y)
     }
+    const includeMotion = (rect: Rect, motion: ReturnType<typeof motionAt>, project = (point: DOMPoint) => point) => {
+      const [cx, cy] = motion?.pivot ? [rect.x + motion.pivot[0] * rect.width, rect.y + motion.pivot[1] * rect.height] : [rect.x + rect.width / 2, rect.y + rect.height / 2]
+      const matrix = new DOMMatrix()
+        .translate(motion?.translation?.[0] ?? 0, motion?.translation?.[1] ?? 0)
+        .translate(cx, cy).rotate(motion?.rotation ?? 0).scale(motion?.scale?.[0] ?? 1, motion?.scale?.[1] ?? 1).translate(-cx, -cy)
+      for (const [x, y] of [[rect.x, rect.y], [rect.x + rect.width, rect.y], [rect.x, rect.y + rect.height], [rect.x + rect.width, rect.y + rect.height]]) {
+        const point = project(matrix.transformPoint(new DOMPoint(x, y)))
+        include(point.x, point.y)
+      }
+    }
     for (let step = 0; step <= SAMPLES; step++) {
       const at = duration * step / SAMPLES
       const motion = tracks.length ? motionAt(tracks, at, keyRect) : undefined
-      if (motion) {
-        const [cx, cy] = motion.pivot ? [keyRect.x + motion.pivot[0] * keyRect.width, keyRect.y + motion.pivot[1] * keyRect.height] : [keyRect.x + keyRect.width / 2, keyRect.y + keyRect.height / 2]
-        const matrix = new DOMMatrix()
-          .translate(motion.translation?.[0] ?? 0, motion.translation?.[1] ?? 0)
-          .translate(cx, cy).rotate(motion.rotation ?? 0).scale(motion.scale?.[0] ?? 1, motion.scale?.[1] ?? 1).translate(-cx, -cy)
-        for (const [x, y] of [[keyRect.x, keyRect.y], [keyRect.x + keyRect.width, keyRect.y], [keyRect.x, keyRect.y + keyRect.height], [keyRect.x + keyRect.width, keyRect.y + keyRect.height]]) {
-          const point = matrix.transformPoint(new DOMPoint(x, y))
-          include(point.x, point.y)
-        }
+      if (motion) includeMotion(keyRect, motion)
+      if (nativeScene) {
+        const rect = nativeScene.key.rect
+        const scale = Math.min(112 / rect.width, 112 / rect.height)
+        const project = (point: DOMPoint) => new DOMPoint(STAGE.width / 2 + (point.x - rect.x - rect.width / 2) * scale, STAGE.height / 2 + (point.y - rect.y - rect.height / 2) * scale)
+        const frame = nativeScene.effects.press(nativeScene.key.section, at, 1)
+        for (const motion of [frame.back, ...frame.fore]) includeMotion(rect, motion, project)
+        for (const sprite of frame.sprites) includeMotion(sprite.rect, sprite.motion, project)
       }
       for (const item of clip.particles) {
         for (const particle of particleFrames(item, at)) {
@@ -218,7 +231,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       (STAGE.height / 2 - top) / (STAGE.height / 2 - margin), (bottom - STAGE.height / 2) / (STAGE.height / 2 - margin),
     )
     // Only thumbnails zoom in: retain real sampling coordinates and the full editor's handle geometry.
-    const maxFit = thumbnail && !clip.images.length ? 1.75 : 1
+    const maxFit = thumbnail && !clip.images.length && !native ? 1.75 : 1
     fit = Number.isFinite(reach) && reach > 0 ? Math.min(maxFit, 1 / reach) : 1
     if (fit < 1) notes.push(`舞台缩放 ${Math.round(fit * 100)}%`)
   }
@@ -231,6 +244,19 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     context.translate(STAGE.width / 2, STAGE.height / 2)
     context.scale(fit, fit)
     context.translate(-STAGE.width / 2, -STAGE.height / 2)
+    if (nativeScene) {
+      const { key: target, effects } = nativeScene
+      const scale = Math.min(112 / target.rect.width, 112 / target.rect.height)
+      context.translate(STAGE.width / 2, STAGE.height / 2)
+      context.scale(scale, scale)
+      context.translate(-target.rect.x - target.rect.width / 2, -target.rect.y - target.rect.height / 2)
+      const layers = target.layers(true)
+      const motion = effects.press(target.section, elapsed, 1)
+      withMotion(context, target.rect, motion.back, () => layers.back.forEach(layer => drawSceneLayer(context, layer)))
+      layers.fore.forEach((layer, index) => withMotion(context, target.rect, motion.fore[layers.groups?.[index] ?? 0], () => drawSceneLayer(context, layer)))
+      motion.sprites.forEach(sprite => drawSprite(context, sprite))
+      return
+    }
     const radius = parseFloat(token("--radius-md")) || 0
     const outline = (rect: Rect, color: string) => {
       context.save()
@@ -427,6 +453,12 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   update()
   queueMicrotask(() => { if (root.isConnected) draw() })
   const load = async () => {
+    nativeScene = await native?.()
+    if (disposed) return
+    if (nativeScene) {
+      duration = Math.min(MAX_DURATION, nativeScene.effects.pressDuration(nativeScene.key.section, 1))
+      hasContent = duration > 0
+    }
     const artwork = await sample?.()
     if (disposed) return
     if (artwork) {

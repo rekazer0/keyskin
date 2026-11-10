@@ -7,7 +7,7 @@
 import { drawVisualPreview, type Visual } from "../atlas.ts"
 import { element } from "../dom-element.ts"
 import { createIcon } from "../icons.ts"
-import { soundStyleSample, styleReferenceCard } from "../style-card.ts"
+import { soundStyleSample, styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
 
 /** 选项：值、文字（纯图标分段时只进悬停提示与 aria-label）、可选图标。 */
 type Choice = readonly [value: string, label: string, icon?: string]
@@ -104,6 +104,16 @@ export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElemen
   if (spec.kind === "style" || spec.kind === "image") {
     row.classList.add("style-reference-field")
     if (spec.kind === "style") services.decorateStyle(control as HTMLInputElement, spec.reference)
+    else if (!spec.value.trim() && !options.mixed) {
+      control.hidden = true
+      row.firstElementChild?.append(styleReferenceAddButton(`添加${options.label}`, () => {
+        if (spec.pick) spec.pick()
+        else {
+          control.hidden = false
+          control.querySelector("input")?.focus()
+        }
+      }, !(options.editable ?? services.editing()) || !options.commit))
+    }
   }
   if (options.rowKey !== undefined) row.dataset.inspectorRowKey = JSON.stringify(options.rowKey)
   if (options.commit && spec.kind !== "readonly") {
@@ -196,6 +206,7 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
     case "style": {
       const input = element("input")
       input.value = spec.value
+      input.placeholder = placeholder
       input.disabled = disabled
       input.setAttribute("aria-label", label)
       input.addEventListener("change", () => send(input.value.trim(), {}))

@@ -27,7 +27,7 @@ const sectionKind = (section: string) => section.replace(/\d+$/i, "").toUpperCas
 /** 候选栏与输入区属于候选栏文件：选中候选栏/输入码区域时才编辑，整体布局里不展开。 */
 const CANDIDATE_AREA_SECTIONS = new Set(["CAND", "INPUT"])
 
-/** 整体布局（选中当前布局、没选按键）只列这个布局自己的分区：更多面板等各有自己的入口，不在这里重复。 */
+/** 整体布局不重复列出候选栏与输入区；其他配置仍由调用方决定是否展示。 */
 function overallLayoutEntries(document: IniDocument) {
   const entries = document.entries().filter(({ section }) => !CANDIDATE_AREA_SECTIONS.has(sectionKind(section)))
   for (const section of document.sections()) {

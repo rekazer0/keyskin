@@ -253,7 +253,22 @@ export function scheduleSelectionInspectorSync(canvasPreview: Preview): void {
   }))
 }
 
+export function selectNativeToolbar(): void {
+  const path = appState.archive?.format === "ssf" ? appState.layoutPath : toolbarStrip.dataset.path
+  if (!path) return
+  if (appState.selectedPath !== path) selectFile(path, "overview", "document", true)
+  appState.selectedCandidate = true
+  appState.selectedKeySections = []
+  appState.selectedToolbarSections = []
+  preview.setSelected([])
+  toolbarPreview.setSelected([])
+  syncCandidateSelection()
+  scheduleSelectionInspectorSync(toolbarPreview)
+  if (mobilePortraitQuery.matches) setMobilePane("inspector")
+}
+
 export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections) => {
+  if (appState.archive?.format === "ssf" || appState.archive?.format === "sxi") return selectNativeToolbar()
   const path = toolbarStrip.dataset.path
   if (!path) return
   if (appState.selectedPath !== path) selectFile(path, "overview", "document", true)
@@ -370,16 +385,7 @@ export function playSoundPath(path: string, onFinished?: (error?: string) => voi
   const finish = () => { if (appState.keySoundAudio === audio) releaseKeySound() }
   audio.onended = finish
   audio.preload = "auto"
-  void audio.play().catch(async (error: unknown) => {
-    if (appState.keySoundAudio !== audio) return
-    if (error instanceof DOMException && error.name === "NotSupportedError") {
-      try {
-        await playDecodedSound(path, bytes, audio, finish)
-        return
-      } catch (fallbackError) {
-        error = fallbackError
-      }
-    }
+  const failed = (error: unknown) => {
     if (appState.keySoundAudio !== audio) return
     const reason = error instanceof Error ? `（${error.name}：${error.message}）` : ""
     const message = `无法播放按键音效：${path.split("/").pop() ?? path}${reason}`
@@ -387,7 +393,21 @@ export function playSoundPath(path: string, onFinished?: (error?: string) => voi
     releaseKeySound()
     onFinished?.(message)
     eventLog.textContent = message
-  })
+  }
+  // 按键音只有几毫秒：`<audio>` 要现场解析文件头，WebKit 上换成 Ogg 后经常还没出声就播完了，
+  // 所以先解码再播放（解出的 AudioBuffer 会缓存），元素播放只作兜底。
+  void (async () => {
+    try {
+      await playDecodedSound(path, bytes, audio, finish)
+    } catch (error) {
+      if (appState.keySoundAudio !== audio) return
+      try {
+        await audio.play()
+      } catch {
+        failed(error)
+      }
+    }
+  })()
 }
 
 function keySoundForEvent(event: PreviewEvent): string | undefined {

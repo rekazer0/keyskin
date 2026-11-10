@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { pickStyleReference } from '../tests/helpers/style-reference-picker.mjs'
 import { strToU8, strFromU8, unzipSync, zipSync } from 'fflate'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -40,7 +41,7 @@ try {
   await selectKey()
   await group().waitFor()
   assert.equal(await group().locator(':scope > .inspector-grid > label').count(), 4)
-  assert.deepEqual(await row('FORE_ANIM_STYLE').locator('.ui-style-ref-number').evaluateAll(inputs => inputs.map(input => input.value)), ['', '7', '0', '7', ''])
+  assert.deepEqual(await row('FORE_ANIM_STYLE').locator('.ui-style-ref-number').evaluateAll(inputs => inputs.map(input => input.value)), ['7', '7'])
   assert.equal(await group().locator('.ui-style-state[data-state="pressed"]').count(), 0, '动画不是正常/按下图片对')
   const before = await text(), undo = await history()
   const card = row('BACK_ANIM_STYLE').getByRole('button', { name: /动画 1/ })
@@ -74,7 +75,7 @@ try {
   assert.match(await text(), /FORE_ANIM_STYLE=,8,0,7,/)
   await slot().fill(''); await slot().press('Tab')
   assert.match(await text(), /FORE_ANIM_STYLE=,,0,7,/)
-  assert.equal(await row('FORE_ANIM_STYLE').locator('.ui-style-ref').count(), 5, '清空不移动后续槽位')
+  assert.equal(await row('FORE_ANIM_STYLE').locator('.ui-style-ref').count(), 1, '清空隐藏卡片但不移动后续槽位')
   await row('ANIM_STYLE').locator('.ui-style-ref-number').fill('999')
   await row('ANIM_STYLE').locator('.ui-style-ref-number').press('Tab')
   assert.equal(await row('ANIM_STYLE').getByRole('button', { name: /缺失|未设置/ }).count(), 1)
@@ -87,14 +88,24 @@ try {
   const panel = page.locator('#document-fields [data-inspector-group-label="面板动画"]').filter({ has: page.locator('.document-section-code:text-is("PANEL")') })
   await panel.waitFor()
   for (const key of ['ANIM_STYLE', 'BACK_ANIM_STYLE', 'FORE_ANIM_STYLE', 'PRESS_STYLE']) {
-    assert.equal(await panel.locator(`[data-document-key="${key}"]`).count(), 1)
+    const field = panel.locator(`[data-document-key="${key}"]`)
+    assert.equal(await field.count(), 1)
+    assert.equal(await field.locator('.ui-style-ref').count(), 0)
+    assert.equal(await field.locator('.ui-style-ref-append').count(), 1)
+    assert.ok((await field.boundingBox()).height <= 32, '空配置只占标题行')
   }
-  const panelStyle = panel.locator('[data-document-key="ANIM_STYLE"] .ui-style-ref-number')
-  assert.equal(await panelStyle.inputValue(), '')
+  const panelStyle = panel.locator('[data-document-key="ANIM_STYLE"]')
+  assert.equal(await panelStyle.locator('.ui-style-ref').count(), 0)
+  assert.equal(await panelStyle.locator('.ui-style-ref-append').count(), 1)
   assert.equal(await text(), beforePanel, '显示缺省选项不写入布局')
   assert.equal(await history(), panelUndo, '显示缺省选项不进入撤销栈')
-  await panelStyle.fill('7')
-  await panelStyle.press('Tab')
+  await panelStyle.locator('.ui-style-ref-append').press('Enter')
+  await page.frameLocator('#picker-frame').locator('#picker-close').click()
+  await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+  assert.equal(await text(), beforePanel, '取消添加不写入布局')
+  assert.equal(await history(), panelUndo, '取消添加不进入撤销栈')
+  if (process.env.PI_SCRATCH_DIR) await panel.screenshot({ path: `${process.env.PI_SCRATCH_DIR}/panel-empty-style-fields.png` })
+  await pickStyleReference(page, panelStyle, '7')
   assert.match(await text(), /\[PANEL\][^\[]*ANIM_STYLE=7/)
   assert.equal(await history(), panelUndo + 1, '设置面板动画进入撤销栈')
   await panel.getByRole('button', { name: /动画 1/ }).click({ modifiers: ['Control'] })

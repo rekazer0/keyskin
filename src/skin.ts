@@ -3,6 +3,7 @@ import type { ExportFormat } from "./export.ts"
 import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
 import { adaptAndroidToolbar, adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
+import { adaptIosToolbarGeometry } from "./ios-toolbar-geometry.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
 
@@ -510,6 +511,7 @@ export class SkinArchive {
       }
     }
 
+    if (format === "bds" && this.format === "bdi") adaptIosToolbarGeometry(output)
     return Object.fromEntries(output)
   }
 

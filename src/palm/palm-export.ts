@@ -16,12 +16,12 @@
 //   an explicit entry, matching the layout the Palm app expects.
 
 import { zipSync } from "fflate"
-import type { SkinArchive } from "../skin.ts"
-import { writeIosToolbarMenu } from "../ios-toolbar.ts"
-import { decodePng, encodePng, placeImage, resizeImage } from "../ssf/ssf-png.ts"
+import { SkinArchive } from "../skin.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
-import { fitCandidateIcons } from "./palm-export-layout.ts"
+import { fitCandidateIcons, fitEnglishEnter } from "./palm-export-layout.ts"
 import { separateOrientationResources } from "./palm-export-resources.ts"
+import { bakeBackgrounds } from "./palm-export-backgrounds.ts"
+import { fitToolbarArtwork, prepareToolbarIcons } from "./palm-export-toolbar.ts"
 import { boardTypeFromIniFileName } from "./palm-board-types.ts"
 import { NATIVE_LAYOUT_JSON } from "./palm-native-layout.ts"
 import { decodeSkinText, parseIniSections, toBool, toInt, type IniSection } from "./palm-ini.ts"
@@ -48,6 +48,7 @@ import {
   tableModel,
   tileModels,
 } from "./palm-models.ts"
+import { asObject } from "./sxi-ini.ts"
 import { parseXmlPlist, type PalmPlistValue } from "./palm-plist.ts"
 import { fixTouchRects } from "./palm-touch-rect.ts"
 import { animationsIni } from "./sxi-style.ts"
@@ -138,6 +139,13 @@ function readResource(context: ExportContext, resource: string[] | undefined, na
 
 /* ------------------------------------------------------------------- models */
 
+// The order Palm's own skins list the candidate bar's icons in; anything else keeps its `.cnd` order after them.
+const CANDIDATE_ICON_ORDER = ["logoMenu", "switchContainer", "hideBoard", "moreCandidates"]
+
+function candidateIconRank(value: Json): number {
+  const at = CANDIDATE_ICON_ORDER.indexOf(String(asObject(value)?.k ?? ""))
+  return at < 0 ? CANDIDATE_ICON_ORDER.length : at
+}
 // `SkinCandidateModel(fileURL:)` for `*.cnd`.
 function candidateModelFromFile(context: ExportContext, path: string): Json {
   const sections = sectionsOf(context, path) ?? []
@@ -161,7 +169,12 @@ function candidateModelFromFile(context: ExportContext, path: string): Json {
   }
   // Icon placement comes from POS/SIZE; `f_size` only fixes it. Dropping every icon because
   // one lacks a fixed size loses the candidate bar's artwork for most real Baidu skins.
-  model.icon_list = icons
+  // Palm's own skins always list the bar's icons in this order; a `.cnd` numbers them freely (this skin's
+  // ICON4 is the switch container), and keeping that order draws the toolbar container last.
+  model.icon_list = icons.sort((left, right) => candidateIconRank(left) - candidateIconRank(right))
+  // Palm uses these vertical insets to move the word row; Baidu's candidate words stay centred.
+  const insets = asObject(model.insets)
+  if (insets) model.insets = { ...insets, top: 0, bottom: 0 }
   // `SkinCandidateModel(fileURL:)` assigns `tips` unconditionally, empty included.
   model.fix = tips
   return model
@@ -305,6 +318,18 @@ function layoutJson(context: ExportContext, paths: string[] | undefined): Json {
       hints[stripExtension(path)] = bubbleModelFromFile(context, path)
     }
   }
+  fitEnglishEnter(maps)
+  const customJump = Object.values(maps).some((value) => {
+    const board = asObject(value)
+    const actions = [
+      ...(Array.isArray(board?.keys) ? board.keys.map((key) => asObject(key)?.values) : []),
+      ...Object.values(asObject(board?.key_fix) ?? {}).map((tip) => asObject(tip)?.v),
+    ]
+    return actions.some((values) => Array.isArray(values)
+      && values.some((action, at) => at % 2 === 1 && typeof action === "string" && action.startsWith("Z+")))
+  })
+  const warning = "手心 Android 不支持 Z+ 自定义面板跳转（包括自定义计算器），相关手势仅保留配置，无法在 Android 调起"
+  if (customJump && !context.warnings.includes(warning)) context.warnings.push(warning)
   fixTouchRects(maps)
   fitCandidateIcons(maps, cands, context.warnings)
   mergeGlobalBoardModels(maps)
@@ -566,6 +591,8 @@ function skinFileJson(context: ExportContext, struct: SkinStruct): Json {
   if (styles.port !== undefined) model.s_port = styles.port
   if (styles.land !== undefined) model.s_land = styles.land
   separateOrientationResources(model, context.entries)
+  bakeBackgrounds(model, context.entries)
+  fitToolbarArtwork(model, context.entries)
   return model
 }
 
@@ -645,36 +672,6 @@ function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
   return entries
 }
 
-/** 手心的图标按设备分三种后缀，真机皮肤里三张图都是 88×88；百度 iOS 只给 iphone@3x 的 80×80。 */
-const PALM_ICON_SIZE = 88
-
-function normalizeToolbarIcons(entries: ConverterEntry[]): void {
-  // Palm loads toolbar functions from menu images, not Baidu Android's atlas alone.
-  const files = new Map(entries.flatMap((entry) => entry.bytes ? [[entry.path, entry.bytes] as const] : []))
-  for (const path of [...files.keys()]) {
-    if (!path.endsWith("res/logo/pop_menu_icons.til")) continue
-    const root = path.slice(0, -"res/logo/pop_menu_icons.til".length)
-    if ([...files.keys()].some((name) => name.startsWith(`${root}res/logo/`) && name.includes("toolbarMenuItems"))) continue
-    writeIosToolbarMenu(files, root)
-  }
-  const existing = new Set(entries.map((entry) => entry.path))
-  for (const [path, bytes] of files) {
-    if (!existing.has(path)) entries.push({ path, bytes, directory: path.endsWith("/") })
-  }
-  for (const entry of entries.filter((item) => !item.directory && /\/res\/logo\/.+_iphone@3x\.png$/.test(item.path))) {
-    const image = entry.bytes ? decodePng(entry.bytes) : undefined
-    if (!image) continue
-    const scale = PALM_ICON_SIZE / Math.max(image.width, image.height)
-    const width = Math.max(1, Math.round(image.width * scale))
-    const height = Math.max(1, Math.round(image.height * scale))
-    entry.bytes = encodePng(placeImage(resizeImage(image, width, height), PALM_ICON_SIZE, PALM_ICON_SIZE,
-      Math.floor((PALM_ICON_SIZE - width) / 2), Math.floor((PALM_ICON_SIZE - height) / 2)))
-    for (const suffix of ["_ipad", "_ipad@2x"]) {
-      entries.push({ path: entry.path.replace(/_iphone@3x\.png$/, `${suffix}.png`), directory: false, bytes: entry.bytes })
-    }
-  }
-}
-
 // Folders that survive the deletion passes with no file left inside them still need an
 // explicit zip entry: the real `.sxi` keeps, for example, `light/skin/land/`.
 function emptyDirectories(entries: ConverterEntry[], written: Iterable<string>): string[] {
@@ -701,6 +698,7 @@ function emptyDirectories(entries: ConverterEntry[], written: Iterable<string>):
 }
 
 export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings: string[] } {
+  if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
   if (archive.format === "bda") {
     // BDA packages carry protobuf panels instead of an INI layout tree, so a caller that
     // reaches this point must convert the archive first (see `convertBdaToBaseLayout`).
@@ -708,7 +706,7 @@ export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings
   }
 
   const entries = collectConverterEntries(archive)
-  if (archive.format === "bdi" || archive.format === "bds") normalizeToolbarIcons(entries)
+  if (archive.format === "bdi" || archive.format === "bds") prepareToolbarIcons(entries)
   const warnings: string[] = []
   const context: ExportContext = {
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),

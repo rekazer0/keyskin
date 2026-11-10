@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
+import { pickStyleReference } from '../tests/helpers/style-reference-picker.mjs'
 import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { bdaStyleID } from '../src/bda.ts'
 import { SkinArchive } from '../src/skin.ts'
 import { removeFields, updateStringMapValue } from '../src/bda-encode.ts'
 
@@ -38,7 +40,7 @@ try {
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   await page.evaluate(async () => (await import('/src/app/navigation.ts')).selectFile('light/skin/port/py_9.ini', 'overview'))
   const baseline = await bytes(), original = await snapshot()
-  for (const path of ['input.backStyle', 'more.backStyle', 'hints.short.backStyle', 'hints.long.cellStyle', 'lists.port.cellForeStyle']) assert.equal(await row(path).locator('.ui-style-ref[data-variant="empty"]').count(), 1, path)
+  for (const path of ['input.backStyle', 'more.backStyle', 'hints.short.backStyle', 'hints.long.cellStyle', 'lists.port.cellForeStyle']) assert.equal(await row(path).locator('.ui-style-ref-append').count(), 1, path)
   assert.equal(await row('lists.port.foreStyles.0').getByRole('button', { name: '添加前景', exact: true }).count(), 1)
   assert.deepEqual(await bytes(), baseline, 'opening empty panel controls does not write source')
   assert.equal((await snapshot()).undo, original.undo)
@@ -46,8 +48,7 @@ try {
   async function firstEdit(path, style, check) {
     if (path.startsWith('cand.')) await candidate(true)
     const undo = (await snapshot()).undo
-    await row(path).locator('input').fill(String(style))
-    await row(path).locator('input').press('Tab')
+    await pickStyleReference(page, row(path), bdaStyleID({ type: path.includes('cellFore') ? 'text' : 'image', key: style }))
     const next = await snapshot()
     check(next.panel)
     assert.equal(next.undo, undo + 1, `${path} creates one undo step`)
@@ -62,7 +63,7 @@ try {
   await firstEdit('hints.short.backStyle', image.key, (panel) => assert.deepEqual(panel.hints.short.backStyle, image))
   await firstEdit('lists.port.cellForeStyle', text.key, (panel) => assert.deepEqual(panel.lists.port.cellForeStyle, text))
   await candidate(true)
-  for (const path of ['cand.candBarStyle', 'cand.switch.selectFore', 'cand.cellForeStyle', 'cand.candKeys.CAND_F31.backStyle', 'cand.menuKeys.MENU_PASTE.backStyle', 'cand.aiIcon.backStyle']) assert.equal(await row(path).locator('.ui-style-ref[data-variant="empty"]').count(), 1, path)
+  for (const path of ['cand.candBarStyle', 'cand.switch.selectFore', 'cand.cellForeStyle', 'cand.candKeys.CAND_F31.backStyle', 'cand.menuKeys.MENU_PASTE.backStyle', 'cand.aiIcon.backStyle']) assert.equal(await row(path).locator('.ui-style-ref-append').count(), 1, path)
   assert.deepEqual(await bytes(), baseline)
   await firstEdit('cand.candBarStyle', image.key, (panel) => assert.deepEqual(panel.cand.candBarStyle, image))
   await firstEdit('cand.cellForeStyle', text.key, (panel) => assert.deepEqual(panel.cand.cellForeStyle, text))
@@ -70,12 +71,11 @@ try {
   await firstEdit('cand.menuKeys.MENU_PASTE.backStyle', image.key, (panel) => assert.deepEqual(panel.cand.menuKeys.MENU_PASTE.backStyle, image))
 
   await candidate(true)
-  await row('cand.candBarStyle').locator('input').fill(String(image.key))
-  await row('cand.candBarStyle').locator('input').press('Tab')
+  await pickStyleReference(page, row('cand.candBarStyle'), bdaStyleID(image))
   await row('cand.candBarStyle').getByRole('button', { name: '移除', exact: true }).click()
   assert.equal((await snapshot()).panel.cand.candBarStyle, undefined, 'a newly created single reference can be removed')
   await page.getByRole('button', { name: '交互预览', exact: true }).click()
-  assert.equal(await row('cand.cellForeStyle').locator('input').isDisabled(), true)
+  assert.equal(await row('cand.cellForeStyle').locator('.ui-style-ref-append').isDisabled(), true)
   assert.deepEqual(errors, [])
   console.log('BDA empty inspector: candidate, toolbar, input, more, hints and lists; first edits, undo/redo, removal and read-only passed')
 } finally {

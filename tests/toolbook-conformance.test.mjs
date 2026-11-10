@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { IniDocument } from '../src/ini.ts'
 import { removeTileSlice, updateTileSlice } from '../src/tiles.ts'
 import { legacyHintCandidates, legacyHintText } from "../src/preview-hints.ts"
-import { persistVisible } from "../src/preview-items.ts"
+import { dynamicToolbarRect, persistVisible } from "../src/preview-items.ts"
 
 // 依据《百度手机输入法皮肤工具书 V6》属性表。
 
@@ -17,6 +17,17 @@ test('HOLDSYM is a separator-free character set', () => {
 test('CAND icon PERSIST 0/1/2/3', () => {
   assert.deepEqual([undefined, '0', '1', '2', '3'].map((value) => persistVisible(value, false)), [true, false, true, false, true])
   assert.deepEqual([undefined, '0', '1', '2', '3'].map((value) => persistVisible(value, true)), [false, false, false, true, true])
+})
+
+test('hidden F14 containers never overlay the authored toolbar icons', () => {
+  for (const persist of ['0', '2']) {
+    const document = IniDocument.parse(`[ICON1]\nKEY=F14\nSIZE=812,114\nANCHOR_TYPE=5\nPOS=-404,-52\nPERSIST=${persist}\n`)
+    assert.equal(dynamicToolbarRect(document, 1125, 119), undefined)
+  }
+  for (const persist of ['', 'PERSIST=1', 'PERSIST=3']) {
+    const document = IniDocument.parse(`[ICON1]\nKEY=F14\nSIZE=812,114\nANCHOR_TYPE=5\nPOS=-404,-52\n${persist}\n`)
+    assert.deepEqual(dynamicToolbarRect(document, 1125, 119), { x: 158.5, y: 7.5, width: 812, height: 114 })
+  }
 })
 
 test('renumberSections closes gaps and keeps IMG0 start', () => {

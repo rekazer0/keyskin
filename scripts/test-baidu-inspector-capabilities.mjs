@@ -8,9 +8,9 @@ const archive = SkinArchive.open(bdsFixture())
 const GEN = "light/skin/port/gen.ini"
 const CAND = "light/skin/port/cand1.cnd"
 const LAYOUT = "light/skin/port/py_26.ini"
-archive.setText(GEN, "[PANEL]\nSIZE=1080,600\nBACK_STYLE=1\n")
-archive.setText(CAND, "[CAND]\n[ICON1]\nKEY=F14\n[SWITCH]\n")
-archive.setText(LAYOUT, "[PANEL]\nSIZE=1080,600\n[LIST]\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=a\n")
+archive.setText(GEN, "[PANEL]\nSIZE=1080,600\nBACK_STYLE=1\n[MORE]\nBACK_STYLE=1\nBACK_ANIM_STYLE=2\n")
+archive.setText(CAND, `[CAND]\n${Array.from({ length: 5 }, (_, index) => `[ICON${index + 1}]\nKEY=F${index === 0 ? 14 : index + 1}\n`).join("")}[SWITCH]\n`)
+archive.setText(LAYOUT, "[PANEL]\nSIZE=1080,600\n[LIST]\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=a\n[MORE]\nBACK_STYLE=1\nBACK_ANIM_STYLE=2\n")
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { host: "127.0.0.1", port: 41944, strictPort: false, hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
@@ -35,13 +35,17 @@ try {
   await page.getByRole("button", { name: "编辑模式", exact: true }).click()
   await select(GEN)
   const before = await source(GEN), undo = await history()
+  assert.equal(await group("MORE").count(), 0, "更多面板及其动画不再显示属性分组")
+  assert.equal((await railTitles()).some((title) => title.includes("更多面板")), false)
+  assert.equal(await value("MORE", "BACK_STYLE"), "1")
+  assert.equal(await value("MORE", "BACK_ANIM_STYLE"), "2")
   assert.equal(await row("INPUT", "POS").locator("input[type=number]").count(), 2)
   assert.equal(await row("LIST", "CELL_SIZE").locator("input[type=number]").count(), 2)
   assert.equal(await row("CAND", "CELL_W").locator("input[type=number]").count(), 1)
   assert.equal(await row("CAND", "VIEW_RECT").count(), 2)
   assert.equal(await row("CAND", "LAYOUT_NAME").locator("input").count(), 1)
   assert.equal(await row("GLOBAL", "SYMBOL_FULL_SCREEN").getByRole("switch").count(), 1)
-  assert.equal(await row("EMOJI", "PANEL_BACK_STYLE_INDEX").locator(".ui-style-ref").count(), 1)
+  assert.equal(await row("EMOJI", "PANEL_BACK_STYLE_INDEX").locator(".ui-style-ref-append").count(), 1)
   assert.equal(await row("PANEL", "NO_BLUR").getByRole("switch").count(), 1)
   assert.equal(await source(GEN), before, "discovering capabilities does not write defaults")
   assert.equal(await history(), undo)
@@ -54,8 +58,11 @@ try {
   assert.equal(await value("INPUT", "POS"), "0,18")
   await select(LAYOUT)
   const layoutBefore = await source(LAYOUT)
-  // 整体布局只列这个布局自己的分区：候选栏、输入区、更多面板等由各自的入口提供。
+  // 整体布局只列这个布局自己的分区：候选栏和输入区由候选栏文件提供。
   assert.deepEqual(await sectionCodes(), ["PANEL", "LIST"])
+  assert.equal((await railTitles()).some((title) => title.includes("更多面板")), false)
+  assert.equal(await value("MORE", "BACK_STYLE"), "1")
+  assert.equal(await value("MORE", "BACK_ANIM_STYLE"), "2")
   // 动画分组按分区命名，不出现「动画 2」「动画 3」这类重名编号。
   assert.deepEqual(await railTitles(), ["文字", "面板（PANEL）", "面板动画（PANEL）", "列表（LIST）", "列表动画（LIST）"])
   assert.equal(await row("LIST", "CELL_SIZE").locator("input[type=number]").count(), 2)
@@ -69,16 +76,27 @@ try {
   await select(CAND)
   const candBefore = await source(CAND), candUndo = await history()
   assert.equal(await row("CAND", "MORE_W").getByRole("spinbutton").count(), 1)
-  assert.equal(await row("ICON1", "SIZE").getByRole("spinbutton").count(), 2)
-  assert.equal(await row("ICON1", "PERSIST").getByRole("button", { name: "始终", exact: true }).count(), 1)
-  assert.equal(await row("SWITCH", "NML_FONT_STYLE").locator(".ui-style-ref").count(), 1)
+  assert.equal(await row("SWITCH", "NML_FONT_STYLE").locator(".ui-style-ref-append").count(), 1)
   assert.equal(await row("SWITCH", "PADDING").getByRole("spinbutton").count(), 1)
-  // 候选栏文件带输入区（输入码），顺序是候选栏 → 输入区 → 工具栏 → 工具按钮。
-  assert.equal(await row("INPUT", "FORE_STYLE").locator(".ui-style-ref").count(), 1)
-  assert.deepEqual(await sectionCodes(), ["CAND", "INPUT", "SWITCH", "ICON1"])
+  // 候选栏整体属性只列候选栏、输入区、工具栏，不展开各工具按钮及其动画分组。
+  assert.equal(await row("INPUT", "FORE_STYLE").locator(".ui-style-ref-append").count(), 1)
+  assert.deepEqual(await sectionCodes(), ["CAND", "INPUT", "SWITCH"])
+  assert.equal((await railTitles()).some((title) => title.includes("工具按钮")), false)
   // 点画布上的输入码区域时，分类栏停在它的「输入区」分组。
   await page.locator("#candidate-input-box").dispatchEvent("click")
   await page.waitForFunction(() => (document.querySelector('#mobile-inspector-groups button[aria-pressed="true"]')?.textContent ?? "").includes("输入区"))
+  assert.equal(await source(CAND), candBefore)
+  assert.equal(await history(), candUndo)
+  // 单独选中工具按钮时，仍可编辑它的属性，查看不修改源文件。
+  await page.evaluate(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    const { populateKeyInspector } = await import("/src/app/key-inspector.ts")
+    appState.selectedToolbarSections = ["ICON1"]
+    populateKeyInspector()
+  })
+  assert.deepEqual(await sectionCodes(), ["ICON1", "SWITCH"])
+  assert.equal(await row("ICON1", "SIZE").getByRole("spinbutton").count(), 2)
+  assert.equal(await row("ICON1", "PERSIST").getByRole("button", { name: "始终", exact: true }).count(), 1)
   assert.equal(await source(CAND), candBefore)
   assert.equal(await history(), candUndo)
   await edit(row("ICON1", "SIZE").getByRole("spinbutton", { name: "尺寸W", exact: true }), "80")

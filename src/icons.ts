@@ -18,7 +18,7 @@ import {
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
-  UserRound, Plug,
+  UserRound, Plug, Gamepad2,
   Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
   SkipBack, Rotate3d, ArrowUpRight, Square, ImageOff, SunMoon, SearchX, ArrowUpLeft, ArrowDownLeft, ArrowDownRight,
 } from "lucide"
@@ -80,7 +80,7 @@ const icons: Record<string, IconNode> = {
   "arrow-up-left": ArrowUpLeft, "arrow-down-left": ArrowDownLeft, "arrow-down-right": ArrowDownRight,
   "skip-back": SkipBack,
   // AI 模型：订阅账号与 API 服务商
-  "user-round": UserRound, plug: Plug,
+  "user-round": UserRound, plug: Plug, "gamepad-2": Gamepad2,
 }
 
 export function createIcon(name: string, size = 14): SVGElement {

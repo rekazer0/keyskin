@@ -3,7 +3,6 @@ import { styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { soundPathForFilename } from "../sounds.ts"
 import { theme, orientation, keyFields, toolbarFields, quickInspector } from "./dom"
-import { iconButton } from "../dom-element.ts"
 import { keyboardFields } from "./canvas-interaction"
 import { openStylePicker, styleConfigDocument, styleKind, availableStyleIDs, styleSoundFile } from "./style-picker"
 import { openPalmSkin, palmTheme, sxiPointer } from "./sxi-documents"
@@ -19,7 +18,7 @@ import { previewStyleAnimation } from "./animation-resource"
 import { updateBdaAppearanceStyleRef } from "./key-inspector"
 import { styleAnimationReferenceStates } from "./legacy-animation-inspector"
 import { keySoundSample, palmStyleAnimationStates } from "./style-card-preview"
-import { styleKindIcon, styleReferenceCard, type StyleReferenceState } from "../style-card"
+import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "../style-card"
 import { palmStyleLocation } from "../palm/palm-style-edit.ts"
 import { palmFieldLabel } from "../palm/palm-labels.ts"
 import { asObject, type Json } from "../palm/sxi-ini.ts"
@@ -66,7 +65,7 @@ export function decorateStyleReferenceInput(input: HTMLInputElement, key = style
 
 /**
  * 重建一个引用字段的卡片：每个编号一张，每张已绑定的卡都可移除。前景、粒子图片、前景动画可以有多张，字段标签右端的 `plus` 追加；
- * 动画槽位按位置保留，空的或 0 只画一张紧凑虚线卡，移除写 0（末尾的空槽位一并去掉）。
+ * 动画槽位按位置保留，空的或 0 不显示卡片，移除写 0（末尾的空槽位一并去掉）。
  */
 export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInputElement, key: string, resolver = visualResolver()): void {
   const animationReference = layoutAnimationFields.has(key)
@@ -99,12 +98,16 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
   const styles = styleConfigDocument()
   const foreground = styleReferenceForeground(key)
   const styleIDs = values()
-  const cards = (styleIDs.length ? styleIDs : [""]).map((styleID, index) => {
+  const mixed = input.placeholder === "混合"
+  const emptySlot = (styleID: string) => !styleID || animationReference && styleID === "0"
+  const bound = styleIDs.some((styleID) => !emptySlot(styleID))
+  const cards = (mixed && !bound ? [""] : styleIDs).flatMap((styleID, index) => {
+    if (emptySlot(styleID) && !mixed) return []
     const name = slotInput(index, styleID)
     name.setAttribute("aria-label", key === "FORE_ANIM_STYLE" ? `前景 ${index + 1} 动画样式编号` : `样式 ${index + 1} 编号`)
     const choose = (highlighted = false) => openStylePicker(slotInput(index, styleID), highlighted)
-    const empty = !styleID || animationReference && styleID === "0"
-    let states: StyleReferenceState[] = []
+    const empty = emptySlot(styleID)
+    let states: StyleReferenceState[] = mixed && empty ? [{ label: "混合", content: "混合", onClick: () => choose() }] : []
     if (key === "SOUND_STYLE" && !empty) {
       const path = soundPathForStyle(styleID)
       states = [{ label: "音效", content: keySoundSample(path?.split("/").pop() ?? styleSoundFile(styleID), path), onClick: (edit) => edit ? openStyleReferenceEditor(styleID) : choose() }]
@@ -118,11 +121,10 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
       }))
     }
     const removable = !input.disabled && !empty
-    return styleReferenceCard({
+    return [styleReferenceCard({
       name,
       kind: empty ? undefined : styleKindIcon(styleKind(styleID, styles)),
       states,
-      empty: { icon: animationReference ? "clapperboard" : key === "SOUND_STYLE" ? "volume-2" : "plus", label: animationReference ? "选择动画样式" : "选择样式", onClick: () => choose() },
       remove: removable ? {
         label: "移除",
         run: () => {
@@ -133,19 +135,17 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
         },
       } : undefined,
       disabled: input.disabled,
-    })
+    })]
   })
   list.replaceChildren(input, ...cards)
   // 多张前景、粒子图片、前景动画：追加按钮在字段标签右端（没有标签时排在卡片末尾）。
   const caption = list.closest(".ui-field")?.firstElementChild
   const captionHost = caption && caption !== list ? caption : list
   captionHost.querySelector(":scope > .ui-style-ref-append")?.remove()
-  const bound = styleIDs.some((styleID) => styleID && !(animationReference && styleID === "0"))
-  if ((multiple || key === "FORE_ANIM_STYLE") && bound && !input.disabled) {
-    const add = iconButton("plus", "添加", () => openStylePicker(slotInput(styleIDs.length, "")))
-    add.classList.add("ui-style-ref-append")
-    add.dataset.size = "sm"
-    captionHost.append(add)
+  list.hidden = !cards.length && captionHost !== list
+  if (!bound || multiple || key === "FORE_ANIM_STYLE") {
+    const index = !bound ? Math.max(0, styleIDs.findIndex(emptySlot)) : styleIDs.length
+    captionHost.append(styleReferenceAddButton("添加", () => openStylePicker(slotInput(index, "")), input.disabled))
   }
 }
 
