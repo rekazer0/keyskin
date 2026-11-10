@@ -17,6 +17,9 @@ import { ask } from "./ask.ts"
 import { animateProgress, closeDialog } from "../motion.ts"
 import { invoke, Channel } from "@tauri-apps/api/core"
 import { adaptIos26Variant, adaptIos26KeyboardLayout } from "../ios26.ts"
+import { adaptBdaForIos26 } from "../bda-ios26.ts"
+import { refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
+import { populateKeyInspector } from "./key-inspector"
 import { adaptSxiForIos26 } from "../palm/sxi-ios26.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { adaptSsfSkinForIos26, isSsfSkinFile } from "../ssf/ssf-ios26.ts"
@@ -210,6 +213,25 @@ function ios26StylePath(genPath: string): string | undefined {
 export function adaptArchiveForIos26(): boolean {
   const archive = appState.archive
   if (!archive) return false
+  if (archive.format === "bda") {
+    const paths = archive.names().filter((path) => /\/(?:\d*)appearanceConfig$/i.test(path))
+    if (!paths.length) throw new Error("没有找到可适配的 BDA 外观配置。")
+    const changes = paths.flatMap((path) => {
+      const before = archive.getBytes(path)!
+      const after = adaptBdaForIos26(before)
+      return before === after ? [] : [{ kind: "bytes" as const, path, before, after }]
+    })
+    if (changes.length) {
+      commitBatch(changes)
+      refreshBdaLayout(appState.layoutPath)
+      refreshSelectedBdaSource()
+      renderFiles()
+      refreshPreview()
+      populateKeyInspector()
+      updateDirty()
+    }
+    return true
+  }
   if (archive.format === "sxi") {
     commitTextChanges([{ path: SXI_SKIN_PATH, before: archive.getText(SXI_SKIN_PATH), after: adaptSxiForIos26(archive.getText(SXI_SKIN_PATH)) }])
     refreshSxiDocument()

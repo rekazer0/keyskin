@@ -306,8 +306,8 @@ export function updatePanelToolButtons(): void {
   // The tools restyle and copy files, so they work on Sogou skins too, whose key geometry is fixed.
   const editing = isEditing()
   panelScaleButton.disabled = !editing || appState.fileOperationRunning || !appState.archive
-  replaceLayoutImageButton.disabled = !editing || appState.fileOperationRunning || !appState.archive || appState.archive.format === "bda"
-  adaptIos26Button.disabled = !editing || appState.fileOperationRunning || !appState.archive || appState.archive.format === "bda"
+  replaceLayoutImageButton.disabled = !editing || appState.fileOperationRunning || !appState.archive
+  adaptIos26Button.disabled = !editing || appState.fileOperationRunning || !appState.archive
 }
 
 export function applyModeState(): void {
