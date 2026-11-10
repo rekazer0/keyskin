@@ -268,10 +268,12 @@ function numberInput(value: string, label: string, placeholder: string, disabled
 function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: string, placeholder: string, disabled: boolean, commit: (value: string) => void): HTMLElement {
   const box = element("span", "ui-input")
   const input = numberInput(spec.value, label, placeholder, disabled, spec.expression, spec.step, spec.min)
+  // The row outlives its commits, so an invalid entry goes back to the last accepted value, not the rendered one.
+  let accepted = spec.value
   input.addEventListener("change", () => {
     const text = input.value.trim()
-    if (validNumber(text, spec.expression)) commit(text)
-    else input.value = spec.value
+    if (validNumber(text, spec.expression)) commit(accepted = text)
+    else input.value = accepted
   })
   box.append(input)
   if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
@@ -282,6 +284,8 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
 function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string, placeholder: string, disabled: boolean, commit: (values: string[], index: number) => void): HTMLElement {
   const pair = element("span", "ui-field-pair")
   if (spec.columns) pair.dataset.columns = String(spec.columns)
+  // As in numberControl: an invalid entry restores the values of the last commit.
+  let accepted: readonly string[] = spec.values
   const inputs = spec.affixes.map((affix, index): HTMLInputElement | HTMLSelectElement => {
     const value = spec.values[index] ?? ""
     const box = element("span", spec.options ? "ui-input ui-select" : "ui-input")
@@ -300,8 +304,8 @@ function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string
     pair.append(box)
     input.addEventListener("change", () => {
       const values = inputs.map((field) => field.value.trim())
-      if (spec.options || values.every((text) => validNumber(text, spec.expression))) commit(values, index)
-      else inputs.forEach((field, position) => { field.value = spec.values[position] ?? "" })
+      if (spec.options || values.every((text) => validNumber(text, spec.expression))) commit(accepted = values, index)
+      else inputs.forEach((field, position) => { field.value = accepted[position] ?? "" })
     })
     return input
   })

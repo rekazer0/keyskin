@@ -371,8 +371,11 @@ export class SkinArchive {
     return strFromU8(bytes)
   }
 
+  /** getText drops a UTF-8 byte order mark; a file that has one keeps it, so an edit only changes what was edited. */
   setText(path: string, text: string): void {
-    this.setBytes(path, strToU8(text))
+    const current = this.getBytes(path)
+    const marked = current?.[0] === 0xef && current[1] === 0xbb && current[2] === 0xbf && !text.startsWith("\uFEFF")
+    this.setBytes(path, strToU8(marked ? `\uFEFF${text}` : text))
   }
 
   setBytes(path: string, bytes: Uint8Array): void {

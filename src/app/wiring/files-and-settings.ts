@@ -128,6 +128,15 @@ export function wireFilesAndSettings(): void {
     source.collapseSelection()
     scheduleSelectionInspectorSync(preview)
   })
+  // ⌘/Ctrl + S 保存；不接管的话浏览器会弹“保存网页”。
+  document.addEventListener("keydown", (event) => {
+    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "s") return
+    event.preventDefault()
+    if (saveButton.disabled || document.querySelector("dialog[open]")) return
+    // 正在输入的字段先提交，保存下来的才是屏幕上的值。
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    saveButton.click()
+  })
   newButton.addEventListener("click", () => void startNewDocument())
   openButton.addEventListener("click", () => {
     if (isTauri()) void runFileOperation("打开", openNative)
