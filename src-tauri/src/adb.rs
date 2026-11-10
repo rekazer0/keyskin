@@ -38,8 +38,7 @@ impl AdbSettings {
         if !safe_name(&self.package) || !self.package.contains('.') {
             return Err("百度输入法包名无效".into());
         }
-        if !self.activity.is_empty() && !safe_name(&self.activity)
-        {
+        if !self.activity.is_empty() && !safe_name(&self.activity) {
             return Err("预览 Activity 请填写类名，不含包名/前缀或命令参数".into());
         }
         if !self.directory.is_empty()
@@ -131,7 +130,10 @@ impl SkinTarget {
 fn skin_directory(settings: &AdbSettings) -> String {
     if settings.directory.is_empty() {
         match SkinTarget::of(&settings.package) {
-            SkinTarget::Sogou => format!("/sdcard/Android/data/{}/files/sga/wallpaper", settings.package),
+            SkinTarget::Sogou => format!(
+                "/sdcard/Android/data/{}/files/sga/wallpaper",
+                settings.package
+            ),
             // .piska 的 ACTION_VIEW 入口按 file:// 读取，放输入法自己的目录才不需要存储权限。
             _ => format!("/sdcard/Android/data/{}/files/KeySkin", settings.package),
         }
@@ -370,7 +372,10 @@ fn device_uri_byte(byte: u8) -> String {
 }
 
 fn ui_bounds_for_label(xml: &str, label: &str) -> Option<(i32, i32)> {
-    let markers = [format!("text=\"{label}\""), format!("content-desc=\"{label}\"")];
+    let markers = [
+        format!("text=\"{label}\""),
+        format!("content-desc=\"{label}\""),
+    ];
     let (start, _) = markers
         .iter()
         .filter_map(|marker| xml.find(marker).map(|start| (start, marker)))
@@ -381,7 +386,7 @@ fn ui_bounds_for_label(xml: &str, label: &str) -> Option<(i32, i32)> {
     let bounds = node.split("bounds=\"").nth(1)?.split('"').next()?;
     let numbers: Vec<i32> = bounds
         .trim_matches(&['[', ']'][..])
-        .split(|character: char| matches!(character, '[' | ']' | ','))
+        .split(['[', ']', ','])
         .filter_map(|value| value.parse().ok())
         .collect();
     (numbers.len() == 4).then_some(((numbers[0] + numbers[2]) / 2, (numbers[1] + numbers[3]) / 2))
@@ -403,12 +408,14 @@ fn ui_bounds_for_local_card(xml: &str) -> Option<(i32, i32)> {
         }
         cursor = offset;
     };
-    let node_end = xml[image_start..].find("/>").map(|offset| image_start + offset)?;
+    let node_end = xml[image_start..]
+        .find("/>")
+        .map(|offset| image_start + offset)?;
     let node = &xml[image_start..node_end];
     let bounds = node.split("bounds=\"").nth(1)?.split('"').next()?;
     let numbers: Vec<i32> = bounds
         .trim_matches(&['[', ']'][..])
-        .split(|character: char| matches!(character, '[' | ']' | ','))
+        .split(['[', ']', ','])
         .filter_map(|value| value.parse().ok())
         .collect();
     (numbers.len() == 4).then_some(((numbers[0] + numbers[2]) / 2, (numbers[1] + numbers[3]) / 2))
@@ -428,12 +435,7 @@ fn dump_ui(adb: &impl Fn(&[&str]) -> Result<String, String>) -> Result<String, S
     let preferred = "/data/local/tmp/keyskin-window.xml";
     let legacy = "/sdcard/keyskin-window.xml";
     let _ = adb(&["shell", "rm", "-f", preferred, legacy])?;
-    let output = adb(&[
-        "shell",
-        "uiautomator",
-        "dump",
-        preferred,
-    ])?;
+    let output = adb(&["shell", "uiautomator", "dump", preferred])?;
     let path = ui_dump_path(&output).unwrap_or(preferred);
     match adb(&["shell", "cat", path]) {
         Ok(xml) => Ok(xml),
@@ -446,7 +448,10 @@ fn dump_ui(adb: &impl Fn(&[&str]) -> Result<String, String>) -> Result<String, S
     }
 }
 
-fn tap_ui_text(adb: &impl Fn(&[&str]) -> Result<String, String>, text: &str) -> Result<bool, String> {
+fn tap_ui_text(
+    adb: &impl Fn(&[&str]) -> Result<String, String>,
+    text: &str,
+) -> Result<bool, String> {
     let xml = dump_ui(adb)?;
     if let Some((x, y)) = ui_bounds_for_label(&xml, text) {
         adb(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
@@ -471,9 +476,18 @@ fn open_sogou_skins(
 ) -> Result<(), String> {
     // CLEAR_TASK 让深链从任何残留页面（详情/试打页）都能重新落到「我的皮肤」。
     let deep_link = [
-        "shell", "am", "start", "-W", "-f", "0x10008000", "-n",
+        "shell",
+        "am",
+        "start",
+        "-W",
+        "-f",
+        "0x10008000",
+        "-n",
         &format!("{package}/com.sogou.inputmethod.navigation.UniRouteActivity"),
-        "-a", "android.intent.action.VIEW", "-d", "sogou://com.sogou.sogouinput/mine-my-skins",
+        "-a",
+        "android.intent.action.VIEW",
+        "-d",
+        "sogou://com.sogou.sogouinput/mine-my-skins",
     ];
     let started = Instant::now();
     let mut launched = false;
@@ -486,7 +500,9 @@ fn open_sogou_skins(
             continue;
         }
         let xml = dump_ui(adb)?;
-        if ui_bounds_for_local_card(&xml).is_some() || ui_bounds_for_label(&xml, "我的制作").is_some() {
+        if ui_bounds_for_local_card(&xml).is_some()
+            || ui_bounds_for_label(&xml, "我的制作").is_some()
+        {
             return Ok(());
         }
         if tap_ui_text(adb, "皮肤")? {
@@ -575,7 +591,11 @@ fn share(
         ));
     }
     // 手心「本地皮肤」是 .piska 压缩包，其余输入法用导出的原格式扩展名。
-    let extension = if target == SkinTarget::ShouXin { "piska" } else { format.as_str() };
+    let extension = if target == SkinTarget::ShouXin {
+        "piska"
+    } else {
+        format.as_str()
+    };
     if !valid_skin_name(&name, extension) {
         return Err("皮肤文件名无效，请使用不含路径的皮肤文件名".into());
     }
@@ -624,8 +644,18 @@ fn share(
             // ACTION_VIEW 与 Android 客户端的分享入口一致；仅传递校验过的参数，绝不执行自定义 shell。
             let uri = device_file_uri(&remote);
             let mut args = vec![
-                "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", uri.as_str(),
-                "-t", target.mime_type(), "-f", "0x10008000",
+                "shell",
+                "am",
+                "start",
+                "-W",
+                "-a",
+                "android.intent.action.VIEW",
+                "-d",
+                uri.as_str(),
+                "-t",
+                target.mime_type(),
+                "-f",
+                "0x10008000",
             ];
             // exhibit 会打开「今日推荐」广告页；ask=false 让导入直接启用皮肤。
             if target == SkinTarget::Baidu {
@@ -748,9 +778,15 @@ mod tests {
             SkinTarget::of("com.sohu.inputmethod.sogou.chuizi").name(),
             "搜狗输入法"
         );
-        assert_eq!(SkinTarget::of("com.xinshuru.inputmethod").name(), "手心输入法");
+        assert_eq!(
+            SkinTarget::of("com.xinshuru.inputmethod").name(),
+            "手心输入法"
+        );
         assert_eq!(SkinTarget::of("com.example.ime").name(), "输入法");
-        assert_eq!(SkinTarget::of("com.sohu.inputmethod.sogou").formats(), ["ssf"]);
+        assert_eq!(
+            SkinTarget::of("com.sohu.inputmethod.sogou").formats(),
+            ["ssf"]
+        );
         assert_eq!(SkinTarget::of("com.baidu.input").formats(), ["bds", "bda"]);
         assert_eq!(
             SkinTarget::of("com.sohu.inputmethod.sogou").import_activity(),
@@ -760,8 +796,14 @@ mod tests {
             SkinTarget::of("com.xinshuru.inputmethod").import_activity(),
             Some(".FTInputSettingsActivity")
         );
-        assert_eq!(SkinTarget::of("com.baidu.input").mime_type(), "application/octet-stream");
-        assert_eq!(SkinTarget::of("com.sohu.inputmethod.sogou").mime_type(), "'*/*'");
+        assert_eq!(
+            SkinTarget::of("com.baidu.input").mime_type(),
+            "application/octet-stream"
+        );
+        assert_eq!(
+            SkinTarget::of("com.sohu.inputmethod.sogou").mime_type(),
+            "'*/*'"
+        );
         assert_eq!(
             skin_directory(&AdbSettings {
                 directory: String::new(),
@@ -800,13 +842,27 @@ mod tests {
             package: "com.sohu.inputmethod.sogou".into(),
             ..settings()
         };
-        assert!(share(sogou, "bds".into(), "a.bds".into(), vec![1], &AtomicBool::new(false), |_| {})
-            .unwrap_err()
-            .contains("SSF"));
+        assert!(share(
+            sogou,
+            "bds".into(),
+            "a.bds".into(),
+            vec![1],
+            &AtomicBool::new(false),
+            |_| {}
+        )
+        .unwrap_err()
+        .contains("SSF"));
         // SXI is a supported hand-heart import format.
-        assert!(share(settings(), "ssf".into(), "a.ssf".into(), vec![1], &AtomicBool::new(false), |_| {})
-            .unwrap_err()
-            .contains("BDS / BDA"));
+        assert!(share(
+            settings(),
+            "ssf".into(),
+            "a.ssf".into(),
+            vec![1],
+            &AtomicBool::new(false),
+            |_| {}
+        )
+        .unwrap_err()
+        .contains("BDS / BDA"));
     }
 
     #[cfg(unix)]
@@ -900,7 +956,15 @@ mod tests {
             ..settings()
         };
         assert_eq!(
-            share(config, "ssf".into(), "测试.ssf".into(), vec![1], &AtomicBool::new(false), |_| {}).unwrap(),
+            share(
+                config,
+                "ssf".into(),
+                "测试.ssf".into(),
+                vec![1],
+                &AtomicBool::new(false),
+                |_| {}
+            )
+            .unwrap(),
             "dev"
         );
         let written = fs::read_to_string(&calls).unwrap();
@@ -909,7 +973,9 @@ mod tests {
             "-n com.sohu.inputmethod.sogou/com.sogou.inputmethod.navigation.UniRouteActivity"
         ));
         assert!(written.contains("sogou://com.sogou.sogouinput/mine-my-skins"));
-        assert!(written.contains("/sdcard/Android/data/com.sohu.inputmethod.sogou/files/sga/wallpaper"));
+        assert!(
+            written.contains("/sdcard/Android/data/com.sohu.inputmethod.sogou/files/sga/wallpaper")
+        );
         assert!(!written.contains("exhibit"));
         fs::remove_dir_all(root).unwrap();
     }
@@ -1109,7 +1175,9 @@ mod tests {
     #[test]
     fn cancel_request_stops_before_the_next_adb_call() {
         let cancel = AtomicBool::new(true);
-        assert!(ensure_not_cancelled(&cancel).unwrap_err().contains("已取消"));
+        assert!(ensure_not_cancelled(&cancel)
+            .unwrap_err()
+            .contains("已取消"));
         assert!(ensure_not_cancelled(&AtomicBool::new(false)).is_ok());
         // 取消命令只置位当前这一次分享的开关。
         let active = std::sync::Arc::new(AtomicBool::new(false));
@@ -1126,7 +1194,10 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "keyskin-cancel-{}-{}",
             std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         fs::create_dir(&root).unwrap();
         let executable = root.join("adb");
@@ -1146,16 +1217,26 @@ mod tests {
             ..settings()
         };
         let cancel = AtomicBool::new(false);
-        let error = share(config, "bds".into(), "测试.bds".into(), vec![1], &cancel, |detail| {
-            if detail.contains("皮肤已推送") {
-                cancel.store(true, Ordering::SeqCst);
-            }
-        })
+        let error = share(
+            config,
+            "bds".into(),
+            "测试.bds".into(),
+            vec![1],
+            &cancel,
+            |detail| {
+                if detail.contains("皮肤已推送") {
+                    cancel.store(true, Ordering::SeqCst);
+                }
+            },
+        )
         .unwrap_err();
         assert!(error.contains("已取消"), "{error}");
         let written = fs::read_to_string(&calls).unwrap();
         assert!(written.contains("push"));
-        assert!(!written.contains("am start"), "取消后不再启动导入: {written}");
+        assert!(
+            !written.contains("am start"),
+            "取消后不再启动导入: {written}"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1187,8 +1268,14 @@ mod tests {
         let request: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
         let settings: AdbSettings = serde_json::from_value(request["settings"].clone()).unwrap();
         let data = fs::read(request["dataPath"].as_str().unwrap()).unwrap();
-        share(settings, request["format"].as_str().unwrap().into(), request["name"].as_str().unwrap().into(), data,
-            &AtomicBool::new(false), |detail| println!("{detail}")).unwrap();
+        share(
+            settings,
+            request["format"].as_str().unwrap().into(),
+            request["name"].as_str().unwrap().into(),
+            data,
+            &AtomicBool::new(false),
+            |detail| println!("{detail}"),
+        )
+        .unwrap();
     }
-
 }

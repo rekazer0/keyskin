@@ -396,6 +396,10 @@ export function playSoundPath(path: string, onFinished?: (error?: string) => voi
   }
   // 按键音只有几毫秒：`<audio>` 要现场解析文件头，WebKit 上换成 Ogg 后经常还没出声就播完了，
   // 所以先解码再播放（解出的 AudioBuffer 会缓存），元素播放只作兜底。
+  if (typeof AudioContext === "undefined") {
+    void audio.play().catch(failed)
+    return
+  }
   void (async () => {
     try {
       await playDecodedSound(path, bytes, audio, finish)

@@ -950,7 +950,7 @@ async fn set_window_material(
     #[cfg(target_os = "macos")]
     {
         let _ = opacity;
-        return window_material::set_material(window, enabled).await;
+        window_material::set_material(window, enabled).await
     }
     #[cfg(target_os = "windows")]
     {
@@ -964,9 +964,9 @@ async fn set_window_material(
                 .effect(Effect::Acrylic)
                 .color(tauri::window::Color(32, 34, 38, acrylic_alpha(opacity)))
         };
-        return window
+        window
             .set_effects(effect.build())
-            .map_err(|error| error.to_string());
+            .map_err(|error| error.to_string())
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -1264,7 +1264,12 @@ async fn fetch_model_list(
         configuration.provider.as_str(),
         "claude-subscription" | "chatgpt-subscription"
     ) {
-        return model_oauth::subscription_models(app, configuration.provider, configuration.kind == "image").await;
+        return model_oauth::subscription_models(
+            app,
+            configuration.provider,
+            configuration.kind == "image",
+        )
+        .await;
     }
     request_model_list(&configuration).await
 }
@@ -1274,8 +1279,11 @@ async fn fetch_model_thinking_levels(
     app: tauri::AppHandle,
     configuration: ModelConfiguration,
 ) -> Result<Option<Vec<String>>, String> {
-    if configuration.provider != "chatgpt-subscription" { return Ok(None); }
-    model_oauth::subscription_thinking_levels(app, configuration.provider, &configuration.model).await
+    if configuration.provider != "chatgpt-subscription" {
+        return Ok(None);
+    }
+    model_oauth::subscription_thinking_levels(app, configuration.provider, &configuration.model)
+        .await
 }
 
 #[tauri::command]

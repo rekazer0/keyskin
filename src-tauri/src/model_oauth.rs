@@ -443,17 +443,47 @@ pub(crate) async fn subscription_thinking_levels(
 }
 
 fn parse_thinking_levels(model: &str, bytes: &[u8]) -> Result<Option<Vec<String>>, String> {
-    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| "模型列表响应不是有效 JSON")?;
-    let entry = value.get("models").and_then(serde_json::Value::as_array)
-        .ok_or("响应中没有模型列表")?.iter().find(|entry| entry.get("slug").or_else(|| entry.get("id")).and_then(serde_json::Value::as_str) == Some(model));
-    let Some(levels) = entry.and_then(|entry| entry.get("supported_reasoning_levels")).and_then(serde_json::Value::as_array) else { return Ok(None) };
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "模型列表响应不是有效 JSON")?;
+    let entry = value
+        .get("models")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("响应中没有模型列表")?
+        .iter()
+        .find(|entry| {
+            entry
+                .get("slug")
+                .or_else(|| entry.get("id"))
+                .and_then(serde_json::Value::as_str)
+                == Some(model)
+        });
+    let Some(levels) = entry
+        .and_then(|entry| entry.get("supported_reasoning_levels"))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Ok(None);
+    };
     let mut supported = Vec::new();
     for level in levels {
-        let effort = level.as_str().or_else(|| level.get("effort").and_then(serde_json::Value::as_str));
-        let effort = match effort { Some("none") => "off", Some(value @ ("off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")) => value, _ => continue };
-        if !supported.iter().any(|value| value == effort) { supported.push(effort.to_string()); }
+        let effort = level
+            .as_str()
+            .or_else(|| level.get("effort").and_then(serde_json::Value::as_str));
+        let effort = match effort {
+            Some("none") => "off",
+            Some(value @ ("off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")) => {
+                value
+            }
+            _ => continue,
+        };
+        if !supported.iter().any(|value| value == effort) {
+            supported.push(effort.to_string());
+        }
     }
-    Ok(if supported.is_empty() { None } else { Some(supported) })
+    Ok(if supported.is_empty() {
+        None
+    } else {
+        Some(supported)
+    })
 }
 
 async fn subscription_catalog(
@@ -487,7 +517,11 @@ async fn subscription_catalog(
             .ok_or("令牌里没有 ChatGPT 账号信息")?;
         // The endpoint rejects requests without client_version; this Codex CLI release lists current models.
         client
-            .get(if image { "https://chatgpt.com/backend-api/models" } else { "https://chatgpt.com/backend-api/codex/models?client_version=0.159.2" })
+            .get(if image {
+                "https://chatgpt.com/backend-api/models"
+            } else {
+                "https://chatgpt.com/backend-api/codex/models?client_version=0.159.2"
+            })
             .header("chatgpt-account-id", account)
             .header("originator", "pi")
     };
@@ -525,7 +559,12 @@ fn parse_subscription_models(claude: bool, bytes: &[u8]) -> Result<Vec<String>, 
                 Some("hide" | "hidden")
             )
         })
-        .filter_map(|entry| entry.get(if claude { "id" } else { "slug" }).or_else(|| entry.get("id"))?.as_str())
+        .filter_map(|entry| {
+            entry
+                .get(if claude { "id" } else { "slug" })
+                .or_else(|| entry.get("id"))?
+                .as_str()
+        })
         .filter(|id| !id.is_empty() && id.len() <= 256)
         .map(str::to_string)
         .collect())
@@ -533,15 +572,33 @@ fn parse_subscription_models(claude: bool, bytes: &[u8]) -> Result<Vec<String>, 
 
 #[cfg(test)]
 mod tests {
-    use super::{credential, parse_callback, parse_subscription_models, parse_thinking_levels, vendor};
+    use super::{
+        credential, parse_callback, parse_subscription_models, parse_thinking_levels, vendor,
+    };
 
     #[test]
     fn thinking_levels_belong_to_the_selected_model() {
         let bytes = br#"{"models":[{"slug":"gpt-6.1-sol","supported_reasoning_levels":[{"effort":"low"},{"effort":"medium"},{"effort":"xhigh"},{"effort":"ultra"}]},{"slug":"plain","supported_reasoning_levels":["none","none"]}]}"#;
-        assert_eq!(parse_thinking_levels("gpt-6.1-sol", bytes).unwrap().unwrap(), ["low", "medium", "xhigh"]);
-        assert_eq!(parse_thinking_levels("plain", bytes).unwrap().unwrap(), ["off"]);
+        assert_eq!(
+            parse_thinking_levels("gpt-6.1-sol", bytes)
+                .unwrap()
+                .unwrap(),
+            ["low", "medium", "xhigh"]
+        );
+        assert_eq!(
+            parse_thinking_levels("plain", bytes).unwrap().unwrap(),
+            ["off"]
+        );
         assert_eq!(parse_thinking_levels("missing", bytes).unwrap(), None);
-        assert_eq!(parse_thinking_levels("by-id", br#"{"models":[{"id":"by-id","supported_reasoning_levels":["medium"]}]}"#).unwrap().unwrap(), ["medium"]);
+        assert_eq!(
+            parse_thinking_levels(
+                "by-id",
+                br#"{"models":[{"id":"by-id","supported_reasoning_levels":["medium"]}]}"#
+            )
+            .unwrap()
+            .unwrap(),
+            ["medium"]
+        );
         assert!(parse_thinking_levels("x", b"{}").is_err());
     }
 
@@ -558,7 +615,10 @@ mod tests {
             ["gpt-6", "gpt-5.5"]
         );
         assert!(parse_subscription_models(false, claude).is_err());
-        assert_eq!(parse_subscription_models(false, br#"{"models":[{"id":"gpt-image-1"}]}"#).unwrap(), ["gpt-image-1"]);
+        assert_eq!(
+            parse_subscription_models(false, br#"{"models":[{"id":"gpt-image-1"}]}"#).unwrap(),
+            ["gpt-image-1"]
+        );
     }
 
     #[test]

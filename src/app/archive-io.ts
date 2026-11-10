@@ -695,8 +695,8 @@ export async function shareArchiveToMobile(): Promise<boolean> {
   if (!appState.archive) return false
   const ios = isIOSWeb()
   if (!isAndroidTauri()) {
+    showFileOperationProgress()
     if (!navigator.share) {
-      showFileOperationProgress()
       throw new Error("当前浏览器不支持系统文件分享")
     }
   }
