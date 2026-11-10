@@ -4,6 +4,7 @@ import { bdaColorHex } from "./bda-resolver.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
 import { buildLegacyMotion, legacyMotionIni, legacyStyleProp, type LegacyMotionBinding, type LegacyStyleProp } from "./bda-motion.ts"
 import { IniDocument } from "./ini.ts"
+import { scaleIniDocument } from "./panel-tools.ts"
 import { SkinArchive } from "./skin.ts"
 import { soundPathForFilename } from "./sounds.ts"
 import { pngSize } from "./ssf/ssf-png.ts"
@@ -16,6 +17,7 @@ const PANEL_TARGETS = ["PANEL", "KEYBOARD", "KEYBOARD_BG", "BG", "SKIN"]
 const CAND_TARGETS = ["CAND", "CANDIDATE", "CAND_BAR", "CANDIDATE_BAR", "CAND_BG"]
 const HINT_TARGETS = ["HINT", "BUBBLE", "POPUP", "HINT_BG"]
 const LIST_TARGETS = ["LIST", "CAND_LIST", "LIST_BG"]
+const STYLE_REFERENCE = /(?:^|_)STYLE$|^FIRST_(?:BACK|FORE)$/
 
 type BdaConversion = { archive: SkinArchive; warnings: string[] }
 
@@ -59,6 +61,20 @@ function applyKeySounds(document: IniDocument, sounds: Map<string, string>, fall
       .map((action) => sounds.get(bdaPanelKeyName(action)))
       .find(Boolean)
     if (style && style !== fallback) document.set(section, "SOUND_STYLE", style)
+  }
+}
+
+/** The base layout still names the official skin's styles wherever the BDA sets none; those are not in the output. */
+function dropUnknownStyles(document: IniDocument, styles: Map<string, string[]>): void {
+  for (const { section, key, value } of document.entries()) {
+    if (!STYLE_REFERENCE.test(key)) continue
+    const ids = value.split(",").map((id) => id.trim())
+    const kept = ids.map((id) => !/^[1-9]\d*$/.test(id) || styles.has(`[STYLE${id}]`))
+    if (kept.every(Boolean)) continue
+    if (!kept.some(Boolean)) { document.remove(section, key); continue }
+    document.set(section, key, ids.filter((_, index) => kept[index]).join(","))
+    const offsets = key === "FORE_STYLE" ? document.get(section, "FORE_OFFSET")?.split(";") : undefined
+    if (offsets) document.set(section, "FORE_OFFSET", offsets.filter((_, index) => kept[index] ?? true).join(";"))
   }
 }
 
@@ -184,10 +200,27 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
 
       const basePrefix = `light/skin/${orientation}/`
       const targetPrefix = `${theme}/skin/${orientation}/`
+      // The base layout is drawn at its own width; BDA styles (font sizes, offsets) are in design-width units.
+      const baseWidth = base.isText(`${basePrefix}gen.ini`)
+        ? Number(IniDocument.parse(base.getText(`${basePrefix}gen.ini`)).get("PANEL", "SIZE")?.split(",")[0])
+        : 0
+      const ratio = appearance.designWidth && baseWidth ? appearance.designWidth / baseWidth : 1
+      const baseDocument = (path: string) => {
+        const document = IniDocument.parse(base.getText(path))
+        return ratio === 1 ? document : scaleIniDocument(document, ratio, ratio)
+      }
+      // gen.ini, candidate bars and bubbles are shared by every panel: they take the main keyboard's styles.
+      const sharedPanel = ["py_26", "py_9", "en_26", ...appearance.panels.keys()]
+        .find((name) => appearance.panels.get(name)?.cand?.candBarStyle) ?? appearance.panels.keys().next().value
+      const documents = new Map<string, IniDocument>()
       for (const path of base.names()) {
         if (!path.startsWith(basePrefix) || path.slice(basePrefix.length).includes("/")) continue
         const name = path.slice(basePrefix.length)
         if (name !== "gen.ini" && /\.ini$/i.test(name)) continue
+        if (base.isText(path)) {
+          documents.set(`${targetPrefix}${name}`, sharedPanel ? bdaLayoutDocument(baseDocument(path), appearance, sharedPanel) : baseDocument(path))
+          continue
+        }
         const bytes = base.getBytes(path)
         if (bytes) output.set(`${targetPrefix}${name}`, bytes)
       }
@@ -199,9 +232,9 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
           warnings.push(`${theme}/${orientation} 的 ${layout} 面板没有 BDS/BDI 基础布局，已跳过`)
           continue
         }
-        const document = bdaLayoutDocument(IniDocument.parse(base.getText(path)), appearance, layout)
+        const document = bdaLayoutDocument(baseDocument(path), appearance, layout)
         if (keySounds.size) applyKeySounds(document, keySounds, defaultSound)
-        output.set(`${targetPrefix}${layout}.ini`, strToU8(document.toString()))
+        documents.set(`${targetPrefix}${layout}.ini`, document)
         layouts.push({ document, panelName: layout })
       }
 
@@ -299,6 +332,8 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
           output.set(`${theme}/skin/res/${fontName}`, bytes)
         } else if (style.resource?.resourceID) warnings.push(`${theme}/${orientation} 缺少字体：${reference}`)
         addStyle(`[STYLE${bdaStyleID({ type: "text", key })}]`, [
+          // A BDA text style carries the label itself; legacy styles keep it in SHOW.
+          ...(style.contentText && !/[\r\n]/.test(style.contentText) ? [`SHOW=${style.contentText}`] : []),
           ...(fontName ? [`FONT_NAME=${fontName}`] : []),
           ...(style.fontSize ? [`FONT_SIZE=${style.fontSize}`] : []),
           `NM_COLOR=${bdaColorHex(style.normalColor ?? 0)}`,
@@ -362,6 +397,10 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
         warnings.push(`${theme}/${orientation} 的动效目标 ${[...unmatched].join("、")} 在导出布局里找不到对应按键或样式，已跳过`)
       }
       for (const [filename, styleID] of soundStyles) directionStyles.set(`[STYLE${styleID}]`, [`PRESS_SOUND_PATH=${filename}`])
+      for (const [path, document] of documents) {
+        dropUnknownStyles(document, directionStyles)
+        output.set(path, strToU8(document.toString()))
+      }
       appendMotionRefs(directionStyles, directionRefs, new Set(), theme, warnings)
       const localSections = [...directionStyles].flatMap(([header, lines]) => [header, ...lines, ""])
       output.set(`${targetPrefix}res/default.css`, strToU8(`[GLOBAL]\nSTYLE_NUM=${directionStyles.size}\n\n${localSections.join("\n")}`))

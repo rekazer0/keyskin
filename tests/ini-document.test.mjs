@@ -42,3 +42,14 @@ test('section set stays valid across appends and structural edits', () => {
   assert.equal(document.hasSection('KEY9'), false, 'removed sections leave the cached set')
   assert.equal(document.hasSection('KEY3'), true)
 })
+
+test('a new entry joins its section above the blank lines that separate sections', () => {
+  const document = IniDocument.parse('[A]\nX=1\n\n[B]\nY=2\n\n')
+  document.set('A', 'Z', '3')
+  document.set('B', 'W', '4')
+  assert.equal(document.toString(), '[A]\nX=1\nZ=3\n\n[B]\nY=2\nW=4\n\n')
+  const empty = IniDocument.parse('[A]\n\n[B]')
+  empty.set('A', 'X', '1')
+  empty.set('B', 'Y', '2')
+  assert.equal(empty.toString(), '[A]\nX=1\n\n[B]\nY=2\n')
+})

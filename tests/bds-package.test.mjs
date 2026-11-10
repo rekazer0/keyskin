@@ -126,3 +126,28 @@ test('部分合图为字体图片预留数量，并保留已有图集，避免�
   assert.ok(out['light/res/keyskin_atlas2.png'])
   assert.equal(IniDocument.parse(strFromU8(out['light/res/default.css'])).get('STYLE1', 'NM_IMG'), 'keyskin_atlas1,1')
 })
+
+test('图集改写按整个引用匹配：数字开头的图片名（BDA 资源 ID）也跟着改', async () => {
+  const png = encodePng({ width: 4, height: 2, data: new Uint8Array(32).fill(0x80) })
+  const til = strToU8('[GLOBAL]\nTILE_NUM=1\n[IMG1]\nSOURCE_RECT=0,0,4,2\n')
+  const files = {
+    'Info.txt': strToU8('Name=t\r\n'),
+    'light/res/default.css': strToU8('[GLOBAL]\nSTYLE_NUM=1\n[STYLE1]\nNM_IMG=3btn,1\n'),
+    'light/port/res/default.css': strToU8('[GLOBAL]\nSTYLE_NUM=1\n[STYLE1]\nNM_IMG=10023,1\nHL_IMG=btn,1\n'),
+  }
+  for (const name of ['10023', '3btn', 'btn', ...Array.from({ length: MAX_IMAGE_FILES }, (_, i) => `img${i}`)]) {
+    files[`light/res/${name}.png`] = name === 'btn' ? encodePng({ width: 4, height: 2, data: new Uint8Array(32).fill(0x40) }) : png
+    files[`light/res/${name}.til`] = til
+  }
+  const out = unzipSync(await completeBdsPackage(zipSync(files), async (width, height) =>
+    encodePng({ width, height, data: new Uint8Array(width * height * 4).fill(0x80) })))
+  const resolves = (path, key) => {
+    const [name, slice] = IniDocument.parse(strFromU8(out[path])).get('STYLE1', key).split(',')
+    return Boolean(out[`light/res/${name}.png`]) && IniDocument.parse(strFromU8(out[`light/res/${name}.til`])).sections().includes(`IMG${slice}`)
+  }
+  assert.ok(resolves('light/port/res/default.css', 'NM_IMG'), 'a numeric image name follows its image into the atlas')
+  assert.ok(resolves('light/res/default.css', 'NM_IMG'))
+  assert.ok(resolves('light/port/res/default.css', 'HL_IMG'))
+  const style = (path, key) => IniDocument.parse(strFromU8(out[path])).get('STYLE1', key)
+  assert.notEqual(style('light/res/default.css', 'NM_IMG'), style('light/port/res/default.css', 'HL_IMG'), '3btn is not mistaken for btn')
+})

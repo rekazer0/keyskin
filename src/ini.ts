@@ -113,11 +113,13 @@ export class IniDocument {
     const nextSectionOffset = this.lines
       .slice(sectionIndex + 1)
       .findIndex((candidate) => candidate.section !== undefined && candidate.key === undefined)
-    const insertAt =
+    let insertAt =
       nextSectionOffset < 0 ? this.lines.length : sectionIndex + 1 + nextSectionOffset
+    // The blank lines that separate this section from the next one stay below the new entry.
+    while (insertAt - 1 > sectionIndex && this.lines[insertAt - 1].raw.trim() === "") insertAt--
     const ending = this.lines.find((candidate) => candidate.ending)?.ending ?? "\n"
-    if (insertAt === this.lines.length && this.lines.at(-1)?.ending === "") {
-      const previous = this.lines.at(-1)!
+    const previous = this.lines[insertAt - 1]
+    if (previous && previous.ending === "") {
       previous.ending = ending
       previous.raw += ending
     }

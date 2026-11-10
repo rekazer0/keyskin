@@ -41,3 +41,29 @@ test('BDA frame animation copies the current orientation GIF, never another them
   assert.deepEqual(archive.getBytes('light/skin/land/res/spark.gif'), land)
   for (const orientation of ['port', 'land']) assert.ok(css(archive, orientation).entries().some(entry => entry.key === 'SHOW_ANIM'))
 })
+
+test('the official BDA converts with its key labels and with every layout style defined', async () => {
+  const { readFileSync } = await import('node:fs')
+  const read = name => new Uint8Array(readFileSync(new URL(`../public/${name}`, import.meta.url)))
+  const { decodeBdaAppearance } = await import('../src/bda-decode.ts')
+  const source = SkinArchive.open(read('default-template.bda'), 'bda')
+  const { archive } = convertBdaArchive(source, SkinArchive.open(read('bda-base.bds')))
+  const appearance = decodeBdaAppearance(source.getBytes('light/skin/port/appearanceConfig'))
+  const styles = css(archive, 'port')
+  const [key, labelled] = [...appearance.textStyles].find(([, style]) => style.contentText)
+  assert.equal(styles.get(`STYLE${3000000 + key}`, 'SHOW'), labelled.contentText)
+
+  // Candidate bars and bubbles come from the base layout; they take the BDA's styles, not the base skin's numbers.
+  const candidate = IniDocument.parse(archive.getText('light/skin/port/cand1.cnd'))
+  assert.equal(candidate.get('CAND', 'BACK_STYLE'), String(1000000 + appearance.panels.get('py_26').cand.candBarStyle.key))
+  const defined = new Set(styles.sections())
+  for (const path of archive.names().filter(name => /^light\/skin\/port\/[^/]+\.(?:ini|cnd|pop)$/.test(name))) {
+    const document = IniDocument.parse(archive.getText(path))
+    for (const { section, key, value } of document.entries()) {
+      if (!/(?:^|_)STYLE$|^FIRST_(?:BACK|FORE)$/.test(key)) continue
+      for (const id of value.split(',').filter(id => /^[1-9]\d*$/.test(id.trim()))) {
+        assert.ok(defined.has(`STYLE${id.trim()}`), `${path} [${section}] ${key}=${value}`)
+      }
+    }
+  }
+})

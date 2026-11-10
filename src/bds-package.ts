@@ -185,8 +185,12 @@ async function packImages(archive: SkinArchive, theme: string, compose: ComposeA
   for (const path of archive.names()) {
     if (!path.startsWith(`${theme}/skin/`) || !/\.(?:css|ini|cnd)$/i.test(path)) continue
     const text = archive.getText(path)
+    // A reference is the whole `name,slice` value: image names may start with a digit (BDA resource IDs).
     const next = text.replace(/^(\w*IMG\w*\s*=\s*)(.+)$/gm, (_, key: string, value: string) =>
-      key + value.replace(/([A-Za-z_][\w.-]*)\s*,\s*(\d+)/g, (token, name: string, slice: string) => renamed.get(`${name},${slice}`) ?? token))
+      key + value.split(";").map((token) => {
+        const reference = /^\s*(.+?)\s*,\s*(\d+)\s*$/.exec(token)
+        return reference && renamed.get(`${reference[1]},${reference[2]}`) || token
+      }).join(";"))
     if (next !== text) archive.setText(path, next)
   }
   return true
