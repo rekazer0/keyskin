@@ -474,18 +474,9 @@ function conversionProgress(start: number, end: number, detail: string): (fracti
   }
 }
 
-/** Key sounds the target platform cannot play, and what packaging for that platform adjusted, each under its own heading. */
 function reportExportWarnings(sounds: string[], adjustments: string[] = []): void {
   if (!sounds.length && !adjustments.length) return
   clientLog.info("export.warnings", { sounds: sounds.length, adjustments: adjustments.length, detail: [...adjustments, ...sounds].join("; ") })
-  void ask({
-    title: "导出时做了调整",
-    detail: [
-      adjustments.length ? `为适配目标平台做了以下调整：\n${adjustments.join("\n")}` : "",
-      sounds.length ? `以下按键音未能转换为目标平台格式，导出包中仍引用原文件，目标平台可能没有声音：\n${sounds.join("\n")}` : "",
-    ].filter(Boolean).join("\n\n"),
-    actions: [{ value: "close", label: "好", variant: "primary" }],
-  })
 }
 
 /** 转换会降级内容时先问一次；没有降级时直接继续。 */

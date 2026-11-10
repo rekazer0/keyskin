@@ -3,7 +3,6 @@ import type { ExportFormat } from "./export.ts"
 import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
 import { adaptAndroidToolbar, adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
-import { adaptIosPanelBackground } from "./ios-panel-background.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
 
@@ -536,11 +535,9 @@ export class SkinArchive {
   async platformBytesAsync(format: "bdi" | "bds", warnings?: string[], fromAndroid = false, notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
     const files = new Map(Object.entries(this.packagedFiles(format)))
-    // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons, and it stretches panel
-    // backgrounds behind the toolbar. The toolbar samples the bar's background before it is cleared.
+    // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons.
     if (fromAndroid) {
       adaptIosToolbar(files, notes)
-      adaptIosPanelBackground(files, notes)
       sortIosTiles(files)
     }
     // An iOS BDI on Android: Android draws the candidate bar's function icons from res/logo/pop_menu_icons,

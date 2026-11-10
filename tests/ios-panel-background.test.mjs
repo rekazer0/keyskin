@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { strToU8, zipSync } from 'fflate'
 import { SkinArchive } from '../src/skin.ts'
 import { IniDocument } from '../src/ini.ts'
-import { decodePng, encodePng } from '../src/ssf/ssf-png.ts'
+import { encodePng } from '../src/ssf/ssf-png.ts'
 
 // One picture split Android-style: a red bar slice (rows 0–1) over a blue panel slice (rows 2–7).
 function splitPicture(panelInner = '') {
@@ -25,71 +25,26 @@ function splitPicture(panelInner = '') {
   return SkinArchive.open(zipSync(files), 'bds')
 }
 
-test('BDS → BDI stacks the bar and panel slices so iPhone shows the picture whole', async () => {
-  const warnings = []
-  const bdi = SkinArchive.open(await splitPicture().toBytesAsync('bdi', warnings), 'bdi')
-  const css = IniDocument.parse(bdi.getText('light/skin/res/default.css'))
-  const style = IniDocument.parse(bdi.getText('light/skin/port/py_26.ini')).get('PANEL', 'BACK_STYLE')
-  const [resource, tile] = css.get(`STYLE${style}`, 'NM_IMG').split(',')
-  const image = decodePng(bdi.getBytes(`light/skin/res/${resource}.png`))
-  assert.equal(IniDocument.parse(bdi.getText(`light/skin/res/${resource}.til`)).get(`IMG${tile}`, 'SOURCE_RECT'), '0,0,6,5')
-  const pixel = (row) => [...image.data.subarray(row * 6 * 4, row * 6 * 4 + 4)]
-  assert.deepEqual([image.width, image.height], [6, 5])
-  assert.deepEqual(pixel(0), [255, 0, 0, 255])
-  assert.deepEqual([1, 4].map(pixel), [[0, 0, 255, 255], [0, 0, 255, 255]])
-  // The bar lets the stacked picture through, in its TAB state too.
-  const cand = IniDocument.parse(bdi.getText('light/skin/port/cand1.cnd'))
-  for (const section of ['CAND', 'TAB']) assert.equal(css.get(`STYLE${cand.get(section, 'BACK_STYLE')}`, 'NM_COLOR'), '00000000')
-  // Layouts with a colour background (here inherited from gen.ini) keep it.
-  assert.equal(IniDocument.parse(bdi.getText('light/skin/port/gen.ini')).get('PANEL', 'BACK_STYLE'), '9')
-  assert.equal(IniDocument.parse(bdi.getText('light/skin/port/en_26.ini')).get('PANEL', 'BACK_STYLE'), undefined)
-  assert.ok(warnings.some((text) => text.includes('拼成一张整图')))
-})
-
-test('a nine-patch panel, and BDS export, keep the Android background', async () => {
-  const bdi = SkinArchive.open(await splitPicture('INNER_RECT=2,4,2,2\n').toBytesAsync('bdi'), 'bdi')
-  assert.equal(IniDocument.parse(bdi.getText('light/skin/port/py_26.ini')).get('PANEL', 'BACK_STYLE'), '2')
-  assert.equal(IniDocument.parse(bdi.getText('light/skin/port/cand1.cnd')).get('CAND', 'BACK_STYLE'), '1')
-  const bds = SkinArchive.open(await splitPicture().toBytesAsync('bds'), 'bds')
-  assert.equal(IniDocument.parse(bds.getText('light/skin/port/py_26.ini')).get('PANEL', 'BACK_STYLE'), '2')
-})
-
-test('BDS → BDI includes the inline input row so the toolbar bottom seam is not lifted into the bar', async () => {
-  const source = splitPicture()
-  source.setText('light/skin/res/default.css', source.getText('light/skin/res/default.css') + '[STYLE10]\nNM_IMG=input,1\n[STYLE11]\nFONT_SIZE=45\nNM_COLOR=000000\n')
-  source.setBytes('light/skin/res/input.png', encodePng({ width: 360, height: 60, data: new Uint8Array(360 * 60 * 4).map((_, i) => [0, 255, 0, 255][i % 4]) }))
-  source.setText('light/skin/res/input.til', '[GLOBAL]\nTILE_NUM=1\n[IMG1]\nSOURCE_RECT=0,0,360,60\n')
-  source.setText('light/skin/port/gen.ini', source.getText('light/skin/port/gen.ini') + '[INPUT]\nFORE_STYLE=11\n[SCAND]\nBACK_STYLE=10\n')
-  const bdi = SkinArchive.open(await source.toBytesAsync('bdi'), 'bdi')
-  const css = IniDocument.parse(bdi.getText('light/skin/res/default.css'))
-  const layout = IniDocument.parse(bdi.getText('light/skin/port/py_26.ini'))
-  const resource = css.get(`STYLE${layout.get('PANEL', 'BACK_STYLE')}`, 'NM_IMG').split(',')[0]
-  const image = decodePng(bdi.getBytes(`light/skin/res/${resource}.png`))
-  assert.deepEqual([image.width, image.height], [6, 6])
-  const pixel = (row) => [...image.data.subarray(row * 6 * 4, row * 6 * 4 + 4)]
-  assert.deepEqual([0, 1, 2, 5].map(pixel), [[0, 255, 0, 255], [255, 0, 0, 255], [0, 0, 255, 255], [0, 0, 255, 255]])
-  assert.equal(IniDocument.parse(bdi.getText('light/skin/port/gen.ini')).get('SCAND', 'BACK_STYLE'), '10')
-})
-
-test('BDS → BDI removes a baked bottom seam only between otherwise identical flat backgrounds', async () => {
-  for (const artwork of ['none', 'bar', 'panel']) {
-    const source = splitPicture()
-    const data = new Uint8Array(360 * 300 * 4).map((_, i) => [243, 246, 250, 255][i % 4])
-    // A single darker row one pixel above the bar's bottom, as in the light Qingni atlas.
-    for (let x = 0; x < 360; x++) data.set([221, 224, 228, 255], (58 * 360 + x) * 4)
-    if (artwork !== 'none') data.set([100, 110, 120, 255], ((artwork === 'bar' ? 10 : 100) * 360 + 10) * 4)
-    source.setBytes('light/skin/res/pic.png', encodePng({ width: 360, height: 300, data }))
-    source.setText('light/skin/res/pic.til', '[GLOBAL]\nTILE_NUM=2\n[IMG1]\nSOURCE_RECT=0,0,360,60\n[IMG2]\nSOURCE_RECT=0,60,360,240\n')
-    const original = source.getBytes('light/skin/res/pic.png').slice()
-    const bdi = SkinArchive.open(await source.toBytesAsync('bdi'), 'bdi')
-    const css = IniDocument.parse(bdi.getText('light/skin/res/default.css'))
-    const layout = IniDocument.parse(bdi.getText('light/skin/port/py_26.ini'))
-    const name = css.get(`STYLE${layout.get('PANEL', 'BACK_STYLE')}`, 'NM_IMG').split(',')[0]
-    const result = decodePng(bdi.getBytes(`light/skin/res/${name}.png`))
-    assert.deepEqual([result.width, result.height], [360, 300])
-    if (artwork === 'none') assert.ok(result.data.every((value, i) => value === [243, 246, 250, 255][i % 4]))
-    else assert.deepEqual(result.data, data, `${artwork} artwork and separator must be preserved`)
-    assert.deepEqual(source.getBytes('light/skin/res/pic.png'), original)
-    assert.deepEqual(bdi.getBytes('light/skin/res/pic.png'), original)
-  }
-})
+for (const format of ['bdi', 'bds']) for (const inner of ['', 'INNER_RECT=2,4,2,2\n']) {
+  test(`BDS → ${format.toUpperCase()} preserves separate toolbar and panel backgrounds${inner ? ' with nine-patch' : ''}`, async () => {
+    const source = splitPicture(inner)
+    const warnings = []
+    const exported = SkinArchive.open(await source.toBytesAsync(format, warnings), format)
+    const root = 'light/skin/'
+    const css = IniDocument.parse(exported.getText(`${root}res/default.css`))
+    for (const style of ['STYLE1', 'STYLE2']) {
+      assert.equal(css.get(style, 'NM_IMG'), IniDocument.parse(source.getText(`${root}res/default.css`)).get(style, 'NM_IMG'))
+    }
+    for (const file of ['port/cand1.cnd', 'port/py_26.ini', 'port/en_26.ini']) {
+      assert.equal(exported.getText(root + file), source.getText(root + file))
+    }
+    assert.equal(IniDocument.parse(exported.getText(`${root}port/gen.ini`)).get('PANEL', 'BACK_STYLE'), '9')
+    assert.deepEqual(exported.getBytes(`${root}res/pic.png`), source.getBytes(`${root}res/pic.png`))
+    const tiles = IniDocument.parse(exported.getText(`${root}res/pic.til`))
+    assert.equal(tiles.get('IMG1', 'SOURCE_RECT'), '0,0,6,2')
+    assert.equal(tiles.get('IMG2', 'SOURCE_RECT'), '0,2,6,6')
+    assert.equal(tiles.get('IMG2', 'INNER_RECT'), inner ? '2,4,2,2' : undefined)
+    assert.ok(exported.names().every(name => !name.includes('ios_keyboard_')))
+    assert.deepEqual(warnings, [])
+  })
+}
