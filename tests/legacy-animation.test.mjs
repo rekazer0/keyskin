@@ -14,6 +14,7 @@ import {
   legacyAnimationTypeOptions,
   legacyAnimationValueParts,
   parseLegacyAnimationFile,
+  removeLegacyAnimation,
   writeLegacyAnimationFields,
   writeLegacyAnimationKind,
   writeLegacyAnimationType,
@@ -175,7 +176,7 @@ test("改字段只动目标行：保留段顺序、注释、未知键与其他�
   assert.match(sectionText(after, "ANIM2"), /CUSTOM=keep/)
   assert.match(sectionText(after, "ANIM2"), /FROM=10,20/)
   assert.match(after, /; 组合动效与基础动效分开写/)
-  assert.match(after, /ANIM_NUM=5/, "实际有 5 个 [ANIM*]，写回时按段数修正 ANIM_NUM")
+  assert.match(after, /ANIM_NUM=5/, "ANIM_NUM 盖不住最大编号 ANIM5，写回时补到 5")
   assert.ok(after.startsWith("[GLOBAL]"))
   assert.equal(after.indexOf("[ANIM3]") > after.indexOf("[ANIM2]"), true)
   assert.match(after, /\[PATH1\][\s\S]*LINE_TO_POINT=0\.2,0\.2/, "未知段保持原样")
@@ -183,6 +184,15 @@ test("改字段只动目标行：保留段顺序、注释、未知键与其他�
   const removed = writeLegacyAnimationFields(after, "ANIM2", { CUSTOM: undefined })
   assert.doesNotMatch(sectionText(removed, "ANIM2"), /CUSTOM/)
   assert.match(sectionText(removed, "ANIM2"), /TO=200,100/)
+})
+
+test("跳号编号：保留预留的大 ANIM_NUM，不够时补到最大编号，删末尾时收缩", () => {
+  const sparse = "[GLOBAL]\nANIM_NUM=3000\n[ANIM1]\nTYPE=0\n[ANIM2]\nTYPE=0\n[ANIM11]\nTYPE=4\n"
+  assert.match(writeLegacyAnimationFields(sparse, "ANIM11", { DURATION: "80" }), /ANIM_NUM=3000/)
+  const short = sparse.replace("ANIM_NUM=3000", "ANIM_NUM=3")
+  assert.match(writeLegacyAnimationFields(short, "ANIM11", { DURATION: "80" }), /ANIM_NUM=11/)
+  assert.match(appendLegacyAnimation(sparse, "basic").text, /ANIM_NUM=3000/)
+  assert.match(removeLegacyAnimation(short.replace("ANIM_NUM=3", "ANIM_NUM=11"), "ANIM11", undefined, undefined), /ANIM_NUM=2/)
 })
 
 test("切到组合动效时清理基础字段、写入组合默认值，未知键保留", () => {

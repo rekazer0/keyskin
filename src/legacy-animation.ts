@@ -243,8 +243,14 @@ export function legacyAnimationFieldGroups(entry: LegacyAnimationEntry): LegacyA
 }
 
 /* —— 写回 —— */
-function updateAnimNum(document: IniDocument): void {
-  const count = document.sections().filter((section) => sectionIndex(section) !== undefined).length
+function maxAnimIndex(document: IniDocument): number {
+  return Math.max(0, ...document.sections().map((section) => sectionIndex(section) ?? 0))
+}
+
+/** 引擎按 ANIM1…ANIM_NUM 读取，编号可以跳：用户预留的更大值保留，只在盖不住最大编号（或删掉了末尾那个）时修正。 */
+function updateAnimNum(document: IniDocument, previousMax = maxAnimIndex(document)): void {
+  const declared = Number(document.get("GLOBAL", "ANIM_NUM")?.trim())
+  const count = Number.isFinite(declared) && declared > previousMax ? declared : maxAnimIndex(document)
   if (document.sections().includes("GLOBAL")) {
     if (document.get("GLOBAL", "ANIM_NUM") !== String(count)) document.set("GLOBAL", "ANIM_NUM", String(count))
   } else {
@@ -282,8 +288,9 @@ export function removeLegacyAnimation(text: string, section: string, styles: Ini
   if (!entry || legacyAnimationReferences(styles, layout).some((reference) => reference.animation === entry.index)) return
   if (entries.some((candidate) => candidate.section !== section && candidate.kind === "combination"
     && buildList(candidate).some((id) => Number(id) === entry.index))) return
+  const previousMax = maxAnimIndex(document)
   document.removeSections([section])
-  updateAnimNum(document)
+  updateAnimNum(document, previousMax)
   return document.toString()
 }
 /** 改一个或多个字段；`undefined` 表示删掉该键。段顺序、未知键与注释原样保留，并同步 ANIM_NUM。 */

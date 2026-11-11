@@ -320,8 +320,9 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   const selected = selectedAnimation(items)
   const entry = entries.find((candidate) => candidate.section === selected)
   const listRows: HTMLElement[] = []
-  if (model.animNum !== undefined && model.animNum !== model.entries.length) {
-    listRows.push(animationWarning(`[GLOBAL] ANIM_NUM=${model.animNum}，实际有 ${model.entries.length} 个动画，写回任意字段时自动修正`))
+  const maxIndex = Math.max(0, ...model.entries.map((candidate) => candidate.index ?? 0))
+  if (model.animNum !== undefined && model.animNum < maxIndex) {
+    listRows.push(animationWarning(`[GLOBAL] ANIM_NUM=${model.animNum}，小于最大编号 ANIM${maxIndex}，超出的动画不生效；写回任意字段时自动修正`))
   }
   const create = (kind: LegacyAnimationKind, copyOf?: string) => edit((current) => {
     const next = appendLegacyAnimation(current, kind, copyOf)
