@@ -197,8 +197,10 @@ export const appState = {
   */
   inspectorGroupKey: "",
   singlePageInspectorContext: "",
-  mobileSplitBeforeCollapse: Number(localStorage.getItem("mobile-workspace-split")) || 50,
-  mobileSwipeStart: undefined as { pointerId: number; x: number; y: number } | undefined,
+  mobilePropertyPage: "home" as "home" | "group",
+  mobileCanvas: "closed" as "closed" | "select" | "preview",
+  mobilePreviewRatio: Number(localStorage.getItem("mobile-preview-ratio")) || 35,
+  mobilePreviewDrag: undefined as { pointerId: number; y: number; ratio: number } | undefined,
   cachedVisualResolver: undefined as { key: readonly unknown[]; resolver: VisualResolver } | undefined,
   cachedSkinStates: undefined as { key: readonly unknown[]; byLayout: Map<string, number[]> } | undefined,
   // 切换布局时在点击处理中途读取尺寸会强制整页重排；改由 ResizeObserver 回调（布局已就绪）缓存。

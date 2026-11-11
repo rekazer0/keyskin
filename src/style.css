@@ -1,3 +1,4 @@
+.mobile-workspace-tabs, .mobile-editor-heading, .mobile-page-heading, .mobile-welcome-intro, .mobile-canvas-heading, #mobile-save { display: none; }
 /* ===================== 原 style-performance.css ===================== */
 
 /* 优化滚动性能（侧栏自身不滚动，由 #files 承担滚动） */
@@ -347,9 +348,12 @@ aside:has(.sidebar-overview:not([hidden])) { display: grid; grid-template-rows: 
 aside:has(.raw-files:not([hidden])) { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) #files { height: 100%; }
 @media (max-width: 760px) and (orientation: portrait) {
-  /* 手机概览：左侧一列分组磁贴，右侧只显示当前分组 */
-  .sidebar-overview { display: grid; grid-template-columns: 70px minmax(0, 1fr); height: 100%; overflow: hidden; }
-  .mobile-overview-groups { display: flex; flex-direction: column; gap: var(--space-2xs); min-height: 0; padding: var(--space-2xs); overflow-y: auto; border-right: 1px solid var(--line-soft); }
+  /* 手机项目页：横向分类，当前分类占据整页宽度。 */
+  .sidebar-overview { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: 100%; overflow: hidden; }
+  .mobile-overview-groups { display: flex; gap: var(--space-xs); min-height: 0; padding: var(--space-sm) var(--space-lg); overflow-x: auto; border-bottom: 1px solid var(--line-soft); scrollbar-width: none; }
+  .mobile-overview-groups > button { display: flex; flex-direction: row; flex: none; width: auto; min-height: var(--control-height-md); padding: var(--space-sm) var(--space-md); gap: var(--space-xs); font-size: var(--font-size-sm); }
+  .sidebar-overview > .nav-group { padding: var(--space-sm); }
+
   .sidebar-overview > .nav-group { display: none; min-height: 0; overflow-y: auto; }
   .sidebar-overview > .nav-group.mobile-overview-active { display: block; }
   .sidebar-overview > .nav-group.mobile-overview-active > .nav-group-body { padding-top: var(--space-xs); }
@@ -1828,275 +1832,6 @@ input[type="search"]:focus {
   }
 }
 
-@media (max-width: 760px) and (orientation: portrait) {
-
-  .app-window {
-    background: var(--toolbar);
-  }
-
-  .titlebar {
-    padding-top: calc(6px + var(--safe-area-top));
-    padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right));
-  }
-
-  .mobile-quick-actions {
-    flex: none;
-    gap: 2px;
-  }
-
-  .titlebar > .spacer {
-    display: none;
-  }
-
-  main {
-    height: calc(var(--viewport-height) - var(--titlebar-height));
-    min-height: 0;
-    display: block;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .mobile-workspace-tabs {
-    display: flex;
-    position: absolute;
-    z-index: 12;
-    right: 0;
-    left: 0;
-    border-bottom: 1px solid var(--line);
-    background: var(--toolbar);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    backdrop-filter: saturate(180%) blur(20px);
-  }
-
-  .mobile-split-handle {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    touch-action: none;
-    cursor: row-resize;
-  }
-
-  .mobile-split-handle::before {
-    content: "";
-    width: 28px;
-    height: 3px;
-    position: absolute;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--secondary) 48%, transparent);
-  }
-
-  .mobile-split-icon,
-  .mobile-split-icon svg {
-    width: 16px;
-    height: 16px;
-    display: block;
-  }
-
-  .mobile-split-icon {
-    color: var(--secondary);
-    background: var(--toolbar);
-  }
-
-  .mobile-split-icon svg {
-    fill: none;
-    stroke: currentColor;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 1.7;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] .workspace {
-    display: none;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] :is(aside, .source) {
-    top: 18px;
-    height: calc(100% - 18px);
-  }
-
-  :root[data-mobile-preview-collapsed="true"] .mobile-workspace-tabs {
-    top: 0;
-  }
-
-  .mobile-split-handle.dragging,
-  .mobile-split-handle:focus-visible {
-    color: var(--accent);
-  }
-
-  
-
-  
-
-  
-
-  .workspace {
-    width: 100%;
-    height: var(--mobile-workspace-split, 50%);
-    position: absolute;
-    right: 0;
-    left: 0;
-    grid-template-rows: minmax(0, 1fr) 24px;
-    border-top: 1px solid var(--line);
-    transition: opacity var(--duration-base) var(--ease-standard);
-  }
-
-  aside {
-    width: 100%;
-    height: calc(50% - 18px);
-    min-height: 0;
-    position: absolute;
-    right: 0;
-    left: 0;
-    border-right: 0;
-    border-left: 0;
-    touch-action: pan-y;
-    transition: transform var(--duration-base) var(--ease-emphasized);
-    will-change: transform;
-  }
-
-  aside {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  aside #files {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-bottom: var(--space-xl);
-  }
-
-  :root[data-mobile-pane="inspector"] aside {
-    pointer-events: none;
-    transform: translateX(-100%);
-  }
-
-  :root:not([data-mobile-pane="inspector"]) aside {
-    transform: translateX(0);
-  }
-
-  :root[data-mobile-preview-position="top"] .workspace {
-    top: 0;
-  }
-
-  :root[data-mobile-preview-position="top"] .mobile-workspace-tabs {
-    top: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-position="top"] :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + 18px);
-    height: calc(100% - var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) .workspace {
-    top: calc(100% - var(--mobile-workspace-split, 50%) + 18px);
-    height: calc(var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) :is(aside, .source) {
-    top: 18px;
-    height: calc(100% - var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) .mobile-workspace-tabs {
-    top: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  .inspector-resize-handle {
-    display: none;
-  }
-
-  :root:has(.source :is(input, textarea, select):focus) .mobile-split-handle,
-  :root[data-keyboard-open="true"] .mobile-split-handle {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .preview-toolbar {
-    display: none;
-    overflow-x: auto;
-  }
-
-  .preview-toolbar .field-control {
-    width: 100%;
-    min-width: 0;
-    position: static;
-    transform: none;
-  }
-
-  #skin-state-control {
-    width: 100%;
-  }
-
-  .preview-toolbar select {
-    width: 100%;
-    min-width: 0;
-    height: 34px;
-    padding-inline: 8px 24px;
-    font-size: var(--font-size-md);
-  }
-
-  #preview-coordinates {
-    display: none;
-  }
-
-  .workspace-status {
-    padding-inline: 8px;
-  }
-
-  #event-log,
-  #panel-status {
-    padding-block: 6px;
-  }
-
-  #panel-status {
-    max-width: 52%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .pane-heading {
-    min-height: 36px;
-    padding: 4px 8px;
-  }
-
-  /* Keep key actions beside the file name, with the view switch at the edge. */
-
-  #mobile-inspector-selection {
-    display: block;
-    overflow: hidden;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  #resource-inspector,
-  #source-editor {
-    touch-action: pan-y;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  #resource-inspector,
-  #source-editor {
-    scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom));
-  }
-
-  #resource-inspector {
-    padding: 8px 8px 16px;
-  }
-
-}
-
 @media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
 
   .document-title {
@@ -2337,10 +2072,6 @@ summary,
 }
 
 /* ── 移动端 ── */
-.mobile-workspace-tabs {
-  border-bottom: 1px solid var(--line);
-  background: var(--toolbar);
-}
 
 /* Section markers replace the vertical thumb while preserving horizontal scrolling. */
 .source-section-scrollbar {
@@ -2537,8 +2268,7 @@ summary,
   content: "";
 }
 
-.mobile-quick-actions,
-.mobile-workspace-tabs {
+.mobile-quick-actions {
   display: none;
 }
 
@@ -2767,15 +2497,10 @@ main {
 
 @media (max-width: 760px) {
 
-  .mobile-workspace-tabs {
-    display: flex;
-  }
-
   
 
   
 
-  .mobile-workspace-tabs,
   .sidebar,
   .workspace {
     border-color: var(--line);
@@ -2949,107 +2674,6 @@ main {
   font-size: var(--font-size-md);
   font-weight: 600;
   line-height: 18px;
-}
-
-/* =================================================================================================
- * 15 · Mobile — 组件 / 移动 · 底部导航 rendered as the pane switcher.
- *
- * The pen draws a labelled dock (56px raised bar, 40px tabs, $brand-soft ground
- * on the live tab). style.css had reduced the same control to an invisible 18px
- * strip of 4px indicator bars, so this section restores the component and moves
- * the hard-coded 18px layout budgets onto one variable.
- * ================================================================================================= */
-
-@media (max-width: 760px) {
-
-  .mobile-workspace-tabs {
-    height: var(--mobile-dock-h);
-    gap: 6px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--material-panel);
-    box-shadow: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane] {
-    height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    border-radius: var(--radius-md);
-    color: var(--secondary);
-    background: transparent;
-    font-size: var(--font-size-sm);
-    font-weight: 400;
-    line-height: 1;
-  }
-
-  
-
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"] {
-    color: var(--accent);
-    background: var(--accent-soft);
-    box-shadow: none;
-    font-weight: 500;
-  }
-
-  /* The pane splitter is a grab handle on the dock's lower edge. */
-  .mobile-split-handle {
-    width: 72px;
-    height: 12px;
-    top: auto;
-    bottom: 0;
-    border-radius: var(--radius-full);
-  }
-
-  .mobile-split-handle::before {
-    width: 32px;
-    height: 3px;
-    top: 50%;
-    margin-top: -2px;
-    border-radius: var(--radius-full);
-    background: var(--line-strong);
-  }
-
-  /* Layout budgets below used to hard-code the retired 18px strip; .source gets the same height in inspector.css */
-  aside {
-    height: calc(50% - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-position="top"] body .mobile-workspace-tabs {
-    top: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-position="top"] body :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .mobile-workspace-tabs {
-    top: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .workspace {
-    top: calc(100% - var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-dock-h));
-  }
-
-  #event-log {
-    display: none;
-  }
 }
 
 /* =================================================================================================
@@ -3592,7 +3216,8 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     max-width: 100%;
     display: inline-flex;
     gap: 6px;
-    padding: 8px 12px;
+    padding: var(--space-sm) var(--space-xs);
+    background: none;
     transform: none;
     pointer-events: auto;
   }
@@ -3619,8 +3244,11 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   /* 菜单、撤销重做、模式切换：手机上换成单个切换按钮，按钮放大一档便于点按 */
   .titlebar .mode-control { display: none; }
   .titlebar .mobile-choice-toggle { display: inline-flex; }
-  .titlebar :is(.ui-icon-button, .ui-button) { --_height: var(--control-height-lg); }
-  .titlebar .mobile-choice-toggle .mode-toggle-icon { display: none; }
+  .titlebar :is(.ui-icon-button, .ui-button) { --_height: var(--control-height-md); }
+  .titlebar .mobile-choice-toggle .mode-toggle-icon { display: block; }
+  .titlebar #mobile-redo { display: none; }
+
+
   .pen-file-menu > .ui-menu {
     position: fixed;
     top: calc(var(--titlebar-height) + var(--space-xs));
@@ -3656,9 +3284,6 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
  * ------------------------------------------------------------------------------------------------- */
 
 @media (max-width: 760px) {
-  body:has(.canvas-wrap.empty) .mobile-workspace-tabs {
-    display: none;
-  }
 
   body:has(.canvas-wrap.empty) main > .workspace {
     top: 0;
@@ -3685,11 +3310,19 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     -webkit-overflow-scrolling: touch;
   }
   .welcome-main {
-    gap: 24px;
-    padding: 20px max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    gap: var(--space-xl);
+    padding: var(--space-xl) max(var(--space-lg), env(safe-area-inset-right)) calc(var(--space-2xl) + var(--safe-area-bottom)) max(var(--space-lg), env(safe-area-inset-left));
     overflow: visible;
   }
-
+  body:has(.canvas-wrap.empty) .canvas-wrap { background: var(--material-panel); }
+  .mobile-welcome-intro { display: grid; gap: var(--space-md); padding-block: var(--space-lg) var(--space-xl); }
+  .mobile-welcome-brand { display: flex; align-items: center; gap: var(--space-sm); color: var(--secondary); font-size: var(--font-size-sm); }
+  .mobile-welcome-intro h1 { margin: var(--space-sm) 0 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); }
+  .mobile-welcome-intro p { margin: 0; color: var(--secondary); font-size: var(--font-size-md); }
+  .mobile-welcome-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); }
+  .mobile-welcome-actions > button { flex: 1; }
+  .welcome-recent:has(#welcome-recent-grid[hidden]), .welcome-note { display: none; }
+  .welcome-recent .welcome-head-action { display: none; }
   .welcome-section-head {
     flex-wrap: wrap;
     align-items: center;
@@ -3749,118 +3382,92 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   }
 }
 
-/* -------------------------------------------------------------------------------------------------
- * 3 · Split editor (portrait phones)
- *     Panes above, dock (pane switch + grab handle) in between, canvas below — or mirrored
- *     when 「预览位置」 is set to top. The Pen dock is 56px tall; the older budget reserved a
- *     dock-sized gap above the panes even when the dock sits at the split.
- * ------------------------------------------------------------------------------------------------- */
+/* 手机工作区：全屏预览 / 项目页面 / 实时画布与编辑面板。 */
+
 
 @media (max-width: 760px) and (orientation: portrait) {
-  :root:not([data-mobile-preview-position="top"]) body main > :is(aside, .source) {
-    top: 0;
-    height: calc(100% - var(--mobile-workspace-split, 50%));
+  .app-window { background: var(--material-panel); }
+  body:not(:has(.canvas-wrap.empty)) .titlebar-preferences { display: none; }
+  body:not(:has(.canvas-wrap.empty)) #mobile-save { display: inline-flex; }
+  .titlebar .mobile-choice-toggle { display: none; }
+  main {
+    position: relative;
+    display: block;
+    min-height: 0;
+    height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-dock-h) - var(--safe-area-bottom));
+    overflow: hidden;
   }
-
-  :root[data-mobile-preview-position="top"] body main > :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-position="top"] body main > .workspace {
-    top: 0;
-    height: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body main > :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body .mobile-workspace-tabs {
-    top: 0;
-  }
-
-  main > :is(aside, .source) {
-    border-top: 0;
-    border-bottom: 0;
+  body:has(.canvas-wrap.empty) main { height: calc(var(--viewport-height) - var(--titlebar-height)); }
+  .mobile-workspace-tabs {
+    position: fixed;
+    z-index: 12;
+    inset: auto 0 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: var(--space-sm);
+    height: calc(var(--mobile-dock-h) + var(--safe-area-bottom));
+    padding: var(--space-xs) max(var(--space-lg), env(safe-area-inset-right)) calc(var(--space-xs) + var(--safe-area-bottom)) max(var(--space-lg), env(safe-area-inset-left));
+    border-top: 1px solid var(--line-soft);
     background: var(--material-panel);
   }
+  .mobile-workspace-tabs > button { flex: 1; min-width: 0; gap: var(--space-xs); padding: var(--space-xs); font-size: var(--font-size-xs); }
+  body:has(.canvas-wrap.empty) .mobile-workspace-tabs { display: none; }
 
-  /* Each half of the hairline represents its pane: layout on the left, inspector on the right. */
-
-  .mobile-workspace-tabs {
-    height: var(--mobile-dock-h);
-    justify-content: center;
-    align-items: center;
-    gap: 0;
-    padding: 0;
-    border: 0;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane] {
-    position: relative;
-    z-index: 3;
-    pointer-events: none;
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    color: transparent;
-    font-size: 0;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane]::after {
-    content: "";
+  main > .workspace { position: absolute; inset: 0; display: grid; width: 100%; height: 100%; border: 0; }
+  :root[data-mobile-pane="layout"] body:not(:has(.canvas-wrap.empty)) main > .workspace { display: none; }
+  main > aside {
     position: absolute;
     inset: 0;
-    background: var(--line-strong);
-    transition: background-color var(--duration-base) var(--ease-standard);
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    background: var(--material-panel);
+    overflow: hidden;
   }
+  aside:has(.sidebar-overview:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
+  aside:has(.raw-files:not([hidden])) { grid-template-rows: auto auto auto minmax(0, 1fr); }
+  :root:not([data-mobile-pane="layout"]) body main > aside { display: none; }
+  .mobile-page-heading { display: flex; align-items: baseline; gap: var(--space-sm); padding: var(--space-xl) var(--space-lg) var(--space-lg); }
+  .mobile-page-heading h1 { margin: 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); }
+  .mobile-page-heading p { margin: 0; font-size: var(--font-size-sm); color: var(--secondary); }
+  aside #files { min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: var(--space-lg); }
+  .pane-heading { min-height: 0; padding: var(--space-sm) var(--space-lg); }
+  .inspector-resize-handle { display: none; }
+  #preview-coordinates, .workspace-status { display: none; }
+  #resource-inspector, #source-editor { touch-action: pan-y; overscroll-behavior: contain; }
 
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"] {
-    background: transparent;
+  :root[data-mobile-pane="inspector"] body main > .workspace { height: var(--mobile-preview-height); }
+  :root[data-mobile-pane="inspector"] .mobile-editor-heading { display: flex; align-items: center; gap: var(--space-xs); padding: 0 var(--space-sm); background: var(--material-panel); border-bottom: 1px solid var(--line-soft); }
+  .mobile-editor-heading strong { flex: 1; font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); color: var(--secondary); }
+  :root[data-mobile-pane="inspector"] body .preview-toolbar { display: none; }
+  :root[data-mobile-pane="inspector"][data-mobile-canvas="select"] body .preview-toolbar { display: flex; }
+  :root[data-mobile-canvas="select"] .mobile-editor-heading { display: none; }
+  :root[data-mobile-canvas="select"][data-mobile-pane="inspector"] body main > .workspace {
+    height: 100%;
+    z-index: 20;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
   }
-
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"]::after {
-    background: var(--accent);
+  :root[data-mobile-canvas="select"] .mobile-canvas-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    background: var(--material-panel);
+    border-bottom: 1px solid var(--line-soft);
   }
-
-  .mobile-split-handle {
-    z-index: 2;
-    inset: calc(-1 * var(--space-sm)) 0 auto;
-    width: auto;
-    height: calc(var(--space-lg) + var(--mobile-dock-h));
-    border-radius: 0;
-    transform: none;
-  }
-
-  .mobile-split-handle::before,
-  .mobile-split-handle .mobile-split-icon {
-    display: none;
-  }
-
-  .mobile-split-handle.dragging,
-  .mobile-split-handle:focus-visible {
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
-  }
+  .mobile-canvas-heading strong { flex: 1; min-width: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-medium); }
 
   /* Canvas: compact preview toolbar on top, canvas fills the rest. The desktop grid
      (48px · 1fr · 30px) used to squeeze the canvas into the 48px toolbar row. */
-  :root:not([data-mobile-preview-collapsed="true"]) body:not(:has(.canvas-wrap.empty)) main > .workspace {
-    display: grid;
+  body:not(:has(.canvas-wrap.empty)) main > .workspace {
     grid-template-rows: auto minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr);
     border-top: 0;
   }
 
-  :root[data-mobile-preview-collapsed="true"] body main > .workspace {
-    display: none;
-  }
 
   main > .workspace > .workspace-status {
     display: none;
@@ -3910,8 +3517,8 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   .preview-toolbar #device {
     width: 100%;
     min-width: 0;
-    height: 30px;
-    padding: 0 16px 0 0;
+    height: var(--control-height-md);
+    padding: 0 var(--space-lg) 0 0;
     font-size: var(--font-size-md);
   }
 
@@ -3921,8 +3528,8 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 
   .preview-toolbar #device-control,
   .preview-toolbar #skin-state-control {
-    height: 32px;
-    padding: 0 8px;
+    height: var(--control-height-md);
+    padding: 0 var(--space-sm);
   }
 
   .preview-toolbar #skin-state-control {
@@ -3933,7 +3540,7 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   .preview-toolbar #skin-state-control .skin-state-value {
     left: var(--space-sm);
     right: var(--space-sm);
-    line-height: 30px;
+    line-height: var(--control-height-md);
   }
 
   .canvas-wrap {
@@ -3941,13 +3548,9 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     padding: 8px;
   }
 
-  :root:not([data-mobile-preview-position="top"]) body .canvas-wrap:not(.empty) {
-    padding-bottom: calc(var(--space-sm) + var(--safe-area-bottom));
-  }
 
-  :root:not([data-mobile-preview-position="top"]) body .canvas-multi-toolbar {
-    bottom: calc(var(--space-lg) + var(--space-2xs) + var(--safe-area-bottom));
-  }
+
+
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -3973,7 +3576,7 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
  * ------------------------------------------------------------------------------------------------- */
 
 @media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
-  :root:not([data-mobile-preview-collapsed="true"]) body:not(:has(.canvas-wrap.empty)) main > .workspace {
+  body:not(:has(.canvas-wrap.empty)) main > .workspace {
     grid-template-rows: auto minmax(0, 1fr);
   }
 

@@ -4,7 +4,7 @@ import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResul
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
-import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportButtons, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel } from "./canvas-interaction"
+import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportButtons, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
 import { canExport, exportFormatFromPath, exportName, skinFileName, type ExportFormat } from "../export.ts"
 import { buildSxiZip } from "../palm/palm-export.ts"
@@ -14,7 +14,7 @@ import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
 import { aiDesignStatus, aiDesignPanel, theme, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationClose, fileOperationDetail, fileOperationResult } from "./dom"
 import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
-import { applyModeState, syncSegmentedControls } from "./mobile-layout"
+import { applyModeState, syncSegmentedControls, setMobilePane } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
 import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
@@ -170,6 +170,9 @@ export async function loadArchive(
     selectFile(initial)
   }
   // The canvas edits keys only for Baidu skins, so the mode state follows the document's format.
+  if (mobilePortraitQuery.matches) {
+    setMobilePane("preview")
+  }
   applyModeState()
   updateFileOperationProgress(92, "正在连接源码工作区…")
   await activateSourceWorkspace(nextSourceWorkspace, sourcePrefix)

@@ -79,6 +79,7 @@
         <button data-variant="filled" class="ui-icon-button titlebar-preferences" type="button" data-app-dialog="settings" title="设置" aria-label="设置">
           <span class="system-symbol" data-icon="ellipsis" aria-hidden="true"></span>
         </button>
+        <button id="mobile-save" class="ui-button" data-variant="primary" type="button" disabled>保存</button>
         <div class="window-controls" aria-label="窗口">
           <button id="window-minimize" type="button" title="最小化" aria-label="最小化"><span class="system-symbol" data-icon="minus" aria-hidden="true"></span></button>
           <button id="window-maximize" type="button" title="最大化" aria-label="最大化">
@@ -91,14 +92,13 @@
     </header>
 
     <main>
-      <nav class="mobile-workspace-tabs" aria-label="手机编辑区域">
-        <button type="button" data-mobile-pane="layout" aria-pressed="true">文件与布局</button>
-        <button type="button" data-mobile-pane="inspector" aria-pressed="false">属性检查器</button>
-        <button id="mobile-split-handle" class="mobile-split-handle" type="button" role="slider" aria-orientation="vertical" aria-valuemin="28" aria-valuemax="72" aria-valuenow="50" aria-expanded="true" title="调整预览高度" aria-label="调整预览高度">
-          <span class="system-symbol mobile-split-icon" data-icon="chevrons-up-down" aria-hidden="true"></span>
-        </button>
+      <nav class="mobile-workspace-tabs" aria-label="手机工作区">
+        <button class="ui-list-item" data-layout="tile" type="button" data-mobile-pane="preview" aria-pressed="true" aria-controls="device-shell"><span data-icon="eye" data-icon-size="20" aria-hidden="true"></span><span>预览</span></button>
+        <button class="ui-list-item" data-layout="tile" type="button" data-mobile-pane="layout" aria-pressed="false" aria-controls="files"><span data-icon="layers" data-icon-size="20" aria-hidden="true"></span><span>项目</span></button>
+        <button class="ui-list-item" data-layout="tile" type="button" data-mobile-pane="inspector" aria-pressed="false" aria-controls="quick-inspector"><span data-icon="sliders-horizontal" data-icon-size="20" aria-hidden="true"></span><span>编辑</span></button>
       </nav>
       <aside class="sidebar">
+        <header class="mobile-page-heading"><h1>项目</h1><p>布局与资源</p></header>
         <div class="pane-heading">
           <div class="sidebar-view-control ui-segmented" data-fill aria-label="左侧视图">
             <button type="button" data-sidebar-view="overview" aria-pressed="true"><span class="system-symbol" data-icon="layout-grid" aria-hidden="true"></span><span>概览</span></button>
@@ -119,6 +119,16 @@
       </aside>
 
       <section class="workspace">
+        <header class="mobile-canvas-heading">
+          <button id="mobile-canvas-close" class="ui-icon-button" type="button" aria-label="返回属性" data-icon="arrow-left"></button>
+          <strong id="mobile-canvas-title">选择要编辑的按键</strong>
+          <button id="mobile-canvas-parent" class="ui-button" data-variant="quiet" type="button">整体布局</button>
+        </header>
+        <header class="mobile-editor-heading">
+          <strong>实时预览</strong>
+          <button id="mobile-select-object" class="ui-icon-button" type="button" aria-expanded="false" aria-controls="device-shell" aria-label="放大选择按键" title="放大选择按键" data-icon="maximize"></button>
+          <button id="mobile-preview-toggle" class="ui-button" data-variant="quiet" type="button" aria-pressed="false"><span data-icon="eye" aria-hidden="true"></span><span class="mobile-preview-label">试按</span></button>
+        </header>
         <div class="preview-toolbar">
           <div class="preview-toolbar-start">
             <button id="toggle-guides" class="ui-icon-button" data-variant="filled" type="button" aria-label="辅助线" title="辅助线" aria-pressed="false"><span class="system-symbol" data-icon="crosshair" aria-hidden="true"></span></button>
@@ -166,6 +176,15 @@
         <div class="canvas-wrap empty">
           <div class="empty-state">
             <div class="welcome-main">
+              <article class="mobile-welcome-intro">
+                <span class="mobile-welcome-brand"><span data-icon="keyboard" aria-hidden="true"></span>键设 KeySkin</span>
+                <h1>设计你的下一款键盘</h1>
+                <p>打开现有皮肤，或从一个模板开始</p>
+                <div class="mobile-welcome-actions">
+                  <button class="ui-button" data-variant="primary" type="button" data-mobile-action="open"><span data-icon="folder-open" aria-hidden="true"></span>打开皮肤</button>
+                  <button class="ui-button" type="button" data-mobile-action="new"><span data-icon="plus" aria-hidden="true"></span>新建皮肤</button>
+                </div>
+              </article>
               <section class="welcome-section welcome-recent">
                 <div class="welcome-section-head">
                   <h2>最近打开</h2>
@@ -357,6 +376,7 @@
 
       <div class="inspector-resize-handle" id="inspector-resize-handle" aria-hidden="true"></div>
       <section class="source">
+        <div id="mobile-preview-resize" class="ui-resize-handle" tabindex="0" role="slider" aria-orientation="vertical" aria-valuemin="28" aria-valuemax="52" aria-valuenow="35" aria-label="预览高度" title="拖动调整预览高度"></div>
         <div class="pane-heading source-heading">
           <div class="inspector-context">
             <h2>检查器</h2>
@@ -370,6 +390,17 @@
               <button type="button" role="tab" data-inspector-tab="source" aria-selected="false">源代码</button>
               <button type="button" role="tab" data-inspector-tab="ai" aria-selected="false">AI 设计</button>
             </div>
+            <select id="mobile-inspector-view" class="ui-input mobile-inspector-view" aria-label="编辑视图"><option value="properties">属性</option><option value="source">源代码</option><option value="ai">AI 设计</option></select>
+            <details id="mobile-inspector-more" class="toolbar-more mobile-inspector-more">
+              <summary class="ui-icon-button" aria-label="更多对象操作" title="更多对象操作" data-icon="ellipsis"></summary>
+              <div class="ui-menu" role="menu" aria-label="对象操作">
+                <button class="ui-list-item" type="button" role="menuitem" data-mobile-key-tool="select"><span data-icon="mouse-pointer-2" aria-hidden="true"></span>选择按键</button>
+                <button class="ui-list-item" type="button" role="menuitem" data-mobile-key-tool="move"><span data-icon="move" aria-hidden="true"></span>拖动按键</button>
+                <button class="ui-list-item" type="button" role="menuitem" data-mobile-key-tool="copy"><span data-icon="copy" aria-hidden="true"></span>复制按键</button>
+                <button class="ui-list-item" type="button" role="menuitem" data-mobile-key-tool="swap"><span data-icon="arrow-left-right" aria-hidden="true"></span>交换位置</button>
+                <button class="ui-list-item" type="button" role="menuitem" data-mobile-key-tool="delete"><span data-icon="trash-2" aria-hidden="true"></span>删除按键</button>
+              </div>
+            </details>
             <div class="inspector-title key-inspector-title">
               <span id="selected-key-preview" class="key-inspector-preview" aria-hidden="true" hidden></span>
               <div class="key-inspector-copy">
@@ -387,6 +418,12 @@
           </div>
         </div>
         <div id="quick-inspector" class="ui-form" hidden>
+          <header class="mobile-property-heading">
+            <button id="mobile-property-back" class="ui-icon-button" type="button" aria-label="返回属性分类" data-icon="arrow-left" hidden></button>
+            <h2>属性</h2>
+            <select id="mobile-property-select" class="ui-input" aria-label="属性分类"></select>
+            <button id="mobile-property-search" class="ui-icon-button" type="button" aria-label="搜索所有属性" data-icon="search"></button>
+          </header>
           <div class="inspector-rail" role="group" aria-label="属性导航">
             <button class="inspector-filter-open ui-icon-button" type="button" title="筛选属性" data-shortcut="F" aria-label="筛选属性" data-icon="search"></button>
             <nav id="mobile-inspector-groups" aria-label="属性分组"></nav>
@@ -868,7 +905,6 @@
             </section>
             <section class="settings-group" aria-labelledby="settings-mobile-title">
               <h3 id="settings-mobile-title">移动端</h3>
-              <label class="settings-row"><span>预览面板位置</span><span class="ui-input ui-select"><select id="mobile-preview-position"><option value="bottom" selected>底部</option><option value="top">顶部</option></select></span></label>
             </section>
           </section>
 

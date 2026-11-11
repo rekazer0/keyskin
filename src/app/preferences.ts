@@ -73,7 +73,7 @@ export const initialCanvasBackground = savedCanvasBackground === "default"
   ? "glass"
   : canvasBackgroundValues.includes(savedCanvasBackground as CanvasBackground)
     ? savedCanvasBackground as CanvasBackground
-    : "checkerboard"
+    : matchMedia("(max-width: 760px) and (orientation: portrait)").matches ? "light-gray" : "checkerboard"
 
 export function applyEditorCrosshairSetting(): void {
   const state = editorCrosshair.checked ? "on" : "off"

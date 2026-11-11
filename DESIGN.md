@@ -63,6 +63,7 @@
 ## 4. 间距与尺寸
 
 - 间距用 4px 网格：`0 2 4 6 8 12 16 20 24 32 40 48`（2 和 6 只用于控件内部）。优先用 `--space-*`。
+- 手机竖屏（≤760px）：小控件 32px，默认与大控件 40px，由 `tokens.css` 覆盖同名高度 token；桌面保持原档位。
 - 控件高度三档：`--control-height-sm` 24、`--control-height-md` 28（默认）、`--control-height-lg` 32。同一行的控件高度必须一致。
 - 面板内边距 16，分组之间 24，分组内行距 8，行内元素间距 8。
 - 动画与样式列表共用最小卡片宽度 `--style-card-width`（160px）：卡片随容器拉伸，宽到能多放一张时自动加列；容器窄于卡片时收窄。预览区固定 3:2 宽高比随卡片缩放，尺寸变化后在可见时重画，预览内容等比缩放、不被压扁；文字预览同样用棋盘格背景。侧栏列表里预览按卡宽 4:3 撑高、占卡片主体，文字只留一行标题与一行摘要；标题区等高，动画的 `INFO` 与名称同一行（单行省略），耗时与引用次数仍属于底部摘要。缩略图使用共享棋盘格，类型图标用 `--icon-size-sm`；只放大缩略图主体，完整编辑播放器与手柄坐标保持不变。
@@ -158,6 +159,7 @@
 | 列表行 | `.ui-list-item` | 图标 + 标题 + 次要文字 + 尾部附件；第二行要带标签时用 `.ui-list-item-meta` 包住若干 `.ui-badge` 和摘要 `small`；`data-layout="tile"` 是图标在上、文字在下的磁贴（资源配置、检查器分类栏、手机概览分组）；选中用 `aria-selected` / `aria-current` / `aria-pressed`（左侧栏：源文件树 `role="treeitem"` 用 `aria-selected`，概览导航用 `aria-current`；设置导航是 `role="tab"` 行）；也用作菜单项；单选行是 `label.ui-list-item` 包一个 radio（radio 透明铺满整行，勾选即选中态） |
 | 角标 | `.ui-badge` | 状态、“实验”标记（`data-variant="accent"`）；`data-variant="pill"` 胶囊（计数、保存状态），`"selection"` 画布多选计数 |
 | 对话框 | `.ui-dialog` | `<dialog>` 外壳：`.ui-dialog-header`（h2 15/600、可选一句说明、右侧 `iconButton("x")`）、`.ui-dialog-body`、`.ui-dialog-footer`（左侧 `.ui-dialog-status`，右侧 `.ui-button` 组）；`data-size="sm｜lg"`（400 / 800，默认 560）；关闭走 `closeDialog()`；Esc / 点遮罩 / 关闭按钮 / 表单提交由 `bindDialog(dialog, cancel?)`（`src/app/ask.ts`）统一接管并补上头部关闭按钮。询问用 `ask()`（`data-variant="ask"`，仅正文滚动）。表单用 `.ui-form`，行用 `.ui-field`，校验错误写在框内的 `.ui-field-error`，通过前不关闭。`data-variant="operation"` 是文件操作进度窗：`.ui-dialog-icon` + `.ui-dialog-meter`，用于长进度、降级确认、保存/导出完成和失败，状态由 `data-outcome`（`progress` / `error`）表示；保存/导出完成时保留进度条并显示 100% |
+| 调整把手 | `.ui-resize-handle` | 可聚焦 `role="slider"`，拖动、方向键、Home / End 调整预览比例，不兼任收起按钮 |
 | 菜单 | `.ui-menu` / `.ui-menu-separator` | 浮层菜单外壳，菜单项用 `.ui-list-item`；键盘见 §7 `bindMenuKeys()` |
 | 面板头 | `.ui-pane-header` | 返回 `iconButton("arrow-left")`（名字“返回”，悬停提示写去处）+ h2 13/600 单行省略 + `.ui-badge[data-variant="pill"]` 数量（只写数字）+ 尾部操作区；`paneHeader()` 生成 |
 | 列表工具条 | `.ui-list-toolbar` | 列表的新建 `plus` / 复制 `copy` / 删除 `trash-2` 三个图标按钮；新建有多个种类时是带 `plus` 前缀的下拉；`listToolbar()` 生成 |
@@ -245,3 +247,12 @@
 - 加载中用骨架扫光，不写“正在加载…”。
 - 能用图标或控件本身表达的说明句直接删掉；必须保留的说明改成 `info` 图标 + 悬停提示，或一行 `.ui-field-note`。
 - 有可见文字的按钮不再加重复的 `title`。
+
+## 14. 手机工作区
+
+- 手机竖屏采用独立的信息结构，底部固定「预览 / 项目 / 编辑」三项导航，安全区在导航下方；不依赖滑动猜测入口。
+- 预览页为全屏画布、支持试按；项目页独占视口，用横向分类浏览布局与资源；选布局进入预览，选资源进入编辑。
+- 编辑页始终上方实时预览、下方属性编辑；默认预览占 35%，分隔把手可调整至 28%–52%。属性区为紧凑对象头 → 视图切换 → 横向分类 → 全宽属性。分类只定位、不隐藏其他分组。
+- 手机上属性行默认标签在上、控件在下，开关保留同一行，坐标对与颜色对维持并排。文字和输入框都不能被分类导航挤窄。
+- 画布可直接选择按键，放大按钮临时全屏选择，点选后回到同屏编辑；「试按 / 选键」只切换画布交互，不禁用属性字段、不清除改动标记和滚动位置。任何属性修改都立即更新可见画布。
+- 移动端标题栏保留菜单、名称、撤销与保存；重做、导出、设置在菜单中。欢迎页独立呈现打开、新建和模板入口。

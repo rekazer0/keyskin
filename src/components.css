@@ -48,6 +48,13 @@
 .ui-button:active, .ui-icon-button:active { background: color-mix(in srgb, var(--text) 12%, transparent); transform: scale(0.96); }
 .ui-button[aria-pressed="true"], .ui-icon-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
+/* —— 预览分隔把手：拖动或方向键调高低 —— */
+.ui-resize-handle { display: grid; place-items: center; width: 72px; height: var(--space-lg); color: var(--tertiary); touch-action: none; cursor: row-resize; }
+.ui-resize-handle::before { content: ""; width: var(--space-2xl); height: var(--space-xs); border-radius: var(--radius-full); background: currentColor; }
+.ui-resize-handle:focus-visible { outline: 0; border-radius: var(--radius-sm); box-shadow: var(--focus-ring); }
+.ui-resize-handle:active { color: var(--accent); }
+@media (hover: hover) { .ui-resize-handle:hover { color: var(--secondary); } }
+
 /* —— 对话框：外壳 + 头 / 正文 / 底。入场 slow + emphasized；退出由 src/motion.ts 的 closeDialog() 播放 —— */
 .ui-dialog {
   --_width: 560px;

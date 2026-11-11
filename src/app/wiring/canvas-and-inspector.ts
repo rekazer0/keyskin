@@ -1,17 +1,18 @@
+import { wireMobileWorkspace } from "./mobile-workspace"
 import { installClientLogging } from "../../client-log.ts"
 import { installSafeAreaLock } from "../../safe-area.ts"
-import { isTauri, scrollbarIdleTimers, source, schedulePointerCoordinates, syncMobileShareLabel, syncUndoButtons, mobilePortraitQuery, preview, toolbarPreview, keyboardFields } from "../canvas-interaction"
+import { isTauri, scrollbarIdleTimers, source, schedulePointerCoordinates, syncMobileShareLabel, syncUndoButtons, preview, toolbarPreview, keyboardFields } from "../canvas-interaction"
 import { installNumberInputWheel } from "../../number-input-wheel.ts"
 import { wheelZoomFactor } from "../../wheel-zoom.ts"
 import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
-import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
-import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, mainWorkspace, mobileSplitHandle, mobilePreviewPosition, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton } from "../dom"
+import { renderSourceValueThumbnail } from "../source-panel"
+import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, files, bdaInspectorStateButtons, bdaConfigFieldsGroup, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
-import { syncSinglePageInspectorGroup, setMobileSplit, setMobilePane, syncMobileInspectorHeader, setMobilePreviewCollapsed } from "../mobile-layout"
+import { syncSinglePageInspectorGroup } from "../mobile-layout"
 import { fitCandidateInputBar } from "../config-context"
 import { measureCanvasWrapInnerSize, scheduleFitCanvasPreview, applyPreviewZoom, setPreviewPan, finishPreviewPan, schedulePreviewPan } from "../preview-render"
 import { canvasEditable, isEditing } from "../edit-history"
@@ -158,101 +159,7 @@ export function wireCanvasAndInspector(): void {
       }
     })
   }
-  setMobileSplit(Number(localStorage.getItem("mobile-workspace-split")) || 50, false)
-  setMobilePane("layout")
-  syncMobileInspectorHeader()
-  for (const button of mobilePaneButtons) {
-    button.addEventListener("click", () => setMobilePane(button.dataset.mobilePane === "inspector" ? "inspector" : "layout"))
-  }
-  mobilePortraitQuery.addEventListener("change", () => {
-    if (!mobilePortraitQuery.matches) setMobilePreviewCollapsed(false)
-    else {
-      const activeGroup = files.querySelector<HTMLDetailsElement>(".nav-group.mobile-overview-active")
-      if (activeGroup) activeGroup.open = true
-    }
-    setMobilePane(document.documentElement.dataset.mobilePane === "inspector" ? "inspector" : "layout")
-    syncMobileInspectorHeader()
-    updateSourceFindVisibility()
-  })
-  mainWorkspace.addEventListener("pointerdown", (event) => {
-    if (!mobilePortraitQuery.matches || event.pointerType === "mouse" && event.button !== 0 ||
-      !(event.target as Element).closest("aside, .source")) return
-    appState.mobileSwipeStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
-  })
-  mainWorkspace.addEventListener("pointermove", (event) => {
-    if (!appState.mobileSwipeStart || appState.mobileSwipeStart.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - appState.mobileSwipeStart.x
-    const deltaY = event.clientY - appState.mobileSwipeStart.y
-    if (Math.abs(deltaY) > 12 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      appState.mobileSwipeStart = undefined
-      return
-    }
-    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return
-    appState.mobileSwipeStart = undefined
-    setMobilePane(deltaX < 0 ? "inspector" : "layout")
-  })
-  mainWorkspace.addEventListener("pointerup", (event) => {
-    if (!appState.mobileSwipeStart || appState.mobileSwipeStart.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - appState.mobileSwipeStart.x
-    const deltaY = event.clientY - appState.mobileSwipeStart.y
-    appState.mobileSwipeStart = undefined
-    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return
-    setMobilePane(deltaX < 0 ? "inspector" : "layout")
-  })
-  mainWorkspace.addEventListener("pointercancel", (event) => {
-    if (appState.mobileSwipeStart?.pointerId === event.pointerId) appState.mobileSwipeStart = undefined
-  })
-  {
-    let dragging = false
-    let moved = false
-    let pointerId = -1
-    let pointerStartY = 0
-
-    mobileSplitHandle.addEventListener("pointerdown", (event) => {
-      if (!mobilePortraitQuery.matches) return
-      dragging = true
-      moved = false
-      pointerId = event.pointerId
-      pointerStartY = event.clientY
-      mobileSplitHandle.classList.add("dragging")
-      mobileSplitHandle.setPointerCapture(pointerId)
-      event.preventDefault()
-    })
-
-    mobileSplitHandle.addEventListener("pointermove", (event) => {
-      if (!dragging || event.pointerId !== pointerId) return
-      moved ||= Math.abs(event.clientY - pointerStartY) > 3
-      const rect = mainWorkspace.getBoundingClientRect()
-      if (!rect.height) return
-      const fromTop = (event.clientY - rect.top) / rect.height * 100
-      const split = mobilePreviewPosition.value === "top" ? fromTop : 100 - fromTop
-      setMobileSplit(split)
-    })
-
-    const finishMobileSplitDrag = (event: PointerEvent) => {
-      if (!dragging || event.pointerId !== pointerId) return
-      dragging = false
-      pointerId = -1
-      mobileSplitHandle.classList.remove("dragging")
-      if (mobileSplitHandle.hasPointerCapture(event.pointerId)) mobileSplitHandle.releasePointerCapture(event.pointerId)
-    }
-    mobileSplitHandle.addEventListener("pointerup", finishMobileSplitDrag)
-    mobileSplitHandle.addEventListener("pointercancel", finishMobileSplitDrag)
-    mobileSplitHandle.addEventListener("click", () => {
-      const wasMoved = moved
-      moved = false
-      if (!mobilePortraitQuery.matches || wasMoved) return
-      setMobilePreviewCollapsed(document.documentElement.dataset.mobilePreviewCollapsed !== "true")
-    })
-    mobileSplitHandle.addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
-      const current = Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--mobile-workspace-split"),
-      ) || 50
-      setMobileSplit(current + (event.key === "ArrowUp" ? 2 : -2))
-      event.preventDefault()
-    })
-  }
+  wireMobileWorkspace()
   new ResizeObserver(() => {
     appState.canvasWrapInnerSize = measureCanvasWrapInnerSize()
     scheduleFitCanvasPreview()

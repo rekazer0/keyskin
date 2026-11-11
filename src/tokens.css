@@ -183,7 +183,13 @@
   :root { --mobile-dock-h: 56px; }
 }
 @media (max-width: 760px) and (orientation: portrait) {
-  :root { --mobile-dock-h: 1px; }
+  :root {
+    --mobile-dock-h: 64px;
+    --mobile-preview-height: 35%;
+    --control-height-sm: 32px;
+    --control-height-md: 40px;
+    --control-height-lg: 40px;
+  }
 }
 
 :root[data-app-theme="dark"] {

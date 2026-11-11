@@ -416,51 +416,45 @@
 .source .bda-style-reference-label { overflow: hidden; color: var(--secondary); text-overflow: ellipsis; white-space: nowrap; }
 .source #primary-css-fields:empty { display: none; }
 
-/* 手机竖屏：侧栏与检查器叠在同一区域，检查器必须不透明，不能让下面的侧栏透出来。 */
+.source { min-width: 0; border-color: var(--line); background: var(--material-panel); box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+ .source > .ui-resize-handle { display: none; }
+
+/* 手机属性面板与上方画布始终同屏，分类横排保留字段宽度。 */
 @media (max-width: 760px) and (orientation: portrait) {
-  .source { background: var(--material-panel); }
-  /* 两个面板左右滑动切换：不在当前页时滑出屏幕并且不接收点击 */
-  :root[data-mobile-pane="inspector"] .source { transform: translateX(0); }
-  :root:not([data-mobile-pane="inspector"]) .source { pointer-events: none; transform: translateX(100%); }
-}
-/*
- 从 style.css 归并过来的同名规则（含响应式变体）
- */
-
-.source {
-  min-width: 0;
-}
-
-@media (max-width: 760px) and (orientation: portrait) {
-
-  .source {
-    width: 100%;
-    min-height: 0;
-    position: absolute;
-    right: 0;
-    left: 0;
-    border-right: 0;
-    border-left: 0;
-    touch-action: pan-y;
-    transition: transform var(--duration-base) var(--ease-emphasized);
-    will-change: transform;
-  }
-}
-
-.source {
-  border-color: var(--line);
-  background: var(--material-panel);
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-@media (max-width: 760px) {
-
-  .source {
-    height: calc(50% - var(--mobile-dock-h));
-    border-color: var(--line);
-  }
+  .source { position: absolute; inset: var(--mobile-preview-height) 0 auto; width: 100%; height: calc(100% - var(--mobile-preview-height)); padding-top: var(--space-lg); border: 0; border-top: 1px solid var(--line-soft); border-radius: 0; background: var(--material-panel); }
+  .source > .ui-resize-handle { display: grid; position: absolute; z-index: 2; top: 0; left: 50%; transform: translateX(-50%); }
+  :root:not([data-mobile-pane="inspector"]) .source { display: none; }
+  :root[data-mobile-canvas="select"] .source { visibility: hidden; pointer-events: none; }
+  .source > .pane-heading { padding-top: 0; }
+  .source .inspector-view-controls { display: flex; flex-direction: column; gap: var(--space-sm); }
+  .source .key-inspector-title { order: -1; flex-wrap: wrap; padding: var(--space-sm) var(--space-lg); margin: 0 calc(-1 * var(--_gutter)); }
+  .source .key-inspector-copy { min-width: 0; }
+  .source #selected-key { font-size: var(--font-size-lg); }
+  .source #selected-key-context { font-size: var(--font-size-xs); }
+  .source .inspector-object-actions { justify-content: flex-end; margin-left: auto; }
+  .source .inspector-object-actions > .ui-icon-button { --_height: var(--control-height-sm); }
+  .source #quick-inspector { padding-right: 0; }
+  .source .mobile-property-heading { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-lg) var(--space-md); }
+  .source .mobile-property-heading h2 { flex: 1; margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+  .source .mobile-property-heading .ui-input { width: auto; max-width: 52%; height: var(--control-height-md); }
+  .source .inspector-rail { display: none; }
+  .source #mobile-inspector-groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); width: 100%; padding: 0 var(--space-lg) var(--space-lg); overflow: visible; }
+  .source #mobile-inspector-groups > button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; width: 100%; min-height: var(--control-height-lg); padding: var(--space-sm) var(--space-md); font-size: var(--font-size-md); text-align: left; white-space: nowrap; }
+  .source #mobile-inspector-groups > button > .ui-icon { display: block; grid-row: 1 / -1; }
+  .source #mobile-inspector-groups .inspector-group-label { text-align: left; }
+  .source .mobile-property-summary { grid-column: 2; overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+  .source .mobile-property-chevron { grid-column: 3; grid-row: 1 / -1; color: var(--tertiary); }
+  .source #mobile-inspector-groups > button[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--accent); }
+  .source .inspector-reset { flex: none; width: auto; min-height: var(--control-height-md); margin: 0; padding-inline: var(--space-sm); }
+  .source .inspector-filter { top: calc(var(--control-height-md) + var(--space-sm) * 2); }
+  .source .ui-section { gap: var(--space-lg); padding: var(--space-xl) var(--space-lg); }
+  .source :is(.ui-section > h3, .tile-heading > h3, .bda-selected-style-heading > h3) { min-height: 0; font-size: var(--font-size-lg); }
+  .source .ui-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); padding-block: var(--space-xs); }
+  .source .ui-field:has(> .ui-switch) { grid-template-columns: minmax(0, 1fr) auto; }
+  .source .ui-field > span:first-child, .source .document-field-caption { font-size: var(--font-size-md); overflow: visible; white-space: normal; }
+  .source :is(.inspector-grid, .appearance-typography-fields, .appearance-property-grid, #primary-css-fields) { gap: var(--space-md); }
+  .source :is(input, select, textarea, .ui-input) { font-size: var(--font-size-md); }
 }
 
 /* —— 搜狗、手心（ssf-inspector.ts / sxi-inspector.ts）：分组与百度共用同一套样式；一个分组里的多个配置段各有一行小标题 —— */

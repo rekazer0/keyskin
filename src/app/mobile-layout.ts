@@ -1,4 +1,4 @@
-import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, mobileSplitHandle, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, mobilePropertySelect, mobilePropertyBack, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, mobilePreviewToggle, mobilePreviewResize, mobileObjectSelect, mobileCanvasTitle, mobileCanvasParent, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
@@ -38,14 +38,19 @@ export function syncSegmentedControls(): void {
     const value = values[button.dataset.mobileChoice ?? ""] ?? ""
     const label = labels[value] ?? value
     const labelNode = button.querySelector<HTMLElement>(".mobile-choice-label")
-    if (labelNode) labelNode.textContent = label
+    if (labelNode) labelNode.textContent = button.dataset.mobileChoice === "mode" ? (value === "edit" ? "编辑" : "预览") : label
+    if (button.dataset.mobileChoice === "mode") {
+      button.querySelector(".mode-toggle-icon")?.replaceChildren(createIcon(value === "edit" ? "pencil-line" : "eye"))
+    }
     const currentIcon = button.querySelector<HTMLElement>("[data-mobile-current-icon]")
     if (currentIcon) {
       const icons: Record<string, string> = { port: "rectangle-vertical", land: "rectangle-horizontal", light: "sun", dark: "moon" }
       currentIcon.replaceChildren(createIcon(icons[value]))
     }
     if (button.dataset.mobileChoice === "mode") button.setAttribute("aria-pressed", String(value === "edit"))
-    button.setAttribute("aria-label", `切换${label || "选项"}（当前${label}）`)
+    button.setAttribute("aria-label", button.dataset.mobileChoice === "mode"
+      ? `切换至${value === "edit" ? "交互预览" : "编辑模式"}（当前${label}）`
+      : `切换${label || "选项"}（当前${label}）`)
   }
 }
 
@@ -81,6 +86,18 @@ export function mobileInspectorGroupKey(group: HTMLElement): string {
 // 点选分类栏后记下落点：末尾的短分区滚不到顶部，按滚动位置反推会指回上一个分区。
 let pinnedScrollTop: number | null = null
 
+export function setMobilePropertyPage(page: "home" | "group"): void {
+  appState.mobilePropertyPage = page
+  quickInspector.dataset.mobilePropertyPage = page
+  mobilePropertyBack.hidden = page === "home"
+  if (mobilePortraitQuery.matches) {
+    for (const button of mobileInspectorGroups.querySelectorAll<HTMLButtonElement>("button[data-mobile-inspector-group]")) {
+      button.setAttribute("aria-pressed", String(page === "group" && button.dataset.mobileInspectorGroup === quickInspector.dataset.mobileInspectorGroup))
+    }
+  }
+  quickInspector.scrollTop = 0
+}
+
 export function setMobileInspectorGroup(id: string, scroll = true): void {
   quickInspector.dataset.mobileInspectorGroup = id
   for (const button of Array.from(mobileInspectorGroups.querySelectorAll<HTMLButtonElement>("button"))) {
@@ -90,7 +107,15 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
   const current = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .find((group) => group.dataset.mobileInspectorGroup === id)
   appState.inspectorGroupKey = current ? mobileInspectorGroupKey(current) : ""
-  // 分类栏只定位同一列内的分组，不切换或隐藏属性。
+  for (const group of quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed")) {
+    group.toggleAttribute("data-mobile-property-active", group === current)
+  }
+  mobilePropertySelect.value = id
+  if (mobilePortraitQuery.matches) {
+    if (scroll) setMobilePropertyPage("group")
+    return
+  }
+  // 桌面分类栏定位同一列；手机只进入当前分类的二级页面。
   revealActiveRailButton()
   if (scroll) {
     quickInspector.scrollTop = 0
@@ -117,6 +142,7 @@ function revealActiveRailButton(): void {
   const rail = mobileInspectorGroups.parentElement
   const button = mobileInspectorGroups.querySelector<HTMLElement>('button[aria-pressed="true"]')
   if (!rail || !button) return
+  if (mobilePortraitQuery.matches) return
   const view = rail.getBoundingClientRect()
   const box = button.getBoundingClientRect()
   // 第一项连同上面的筛选按钮一起露出来
@@ -125,13 +151,20 @@ function revealActiveRailButton(): void {
   else if (box.bottom > view.bottom) rail.scrollTop += box.bottom - view.bottom
 }
 
-/** 一页显示时把当前分区滚到检查器顶部；第一个分区保留顶部留白。 */
+function inspectorScrollInset(): number {
+  if (!mobilePortraitQuery.matches) return 0
+  const rail = mobileInspectorGroups.parentElement?.getBoundingClientRect().height ?? 0
+  const filter = quickInspector.querySelector<HTMLElement>(".inspector-filter")
+  return rail + (quickInspector.hasAttribute("data-filter-open") ? filter?.getBoundingClientRect().height ?? 0 : 0)
+}
+
+/** 一页显示时把当前分区滚到导航下方；第一个分区保留顶部留白。 */
 function scrollToSinglePageInspectorGroup(): void {
   const groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .filter((group) => group.getClientRects().length > 0)
   const current = groups.find((group) => group.dataset.mobileInspectorGroup === quickInspector.dataset.mobileInspectorGroup)
   quickInspector.scrollTop = 0
-  if (current && current !== groups[0]) quickInspector.scrollTop = current.getBoundingClientRect().top - quickInspector.getBoundingClientRect().top
+  if (current && current !== groups[0]) quickInspector.scrollTop = current.getBoundingClientRect().top - quickInspector.getBoundingClientRect().top - inspectorScrollInset()
 }
 
 /** 换了选中对象时停在记住的分区（与分组模式一致）；同一对象重绘时只按滚动位置刷新分类轨。 */
@@ -141,11 +174,16 @@ export function revealSinglePageInspectorGroup(context: string): void {
     return
   }
   appState.singlePageInspectorContext = context
+  if (mobilePortraitQuery.matches) {
+    setMobilePropertyPage("home")
+    return
+  }
   scrollToSinglePageInspectorGroup()
 }
 
 /** 一页显示时按滚动位置点亮分类轨：最后一个顶边越过检查器顶部的分区即为当前分区。 */
 export function syncSinglePageInspectorGroup(): void {
+  if (mobilePortraitQuery.matches) return
   const groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .filter((group) => group.getClientRects().length > 0)
   // 刚点选分类栏：落点没变就保留点选的分区，用户自己滚动后才重新按位置点亮。
@@ -155,12 +193,13 @@ export function syncSinglePageInspectorGroup(): void {
   }
   if (!groups.length) return
   const view = quickInspector.getBoundingClientRect()
+  const contentTop = view.top + inspectorScrollInset()
   const current = groups.find((group) => group.dataset.mobileInspectorGroup === quickInspector.dataset.mobileInspectorGroup)
   const atEnd = quickInspector.scrollTop + quickInspector.clientHeight >= quickInspector.scrollHeight - 2
   // 滚到底时末尾几个短分区到不了顶部：保留刚点选且仍可见的分区，否则点亮最后一个。
   const currentTop = current?.getBoundingClientRect().top ?? -Infinity
-  if (atEnd && currentTop >= view.top - 8 && currentTop < view.bottom) return
-  const next = atEnd ? groups[groups.length - 1] : groups.filter((group) => group.getBoundingClientRect().top - view.top <= 8).pop() ?? groups[0]
+  if (atEnd && currentTop >= contentTop - 8 && currentTop < view.bottom) return
+  const next = atEnd ? groups[groups.length - 1] : groups.filter((group) => group.getBoundingClientRect().top - contentTop <= 8).pop() ?? groups[0]
   if (next !== current) setMobileInspectorGroup(next.dataset.mobileInspectorGroup ?? "", false)
 }
 
@@ -229,6 +268,12 @@ export function syncMobileInspectorGroups(): void {
   // Keep the horizontal inspector navigation evenly distributed when the
   // available groups change (for example: 面板 / 提示栏 / 扩展区域).
   mobileInspectorGroups.style.setProperty("--inspector-group-count", String(Math.max(groups.length, 1)))
+  mobilePropertySelect.replaceChildren(...groups.map((group) => {
+    const option = document.createElement("option")
+    option.value = group.dataset.mobileInspectorGroup ?? ""
+    option.textContent = railLabels.get(group) ?? mobileInspectorGroupLabel(group)
+    return option
+  }))
   mobileInspectorGroups.replaceChildren(...groups.map((group) => {
     const button = railButton()
     const label = railLabels.get(group) ?? mobileInspectorGroupLabel(group)
@@ -236,6 +281,15 @@ export function syncMobileInspectorGroups(): void {
     text.className = "inspector-group-label"
     text.textContent = label
     button.append(groupIcon(label), text)
+    const labels = [...new Set(Array.from(group.querySelectorAll<HTMLElement>(".ui-field > span:first-child")).map((el) => el.textContent?.trim()).filter(Boolean))].slice(0, 3)
+    if (labels.length) {
+      const summary = element("small", "mobile-property-summary")
+      summary.textContent = labels.join(" · ")
+      button.append(summary)
+    }
+    const chevron = createIcon("chevron-right")
+    chevron.classList.add("mobile-property-chevron")
+    button.append(chevron)
     button.title = railCodes.has(group) ? `${label}（${railCodes.get(group)}）` : label
     button.dataset.mobileInspectorGroup = group.dataset.mobileInspectorGroup
     button.addEventListener("click", () => setMobileInspectorGroup(group.dataset.mobileInspectorGroup ?? "0"))
@@ -270,7 +324,8 @@ function railButton(): HTMLButtonElement {
   return button
 }
 
-export function setMobilePane(pane: "layout" | "inspector"): void {
+export function setMobilePane(pane: "preview" | "layout" | "inspector"): void {
+  setMobileCanvas("closed")
   document.documentElement.dataset.mobilePane = pane
   for (const button of mobilePaneButtons) {
     const active = button.dataset.mobilePane === pane
@@ -279,27 +334,36 @@ export function setMobilePane(pane: "layout" | "inspector"): void {
   const mobile = mobilePortraitQuery.matches
   sidebarPane.inert = mobile && pane !== "layout"
   inspectorPane.inert = mobile && pane !== "inspector"
+  if (mobile && pane !== "layout") selectChoice(mode, pane === "inspector" ? "edit" : "preview")
 }
 
-export function setMobileSplit(value: number, persist = true): void {
-  const clamped = Math.max(28, Math.min(72, value))
-  document.documentElement.style.setProperty("--mobile-workspace-split", `${clamped}%`)
-  mobileSplitHandle.setAttribute("aria-valuenow", String(Math.round(clamped)))
-  mobileSplitHandle.setAttribute("aria-valuetext", `画布占 ${Math.round(clamped)}%`)
-  if (persist) localStorage.setItem("mobile-workspace-split", String(clamped))
-}
-
-export function setMobilePreviewCollapsed(collapsed: boolean): void {
-  if (collapsed) {
-    appState.mobileSplitBeforeCollapse = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--mobile-workspace-split"),
-    ) || appState.mobileSplitBeforeCollapse
+export function setMobileCanvas(view: "closed" | "select" | "preview"): void {
+  if (appState.mobileCanvas === view) return
+  const previous = appState.mobileCanvas
+  appState.mobileCanvas = view
+  document.documentElement.dataset.mobileCanvas = view
+  const mobile = mobilePortraitQuery.matches
+  inspectorPane.inert = mobile && (view === "select" || document.documentElement.dataset.mobilePane !== "inspector")
+  mobileObjectSelect.setAttribute("aria-expanded", String(view === "select"))
+  mobilePreviewToggle.setAttribute("aria-pressed", String(view === "preview"))
+  const label = mobilePreviewToggle.querySelector(".mobile-preview-label")
+  if (label) label.textContent = view === "preview" ? "选键" : "试按"
+  mobileCanvasTitle.textContent = view === "preview" ? "试按键盘" : "选择要编辑的按键"
+  mobileCanvasParent.hidden = view !== "select"
+  if (mobile) {
+    applyModeState()
+    if (view === "closed") {
+      const trigger = previous === "select" ? mobileObjectSelect : mobilePreviewToggle
+      trigger.focus({ preventScroll: true })
+    }
   }
-  document.documentElement.dataset.mobilePreviewCollapsed = String(collapsed)
-  mobileSplitHandle.setAttribute("aria-expanded", String(!collapsed))
-  mobileSplitHandle.title = collapsed ? "展开预览" : "调整预览高度"
-  mobileSplitHandle.setAttribute("aria-label", mobileSplitHandle.title)
-  if (!collapsed) setMobileSplit(appState.mobileSplitBeforeCollapse)
+}
+
+export function setMobilePreviewHeight(ratio: number): void {
+  appState.mobilePreviewRatio = Math.max(28, Math.min(52, Number.isFinite(ratio) ? ratio : 35))
+  document.documentElement.style.setProperty("--mobile-preview-height", `${appState.mobilePreviewRatio}%`)
+  mobilePreviewResize.setAttribute("aria-valuenow", String(Math.round(appState.mobilePreviewRatio)))
+  mobilePreviewResize.setAttribute("aria-valuetext", `预览占 ${Math.round(appState.mobilePreviewRatio)}%`)
 }
 
 export function updatePanelToolButtons(): void {
@@ -313,7 +377,7 @@ export function updatePanelToolButtons(): void {
 export function applyModeState(): void {
   const editing = isEditing()
   if (!editing && editorCrosshair.checked) previewCoordinates.hidden = true
-  const canvasMode = editing ? "edit" : "preview"
+  const canvasMode = editing && !(mobilePortraitQuery.matches && appState.mobileCanvas === "preview") ? "edit" : "preview"
   deviceShell.dataset.mode = canvasMode
   preview.setMode(canvasMode)
   toolbarPreview.setMode(canvasMode)

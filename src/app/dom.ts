@@ -118,7 +118,6 @@ export const sourceValueHintsEnabled = $("#source-value-hints-enabled") as HTMLI
 
 export const sourceLineExplanationEnabled = $("#source-line-explanation-enabled") as HTMLInputElement
 
-export const mobilePreviewPosition = $("#mobile-preview-position") as HTMLSelectElement
 
 export const hintPreviewEnabled = $("#hint-preview-enabled") as HTMLInputElement
 
@@ -142,7 +141,6 @@ export const sourceDirectoryStatus = $("#source-directory-status")
 
 export const mobilePaneButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mobile-pane]"))
 
-export const mobileSplitHandle = $("#mobile-split-handle") as HTMLButtonElement
 
 export const sourceColorPicker = $("#source-color-picker") as HTMLInputElement
 
@@ -590,3 +588,16 @@ export const sourceStyleProxy = document.createElement("input")
 
 // 只渲染真正滚进视野的卡片：9 张十几 MB 的皮肤不该在启动时全部读一遍。
 export const welcomeScroller = document.querySelector<HTMLElement>(".welcome-main")
+
+export const mobilePreviewToggle = $("#mobile-preview-toggle") as HTMLButtonElement
+export const mobileSaveButton = $("#mobile-save") as HTMLButtonElement
+export const mobileObjectSelect = $("#mobile-select-object") as HTMLButtonElement
+export const mobileCanvasClose = $("#mobile-canvas-close") as HTMLButtonElement
+export const mobileCanvasTitle = $("#mobile-canvas-title")
+export const mobileCanvasParent = $("#mobile-canvas-parent") as HTMLButtonElement
+export const mobilePreviewResize = $("#mobile-preview-resize")
+export const mobilePropertyBack = $("#mobile-property-back") as HTMLButtonElement
+export const mobilePropertySelect = $("#mobile-property-select") as HTMLSelectElement
+export const mobilePropertySearch = $("#mobile-property-search") as HTMLButtonElement
+export const mobileInspectorView = $("#mobile-inspector-view") as HTMLSelectElement
+export const mobileInspectorMore = $("#mobile-inspector-more") as HTMLDetailsElement
