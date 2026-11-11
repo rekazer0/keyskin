@@ -7,6 +7,7 @@ import { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
 import { convertBaiduToSsf } from "./baidu-to-ssf.ts"
 import { isSkinContainer } from "./ssf-container.ts"
+import { sogouKeySizes } from "./ssf-key-sizes.ts"
 import { SsfPackage, unpackSsf } from "./ssf-package.ts"
 import { syncKeyStateTips } from "./ssf-state-tips.ts"
 import { copySsfSkeleton } from "./ssf-skeleton.ts"
@@ -94,11 +95,13 @@ export async function convertSsfDocument(
 }
 
 /** Converts any editable Baidu skin to `.ssf`; BDA goes through the official BDS base layout first. */
-export async function exportSsf(archive: SkinArchive, bdaBase: SkinArchive | undefined): Promise<Converted> {
-  if (archive.format !== "bda") return convertBaiduToSsf(archive)
+export async function exportSsf(archive: SkinArchive, bdaBase: SkinArchive | undefined, sogouTemplate?: SkinArchive): Promise<Converted> {
+  // 官方骨架决定每个按键类的显示尺寸：按它缩图，包里不再存客户端用不到的分辨率。
+  const options = sogouTemplate ? { keySizes: sogouKeySizes(sogouTemplate) } : undefined
+  if (archive.format !== "bda") return convertBaiduToSsf(archive, options)
   if (!bdaBase) throw new Error("无法加载 BDA 官方基础布局")
   const converted = convertBdaArchive(archive, bdaBase)
-  const result = await convertBaiduToSsf(converted.archive)
+  const result = await convertBaiduToSsf(converted.archive, options)
   // BDA-only panels (split / one-handed landscape boards) have no Sogou counterpart either.
   const warnings = converted.warnings.filter((warning) => !warning.includes("没有 BDS/BDI 基础布局"))
   return { bytes: result.bytes, warnings: [...warnings, ...result.warnings] }

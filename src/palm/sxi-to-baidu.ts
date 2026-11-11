@@ -8,6 +8,7 @@
 import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
+import { adaptAndroidToolbar } from "../ios-toolbar.ts"
 import { applyLegacyBaiduMotion } from "../legacy-to-bda-motion.ts"
 import { convertBaiduToSsf } from "../ssf/baidu-to-ssf.ts"
 import { SsfPackage } from "../ssf/ssf-package.ts"
@@ -142,8 +143,10 @@ function toolbarPlist(items: Json[]): string {
 /**
  * The Baidu BDS archive an `.sxi` document stands for. Layouts, styles and tile maps are written
  * from `skin.json`; images, sounds and fonts are the Palm archive's own resources.
+ * 目标是 BDS 时还要补上 Android 的功能栏图集：iOS 皮肤的工具栏只有 plist 和 1.0 图片，
+ * 百度 Android 从 res/logo/pop_menu_icons 读取，否则功能栏只剩 Logo。
  */
-export function sxiToBaiduArchive(archive: SkinArchive): SkinArchive {
+export function sxiToBaiduArchive(archive: SkinArchive, target: "bdi" | "bds" = "bdi", warnings: string[] = []): SkinArchive {
   if (archive.format !== "sxi") throw new Error("只有手心皮肤（.sxi）需要转换")
   const skin = parseSkinJson(archive.getText("skin.json"))
   const themes = themesOf(skin)
@@ -174,14 +177,15 @@ export function sxiToBaiduArchive(archive: SkinArchive): SkinArchive {
   files["Info.txt"] = strToU8(info)
   const preview = archive.getBytes("preview.png") ?? archive.getBytes("light/skin/preview.png")
   if (preview) files["demo.png"] = preview
-
-  return SkinArchive.open(zipSync(files, { level: 6 }))
+  const output = new Map(Object.entries(files))
+  if (target === "bds") adaptAndroidToolbar(output, warnings)
+  return SkinArchive.open(zipSync(Object.fromEntries(output), { level: 6 }))
 }
 
 /** Repackages an `.sxi` document as an Android `.bds` or iOS `.bdi` skin, key sounds included. */
 export async function convertSxiToBaidu(archive: SkinArchive, format: "bdi" | "bds"): Promise<Converted> {
-  const converted = sxiToBaiduArchive(archive)
   const warnings: string[] = []
+  const converted = sxiToBaiduArchive(archive, format, warnings)
   const bytes = await converted.platformBytesAsync(format, warnings)
   return { bytes, warnings: [...new Set([...warnings, ...palmMotionWarnings(archive, "baidu")])] }
 }

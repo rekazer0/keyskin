@@ -72,8 +72,12 @@ function renderCandidateState(): boolean {
 
 export function refreshSimulationState(): boolean {
   const composing = renderCandidateState()
-  const symbolPanel = isConfiguredSymbolLayout(appState.layoutPath, textDocument(genConfigPath()))
-  candidateArea.hidden = symbolPanel
+  const gen = textDocument(genConfigPath())
+  const symbolPanel = isConfiguredSymbolLayout(appState.layoutPath, gen)
+  // 真机（百度安卓 13.3）：[CAND] TYPE=3 的候选栏叠在面板顶部，没有候选时整条隐藏。
+  const overlay = gen?.get("CAND", "TYPE")?.trim() === "3"
+  deviceShell.toggleAttribute("data-candidate-overlay", overlay)
+  candidateArea.hidden = symbolPanel || (overlay && !composing)
   toolbarStrip.hidden = symbolPanel || !toolbarStrip.dataset.path
   toolbarPreview.setPersistentOnly(composing)
   return composing
@@ -256,9 +260,10 @@ export function refreshPreview(): void {
       config.height,
       appState.layoutDocument.get("PANEL", "ANIM_STYLE") ?? context.gen.get("PANEL", "ANIM_STYLE") ?? "",
     )
-    const candidateHeight = symbolPanel ? 0 : (toolbarSize?.height ?? 0)
     const candidateInputHeight = symbolPanel ? 0 : (toolbarSize?.inputHeight ?? 0)
-    const surfaceHeight = updatePanelTools(config.width, config.height, candidateHeight)
+    const barHeight = symbolPanel ? 0 : (toolbarSize?.height ?? 0)
+    const surfaceHeight = updatePanelTools(config.width, config.height, deviceShell.hasAttribute("data-candidate-overlay") ? 0 : barHeight)
+    const candidateHeight = overlaidCandidateHeight(barHeight, surfaceHeight)
     appState.activeKeyboardGeometry = {
       panelWidth: config.width,
       panelHeight: surfaceHeight,
@@ -339,7 +344,9 @@ export function refreshSimulationPreview(): void {
   if (!resolver) return
   const toolbarSize = refreshToolbarPreview(composing, resolver)
   const symbolPanel = candidateArea.hidden
-  const candidateHeight = symbolPanel ? 0 : (toolbarSize?.height ?? appState.activeKeyboardGeometry.candidateHeight)
+  const candidateHeight = symbolPanel
+    ? 0
+    : overlaidCandidateHeight(toolbarSize?.height ?? appState.activeKeyboardGeometry.candidateHeight, appState.activeKeyboardGeometry.panelHeight)
   const candidateInputHeight = symbolPanel
     ? 0
     : (toolbarSize?.inputHeight ?? appState.activeKeyboardGeometry.candidateInputHeight)
@@ -495,6 +502,13 @@ export function finishPreviewPan(): void {
   toolbarPreview.setPointerInteractionLocked(false)
   canvasWrap.classList.remove("preview-pan-ready", "preview-panning")
   if (pointerId !== undefined && canvasWrap.hasPointerCapture(pointerId)) canvasWrap.releasePointerCapture(pointerId)
+}
+
+/** A bar laid over the panel takes no keyboard row; it covers its own share of the panel's top. */
+function overlaidCandidateHeight(barHeight: number, panelHeight: number): number {
+  if (!deviceShell.hasAttribute("data-candidate-overlay")) return barHeight
+  candidateArea.style.setProperty("--candidate-overlay-height", `${barHeight / panelHeight * 100}%`)
+  return 0
 }
 
 function updateCanvasCandidateGeometry(candidateHeight: number): void {

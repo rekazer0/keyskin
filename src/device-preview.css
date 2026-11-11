@@ -733,3 +733,17 @@
   border-radius: var(--radius-md);
   background: var(--material-content);
 }
+
+/* [CAND] TYPE=3：候选栏盖在面板顶部那一行上，不另占键盘高度。 */
+.device-shell[data-candidate-overlay] .keyboard-dock #panel-viewport,
+.device-shell[data-candidate-overlay] #candidate-area {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.device-shell[data-candidate-overlay] #candidate-area {
+  z-index: 1;
+  align-self: start;
+  height: var(--candidate-overlay-height, 0px);
+  grid-template-rows: 0px 0px minmax(0, 1fr);
+}

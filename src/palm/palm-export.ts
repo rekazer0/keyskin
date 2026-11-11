@@ -15,17 +15,17 @@
 // - Zip entries are written in sorted converter-relative order and emptied directories keep
 //   an explicit entry, matching the layout the Palm app expects.
 
-import { zipSync } from "fflate"
 import { SkinArchive } from "../skin.ts"
+import { zipArchiveAsync } from "../skin-zip.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
 import { fitCandidateIcons, fitEnglishEnter } from "./palm-export-layout.ts"
 import { separateOrientationResources } from "./palm-export-resources.ts"
-import { bakeBackgrounds } from "./palm-export-backgrounds.ts"
+import { bakeBackgrounds, bakeBackgroundsSteps } from "./palm-export-backgrounds.ts"
+import { assembleSxiFiles, collectConverterEntries, packSxiFiles, type ConverterEntry } from "./palm-export-package.ts"
 import { fitToolbarArtwork, prepareToolbarIcons } from "./palm-export-toolbar.ts"
 import { boardTypeFromIniFileName } from "./palm-board-types.ts"
-import { NATIVE_LAYOUT_JSON } from "./palm-native-layout.ts"
 import { decodeSkinText, parseIniSections, toBool, toInt, type IniSection } from "./palm-ini.ts"
-import { encodePalmJSON, type PalmJSONValue } from "./palm-json.ts"
+import { type PalmJSONValue } from "./palm-json.ts"
 import {
   additionModel,
   baseModel,
@@ -48,14 +48,13 @@ import {
   tableModel,
   tileModels,
 } from "./palm-models.ts"
-import { asObject } from "./sxi-ini.ts"
+import { asObject, type JsonObject } from "./sxi-ini.ts"
 import { parseXmlPlist, type PalmPlistValue } from "./palm-plist.ts"
 import { fixTouchRects } from "./palm-touch-rect.ts"
 import { animationsIni } from "./sxi-style.ts"
 import {
   PalmVirtualRoot,
   comparePalmDirectoryPaths,
-  normalizePalmPath,
   palmBaseName,
   palmJoinPath,
 } from "./palm-vfs.ts"
@@ -63,19 +62,7 @@ import {
 type Json = PalmJSONValue
 type Ini = Record<string, string>
 
-// `deleteFiles(matchExt:)` from both `PalmSkin.convert` and `PalmSkinConverter`.
-const DELETED_EXTENSIONS = new Set(["ini", "pop", "cnd", "css", "txt", "bdi", "til", "plist"])
-
-// `renamePreviewImage` only rewrites `demo.png` directly inside these folders.
-const PREVIEW_DIRECTORIES = new Set(["", "dark/", "light/", "dark/skin/", "light/skin/"])
-
 const PREVIEW_PREFIX = "file:///"
-
-type ConverterEntry = {
-  path: string
-  directory: boolean
-  bytes?: Uint8Array
-}
 
 type SkinStruct = {
   dir: string
@@ -97,12 +84,6 @@ type ExportContext = {
 }
 
 /* ------------------------------------------------------------------ helpers */
-
-function fileExtension(path: string): string {
-  const name = palmBaseName(path)
-  const separator = name.lastIndexOf(".")
-  return separator <= 0 ? "" : name.slice(separator + 1).toLowerCase()
-}
 
 function stripExtension(path: string): string {
   const name = palmBaseName(path)
@@ -564,12 +545,22 @@ function styleSets(context: ExportContext, struct: SkinStruct): { info: Json; po
   return fallback === undefined ? { info, port, land } : { info: fallback, port, land }
 }
 
-function skinFileJson(context: ExportContext, struct: SkinStruct): Json {
+/** The theme's shared `res` folder: baked backgrounds are written here once per theme. */
+function themeResFolder(struct: SkinStruct): string {
+  return palmJoinPath(struct.themeSkinDir, "res")
+}
+
+// `skinFileJson`'s structural part: layouts, styles, menu and resource separation. Its two callers
+// differ only in whether the background bake is drained synchronously or driven by the async export.
+function* skinBaseSteps(context: ExportContext, struct: SkinStruct, base: number, end: number): Generator<number, JsonObject, void> {
+  const span = end - base
+  yield base
   const res = removeUselessPath(struct.res)
   const portRes = removeUselessPath(struct.portRes)
   const landRes = removeUselessPath(struct.landRes)
   const logo = struct.logo.filter((path) => !path.endsWith(".plist"))
   const styles = styleSets(context, struct)
+  yield base + span * 0.35
   const menu = toolbarMenu(context, struct.logo)
   const model: Record<string, Json> = {
     land_layout: layoutJson(context, struct.land),
@@ -590,9 +581,28 @@ function skinFileJson(context: ExportContext, struct: SkinStruct): Json {
   }
   if (styles.port !== undefined) model.s_port = styles.port
   if (styles.land !== undefined) model.s_land = styles.land
+  yield base + span * 0.9
   separateOrientationResources(model, context.entries)
-  bakeBackgrounds(model, context.entries)
+  yield end
+  return model
+}
+
+function skinFileJson(context: ExportContext, struct: SkinStruct): JsonObject {
+  const model = drain(skinBaseSteps(context, struct, 0, 1))
+  bakeBackgrounds(model, context.entries, themeResFolder(struct))
   fitToolbarArtwork(model, context.entries)
+  return model
+}
+
+function* skinFileSteps(context: ExportContext, struct: SkinStruct, base: number, end: number): Generator<number, JsonObject, void> {
+  const split = base + (end - base) * 0.25
+  const model = yield* skinBaseSteps(context, struct, base, split)
+  const bakeSpan = (end - base) * 0.7
+  for (const fraction of bakeBackgroundsSteps(model, context.entries, themeResFolder(struct))) {
+    yield split + bakeSpan * fraction
+  }
+  fitToolbarArtwork(model, context.entries)
+  yield end
   return model
 }
 
@@ -645,59 +655,16 @@ function skinInfoJson(context: ExportContext, infoPath: string): Json {
 
 /* ------------------------------------------------------------------- output */
 
-function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
-  const raws = archive.names().map((canonical) => {
-    const raw = archive.sourcePath(canonical)
-    return { canonical, raw, normalized: normalizePalmPath(raw), directory: raw.endsWith("/") }
-  })
-  const usesSkinRoot = raws.some(({ normalized }) => normalized === "skin" || normalized.startsWith("skin/"))
-  const entries: ConverterEntry[] = []
-  for (const item of raws) {
-    let path = item.normalized
-    if (usesSkinRoot) {
-      if (!path.startsWith("skin/")) continue
-      path = path.slice("skin/".length)
-    }
-    if (!path) continue
-    // Single-theme Baidu packages keep resources at the root; Palm resolves them in the default theme.
-    if (/^(?:port|land|res)(?:\/|$)/.test(path)) path = `light/skin/${path}`
-    // Palm reads a theme's artwork from `<theme>/skin/`; Baidu Android keeps it at `<theme>/`.
-    path = path.replace(/^(dark|light)\/(?!skin\/)/, "$1/skin/")
-    entries.push({
-      path,
-      directory: item.directory,
-      bytes: item.directory ? undefined : archive.getBytes(item.canonical),
-    })
-  }
-  return entries
+/** Everything `buildSxiZip` and `buildSxiZipAsync` share: the converter entries and their parsed view. */
+type PreparedExport = {
+  context: ExportContext
+  entries: ConverterEntry[]
+  infoPath: string
+  defaultStruct: SkinStruct
+  darkStruct?: SkinStruct
 }
 
-// Folders that survive the deletion passes with no file left inside them still need an
-// explicit zip entry: the real `.sxi` keeps, for example, `light/skin/land/`.
-function emptyDirectories(entries: ConverterEntry[], written: Iterable<string>): string[] {
-  const directories = new Set<string>()
-  for (const entry of entries) {
-    const parts = entry.path.split("/")
-    const parentParts = entry.directory ? parts : parts.slice(0, -1)
-    let parent = ""
-    for (const part of parentParts) {
-      parent = parent ? `${parent}/${part}` : part
-      directories.add(parent)
-    }
-  }
-  const populated = new Set<string>()
-  for (const path of written) {
-    const parts = path.split("/")
-    let current = ""
-    for (const part of parts.slice(0, -1)) {
-      current = current ? `${current}/${part}` : part
-      populated.add(current)
-    }
-  }
-  return [...directories].filter((directory) => !populated.has(directory)).sort()
-}
-
-export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings: string[] } {
+function prepareExport(archive: SkinArchive): PreparedExport {
   if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
   if (archive.format === "bda") {
     // BDA packages carry protobuf panels instead of an INI layout tree, so a caller that
@@ -707,63 +674,117 @@ export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings
 
   const entries = collectConverterEntries(archive)
   if (archive.format === "bdi" || archive.format === "bds") prepareToolbarIcons(entries)
-  const warnings: string[] = []
   const context: ExportContext = {
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),
-    warnings,
+    warnings: [],
     entries,
     sections: new Map(),
   }
-
   const skinDir = context.root.isDirectory("skin") ? "skin" : ""
-  const infoPath = palmJoinPath(skinDir, "Info.txt")
-  const lightStruct = structModel(context, palmJoinPath(skinDir, "light"))
-  const darkStruct = structModel(context, palmJoinPath(skinDir, "dark"))
   const hasLight = context.root.isDirectory(palmJoinPath(skinDir, "light"))
-  const hasDark = context.root.isDirectory(palmJoinPath(skinDir, "dark"))
+  const dark = context.root.isDirectory(palmJoinPath(skinDir, "dark")) ? palmJoinPath(skinDir, "dark") : undefined
+  return {
+    context,
+    entries,
+    infoPath: palmJoinPath(skinDir, "Info.txt"),
+    defaultStruct: structModel(context, hasLight ? palmJoinPath(skinDir, "light") : skinDir),
+    darkStruct: dark === undefined ? undefined : structModel(context, dark),
+  }
+}
 
-  const skin: Record<string, Json> = {
+// 建模阶段占导出进度的前 55%；背景烘焙是其中最慢的一段。
+const MODEL_BASE = 0.02
+const MODEL_END = 0.55
+
+function* buildSkinSteps(prepared: PreparedExport): Generator<number, Record<string, Json>, void> {
+  const { context } = prepared
+  const themes = prepared.darkStruct === undefined ? 1 : 2
+  const span = (MODEL_END - MODEL_BASE) / themes
+  const skin: Record<string, Json> = { root: "", default: undefined, night: undefined, info: undefined, demo: undefined }
+  skin.default = yield* skinFileSteps(context, prepared.defaultStruct, MODEL_BASE, MODEL_BASE + span)
+  if (prepared.darkStruct !== undefined) {
+    skin.night = yield* skinFileSteps(context, prepared.darkStruct, MODEL_BASE + span, MODEL_END)
+  }
+  skin.info = skinInfoJson(context, prepared.infoPath)
+  yield MODEL_END
+  return skin
+}
+
+function buildSkin(prepared: PreparedExport): Record<string, Json> {
+  const { context } = prepared
+  return {
     root: "",
-    default: skinFileJson(context, hasLight ? lightStruct : structModel(context, skinDir)),
-    night: hasDark ? skinFileJson(context, darkStruct) : undefined,
-    info: skinInfoJson(context, infoPath),
+    default: skinFileJson(context, prepared.defaultStruct),
+    night: prepared.darkStruct === undefined ? undefined : skinFileJson(context, prepared.darkStruct),
+    info: skinInfoJson(context, prepared.infoPath),
     demo: undefined,
   }
-
-  const files: Record<string, Uint8Array> = {
-    "skin.json": new TextEncoder().encode(encodePalmJSON(skin)),
-    "info.json": new TextEncoder().encode(encodePalmJSON(skinJsonInfo(skin))),
-  }
-  const written = new Set<string>()
-  for (const entry of entries) {
-    if (entry.directory) continue
-    if (DELETED_EXTENSIONS.has(fileExtension(entry.path))) continue
-    const preview = previewPath(entry.path)
-    const name = preview !== undefined && files[preview] === undefined ? preview : entry.path
-    files[name] = entry.bytes ?? new Uint8Array()
-    written.add(name)
-  }
-  for (const directory of emptyDirectories(entries, written)) {
-    files[`${directory}/`] = new Uint8Array()
-  }
-
-  // `copyLayoutIfNeed` copies the bundled `native_325.json` into the output folder so a
-  // standalone skin can resolve its `native` specify-layout. The Swift call is `try?`, so a
-  // source file already named `native.layout` survives untouched.
-  if (files["native.layout"] === undefined) {
-    files["native.layout"] = new TextEncoder().encode(NATIVE_LAYOUT_JSON)
-  }
-
-  return { bytes: zipSync(files, { level: 6 }), warnings }
 }
 
-function skinJsonInfo(skin: Record<string, Json>): Json {
-  return skin.info
+function drain<T>(steps: Generator<number, T, void>): T {
+  for (;;) {
+    const step = steps.next()
+    if (step.done) return step.value
+  }
 }
 
-function previewPath(path: string): string | undefined {
-  const separator = path.lastIndexOf("/")
-  const parent = separator < 0 ? "" : path.slice(0, separator + 1)
-  if (path.slice(parent.length) !== "demo.png") return undefined
-  return PREVIEW_DIRECTORIES.has(parent) ? `${parent}preview.png` : undefined
+/** 导出进度：0–1，`detail` 是进度窗里的一句说明。 */
+export type SxiExportReport = (fraction: number, detail: string) => Promise<void>
+
+// 打包阶段从建模结束处起步，留出整理文件的一小段。
+const ZIP_START = 0.58
+
+export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings: string[] } {
+  const prepared = prepareExport(archive)
+  const skin = buildSkin(prepared)
+  return { bytes: packSxiFiles(assembleSxiFiles(prepared.entries, skin)), warnings: prepared.context.warnings }
+}
+
+/**
+ * `buildSxiZip` 的异步版本：同样的工作，但每约 12ms 让出一次主线程并报告进度，
+ * 大皮肤导出时进度窗不会卡住。
+ */
+export async function buildSxiZipAsync(
+  archive: SkinArchive,
+  report?: SxiExportReport,
+): Promise<{ bytes: Uint8Array; warnings: string[] }> {
+  let reported = -1
+  let reportedAt = 0
+  // 进度窗每更新一次要等两帧，而大皮肤烘焙有上千步；汇报按时间节流，否则汇报本身就把导出拖慢。
+  const REPORT_INTERVAL = 100
+  const emit = async (fraction: number, detail: string, force = false): Promise<void> => {
+    if (report === undefined || fraction <= reported) return
+    const now = performance.now()
+    if (!force && fraction < 1 && now - reportedAt < REPORT_INTERVAL) return
+    reported = fraction
+    reportedAt = now
+    await report(fraction, detail)
+  }
+  const breathe = async (fraction: number, detail: string, force = false): Promise<void> => {
+    await emit(fraction, detail, force)
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+  await breathe(0, "正在读取皮肤…", true)
+  const prepared = prepareExport(archive)
+  const driveModel = async (): Promise<Record<string, Json>> => {
+    const steps = buildSkinSteps(prepared)
+    let last = performance.now()
+    for (;;) {
+      const step = steps.next()
+      if (step.done) return step.value
+      if (performance.now() - last >= 12) {
+        last = performance.now()
+        await breathe(step.value, "正在整理手心皮肤…")
+      }
+    }
+  }
+  const skin = await driveModel()
+  await breathe(MODEL_END + 0.01, "正在整理导出文件…", true)
+  const files = assembleSxiFiles(prepared.entries, skin)
+  const bytes = await zipArchiveAsync(files, (fraction) => emit(
+    ZIP_START + (1 - ZIP_START) * fraction,
+    fraction >= 1 ? "手心皮肤已生成" : "正在打包手心皮肤…",
+    fraction === 0 || fraction >= 1,
+  ))
+  return { bytes, warnings: prepared.context.warnings }
 }

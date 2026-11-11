@@ -42,3 +42,11 @@ test('section set stays valid across appends and structural edits', () => {
   assert.equal(document.hasSection('KEY9'), false, 'removed sections leave the cached set')
   assert.equal(document.hasSection('KEY3'), true)
 })
+
+test('section headers may carry trailing notes like real Baidu default.css', () => {
+  const source = '[STYLE123]上档\r\nNM_IMG=anjian,1\r\n[STYLE124] 符号\r\nNM_IMG=bj,2\r\n'
+  const document = IniDocument.parse(source)
+  assert.deepEqual(document.sections(), ['STYLE123', 'STYLE124'])
+  assert.equal(document.get('STYLE123', 'NM_IMG'), 'anjian,1')
+  assert.equal(document.toString(), source)
+})

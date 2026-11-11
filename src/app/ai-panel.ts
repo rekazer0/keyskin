@@ -387,7 +387,7 @@ function aiDraftSections(changes: readonly AiSkinDraftChange[]): string[] {
 }
 
 function iniSectionTexts(source: string): Array<[string, string]> {
-  const headers = [...source.matchAll(/^\s*\[([^\]]+)]\s*$/gm)]
+  const headers = [...source.matchAll(/^\s*\[([^\]]+)][^\n]*$/gm)]
   return headers.map((header, index) => [
     header[1],
     source.slice(header.index ?? 0, headers[index + 1]?.index ?? source.length),

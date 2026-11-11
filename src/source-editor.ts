@@ -335,7 +335,7 @@ export class SourceCodeEditor extends EventTarget {
       const doc = this.view.state.doc
       for (let number = 1; number <= doc.lines; number++) {
         const line = doc.line(number)
-        const match = /^\s*\[([^\]\r\n]+)\]\s*(?:[;#].*)?$/.exec(line.text)
+        const match = /^\s*\[([^\]\r\n]+)\].*$/.exec(line.text)
         if (!match) continue
         const button = document.createElement("button")
         button.type = "button"

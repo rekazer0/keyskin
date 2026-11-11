@@ -9,7 +9,9 @@ import { canExport } from "../src/export.ts"
 import { IniDocument } from "../src/ini.ts"
 import { parseXmlPlist } from "../src/palm/palm-plist.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { nativeToolbarFixture } from "./helpers/native-toolbar-fixture.mjs"
 import { decodeBdaAnimation } from "../src/bda-decode.ts"
+import { decodePng } from "../src/ssf/ssf-png.ts"
 
 function sxi() {
   return SkinArchive.open(buildSxiZip(SkinArchive.open(bdsFixture())).bytes, "sxi")
@@ -104,4 +106,26 @@ test("an .sxi keeps the toolbar plist and menu atlas the export folds into skin.
   assert.equal(item.Titles.Normal.Normal, "语音&输入")
   assert.equal(item.Images.Normal.Normal, "lg/yuyin")
   assert.equal(IniDocument.parse(baidu.getText("light/skin/res/logo/pop_menu_icons.til")).get("IMG26", "SOURCE_RECT"), "0,0,2,2")
+})
+
+test("an .sxi → BDS conversion adds the Android toolbar atlas an iOS package lacks", async () => {
+  const sxi = SkinArchive.open(buildSxiZip(nativeToolbarFixture()).bytes, "sxi")
+  const { bytes, warnings } = await convertSxiToBaidu(sxi, "bds")
+  const files = unzipSync(bytes)
+  for (const theme of ["light", "dark"]) {
+    const png = `res/logo/pop_menu_icons.png`
+    const til = `res/logo/pop_menu_icons.til`
+    assert.ok(files[`${theme}/${png}`], `${theme}: Android function atlas`)
+    assert.ok(files[`${theme}/${til}`], `${theme}: Android function tile map`)
+    const menu = IniDocument.parse(strFromU8(files[`${theme}/${til}`]))
+    // The fixture's toolbar plist names function 17 (键盘类型); the export fits its artwork to the 68px bar.
+    assert.equal(menu.get("GLOBAL", "TILE_NUM"), "28")
+    assert.equal(menu.get("IMG27", "SOURCE_RECT"), "0,0,68,68")
+    const atlas = decodePng(files[`${theme}/${png}`])
+    assert.deepEqual([atlas.width, atlas.height], [68, 68])
+  }
+  assert.ok(warnings.some((warning) => warning.includes("pop_menu_icons")))
+  // The iOS target keeps the plists and 1.0 artwork only; no Android atlas is invented for it.
+  const ios = await convertSxiToBaidu(sxi, "bdi")
+  assert.ok(!Object.keys(unzipSync(ios.bytes)).some((path) => path.endsWith("res/logo/pop_menu_icons.png") || path.endsWith("res/logo/pop_menu_icons.til")))
 })

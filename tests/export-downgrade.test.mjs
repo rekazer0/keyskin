@@ -13,7 +13,7 @@ test('multi-stage BDA → SXI opens progress first, then confirms unique warning
       assert.deepEqual(events, ['progress'], 'progress opens before conversion starts')
       return { archive: {}, warnings: warnings.slice(0, 10) }
     },
-    buildSxiZip: () => ({ bytes: new Uint8Array([1]), warnings: [...warnings.slice(10), ...warnings.slice(0, 5)] }),
+    buildSxiZipAsync: async () => ({ bytes: new Uint8Array([1]), warnings: [...warnings.slice(10), ...warnings.slice(0, 5)] }),
     clientLog: { info: () => {} },
     showFileOperationResult: detail => assert.equal(detail, warnings.join('\n')),
     fileOperationResult: {},

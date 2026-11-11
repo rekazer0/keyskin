@@ -7,7 +7,7 @@ import { appState } from "./state"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportButtons, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
 import { canExport, exportFormatFromPath, exportName, skinFileName, type ExportFormat } from "../export.ts"
-import { buildSxiZip } from "../palm/palm-export.ts"
+import { buildSxiZipAsync } from "../palm/palm-export.ts"
 import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
@@ -380,7 +380,11 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   if (appState.archive.format === "ssf" && format === "sxi" || appState.archive.format === "sxi" && format === "ssf") {
     const report = conversionProgress(22, 78, `正在转换为${exportTargetLabel(format)}…`)
     await report(0.2)
-    const result = await convertSsfSxi(appState.archive, appState.archive.format === "ssf" ? await ssfTemplates() : undefined)
+    const result = await convertSsfSxi(
+      appState.archive,
+      appState.archive.format === "ssf" ? await ssfTemplates() : undefined,
+      (fraction, detail) => report(0.2 + fraction * 0.8, detail),
+    )
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
   if (format === "sxi" && appState.archive.format !== "sxi") {
@@ -396,8 +400,11 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
       source = converted.archive
       warnings.push(...converted.warnings)
     }
-    await report(0.75, "正在打包手心皮肤…")
-    const result = buildSxiZip(source)
+    // 转换已经走过前一段；手心打包自己从 0 报到 1，接在它后面继续推进同一根进度条。
+    // 打包流程本身每隔几毫秒让出主线程，进度更新不必再等两帧，否则大皮肤会多等一两秒。
+    const start = source === appState.archive ? 0.2 : 0.45
+    const progress = conversionProgress(start * 100, 100, "正在导出手心皮肤…", false)
+    const result = await buildSxiZipAsync(source, async (fraction, detail) => progress(fraction, detail))
     return { bytes: result.bytes, converted: true, warnings: [...warnings, ...result.warnings] }
   }
   if (appState.archive.format === "ssf" && format !== "ssf" && format !== "sxi") {
@@ -430,7 +437,9 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     }
     const report = conversionProgress(22, 78, "正在导出搜狗皮肤…")
     await report(0.3)
-    const result = await exportSsf(appState.archive, appState.bdaBase)
+    // 官方骨架的按键尺寸决定导出图要保留多少像素；模板取不到时退回原尺寸。
+    const sogouTemplate = await ssfTemplates().then((templates) => templates.sogou, () => undefined)
+    const result = await exportSsf(appState.archive, appState.bdaBase, sogouTemplate)
     return { bytes: result.bytes, converted: true, warnings: result.warnings }
   }
   if (appState.archive.format === "bda" && format === "bda" && targetBdaPlatform) {
@@ -462,11 +471,11 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
 /**
  * 转换阶段在进度窗中收集降级提示。回调按 0–1 报告阶段并映射到百分比区间。
  */
-function conversionProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => Promise<void> {
+function conversionProgress(start: number, end: number, detail: string, paint = true): (fraction: number, stage?: string) => Promise<void> {
   updateFileOperationProgress(start, detail)
   return async (fraction, stage) => {
     updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
-    await waitForInterfacePaint()
+    if (paint) await waitForInterfacePaint()
   }
 }
 

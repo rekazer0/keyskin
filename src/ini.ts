@@ -64,7 +64,7 @@ export class IniDocument {
     const lines = splitLines(source).map((raw): Line => {
       const ending = raw.match(/(\r\n|\n|\r)$/)?.[1] ?? ""
       const content = ending ? raw.slice(0, -ending.length) : raw
-      const sectionMatch = content.match(/^\s*\[([^\]]+)]\s*$/)
+      const sectionMatch = content.match(/^\s*\[([^\]]+)][^\n]*$/)
       if (sectionMatch) {
         section = sectionMatch[1]
         return { raw, ending, section }

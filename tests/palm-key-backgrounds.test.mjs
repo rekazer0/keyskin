@@ -131,3 +131,50 @@ test('candidate background decorations scale with the bar in both orientations',
     assert.deepEqual([...png.data.slice((8 * width + 1) * 4, (8 * width + 2) * 4)], [40, 80, 120, 255], 'edge decoration retains its design size')
   }
 })
+
+test('identical baked backgrounds are written once in the theme shared res folder and shared by their styles', () => {
+  const data = new Uint8Array(16 * 8 * 4)
+  for (let y = 1; y < 7; y++) for (let x = 1; x < 7; x++) {
+    data.set([40, 80, 120, 255], (y * 16 + x) * 4)
+    data.set([120, 80, 40, 255], (y * 16 + x + 8) * 4)
+  }
+  const files = { 'Info.txt': 'Name=Baked background dedupe\n' }
+  for (const theme of ['light', 'dark']) {
+    // STYLE2 differs from STYLE1 only in text, so both bake to exactly the same pair of images.
+    files[`${theme}/skin/res/default.css`] = '[STYLE1]\nNM_IMG=key,1\nHL_IMG=key,2\n[STYLE2]\nNM_IMG=key,1\nHL_IMG=key,2\nFONT_SIZE=99\n'
+    files[`${theme}/skin/res/key.png`] = encodePng({ width: 16, height: 8, data })
+    files[`${theme}/skin/res/key.til`] = '[IMG1]\nSOURCE_RECT=0,0,8,8\nINNER_RECT=2,2,4,4\n[IMG2]\nSOURCE_RECT=8,0,8,8\nINNER_RECT=10,2,4,4\n'
+    for (const orientation of ['port', 'land']) {
+      files[`${theme}/skin/${orientation}/gen.ini`] = '[PANEL]\nSIZE=100,100\n'
+      files[`${theme}/skin/${orientation}/py_26.ini`] = [
+        '[KEY1]', 'BACK_STYLE=1', 'VIEW_RECT=0,0,20,16', 'CENTER=q',
+        '[KEY2]', 'BACK_STYLE=2', 'VIEW_RECT=20,0,20,16', 'CENTER=w',
+      ].join('\n')
+    }
+  }
+  const archive = SkinArchive.open(zipSync(Object.fromEntries(Object.entries(files).map(([path, value]) =>
+    [path, typeof value === 'string' ? strToU8(value) : value]))), 'bdi')
+  const result = buildSxiZip(archive)
+  assert.deepEqual(result.warnings, [])
+  const palm = SkinArchive.open(result.bytes, 'sxi')
+  const skin = JSON.parse(palm.getText('skin.json'))
+  for (const theme of ['default', 'night']) for (const orientation of ['port', 'land']) {
+    const [first, second] = skin[theme][`${orientation}_layout`].b.full26Pinyin.keys
+    assert.notEqual(first.b.base_b, second.b.base_b, 'different styles keep their own style ids')
+    const left = skin[theme].s_info.ss_1[first.b.base_b].s_2
+    const right = skin[theme].s_info.ss_1[second.b.base_b].s_2
+    assert.deepEqual(left, right, 'identical artwork shares the same baked images')
+    for (const state of ['normal', 'hl']) {
+      const name = left[state].split(',')[0]
+      const path = skin[theme].r_info.find((path) => path.endsWith(`/${name}.png`))
+      assert.match(path, new RegExp(`^${theme === 'night' ? 'dark' : 'light'}/skin/res/_*keyskin_back_\\d+_${state}\\.png$`))
+    }
+  }
+  const baked = palm.names().filter((path) => /keyskin_back_\d+_(?:normal|hl)\.png$/.test(path))
+  assert.equal(baked.length, 4, 'one normal and one pressed image per theme, however many styles share them')
+  for (const theme of ['default', 'night']) {
+    const declared = skin[theme].r_info.filter((path) => /keyskin_back_/.test(path))
+    assert.equal(declared.length, 2, `${theme}: the shared resource list names each baked image once`)
+    assert.equal(new Set(declared).size, declared.length, `${theme}: no duplicated resource entries`)
+  }
+})

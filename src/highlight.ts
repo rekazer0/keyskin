@@ -66,7 +66,7 @@ export function jsonPropertyRanges(source: string, properties: readonly string[]
 export function iniSectionRanges(source: string, sections: readonly string[]): Array<readonly [number, number]> {
   if (!sections.length) return []
   const selected = new Set(sections)
-  const headers = [...source.matchAll(/^\s*\[([^\]]+)]\s*$/gm)]
+  const headers = [...source.matchAll(/^\s*\[([^\]]+)][^\n]*$/gm)]
   return headers.flatMap((header, index) => selected.has(header[1])
     ? [[header.index ?? 0, headers[index + 1]?.index ?? source.length] as const]
     : [])
@@ -80,7 +80,7 @@ export function iniSectionRanges(source: string, sections: readonly string[]): A
 export function iniSectionAtOffset(source: string, offset: number): string | undefined {
   if (!source.length) return undefined
   const position = Math.max(0, Math.min(source.length - 1, Math.trunc(offset)))
-  const headers = [...source.matchAll(/^\s*\[([^\]]+)]\s*$/gm)]
+  const headers = [...source.matchAll(/^\s*\[([^\]]+)][^\n]*$/gm)]
   let found: string | undefined
   for (const [index, header] of headers.entries()) {
     if ((header.index ?? 0) > position) break

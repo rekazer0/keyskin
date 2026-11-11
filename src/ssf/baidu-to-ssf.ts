@@ -16,9 +16,10 @@ import { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
 import { soundAsWav, soundPathForFilename } from "../sounds.ts"
 import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
+import type { SogouKeySize } from "./ssf-key-sizes.ts"
 import { ssfClassTextStyles } from "./ssf-parts.ts"
 import { BaiduSsfMotion } from "./baidu-anim-to-ssf.ts"
-import { compositeImage, cropImage, decodePng, encodePng, placeImage, resizeImage, type RgbaImage } from "./ssf-png.ts"
+import { compositeImage, cropImage, decodePng, encodePng, nineSliceImage, placeImage, resizeImage, type RgbaImage } from "./ssf-png.ts"
 
 type Theme = "light" | "dark"
 type SliceImage = { image: RgbaImage; stretch?: [number, number, number, number] }
@@ -51,6 +52,40 @@ function solid(color: string, size = 8): RgbaImage {
     data[offset + 3] = value >>> 24
   }
   return { width: size, height: size, data }
+}
+
+/**
+ * 等比缩小到目标的宽、高都容得下；已经够小的图原样返回，不放大。
+ * 搜狗客户端把背景图拉伸进按键矩形，所以缩放不改变它在键上的样子，只是少存用不到的像素。
+ */
+function fitImage(image: RgbaImage, target?: SogouKeySize): RgbaImage {
+  if (!target) return image
+  const scale = Math.min(1, target[0] / image.width, target[1] / image.height)
+  if (scale >= 1) return image
+  return resizeImage(image, Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)))
+}
+
+/**
+ * 九宫格图只要把中间可拉伸的那条压到 1px：四边固定像素原样保留，客户端本来就会把中间拉进按键，
+ * 所以这是无损的；`stretch` 改成边界拼接处的坐标。
+ */
+function fitSlice(slice: SliceImage, target?: SogouKeySize): SliceImage {
+  if (!target) return slice
+  const { image, stretch } = slice
+  if (!stretch) return { image: fitImage(image, target) }
+  const [left, right, top, bottom] = stretch
+  if (left < 0 || top < 0 || right > image.width || bottom > image.height || right <= left || bottom <= top) {
+    // 边界坐标和图片对不上时只能整体等比缩，`stretch` 跟着同比例缩。
+    const fitted = fitImage(image, target)
+    if (fitted === image) return slice
+    const across = fitted.width / image.width
+    const down = fitted.height / image.height
+    return { image: fitted, stretch: [Math.round(left * across), Math.round(right * across), Math.round(top * down), Math.round(bottom * down)] }
+  }
+  return {
+    image: nineSliceImage(image, [0, 0, image.width, image.height], [left, top, right - left, bottom - top], left + 1 + (image.width - right), top + 1 + (image.height - bottom)),
+    stretch: [left, left + 1, top, top + 1],
+  }
 }
 
 /** FNV-1a over the pixels: identical slices cut for different keys share one file. */
@@ -299,6 +334,39 @@ function sampleKeys(archive: SkinArchive, theme: Theme, warnings: string[]): Map
 }
 
 /**
+ * 一个主题里所有按键背景的缩图函数。同一张百度图常被横屏、竖屏类以及共享默认背景类同时用到，
+ * 只按这些类里最大的目标尺寸缩一次：各 section 继续引用同一个文件。若按每个类各缩一次，
+ * 同样的图案会在包里存好几份，总大小反而变大。
+ */
+function backgroundFit(samples: Map<string, KeySample & { layout: string }>, keySizes?: Map<string, SogouKeySize>): (pair: StylePair) => StylePair {
+  const targets = new Map<string, SogouKeySize>()
+  const keys = new WeakMap<SliceImage, string>()
+  const imageKey = (slice: SliceImage) => {
+    let key = keys.get(slice)
+    if (key === undefined) {
+      key = `${slice.image.width}x${slice.image.height}:${contentHash(slice.image.data)}`
+      keys.set(slice, key)
+    }
+    return key
+  }
+  const grow = (slice: SliceImage | undefined, target: SogouKeySize | undefined) => {
+    if (!slice || !target) return
+    const key = imageKey(slice)
+    const previous = targets.get(key)
+    targets.set(key, [Math.max(previous?.[0] ?? 0, target[0]), Math.max(previous?.[1] ?? 0, target[1])])
+  }
+  for (const [section, sample] of samples) {
+    grow(sample.back.normal, keySizes?.get(section))
+    grow(sample.back.pressed, keySizes?.get(section))
+  }
+  return (pair) => ({
+    ...pair,
+    normal: pair.normal && fitSlice(pair.normal, targets.get(imageKey(pair.normal))),
+    pressed: pair.pressed && fitSlice(pair.pressed, targets.get(imageKey(pair.pressed))),
+  })
+}
+
+/**
  * Where a theme keeps its keyboard and candidate bar styles: INI skins in gen.ini and its `.cnd`,
  * skins converted from BDA in each layout's own [PANEL] / [CAND].
  */
@@ -450,10 +518,11 @@ function convertAnimations(archive: SkinArchive, theme: Theme, writer: StatusWri
   if (animations.sections().length) output.set(`${folder}anim.ini`, strToU8(animations.toString()))
 }
 
-function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output: Map<string, Uint8Array>, warnings: string[], animations: boolean): void {
+function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output: Map<string, Uint8Array>, warnings: string[], animations: boolean, keySizes?: Map<string, SogouKeySize>): void {
   const styles = new BaiduStyles(archive, theme, "port", warnings)
   const writer = new StatusWriter(folder, output)
   const samples = sampleKeys(archive, theme, warnings)
+  const fitBack = backgroundFit(samples, keySizes)
   const defaults = new Set<string>()
   // Sogou has no per-key text colour: a key's label takes its class's TextStyle (through the FG_STYLE
   // the app gives the key), so each class gets the colour most of its keys use.
@@ -461,11 +530,12 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
   for (const [section, sample] of samples) {
     const isDefault = !sample.binding.sections.length
     const bgName = isDefault ? section : bgSectionName(section, sample.layout)
-    if (!writer.stateSection(bgName, sample.back)) continue
+    const back = fitBack(sample.back)
+    if (!writer.stateSection(bgName, back)) continue
     for (const fallback of sample.binding.defaults) {
       if (defaults.has(fallback) || samples.has(fallback)) continue
       defaults.add(fallback)
-      writer.stateSection(fallback, sample.back)
+      writer.stateSection(fallback, back)
     }
     if (isDefault) continue
     writer.skin.appendSection(section, [{ key: "BG_IMAGES", value: bgName }])
@@ -481,8 +551,9 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
         { key: "FG_IMAGES", value: foreName },
         { key: "FG_RECT", value: sample.fore.rect },
       ])
-      const normal = writer.file(sample.fore.normal)
-      const pressed = writer.file(sample.fore.pressed)
+      const target = keySizes?.get(section)
+      const normal = writer.file(fitImage(sample.fore.normal, target))
+      const pressed = writer.file(fitImage(sample.fore.pressed, target))
       writer.keys.appendSection(foreName, [
         { key: "NORMAL", value: normal },
         { key: "PRESSED", value: pressed },
@@ -628,8 +699,14 @@ async function soundFiles(archive: SkinArchive, themes: Theme[], output: Map<str
   }
   if (fallback || keySounds.size) output.set("default/sound_android.ini", strToU8(sounds.toString()))
 }
+/** 可选的 `keySizes` 是官方骨架里每个按键类的显示尺寸；不传时按原图尺寸输出。 */
+type BaiduToSsfOptions = { animations?: boolean; keySizes?: Map<string, SogouKeySize> }
+
 /** Converts a Baidu BDS/BDI skin to Sogou `.ssf` bytes. */
-export async function convertBaiduToSsf(archive: SkinArchive, options: { animations?: boolean } = {}): Promise<{ bytes: Uint8Array; warnings: string[] }> {
+export async function convertBaiduToSsf(
+  archive: SkinArchive,
+  options: BaiduToSsfOptions = {},
+): Promise<{ bytes: Uint8Array; warnings: string[] }> {
   if (archive.format === "bda") throw new Error("BDA 需要先转换为 BDS 再导出搜狗皮肤")
   if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
   const warnings: string[] = []
@@ -638,7 +715,7 @@ export async function convertBaiduToSsf(archive: SkinArchive, options: { animati
     ["res", "port/res", "land/res"].some((root) => archive.isText(`${theme}/skin/${root}/default.css`)))
   if (!themes.length) throw new Error("皮肤缺少 res/default.css，无法转换")
   const dual = themes.length > 1
-  for (const theme of themes) convertTheme(archive, theme, dual ? `${SOGOU_WIDTH}/${STATUS[theme]}/` : `${SOGOU_WIDTH}/`, output, warnings, options.animations !== false)
+  for (const theme of themes) convertTheme(archive, theme, dual ? `${SOGOU_WIDTH}/${STATUS[theme]}/` : `${SOGOU_WIDTH}/`, output, warnings, options.animations !== false, options.keySizes)
 
   const name = infoValue(archive, "Name") || "百度皮肤"
   const author = infoValue(archive, "Author") ?? ""
