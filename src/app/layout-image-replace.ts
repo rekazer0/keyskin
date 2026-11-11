@@ -18,6 +18,7 @@ import { type LayoutImageConfig } from "./types"
 import { styleConfigDocument } from "./style-picker"
 import { replaceSsfLayoutImage, replaceSxiLayoutImage } from "./layout-image-native"
 import { isSxiBoardAddress, sxiPointer } from "./sxi-documents"
+import { replaceBdaLayoutImage } from "./layout-image-bda"
 import { palmBoardLabel } from "../palm/palm-labels.ts"
 
 // 替换键盘样式
@@ -41,7 +42,7 @@ export function currentGenDocument(): IniDocument | undefined {
 export function nextResourceBase(root = resourceRootPath()): string {
   let base = `${root}/replace_image`
   let suffix = 2
-  while (appState.archive?.names().some((path) => path === `${base}.png` || path === `${base}.til`)) {
+  while (appState.archive?.names().some((path) => path === `${base}.png` || path === `${base}.til` || path.startsWith(`${base}_`))) {
     base = `${root}/replace_image${suffix}`
     suffix += 1
   }
@@ -56,7 +57,7 @@ export function updateLayoutImageForm(): void {
   layoutImagePreview.hidden = !hasImage
   layoutImageFileLabel.hidden = hasImage
   layoutImageApply.disabled =
-    !appState.archive || appState.archive.format === "bda" || !hasImage || !appState.layoutImageTarget || appState.layoutImageApplying
+    !appState.archive || !hasImage || !appState.layoutImageTarget || appState.layoutImageApplying
 }
 
 export function setLayoutImageHighlight(active: boolean): void {
@@ -78,11 +79,11 @@ export function layoutImageScopeText(): string {
 }
 
 export function openLayoutImageDialog(): void {
-  if (!appState.archive || appState.archive.format === "bda") return
+  if (!appState.archive) return
   // A Palm board is read from skin.json; Palm and Sogou styles live in skin.json / phoneSkin.ini, not a default.css.
   const palmBoard = sxiPointer(appState.layoutPath)
-  if (appState.archive.format === "sxi" ? !isSxiBoardAddress(appState.layoutPath) : !currentLayoutDocument()) return
-  if (appState.archive.format !== "sxi" && appState.archive.format !== "ssf" && !styleConfigDocument()) return
+  if (appState.archive.format === "bda" ? !appState.layoutDocument : appState.archive.format === "sxi" ? !isSxiBoardAddress(appState.layoutPath) : !currentLayoutDocument()) return
+  if (!["bda", "sxi", "ssf"].includes(appState.archive.format) && !styleConfigDocument()) return
   const themeLabel = theme.value === "dark" ? "深色" : "浅色"
   const orientationLabel = orientation.value === "land" ? "横屏" : "竖屏"
   const name = palmBoard ? palmBoardLabel(palmBoard[3]) : appState.layoutPath.split("/").pop() ?? "布局"
@@ -214,6 +215,7 @@ async function runLayoutImageReplace(): Promise<void> {
   if (appState.layoutImageTarget === "panel" && appState.selectedKeySections.length) {
     return showLayoutImageError("键盘背景替换作用于整个布局，请先取消按键选择。")
   }
+  if (appState.archive.format === "bda") return replaceBdaLayoutImage()
   if (appState.archive.format === "sxi") return replaceSxiLayoutImage()
   if (appState.archive.format === "ssf") return replaceSsfLayoutImage()
   const layout = currentLayoutDocument()
@@ -318,8 +320,8 @@ const layoutImageConfigDescriptions: Record<LayoutImageConfig, string> = {
 }
 
 export function syncLayoutImageConfig(): void {
-  // Sogou places keys itself, so a layout cannot follow the picture.
-  const fixedLayout = appState.archive?.format === "ssf"
+  // Sogou and BDA use the input method's fixed key geometry.
+  const fixedLayout = appState.archive?.format === "ssf" || appState.archive?.format === "bda"
   if (fixedLayout && appState.layoutImageConfig === "layout-follows-image") appState.layoutImageConfig = "none"
   for (const button of layoutImageConfigButtons) {
     button.hidden = fixedLayout && button.dataset.layoutImageConfig === "layout-follows-image"
