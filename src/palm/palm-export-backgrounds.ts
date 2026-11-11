@@ -60,6 +60,8 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
   const decoded = new Map<string, RgbaImage>()
   const baked = new Map<string, Baked>()
   const names = new Set(entries.map(({ path }) => path.slice(path.lastIndexOf("/") + 1)))
+  // Looked up once per key state; scanning the whole entry list each time is quadratic on large skins.
+  const byPath = new Map(entries.map((entry) => [entry.path, entry]))
   const bakedStyles: JsonObject = {}, bakedTiles: JsonObject = {}
   const bakedResources: string[] = []
   const total = bakeStepCount(theme)
@@ -69,8 +71,12 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
     const own = asObject(theme[`s_${orientation}`])
     const styles = { ...sharedStyles, ...asObject(own?.ss_1) }
     const tiles = { ...sharedTiles, ...asObject(own?.info) }
-    const resources = [...(Array.isArray(theme[`r_${orientation}`]) ? theme[`r_${orientation}`] as Json[] : []),
-      ...(Array.isArray(theme.r_info) ? theme.r_info : [])]
+    const imagePaths = new Map<string, string>()
+    for (const path of [...(Array.isArray(theme[`r_${orientation}`]) ? theme[`r_${orientation}`] as Json[] : []),
+      ...(Array.isArray(theme.r_info) ? theme.r_info : [])]) {
+      const name = typeof path === "string" ? /\/([^/]+)\.png$/.exec(path)?.[1] : undefined
+      if (name && !imagePaths.has(name)) imagePaths.set(name, path as string)
+    }
     const replace = function* (base: JsonObject | undefined, width: number, height: number): Generator<number> {
       done += 1
       yield Math.min(0.999, done / total)
@@ -95,8 +101,7 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
         if (!source || !inner || inner[2] <= 0 || inner[3] <= 0) continue
         if (![...source, ...inner].every(Number.isInteger) || inner[0] < source[0] || inner[1] < source[1]
           || inner[0] + inner[2] > source[0] + source[2] || inner[1] + inner[3] > source[1] + source[3]) continue
-        const path = resources.find((path) => typeof path === "string" && path.endsWith(`/${name}.png`))
-        const entry = entries.find((entry) => entry.path === path)
+        const entry = byPath.get(imagePaths.get(name) ?? "")
         if (!entry?.bytes) continue
         let image = decoded.get(entry.path)
         if (!image) { image = decodePng(entry.bytes); decoded.set(entry.path, image) }

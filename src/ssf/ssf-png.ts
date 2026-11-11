@@ -212,26 +212,35 @@ export function encodePng(image: RgbaImage): Uint8Array {
   const bpp = indexed ? 1 : 4
   const stride = width * bpp
   const raw = new Uint8Array((stride + 1) * height)
-  const candidates = [new Uint8Array(stride), new Uint8Array(stride), new Uint8Array(stride)]
-  const filters = [1, 2, 4]
+  // Sub, Up and Paeth residuals of a row are worked out in one pass; the row keeps whichever sums smallest.
+  const sub = new Uint8Array(stride)
+  const up = new Uint8Array(stride)
+  const paethRow = new Uint8Array(stride)
   for (let y = 0; y < height; y++) {
-    const target = y * (stride + 1)
-    const scores = [0, 0, 0]
-    for (let index = 0; index < filters.length; index++) {
-      for (let x = 0; x < stride; x++) {
-        const at = y * stride + x
-        const left = x >= bpp ? samples[at - bpp] : 0
-        const up = y ? samples[at - stride] : 0
-        const upLeft = y && x >= bpp ? samples[at - stride - bpp] : 0
-        const predictor = index === 0 ? left : index === 1 ? up : paeth(left, up, upLeft)
-        const residual = (samples[at] - predictor) & 255
-        candidates[index][x] = residual
-        scores[index] += Math.min(residual, 256 - residual)
-      }
+    const row = y * stride
+    const above = row - stride
+    let subScore = 0
+    let upScore = 0
+    let paethScore = 0
+    for (let x = 0; x < stride; x++) {
+      const value = samples[row + x]
+      const left = x >= bpp ? samples[row + x - bpp] : 0
+      const top = y ? samples[above + x] : 0
+      const topLeft = y && x >= bpp ? samples[above + x - bpp] : 0
+      const fromLeft = (value - left) & 255
+      const fromTop = (value - top) & 255
+      const fromPaeth = (value - paeth(left, top, topLeft)) & 255
+      sub[x] = fromLeft
+      up[x] = fromTop
+      paethRow[x] = fromPaeth
+      subScore += fromLeft < 128 ? fromLeft : 256 - fromLeft
+      upScore += fromTop < 128 ? fromTop : 256 - fromTop
+      paethScore += fromPaeth < 128 ? fromPaeth : 256 - fromPaeth
     }
-    const best = scores.indexOf(Math.min(...scores))
-    raw[target] = filters[best]
-    raw.set(candidates[best], target + 1)
+    const target = y * (stride + 1)
+    const best = subScore <= upScore && subScore <= paethScore ? 0 : upScore <= paethScore ? 1 : 2
+    raw[target] = best === 0 ? 1 : best === 1 ? 2 : 4
+    raw.set(best === 0 ? sub : best === 1 ? up : paethRow, target + 1)
   }
   const parts = [new Uint8Array(SIGNATURE), chunk("IHDR", header),
     ...indexed ? [chunk("PLTE", palette), chunk("tRNS", alpha)] : [],

@@ -306,3 +306,25 @@ test('BDS → BDI makes empty key offsets explicit without changing actions or n
   assert.equal(source.getText('light/skin/port/py_9.ini'), layout)
   assert.equal(SkinArchive.open(source.toBytes('bds')).getText('light/skin/port/py_9.ini'), layout)
 })
+
+test('editing a text file keeps its byte order mark, and undoing the edit leaves nothing unsaved', () => {
+  const original = new Uint8Array([0xef, 0xbb, 0xbf, ...strToU8('[PANEL]\r\nSIZE=1,2\r\n')])
+  const archive = SkinArchive.open(zipSync({
+    'port/py_26.ini': original,
+    'res/default.css': strToU8('[STYLE1]\n'),
+  }), 'bds')
+  const path = archive.names().find((name) => name.endsWith('py_26.ini'))
+  const before = archive.getText(path)
+  assert.equal(before, '[PANEL]\r\nSIZE=1,2\r\n')
+  archive.setText(path, before.replace('1,2', '3,4'))
+  assert.deepEqual([...archive.getBytes(path).subarray(0, 4)], [0xef, 0xbb, 0xbf, 0x5b])
+  assert.equal(archive.getText(path), '[PANEL]\r\nSIZE=3,4\r\n')
+  assert.ok(archive.changed.has(path))
+  archive.setText(path, before)
+  assert.deepEqual(archive.getBytes(path), original)
+  assert.equal(archive.changed.size, 0)
+  // A file without the mark does not gain one.
+  const css = archive.names().find((name) => name.endsWith('default.css'))
+  archive.setText(css, '[STYLE2]\n')
+  assert.equal(archive.getBytes(css)[0], 0x5b)
+})

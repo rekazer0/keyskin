@@ -176,8 +176,14 @@ class BaiduStyles {
     const pressed = this.slice(this.styles.get(section, "HL_IMG") ?? normalImage) ?? normal
     const color = baiduColor(this.styles.get(section, "NM_COLOR"))
     const pressedColor = baiduColor(this.styles.get(section, "HL_COLOR")) ?? color
-    if (!normal && !color) return
+    if (!normal && !pressed && !color) return
     return { normal, pressed, color, pressedColor }
+  }
+
+  /** A style that draws text: it exists and names no image. */
+  isText(styleID: string): boolean {
+    const section = `STYLE${styleID.trim()}`
+    return this.styles.sections().includes(section) && !this.styles.get(section, "NM_IMG") && !this.styles.get(section, "HL_IMG")
   }
 }
 
@@ -262,15 +268,17 @@ function offsetValue(value: string | undefined): [number, number] | undefined {
  * Every image layer of a key drawn the way Baidu does (centred at its own size, then offset) and cut
  * to the area they cover, with that area as a Sogou FG_RECT (fractions of the key).
  */
-function foreground(layers: Array<{ pair?: StylePair; offset: [number, number] }>, width: number, height: number, scale: number): Foreground | undefined {
-  const images = layers.filter((layer) => layer.pair?.normal)
-  if (!images.length) return
+function foreground(layers: Array<{ pair?: StylePair; offset: [number, number] }>, width: number, height: number, scale: number, blank = false): Foreground | undefined {
+  // A layer may only have a pressed image (HL_IMG alone): nothing on the resting key, artwork while pressed.
+  const images = layers.filter((layer) => layer.pair?.normal || layer.pair?.pressed)
+  if (!images.length && !blank) return
   const draw = (pick: (pair: StylePair) => SliceImage | undefined) => images.reduce((canvas, { pair, offset }) => {
-    const image = (pick(pair!) ?? pair!.normal!).image
+    const image = pick(pair!)?.image
+    if (!image) return canvas
     return compositeImage(canvas, placeImage(image, width, height, Math.round((width - image.width) / 2 + offset[0]), Math.round((height - image.height) / 2 + offset[1])))
   }, { width, height, data: new Uint8Array(width * height * 4) } as RgbaImage)
   const normal = draw((pair) => pair.normal)
-  const pressed = draw((pair) => pair.pressed)
+  const pressed = draw((pair) => pair.pressed ?? pair.normal)
   let [left, top, right, bottom] = [width, height, 0, 0]
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -325,7 +333,10 @@ function sampleKeys(archive: SkinArchive, theme: Theme, warnings: string[]): Map
           offset: offsetValue(offsets[index]) ?? offsetFromSection(gen, `OFFSET${positions[index]?.trim()}`, { width, height }) ?? [0, 0],
         }))
         const text = layers.find(({ pair }) => pair?.color && !pair.normal)?.pair
-        const fore = width > 0 && height > 0 ? foreground(layers, Math.round(width), Math.round(height), styles.scale) : undefined
+        // A Baidu key only shows what its foreground styles draw. With no text layer the artwork carries the
+        // label (or the key has none), so Sogou's own glyph is covered even when no image is left to place.
+        const drawsText = foreIDs.some((id) => styles.isText(id))
+        const fore = width > 0 && height > 0 ? foreground(layers, Math.round(width), Math.round(height), styles.scale, !drawsText) : undefined
         samples.set(name, { layout, binding, back, fore, labelColor: text?.color, labelPressedColor: text?.pressedColor })
       }
     }
@@ -383,7 +394,7 @@ function styleSources(archive: SkinArchive, theme: Theme): { panel: IniDocument[
 function firstStyle(styles: BaiduStyles, documents: IniDocument[], section: string, key: string): StylePair | undefined {
   for (const document of documents) {
     const style = styles.resolve(document.get(section, key)?.trim())
-    if (style) return style
+    if (style?.normal || style?.color) return style
   }
 }
 
@@ -587,14 +598,16 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
   // The 9-key symbol column is Sogou's candidate code view.
   const nine = `${theme}/skin/port/py_9.ini`
   const list = archive.isText(nine) ? IniDocument.parse(archive.getText(nine)) : undefined
-  const listBack = styles.resolve(list?.get("LIST", "BACK_STYLE"))
-  const listCell = styles.resolve(list?.get("LIST", "CELL_STYLE"))
+  // A board's [LIST] usually only places the column; its styles are inherited from gen.ini.
+  const listStyle = (key: string) => firstStyle(styles, [...(list ? [list] : []), ...styleSources(archive, theme).panel], "LIST", key)
+  const listBack = listStyle("BACK_STYLE")
+  const listCell = listStyle("CELL_STYLE")
   const codeView = [
     ...(listBack && writer.stateSection("BgCodeView", listBack) ? [{ key: "BG_IMAGE", value: "BgCodeView" }] : []),
     ...(listCell && writer.stateSection("BgCodeViewCell", listCell) ? [{ key: "BG_IMAGES", value: "BgCodeViewCell" }] : []),
   ]
   if (codeView.length) writer.skin.appendSection("CandidateCodeView", codeView)
-  const listText = styles.resolve(list?.get("LIST", "FORE_STYLE"))?.color
+  const listText = listStyle("FORE_STYLE")?.color
   if (listText) writer.skin.appendSection("TextStyle_Text", [{ key: "TEXT_COLOR", value: listText }])
   if (animations) convertAnimations(archive, theme, writer, folder, output, warnings)
   writer.write()

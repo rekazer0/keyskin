@@ -55,3 +55,37 @@ test('Baidu export writes bound Sogou animations and every decoration image', as
   assert.ok(pkg.file('light', file))
   assert.ok(anim.sections().some(section => anim.get(section, 'VALUE') === '1,0.9'))
 })
+
+test('Baidu export takes the symbol column styles a board inherits from gen.ini', async () => {
+  const source = SkinArchive.open(read('templates/iqoo-rounded-black.bds'))
+  assert.equal(IniDocument.parse(source.getText('light/skin/port/py_9.ini')).get('LIST', 'FORE_STYLE'), undefined)
+  const pkg = await SsfPackage.open((await convertBaiduToSsf(source)).bytes)
+  const skin = pkg.skin('light')
+  assert.equal(skin.get('TextStyle_Text', 'TEXT_COLOR'), '0xFFFFFFFF')
+  assert.ok(skin.get('CandidateCodeView', 'BG_IMAGE') || skin.get('CandidateCodeView', 'BG_IMAGES'))
+})
+
+test('Baidu export covers the Sogou glyph on keys whose artwork is the label, and keeps pressed-only foregrounds', async () => {
+  const { bdsFixture } = await import('./helpers/baidu-fixture.mjs')
+  const { ssfKeyBinding } = await import('../src/ssf/ssf-keymap.ts')
+  const source = SkinArchive.open(bdsFixture())
+  const cssPath = source.names().find(name => name.endsWith('res/default.css'))
+  const css = IniDocument.parse(source.getText(cssPath))
+  css.appendSection('STYLE9', [{ key: 'HL_IMG', value: 'btn,0' }])
+  source.setText(cssPath, css.toString())
+  const layoutPath = source.names().find(name => name.endsWith('port/py_26.ini'))
+  const layout = IniDocument.parse(source.getText(layoutPath))
+  layout.set('PANEL', 'KEY_NUM', '3')
+  layout.appendSection('KEY3', [{ key: 'BACK_STYLE', value: '2' }, { key: 'FORE_STYLE', value: '9' }, { key: 'VIEW_RECT', value: '230,0,100,120' }, { key: 'CENTER', value: 'w' }])
+  source.setText(layoutPath, layout.toString())
+  const pkg = await SsfPackage.open((await convertBaiduToSsf(source)).bytes)
+  const keys = pkg.ini([...pkg.files.keys()].find(path => path.endsWith('keys.ini')))
+  const section = action => ssfKeyBinding('py_26', action, false).sections[0]
+  // q draws text: Sogou's own label stays. F1 has no foreground at all: the glyph is covered.
+  assert.equal(keys.get(section('q'), 'FG_IMAGES'), undefined)
+  assert.ok(keys.get(section('F1'), 'FG_IMAGES'))
+  // w only has artwork while pressed.
+  const pressedOnly = keys.get(section('w'), 'FG_IMAGES')
+  assert.ok(pressedOnly)
+  assert.notEqual(keys.get(pressedOnly, 'NORMAL'), keys.get(pressedOnly, 'PRESSED'))
+})

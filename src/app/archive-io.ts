@@ -6,7 +6,7 @@ import { ask } from "./ask.ts"
 import { appState } from "./state"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportButtons, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
-import { canExport, exportFormatFromPath, exportName, skinFileName, type ExportFormat } from "../export.ts"
+import { canExport, exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { buildSxiZipAsync } from "../palm/palm-export.ts"
 import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
@@ -351,14 +351,19 @@ function exportTargetLabel(format: ExportFormat): string {
   return format === "sxi" ? "手心皮肤" : format === "ssf" ? "搜狗皮肤" : `${format.toUpperCase()} 皮肤`
 }
 
-type ExportResult = { bytes: Uint8Array; converted: boolean; warnings: string[] }
+/**
+ * `bytes` is the file to write. `document` is the same package before the steps that only the written
+ * file gets (labels cut into images, backgrounds, atlases): what the open document corresponds to.
+ */
+type ExportResult = { bytes: Uint8Array; document: Uint8Array; converted: boolean; warnings: string[] }
+type PackagedResult = Omit<ExportResult, "document">
 
 /** 导出百度皮肤时切片按键文字；BDS 另补齐百度安卓启用前检查的结构。 */
 export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
   showFileOperationProgress()
   await waitForInterfacePaint()
-  const result = await exportArchiveBytes(format, targetBdaPlatform)
-  result.warnings = [...new Set(result.warnings)]
+  const packaged = await exportArchiveBytes(format, targetBdaPlatform)
+  const result: ExportResult = { ...packaged, document: packaged.bytes, warnings: summarizeWarnings(packaged.warnings) }
   if (result.converted && !await acceptDowngrade(`转换为${exportTargetLabel(format)}时将降级以下内容`, result.warnings)) return
   if (format !== "bds" && format !== "bdi") return result
   updateFileOperationProgress(88, "正在检查字体兼容性…")
@@ -371,7 +376,7 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   return { ...result, bytes: await completeBdsPackage(bakeBdsBackgrounds(bytes), composeAtlasPng) }
 }
 
-async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult> {
+async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<PackagedResult> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
   if (!canExport(appState.archive.format, format)) throw new Error(`${appState.archive.format.toUpperCase()} 皮肤不能导出为 ${format.toUpperCase()}`)
@@ -389,7 +394,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   }
   if (format === "sxi" && appState.archive.format !== "sxi") {
     const report = conversionProgress(22, 78, "正在导出手心皮肤…")
-    await report(0.2)
+    await report(0)
     let source: SkinArchive = appState.archive
     const warnings: string[] = []
     // `.sxi` is INI-based, so a BDA source needs the official INI base layout first.
@@ -403,8 +408,8 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     // 转换已经走过前一段；手心打包自己从 0 报到 1，接在它后面继续推进同一根进度条。
     // 打包流程本身每隔几毫秒让出主线程，进度更新不必再等两帧，否则大皮肤会多等一两秒。
     const start = source === appState.archive ? 0.2 : 0.45
-    const progress = conversionProgress(start * 100, 100, "正在导出手心皮肤…", false)
-    const result = await buildSxiZipAsync(source, async (fraction, detail) => progress(fraction, detail))
+    const update = percentProgress(22, 78, "正在导出手心皮肤…")
+    const result = await buildSxiZipAsync(source, async (fraction, detail) => update(start + fraction * (1 - start), detail))
     return { bytes: result.bytes, converted: true, warnings: [...warnings, ...result.warnings] }
   }
   if (appState.archive.format === "ssf" && format !== "ssf" && format !== "sxi") {
@@ -471,11 +476,19 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
 /**
  * 转换阶段在进度窗中收集降级提示。回调按 0–1 报告阶段并映射到百分比区间。
  */
-function conversionProgress(start: number, end: number, detail: string, paint = true): (fraction: number, stage?: string) => Promise<void> {
+function conversionProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => Promise<void> {
   updateFileOperationProgress(start, detail)
   return async (fraction, stage) => {
     updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
-    if (paint) await waitForInterfacePaint()
+    await waitForInterfacePaint()
+  }
+}
+
+/** 只写进度、不等两帧：调用方自己每隔几毫秒让出主线程，浏览器会正常重绘。 */
+function percentProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => void {
+  updateFileOperationProgress(start, detail)
+  return (fraction, stage) => {
+    updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
   }
 }
 
@@ -533,7 +546,8 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
   if (!exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
     appState.unsavedNew = false
-    exported.archive.markSaved(exported.bytes, format, exported.revision)
+    // The written file's baked images are not part of the document; the next save starts from the document again.
+    exported.archive.markSaved(exported.document, format, exported.revision)
     documentName.textContent = documentNameForPath(path, exported.archive)
     updateDirty()
   }
@@ -671,7 +685,7 @@ async function downloadArchive(format: ExportFormat, suggestedName: string): Pro
   if (!exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
     documentName.textContent = suggestedName
-    exported.archive.markSaved(exported.bytes, format, exported.revision)
+    exported.archive.markSaved(exported.document, format, exported.revision)
     appState.unsavedNew = false
     updateDirty()
   }
