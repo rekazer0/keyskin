@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { declarations, run } from './helpers/app-source.mjs'
+import { summarizeWarnings } from '../src/export.ts'
 
 test('multi-stage BDA → SXI opens progress first, then confirms unique warnings in that window', async () => {
   const warnings = Array.from({ length: 20 }, (_, i) => `降级提示 ${i + 1}`)
   const events = []
-  const context = run(declarations('exportArchive', 'exportArchiveBytes', 'acceptDowngrade', 'conversionProgress', 'exportTargetLabel'), {
+  const context = run(declarations('exportArchive', 'exportArchiveBytes', 'acceptDowngrade', 'conversionProgress', 'exportTargetLabel'), { summarizeWarnings,
     archive: { format: 'bda' }, bdaBase: {},
     canExport: () => true,
     updateFileOperationProgress: () => {}, waitForInterfacePaint: async () => {},
@@ -35,7 +36,7 @@ for (const native of [false, true]) for (const platform of [undefined, 'ios']) {
   test(`${native ? 'native' : 'browser'} ${platform ?? 'standard'} export confirms before choosing or writing a file`, async () => {
     const events = []
     const archive = { markSaved: () => assert.fail('conversion must not mark source as saved') }
-    const context = run(declarations('saveArchive', 'saveNative', 'downloadArchive', 'exportForSave', 'exportArchive', 'acceptDowngrade', 'exportTargetLabel'), {
+    const context = run(declarations('saveArchive', 'saveNative', 'downloadArchive', 'exportForSave', 'exportArchive', 'acceptDowngrade', 'exportTargetLabel'), { summarizeWarnings,
       archive, currentPath: '', documentName: { textContent: '测试' },
       flushNumberInputWheel: () => {}, exportName: (_, format) => `测试.${format}`,
       isTauri: () => native, clientLog: { info: () => {} },
@@ -96,3 +97,19 @@ for (const path of ['/Users/test/皮肤/保存.bds', 'content://provider/documen
     assert.deepEqual(events, [])
   })
 }
+
+test('a warning repeated for many keys or animations is listed once with its count', async () => {
+  const keys = Array.from({ length: 30 }, (_, i) => `light/skin/port/py_9.ini [KEY${i + 1}] 在 BDA 模板中没有可映射的目标，未绑定`)
+  const anchors = [11, 21, 101, 102].map(id => `ANIM${id} 的自定义锚点在搜狗转为中心锚点`)
+  const out = summarizeWarnings([
+    'light/port 缺少图片：10039_1', ...keys, ...keys, ...anchors,
+    'ANIM8 的目标区域缩放转换为搜狗整体缩放', 'dark/skin/land/en_26.ini [TIP2] 多前景动画槽位 BDA 只能绑定全部前景，已合并到 scope=0',
+  ])
+  assert.deepEqual(out, [
+    'light/port 缺少图片：10039_1',
+    'light/skin/port/py_9.ini [KEY1] 等 30 处 在 BDA 模板中没有可映射的目标，未绑定',
+    'ANIM11 等 4 处的自定义锚点在搜狗转为中心锚点',
+    'ANIM8 的目标区域缩放转换为搜狗整体缩放',
+    'dark/skin/land/en_26.ini [TIP2] 多前景动画槽位 BDA 只能绑定全部前景，已合并到 scope=0',
+  ])
+})

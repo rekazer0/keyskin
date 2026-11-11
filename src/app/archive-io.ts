@@ -6,7 +6,7 @@ import { ask } from "./ask.ts"
 import { appState } from "./state"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportButtons, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
-import { canExport, exportFormatFromPath, exportName, skinFileName, type ExportFormat } from "../export.ts"
+import { canExport, exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { buildSxiZip } from "../palm/palm-export.ts"
 import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
@@ -363,7 +363,7 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   showFileOperationProgress()
   await waitForInterfacePaint()
   const packaged = await exportArchiveBytes(format, targetBdaPlatform)
-  const result: ExportResult = { ...packaged, document: packaged.bytes, warnings: [...new Set(packaged.warnings)] }
+  const result: ExportResult = { ...packaged, document: packaged.bytes, warnings: summarizeWarnings(packaged.warnings) }
   if (result.converted && !await acceptDowngrade(`转换为${exportTargetLabel(format)}时将降级以下内容`, result.warnings)) return
   if (format !== "bds" && format !== "bdi") return result
   updateFileOperationProgress(88, "正在检查字体兼容性…")
