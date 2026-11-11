@@ -199,8 +199,9 @@ function previewPageTarget(
     [symbolLayout, "symbol", suffix ? `sym_${suffix}_cn` : ""].filter(Boolean),
     /^(?:sym|symbol)(?:[_-]|$)|(?:^|[_-])symbol(?:[_-]|$)/i,
   )
+  // 英文输入状态固定进入 26 键英文面板，不跟随中文布局的 9/26 键后缀。
   if (value === "F16") return firstMatching(
-    suffix ? [`en_${suffix}`] : ["en_26", "en_9"],
+    ["en_26", "en_9"],
     /^(?:en|english|letter|letters)(?:[_-]|$)/i,
   )
 }
