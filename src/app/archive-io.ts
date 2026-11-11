@@ -1,6 +1,6 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
@@ -473,24 +473,6 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   return { bytes, converted: true, warnings: [...result.warnings, ...soundWarnings] }
 }
 
-/**
- * 转换阶段在进度窗中收集降级提示。回调按 0–1 报告阶段并映射到百分比区间。
- */
-function conversionProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => Promise<void> {
-  updateFileOperationProgress(start, detail)
-  return async (fraction, stage) => {
-    updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
-    await waitForInterfacePaint()
-  }
-}
-
-/** 只写进度、不等两帧：调用方自己每隔几毫秒让出主线程，浏览器会正常重绘。 */
-function percentProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => void {
-  updateFileOperationProgress(start, detail)
-  return (fraction, stage) => {
-    updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
-  }
-}
 
 function reportExportWarnings(sounds: string[], adjustments: string[] = []): void {
   if (!sounds.length && !adjustments.length) return

@@ -397,3 +397,22 @@ export function showImage(path: string): void {
   sourceName.textContent = path
   assetBackButton.disabled = !appState.assetReturnPath
 }
+
+/**
+ * 转换阶段在进度窗中收集降级提示。回调按 0–1 报告阶段并映射到百分比区间。
+ */
+export function conversionProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => Promise<void> {
+  updateFileOperationProgress(start, detail)
+  return async (fraction, stage) => {
+    updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
+    await waitForInterfacePaint()
+  }
+}
+
+/** 只写进度、不等两帧：调用方自己每隔几毫秒让出主线程，浏览器会正常重绘。 */
+export function percentProgress(start: number, end: number, detail: string): (fraction: number, stage?: string) => void {
+  updateFileOperationProgress(start, detail)
+  return (fraction, stage) => {
+    updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
+  }
+}
