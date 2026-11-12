@@ -1,7 +1,7 @@
 import { IniDocument } from "./ini.ts"
 import { decodeWav } from "./wav.ts"
 
-export const SOUND_ACCEPT = ".ogg,.wav,.aiff,.aif,audio/ogg,audio/wav,audio/x-aiff"
+export const SOUND_ACCEPT = ".ogg,.wav,.aiff,.aif,.mp3,audio/ogg,audio/wav,audio/x-aiff,audio/mpeg"
 
 type DecodedSound = {
   channelData: Float32Array[]
@@ -10,7 +10,7 @@ type DecodedSound = {
 }
 
 export function isSoundPath(path: string): boolean {
-  return /\.(?:ogg|wav|aiff?|caf)$/i.test(path)
+  return /\.(?:ogg|wav|aiff?|caf|mp3)$/i.test(path)
 }
 
 export function soundMimeType(path: string): string {
@@ -18,6 +18,7 @@ export function soundMimeType(path: string): string {
   if (/\.wav$/i.test(path)) return "audio/wav"
   if (/\.aiff?$/i.test(path)) return "audio/x-aiff"
   if (/\.caf$/i.test(path)) return "audio/x-caf"
+  if (/\.mp3$/i.test(path)) return "audio/mpeg"
   return "application/octet-stream"
 }
 
@@ -113,11 +114,11 @@ export function soundPathForFilename(
 ): string | undefined {
   const clean = filename.trim().split(/[\\/]/).pop()
   if (!clean) return
-  const stem = clean.replace(/\.(?:ogg|wav|aiff?|caf)$/i, "").toLowerCase()
+  const stem = clean.replace(/\.(?:ogg|wav|aiff?|caf|mp3)$/i, "").toLowerCase()
   const paths = soundResourcePaths(names, theme, orientation)
   const name = (path: string) => (path.split("/").pop() ?? path).toLowerCase()
   return paths.find((path) => name(path) === clean.toLowerCase())
-    ?? paths.find((path) => name(path).replace(/\.(?:ogg|wav|aiff?|caf)$/i, "") === stem)
+    ?? paths.find((path) => name(path).replace(/\.(?:ogg|wav|aiff?|caf|mp3)$/i, "") === stem)
 }
 
 export function soundStyleForKey(
@@ -255,6 +256,21 @@ async function decodeSound(bytes: Uint8Array): Promise<DecodedSound> {
   if (head === "FORM") return decodeAiffPcm(bytes)
   if (head === "OggS") return decodeOggVorbis(bytes)
   if (head === "RIFF") return decodeWav(bytes)
+  if (head.startsWith("ID3") || bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) {
+    if (typeof AudioContext === "undefined") throw new Error("当前环境不支持 MP3 解码")
+    const context = new AudioContext()
+    try {
+      const decoded = await context.decodeAudioData(new Uint8Array(bytes).buffer)
+      if (!decoded.length || !decoded.numberOfChannels) throw new Error("MP3 文件没有可播放的音频")
+      return {
+        channelData: Array.from({ length: decoded.numberOfChannels }, (_, channel) => decoded.getChannelData(channel)),
+        samplesDecoded: decoded.length,
+        sampleRate: decoded.sampleRate,
+      }
+    } finally {
+      await context.close()
+    }
+  }
   throw new Error("不支持的音频编码")
 }
 
@@ -267,7 +283,7 @@ export async function soundAsWav(bytes: Uint8Array): Promise<Uint8Array> {
 /** Baidu skins use AIFF on iOS and Ogg Vorbis on Android; retain originals while adding native copies. */
 const NATIVE_SOUND_EXTENSION = { bdi: "aiff", bds: "ogg" } as const
 
-/** MP3 is neither platform's format and cannot be decoded here, so it is reported instead of shipped silently. */
+/** WAV/MP3 sources also need the target platform's native encoding. */
 function soundNeedsTranscode(path: string, format: "bdi" | "bds"): boolean {
   return format === "bdi" ? /\.(?:ogg|wav|mp3)$/i.test(path) : /\.(?:aiff?|caf|wav|mp3)$/i.test(path)
 }
@@ -276,7 +292,7 @@ function soundNeedsTranscode(path: string, format: "bdi" | "bds"): boolean {
  * Rewrites every PRESS/PANEL_SHOW/PANEL_HIDE_SOUND_PATH in each theme's default.css (light and dark each have their own)
  * that needs a native copy: Ogg/WAV/MP3 → AIFF for BDI, AIFF/CAF/WAV/MP3 → Ogg for BDS.
  * A same-named file in the target format next to that css is used as is; otherwise the referenced
- * file is transcoded, and a sound the decoder cannot read (MP3) is reported in `warnings`.
+ * file is transcoded, and a sound the decoder cannot read is reported in `warnings`.
  * Original files are kept, matching official packages that bundle both formats.
  */
 export async function adaptPackageSounds(

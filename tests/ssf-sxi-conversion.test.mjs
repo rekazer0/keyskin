@@ -9,6 +9,7 @@ import { convertBaiduToSsf } from '../src/ssf/baidu-to-ssf.ts'
 import { SsfPackage } from '../src/ssf/ssf-package.ts'
 import { ssfFixture } from './helpers/ssf-fixture.mjs'
 import { canExport } from '../src/export.ts'
+import { decodeAiffPcm } from '../src/sounds.ts'
 
 const read = name => new Uint8Array(readFileSync(new URL(`../public/${name}`, import.meta.url)))
 const templates = { sogou: SkinArchive.open(read('sogou-template.bds')), bda: SkinArchive.open(read('default-template.bda'), 'bda') }
@@ -24,7 +25,12 @@ test('Sogou and Palm cross-convert with their own configs, images and sound reso
   const skin = JSON.parse(palm.getText('skin.json'))
   assert.ok(skin.default.s_info.ss_1)
   assert.ok(palm.names().some(path => path.endsWith('.png')))
-  assert.ok(palm.names().some(path => path.endsWith('s_del.ogg')))
+  const soundPath = palm.names().find(path => path.endsWith('s_del.aiff'))
+  assert.ok(soundPath)
+  assert.equal(decodeAiffPcm(palm.getBytes(soundPath)).samplesDecoded, 48)
+  const sounds = Object.values(skin.default.s_info.ss_1).flatMap(style => style.s_4 ? [style.s_4.path_1] : [])
+  assert.ok(sounds.length > 0)
+  assert.ok(sounds.every(path => path.endsWith('.aiff')))
   const back = await convertSsfSxi(palm)
   const pkg = await SsfPackage.open(back.bytes)
   assert.ok(pkg.skin('light').get('RootView', 'BG_IMAGE'))

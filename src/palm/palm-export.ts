@@ -15,14 +15,14 @@
 // - Zip entries are written in sorted converter-relative order and emptied directories keep
 //   an explicit entry, matching the layout the Palm app expects.
 
-import { SkinArchive } from "../skin.ts"
+import type { SkinArchive } from "../skin.ts"
 import { zipArchiveAsync } from "../skin-zip.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
 import { fitCandidateIcons, fitEnglishEnter, removeMissingAnimationKeys } from "./palm-export-layout.ts"
 import { separateOrientationResources } from "./palm-export-resources.ts"
 import { bakeBackgrounds, bakeBackgroundsSteps } from "./palm-export-backgrounds.ts"
-import { assembleSxiFiles, collectConverterEntries, packSxiFiles, type ConverterEntry } from "./palm-export-package.ts"
-import { fitToolbarArtwork, prepareToolbarIcons } from "./palm-export-toolbar.ts"
+import { adaptSxiSounds, assembleSxiFiles, collectConverterEntries, packSxiFiles, type ConverterEntry } from "./palm-export-package.ts"
+import { fitToolbarArtwork } from "./palm-export-toolbar.ts"
 import { boardTypeFromIniFileName } from "./palm-board-types.ts"
 import { decodeSkinText, parseIniSections, toBool, toInt, type IniSection } from "./palm-ini.ts"
 import { type PalmJSONValue } from "./palm-json.ts"
@@ -665,19 +665,10 @@ type PreparedExport = {
   darkStruct?: SkinStruct
 }
 
-function prepareExport(archive: SkinArchive): PreparedExport {
-  if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
-  if (archive.format === "bda") {
-    // BDA packages carry protobuf panels instead of an INI layout tree, so a caller that
-    // reaches this point must convert the archive first (see `convertBdaToBaseLayout`).
-    throw new Error("BDA 皮肤需要先转换为 BDI/BDS 布局再导出手心皮肤（.sxi）")
-  }
-
-  const entries = collectConverterEntries(archive)
-  if (archive.format === "bdi" || archive.format === "bds") prepareToolbarIcons(entries)
+function prepareExport(entries: ConverterEntry[], warnings: string[] = []): PreparedExport {
   const context: ExportContext = {
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),
-    warnings: [],
+    warnings,
     entries,
     sections: new Map(),
   }
@@ -736,7 +727,7 @@ export type SxiExportReport = (fraction: number, detail: string) => Promise<void
 const ZIP_START = 0.58
 
 export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings: string[] } {
-  const prepared = prepareExport(archive)
+  const prepared = prepareExport(collectConverterEntries(archive))
   const skin = buildSkin(prepared)
   return { bytes: packSxiFiles(assembleSxiFiles(prepared.entries, skin)), warnings: prepared.context.warnings }
 }
@@ -766,7 +757,8 @@ export async function buildSxiZipAsync(
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
   await breathe(0, "正在读取皮肤…", true)
-  const prepared = prepareExport(archive)
+  const entries = collectConverterEntries(archive)
+  const prepared = prepareExport(entries, await adaptSxiSounds(entries))
   const driveModel = async (): Promise<Record<string, Json>> => {
     const steps = buildSkinSteps(prepared)
     let last = performance.now()

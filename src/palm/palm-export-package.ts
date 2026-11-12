@@ -1,6 +1,8 @@
 // 手心导出的文件清单与打包。同步导出和异步导出必须写出同一份清单，所以都走这里。
 import { zipSync } from "fflate"
-import type { SkinArchive } from "../skin.ts"
+import { SkinArchive } from "../skin.ts"
+import { adaptPackageSounds } from "../sounds.ts"
+import { prepareToolbarIcons } from "./palm-export-toolbar.ts"
 import { encodePalmJSON, type PalmJSONValue } from "./palm-json.ts"
 import { NATIVE_LAYOUT_JSON } from "./palm-native-layout.ts"
 import { normalizePalmPath, palmBaseName } from "./palm-vfs.ts"
@@ -31,6 +33,8 @@ function previewPath(path: string): string | undefined {
 }
 
 export function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
+  if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
+  if (archive.format === "bda") throw new Error("BDA 皮肤需要先转换为 BDI/BDS 布局再导出手心皮肤（.sxi）")
   const raws = archive.names().map((canonical) => {
     const raw = archive.sourcePath(canonical)
     return { canonical, raw, normalized: normalizePalmPath(raw), directory: raw.endsWith("/") }
@@ -54,7 +58,22 @@ export function collectConverterEntries(archive: SkinArchive): ConverterEntry[] 
       bytes: item.directory ? undefined : archive.getBytes(item.canonical),
     })
   }
+  if (archive.format === "bdi" || archive.format === "bds") prepareToolbarIcons(entries)
   return entries
+}
+
+/** 在生成 skin.json 前复用 iOS 音效适配，文件和样式引用一起转成 AIFF。 */
+export async function adaptSxiSounds(entries: ConverterEntry[]): Promise<string[]> {
+  const files = new Map(entries.flatMap(entry => entry.bytes ? [[entry.path, entry.bytes] as const] : []))
+  const { warnings } = await adaptPackageSounds(files, "bdi")
+  for (const entry of entries) {
+    if (!entry.directory) {
+      entry.bytes = files.get(entry.path)
+      files.delete(entry.path)
+    }
+  }
+  for (const [path, bytes] of files) entries.push({ path, bytes, directory: false })
+  return warnings
 }
 
 // Folders that survive the deletion passes with no file left inside them still need an

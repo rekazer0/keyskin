@@ -1,5 +1,5 @@
 // 按键音效在百度（BDS/BDI）与搜狗（SSF）之间转换时的边界情况：
-// 搜狗皮肤里的音效文件可能不是 WAV，也可能带百度播不了、这里也解不了的 MP3。
+// 搜狗皮肤里的音效文件可能不是 WAV，也可能带损坏的 MP3。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -79,7 +79,7 @@ test('SSF 的音效文件是 AIFF 时，转 BDI 直接引用 AIFF', async () => 
   assert.match(strFromU8(files['skin/res/default.css']), /^PRESS_SOUND_PATH=bell\.aiff$/m)
 })
 
-test('SSF 的音效文件是 MP3 时，转 BDS 报警而不是静默带上百度播不了的文件', async () => {
+test('SSF 的音效文件是损坏的 MP3 时，转 BDS 报警并保留原文件', async () => {
   const ssf = await sogouSkin({ 'default/bell.mp3': strToU8('ID3 fake') })
   const out = await convertSsfDocument(ssf, 'bds', templates)
   const files = unzipSync(out.bytes)

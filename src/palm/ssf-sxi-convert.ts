@@ -13,7 +13,7 @@ export async function convertSsfSxi(
   // 手心 → 搜狗只做转换，不走手心打包；进度由转换流程自己报告。
   if (source.format === "sxi") return convertBaiduToSsf(sxiToBaiduArchive(source))
   if (source.format !== "ssf" || !templates) throw new Error("搜狗转手心需要搜狗基础布局")
-  const baidu = await convertSsfDocument(source, "bds", templates, report ? (fraction, detail) => report(fraction * 0.8, detail) : undefined)
-  const palm = await buildSxiZipAsync(SkinArchive.open(baidu.bytes, "bds"), report ? (fraction, detail) => report(0.8 + fraction * 0.2, detail) : undefined)
+  const baidu = await convertSsfDocument(source, "bdi", templates, report ? (fraction, detail) => report(fraction * 0.8, detail) : undefined)
+  const palm = await buildSxiZipAsync(SkinArchive.open(baidu.bytes, "bdi"), report ? (fraction, detail) => report(0.8 + fraction * 0.2, detail) : undefined)
   return { bytes: palm.bytes, warnings: [...new Set([...baidu.warnings, ...palm.warnings])] }
 }

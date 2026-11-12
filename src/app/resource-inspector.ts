@@ -596,7 +596,7 @@ function selectGalleryItem(path: string, container: HTMLElement): void {
 }
 
 export async function uploadKeySound(file: File, replacePath?: string): Promise<boolean> {
-  if (!appState.archive || !isSoundPath(file.name)) throw new Error("按键音效仅支持 OGG、WAV 或 AIFF 文件")
+  if (!appState.archive || !isSoundPath(file.name)) throw new Error("按键音效仅支持 OGG、WAV、AIFF 或 MP3 文件")
   if (!isEditing()) return false
   const targetArchive = appState.archive
   const filename = file.name.split(/[\\/]/).pop() ?? file.name

@@ -33,7 +33,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     input.addEventListener("cancel", () => input.remove(), { once: true })
     input.click()
   }
-  const toolbar = listToolbar({ create: { label: "添加音效", title: "添加音效（OGG / WAV / AIFF）", run: () => chooseFile(), disabled: !isEditing() } })
+  const toolbar = listToolbar({ create: { label: "添加音效", title: "添加音效（OGG / WAV / AIFF / MP3）", run: () => chooseFile(), disabled: !isEditing() } })
   const list = element("div", "ui-sound-list")
   list.setAttribute("role", "listbox")
   list.setAttribute("aria-label", "音效文件")
