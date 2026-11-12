@@ -63,10 +63,6 @@
             <span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span>
           </button>
         </div>
-        <div class="mobile-quick-actions" aria-label="常用操作">
-          <button id="mobile-undo" class="ui-icon-button" type="button" title="撤销" aria-label="撤销"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span></button>
-          <button id="mobile-redo" class="ui-icon-button" type="button" title="重做" aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span></button>
-        </div>
         <div class="mode-control ui-segmented" aria-label="工作模式">
           <button type="button" data-mode-choice="edit" aria-pressed="false">编辑模式</button>
           <button type="button" data-mode-choice="preview" aria-pressed="true">交互预览</button>
@@ -91,13 +87,6 @@
     </header>
 
     <main>
-      <nav class="mobile-workspace-tabs" aria-label="手机编辑区域">
-        <button type="button" data-mobile-pane="layout" aria-pressed="true">文件与布局</button>
-        <button type="button" data-mobile-pane="inspector" aria-pressed="false">属性检查器</button>
-        <button id="mobile-split-handle" class="mobile-split-handle" type="button" role="slider" aria-orientation="vertical" aria-valuemin="28" aria-valuemax="72" aria-valuenow="50" aria-expanded="true" title="调整预览高度" aria-label="调整预览高度">
-          <span class="system-symbol mobile-split-icon" data-icon="chevrons-up-down" aria-hidden="true"></span>
-        </button>
-      </nav>
       <aside class="sidebar">
         <div class="pane-heading">
           <div class="sidebar-view-control ui-segmented" data-fill aria-label="左侧视图">
@@ -160,18 +149,6 @@
             <select id="theme" hidden><option value="light">浅色</option><option value="dark">深色</option></select>
             <button class="ui-icon-button mobile-choice-toggle" data-variant="filled" type="button" data-mobile-choice="orientation" title="切换方向" aria-label="切换方向（当前竖屏）"><span class="system-symbol" data-mobile-current-icon data-icon="rectangle-vertical" aria-hidden="true"></span></button>
             <button class="ui-icon-button mobile-choice-toggle" data-variant="filled" type="button" data-mobile-choice="theme" title="切换外观" aria-label="切换外观（当前浅色）"><span class="system-symbol" data-mobile-current-icon data-icon="sun" aria-hidden="true"></span></button>
-            <details id="mobile-preview-more" class="toolbar-more mobile-preview-more">
-              <summary class="ui-icon-button" data-variant="filled" title="更多预览选项" aria-label="更多预览选项" aria-haspopup="menu"><span class="system-symbol" data-icon="sliders-horizontal" aria-hidden="true"></span></summary>
-              <div class="ui-menu" role="menu" aria-label="更多预览选项">
-                <button id="mobile-preview-orientation" class="ui-list-item" type="button" role="menuitem" data-preview-action="orientation"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span><span>方向</span></button>
-                <button id="mobile-preview-theme" class="ui-list-item" type="button" role="menuitem" data-preview-action="theme"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span><span>外观</span></button>
-                <hr class="ui-menu-separator">
-                <button id="mobile-preview-guides" class="ui-list-item" type="button" role="menuitem" data-preview-action="guides" aria-pressed="false"><span class="system-symbol" data-icon="crosshair" aria-hidden="true"></span><span>辅助线</span></button>
-                <button id="mobile-preview-device" class="ui-list-item" type="button" role="menuitem" data-preview-action="device"><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>设备</span></button>
-                <button id="mobile-preview-state" class="ui-list-item" type="button" role="menuitem" data-preview-action="state" hidden><span class="system-symbol" data-icon="layers" aria-hidden="true"></span><span>皮肤状态</span></button>
-                <button id="mobile-preview-overview" class="ui-list-item" type="button" role="menuitem" data-preview-action="overview"><span class="system-symbol" data-icon="maximize" aria-hidden="true"></span><span>全局预览</span></button>
-              </div>
-            </details>
             <select id="layout" class="ui-select" aria-label="预览布局" hidden><option value="py_9.ini">9 键</option><option value="py_26.ini">26 键</option></select>
           </div>
         </div>
@@ -355,6 +332,20 @@
             <button class="ui-icon-button" type="button" data-layout-action="vertical-gap" title="垂直等间距" aria-label="垂直等间距"><span class="system-symbol" data-icon="fold-vertical" aria-hidden="true"></span></button>
           </div>
           <div id="layout-overview" class="layout-overview" hidden><div id="layout-overview-grid" class="layout-overview-grid" role="group" aria-label="全部布局"></div></div>
+        </div>
+        <div class="mobile-canvas-tools" role="toolbar" aria-label="画布预览">
+          <details id="mobile-preview-more" class="toolbar-more mobile-preview-more">
+            <summary class="ui-icon-button" data-variant="filled" title="预览选项" aria-label="预览选项" aria-haspopup="menu"><span class="system-symbol" data-icon="sliders-horizontal" aria-hidden="true"></span></summary>
+            <div class="ui-menu" role="menu" aria-label="预览选项">
+              <button id="mobile-preview-orientation" class="ui-list-item" type="button" role="menuitem"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span><span>方向</span></button>
+              <button id="mobile-preview-theme" class="ui-list-item" type="button" role="menuitem"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span><span>外观</span></button>
+              <hr class="ui-menu-separator">
+              <button id="mobile-preview-device" class="ui-list-item" type="button" role="menuitem"><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>设备与画布</span></button>
+              <button id="mobile-preview-state" class="ui-list-item" type="button" role="menuitem" hidden><span class="system-symbol" data-icon="layers" aria-hidden="true"></span><span>皮肤状态</span></button>
+              <button id="mobile-preview-guides" class="ui-list-item" type="button" role="menuitem" aria-pressed="false"><span class="system-symbol" data-icon="crosshair" aria-hidden="true"></span><span>辅助线</span></button>
+              <button id="mobile-preview-overview" class="ui-list-item" type="button" role="menuitem"><span class="system-symbol" data-icon="maximize" aria-hidden="true"></span><span>全局预览</span></button>
+            </div>
+          </details>
         </div>
         <div class="preview-zoom-control glass-module" aria-label="画布缩放">
           <button id="preview-zoom-out" type="button" aria-label="缩小画布" title="缩小" data-icon="minus" data-icon-size="16"></button>
@@ -725,6 +716,21 @@
           <button id="replace-asset">替换图片</button>
         </div>
       </section>
+
+      <nav class="ui-tabbar" aria-label="主导航">
+        <button class="ui-tabbar-item" type="button" data-mobile-tab="canvas" aria-current="page">
+          <span class="system-symbol" data-icon="keyboard" data-icon-size="20" aria-hidden="true"></span>
+          <span>画布</span>
+        </button>
+        <button class="ui-tabbar-item" type="button" data-mobile-tab="inspector">
+          <span class="system-symbol" data-icon="sliders-horizontal" data-icon-size="20" aria-hidden="true"></span>
+          <span>属性</span>
+        </button>
+        <button class="ui-tabbar-item" type="button" data-mobile-tab="files">
+          <span class="system-symbol" data-icon="folder" data-icon-size="20" aria-hidden="true"></span>
+          <span>文件</span>
+        </button>
+      </nav>
     </main>
 
     <datalist id="baidu-action-codes"></datalist>
@@ -877,10 +883,6 @@
               <label class="settings-row"><span>布局辅助线</span><input id="settings-layout-guides" class="ui-switch" type="checkbox" role="switch"></label>
               <label class="settings-row"><span>编辑十字光标</span><input id="editor-crosshair" class="ui-switch" type="checkbox" role="switch" checked></label>
               <label id="editor-coordinate-snap-setting" class="settings-row"><span>坐标轴吸附</span><input id="editor-coordinate-snap" class="ui-switch" type="checkbox" role="switch" checked></label>
-            </section>
-            <section class="settings-group" aria-labelledby="settings-mobile-title">
-              <h3 id="settings-mobile-title">移动端</h3>
-              <label class="settings-row"><span>预览面板位置</span><span class="ui-input ui-select"><select id="mobile-preview-position"><option value="bottom" selected>底部</option><option value="top">顶部</option></select></span></label>
             </section>
           </section>
 

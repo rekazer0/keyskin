@@ -442,7 +442,7 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 @keyframes ui-tour-in { from { opacity: 0; } }
 
 /* —— 统一的焦点与禁用 —— */
-:where(.ui-button, .ui-icon-button, .ui-segmented > button, .ui-switch, .ui-list-item, .ui-swatch):focus-visible {
+:where(.ui-button, .ui-icon-button, .ui-segmented > button, .ui-switch, .ui-list-item, .ui-swatch, .ui-tabbar-item):focus-visible {
   outline: 0;
   box-shadow: var(--focus-ring);
 }
@@ -730,3 +730,38 @@ body {
 .ui-image-card:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
 .ui-image-card[aria-selected="true"], .ui-listbox > .ui-style-card[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .ui-image-card:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+
+/* —— 底部标签栏：移动端一级导航（DESIGN.md §14.3），桌面隐藏 —— */
+.ui-tabbar { display: none; }
+.ui-tabbar-item {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2xs);
+  min-width: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+}
+.ui-tabbar-item > .system-symbol { display: inline-flex; }
+.ui-tabbar-item[aria-current="page"] { color: var(--accent); }
+.ui-tabbar-item:active { transform: scale(0.96); }
+@media (hover: hover) { .ui-tabbar-item:hover { background: var(--hover); } }
+@media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
+  .ui-tabbar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: var(--space-2xs);
+    height: calc(var(--mobile-tabbar-height) + var(--safe-area-bottom));
+    padding: var(--space-2xs) max(var(--space-sm), env(safe-area-inset-right)) var(--safe-area-bottom) max(var(--space-sm), env(safe-area-inset-left));
+    border-top: 1px solid var(--line);
+    background: var(--menu);
+  }
+}

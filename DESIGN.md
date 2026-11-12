@@ -64,6 +64,7 @@
 
 - 间距用 4px 网格：`0 2 4 6 8 12 16 20 24 32 40 48`（2 和 6 只用于控件内部）。优先用 `--space-*`。
 - 控件高度三档：`--control-height-sm` 24、`--control-height-md` 28（默认）、`--control-height-lg` 32。同一行的控件高度必须一致。
+- 移动端尺寸（§14）：标签栏高 `--mobile-tabbar-height` 56（另加底部安全区），菜单行与页面列表行高 `--mobile-row-height` 48，应用栏高 `--titlebar-height`（竖屏 52 / 横屏 44，另加顶部安全区），sheet 最大高 `--mobile-sheet-max-height`（视口 70%）。
 - 面板内边距 16，分组之间 24，分组内行距 8，行内元素间距 8。
 - 动画与样式列表共用最小卡片宽度 `--style-card-width`（160px）：卡片随容器拉伸，宽到能多放一张时自动加列；容器窄于卡片时收窄。预览区固定 3:2 宽高比随卡片缩放，尺寸变化后在可见时重画，预览内容等比缩放、不被压扁；文字预览同样用棋盘格背景。侧栏列表里预览按卡宽 4:3 撑高、占卡片主体，文字只留一行标题与一行摘要；标题区等高，动画的 `INFO` 与名称同一行（单行省略），耗时与引用次数仍属于底部摘要。缩略图使用共享棋盘格，类型图标用 `--icon-size-sm`；只放大缩略图主体，完整编辑播放器与手柄坐标保持不变。
 
@@ -158,7 +159,7 @@
 | 列表行 | `.ui-list-item` | 图标 + 标题 + 次要文字 + 尾部附件；第二行要带标签时用 `.ui-list-item-meta` 包住若干 `.ui-badge` 和摘要 `small`；`data-layout="tile"` 是图标在上、文字在下的磁贴（资源配置、检查器分类栏、手机概览分组）；选中用 `aria-selected` / `aria-current` / `aria-pressed`（左侧栏：源文件树 `role="treeitem"` 用 `aria-selected`，概览导航用 `aria-current`；设置导航是 `role="tab"` 行）；也用作菜单项；单选行是 `label.ui-list-item` 包一个 radio（radio 透明铺满整行，勾选即选中态） |
 | 角标 | `.ui-badge` | 状态、“实验”标记（`data-variant="accent"`）；`data-variant="pill"` 胶囊（计数、保存状态），`"selection"` 画布多选计数 |
 | 对话框 | `.ui-dialog` | `<dialog>` 外壳：`.ui-dialog-header`（h2 15/600、可选一句说明、右侧 `iconButton("x")`）、`.ui-dialog-body`、`.ui-dialog-footer`（左侧 `.ui-dialog-status`，右侧 `.ui-button` 组）；`data-size="sm｜lg"`（400 / 800，默认 560）；关闭走 `closeDialog()`；Esc / 点遮罩 / 关闭按钮 / 表单提交由 `bindDialog(dialog, cancel?)`（`src/app/ask.ts`）统一接管并补上头部关闭按钮。询问用 `ask()`（`data-variant="ask"`，仅正文滚动）。表单用 `.ui-form`，行用 `.ui-field`，校验错误写在框内的 `.ui-field-error`，通过前不关闭。`data-variant="operation"` 是文件操作进度窗：`.ui-dialog-icon` + `.ui-dialog-meter`，用于长进度、降级确认、保存/导出完成和失败，状态由 `data-outcome`（`progress` / `error`）表示；保存/导出完成时保留进度条并显示 100% |
-| 菜单 | `.ui-menu` / `.ui-menu-separator` | 浮层菜单外壳，菜单项用 `.ui-list-item`；键盘见 §7 `bindMenuKeys()` |
+| 菜单 | `.ui-menu` / `.ui-menu-separator` | 浮层菜单外壳，菜单项用 `.ui-list-item`；键盘见 §7 `bindMenuKeys()`。手机上 `.toolbar-more > .ui-menu` 呈现为底部 sheet（§14.5），遮罩用 `::before`，不改 DOM 结构 |
 | 面板头 | `.ui-pane-header` | 返回 `iconButton("arrow-left")`（名字“返回”，悬停提示写去处）+ h2 13/600 单行省略 + `.ui-badge[data-variant="pill"]` 数量（只写数字）+ 尾部操作区；`paneHeader()` 生成 |
 | 列表工具条 | `.ui-list-toolbar` | 列表的新建 `plus` / 复制 `copy` / 删除 `trash-2` 三个图标按钮；新建有多个种类时是带 `plus` 前缀的下拉；`listToolbar()` 生成 |
 | 搜索框 | `.ui-search` | `.ui-input` + 放大镜前缀 + 有内容时出现的清除按钮；Esc 分层见 §7；`searchField()` 生成，传 `input` 时接管 HTML 里写好的 `label.ui-search` |
@@ -173,6 +174,7 @@
 | 工具栏图标 | `.ui-toolbar-icons` / `.ui-toolbar-icon` | 检查器专用按钮组，展示全部工具栏图标；SSF 按原生功能图片编辑，SXI 读取菜单、图集及候选栏图片，画布上按工具栏整体选中；BDI 同时展示菜单功能，优先按功能 ID 解析，缺失资源显示对应功能的默认 Lucide 图标，查看不创建资源，确认更换才补齐图片与声明；正方形棋盘格预览横向排列、自动换行，卡宽 `--toolbar-icon-card-width`（72px），功能名称在卡片下方完整换行；单击或键盘激活更换图片，不使用样式引用卡 |
 | 样式引用卡 | `.ui-style-ref` / `.ui-style-ref-append` | 检查器里的样式、图片引用，`styleReferenceCard()` 生成（见 §10）：左侧可输入的编号（搜狗、图片为文件名 `.ui-style-ref-name`）与类型图标，右侧 `.ui-style-state` 正常 | 按下两格或单格内容；未配置时不显示卡片，字段标题右侧提供 `plus` 添加按钮，点击选择要添加的内容；已绑定的卡右侧是移除条 `.ui-style-remove`（与样式卡共用，见 §10）；添加入口是字段标签右端的 `plus` 小按钮 `.ui-style-ref-append` |
 | 音效试听 | `.ui-style-sound` | `soundStyleSample(filename, play?)` 生成，播放动作由调用方注入（主窗口 `keySoundSample()`，弹窗发消息）；样式卡、引用卡、样式详情共用 |
+| 底部标签栏 | `.ui-tabbar` / `.ui-tabbar-item` | 移动端一级导航（§14.3）：图标在上、文字在下，整格可点，选中用 `aria-current="page"`，高 `--mobile-tabbar-height` + 底部安全区；没有皮肤或键盘打开时整条隐藏 |
 
 新组件要先在本表登记，写进 `components.css`，再在页面中使用。
 
@@ -248,18 +250,80 @@
 
 ## 14. 移动端界面与动画规范
 
-移动端以“当前工作 + 更多预览选项”为两层结构。标题栏只保留文件菜单、撤销 / 重做、工作模式和设置；预览工具栏只保留一个“更多”入口。方向、外观、设备、皮肤状态、辅助线和全局预览属于低频操作，统一放进 `toolbar-more` + `.ui-menu` 的“更多预览选项”，菜单项沿用 `.ui-list-item`，不为手机另做一套控件。
+移动端是一套独立的 App 式界面：**应用栏 + 页面区 + 底部标签栏**。它不是把桌面三栏压窄，也不再有上下分栏、可拖动的预览高度或左右滑出的临时面板。桌面与移动端共用同一份 DOM、`.ui-*` 组件和 token，只在断点内换成 App 外壳；移动端专用的行为集中在 `src/app/mobile-shell.ts`，不散落到各业务模块。
 
-- 手机宽度以 `760px` 为竖屏编辑断点，横屏窄窗口沿用 `950px` / `600px` 组合条件；断点只负责布局，颜色、字号、圆角和间距仍来自 token。
-- 工具栏保持单行，使用 `--control-height-lg` 的触控目标；左右安全区使用 `env(safe-area-inset-*)`。菜单宽度、最大高度和留白分别使用 `--space-*` 与 `--viewport-height` 计算，不能写固定像素值。
-- 高频操作使用图标按钮并保留可见状态；菜单中的切换项使用 `aria-pressed`，选择器仍由原生 `<select>` 承载，菜单项只负责把焦点和点击交给它，保证键盘、读屏和触控语义一致。
-- 菜单必须有 `aria-label`，菜单项必须有 `role="menuitem"`；启动时统一调用 `bindMenuKeys()`，支持方向键、Home、End 和 Esc。点击菜单项后收起菜单并把焦点留给触发按钮。
-- 菜单出现时不遮挡标题栏和系统安全区；父级工具栏需要允许浮层溢出。没有皮肤时整条预览工具栏隐藏，欢迎页不显示空菜单。
+### 14.1 断点与外壳
 
-手机动效只说明层级和状态变化：
+- 移动端断点：`(max-width: 760px)`，以及 `(max-width: 950px) and (max-height: 600px) and (orientation: landscape)`（手机横屏、窄而矮的窗口）。其余尺寸是桌面三栏工作区，规则不变。
+- 外壳自上而下三部分，位置固定，不随内容滚动：
+  - `.titlebar` 应用栏：只放导航、文档名与撤销 / 重做，不放业务操作；
+  - `main` 页面区：同一时刻只显示一页（画布 / 文件 / 属性），三种页面共用 `main` 的同一格；
+  - `.ui-tabbar` 底部标签栏：三个一级页面。
+- `main` 是两行网格：第 1 行页面区、第 2 行标签栏。标签栏占位而不是浮在内容上，页面滚动到底时不会被遮挡。
+- 页面切换只改一个状态：`:root[data-mobile-tab="canvas|files|inspector"]`。非当前页 `visibility: hidden` 并 `inert`，但保留布局与滚动位置——画布尺寸不需要重新测量，切回来不闪。JS 统一调用 `setMobileTab()`，不直接写 dataset。
+- 没有打开皮肤时（欢迎页）不显示标签栏，页面区占满；`data-mobile-tab` 仍保持 `canvas`。
 
-- `.ui-menu` 使用 `--duration-base` + `--ease-emphasized`，只过渡 `opacity` 与 `transform`，从触发按钮一侧淡入并轻微缩放。
-- 菜单项按下沿用 `.ui-button` / `.ui-icon-button` 的 `scale(0.96)` 与 `--duration-fast`；选中状态只改变 `--accent-soft` 和 `--accent`。
-- 方向、外观、辅助线和工作模式的状态变化只更新图标、`aria-pressed` 与预览内容，不播放装饰性动画；画布整体重建使用 `playEnter()`，不逐行淡入。
-- 关闭菜单由原生 `<details>` 完成，不额外播放退出动画；对话框仍按 §6 使用 `closeDialog()`。`prefers-reduced-motion` 下由 `tokens.css` 将时长归零，组件无需添加分支。
-- 触控拖动分栏只在手指移动时改变几何值，完成后写入本地偏好；折叠预览使用 `transform` / `opacity`，不对 `width`、`height`、`top`、`left` 做过渡。
+### 14.2 应用栏
+
+- 高度为 `--titlebar-height`：竖屏 `52px + 顶部安全区`，横屏 `44px + 顶部安全区`。左右安全区用 `env(safe-area-inset-*)`，背景 `--toolbar`，底部 1px `--line`。
+- 布局：左侧菜单按钮（`☰`，打开全局菜单）→ 中间文档标题（`#document-name` + 未保存圆点，单行省略，超出不挤压两侧）→ 右侧撤销、重做、工作模式切换（单按钮胶囊：图标 + 当前模式文字，可用宽度不足 375px 时只留图标）。
+- 应用栏不放：设置按钮（在全局菜单里）、窗口按钮、预览方向 / 外观 / 设备（在预览选项里）、多选工具条。
+- 可见控件高度 `--control-height-lg`，按钮之间间距 `--space-xs`；标题胶囊不再使用底色，只保留文字，避免和选中态抢强调色。
+- 没有皮肤时撤销 / 重做与模式切换一起隐藏，应用栏只剩菜单和标题（菜单里新建 / 打开 / 最近打开可用）。
+
+### 14.3 底部标签栏
+
+- 组件 `.ui-tabbar` / `.ui-tabbar-item`（`src/components.css`）。高度 `--mobile-tabbar-height`（56）加底部安全区，图标 `--icon-size-lg` 在上、文字 `--font-size-xs` 在下，顶部 1px `--line`，背景 `--menu`。
+- 三个一级页面固定顺序：**画布**（`keyboard`）· **属性**（`sliders-horizontal`）· **文件**（`folder`）。图标只从 `src/icons.ts` 取。画布与属性相邻，选中按键后左右滑动一步就能回来。
+- 选中项用 `aria-current="page"`，颜色 `--accent`；其余 `--secondary`。不使用 `aria-pressed`，不使用滑动指示条，选中态变化只有颜色（`--duration-fast`）。
+- 整格可点，最小触控高度 56；按下 `scale(0.96)`；焦点环与其它组件一致。键盘打开时（`data-keyboard-open="true"`）整条隐藏，输入框获得全部高度。
+
+### 14.4 三种页面
+
+- **画布页**：画布占满页面区，不再有预览工具栏那一行。右下角悬浮一个 `.mobile-canvas-tools` 玻璃胶囊，只有「预览」一个图标按钮（`sliders-horizontal`），打开预览选项 sheet。缩放按钮隐藏，手机上用双指缩放；多选工具条仍按需出现在画布底部。
+- **文件页**：顶部是 `.pane-heading`，放现有 `.ui-segmented[data-fill]` 的「概览 / 源文件」；源文件视图下第二行是文件操作条。下面是现有的分组导航（70px 磁贴轨）+ 列表。行高不小于 44，滚动由 `#files` 承担。
+- **属性页**：顶部是现有的属性页头（「属性 / 源代码 / AI 设计」分段控件、对象名称、对象操作），下面是检查器内容与右侧分类栏。检查器原来的顶部工具栏整个去掉，页面头就是唯一的标题区。
+- 三个页面的页头统一：`.pane-heading`、最小高度 44、左右安全区、底部 1px `--line-soft`；页头内的控件高度一致。
+- 页面内容区负责滚动（`overflow-y: auto` + `overscroll-behavior: contain`），页面本身不滚动。
+
+### 14.5 二级菜单、sheet 与对话框
+
+- 低频操作一律放二级菜单，一级界面只留高频入口：
+  - **全局菜单**（应用栏 `☰`，`#pen-file-menu`）：新建 / 打开 / 最近打开 / 保存 / 分享 / 导出各格式 / 面板复制 / 替换键盘样式 / iOS 26 适配 / 设置 / 使用教程；
+  - **预览选项**（画布页悬浮按钮，`#mobile-preview-more`）：方向 / 外观 / 设备与画布 / 皮肤状态 / 辅助线 / 全局预览。
+- 手机上的 `.toolbar-more > .ui-menu` 不展开成右下角浮层，而是**底部 sheet**：`position: fixed` 贴底、左右贴边、上方圆角 `--radius-xl`、最大高度 `--mobile-sheet-max-height`（视口 70%）、内部滚动、底部内边距含安全区、菜单项最小高度 `--mobile-row-height`。sheet 打开时用 `::before` 铺一层 `--backdrop` 遮罩，点遮罩或按 Esc 关闭。
+- 遮罩淡入 `--duration-fast`；sheet 从下方 16px 滑入并淡入，`--duration-slow` + `--ease-emphasized`；关闭沿用原生 `<details>` 的即时收起，不播放退出动画。
+- 菜单项沿用 `.ui-list-item`；切换项 `aria-pressed`；菜单必须有 `aria-label`，菜单项 `role="menuitem"`；启动时统一 `bindMenuKeys()`（方向键 / Home / End / Esc），点菜单项后收起并把焦点还给触发按钮。
+- 对话框（设置、新建皮肤、文件操作、询问）在手机上铺满：宽 100vw、高 `--viewport-height`、直角、标题与底栏固定、中间滚动、边距用安全区。沿用现有 `.ui-dialog` 与设置窗结构，不新做手机专用窗。
+- 菜单与 sheet 不遮挡顶部安全区和应用栏；`<details>` 的父级允许浮层溢出。
+
+### 14.6 触控、安全区与手势
+
+- 触控目标：图标按钮视觉 32，外层留白补足 44；列表行、菜单项、标签项不小于 44。同一行的控件高度必须一致。
+- 状态与桌面一致（§7）：悬停只在 `(hover: hover)` 生效；按下 `scale(0.96)`（按钮）/ `0.99`（卡片）；选中 `--accent-soft` + `--accent`；焦点 `--focus-ring`；禁用 `--disabled-opacity`。
+- 安全区：顶部给应用栏，底部给标签栏与 sheet；页面区不重复加底部内边距。欢迎页没有标签栏，底部安全区由欢迎页自己留。
+- 页面区左右滑动按「画布 · 属性 · 文件」的顺序切换相邻标签：水平位移 ≥ 56px 且大于垂直位移 1.2 倍才触发，只响应触摸与笔（鼠标拖动保留给画布）；可滚动区域先判断方向，不抢垂直滚动；键盘打开时不切换。
+- 键盘：输入框获得焦点后 `installSafeAreaLock()` 写入 `data-keyboard-open="true"`，标签栏和画布悬浮按钮隐藏；失焦后恢复。组件不各自判断键盘状态。
+
+### 14.7 移动端动效
+
+只说明层级和状态变化，不做装饰性动画：
+
+| 场景 | 动效 | token |
+|---|---|---|
+| 页面切换 | 新页面淡入，不位移、不横向滑动（`playEnter()`） | `--duration-base` + `--ease-standard` |
+| 标签栏 / 应用栏选中态 | 只变颜色，不位移、不缩放 | `--duration-fast` |
+| 按钮按下 | `scale(0.96)`；卡片 `0.99` | `--duration-fast` |
+| 底部 sheet | 遮罩淡入；sheet 上滑 16px + 淡入 | 遮罩 `--duration-fast`；sheet `--duration-slow` + `--ease-emphasized` |
+| 对话框 | 复用 §6 的 `ui-dialog-in` 与 `closeDialog()` | `--duration-slow` + `--ease-emphasized` |
+| 列表重建 | 不逐行加进入动画 | — |
+
+- 只过渡 `opacity`、`transform` 与颜色类属性，不对 `width`、`height`、`top`、`left` 做过渡。
+- `prefers-reduced-motion` 下 `tokens.css` 把时长归零，组件不写分支。
+- 关闭 sheet 由 `<details>` 原生收起，不额外播放退出动画；对话框仍走 `closeDialog()`。
+
+### 14.8 代码组织
+
+- 移动端外壳的唯一入口是 `src/app/mobile-shell.ts`：标签切换、滑动切换、全局菜单和预览选项的接线、欢迎页显隐。
+- `src/app/mobile-layout.ts` 只保留检查器分类栏（属性页内部导航）与模式相关的同步函数，不再处理分栏、预览高度和左右滑出面板。
+- 不再存在：`data-mobile-pane`、`--mobile-workspace-split`、`#mobile-split-handle`、“预览面板位置”设置、手机专用的撤销 / 重做重复按钮、`.mobile-quick-actions`。桌面与手机共用同一个撤销 / 重做按钮和同一套模式控件。
