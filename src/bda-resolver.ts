@@ -84,6 +84,15 @@ export class BdaResolver implements VisualResolver {
     return size && { width: size[0], height: size[1] }
   }
 
+  imagePath(styleID: string, highlighted: boolean): string | undefined {
+    const ref = bdaStyleRef(styleID)
+    if (ref?.type !== "image") return
+    const style = this.appearance.imageStyles.get(ref.key)
+    const atom = highlighted ? style?.highlightImage ?? style?.normalImage : style?.normalImage
+    const found = atom?.resource?.resourceID ? this.resource(atom.resource.resourceID) : undefined
+    return found?.archive === this.archive ? found.path : undefined
+  }
+
   async resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined> {
     const rawKey = Number(styleID)
     const ref = bdaStyleRef(styleID) ?? (

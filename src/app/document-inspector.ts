@@ -445,9 +445,9 @@ export function populateBdaConfigInspector(): void {
       onStyleChange: (ref, property, value) => { updateBdaRefs([ref], property, value) },
       onPanelPropertyChange: (property, value) => { updateSelectedBdaPanelProperty(property, value) },
       onStyleRefChange: (paths, ref, owner) => { updateBdaAppearanceStyleRef(paths, ref, owner) },
-      onStyleRefAction: (paths, ref, field, action, owner) => {
+      onStyleRefAction: (paths, ref, field, action, owner, highlighted) => {
         if (action === "edit") openStyleReferenceEditor(bdaStyleID(ref))
-        else openBdaStyleReferencePicker(paths, ref, field, owner)
+        else openBdaStyleReferencePicker(paths, ref, field, owner, highlighted)
       },
     })
     return

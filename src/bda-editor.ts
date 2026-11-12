@@ -30,6 +30,7 @@ type LayoutEditorOptions = {
     field: string,
     action: "replace" | "edit",
     owner: HTMLElement,
+    highlighted?: boolean,
   ) => void
 }
 
@@ -322,10 +323,10 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
     }
     keyInput.addEventListener("change", commit)
     // 单击换样式，⌘ 单击编辑样式；没有引用时从标题添加。
-    const act = (edit: boolean) => {
+    const act = (edit: boolean, highlighted = false) => {
       const ref = currentRef()
       if (edit && !ref) return
-      options.onStyleRefAction?.(item.paths ?? [item.path], ref ?? { type: item.type, key: -1 }, item.field, edit ? "edit" : "replace", field)
+      options.onStyleRefAction?.(item.paths ?? [item.path], ref ?? { type: item.type, key: -1 }, item.field, edit ? "edit" : "replace", field, highlighted)
     }
     const onClick = options.editable ? act : undefined
     const ref = item.ref
@@ -333,7 +334,7 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
       : ref ? [false, true].map((highlighted) => ({
         label: highlighted ? "按下" : "正常",
         draw: async (canvas: HTMLCanvasElement) => drawVisual(canvas, await options.resolver?.resolve(bdaStyleID(ref), highlighted).catch(() => undefined)),
-        onClick,
+        onClick: options.editable ? (edit: boolean) => act(edit, highlighted) : undefined,
       })) : []
     // 追加前景层：只有一行「前景」标签，右端 plus（排在前景层之前）。
     if (item.field === NEW_FORE_LAYER) {

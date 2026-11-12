@@ -158,7 +158,7 @@ export function styleCard(options: {
   info?: string
   animationPreview?: boolean
   draw?: (canvas: HTMLCanvasElement, highlighted: boolean) => void | Promise<void>
-  animation?: () => HTMLElement[]
+  animation?: () => HTMLElement[] | Promise<HTMLElement[]>
   summary?: string
   sound?: () => HTMLElement
   canvas?: (width: number, height: number) => HTMLCanvasElement
@@ -198,9 +198,13 @@ export function styleCard(options: {
     previews.dataset.variant = "animation"
     previews.title = options.summary || "未设置"
     previews.setAttribute("aria-label", previews.title)
-    requestAnimationFrame(() => {
-      if (card.isConnected) previews.append(...options.animation?.() ?? [])
+    pendingDraws.set(previews, () => {
+      if (card.isConnected) void Promise.resolve(options.animation?.() ?? []).then(players => {
+        if (card.isConnected) previews.append(...players)
+      })
     })
+    drawObserver().observe(previews)
+    releaseOnRemove(card, () => drawObserver().unobserve(previews))
   } else if (options.kind === "empty") {
     previews.title = "暂无样式属性"
     previews.setAttribute("aria-label", previews.title)
@@ -319,7 +323,7 @@ export function styleReferenceCard(options: {
 }
 
 /** 图片资源卡片（.ui-image-card）：侧栏图片列表与「全部图片」共用。 */
-export function imageResourceCard(options: { path: string; src: string; til?: boolean; slices?: number; uses?: number }): HTMLElement {
+export function imageResourceCard(options: { path: string; src?: string; load?: () => Promise<string | undefined>; til?: boolean; slices?: number; uses?: number }): HTMLElement {
   const card = element("div", "ui-image-card")
   card.tabIndex = 0
   card.setAttribute("role", "option")
@@ -327,10 +331,17 @@ export function imageResourceCard(options: { path: string; src: string; til?: bo
   card.dataset.path = options.path
   card.title = options.path
   const image = element("img")
-  image.src = options.src
+  if (options.src) image.src = options.src
   image.alt = ""
   image.loading = "lazy"
   const preview = element("span", "ui-image-card-preview")
+  if (options.load) {
+    pendingDraws.set(preview, () => {
+      void options.load?.().then(src => { if (src && card.isConnected) image.src = src })
+    })
+    drawObserver().observe(preview)
+    releaseOnRemove(card, () => drawObserver().unobserve(preview))
+  }
   const size = element("span", "ui-image-card-size")
   size.hidden = true
   preview.append(image, size)

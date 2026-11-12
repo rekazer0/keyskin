@@ -1,4 +1,5 @@
 import type { AiSession } from "./ai-sessions"
+import type { StyleLibraryPreview } from "../picker-window"
 // 编辑器的全部可变状态（原 main.ts 顶层 let）。各模块通过 appState.x 读写。
 import { SkinArchive } from "../skin.ts"
 import { type UnwatchFn } from "@tauri-apps/plugin-fs"
@@ -254,6 +255,7 @@ export const appState = {
   sourceStyleProxyTarget: undefined as SourceEditorValueRange | undefined,
   stylePickerTarget: undefined as HTMLInputElement | undefined,
   styleLibraryHighlighted: false,
+  styleLibrarySession: undefined as { session: string; preview(id: string): Promise<StyleLibraryPreview | undefined>; image(key: string): string | undefined } | undefined,
   styleLibrarySelected: undefined as { styleID?: string; imagePath?: string } | undefined,
   styleUsageFilter: "all",
   // Thumbnails redraw a frame later so they don't share a task with the inspector rebuild.

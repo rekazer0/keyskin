@@ -303,7 +303,7 @@ export function openStyleReferenceEditor(styleID: string): void {
   selectStyleResource(styleID)
 }
 
-export function openBdaStyleReferencePicker(paths: string[][], ref: BdaStyleRef, field: string, owner: HTMLElement): void {
+export function openBdaStyleReferencePicker(paths: string[][], ref: BdaStyleRef, field: string, owner: HTMLElement, highlighted = false): void {
   const input = document.createElement("input")
   // A reference the skin does not set yet (key -1) opens the picker with nothing chosen.
   input.value = ref.key >= 0 ? bdaStyleID(ref) : ""
@@ -314,5 +314,5 @@ export function openBdaStyleReferencePicker(paths: string[][], ref: BdaStyleRef,
     const next = bdaStyleRef(input.value)
     if (next) updateBdaAppearanceStyleRef(paths, next, owner)
   })
-  openStylePicker(input)
+  openStylePicker(input, highlighted)
 }

@@ -27,6 +27,7 @@ type ResourcePayload = { path: string; dataURL: string }[]
 // 位图不能跨窗口传，图片以 bitmaps 里的 data URL 传过来，由 imageKey 引用。
 export type StyleLibraryVisual = Omit<Visual, "image"> & { imageKey?: string }
 export type StyleLibraryPayload = {
+  session?: string
   sliceBack: boolean
   editable: boolean
   canAdd: boolean
@@ -37,6 +38,7 @@ export type StyleLibraryPayload = {
   kind: string
   currentID: string
   imagesCompatible: boolean
+  applyToStyle?: boolean
   bitmaps: Record<string, string>
   animationText: string
   animationFiles: Record<string, number[]>
@@ -60,6 +62,16 @@ export type StyleLibraryPayload = {
   }[]
   images: { path: string; categories: string[]; uses: number }[]
   sounds: { styleID: string; filename: string; playable: boolean; uses?: number }[]
+}
+
+export type StyleLibraryPreview = {
+  session: string
+  styleID: string
+  visuals: Array<StyleLibraryVisual | null>
+  animationText?: string
+  animationFiles?: Record<string, number[]>
+  animationSections?: string[]
+  particleVisuals: Record<string, StyleLibraryVisual | null>
 }
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!
@@ -87,6 +99,7 @@ const libraryModes = $("#style-library-modes")
 const libraryPreview = $("#style-library-preview")
 const libraryPreviewImage = $("#style-library-preview-image")
 const libraryApply = $("#style-library-apply") as HTMLButtonElement
+const libraryApplyToStyle = $("#style-library-apply-to-style") as HTMLButtonElement
 const librarySlice = $("#style-library-slice") as HTMLButtonElement
 // 新建在网格末尾的虚线卡，删除在卡片上；工具条只放复制（⌘D 同）。
 const libraryToolbar = listToolbar({ duplicate: { label: "复制样式", run: () => { if (librarySelected?.styleID) emitLibrary("style-library-duplicate", librarySelected) } } })
@@ -111,6 +124,36 @@ let libraryKind = "all"
 let libraryFilter = "all"
 let librarySelected: { styleID?: string; imagePath?: string } | undefined
 const libraryBitmaps = new Map<string, Promise<ImageBitmap | undefined>>()
+let libraryAnimations: IniDocument | undefined
+const previewRequests = new Map<string, { promise: Promise<void>; done(): void }>()
+const imageRequests = new Map<string, { promise: Promise<string | undefined>; done(src?: string): void }>()
+
+async function loadLibraryStyle(style: StyleLibraryPayload["styles"][number]): Promise<void> {
+  if (!library?.session) return
+  let request = previewRequests.get(style.styleID)
+  if (!request) {
+    let done!: () => void
+    const promise = new Promise<void>(resolve => { done = resolve })
+    request = { promise, done }
+    previewRequests.set(style.styleID, request)
+    void emitMain("style-library-preview-request", { session: library.session, styleID: style.styleID })
+  }
+  await request.promise
+}
+
+function libraryImageURL(key: string): Promise<string | undefined> {
+  if (library?.bitmaps[key]) return Promise.resolve(library.bitmaps[key])
+  if (!library?.session) return Promise.resolve(undefined)
+  let request = imageRequests.get(key)
+  if (!request) {
+    let done!: (src?: string) => void
+    const promise = new Promise<string | undefined>(resolve => { done = resolve })
+    request = { promise, done }
+    imageRequests.set(key, request)
+    void emitMain("style-library-image-request", { session: library.session, key })
+  }
+  return request.promise
+}
 
 /** 换视图时清空搜索（同步清除按钮）。 */
 function clearSearch(): void {
@@ -189,13 +232,16 @@ function releaseLibraryBitmaps(): void {
 }
 
 function libraryBitmap(key: string | undefined): Promise<ImageBitmap | undefined> {
-  const dataURL = key ? library?.bitmaps[key] : undefined
-  if (!key || !dataURL) return Promise.resolve(undefined)
+  if (!key) return Promise.resolve(undefined)
   let bitmap = libraryBitmaps.get(key)
   if (!bitmap) {
-    const image = new Image()
-    image.src = dataURL
-    bitmap = image.decode().then(() => createImageBitmap(image)).catch(() => undefined)
+    bitmap = libraryImageURL(key).then(async dataURL => {
+      if (!dataURL) return
+      const image = new Image()
+      image.src = dataURL
+      await image.decode()
+      return createImageBitmap(image)
+    }).catch(() => undefined)
     libraryBitmaps.set(key, bitmap)
   }
   return bitmap
@@ -204,7 +250,9 @@ function libraryBitmap(key: string | undefined): Promise<ImageBitmap | undefined
 async function drawLibraryVisual(canvas: HTMLCanvasElement, visual: StyleLibraryVisual | null, foreground: boolean): Promise<void> {
   if (!visual) return
   const { imageKey, ...rest } = visual
-  drawVisualPreview(canvas, [{ ...rest, image: await libraryBitmap(imageKey) }], foreground)
+  const payload = library
+  const image = await libraryBitmap(imageKey)
+  if (canvas.isConnected && library === payload) drawVisualPreview(canvas, [{ ...rest, image }], foreground)
 }
 
 function libraryButtons(selector: string): HTMLButtonElement[] {
@@ -229,16 +277,19 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   if (selected.imagePath) {
     const image = new Image()
     image.alt = selected.imagePath.split("/").pop() ?? selected.imagePath
-    image.src = library.bitmaps[selected.imagePath] ?? ""
+    void libraryImageURL(selected.imagePath).then(src => { if (src && image.isConnected) image.src = src })
     libraryPreviewImage.append(image)
   } else if (sound) {
     libraryPreviewImage.append(librarySound(sound.filename, sound.playable))
   } else if (style?.kind === "anim") {
-    libraryPreviewImage.append(...libraryAnimationPlayers(style))
+    const selection = librarySelected
+    void libraryAnimationPlayers(style).then(players => {
+      if (librarySelected === selection) libraryPreviewImage.append(...players)
+    })
   } else {
-    for (const visual of style?.visuals ?? []) {
+    for (const index of [0, 1]) {
       const canvas = retinaThumbnail(document.createElement("canvas"), 180, 120)
-      void drawLibraryVisual(canvas, visual, false)
+      if (style) void loadLibraryStyle(style).then(() => drawLibraryVisual(canvas, style.visuals[index], false))
       libraryPreviewImage.append(canvas)
     }
   }
@@ -246,6 +297,8 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? "")
   const compatible = selected.imagePath ? library.imagesCompatible : library.imageSelection ? style?.kind === "image" : Boolean(style?.compatible ?? sound)
   libraryApply.disabled = !compatible || !library.editable
+  libraryApplyToStyle.hidden = !selected.imagePath || !library.applyToStyle || Boolean(library.imageSelection)
+  libraryApplyToStyle.disabled = !library.editable
   // 不兼容时只禁用并说明原因，不改按钮文字。
   libraryApply.title = compatible ? "" : "样式类型不兼容"
   // 引用卡单击打开这里并定位当前样式；改它的图片切片从这里进。
@@ -267,10 +320,12 @@ function libraryTextResolver(style: StyleLibraryPayload["styles"][number]): Visu
   }
 }
 
-function libraryAnimationPlayers(style: StyleLibraryPayload["styles"][number]): HTMLElement[] {
+async function libraryAnimationPlayers(style: StyleLibraryPayload["styles"][number]): Promise<HTMLElement[]> {
   const payload = library
+  await loadLibraryStyle(style)
+  if (library !== payload) return []
   if (!payload?.animationText) return []
-  const document = IniDocument.parse(payload.animationText)
+  const document = libraryAnimations ??= IniDocument.parse(payload.animationText)
   const resolver: VisualResolver = {
     resolve: async id => {
       const visual = payload.particleVisuals[id]
@@ -318,7 +373,7 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
   }
   if (images) {
     return payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter))).map(({ path, uses }) => {
-      const card = imageResourceCard({ path, src: payload.bitmaps[path] ?? "", uses })
+      const card = imageResourceCard({ path, load: () => libraryImageURL(path), uses })
       bindLibraryCard(card, { imagePath: path }, false)
       return card
     })
@@ -328,7 +383,7 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
       id: style.styleID, label: `STYLE${style.label}`, info: style.info, kind: style.kind,
       draw: (canvas, highlighted) => style.kind === "text"
         ? textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
-        : drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(library?.foreground)),
+        : loadLibraryStyle(style).then(() => drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(payload.foreground))),
       animation: () => libraryAnimationPlayers(style), summary: style.summary,
       sound: style.sound ? () => librarySound(style.sound!, Boolean(style.soundPlayable)) : undefined,
       uses: style.uses,
@@ -385,7 +440,12 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
   styleName.hidden = true
   back.title = "返回图片切片"
   if (payload) {
+    for (const request of previewRequests.values()) request.done()
+    for (const request of imageRequests.values()) request.done()
+    previewRequests.clear()
+    imageRequests.clear()
     library = payload
+    libraryAnimations = undefined
     releaseLibraryBitmaps()
     libraryMode = payload.imageSelection ? "images" : "styles"
     libraryKind = payload.kind
@@ -436,6 +496,7 @@ for (const button of libraryButtons("[data-library-mode]")) {
   })
 }
 libraryApply.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", librarySelected) })
+libraryApplyToStyle.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", { ...librarySelected, toStyle: true }) })
 librarySlice.addEventListener("click", () => { if (librarySelected?.styleID) emitLibrary("style-library-slice", librarySelected) })
 $("#style-library-edit").addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-edit", librarySelected) })
 function closeLibraryPreview(): void {
@@ -485,6 +546,21 @@ canvas.addEventListener("click", (event) => {
 await onMain<ImagePayload>("image-picker-data", (payload) => showImage(payload))
 await onMain("image-picker-show-list", () => showResourceList())
 await onMain<StyleLibraryPayload>("style-library-data", (payload) => showStyleLibrary(payload))
+await onMain<StyleLibraryPreview>("style-library-preview-data", payload => {
+  if (library?.session !== payload.session) return
+  const style = library.styles.find(style => style.styleID === payload.styleID)
+  if (style) {
+    style.visuals = payload.visuals
+    style.animationSections = payload.animationSections
+  }
+  if (payload.animationText) library.animationText = payload.animationText
+  Object.assign(library.animationFiles, payload.animationFiles)
+  Object.assign(library.particleVisuals, payload.particleVisuals)
+  previewRequests.get(payload.styleID)?.done()
+})
+await onMain<{ session: string; key: string; dataURL?: string }>("style-library-image-data", payload => {
+  if (library?.session === payload.session) imageRequests.get(payload.key)?.done(payload.dataURL)
+})
 await onMain<ResourcePayload>("image-picker-resources-data", (payload) => {
   resources = payload
   resourcesLoaded = true

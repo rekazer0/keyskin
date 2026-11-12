@@ -182,6 +182,12 @@ export class PalmStyles implements VisualResolver {
 
   async ready(): Promise<void> {}
 
+  imagePath(styleID: string, highlighted: boolean): string | undefined {
+    const image = asObject(this.style(styleID)?.s_2)
+    const tile = this.tile((highlighted ? image?.hl : undefined) ?? image?.normal)
+    return tile?.source ? this.roots.map(root => `${root}/${tile.name}.png`).find(path => this.archive.getBytes(path)) : undefined
+  }
+
   async resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined> {
     const paint = await this.paint(styleID, highlighted)
     if (!paint || !paint.visual && !paint.fill && !paint.border) return

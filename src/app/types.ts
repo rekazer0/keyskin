@@ -39,6 +39,7 @@ export type StyleImagePickerTarget = {
   path?: string
   sections?: string[]
   selectImage?(path: string, source?: TileSlice["source"]): void
+  selectReference?(value: string): void
 }
 
 export type NativeImagePickerPayload = {

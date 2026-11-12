@@ -45,6 +45,7 @@ import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
 import { appState } from "./state"
+import { cachedIniDocument } from "./style-document"
 import { animationKeySample } from "./animation-key-sample"
 import type { PreviewItem } from "../preview-items.ts"
 import { animationStyleActions, animationStyleCard } from "./animation-style-inspector"
@@ -374,13 +375,22 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   return true
 }
 
+// 几千张样式卡共用只读文档的解析结果；写回、撤销或换文件会拿到新的文档。
+const styleAnimationEntries = new WeakMap<IniDocument, LegacyAnimationEntry[]>()
+
 /** 样式字段值里引用的动画编号，各自在 anim.ini 里的条目（找不到为 undefined）。 */
 function referencedAnimations(value: string): Array<{ id: string; entry?: LegacyAnimationEntry }> {
+  const ids = value.split(",").map((part) => part.trim()).filter((part) => /^\d+$/.test(part))
+  if (!ids.length) return []
   const path = legacyAnimationConfigPath()
-  if (!path || !appState.archive?.isText(path)) return []
-  const entries = parseLegacyAnimationFile(appState.archive.getText(path)).entries
-  return value.split(",").map((part) => part.trim()).filter((part) => /^\d+$/.test(part))
-    .map((id) => ({ id, entry: entries.find((candidate) => candidate.index === Number(id)) }))
+  const document = path && cachedIniDocument(path)
+  if (!document) return []
+  let entries = styleAnimationEntries.get(document)
+  if (!entries) {
+    entries = parseLegacyAnimationFile(document.toString()).entries
+    styleAnimationEntries.set(document, entries)
+  }
+  return ids.map((id) => ({ id, entry: entries.find((candidate) => candidate.index === Number(id)) }))
 }
 
 /** 动画样式引用的全部动画（PRESS_ANIM、RELEASE_ANIM……去重）。 */
@@ -401,7 +411,7 @@ export function styleAnimationSources(styleID: string, styles: IniDocument) {
   const path = legacyAnimationConfigPath()
   if (!entries.length || !path || !appState.archive) return
   const text = appState.archive.getText(path)
-  const document = IniDocument.parse(text)
+  const document = cachedIniDocument(path)!
   const clips = entries.map(entry => iniPreviewClip(document, entry.section, { fillBefore: true }))
   const files: Record<string, number[]> = {}
   for (const file of new Set(clips.flatMap(clip => clip.images.flatMap(item => item.file ? [item.file] : [])))) {
@@ -416,7 +426,7 @@ export function styleAnimationSources(styleID: string, styles: IniDocument) {
 export function styleAnimationPlayers(styleID: string, styles: IniDocument, thumbnail = false): HTMLElement[] {
   const path = legacyAnimationConfigPath()!
   const animations = styleAnimations(styleID, styles)
-  const animationsDocument = animations.length ? IniDocument.parse(appState.archive!.getText(path)) : undefined
+  const animationsDocument = animations.length ? cachedIniDocument(path) : undefined
   return animations.map((entry) => animationPlayer({
     thumbnail,
     clip: iniPreviewClip(animationsDocument!, entry.section, { fillBefore: true }),
@@ -445,7 +455,7 @@ export function decorateStyleAnimationField(row: HTMLElement, key: string, value
   const input = row.querySelector("input")
   if (!STYLE_ANIM_FIELDS.some((field) => field === key) || !path || !input) return
   const animations = referencedAnimations(value)
-  const document = animations.some(({ entry }) => entry) ? IniDocument.parse(appState.archive!.getText(path)) : undefined
+  const document = animations.some(({ entry }) => entry) ? cachedIniDocument(path) : undefined
   const states: StyleReferenceState[] = animations.map(({ id, entry }) => entry ? {
     label: `动画 ${id} · ${kindLabel(entry)}`,
     content: animationPlayer({ thumbnail: true, clip: iniPreviewClip(document!, entry.section, { fillBefore: true }), key: `${path}|${entry.section}`, resolver: visualResolver(), readFile: readSkinFile }),

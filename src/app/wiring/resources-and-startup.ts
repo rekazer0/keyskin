@@ -8,7 +8,7 @@ import { listen } from "@tauri-apps/api/event"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { type ProjectChoice } from "../../project-chooser"
 import { finishNativeProjectChoice } from "../new-document"
-import { emitStyleLibrary, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle, sliceStyleLibrarySelection } from "../style-picker"
+import { emitStyleLibrary, emitStyleLibraryPreview, emitStyleLibraryImage, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle, sliceStyleLibrarySelection } from "../style-picker"
 import { canvasEditable, isEditing, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
 import { WHOLE_IMAGE_INDEX } from "../../slice-picker-canvas.ts"
 import { soundPathForFilename } from "../../sounds.ts"
@@ -71,9 +71,11 @@ export function wireResourcesAndStartup(): void {
   })
   // 切片窗口返回「全部样式」：留在同一个窗口里切视图。
   void onPickerEvent("image-picker-back-styles", () => void emitStyleLibrary(true))
-  void onPickerEvent<{ styleID?: string; imagePath?: string }>("style-library-apply", (selected) => {
+  void onPickerEvent<{ session: string; styleID: string }>("style-library-preview-request", request => void emitStyleLibraryPreview(request))
+  void onPickerEvent<{ session: string; key: string }>("style-library-image-request", request => void emitStyleLibraryImage(request))
+  void onPickerEvent<{ styleID?: string; imagePath?: string; toStyle?: boolean }>("style-library-apply", (selected) => {
     appState.styleLibrarySelected = selected
-    applyStyleLibrarySelection()
+    applyStyleLibrarySelection(selected.toStyle)
   })
   void onPickerEvent<{ styleID?: string; imagePath?: string }>("style-library-edit", (selected) => {
     appState.styleLibrarySelected = selected

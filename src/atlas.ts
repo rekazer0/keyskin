@@ -44,6 +44,7 @@ export type ToolbarVisual = Visual & {
 export type VisualResolver = {
   ready?(): Promise<void>
   resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined>
+  imagePath?(styleID: string, highlighted: boolean): string | undefined
   sourceSize?(styleID: string, highlighted: boolean): { width: number; height: number } | undefined
   resolveResource?(resourceID: string): Promise<Visual | undefined>
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined
@@ -474,6 +475,13 @@ export class AtlasResolver {
     const section = this.tileSection(tiles, spec.tile!)
     const source = numbers(section === undefined ? undefined : tiles.get(section, "SOURCE_RECT"))
     return source ? { width: source[2], height: source[3] } : undefined
+  }
+
+  imagePath(styleID: string, highlighted: boolean): string | undefined {
+    const spec = this.styles && resolveVisualSpec(this.styles, styleID, highlighted)
+    if (!spec?.imageName || !Number.isInteger(spec.tile)) return
+    return this.resourceRoots.map(root => `${root}/${spec.imageName}.png`)
+      .find(path => this.archive.getBytes(path) && this.archive.getBytes(path.replace(/\.png$/i, ".til")))
   }
 
   async resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined> {

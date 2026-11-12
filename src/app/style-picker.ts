@@ -6,7 +6,8 @@ import { IniDocument } from "../ini.ts"
 import { cachedIniDocument } from "./style-document"
 import { type StyleKind } from "./types"
 import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, openStyleReferenceStateImage, refreshStyleReferenceThumbnail, layoutAnimationFields, styleUsages } from "./style-references"
-import { commitText, isEditing, updateDirty } from "./edit-history"
+import { commitText, commitBytes, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
+import { addBdaStyle, updateBdaStyle } from "../bda-encode"
 import { updateBdaRefs } from "./key-inspector"
 import { bdaImageResourceID } from "./tile-editing"
 import { theme, orientation } from "./dom"
@@ -16,7 +17,7 @@ import { afterNextPaint } from "./canvas-interaction"
 import { selectFile } from "./navigation"
 import { resourceImagePaths } from "../resources.ts"
 import { soundPathForFilename } from "../sounds.ts"
-import { type StyleLibraryPayload, type StyleLibraryVisual } from "../picker-window.ts"
+import { type StyleLibraryPayload, type StyleLibraryVisual, type StyleLibraryPreview } from "../picker-window.ts"
 import { SkinArchive } from "../skin.ts"
 import { palmStyle, palmStyleCategories, palmStyleIDs, palmStyleKind, palmStyleSound } from "./sxi-styles"
 import { styleAnimationSources, styleAnimationSummary } from "./legacy-animation-inspector"
@@ -171,7 +172,7 @@ export function styleLibraryCategories(): Map<string, Set<string>> {
   return result
 }
 
-export function applyStyleLibrarySelection(): void {
+export function applyStyleLibrarySelection(toStyle = false): void {
   const target = appState.stylePickerTarget
   const selected = appState.styleLibrarySelected
   const imageTarget = appState.pickerTarget
@@ -195,7 +196,22 @@ export function applyStyleLibrarySelection(): void {
     target.dispatchEvent(new Event("change", { bubbles: true }))
     closeStylePicker()
   } else if (selected.imagePath) {
+    if (target.dataset.bdaStyleType && target.dataset.bdaStyleType !== "image") return
     const styleID = target.value.split(",")[0]?.trim() ?? ""
+    const highlighted = appState.styleLibraryHighlighted
+    if (!toStyle) {
+      if (appState.archive?.format === "bda") {
+        createImageStyleReference(target, styleID, bdaImageResourceID(selected.imagePath), highlighted)
+      } else {
+        const source = appState.archive
+        openImageSlicePicker(selected.imagePath, {
+          source: styleReferenceForeground(styleReferenceKey(target)) ? "FORE_STYLE" : "BACK_STYLE",
+          property: appState.styleLibraryHighlighted ? "HL_IMG" : "NM_IMG",
+          selectReference: value => { if (appState.archive === source) createImageStyleReference(target, styleID, value, highlighted) },
+        })
+      }
+      return
+    }
     if (appState.archive?.format === "bda") {
       const ref = bdaStyleRef(styleID)
       if (ref?.type !== "image") return
@@ -207,6 +223,41 @@ export function applyStyleLibrarySelection(): void {
       openImageSlicePicker(selected.imagePath, styleWriteTarget(styleReferenceForeground(styleReferenceKey(target)) ? "FORE_STYLE" : "BACK_STYLE", appState.styleLibraryHighlighted ? "HL_IMG" : "NM_IMG", [styleID]))
     }
   }
+}
+
+function createImageStyleReference(target: HTMLInputElement, currentID: string, value: string, highlighted: boolean): void {
+  if (!isEditing() || target.disabled) return
+  const property = highlighted ? "HL_IMG" : "NM_IMG"
+  const previous = appState.undoStack.at(-1)
+  let id: string | undefined
+  if (appState.archive?.format === "bda") {
+    const info = currentBdaAppearance()
+    if (!info) return
+    const ref = bdaStyleRef(currentID)
+    const added = addBdaStyle(info.bytes, "image", ref?.type === "image" ? ref.key : undefined)
+    commitBytes(info.path, info.bytes, updateBdaStyle(added.bytes, added.ref, property, value))
+    id = bdaStyleID(added.ref)
+  } else if (appState.archive?.format === "sxi") {
+    editSxi(skin => {
+      const model = structuredClone(palmStyle(currentID, skin) ?? {}) as JsonObject
+      delete model.id
+      model.s_2 = { ...asObject(model.s_2), [property === "HL_IMG" ? "hl" : "normal"]: value }
+      id = addPalmStyle(skin, palmTheme(), model)
+    })
+  } else editStyleConfig(styles => {
+    id = String(nextStyleID(styles))
+    styles.appendSection(`STYLE${id}`, styles.entries(`STYLE${currentID}`).map(({ key, value }) => ({ key, value })))
+    styles.set(`STYLE${id}`, property, value)
+  })
+  if (!id) return
+  target.value = id
+  target.dispatchEvent(new Event("input", { bubbles: true }))
+  target.dispatchEvent(new Event("change", { bubbles: true }))
+  // 新建样式和替换引用是用户的一次操作，撤销时一起还原。
+  const changes = appState.undoStack.splice(previous ? appState.undoStack.indexOf(previous) + 1 : 0)
+  if (changes.length) appState.undoStack.push(changes.length === 1 ? changes[0] : { kind: "batch", changes })
+  updateHistoryButtons()
+  closeStylePicker()
 }
 
 function closeStylePicker(): void {
@@ -225,23 +276,27 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false): v
   appState.styleLibraryHighlighted = highlighted
   if (input.disabled) return
   appState.stylePickerTarget = input
+  appState.pickerTarget = undefined
   appState.styleLibrarySelected = undefined
   void showPickerWindow("styles", "全部样式", 1100, 760)
 }
 
-function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayload | undefined> {
+async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayload | undefined> {
   const target = appState.stylePickerTarget
   const imageSelection = Boolean(appState.pickerTarget?.selectImage)
-  if (!appState.archive || !target && !imageSelection) return Promise.resolve(undefined)
+  if (!appState.archive || !target && !imageSelection) return
   const source = appState.archive
+  const revision = source.revision
   const key = target ? styleReferenceKey(target) : "FORE_STYLE"
-  const soundOnly = key === "SOUND_STYLE"
   const styles = styleConfigDocument()
   const currentID = target?.value.split(",")[0]?.trim() ?? ""
-  const targetType = appState.archive.format === "bda" ? target?.dataset.bdaStyleType : undefined
-  const bitmaps: Record<string, string> = {}
+  const targetType = source.format === "bda" ? target?.dataset.bdaStyleType : undefined
+  const names = source.names()
+  const ids = availableStyleIDs()
+  const resolver = visualResolver()
+  const session = crypto.randomUUID()
+  const images = new Map<string, () => string>()
   const bitmapKeys = new Map<ImageBitmap, string>()
-  // 位图不能跨窗口传：有归档路径就直接编码原始 PNG，否则（如 BDA 基础皮肤里的图）画到画布再导出。
   const wireVisual = (visual: Visual | undefined): StyleLibraryVisual | null => {
     if (!visual) return null
     const { image, ...rest } = visual
@@ -249,104 +304,102 @@ function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayl
     const bytes = visual.imagePath ? source.getBytes(visual.imagePath) : undefined
     const imageKey = bytes ? visual.imagePath! : bitmapKeys.get(image) ?? `bitmap:${bitmapKeys.size}`
     bitmapKeys.set(image, imageKey)
-    if (!bitmaps[imageKey]) {
-      if (bytes) bitmaps[imageKey] = imageDataURL(bytes)
-      else {
-        const canvas = document.createElement("canvas")
-        canvas.width = image.width
-        canvas.height = image.height
-        canvas.getContext("2d")?.drawImage(image, 0, 0)
-        bitmaps[imageKey] = canvas.toDataURL()
-      }
-    }
+    if (!images.has(imageKey)) images.set(imageKey, () => {
+      if (bytes) return imageDataURL(bytes)
+      const canvas = document.createElement("canvas")
+      canvas.width = image.width
+      canvas.height = image.height
+      canvas.getContext("2d")?.drawImage(image, 0, 0)
+      return canvas.toDataURL()
+    })
     return { ...rest, imageKey }
   }
-  const payload = {
-    sliceBack,
-    imageSelection,
+  const valid = () => appState.archive === source && source.revision === revision
+  const previews = new Map<string, Promise<StyleLibraryPreview | undefined>>()
+  appState.styleLibrarySession = {
+    session,
+    image: imageKey => valid() ? images.get(imageKey)?.() : undefined,
+    preview: styleID => {
+      if (!valid() || !ids.includes(styleID) || !resolver) return Promise.resolve(undefined)
+      let preview = previews.get(styleID)
+      if (!preview) {
+        preview = (async () => {
+          const animation = styleKind(styleID, styles) === "anim" && styles ? styleAnimationSources(styleID, styles) : undefined
+          const particleVisuals: StyleLibraryPreview["particleVisuals"] = {}
+          for (const id of animation?.particleIDs ?? []) particleVisuals[id] = wireVisual(await resolver.resolve(id, false).catch(() => undefined))
+          const visuals = await Promise.all([false, true].map(pressed => resolver.resolve(styleID, pressed).catch(() => undefined)))
+          return { session, styleID, visuals: visuals.map(wireVisual), particleVisuals,
+            animationText: animation?.text, animationFiles: animation?.files, animationSections: animation?.sections }
+        })().catch(() => undefined)
+        previews.set(styleID, preview)
+      }
+      return preview
+    },
+  }
+  const payload: StyleLibraryPayload = {
+    session, sliceBack, imageSelection,
     editable: isEditing() && !target?.disabled,
-    canAdd: canAddStyle(),
-    soundOnly,
-    foreground: styleReferenceForeground(key),
-    bda: appState.archive.format === "bda",
-    kind: styleKindForKey(key),
-    currentID,
-    imagesCompatible: !targetType || bdaStyleRef(currentID)?.type === "image",
-    bitmaps,
-    animationText: "",
-    animationFiles: {} as Record<string, number[]>,
-    particleVisuals: {} as Record<string, StyleLibraryVisual | null>,
-    styles: [] as StyleLibraryPayload["styles"],
-    images: [] as StyleLibraryPayload["images"],
-    sounds: [] as StyleLibraryPayload["sounds"],
+    canAdd: canAddStyle(), soundOnly: key === "SOUND_STYLE",
+    foreground: styleReferenceForeground(key), bda: source.format === "bda",
+    kind: styleKindForKey(key), currentID,
+    imagesCompatible: !targetType || targetType === "image",
+    applyToStyle: Boolean(currentID && ids.includes(currentID) && (!targetType || bdaStyleRef(currentID)?.type === "image")),
+    bitmaps: {}, animationText: "", animationFiles: {}, particleVisuals: {}, styles: [], images: [], sounds: [],
   }
-  if (soundOnly) {
-    payload.sounds = availableStyleIDs().flatMap((styleID) => {
-      const filename = styleSoundFile(styleID, styles) ?? ""
-      if (!filename) return []
-      const playable = Boolean(soundPathForFilename(source.names(), theme.value, orientation.value, filename))
-      return [{ styleID, filename, playable, uses: payload.canAdd ? styleUsages(styleID).length : undefined }]
+  if (payload.soundOnly) {
+    payload.sounds = ids.flatMap(styleID => {
+      const filename = styleSoundFile(styleID, styles)
+      return filename ? [{ styleID, filename, playable: Boolean(soundPathForFilename(names, theme.value, orientation.value, filename)),
+        uses: payload.canAdd ? styleUsages(styleID).length : undefined }] : []
     })
-    return Promise.resolve(payload)
+    return payload
   }
-  const resolver = visualResolver()
-  if (!resolver) return Promise.resolve(payload)
-  return Promise.all(availableStyleIDs().map(async (styleID) => ({
-    styleID,
-    visuals: await Promise.all([resolver.resolve(styleID, false).catch(() => undefined), resolver.resolve(styleID, true).catch(() => undefined)]),
-  }))).then((items) => {
-    const imageCategories = new Map<string, Set<string>>()
-    const imageUses = new Map<string, number>()
-    const styleCategories = styleLibraryCategories()
-    const particleIDs = new Set<string>()
-    payload.styles = items.map(({ styleID, visuals }) => {
-      const categories = styleCategories.get(styleID) ?? new Set<string>()
-      for (const visual of visuals) {
-        if (!visual?.imagePath) continue
-        imageUses.set(visual.imagePath, (imageUses.get(visual.imagePath) ?? 0) + 1)
-        const merged = imageCategories.get(visual.imagePath) ?? new Set<string>()
-        for (const category of categories) merged.add(category)
-        imageCategories.set(visual.imagePath, merged)
-      }
-      const kind = styleKind(styleID, styles)
-      const animation = kind === "anim" && styles ? styleAnimationSources(styleID, styles) : undefined
-      if (animation) {
-        payload.animationText = animation.text
-        Object.assign(payload.animationFiles, animation.files)
-        for (const id of animation.particleIDs) particleIDs.add(id)
-      }
-      return {
-        styleID,
-        label: stylePickerLabel(styleID),
-        info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
-        kind,
-        categories: [...categories],
-        compatible: imageSelection ? kind === "image" : !targetType || bdaStyleRef(styleID)?.type === targetType,
-        uses: payload.canAdd ? styleUsages(styleID).length : undefined,
-        imagePaths: visuals.flatMap((visual) => visual?.imagePath ? [visual.imagePath] : []),
-        animationSections: animation?.sections,
-        summary: kind === "anim" && styles ? styleAnimationSummary(styleID, styles) : undefined,
-        textVisuals: kind === "text" ? [false, true].map(highlighted => resolver.resolveStyleText?.(styleID, highlighted) ?? resolver.resolveText(styleID, highlighted)) : undefined,
-        sound: styleSoundFile(styleID, styles),
-        soundPlayable: Boolean(soundPathForFilename(source.names(), theme.value, orientation.value, styleSoundFile(styleID, styles) ?? "")),
-        visuals: visuals.map(wireVisual),
-      }
-    })
-    payload.images = resourceImagePaths(source.names(), theme.value, orientation.value).flatMap((path) => {
-      const bytes = source.getBytes(path)
-      if (!bytes) return []
-      bitmaps[path] ??= imageDataURL(bytes)
-      return [{ path, categories: [...imageCategories.get(path) ?? []], uses: imageUses.get(path) ?? 0 }]
-    })
-    return Promise.all([...particleIDs].map(async id => {
-      payload.particleVisuals[id] = wireVisual(await resolver.resolve(id, false).catch(() => undefined))
-    })).then(() => payload)
+  const imageCategories = new Map<string, Set<string>>()
+  const imageUses = new Map<string, number>()
+  const categories = styleLibraryCategories()
+  payload.styles = ids.map(styleID => {
+    const uses = categories.get(styleID) ?? new Set<string>()
+    const imagePaths = [false, true].flatMap(pressed => resolver?.imagePath?.(styleID, pressed) ?? [])
+    for (const path of imagePaths) {
+      imageUses.set(path, (imageUses.get(path) ?? 0) + 1)
+      const merged = imageCategories.get(path) ?? new Set<string>()
+      for (const category of uses) merged.add(category)
+      imageCategories.set(path, merged)
+    }
+    const kind = styleKind(styleID, styles)
+    const sound = styleSoundFile(styleID, styles)
+    return {
+      styleID, label: stylePickerLabel(styleID), kind, categories: [...uses], imagePaths, visuals: [],
+      info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
+      compatible: imageSelection ? kind === "image" : !targetType || bdaStyleRef(styleID)?.type === targetType,
+      uses: payload.canAdd ? styleUsages(styleID).length : undefined,
+      summary: kind === "anim" && styles ? styleAnimationSummary(styleID, styles) : undefined,
+      textVisuals: kind === "text" ? [false, true].map(pressed => resolver?.resolveStyleText?.(styleID, pressed) ?? resolver?.resolveText(styleID, pressed)) : undefined,
+      sound, soundPlayable: Boolean(sound && soundPathForFilename(names, theme.value, orientation.value, sound)),
+    }
   })
+  payload.images = resourceImagePaths(names, theme.value, orientation.value).map(path => {
+    images.set(path, () => imageDataURL(source.getBytes(path)!))
+    return { path, categories: [...imageCategories.get(path) ?? []], uses: imageUses.get(path) ?? 0 }
+  })
+  return payload
 }
 
 export async function emitStyleLibrary(sliceBack = false): Promise<void> {
   const payload = await nativeStyleLibraryPayload(sliceBack)
   if (payload) await emitToPicker("style-library-data", payload)
+}
+
+export async function emitStyleLibraryPreview(request: { session: string; styleID: string }): Promise<void> {
+  const session = appState.styleLibrarySession
+  if (session?.session !== request.session) return
+  const preview = await session.preview(request.styleID)
+  if (appState.styleLibrarySession === session) await emitToPicker("style-library-preview-data", preview ?? { ...request, visuals: [], particleVisuals: {} })
+}
+
+export async function emitStyleLibraryImage(request: { session: string; key: string }): Promise<void> {
+  const session = appState.styleLibrarySession
+  if (session?.session === request.session) await emitToPicker("style-library-image-data", { ...request, dataURL: session.image(request.key) })
 }
 
 /** 弹窗里的新建：有可写的引用目标就应用并打开编辑器（关窗），否则留在弹窗里刷新。 */

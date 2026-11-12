@@ -119,6 +119,7 @@
 - **列表与网格**一律是 listbox：容器 `role="listbox"`，行或卡片 `role="option"` + `aria-selected`。方向键移动（网格里上下键按列数跳行）、Home、End，统一用 `bindListboxKeys()`（`src/dom-element.ts`）。不再用 `.selected`、`.active`、`data-previewing`、`aria-pressed` 表示列表选中。
 - **单击**选中，并立即在检查器或预览区显示详情；**Enter 或双击**执行主动作（弹窗里是“应用”）；**⌘/Ctrl 单击**跳到被引用的对象（样式卡 → 样式详情，动画样式 → 动画）。不使用 Alt 单击。
 - 检查器里的样式引用卡：单击打开“全部样式”并定位当前样式（选切片在弹窗的预览栏里）；编号可直接输入；⌘/Ctrl 单击编辑该样式。
+- “全部样式”切到图片后，“应用”复制当前样式、替换图片并将当前引用改为新样式；“应用至样式”直接修改原样式。只替换打开时点击的正常图或按下图，另一状态与其他属性保留；新建与替换引用合为一步撤销。
 - 列表获得焦点时 `Delete` / `Backspace` 删除选中项，`⌘/Ctrl + D` 复制；按钮禁用时对应快捷键同样无效。由 `bindListActionKeys(list, toolbar)` 统一接线（工具条按钮带 `data-list-action="remove|duplicate"`，`listToolbar()` 自动加）。
 - 搜索框统一 `.ui-search`（`searchField()`）：前缀放大镜，有内容时尾部出现清除按钮，placeholder 只写“搜索”。
 - **Esc 分层**：先清除搜索 → 再关预览或浮层 → 再关对话框 → 最后取消选择。

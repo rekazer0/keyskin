@@ -50,6 +50,12 @@ function selectedStyleImageSections(source: "BACK_STYLE" | "FORE_STYLE"): { docu
 
 export function updateSelectedImageReference(target: StyleImagePickerTarget | undefined, value: string): boolean {
   if (!appState.archive || !target) return false
+  if (target.selectReference) {
+    if (!isEditing()) return false
+    clearImageSlicePicker()
+    target.selectReference(value)
+    return true
+  }
   if (target.selectImage) {
     if (!isEditing()) return false
     const source = appState.pickerSlices.find(slice => slice.index === appState.pickerSelectedIndex)?.source

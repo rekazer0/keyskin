@@ -62,8 +62,42 @@ try {
   await page.locator('#style-library-grid .ui-animation-player[data-playing="true"]').waitFor()
   await page.locator('#resource-search').fill('no-such-style')
   assert.equal(await page.locator('#style-library-grid > *').count(), 0)
+
+  // 大列表只创建可见动画的播放器，同一批数据只解析一次 anim.ini。
+  await page.evaluate(async () => {
+    const { IniDocument } = await import('/src/ini.ts')
+    const parse = IniDocument.parse
+    window.animationParses = 0
+    IniDocument.parse = text => { window.animationParses++; return parse(text) }
+    const animationText = Array.from({ length: 500 }, (_, index) => `[ANIM${index + 1}]\nCATEGORY=0\nTYPE=1\nDURATION=240\nFROM=0\nTO=90\n`).join('\n')
+    window.largeLibrary = {
+      sliceBack: false, editable: true, canAdd: false, soundOnly: false, foreground: false, bda: false,
+      kind: 'anim', currentID: '', imagesCompatible: true, bitmaps: {}, animationText, animationFiles: {}, particleVisuals: {}, images: [], sounds: [],
+      styles: Array.from({ length: 1000 }, (_, index) => ({
+        styleID: String(index + 1), label: String(index + 1), kind: 'anim', categories: ['key'], compatible: true,
+        imagePaths: [], visuals: [null, null], animationSections: [`ANIM${index % 500 + 1}`],
+      })),
+    }
+    window.postMessage({ pickerEvent: 'style-library-data', payload: window.largeLibrary }, location.origin)
+  })
+  await page.waitForFunction(() => document.querySelectorAll('#style-library-grid > .ui-style-card').length === 1000)
+  await page.locator('#style-library-grid .ui-animation-player[data-playing="true"]').first().waitFor()
+  assert.equal(await page.evaluate(() => window.animationParses), 1, '同一批动画配置只解析一次')
+  assert.ok(await page.locator('#style-library-grid .ui-animation-player').count() < 50, '屏幕外不批量创建播放器')
+  const last = page.locator('#style-library-grid > .ui-style-card').last()
+  await last.scrollIntoViewIfNeeded()
+  await last.locator('.ui-animation-player[data-playing="true"]').waitFor()
+  assert.equal(await page.evaluate(() => window.animationParses), 1, '滚动复用解析结果')
+  await last.click()
+  await page.locator('#style-library-preview .ui-animation-player[data-playing="true"]').waitFor()
+  assert.equal(await page.evaluate(() => window.animationParses), 1, '选中预览复用解析结果')
+  await page.evaluate(() => {
+    window.largeLibrary.animationText = window.largeLibrary.animationText.replaceAll('DURATION=240', 'DURATION=480')
+    window.postMessage({ pickerEvent: 'style-library-data', payload: window.largeLibrary }, location.origin)
+  })
+  await page.waitForFunction(() => window.animationParses === 2)
   assert.deepEqual(errors, [])
-  console.log(`style library: shared cards, combined filters, looping (${frames}fps), hidden stop and resume passed`)
+  console.log(`style library: shared cards, combined filters, looping (${frames}fps), hidden stop/resume and 1000-card lazy previews passed`)
 } finally {
   await browser.close()
   await server.close()

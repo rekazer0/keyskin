@@ -4,7 +4,9 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 import { IniDocument } from "../src/ini.ts"
+import { declarations, run } from "./helpers/app-source.mjs"
 import {
+  STYLE_ANIM_FIELDS,
   LEGACY_ANIMATION_KINDS,
   removeLegacyAnimation,
   legacyAnimationStyles,
@@ -36,6 +38,35 @@ BUILD_NUM=1
 BUILD_LIST=1
 BUILD_METHOD=1
 `)
+
+test("全部样式共用动画解析结果，编辑、撤销和切换文件后读取当前内容", () => {
+  let parses = 0
+  const original = "[ANIM1]\nTYPE=1\nDURATION=200\n"
+  const archive = { texts: { "anim.ini": original }, isText(path) { return path in this.texts }, getText(path) { return this.texts[path] } }
+  const context = run(declarations("documents", "cachedIniDocument", "styleAnimationEntries", "referencedAnimations", "styleAnimations"), {
+    archive, IniDocument, STYLE_ANIM_FIELDS,
+    legacyAnimationConfigPath: () => "anim.ini",
+    parseLegacyAnimationFile: text => { parses++; return parseLegacyAnimationFile(text) },
+  })
+  assert.equal(context.referencedAnimations("").length, 0)
+  assert.equal(parses, 0, "空引用不解析文件")
+  const styles = IniDocument.parse("[STYLE1]\nPRESS_ANIM=1\nRELEASE_ANIM=1\n")
+  for (let i = 0; i < 1000; i++) {
+    const entries = context.styleAnimations("1", styles)
+    assert.equal(entries.length, 1, "同一动画跨事件去重")
+    assert.equal(entries[0].type, 1)
+  }
+  assert.equal(parses, 1, "样式数量不增加动画解析次数")
+  archive.texts["anim.ini"] = original.replace("TYPE=1", "TYPE=2")
+  assert.equal(context.styleAnimations("1", styles)[0].type, 2)
+  archive.texts["anim.ini"] = original
+  assert.equal(context.styleAnimations("1", styles)[0].type, 1, "撤销读取旧值")
+  context.archive = { ...archive, texts: { "anim.ini": original.replace("TYPE=1", "TYPE=3") } }
+  assert.equal(context.styleAnimations("1", styles)[0].type, 3, "同路径的新文件不沿用旧结果")
+  assert.equal(context.referencedAnimations("999")[0].entry, undefined, "保留缺失引用")
+  delete context.archive.texts["anim.ini"]
+  assert.equal(context.referencedAnimations("1").length, 0)
+})
 
 test("检查器导出对象头与填充两个入口，标题跟随动效设计 / 粒子设计", () => {
   assert.match(inspector, /export function populateLegacyAnimationInspector\(container: HTMLElement\): boolean/)
