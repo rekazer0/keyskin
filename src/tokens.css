@@ -181,6 +181,7 @@
     --mobile-tabbar-height: 56px;
     --mobile-row-height: 48px;
     --mobile-sheet-max-height: calc(var(--viewport-height) * 0.7);
+    --mobile-split-handle-height: 12px;
   }
 }
 @media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {

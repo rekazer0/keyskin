@@ -9,8 +9,6 @@ import { previewStateImpact } from "../preview-items.ts"
 import { appState } from "./state"
 import { syncCandidateSelection, setPreviewPan, refreshSimulationPreview, simulationLanguage } from "./preview-render"
 import { selectFile } from "./navigation"
-import { setMobileTab } from "./mobile-shell"
-import { mobileShellQuery } from "./mobile-media"
 import { moveSelectedKeys } from "./key-editing"
 import { isEditing } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
@@ -128,7 +126,6 @@ export const preview = new Preview(
     if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview", "document", true)
     appState.selectedKeySections = sections
     if (!sections.length) source.collapseSelection()
-    if (sections.length && mobileShellQuery.matches) setMobileTab("inspector")
     scheduleSelectionInspectorSync(preview)
   },
   false,
@@ -271,7 +268,6 @@ export function selectNativeToolbar(): void {
   toolbarPreview.setSelected([])
   syncCandidateSelection()
   scheduleSelectionInspectorSync(toolbarPreview)
-  if (mobileShellQuery.matches) setMobileTab("inspector")
 }
 
 export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections) => {

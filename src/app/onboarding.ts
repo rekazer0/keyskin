@@ -69,7 +69,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       title: "选中一个按键",
       enter: compact ? () => setMobileTab("canvas") : undefined,
       body: compact
-        ? "编辑模式下轻点按键即可选中，选中后会自动切到「属性」页。"
+        ? "编辑模式是上下分屏：上方实时预览，下方是属性。轻点按键即可选中，改完立刻在画布上看到效果。"
         : `编辑模式下单击按键即可选中，拖动可以移动位置；${shortcutLabel("单击")}可以多选。`,
       action: { hint: compact ? "轻点画布上任意一个按键" : "点击画布上任意一个按键", done: () => appState.selectedKeySections.length > 0 },
       when: () => hasSkin() && mode.value === "edit",
@@ -77,9 +77,9 @@ function onboardingSteps(compact: boolean): TourStep[] {
     {
       target: ["section.source"],
       title: "属性检查器",
-      enter: compact ? () => setMobileTab("inspector") : undefined,
+      enter: compact ? () => setMobileTab("canvas") : undefined,
       body: compact
-        ? "属性页里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点顶部的撤销按钮可以撤回。右侧分类栏可快速跳到对应分组。"
+        ? "画布下方就是选中按键的属性：位置、尺寸、样式、文字和手势，改动立即显示在上方画布上，点顶部的撤销按钮可以撤回。右侧分类栏可快速跳到对应分组；需要更大编辑区时点底部「属性」。"
         : `在这里修改选中对象的位置、尺寸、样式、文字和手势，改动立即显示在画布上，可随时撤销（${shortcutLabel("Z")}）。右侧分类栏点击即可跳到对应分组，放大镜可以筛选属性。`,
       when: hasSkin,
     },
@@ -87,7 +87,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       ? {
           target: [".ui-tabbar"],
           title: "三个主页面",
-          body: "底部三个标签是「画布」「属性」「文件」，点按或左右滑动切换。「文件」里可以换到 9 键、26 键、符号等面板。",
+          body: "底部三个标签是「画布」「属性」「文件」。画布页上方预览、下方属性，拖中间的分割线可以调高度；「属性」是整页检查器，「文件」里可以换到 9 键、26 键、符号等面板。",
           when: hasSkin,
         }
       : {

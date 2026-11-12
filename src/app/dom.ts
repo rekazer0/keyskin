@@ -170,6 +170,8 @@ export const mainWorkspace = $("main")
 
 export const workspacePane = $("section.workspace")
 
+export const mobileSplitHandle = $("#mobile-split-handle") as HTMLElement
+
 export const sidebarPane = $("aside.sidebar")
 
 export const inspectorPane = $("section.source")

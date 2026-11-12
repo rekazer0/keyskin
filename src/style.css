@@ -2716,7 +2716,8 @@ main {
 .toolbar-more > summary::-webkit-details-marker { display: none; }
 .pen-file-menu > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); left: 0; z-index: 100; width: 268px; max-width: calc(100vw - var(--space-xl)); transform-origin: top left; }
 .mobile-preview-more,
-.mobile-canvas-tools { display: none; }
+.mobile-canvas-tools,
+.mobile-split-handle { display: none; }
 .mobile-preview-more > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); right: 0; z-index: 20; width: 220px; max-width: calc(100vw - var(--space-xl)); max-height: calc(var(--viewport-height) - var(--space-2xl)); overflow-y: auto; transform-origin: top right; }
 .ui-menu > .ui-list-item > .ui-badge { margin-left: auto; }
 /* 组件里的图标包裹层按图标本身的尺寸（14/16/20）排版，不按字号的 1em */
@@ -3143,34 +3144,71 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mode-control
   }
   .titlebar .document-title #dirty::before { display: none; }
 
-  /* —— 页面区：三页叠在同一格，底部标签栏独占一行 —— */
+  /* —— 页面区：画布页是「画布 + 属性」上下分屏；属性页 / 文件页占满页面区 —— */
   main {
     height: calc(var(--viewport-height) - var(--titlebar-height));
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) var(--mobile-split-handle-height) minmax(120px, var(--mobile-editor-split, 46%)) auto;
     overflow: hidden;
   }
-  main > :is(aside.sidebar, .workspace, .source) {
-    grid-area: 1 / 1;
+  main > :is(aside.sidebar, .workspace, .source, .mobile-split-handle) {
+    display: none;
     width: auto;
     height: auto;
     min-width: 0;
     min-height: 0;
     border: 0;
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
   }
-  main > .ui-tabbar { grid-area: 2 / 1; }
+  main > .workspace { grid-area: 1 / 1; }
+  main > .mobile-split-handle { grid-area: 2 / 1; }
+  main > .source { grid-area: 3 / 1; }
+  main > aside.sidebar { grid-area: 1 / 1; }
+  main > .ui-tabbar { grid-area: 4 / 1; }
   #inspector-resize-handle { display: none; }
-  :root[data-mobile-tab="canvas"] main > .workspace,
-  :root[data-mobile-tab="inspector"] main > .source,
-  :root[data-mobile-tab="files"] main > aside.sidebar {
-    visibility: visible;
-    opacity: 1;
-    pointer-events: auto;
+
+  /* 画布页：编辑模式下画布实时预览、下方是当前对象的属性；交互预览时画布铺满。 */
+  :root[data-mobile-tab="canvas"] main > .workspace { display: grid; }
+  :root[data-mobile-tab="canvas"][data-canvas-mode="edit"] main > .mobile-split-handle { display: grid; }
+  :root[data-mobile-tab="canvas"][data-canvas-mode="edit"] main > .source { display: flex; }
+  :root[data-mobile-tab="canvas"]:not([data-canvas-mode="edit"]) main { grid-template-rows: minmax(0, 1fr) auto; }
+  :root[data-mobile-tab="inspector"] main { grid-template-rows: minmax(0, 1fr) auto; }
+  :root[data-mobile-tab="inspector"] main > .source { display: flex; grid-area: 1 / 1; }
+  :root[data-mobile-tab="files"] main { grid-template-rows: minmax(0, 1fr) auto; }
+  :root[data-mobile-tab="files"] main > aside.sidebar { display: flex; }
+
+  /* 分屏拖动条：12px 触控带，只画一条抓握线。 */
+  .mobile-split-handle {
+    position: relative;
+    place-items: center;
+    border-top: 1px solid var(--line);
+    background: var(--material-panel);
+    touch-action: none;
+    cursor: row-resize;
+    outline: 0;
   }
+  .mobile-split-handle::before {
+    content: "";
+    width: var(--space-2xl);
+    height: 3px;
+    border-radius: var(--radius-full);
+    background: var(--line-strong);
+    transition: background-color var(--duration-fast) var(--ease-standard);
+  }
+  .mobile-split-handle:focus-visible::before,
+  .mobile-split-handle:active::before { background: var(--accent); }
+
+  /* 分屏里的属性区用紧凑页头：不重复「属性 / 源代码 / AI 设计」切换条，
+     需要全屏编辑时直接点底部「属性」。 */
+  :root[data-mobile-tab="canvas"] main > .source { background: var(--material-panel); }
+  :root[data-mobile-tab="canvas"] main > .source > .pane-heading { padding-top: var(--space-2xs); border-bottom: 0; }
+  :root[data-mobile-tab="canvas"] main > .source .inspector-tabs { display: none; }
+  :root[data-mobile-tab="canvas"] main > .source .inspector-view-controls { gap: var(--space-xs); }
+  :root[data-mobile-tab="canvas"] main > .source .key-inspector-title { padding-bottom: var(--space-sm); }
+
+  body:has(.canvas-wrap.empty) main { grid-template-rows: minmax(0, 1fr) auto; }
+  body:has(.canvas-wrap.empty) main > .mobile-split-handle,
+  body:has(.canvas-wrap.empty) main > .source { display: none; }
   body:has(.canvas-wrap.empty) .ui-tabbar,
   :root[data-keyboard-open="true"] .ui-tabbar { display: none; }
 

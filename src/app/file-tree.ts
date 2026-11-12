@@ -68,7 +68,7 @@ function addNavButton(
       appState.previewReturnName = path.split("/").pop() ?? layout.value
     }
     selectFile(path, "overview", navMode === "resource" ? "image" : navMode === "style" ? "style" : navMode === "sound" ? "sound" : navMode === "motion" || navMode === "particle" ? navMode : "document")
-    if (mobileShellQuery.matches) setMobileTab("inspector")
+    if (mobileShellQuery.matches) setMobileTab("canvas")
   })
   parent.append(button)
   if (appState.sidebarView === "overview" && path === appState.selectedPath && navMode === currentNavigationMode()) {

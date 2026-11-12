@@ -161,6 +161,7 @@ async function paneStates(page) {
       canvas: state("main > .workspace"),
       inspector: state("main > .source"),
       files: state("main > aside.sidebar"),
+      handle: state(".mobile-split-handle"),
       buttons: [...document.querySelectorAll(".ui-tabbar-item")].map((button) => ({
         tab: button.dataset.mobileTab,
         current: button.getAttribute("aria-current"),
@@ -208,6 +209,7 @@ for (const viewport of portraitPhones) {
     await assertTitlebarClean(page, "welcome")
     await assertNoPageOverflow(page, "welcome")
     assert.equal((await rect(page, ".ui-tabbar")).visible, false, "tab bar is hidden without a skin")
+    assert.equal((await rect(page, ".mobile-split-handle")).visible, false, "split handle is hidden on the welcome page")
     const main = await rect(page, "main")
     const workspace = await rect(page, "main > .workspace")
     assert.ok(Math.abs(workspace.y - main.y) <= 1 && Math.abs(workspace.height - main.height) <= 1, "welcome page covers main")
@@ -227,24 +229,50 @@ for (const viewport of portraitPhones) {
     await assertNoPageOverflow(page, "editor")
     assert.equal(await page.locator(".titlebar-preferences:visible").count(), 0, "settings button moved into the menu")
     assert.equal(await page.locator('[data-mobile-choice="mode"]:visible').count(), 1, "mode pill stays in the app bar")
+    // 交互预览：画布铺满页面区，分屏收起。
     await assertCanvasPage(page, tag)
-    const states = await paneStates(page)
+    let states = await paneStates(page)
     assert.deepEqual(states.buttons.map((button) => button.tab), ["canvas", "inspector", "files"], "tab bar has three pages")
     assert.equal(states.buttons[0].current, "page", "canvas tab is current")
-    assert.equal(states.inspector.visible || states.files.visible, false, "other pages stay hidden")
-    assert.equal(states.inspector.inert, true, "hidden inspector is inert")
+    assert.equal(states.inspector.visible, false, "preview mode hides the docked inspector")
+    assert.equal(states.handle.visible, false, "preview mode hides the split handle")
+    // 编辑模式：画布与属性同屏，方便实时预览。
+    await page.locator('[data-mobile-choice="mode"]').click()
+    await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
+    await page.waitForTimeout(300)
+    states = await paneStates(page)
+    const main = await rect(page, "main")
+    const tabbar = await rect(page, ".ui-tabbar")
+    const workspace = await rect(page, "main > .workspace")
+    const handle = await rect(page, ".mobile-split-handle")
+    const source = await rect(page, "main > .source")
+    assert.equal(states.inspector.visible, true, "edit mode docks the inspector below the canvas")
+    assert.equal(states.handle.visible, true, "edit mode shows the split handle")
+    assert.equal(states.canvas.visible, true, "canvas stays visible while editing")
+    assert.ok(Math.abs(workspace.y - main.y) <= 1, "canvas starts at the top of the page area")
+    assert.ok(Math.abs(handle.y - workspace.bottom) <= 1, "split handle sits between canvas and inspector")
+    assert.ok(Math.abs(source.y - handle.bottom) <= 1, "inspector starts below the split handle")
+    assert.ok(Math.abs(tabbar.y - source.bottom) <= 1, "inspector ends above the tab bar")
+    assert.ok(source.height >= main.height * 0.25 && source.height <= main.height * 0.6, `inspector keeps a usable share (${source.height}/${main.height})`)
+    assert.ok(workspace.height >= main.height * 0.25, "canvas keeps a usable share")
+    assert.equal(await page.locator("#selected-key:visible").count(), 1, "docked inspector shows the current object")
+    assert.equal(await page.locator(".mobile-inspector-toggle:visible").count(), 0, "no extra expand button in the docked header")
+    assert.equal(states.inspector.inert, false, "docked inspector accepts input")
     assert.equal(states.files.inert, true, "hidden files page is inert")
   }))
 
   await check(`${tag} switching pages`, () => withPage(viewport, async (page) => {
     await openTemplate(page)
     const pageArea = await rect(page, "main")
+    await page.locator('[data-mobile-choice="mode"]').click()
+    await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
     await page.locator('.ui-tabbar-item[data-mobile-tab="inspector"]').click()
     await page.waitForTimeout(300)
     let states = await paneStates(page)
     assert.equal(await currentTab(page), "inspector", "inspector tab switches page")
     assert.equal(states.inspector.visible, true, "inspector page is shown")
     assert.equal(states.canvas.visible, false, "canvas page is hidden")
+    assert.equal(states.handle.visible, false, "full inspector has no split handle")
     assert.equal(states.inspector.inert, false, "inspector page accepts input")
     assert.equal(states.buttons[1].current, "page", "inspector tab is marked current")
     const source = await rect(page, "main > .source")
@@ -259,7 +287,9 @@ for (const viewport of portraitPhones) {
     assert.ok(items > 0, "the active overview group lists its items")
     await page.locator('.ui-tabbar-item[data-mobile-tab="canvas"]').click()
     await page.waitForTimeout(300)
-    assert.equal((await rect(page, "main > .workspace")).visible, true, "canvas tab returns to the canvas")
+    states = await paneStates(page)
+    assert.equal(states.canvas.visible, true, "canvas tab returns to the canvas")
+    assert.equal(states.inspector.visible, true, "the docked inspector comes back with the canvas")
   }))
 
   await check(`${tag} swipe between pages`, () => withPage(viewport, async (page) => {
@@ -309,24 +339,50 @@ for (const viewport of portraitPhones) {
     assert.equal(await page.locator(".pen-file-menu > summary").evaluate((el) => el === document.activeElement), true, "focus returns to the trigger")
   }))
 
-  await check(`${tag} selecting a key opens the inspector page`, () => withPage(viewport, async (page) => {
+  await check(`${tag} selecting a key keeps canvas and inspector together`, () => withPage(viewport, async (page) => {
     await openTemplate(page)
     await page.locator('[data-mobile-choice="mode"]').click()
     await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
     const box = await page.locator("#preview").boundingBox()
     await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.45)
-    await page.waitForFunction(() => document.documentElement.dataset.mobileTab === "inspector")
-    assert.equal(await currentTab(page), "inspector", "the property page follows the selection")
-    assert.equal((await paneStates(page)).inspector.inert, false, "the property page accepts input")
+    await page.waitForFunction(() => /按键/.test(document.querySelector("#selected-key")?.textContent ?? ""))
+    const states = await paneStates(page)
+    assert.equal(await currentTab(page), "canvas", "selecting a key keeps the canvas page")
+    assert.equal(states.canvas.visible, true, "canvas stays visible for live preview")
+    assert.equal(states.inspector.visible, true, "docked inspector shows the key")
+    assert.equal((await rect(page, "main > .workspace")).visible, true, "canvas is still on screen")
+    assert.equal(await page.locator(".mobile-inspector-toggle:visible").count(), 0, "docked header stays compact")
   }))
 
-  await check(`${tag} file selection opens the inspector page`, () => withPage(viewport, async (page) => {
+  await check(`${tag} file selection returns to the split editor`, () => withPage(viewport, async (page) => {
     await openTemplate(page)
+    await page.locator('[data-mobile-choice="mode"]').click()
+    await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
     await page.locator('.ui-tabbar-item[data-mobile-tab="files"]').click()
     await page.waitForTimeout(300)
     await page.locator(".sidebar-overview .mobile-overview-active .nav-item").first().click()
-    await page.waitForFunction(() => document.documentElement.dataset.mobileTab === "inspector")
-    assert.equal(await currentTab(page), "inspector", "picking a file shows the property page")
+    await page.waitForFunction(() => document.documentElement.dataset.mobileTab === "canvas")
+    assert.equal(await currentTab(page), "canvas", "picking a layout returns to the split editor")
+    assert.equal((await paneStates(page)).inspector.visible, true, "properties follow the selection")
+  }))
+
+  await check(`${tag} split drag`, () => withPage(viewport, async (page) => {
+    await openTemplate(page)
+    await page.locator('[data-mobile-choice="mode"]').click()
+    await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
+    await page.waitForTimeout(300)
+    const before = await rect(page, "main > .source")
+    const handle = await rect(page, ".mobile-split-handle")
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(handle.x + handle.width / 2, handle.y - 90, { steps: 6 })
+    await page.mouse.up()
+    await page.waitForTimeout(300)
+    const after = await rect(page, "main > .source")
+    assert.ok(after.height > before.height + 40, `dragging up grows the property area (${before.height} → ${after.height})`)
+    const saved = await page.evaluate(() => Number(localStorage.getItem("mobile-editor-split")))
+    assert.ok(saved > 46, `drag persists the split (${saved})`)
+    assert.ok(Number(await page.locator(".mobile-split-handle").getAttribute("aria-valuenow")) > 46, "handle reports the new value")
   }))
 
   await check(`${tag} mode switch keeps the title readable`, () => withPage(viewport, async (page) => {
@@ -380,6 +436,11 @@ await check("390×844 safe areas", () => withPage({ width: 390, height: 844 }, a
   assert.equal(Math.round(workspace.bottom), Math.round(tabbar.y), "page area ends above the tab bar")
   const canvasPadding = await page.$eval("main > .workspace > .canvas-wrap", (el) => getComputedStyle(el).paddingBottom)
   assert.equal(canvasPadding, "8px", "canvas page does not repeat the bottom safe area")
+  await page.locator('[data-mobile-choice="mode"]').click()
+  await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
+  await page.waitForTimeout(300)
+  const docked = await rect(page, "main > .source")
+  assert.equal(Math.round(docked.bottom), Math.round(tabbar.y), "docked inspector ends above the tab bar")
   await session.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 0, bottom: 0 } })
   assert.equal((await rect(page, ".titlebar")).height, 52, "removing the browser inset removes the reserved space")
 }))
@@ -434,6 +495,7 @@ await check("1280×800 desktop is unchanged", () => withPage({ width: 1280, heig
   assert.equal((await rect(page, "main > .workspace")).visible, true, "canvas column")
   assert.equal((await rect(page, "main > .source")).visible, true, "inspector column")
   assert.equal((await rect(page, ".mobile-canvas-tools")).visible, false, "mobile canvas tools are hidden on desktop")
+  assert.equal((await rect(page, ".mobile-split-handle")).visible, false, "mobile split handle is hidden on desktop")
 }, { mobile: false }))
 
 await browser.close()

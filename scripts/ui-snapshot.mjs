@@ -224,7 +224,13 @@ await withPage(async (page) => {
   await capture(page, "mobile-welcome")
   await openTemplate(page, "official-android-bds")
   await capture(page, "mobile-bds")
-  // App 外壳的三页与两个二级菜单（DESIGN.md §14）。
+  // App 外壳：画布页是「画布 + 属性」分屏，底部标签栏另有整页属性与文件（DESIGN.md §14）。
+  await page.locator('[data-mobile-choice="mode"]').click()
+  await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
+  const previewBox = await page.locator("#preview").boundingBox()
+  await page.mouse.click(previewBox.x + previewBox.width * 0.45, previewBox.y + previewBox.height * 0.45)
+  await page.waitForFunction(() => /按键/.test(document.querySelector("#selected-key")?.textContent ?? ""))
+  await capture(page, "mobile-editor")
   await page.locator('.ui-tabbar-item[data-mobile-tab="inspector"]').click()
   await capture(page, "mobile-inspector")
   await page.locator('.ui-tabbar-item[data-mobile-tab="files"]').click()

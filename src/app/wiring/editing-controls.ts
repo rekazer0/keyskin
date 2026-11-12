@@ -475,7 +475,6 @@ export function wireEditingControls(): void {
       populateKeyInspector()
       updateSourceHighlight()
       scrollSelectedSource()
-      if (mobileShellQuery.matches) setMobileTab("inspector")
       return
     }
     const path = toolbarStrip.dataset.path

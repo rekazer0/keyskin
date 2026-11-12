@@ -1,5 +1,6 @@
 import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
+import { syncMobileShellState } from "./mobile-shell"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
 import { createIcon, groupIcon } from "../icons"
@@ -282,7 +283,10 @@ export function applyModeState(): void {
   const editing = isEditing()
   if (!editing && editorCrosshair.checked) previewCoordinates.hidden = true
   const canvasMode = editing ? "edit" : "preview"
+  document.documentElement.dataset.canvasMode = canvasMode
   deviceShell.dataset.mode = canvasMode
+  // 分屏里的属性区随编辑模式显示 / 收起，inert 要跟着一起更新。
+  syncMobileShellState()
   preview.setMode(canvasMode)
   toolbarPreview.setMode(canvasMode)
   preview.setEditTool(appState.keyMode)
