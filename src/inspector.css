@@ -417,12 +417,6 @@
 .source #primary-css-fields:empty { display: none; }
 
 /* 手机竖屏：侧栏与检查器叠在同一区域，检查器必须不透明，不能让下面的侧栏透出来。 */
-@media (max-width: 760px) and (orientation: portrait) {
-  .source { background: var(--material-panel); }
-  /* 两个面板左右滑动切换：不在当前页时滑出屏幕并且不接收点击 */
-  :root[data-mobile-pane="inspector"] .source { transform: translateX(0); }
-  :root:not([data-mobile-pane="inspector"]) .source { pointer-events: none; transform: translateX(100%); }
-}
 /*
  从 style.css 归并过来的同名规则（含响应式变体）
  */
@@ -431,36 +425,12 @@
   min-width: 0;
 }
 
-@media (max-width: 760px) and (orientation: portrait) {
-
-  .source {
-    width: 100%;
-    min-height: 0;
-    position: absolute;
-    right: 0;
-    left: 0;
-    border-right: 0;
-    border-left: 0;
-    touch-action: pan-y;
-    transition: transform var(--duration-base) var(--ease-emphasized);
-    will-change: transform;
-  }
-}
-
 .source {
   border-color: var(--line);
   background: var(--material-panel);
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-}
-
-@media (max-width: 760px) {
-
-  .source {
-    height: calc(50% - var(--mobile-dock-h));
-    border-color: var(--line);
-  }
 }
 
 /* —— 搜狗、手心（ssf-inspector.ts / sxi-inspector.ts）：分组与百度共用同一套样式；一个分组里的多个配置段各有一行小标题 —— */
@@ -509,3 +479,15 @@
 .source .animation-combo-item .ui-list-item-text > strong { overflow: hidden; font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
 .source .animation-combo-actions { display: flex; }
 /* 样式详情里动画事件（PRESS_ANIM…）引用的动画：每个编号一个按钮，打开动效设计 / 粒子设计 */
+
+/* ================================ 移动端属性页 ================================
+ * App 外壳的第三页（DESIGN.md §14.4）：占满页面区，页头与左右安全区对齐，
+ * 内容与右侧分类栏的排布沿用桌面规则，只去掉分栏与滑出动画。
+ */
+@media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
+  .source > .pane-heading {
+    padding-left: max(var(--_gutter), env(safe-area-inset-left));
+    padding-right: max(var(--_gutter), env(safe-area-inset-right));
+  }
+  .source #quick-inspector { padding-bottom: var(--space-lg); }
+}

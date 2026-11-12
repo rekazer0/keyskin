@@ -335,7 +335,7 @@
 
 /* Phones: the panel shares half the screen with the canvas, so the frame gives
    every spare pixel to the conversation. */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
   #ai-design-panel .ai-bar { padding: 8px 16px 2px; }
   #ai-design-panel .ai-design-composer { min-height: 0; }
   #ai-design-panel .ai-design-toolbar { bottom: 18px; }

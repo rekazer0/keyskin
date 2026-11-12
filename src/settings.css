@@ -181,9 +181,10 @@
 #settings-dialog .settings-footer-actions { display: flex; flex: none; gap: var(--space-sm); }
 
 /* —— 手机：全屏 sheet，分类变成一行可横滑的标签 —— */
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
   #settings-dialog {
     width: 100vw;
+    max-width: none;
     height: var(--viewport-height);
     max-height: none;
     margin: 0;

@@ -346,17 +346,6 @@ h2 {
 aside:has(.sidebar-overview:not([hidden])) { display: grid; grid-template-rows: auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) #files { height: 100%; }
-@media (max-width: 760px) and (orientation: portrait) {
-  /* 手机概览：左侧一列分组磁贴，右侧只显示当前分组 */
-  .sidebar-overview { display: grid; grid-template-columns: 70px minmax(0, 1fr); height: 100%; overflow: hidden; }
-  .mobile-overview-groups { display: flex; flex-direction: column; gap: var(--space-2xs); min-height: 0; padding: var(--space-2xs); overflow-y: auto; border-right: 1px solid var(--line-soft); }
-  .sidebar-overview > .nav-group { display: none; min-height: 0; overflow-y: auto; }
-  .sidebar-overview > .nav-group.mobile-overview-active { display: block; }
-  .sidebar-overview > .nav-group.mobile-overview-active > .nav-group-body { padding-top: var(--space-xs); }
-  #files .sidebar-overview > .nav-group > .nav-section { display: none; }
-  aside #files:has(.sidebar-overview:not([hidden])) { overflow: hidden; padding-bottom: 0; }
-}
-
 /* 旧的源文件树样式已移至 source-files-redesign.css */
 
 .workspace {
@@ -1789,368 +1778,6 @@ input[type="search"]:focus {
   }
 }
 
-@media (max-width: 600px) {
-
-  .titlebar {
-    overflow: visible;
-  }
-
-  .titlebar > .spacer {
-    display: none;
-  }
-
-  .document-title {
-    display: none;
-  }
-
-  main {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  aside {
-    display: none;
-  }
-
-  .preview-toolbar {
-    padding-inline: 8px;
-  }
-
-  .preview-toolbar .field-control {
-    min-width: 0;
-    flex: 1;
-    position: static;
-    transform: none;
-  }
-
-  .preview-toolbar .field-control select {
-    width: 100%;
-    min-width: 0;
-  }
-}
-
-@media (max-width: 760px) and (orientation: portrait) {
-
-  .app-window {
-    background: var(--toolbar);
-  }
-
-  .titlebar {
-    padding-top: calc(6px + var(--safe-area-top));
-    padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right));
-  }
-
-  .mobile-quick-actions {
-    flex: none;
-    gap: 2px;
-  }
-
-  .titlebar > .spacer {
-    display: none;
-  }
-
-  main {
-    height: calc(var(--viewport-height) - var(--titlebar-height));
-    min-height: 0;
-    display: block;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .mobile-workspace-tabs {
-    display: flex;
-    position: absolute;
-    z-index: 12;
-    right: 0;
-    left: 0;
-    border-bottom: 1px solid var(--line);
-    background: var(--toolbar);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    backdrop-filter: saturate(180%) blur(20px);
-  }
-
-  .mobile-split-handle {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    touch-action: none;
-    cursor: row-resize;
-  }
-
-  .mobile-split-handle::before {
-    content: "";
-    width: 28px;
-    height: 3px;
-    position: absolute;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--secondary) 48%, transparent);
-  }
-
-  .mobile-split-icon,
-  .mobile-split-icon svg {
-    width: 16px;
-    height: 16px;
-    display: block;
-  }
-
-  .mobile-split-icon {
-    color: var(--secondary);
-    background: var(--toolbar);
-  }
-
-  .mobile-split-icon svg {
-    fill: none;
-    stroke: currentColor;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 1.7;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] .workspace {
-    display: none;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] :is(aside, .source) {
-    top: 18px;
-    height: calc(100% - 18px);
-  }
-
-  :root[data-mobile-preview-collapsed="true"] .mobile-workspace-tabs {
-    top: 0;
-  }
-
-  .mobile-split-handle.dragging,
-  .mobile-split-handle:focus-visible {
-    color: var(--accent);
-  }
-
-  
-
-  
-
-  
-
-  .workspace {
-    width: 100%;
-    height: var(--mobile-workspace-split, 50%);
-    position: absolute;
-    right: 0;
-    left: 0;
-    grid-template-rows: minmax(0, 1fr) 24px;
-    border-top: 1px solid var(--line);
-    transition: opacity var(--duration-base) var(--ease-standard);
-  }
-
-  aside {
-    width: 100%;
-    height: calc(50% - 18px);
-    min-height: 0;
-    position: absolute;
-    right: 0;
-    left: 0;
-    border-right: 0;
-    border-left: 0;
-    touch-action: pan-y;
-    transition: transform var(--duration-base) var(--ease-emphasized);
-    will-change: transform;
-  }
-
-  aside {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  aside #files {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-bottom: var(--space-xl);
-  }
-
-  :root[data-mobile-pane="inspector"] aside {
-    pointer-events: none;
-    transform: translateX(-100%);
-  }
-
-  :root:not([data-mobile-pane="inspector"]) aside {
-    transform: translateX(0);
-  }
-
-  :root[data-mobile-preview-position="top"] .workspace {
-    top: 0;
-  }
-
-  :root[data-mobile-preview-position="top"] .mobile-workspace-tabs {
-    top: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-position="top"] :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + 18px);
-    height: calc(100% - var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) .workspace {
-    top: calc(100% - var(--mobile-workspace-split, 50%) + 18px);
-    height: calc(var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) :is(aside, .source) {
-    top: 18px;
-    height: calc(100% - var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) .mobile-workspace-tabs {
-    top: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  .inspector-resize-handle {
-    display: none;
-  }
-
-  :root:has(.source :is(input, textarea, select):focus) .mobile-split-handle,
-  :root[data-keyboard-open="true"] .mobile-split-handle {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .preview-toolbar {
-    display: none;
-    overflow-x: auto;
-  }
-
-  .preview-toolbar .field-control {
-    width: 100%;
-    min-width: 0;
-    position: static;
-    transform: none;
-  }
-
-  #skin-state-control {
-    width: 100%;
-  }
-
-  .preview-toolbar select {
-    width: 100%;
-    min-width: 0;
-    height: 34px;
-    padding-inline: 8px 24px;
-    font-size: var(--font-size-md);
-  }
-
-  #preview-coordinates {
-    display: none;
-  }
-
-  .workspace-status {
-    padding-inline: 8px;
-  }
-
-  #event-log,
-  #panel-status {
-    padding-block: 6px;
-  }
-
-  #panel-status {
-    max-width: 52%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .pane-heading {
-    min-height: 36px;
-    padding: 4px 8px;
-  }
-
-  /* Keep key actions beside the file name, with the view switch at the edge. */
-
-  #mobile-inspector-selection {
-    display: block;
-    overflow: hidden;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  #resource-inspector,
-  #source-editor {
-    touch-action: pan-y;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  #resource-inspector,
-  #source-editor {
-    scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom));
-  }
-
-  #resource-inspector {
-    padding: 8px 8px 16px;
-  }
-
-}
-
-@media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
-
-  .document-title {
-    display: none;
-  }
-
-  main {
-    height: calc(var(--viewport-height) - var(--titlebar-height));
-    grid-template-columns: clamp(116px, 18vw, 150px) minmax(0, 1fr) 0 clamp(190px, 28vw, 240px);
-  }
-
-  aside {
-    display: flex;
-    flex-direction: column;
-    grid-column: 1;
-  }
-
-  .inspector-resize-handle {
-    display: none;
-  }
-
-  .pane-heading {
-    min-height: 40px;
-    padding: 6px 8px;
-  }
-
-  .workspace {
-    grid-column: 2;
-    grid-template-rows: minmax(0, 1fr) 24px;
-  }
-
-  .preview-toolbar {
-    display: none;
-  }
-
-  .canvas-wrap {
-    padding: 6px;
-  }
-
-  #files,
-  #resource-inspector {
-    padding: 8px;
-  }
-
-  .workspace-status {
-    padding-inline: 6px;
-  }
-
-  #event-log,
-  #panel-status {
-    padding-block: 6px;
-  }
-}
-
 /* Inspector surfaces follow the same theme and window material as the workspace. */
 
 .source:has(#ai-design-panel:not([hidden])) {
@@ -2334,12 +1961,6 @@ summary,
 .document-title span {
   font-size: var(--font-size-xs);
   color: var(--tertiary);
-}
-
-/* ── 移动端 ── */
-.mobile-workspace-tabs {
-  border-bottom: 1px solid var(--line);
-  background: var(--toolbar);
 }
 
 /* Section markers replace the vertical thumb while preserving horizontal scrolling. */
@@ -2535,11 +2156,6 @@ summary,
   /* 未保存是提醒，不是成功状态 */
   background: var(--state-warn);
   content: "";
-}
-
-.mobile-quick-actions,
-.mobile-workspace-tabs {
-  display: none;
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -2765,29 +2381,6 @@ main {
  * Mobile frames
  * ------------------------------------------------------------------------------------------------- */
 
-@media (max-width: 760px) {
-
-  .mobile-workspace-tabs {
-    display: flex;
-  }
-
-  
-
-  
-
-  .mobile-workspace-tabs,
-  .sidebar,
-  .workspace {
-    border-color: var(--line);
-  }
-
-  .canvas-multi-toolbar {
-    bottom: 10px;
-    max-width: calc(100% - 16px);
-    overflow-x: auto;
-  }
-}
-
 /* Title bar file operations are collapsed into one overflow (hamburger) menu. */
 
 /* 未打开皮肤时画布承载的是应用级欢迎页，而不是文档画布；此时不能沿用「画布背景」那张
@@ -2864,10 +2457,6 @@ main {
   width: 100%;
   min-width: 0;
   text-overflow: ellipsis;
-}
-
-@media (max-width: 760px) {
-  .desktop-quick-actions { display: none; }
 }
 
 .preview-toolbar #device-control,
@@ -2959,98 +2548,6 @@ main {
  * strip of 4px indicator bars, so this section restores the component and moves
  * the hard-coded 18px layout budgets onto one variable.
  * ================================================================================================= */
-
-@media (max-width: 760px) {
-
-  .mobile-workspace-tabs {
-    height: var(--mobile-dock-h);
-    gap: 6px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--material-panel);
-    box-shadow: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane] {
-    height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    border-radius: var(--radius-md);
-    color: var(--secondary);
-    background: transparent;
-    font-size: var(--font-size-sm);
-    font-weight: 400;
-    line-height: 1;
-  }
-
-  
-
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"] {
-    color: var(--accent);
-    background: var(--accent-soft);
-    box-shadow: none;
-    font-weight: 500;
-  }
-
-  /* The pane splitter is a grab handle on the dock's lower edge. */
-  .mobile-split-handle {
-    width: 72px;
-    height: 12px;
-    top: auto;
-    bottom: 0;
-    border-radius: var(--radius-full);
-  }
-
-  .mobile-split-handle::before {
-    width: 32px;
-    height: 3px;
-    top: 50%;
-    margin-top: -2px;
-    border-radius: var(--radius-full);
-    background: var(--line-strong);
-  }
-
-  /* Layout budgets below used to hard-code the retired 18px strip; .source gets the same height in inspector.css */
-  aside {
-    height: calc(50% - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-position="top"] body .mobile-workspace-tabs {
-    top: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-position="top"] body :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .mobile-workspace-tabs {
-    top: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .workspace {
-    top: calc(100% - var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-dock-h));
-  }
-
-  #event-log {
-    display: none;
-  }
-}
 
 /* =================================================================================================
  * 17 · Title bar layout  (组件 / 标题栏: 54px bar · 16px padding · left 打开/保存/导出 ·
@@ -3213,16 +2710,13 @@ main {
 
 }
 
-.mobile-quick-actions {
-  display: none;
-}
-
 /* 标题栏、源文件工具条、画布工具条里的控件：外观全部来自 .ui-icon-button / .ui-segmented / .ui-menu，这里只排位置 */
 .toolbar-more { position: relative; flex: none; }
 .toolbar-more > summary { list-style: none; }
 .toolbar-more > summary::-webkit-details-marker { display: none; }
 .pen-file-menu > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); left: 0; z-index: 100; width: 268px; max-width: calc(100vw - var(--space-xl)); transform-origin: top left; }
-.mobile-preview-more { display: none; }
+.mobile-preview-more,
+.mobile-canvas-tools { display: none; }
 .mobile-preview-more > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); right: 0; z-index: 20; width: 220px; max-width: calc(100vw - var(--space-xl)); max-height: calc(var(--viewport-height) - var(--space-2xl)); overflow-y: auto; transform-origin: top right; }
 .ui-menu > .ui-list-item > .ui-badge { margin-left: auto; }
 /* 组件里的图标包裹层按图标本身的尺寸（14/16/20）排版，不按字号的 1em */
@@ -3231,21 +2725,11 @@ main {
 /* 标题栏控件统一放大一档，左侧菜单与右侧撤销/重做、模式切换、更多保持同高 */
 .titlebar :is(.ui-icon-button, .ui-segmented) { --_height: var(--control-height-lg); }
 .titlebar .mode-control > button { font-size: var(--font-size-sm); }
-.mobile-choice-toggle, .mobile-quick-actions { display: none; }
-body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick-actions, .mode-control, .mobile-choice-toggle) { display: none; }
+.mobile-choice-toggle { display: none; }
+body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mode-control, .mobile-choice-toggle) { display: none; }
 .source .tile-mode-control { margin-right: auto; }
 .source-find-fab { position: absolute; right: var(--space-lg); bottom: calc(var(--space-lg) + var(--source-find-bar-height, 0px)); z-index: 6; border-radius: var(--radius-full); box-shadow: var(--shadow-md); }
 .source-find-fab[hidden], #source-find-toggle[aria-pressed="true"] .source-find-fab-search, #source-find-toggle:not([aria-pressed="true"]) .source-find-fab-close { display: none; }
-@media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
-  body:not(:has(.canvas-wrap.empty)) .preview-toolbar { overflow: visible; }
-  .preview-toolbar .preview-choice { display: none; }
-  .preview-toolbar .mobile-choice-toggle,
-  .preview-toolbar #toggle-guides { display: none; }
-  .mobile-preview-more { display: block; }
-  .preview-toolbar :is(#device-control, #skin-state-control) { display: none; }
-  .preview-toolbar :is(#device-control, #skin-state-control)[data-mobile-picker-open] { display: flex; }
-}
-
 /* =================================================================================================
  * 18 · Welcome screen  (桌面 · 新建皮肤: single column, content capped at 1100px · gap 26 ·
  *      280px template cards)
@@ -3548,514 +3032,17 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 .welcome-note .system-symbol {
   color: var(--tertiary);
 }
-/* -------------------------------------------------------------------------------------------------
- * 1 · Title bar
- *     ☰ actions · undo/redo · document name (truncates) · mode pill · more
- * ------------------------------------------------------------------------------------------------- */
 
-@media (max-width: 760px) {
 
-  :root:has(body.app-window) {
-    background: var(--material-toolbar);
-  }
 
-  .titlebar {
-    height: var(--titlebar-height);
-    min-height: var(--titlebar-height);
-    gap: 6px;
-    padding: var(--safe-area-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
-    background: var(--material-toolbar);
-  }
 
-  .titlebar-left,
-  .titlebar-right {
-    flex: none;
-    gap: 4px;
-  }
 
-  .titlebar-center {
-    flex: 1 1 auto;
-    min-width: 0;
-    justify-content: flex-start;
-  }
 
-  /* The phone menu mirrors the desktop file menu and also carries the panel tools,
-     so the desktop-only buttons leave the bar. */
-  .titlebar-left > .spacer,
-.titlebar .desktop-quick-actions {
-    display: none;
-  }
-
-  .titlebar .mobile-quick-actions {
-    display: flex;
-    flex: none;
-    gap: 2px;
-  }
-
-  /* Document name: an inline, truncating pill instead of an absolutely centred label. */
-  .titlebar .document-title {
-    position: static;
-    min-width: 0;
-    max-width: 100%;
-    display: inline-flex;
-    gap: 6px;
-    padding: 8px 12px;
-    transform: none;
-    pointer-events: auto;
-  }
-
-  .titlebar .document-title .document-icon {
-    display: none;
-  }
-
-  .titlebar .document-title strong {
-    min-width: 0;
-    max-width: none;
-    overflow: hidden;
-    font-size: var(--font-size-lg);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .titlebar .document-title input {
-    width: 100%;
-    min-width: 0;
-    font-size: var(--font-size-lg);
-  }
-
-  /* 菜单、撤销重做、模式切换：手机上换成单个切换按钮，按钮放大一档便于点按 */
-  .titlebar .mode-control { display: none; }
-  .titlebar .mobile-choice-toggle { display: inline-flex; }
-  .titlebar :is(.ui-icon-button, .ui-button) { --_height: var(--control-height-lg); }
-  .titlebar .mobile-choice-toggle .mode-toggle-icon { display: none; }
-  .pen-file-menu > .ui-menu {
-    position: fixed;
-    top: calc(var(--titlebar-height) + var(--space-xs));
-    left: max(var(--space-sm), env(safe-area-inset-left));
-    max-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--space-lg) - env(safe-area-inset-bottom));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .pen-file-menu > .ui-menu > .ui-list-item { min-height: 44px; }
-
-  /* 手机标题栏很窄，未保存提示只保留圆点 */
-  .titlebar .document-title #dirty {
-    min-height: 0;
-    padding: 0 2px;
-    border: 0;
-    background: transparent;
-    font-size: 0;
-    gap: 0;
-  }
-
-}
-
-@media (max-width: 374px) {
-  .titlebar .mobile-choice-toggle .mode-toggle-icon { display: block; }
-  .titlebar .mobile-choice-toggle .mobile-choice-label { display: none; }
-}
-
-/* -------------------------------------------------------------------------------------------------
- * 2 · Welcome screen (no skin open)
- *     Older phone rules target the bare `aside` element, which also matches the welcome
- *     page's `aside.welcome-aside` and pinned it over the recent list. Without a skin the
- *     split dock has nothing to switch between, so the welcome page takes the whole window.
- * ------------------------------------------------------------------------------------------------- */
-
-@media (max-width: 760px) {
-  body:has(.canvas-wrap.empty) .mobile-workspace-tabs {
-    display: none;
-  }
-
-  body:has(.canvas-wrap.empty) main > .workspace {
-    top: 0;
-    height: 100%;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr);
-    border-top: 0;
-  }
-
-  /* 手机上用双指缩放画布，不显示缩放按钮 */
-  .preview-zoom-control {
-    display: none;
-  }
-
-  .canvas-wrap:not(.empty) {
-    touch-action: none;
-  }
-
-  .canvas-wrap.empty .empty-state {
-    display: block;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-  .welcome-main {
-    gap: 24px;
-    padding: 20px max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-    overflow: visible;
-  }
-
-  .welcome-section-head {
-    flex-wrap: wrap;
-    align-items: center;
-    row-gap: 6px;
-  }
-
-  .welcome-recent .welcome-section-head h2,
-  .welcome-hero h1 {
-    font-size: var(--font-size-xl);
-    line-height: 1.25;
-  }
-
-  .welcome-head-action {
-    margin-left: auto;
-    min-height: 34px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    white-space: nowrap;
-  }
-
-  .welcome-hero p {
-    font-size: var(--font-size-md);
-  }
-
-  .template-grid,
-  .recent-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 12px;
-  }
-
-  .template-card {
-    min-width: 0;
-    gap: 12px;
-    padding: 12px;
-  }
-
-  .template-grid .template-preview,
-  .recent-grid .template-preview {
-    height: 128px;
-  }
-
-  .template-name-row,
-  .template-meta {
-    min-width: 0;
-  }
-
-  .template-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .template-meta {
-    flex-wrap: wrap;
-    row-gap: 4px;
-  }
-}
-
-/* -------------------------------------------------------------------------------------------------
- * 3 · Split editor (portrait phones)
- *     Panes above, dock (pane switch + grab handle) in between, canvas below — or mirrored
- *     when 「预览位置」 is set to top. The Pen dock is 56px tall; the older budget reserved a
- *     dock-sized gap above the panes even when the dock sits at the split.
- * ------------------------------------------------------------------------------------------------- */
-
-@media (max-width: 760px) and (orientation: portrait) {
-  :root:not([data-mobile-preview-position="top"]) body main > :is(aside, .source) {
-    top: 0;
-    height: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  :root[data-mobile-preview-position="top"] body main > :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-position="top"] body main > .workspace {
-    top: 0;
-    height: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body main > :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body .mobile-workspace-tabs {
-    top: 0;
-  }
-
-  main > :is(aside, .source) {
-    border-top: 0;
-    border-bottom: 0;
-    background: var(--material-panel);
-  }
-
-  /* Each half of the hairline represents its pane: layout on the left, inspector on the right. */
-
-  .mobile-workspace-tabs {
-    height: var(--mobile-dock-h);
-    justify-content: center;
-    align-items: center;
-    gap: 0;
-    padding: 0;
-    border: 0;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane] {
-    position: relative;
-    z-index: 3;
-    pointer-events: none;
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    color: transparent;
-    font-size: 0;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane]::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: var(--line-strong);
-    transition: background-color var(--duration-base) var(--ease-standard);
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"] {
-    background: transparent;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"]::after {
-    background: var(--accent);
-  }
-
-  .mobile-split-handle {
-    z-index: 2;
-    inset: calc(-1 * var(--space-sm)) 0 auto;
-    width: auto;
-    height: calc(var(--space-lg) + var(--mobile-dock-h));
-    border-radius: 0;
-    transform: none;
-  }
-
-  .mobile-split-handle::before,
-  .mobile-split-handle .mobile-split-icon {
-    display: none;
-  }
-
-  .mobile-split-handle.dragging,
-  .mobile-split-handle:focus-visible {
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
-  }
-
-  /* Canvas: compact preview toolbar on top, canvas fills the rest. The desktop grid
-     (48px · 1fr · 30px) used to squeeze the canvas into the 48px toolbar row. */
-  :root:not([data-mobile-preview-collapsed="true"]) body:not(:has(.canvas-wrap.empty)) main > .workspace {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-columns: minmax(0, 1fr);
-    border-top: 0;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body main > .workspace {
-    display: none;
-  }
-
-  main > .workspace > .workspace-status {
-    display: none;
-  }
-
-  body:not(:has(.canvas-wrap.empty)) .preview-toolbar {
-    height: auto;
-    min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    padding: 6px max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left));
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    border-bottom: 1px solid var(--line);
-    background: var(--material-panel);
-  }
-
-  .preview-toolbar-start,
-  .preview-toolbar-end {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    position: static;
-  }
-
-  .preview-toolbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .preview-toolbar #device-control {
-    width: auto;
-    flex: 1 1 auto;
-    min-width: 116px;
-    position: static;
-    transform: none;
-  }
-
-  .preview-toolbar #skin-state-control {
-    flex: none;
-  }
-
-  .preview-toolbar #device-control select,
-  .preview-toolbar #device {
-    width: 100%;
-    min-width: 0;
-    height: 30px;
-    padding: 0 16px 0 0;
-    font-size: var(--font-size-md);
-  }
-
-  .preview-toolbar #device-control .device-control-icon {
-    display: none;
-  }
-
-  .preview-toolbar #device-control,
-  .preview-toolbar #skin-state-control {
-    height: 32px;
-    padding: 0 8px;
-  }
-
-  .preview-toolbar #skin-state-control {
-    align-items: center;
-  }
-
-  /* 窄屏控件只有 58–72px，且移动端下拉不画箭头；沿用桌面端给箭头留的 26px 会把“默认”裁掉一截。 */
-  .preview-toolbar #skin-state-control .skin-state-value {
-    left: var(--space-sm);
-    right: var(--space-sm);
-    line-height: 30px;
-  }
-
-  .canvas-wrap {
-    min-height: 0;
-    padding: 8px;
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .canvas-wrap:not(.empty) {
-    padding-bottom: calc(var(--space-sm) + var(--safe-area-bottom));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .canvas-multi-toolbar {
-    bottom: calc(var(--space-lg) + var(--space-2xs) + var(--safe-area-bottom));
-  }
-}
-
-/* -------------------------------------------------------------------------------------------------
- * 4 · Panes: overview rail and inspector group rail
- * ------------------------------------------------------------------------------------------------- */
-
-@media (max-width: 760px) and (orientation: portrait) {
-  .preview-toolbar #skin-state-control {
-    width: 58px;
-    max-width: 58px;
-  }
-
-  /* The rail already names the group; a collapsible summary would only hide its items. */
-
-}
-
-/* Narrow phones (iPhone SE, 360dp Android): the mode pill drops its label for the icon. */
-
-/* -------------------------------------------------------------------------------------------------
- * 5 · Landscape phones
- *     The three-column desktop frame stays, but the canvas row had collapsed to the 48px
- *     toolbar slot and the 30px status row grew to fill the column.
- * ------------------------------------------------------------------------------------------------- */
-
-@media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
-  :root:not([data-mobile-preview-collapsed="true"]) body:not(:has(.canvas-wrap.empty)) main > .workspace {
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  main > .workspace > .workspace-status {
-    display: none;
-  }
-
-  body:not(:has(.canvas-wrap.empty)) .preview-toolbar {
-    height: auto;
-    min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    padding: 6px 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-  }
-
-  .preview-toolbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .preview-toolbar-start,
-  .preview-toolbar-end {
-    flex: none;
-    position: static;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .preview-toolbar #device-control {
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 116px;
-    position: static;
-    transform: none;
-  }
-
-  .preview-toolbar #device-control .device-control-icon {
-    display: none;
-  }
-
-  .preview-zoom-control {
-    display: none;
-  }
-
-  .canvas-wrap.empty .empty-state {
-    overflow-y: auto;
-  }
-}
-
-/* -------------------------------------------------------------------------------------------------
- * 7 · Other sheets on phones
- *     The new-skin list scrolled inside a dialog that also scrolled (its buttons were below
- *     the fold), and the layout-image form overlapped its own footer. Both become a column
- *     with a scrolling middle and a footer that stays reachable and opaque.
- * ------------------------------------------------------------------------------------------------- */
+/* —— 手机上的其它面板与对话框 —— */
 
 /* —— 对话框内容布局（外壳、头、底、按钮都是 components.css 的 .ui-dialog） —— */
 .picker-dialog { --_width: 1100px; height: min(760px, calc(var(--viewport-height) - var(--space-2xl))); overflow: hidden; }
 #picker-frame { display: block; width: 100%; height: 100%; border: 0; }
-@media (max-width: 640px) {
-  .picker-dialog {
-    width: 100vw;
-    height: var(--viewport-height);
-    max-height: none;
-    padding-top: var(--safe-area-top);
-    padding-bottom: var(--safe-area-bottom);
-    border: 0;
-    border-radius: 0;
-  }
-}
 .layout-image-file {
   display: grid;
   justify-items: center;
@@ -4081,3 +3068,301 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 .layout-image-config:disabled { opacity: var(--disabled-opacity); }
 @media (max-width: 560px) { .layout-image-targets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
+
+/* =================================================================================================
+ * 移动端 App 外壳（DESIGN.md §14）
+ * 应用栏 + 页面区（画布 / 属性 / 文件）+ 底部标签栏。桌面的三栏工作区不受影响。
+ * 断点与 tokens.css、mobile-media.ts、components.css 的 .ui-tabbar 保持一致。
+ * ================================================================================================= */
+
+@media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
+
+  :root:has(body.app-window) {
+    background: var(--material-toolbar);
+  }
+
+  /* —— 应用栏：菜单 · 文档名 · 撤销 / 重做 · 模式胶囊 —— */
+  .titlebar {
+    height: var(--titlebar-height);
+    min-height: var(--titlebar-height);
+    gap: var(--space-xs);
+    padding: var(--safe-area-top) max(var(--space-sm), env(safe-area-inset-right)) 0 max(var(--space-sm), env(safe-area-inset-left));
+    overflow: visible;
+    border-bottom: 1px solid var(--line);
+    background: var(--material-toolbar);
+  }
+  .titlebar-left,
+  .titlebar-right { flex: none; gap: var(--space-xs); }
+  .titlebar-center { flex: 1 1 auto; min-width: 0; justify-content: flex-start; }
+  .titlebar-left > .spacer { display: none; }
+  .titlebar .desktop-quick-actions { display: flex; flex: none; gap: var(--space-2xs); }
+  .titlebar :is(.ui-icon-button, .ui-button) { --_height: var(--control-height-lg); }
+  .titlebar-preferences,
+  .titlebar .window-controls { display: none; }
+  .titlebar .mode-control { display: none; }
+  .titlebar .mobile-choice-toggle { display: inline-flex; flex: none; }
+  .titlebar .mobile-choice-toggle .mode-toggle-icon { display: none; }
+
+  .titlebar .document-title {
+    position: static;
+    min-width: 0;
+    max-width: 100%;
+    display: inline-flex;
+    gap: var(--space-xs);
+    padding: var(--space-xs) 0;
+    transform: none;
+    background: transparent;
+    box-shadow: none;
+    pointer-events: auto;
+  }
+  .titlebar .document-title .document-icon { display: none; }
+  .titlebar .document-title strong,
+  .titlebar .document-title input {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    overflow: hidden;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 未保存只留一个圆点（提醒色，不是强调色）。 */
+  .titlebar .document-title #dirty {
+    flex: none;
+    width: var(--space-sm);
+    height: var(--space-sm);
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: var(--state-warn);
+    color: transparent;
+    font-size: 0;
+  }
+  .titlebar .document-title #dirty::before { display: none; }
+
+  /* —— 页面区：三页叠在同一格，底部标签栏独占一行 —— */
+  main {
+    height: calc(var(--viewport-height) - var(--titlebar-height));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
+  }
+  main > :is(aside.sidebar, .workspace, .source) {
+    grid-area: 1 / 1;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    border: 0;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+  main > .ui-tabbar { grid-area: 2 / 1; }
+  #inspector-resize-handle { display: none; }
+  :root[data-mobile-tab="canvas"] main > .workspace,
+  :root[data-mobile-tab="inspector"] main > .source,
+  :root[data-mobile-tab="files"] main > aside.sidebar {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  body:has(.canvas-wrap.empty) .ui-tabbar,
+  :root[data-keyboard-open="true"] .ui-tabbar { display: none; }
+
+  /* —— 文件页：页头 + 可选的文件操作条 + 列表 —— */
+  main > aside.sidebar {
+    display: flex;
+    flex-direction: column;
+    background: var(--material-panel);
+  }
+  main > aside.sidebar > .pane-heading {
+    flex: none;
+    height: var(--mobile-row-height);
+    margin: 0;
+    padding: 0 max(var(--space-md), env(safe-area-inset-right)) 0 max(var(--space-md), env(safe-area-inset-left));
+    border-bottom: 1px solid var(--line-soft);
+  }
+  main > aside.sidebar > .source-file-toolbar {
+    flex: none;
+    margin: var(--space-sm) max(var(--space-sm), env(safe-area-inset-right)) var(--space-xs) max(var(--space-sm), env(safe-area-inset-left));
+  }
+  main > aside.sidebar > #files {
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-xs) max(var(--space-sm), env(safe-area-inset-right)) var(--space-lg) max(var(--space-sm), env(safe-area-inset-left));
+    overscroll-behavior: contain;
+  }
+  /* 手机概览：左侧一列分组磁贴，右侧只显示当前分组。 */
+  .sidebar-overview {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+  }
+  .mobile-overview-groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+    min-height: 0;
+    padding: var(--space-2xs);
+    overflow-y: auto;
+    border-right: 1px solid var(--line-soft);
+  }
+  .sidebar-overview > .nav-group { display: none; min-height: 0; overflow-y: auto; }
+  .sidebar-overview > .nav-group.mobile-overview-active { display: block; }
+  .sidebar-overview > .nav-group.mobile-overview-active > .nav-group-body { padding-top: var(--space-xs); }
+  #files .sidebar-overview > .nav-group > .nav-section { display: none; }
+  aside #files:has(.sidebar-overview:not([hidden])) { overflow: hidden; padding-bottom: 0; }
+
+  /* —— 画布页：画布占满页面区，只有右下角一个悬浮的预览入口 —— */
+  main > .workspace {
+    position: relative;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--canvas-surface);
+  }
+  main > .workspace > .preview-toolbar,
+  main > .workspace > .workspace-status,
+  main > .workspace > .preview-zoom-control,
+  #preview-coordinates { display: none; }
+  main > .workspace > .canvas-wrap {
+    min-height: 0;
+    padding: var(--space-sm);
+    touch-action: none;
+  }
+  main > .workspace > .canvas-wrap.empty {
+    padding: 0;
+    touch-action: auto;
+  }
+  main > .workspace > .canvas-multi-toolbar {
+    bottom: var(--space-md);
+    max-width: calc(100% - var(--space-lg));
+    overflow-x: auto;
+  }
+  .mobile-canvas-tools {
+    display: flex;
+    position: absolute;
+    right: max(var(--space-md), env(safe-area-inset-right));
+    bottom: var(--space-md);
+    z-index: 6;
+  }
+  .mobile-canvas-tools > .mobile-preview-more { display: block; }
+  .mobile-canvas-tools > .mobile-preview-more > summary {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full);
+    background: var(--menu);
+    box-shadow: var(--shadow-md);
+  }
+  body:has(.canvas-wrap.empty) .mobile-canvas-tools,
+  :root[data-keyboard-open="true"] .mobile-canvas-tools { display: none; }
+
+  /* —— 手机上的菜单呈现为底部 sheet：遮罩 + 贴底浮层，桌面的下拉行为不变 —— */
+  .toolbar-more[open]::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+    background: var(--backdrop);
+    animation: ui-fade var(--duration-fast) var(--ease-standard);
+  }
+  .toolbar-more > .ui-menu {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 100;
+    width: auto;
+    max-width: none;
+    max-height: var(--mobile-sheet-max-height);
+    margin: 0;
+    padding: var(--space-sm) max(var(--space-md), env(safe-area-inset-right)) calc(var(--space-lg) + var(--safe-area-bottom)) max(var(--space-md), env(safe-area-inset-left));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-width: 1px 0 0;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    transform-origin: bottom center;
+    animation: ui-sheet-in var(--duration-slow) var(--ease-emphasized);
+  }
+  .toolbar-more > .ui-menu > .ui-list-item {
+    min-height: var(--mobile-row-height);
+    font-size: var(--font-size-md);
+  }
+  .toolbar-more > .ui-menu > .ui-list-item[hidden] { display: none; }
+
+  /* —— 欢迎页：没有标签栏，页面区占满 —— */
+  body:has(.canvas-wrap.empty) main > .workspace {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .canvas-wrap.empty .empty-state {
+    display: block;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .welcome-main {
+    gap: var(--space-xl);
+    padding: var(--space-lg) max(var(--space-lg), env(safe-area-inset-right)) calc(var(--space-2xl) + var(--safe-area-bottom)) max(var(--space-lg), env(safe-area-inset-left));
+    overflow: visible;
+  }
+  .welcome-section-head {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: var(--space-xs);
+  }
+  .welcome-recent .welcome-section-head h2,
+  .welcome-hero h1 {
+    font-size: var(--font-size-xl);
+    line-height: 1.25;
+  }
+  .welcome-head-action {
+    margin-left: auto;
+    min-height: var(--control-height-lg);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    white-space: nowrap;
+  }
+  .welcome-hero p { font-size: var(--font-size-md); }
+  .template-grid,
+  .recent-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--space-md);
+  }
+  .template-card {
+    min-width: 0;
+    gap: var(--space-md);
+    padding: var(--space-md);
+  }
+  .template-grid .template-preview,
+  .recent-grid .template-preview { height: 128px; }
+  .template-name-row,
+  .template-meta { min-width: 0; }
+  .template-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .template-meta { flex-wrap: wrap; row-gap: var(--space-xs); }
+}
+
+@keyframes ui-sheet-in {
+  from { opacity: 0; transform: translateY(16px); }
+}
+
+/* 手机上的选择器弹窗（项目选择器）铺满屏幕。 */
+@media (max-width: 640px) {
+  .picker-dialog {
+    width: 100vw;
+    height: var(--viewport-height);
+    max-height: none;
+    padding-top: var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
+    border: 0;
+    border-radius: 0;
+  }
+}
