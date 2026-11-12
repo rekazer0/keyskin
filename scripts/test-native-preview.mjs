@@ -94,7 +94,8 @@ const enter = async (input, value) => { await input.fill(value); await input.pre
 const bubbleGroup = () => page.locator('#document-fields [data-inspector-group-label="气泡"]')
 const popup = () => page.evaluate(async () => {
   const { preview } = await import('/src/app/canvas-interaction.ts')
-  return (await preview.sceneForState()).keys.find((key) => key.section === 'KEY2').popup
+  const bar = (await preview.sceneForState()).keys.find((key) => key.section === 'KEY2').holdPopup
+  return bar?.layers(bar.selected)
 })
 async function pressBubble(hold = false) {
   const point = await page.evaluate(async () => {
@@ -262,7 +263,7 @@ try {
   assert.ok(editedPalm.texts.every(({ font }) => font.includes('26px')), 'Palm bubble text edits reach the canvas')
   for (let index = 0; index < 4; index++) await history('undo')
 
-  // Sogou presses play anim.ini; a tap pops the key's label on PopupBG.
+  // Sogou taps only play anim.ini; long presses show the native character bar.
   await open('animated.ssf', animatedSogou())
   await selectLayout('light/skin/port/py_9.ini')
   const sogouPress = await page.evaluate(async () => {
@@ -275,8 +276,7 @@ try {
       duration: scene.effects.pressDuration('KEY2', 1),
       squeeze: scene.effects.press('KEY2', 100, 1).back?.scale,
       key: key.rect,
-      sprite: sprite && { rect: sprite.rect, translation: sprite.motion?.translation },
-      popup: key.popup?.flatMap((layer) => layer.kind === 'text' ? [{ text: layer.text.text, color: layer.text.color }] : [layer.rect]),
+      sprite: sprite && { rect: sprite.rect, translation: sprite.motion?.translation, overlay: sprite.overlay },
     }
   })
   assert.equal(sogouPress.duration, 400)
@@ -285,9 +285,41 @@ try {
   const side = Math.min(sogouPress.key.width, sogouPress.key.height) / 2
   assert.deepEqual(sogouPress.sprite.rect, { x: sogouPress.key.x + (sogouPress.key.width - side) / 2, y: sogouPress.key.y + (sogouPress.key.height - side) / 2, width: side, height: side })
   assert.deepEqual(sogouPress.sprite.translation, [0, -100], 'v·t after 200 ms')
-  assert.deepEqual(sogouPress.popup[0], { x: sogouPress.key.x, y: sogouPress.key.y - 184, width: sogouPress.key.width, height: 184 })
-  assert.deepEqual(sogouPress.popup.slice(1), [{ text: 'ABC', color: 'rgba(17, 34, 51, 1)' }, { text: '2', color: 'rgba(17, 34, 51, 1)' }])
-  assert.deepEqual((await pressBubble()).texts.map(({ text }) => text), ['ABC', '2'], 'Sogou pointer presses draw the native popup')
+  assert.equal(sogouPress.sprite.overlay, true, 'decorations use the layer above the candidate bar')
+  // Sample the real animation beyond the panel's upper edge, inside the candidate bar.
+  const decoration = await page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    await preview.whenDrawn()
+    const realNow = Date.now
+    const now = realNow()
+    Date.now = () => now
+    try {
+      preview.nativePress = { section: 'KEY2', startedAt: now - 350, seed: 1 }
+      await preview.whenDrawn()
+      const sprite = preview.drawnScene.effects.press('KEY2', 350, 1).sprites[0]
+      const panel = preview.canvas.getBoundingClientRect()
+      const overlay = preview.hintCanvas.getBoundingClientRect()
+      const x = panel.left + (sprite.rect.x + sprite.rect.width / 2) * panel.width / preview.panelWidth
+      const y = panel.top + (sprite.rect.y + sprite.rect.height / 2 + sprite.motion.translation[1]) * panel.height / preview.surfaceHeight
+      const candidate = document.querySelector('#candidate-area').getBoundingClientRect()
+      const context = preview.hintCanvas.getContext('2d')
+      const pixel = [...context.getImageData(Math.round((x - overlay.left) * preview.hintCanvas.width / overlay.width), Math.round((y - overlay.top) * preview.hintCanvas.height / overlay.height), 1, 1).data]
+      // The overlay ignores pointer events; temporarily enable them to check the painted stacking order.
+      preview.hintCanvas.style.pointerEvents = 'auto'
+      const top = document.elementFromPoint(x, y) === preview.hintCanvas
+      preview.hintCanvas.style.removeProperty('pointer-events')
+      const visible = preview.nativeOverlayVisible
+      preview.nativePress = undefined
+      await preview.whenDrawn()
+      const cleared = [...context.getImageData(0, 0, preview.hintCanvas.width, preview.hintCanvas.height).data].every(value => value === 0)
+      return { pixel, top, visible, cleared, hint: preview.hintVisible, abovePanel: y < panel.top, inCandidates: y >= candidate.top && y < candidate.bottom }
+    } finally { Date.now = realNow; preview.nativePress = undefined }
+  })
+  assert.ok(decoration.abovePanel && decoration.inCandidates, 'the decoration flies over the candidate bar')
+  assert.deepEqual(decoration.pixel, [200, 10, 10, 255], 'the decoration remains painted outside the panel')
+  assert.ok(decoration.top && decoration.visible, 'the candidate bar cannot cover the decoration')
+  assert.ok(decoration.cleared && !decoration.hint, 'ending the effect clears the overlay without showing a tap bubble')
+  assert.deepEqual((await pressBubble(true)).texts.map(({ text }) => text), ['A', 'B', 'C', '2', 'a', 'b', 'c'], 'Sogou long presses draw the native character bar')
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   const beforeSogou = await popup()
   await enter(bubbleGroup().locator('[data-document-key="POPUP_OFFSET_VERTICAL"] input[type=number]'), '-24')
@@ -296,24 +328,30 @@ try {
   assert.equal((await popup())[0].rect.y, beforeSogou[0].rect.y)
   await history('redo')
   assert.equal((await popup())[0].rect.y, beforeSogou[0].rect.y - 24)
-  await enter(bubbleGroup().locator('[data-document-key="TEXT_SIZE"] input[type=number]'), '52')
+  await page.evaluate(async () => {
+    const { editSsfFile, setSsfValue } = await import('/src/app/ssf-fields.ts')
+    editSsfFile('1080/status1/phoneSkin.ini', document => {
+      setSsfValue(document, 'TextStyle_Popup_Phone_LongPress', 'TEXT_SIZE', '52')
+      setSsfValue(document, 'TextStyle_Popup_Phone_Minor_LongPress', 'TEXT_SIZE', '52')
+    })
+  })
   assert.ok((await popup()).filter((layer) => layer.kind === 'text').every(({ text }) => text.size === 52))
-  // Remove the image through the same mutation path; authored colours still provide a popup.
+  // Long-press bars use their own foreground reference and the authored background colour.
   await page.evaluate(async () => {
     const { editSsfFile, setSsfValue } = await import('/src/app/ssf-fields.ts')
     editSsfFile('1080/status1/phoneSkin.ini', (document) => {
       setSsfValue(document, 'PopupBG', 'BG_IMAGE', '')
       setSsfValue(document, 'General', 'POPUP_BG_COLOR', '0xFF225588')
-      setSsfValue(document, 'FGStyle_Phone_Popup', 'LABEL_STYLE', 'TextStyle_CustomPopup')
+      setSsfValue(document, 'FGStyle_Phone_Popup_LongPress', 'LABEL_STYLE', 'TextStyle_CustomPopup')
       setSsfValue(document, 'TextStyle_CustomPopup', 'TEXT_COLOR', '0xFF778899')
     })
   })
   const colorPopup = await popup()
   assert.equal(colorPopup[0].kind, 'fill')
   assert.equal(colorPopup[0].color, 'rgba(34, 85, 136, 1)')
-  assert.equal(colorPopup[1].text.color, 'rgba(119, 136, 153, 1)', 'Sogou respects the popup foreground’s text-style reference')
+  assert.equal(colorPopup.find(layer => layer.kind === 'text' && layer.text.text === '2').text.color, 'rgba(119, 136, 153, 1)', 'Sogou respects the popup foreground’s text-style reference')
   await page.getByRole('button', { name: '交互预览', exact: true }).click()
-  assert.ok((await pressBubble()).texts.some(({ color }) => color === '#778899'))
+  assert.ok((await pressBubble(true)).texts.some(({ color }) => color === '#778899'))
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   await page.evaluate(async () => {
     const { editSsfFile, setSsfValue } = await import('/src/app/ssf-fields.ts')
@@ -323,11 +361,7 @@ try {
       setSsfValue(document, 'FGStyle_Phone_Popup', 'MINOR_LABEL_HORIZONTAL_OFFSET', '12')
     })
   })
-  const directPopup = await popup()
-  assert.equal(directPopup[0].kind, 'image', 'PopupBG accepts a direct image as well as an image section')
-  assert.equal(directPopup.length, 2, 'the foreground visibility flag hides the main label')
-  assert.equal(directPopup[1].text.text, '2')
-  assert.equal(directPopup[1].text.x, directPopup[0].rect.x + directPopup[0].rect.width / 2 + 12)
+  assert.equal((await popup())[0].kind, 'fill', 'single-key PopupBG does not replace the long-press bar')
   await page.getByRole('button', { name: '交互预览', exact: true }).click()
   await page.evaluate(async () => {
     const { hintPreviewEnabled } = await import('/src/app/dom.ts')

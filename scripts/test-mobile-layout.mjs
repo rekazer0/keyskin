@@ -135,23 +135,26 @@ const portraitPhones = [
 ]
 
 async function assertPreviewToggles(page) {
-  for (const [choice, values, icons] of [
-    ["orientation", ["port", "land"], ["rectangle-vertical", "rectangle-horizontal"]],
-    ["theme", ["light", "dark"], ["sun", "moon"]],
-  ]) {
-    const button = page.locator(`.preview-toolbar [data-mobile-choice="${choice}"]`)
-    assert.equal(await page.locator(".preview-toolbar .preview-choice button:visible").count(), 0, "segmented choices hidden on phones")
-    assert.equal(await page.locator(`.preview-toolbar [data-mobile-choice="${choice}"]:visible`).count(), 1, `${choice} has one mobile button`)
-    for (const [step, index] of [0, 1, 0].entries()) {
-      await page.waitForFunction(([choice, value]) => document.querySelector(`#${choice}`).value === value, [choice, values[index]])
-      await button.locator(`svg[data-pen-icon="${icons[index]}"]`).waitFor({ state: "visible" })
-      assert.equal(await page.locator(`#${choice}`).inputValue(), values[index], `${choice} state at step ${step}`)
-      assert.equal(await button.locator("svg:visible").count(), 1, `${choice} shows one icon`)
-      assert.ok(await button.locator(`svg[data-pen-icon="${icons[index]}"]`).isVisible(), `${choice} icon follows state`)
-      if (step === 0) await button.click()
-      if (step === 1) await button.press("Enter")
-    }
-  }
+  assert.equal(await page.locator(".preview-toolbar .preview-choice button:visible").count(), 0, "segmented choices hidden on phones")
+  assert.equal(await page.locator('.preview-toolbar [data-mobile-choice="orientation"]:visible').count(), 0, "orientation is secondary on phones")
+  assert.equal(await page.locator('.preview-toolbar [data-mobile-choice="theme"]:visible').count(), 0, "theme is secondary on phones")
+  assert.equal(await page.locator(".preview-toolbar #toggle-guides:visible").count(), 0, "guides are secondary on phones")
+}
+
+async function assertPreviewSecondaryMenu(page) {
+  const menu = page.locator("#mobile-preview-more")
+  assert.equal(await menu.count(), 1, "mobile preview has one secondary menu")
+  assert.equal(await page.locator("#device-control:visible").count(), 0, "device picker is secondary on phones")
+  assert.equal(await page.locator("#skin-state-control:visible").count(), 0, "skin state picker is secondary on phones")
+  await menu.locator(":scope > summary").click()
+  assert.equal(await page.locator("#mobile-preview-more[open]").count(), 1, "secondary menu opens")
+  assert.equal(await page.locator('#mobile-preview-orientation:visible').count(), 1, "orientation is in the secondary menu")
+  assert.equal(await page.locator('#mobile-preview-theme:visible').count(), 1, "theme is in the secondary menu")
+  const guides = page.locator("#mobile-preview-guides")
+  const before = await guides.getAttribute("aria-pressed")
+  await guides.click()
+  assert.notEqual(await guides.getAttribute("aria-pressed"), before, "guide state follows the shared control")
+  assert.equal(await page.locator("#mobile-preview-more[open]").count(), 0, "secondary menu closes after an action")
 }
 
 for (const viewport of portraitPhones) {
@@ -177,6 +180,7 @@ for (const viewport of portraitPhones) {
   await check(`${tag} split editor layout`, () => withPage(viewport, async (page) => {
     await openTemplate(page, "official-android-bds")
     await assertPreviewToggles(page)
+    await assertPreviewSecondaryMenu(page)
     await assertTitlebarClean(page, "editor")
     await assertNoPageOverflow(page, "editor")
     const main = await rect(page, "main")

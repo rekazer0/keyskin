@@ -5,7 +5,7 @@
 
 import type { IniDocument } from "../ini.ts"
 import type { SsfKeyBinding } from "./ssf-keymap.ts"
-import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground } from "./ssf-parts.ts"
+import { freeSectionName, ownSection, ssfBackground, ssfForeground, ssfIconPair } from "./ssf-parts.ts"
 
 /** Images that follow NORMAL / PRESSED when those are replaced and still showed the same file. */
 const LINKED_STATES: Record<string, string[]> = { NORMAL: ["DISABLED", "NORMAL_ON"], PRESSED: ["PRESSED_ON"] }
@@ -46,9 +46,10 @@ export function applySsfKeyImage(skin: IniDocument, keys: IniDocument, binding: 
   // Sogou keys have one foreground: the picture replaces it, keeping the other state's image.
   const foreground = ssfForeground(skin, keys, binding)
   const owner = ownSection(keys, binding)
+  const icon = foreground?.kind === "icon" ? ssfIconPair(skin, foreground.owner) : undefined
   const current = foreground?.kind === "keys"
     ? entries(keys, foreground.images)
-    : foreground ? [{ key: "NORMAL", value: firstValue(skin.get(foreground.owner, "ICON"))! }] : []
+    : icon ? [{ key: "NORMAL", value: icon.normal }, { key: "PRESSED", value: icon.pressed }] : []
   if (state === "PRESSED" && !current.some((entry) => entry.key === "NORMAL")) current.push({ key: "NORMAL", value: "transparent.png" })
   setValue(keys, owner, "FG_IMAGES", imageSection(keys, `Foground_${owner}`, current, state, file))
   // The slice is cut to the key, so it fills the key.

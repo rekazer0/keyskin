@@ -1,6 +1,6 @@
 import { appState } from "./state"
 import { source, toolbarPreview, preview, mobilePortraitQuery } from "./canvas-interaction"
-import { toggleGuides, mobileToggleGuides, newTileButton, atlasCanvas, resourceListView, resourceDetail, sourceName, quickInspector, files } from "./dom"
+import { toggleGuides, mobilePreviewGuides, newTileButton, atlasCanvas, resourceListView, resourceDetail, sourceName, quickInspector, files } from "./dom"
 import { setGuidesVisible, refreshPreview, syncCandidateSelection } from "./preview-render"
 import { bdaAppearancePart, currentBdaAppearance, bdaBasePath, refreshBdaLayout, isBdaVirtualTextPath, isBdaLayoutPath, isBdaAppearancePartPath } from "./bda-documents"
 import { hideImageWorkspace, renderResourceInspector, selectResourceImage } from "./resource-inspector"
@@ -50,7 +50,7 @@ export function selectFile(
   appState.resourceConfigActive = resourceMode === "image" || resourceMode === "style" || resourceMode === "sound"
   appState.resourceInspectorMode = resourceMode === "style" ? "style" : resourceMode === "sound" ? "sound" : "image"
   const guideLabel = appState.resourceInspectorMode === "image" && appState.resourceConfigActive ? "切片网格" : "辅助线"
-  for (const button of [toggleGuides, mobileToggleGuides]) {
+  for (const button of [toggleGuides, mobilePreviewGuides]) {
     button.title = guideLabel
     button.setAttribute("aria-label", guideLabel)
   }

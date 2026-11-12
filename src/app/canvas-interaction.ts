@@ -1,6 +1,7 @@
 import { settingsDialog, $, sidebarViewControl, device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton } from "./dom"
 import { LazySourceCodeEditor } from "../lazy-source-editor.ts"
 import { effectiveDeviceValue } from "../canvas-background.ts"
+import { deviceSpec } from "../devices.ts"
 import { type SourceWriteSnapshot } from "../source-tree.ts"
 import { createGestureHistory } from "../gesture-history"
 import { Preview, type PreviewEvent } from "../preview.ts"
@@ -23,6 +24,7 @@ import { IniDocument } from "../ini.ts"
 import { previewStateFromAction, previewToggleStateFromAction, previewStateTransitionFromAction, previewPageTransition } from "../actions.ts"
 import { bdaAvailableLayoutPaths, isBdaLayoutPath } from "./bda-documents"
 import { palmKeySound } from "./sxi-styles"
+import { ssfKeySoundPath } from "./ssf-documents"
 import { isSxiBoardAddress, palmBoardTypes, sxiBoardAddress, sxiPointer } from "./sxi-documents"
 import { boardFileName } from "../palm/sxi-layout.ts"
 import { boardTypeFromIniFileName } from "../palm/palm-board-types.ts"
@@ -66,6 +68,12 @@ export const inspectorTabButtons = Array.from(
 
 export function currentDeviceValue(): string {
   return effectiveDeviceValue(device.value)
+}
+
+export function previewScreenWidth(): number {
+  // 画布模式按校准搜狗预览的 2160×3840 Android 屏幕换算物理像素。
+  const spec = deviceSpec(currentDeviceValue()) ?? { width: 2160, height: 3840 }
+  return orientation.value === "land" ? spec.height : spec.width
 }
 
 export const resourceSearchControl = resourceSearch.closest("label")!
@@ -414,7 +422,9 @@ export function playSoundPath(path: string, onFinished?: (error?: string) => voi
   })()
 }
 
+/** Each format reads its own sound table; none falls through to another's parser. */
 function keySoundForEvent(event: PreviewEvent): string | undefined {
+  if (appState.archive?.format === "ssf") return ssfKeySoundPath(event.section)
   if (appState.archive?.format === "sxi") {
     const filename = palmKeySound(event.section)
     return filename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, filename) : undefined
@@ -427,9 +437,8 @@ function keySoundForEvent(event: PreviewEvent): string | undefined {
     if (!bytes) return
     const sound = decodeBdaSoundConfig(bytes)
     const sounds = bdaPlatform(appState.archive) === "ios" ? sound.iosKeySounds : sound.keySounds
-    const resource = sounds.get(bdaPanelKeyName(event.code))
-      ?? sounds.get(event.section)
-      ?? [...sounds.values()][0]
+    // Keys without their own entry play `default`; any other entry belongs to one key only.
+    const resource = sounds.get(bdaPanelKeyName(event.code)) ?? sounds.get("default")
     return resource?.resourceID
       ? soundPathForFilename(names, theme.value, orientation.value, resource.resourceID)
       : undefined

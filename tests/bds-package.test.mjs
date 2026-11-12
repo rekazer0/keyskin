@@ -63,7 +63,7 @@ test('整包修复：CRLF Info、补 symbol.ini，图片超过上限时合成图
     return encodePng({ width, height, data: new Uint8Array(width * height * 4).fill(0x80) })
   }))
   const text = (path) => strFromU8(out[path])
-  assert.equal(text('Info.txt'), 'Name=t\r\nSupportPlatform=A\r\n')
+  assert.equal(text('Info.txt'), 'Name=t\r\nSupportPlatform=A\r\nSupportDarkMode=1\r\n')
   assert.ok(out['light/port/symbol.ini'])
   assert.ok(text('light/port/py_9.ini').startsWith('[INPUT]\n[CAND]\n[MORE]\n'))
   assert.ok(!text('light/port/logo.ini').includes('[CAND]'))

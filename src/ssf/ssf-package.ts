@@ -192,4 +192,13 @@ export class SsfPackage {
     const path = this.path(theme, name)
     return path === undefined ? undefined : this.files.get(path)
   }
+
+  /** The file a `sound=` value (written without extension) names, shared by preview, inspector and writers. */
+  soundPath(theme: SsfTheme, sound: string): string | undefined {
+    return [...SOUND_EXTENSIONS.map((extension) => `${sound}.${extension}`), sound]
+      .map((name) => this.path(theme, name)).find(Boolean)
+  }
 }
+
+/** Sogou's `sound=` value has no extension; skins ship any of these next to the INI. */
+const SOUND_EXTENSIONS = ["wav", "ogg", "mp3", "aiff", "aif", "caf"]

@@ -102,7 +102,7 @@ export function legacyHintCandidates(
   defaults = false,
 ): string[] {
   if (defaults && direction === "hold" && !key.holdSymbols && !key.hold) {
-    const letters = [key.left, key.center, key.right]
+    const letters = [key.left, key.center, key.right, key.down]
       .filter((value) => /^[a-z]$/i.test(value))
     return letters.length > 1 && /^\d$/.test(key.up)
       ? [...new Set([...letters.map((value) => value.toUpperCase()), key.up, ...letters.map((value) => value.toLowerCase())])]
@@ -119,7 +119,7 @@ export function legacyHintHasHold(key: PreviewItem, hint: LegacyHint | undefined
   return Boolean(key.hold || key.holdSymbols || hint?.barIcon && isLegacyHintInputKey(key) && legacyHintCandidates(key, "hold", defaults).length)
 }
 
-export function legacyHintSelectedIndex(key: PreviewItem, candidates: readonly string[]): number {
+export function legacyHintSelectedIndex(key: Pick<PreviewItem, "center" | "up" | "hold" | "holdSymbols">, candidates: readonly string[]): number {
   return !key.hold && !key.holdSymbols && /^\d$/.test(key.up) && candidates.includes(key.up)
     ? candidates.indexOf(key.up)
     : Math.max(0, candidates.lastIndexOf(key.center))

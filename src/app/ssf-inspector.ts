@@ -5,7 +5,7 @@
 import type { IniDocument } from "../ini.ts"
 import type { SsfKeyBinding } from "../ssf/ssf-keymap.ts"
 import { ssfSectionLabel } from "../ssf/ssf-labels.ts"
-import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground, ssfLabelStyle, ssfSoundSection, ssfTextSections } from "../ssf/ssf-parts.ts"
+import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground, ssfIconPair, ssfLabelStyle, ssfSoundSection, ssfTextSections } from "../ssf/ssf-parts.ts"
 import { orientation } from "./dom"
 import { editSsfFile, renderGroup as renderSsfGroup, setSsfValue, ssfButton, ssfEntries, ssfFontImportButton, ssfFontOptions, type SsfBlock } from "./ssf-fields"
 import { openImageResourceChooser } from "./resource-inspector"
@@ -103,7 +103,9 @@ function foregroundGroup(skinPath: string, keysPath: string, skin: IniDocument, 
       { path: keysPath, section: foreground.owner, title: "前景位置", omit: ["FG_IMAGES", "ANIM_STYLE"], expect: ["FG_RECT"] },
     )
   } else if (foreground) {
-    blocks.push({ path: skinPath, section: foreground.owner, title: "图标", only: ["ICON", "ICON_PRESSED"], expect: ["ICON", "ICON_PRESSED"] })
+    const images = ssfIconPair(skin, foreground.owner)?.images
+    if (images) blocks.push({ path: skinPath, section: images, title: "图标", only: IMAGE_KEYS, expect: IMAGE_KEYS })
+    blocks.push({ path: skinPath, section: foreground.owner, title: images ? "图标覆盖" : "图标", only: ["ICON", "ICON_PRESSED", "ICONS"], expect: ["ICON", "ICON_PRESSED"] })
   } else {
     const add = ssfButton("添加前景图", "square-plus", () => openImageResourceChooser((resourceID) => {
       const file = /\.\w+$/.test(resourceID) ? resourceID : `${resourceID}.png`

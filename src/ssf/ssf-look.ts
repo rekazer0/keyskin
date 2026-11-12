@@ -8,7 +8,7 @@
 
 import type { IniDocument } from "../ini.ts"
 import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
-import { firstValue, ssfBackground, ssfForeground, ssfSoundSection, ssfTextSections } from "./ssf-parts.ts"
+import { firstValue, ssfBackground, ssfForeground, ssfForegroundLayout, ssfIconPair, ssfSoundSection, ssfSpaceIconColor, ssfTextSections } from "./ssf-parts.ts"
 import { parseSsfImage, ssfColor, type SsfImageRef, type SsfPackage, type SsfStretch, type SsfTheme } from "./ssf-package.ts"
 import { cached, fingerprint } from "./ssf-cache.ts"
 import { MAX_PIXELS, compositeImage, cropImage, decodePng, encodePng, isPng, placeImage, pngSize, resizeImage, type RgbaImage } from "./ssf-png.ts"
@@ -20,12 +20,9 @@ export type LookColors = { normal: string; pressed: string }
 /** Text size in target pixels, typeface file and weight, each only when the skin sets it. */
 export type LookText = { fontSize?: number; font?: { name: string; bytes: Uint8Array }; bold?: boolean }
 /** `texts` is the skin's own LABEL and MINOR_LABEL for keys Sogou draws as text. */
-type KeyLook = { binding: SsfKeyBinding; back?: LookPair; fore?: LookPair; label?: LookColors; labelText?: LookText; texts: Array<string | undefined> }
+type KeyLook = { binding: SsfKeyBinding; back?: LookPair; fore?: LookPair; label?: LookColors; icon?: LookColors; labelText?: LookText; texts: Array<string | undefined>; visible: boolean[]; iconRect?: number[] }
 
 type Foreground = { normal: string; pressed: string; rect?: number[] }
-
-/** Sogou's `sound=` value has no extension; skins ship any of these next to the INI. */
-const SOUND_EXTENSIONS = ["wav", "ogg", "mp3", "aiff", "aif", "caf"]
 
 export class SsfLook {
   readonly theme: SsfTheme
@@ -144,7 +141,7 @@ export class SsfLook {
   }
 
   /** `on` reads the `_ON` states, which Sogou's pinyin boards show on letter keys (capitals). */
-  private foregroundSource(binding: SsfKeyBinding, on: boolean): Foreground | undefined {
+  private foregroundSource(binding: SsfKeyBinding, on: boolean, iconRect?: number[]): Foreground | undefined {
     const found = ssfForeground(this.skin, this.keys, binding)
     if (found?.kind === "keys") {
       const state = (name: string) => firstValue(this.keys.get(found.images, on ? `${name}_ON` : name)) ?? firstValue(this.keys.get(found.images, name))
@@ -152,11 +149,7 @@ export class SsfLook {
       return { normal, pressed: state("PRESSED") ?? normal, rect: found.rect }
     }
     if (found?.kind === "icon") {
-      const icon = firstValue(this.skin.get(found.owner, "ICON"))!
-      return { normal: icon, pressed: firstValue(this.skin.get(found.owner, "ICON_PRESSED")) ?? icon }
-    }
-    if (binding.sections.some((section) => /^transparent\.png$/i.test(firstValue(this.skin.get(section, "ICON")) ?? ""))) {
-      return { normal: "transparent.png", pressed: "transparent.png" }
+      return { ...ssfIconPair(this.skin, found.owner)!, rect: iconRect }
     }
   }
 
@@ -164,10 +157,10 @@ export class SsfLook {
    * FG_RECT (fractions of the key) becomes transparent padding; an icon is centred on a canvas the
    * size of the key's own background image, which Sogou draws at the key's real size.
    */
-  private foregroundImage(name: string, rect: number[] | undefined, canvas: [number, number] | undefined, target?: [number, number]): LookImage | undefined {
-    const bytes = this.file(name)
-    const size = bytes && pngSize(bytes)
-    if (!bytes || !size) return
+  private foregroundImage(image: LookImage, rect: number[] | undefined, canvas: [number, number] | undefined, target?: [number, number]): LookImage | undefined {
+    const { id: name, bytes } = image
+    const size = pngSize(bytes)
+    if (!size) return
     const [sourceWidth, sourceHeight] = size
     if (rect) {
       // Sogou parses FG_RECT as Android RectF: left, top, right, bottom.
@@ -202,6 +195,15 @@ export class SsfLook {
     })
   }
 
+  /** Places built-in glyphs with the same ICON_RECT geometry as custom icons. */
+  placeIcon(pair: LookPair, rect: number[] | undefined, size?: [number, number]): LookPair {
+    if (!rect) return pair
+    return {
+      normal: this.foregroundImage(pair.normal, rect, size, size) ?? pair.normal,
+      pressed: this.foregroundImage(pair.pressed, rect, size, size) ?? pair.pressed,
+    }
+  }
+
   private labelColor(binding: SsfKeyBinding, qwerty: boolean, pressed: boolean): string | undefined {
     const field = pressed ? "TEXT_COLOR_PRESSED" : "TEXT_COLOR"
     for (const section of ssfTextSections(binding, qwerty, this.skin)) {
@@ -232,16 +234,60 @@ export class SsfLook {
     return this.textLook([section])
   }
 
+  /** Popup artwork and text, shared by the tap bubble and Baidu's long-press character bar. */
+  popup(qwerty: boolean) {
+    const owners = [qwerty ? "PopupBG_Qwerty" : "PopupBG_Phone", "PopupBG"]
+    const owner = owners.find((section) => firstValue(this.skin.get(section, "BG_IMAGE"))) ?? "PopupBG"
+    const name = firstValue(this.skin.get(owner, "BG_IMAGE"))
+    const ref = parseSsfImage(name)
+    const image = ref && this.image(ref)
+    const source = name ? this.statePair(name) ?? (image && { normal: image, pressed: image }) : undefined
+    const back = this.scaledPair(source)
+    const text = [qwerty ? "TextStyle_Popup_Qwerty" : "TextStyle_Popup_Phone", "TextStyle_Popup"]
+    const fg = [qwerty ? "FGStyle_Popup_Qwerty" : "FGStyle_Phone_Popup", "FGStyle_Popup"].find((section) => this.skin.hasSection(section))
+    const labelStyle = fg && firstValue(this.skin.get(fg, "LABEL_STYLE"))
+    if (labelStyle) text.unshift(labelStyle)
+    const color = (sections: string[], field = "TEXT_COLOR") => sections.map((section) => this.color(section, field)).find(Boolean)
+    const normal = color(text) ?? "FF373737"
+    const hold = qwerty ? text : ["TextStyle_Popup_Phone_Minor_LongPress", ...text]
+    const selected = qwerty ? text : ["TextStyle_Popup_Phone_LongPress", ...text]
+    const unit = this.scale ?? 1
+    const width = this.sogouWidth * unit
+    const sourceSize = source && pngSize(source.normal.bytes)
+    const numbers = (value: string | undefined) => value?.split(",").map(Number) ?? []
+    const padding = numbers(this.skin.get(owner, "PADDINGS"))
+    const labelBox = numbers(fg ? this.skin.get(fg, "LABEL_POSITION") : undefined)
+    const offset = Number(this.skin.get("General", "POPUP_OFFSET_VERTICAL"))
+    return {
+      back, color: this.color("General", "POPUP_BG_COLOR") ?? "FFFFFFFF",
+      text: { normal, pressed: color(text, "TEXT_COLOR_PRESSED") ?? normal }, label: this.textLook(text),
+      hold: { normal: color(hold) ?? normal, pressed: color(selected, "TEXT_COLOR_PRESSED") ?? color(selected) ?? normal }, holdLabel: this.textLook(hold),
+      size: sourceSize ? [Math.max(1, Math.round(sourceSize[0] * unit)), Math.max(1, Math.round(sourceSize[1] * unit))] : [Math.round(width * 0.15), Math.round(width * 0.18)],
+      padding: padding.length === 4 && padding.every(value => Number.isFinite(value) && value >= 0) ? padding.map((value) => Math.round(value * unit)) : [0, 0, 0, 0],
+      labelBox: labelBox.length === 4 && labelBox.every(value => Number.isFinite(value) && value >= 0 && value <= 1) && labelBox[2] > labelBox[0] && labelBox[3] > labelBox[1] ? labelBox : [0.2, 0.2, 0.8, 0.8],
+      offset: Number.isFinite(offset) ? Math.round(offset * unit) : 0,
+    }
+  }
+
   key(layout: string, action: string, landscape: boolean, size?: [number, number], sourceSection?: string, sourceBackground?: string): KeyLook {
     const binding = ssfKeyBinding(layout, action, landscape, sourceSection, sourceBackground)
     const sogouBack = this.background(binding)
     // Sogou's pinyin layouts mark letter keys S_FLAG=1 (English ones add KEY_FLAG_VALUE): they start upper case.
     const on = /^[a-z]$/.test(action) && ["py9", "py26"].includes(ssfBoard(layout))
-    const source = this.foregroundSource(binding, on)
+    const fgStyle = ssfForegroundLayout(this.skin, binding, layout, landscape)?.fgStyle
+    const field = (name: string) => fgStyle ? this.skin.get(fgStyle, name) : undefined
+    const rawRect = field("ICON_RECT")?.split(",").map(Number)
+    const iconRect = rawRect?.length === 4 && rawRect.every(Number.isFinite) ? rawRect : undefined
+    const visible = ["LABEL_VISIBLE", "MINOR_LABEL_VISIBLE"].map((name) => field(name)?.trim() !== "0")
+    const source = this.foregroundSource(binding, on, iconRect)
     const canvas = sogouBack ? pngSize(sogouBack.normal.bytes) : undefined
     const foreground = (name: string) => {
-      if (source?.rect && size) return this.foregroundImage(name, source.rect, canvas, size)
-      const image = this.foregroundImage(name, source?.rect, canvas)
+      if (/^transparent\.png$/i.test(name)) return this.derive("transparent", [], () => ({ width: 1, height: 1, data: new Uint8Array(4) }))
+      const bytes = this.file(name)
+      if (!bytes) return
+      const original = { id: name, bytes }
+      if (source?.rect && size) return this.foregroundImage(original, source.rect, canvas, size)
+      const image = this.foregroundImage(original, source?.rect, canvas, iconRect && source?.rect === iconRect ? canvas : undefined)
       return image && (sourceSection && size ? this.resized(image, Math.round(size[0]), Math.round(size[1])) : this.fitted(image, size))
     }
     const normal = source && foreground(source.normal)
@@ -250,11 +296,13 @@ export class SsfLook {
     const qwerty = ssfQwerty(layout)
     const labelNormal = this.labelColor(binding, qwerty, false)
     const label = labelNormal ? { normal: labelNormal, pressed: this.labelColor(binding, qwerty, true) ?? labelNormal } : undefined
+    const iconNormal = binding.keyClass === "space" ? ssfSpaceIconColor(this.skin, false) : undefined
+    const icon = iconNormal ? { normal: iconNormal, pressed: ssfSpaceIconColor(this.skin, true) ?? iconNormal } : undefined
     // Sogou lays a skin's style over its built-in one of the same name, so a size, typeface or weight
     // the key's own style leaves out is the built-in one, not the next style's.
     const labelText = this.textLook(ssfTextSections(binding, qwerty, this.skin).slice(0, 1))
     const text = (field: string) => binding.sections.map((section) => firstValue(this.skin.get(section, field))).find(Boolean)
-    return { binding, back, fore, label, labelText: Object.keys(labelText).length ? labelText : undefined, texts: [text("LABEL"), text("MINOR_LABEL")] }
+    return { binding, back, fore, label, icon, iconRect, visible, labelText: Object.keys(labelText).length ? labelText : undefined, texts: [text("LABEL"), text("MINOR_LABEL")] }
   }
 
   /**
@@ -317,7 +365,17 @@ export class SsfLook {
     const size = bytes && pngSize(bytes)
     if (!ref || !bytes || !size) return
     const width = Math.round(this.sogouWidth * (this.scale ?? 1))
-    return this.resized({ id: `${ref.file}|`, bytes }, width, Math.max(1, Math.round(size[1] * width / size[0])))
+    const image = this.resized({ id: `${ref.file}|`, bytes }, width, Math.max(1, Math.round(size[1] * width / size[0])))
+    const color = this.color("VPA_Bar", "BG_COLOR") ?? this.color("ComposingView", "BG_COLOR")
+    if (!image || !color) return image
+    return this.derive(`input:${color}`, [image.bytes], () => {
+      const top = this.decode(image.id, image.bytes)
+      if (!top) return
+      const value = Number.parseInt(color, 16)
+      const data = new Uint8Array(top.width * top.height * 4)
+      for (let i = 0; i < data.length; i += 4) data.set([(value >>> 16) & 255, (value >>> 8) & 255, value & 255, value >>> 24], i)
+      return compositeImage({ ...top, data }, top)
+    })
   }
 
   /** The size of one of the skin's images in Sogou pixels. */
@@ -378,9 +436,9 @@ export class SsfLook {
     const section = ssfSoundSection(this.sounds, binding)
     const sound = section && this.sounds.get(section, "sound")?.trim()
     if (!sound) return
-    const filename = [...SOUND_EXTENSIONS.map((extension) => `${sound}.${extension}`), sound].find((name) => this.pkg.file(this.theme, name))
-    const bytes = filename && this.pkg.file(this.theme, filename)
+    const path = this.pkg.soundPath(this.theme, sound)
+    const bytes = path && this.pkg.files.get(path)
     // Writers put the sound in their own res/ folder, so only the file name is kept.
-    return filename && bytes ? { filename: filename.split(/[\\/]/).pop()!, bytes } : undefined
+    return path && bytes ? { filename: path.split("/").pop()!, bytes } : undefined
   }
 }

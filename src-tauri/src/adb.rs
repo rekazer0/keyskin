@@ -661,6 +661,14 @@ fn share(
             if target == SkinTarget::Baidu {
                 args.extend(["--ez", "exhibit", "false", "--ez", "ask", "false"]);
             }
+            // 百度从 URI 猜名称时不解码；显式传显示名称，并引用以通过 adb shell 的再次解析。
+            let display_name = format!(
+                "'{}'",
+                name.rsplit_once('.').unwrap().0.replace('\'', "'\\''")
+            );
+            if target == SkinTarget::Baidu {
+                args.extend(["--es", "name", &display_name]);
+            }
             let component;
             if import_activity.is_empty() {
                 args.extend(["-p", &settings.package]);
@@ -1110,7 +1118,7 @@ mod tests {
             serial: "ignored-usb-device".into(),
             ..settings()
         };
-        write("case \"$1\" in\nconnect) echo \"connected to $2\";;\ndevices) printf 'other-device\\tdevice\\n127.0.0.1:12345\\tdevice\\n';;\n-s) test \"$2\" = '127.0.0.1:12345' || exit 1; case \"$4\" in pm) echo package:/test.apk;; settings) echo com.baidu.input/.ImeService;; dumpsys) echo 'mCurId=com.baidu.input/.ImeService mBoundToMethod=true mInputShown=true';; uiautomator) echo 'UI hierarchy dumped to: /data/local/tmp/keyskin-window.xml';; cat) printf '%s' '<hierarchy><node resource-id=\"com.baidu.input:id/recycler_view\" bounds=\"[0,0][1080,1800]\"><node class=\"android.view.ViewGroup\" clickable=\"true\" bounds=\"[0,100][500,500]\"><node resource-id=\"com.baidu.input:id/skin_name\" text=\"测试 皮肤\" bounds=\"[0,100][500,150]\"/><node resource-id=\"com.baidu.input:id/tag_in_use\" text=\"已启用\" bounds=\"[0,150][500,200]\"/></node></node><node class=\"android.widget.EditText\" bounds=\"[0,0][100,100]\"/></hierarchy>';; esac;;\npair) test \"$#\" -eq 2 || exit 1; read -r code; test \"${#code}\" -eq 6 || exit 1; echo \"Successfully paired to $2\";;\nesac");
+        write("case \"$1\" in\nconnect) echo \"connected to $2\";;\ndevices) printf 'other-device\\tdevice\\n127.0.0.1:12345\\tdevice\\n';;\n-s) test \"$2\" = '127.0.0.1:12345' || exit 1; case \"$4\" in pm) echo package:/test.apk;; settings) echo com.baidu.input/.ImeService;; am) case \"$*\" in *\"--es name '测试 皮肤'\"*) :;; *) exit 1;; esac;; dumpsys) echo 'mCurId=com.baidu.input/.ImeService mBoundToMethod=true mInputShown=true';; uiautomator) echo 'UI hierarchy dumped to: /data/local/tmp/keyskin-window.xml';; cat) printf '%s' '<hierarchy><node resource-id=\"com.baidu.input:id/recycler_view\" bounds=\"[0,0][1080,1800]\"><node class=\"android.view.ViewGroup\" clickable=\"true\" bounds=\"[0,100][500,500]\"><node resource-id=\"com.baidu.input:id/skin_name\" text=\"测试 皮肤\" bounds=\"[0,100][500,150]\"/><node resource-id=\"com.baidu.input:id/tag_in_use\" text=\"已启用\" bounds=\"[0,150][500,200]\"/></node></node><node class=\"android.widget.EditText\" bounds=\"[0,0][100,100]\"/></hierarchy>';; esac;;\npair) test \"$#\" -eq 2 || exit 1; read -r code; test \"${#code}\" -eq 6 || exit 1; echo \"Successfully paired to $2\";;\nesac");
         assert_eq!(connect(&config).unwrap(), "127.0.0.1:12345");
         let messages = std::cell::RefCell::new(Vec::new());
         assert!(share(

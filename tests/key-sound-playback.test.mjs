@@ -80,3 +80,27 @@ test('解码和元素播放都失败时报错，并说明是哪个文件', async
   assert.match(error, /无法播放按键音效：click\.wav/)
   assert.equal(context.eventLog.textContent, error)
 })
+
+test('搜狗画布按键音只读皮肤自己的 sound_android.ini：按键类优先，其余键用 [Key]', async () => {
+  const { ssfFixture } = await import('./helpers/ssf-fixture.mjs')
+  const { SkinArchive } = await import('../src/skin.ts')
+  const { IniDocument } = await import('../src/ini.ts')
+  const { documentPackage } = await import('../src/ssf/ssf-convert.ts')
+  const { ssfKeyBinding } = await import('../src/ssf/ssf-keymap.ts')
+  const { ssfSoundSection } = await import('../src/ssf/ssf-parts.ts')
+  const pkg = documentPackage(SkinArchive.open(ssfFixture({ single: true }), 'ssf'))
+  const context = run(declarations('ssfSectionBinding', 'ssfKeySoundPath'), {
+    ssfPackage: () => pkg,
+    ssfTheme: () => 'light',
+    isSsfBoardPath: () => true,
+    ssfKeyBinding,
+    ssfSoundSection,
+    SSF_SOUNDS_PATH: 'default/sound_android.ini',
+    orientation: { value: 'port' },
+    layoutPath: 'light/skin/port/py_26.ini',
+    layoutDocument: IniDocument.parse('[KEY1]\nCENTER=F36\n[KEY2]\nCENTER=q\n'),
+  })
+  assert.equal(context.ssfKeySoundPath('KEY1'), 'default/s_del.wav')
+  assert.equal(context.ssfKeySoundPath('KEY2'), 'default/s_code.wav')
+  assert.equal(context.ssfKeySoundPath('CAND'), 'default/s_code.wav')
+})

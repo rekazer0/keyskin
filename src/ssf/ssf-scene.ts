@@ -17,7 +17,7 @@ import { offsetFromSection, parseOffset, parseRect, type Rect } from "../preview
 import type { SkinArchive } from "../skin.ts"
 import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
 import { parseSsfImage, ssfColor, type SsfPackage, type SsfTheme } from "./ssf-package.ts"
-import { firstValue, ssfBackground, ssfForeground, ssfLabelStyle, ssfTextSections } from "./ssf-parts.ts"
+import { firstValue, ssfBackground, ssfForeground, ssfForegroundLayout, ssfIconPair, ssfSpaceIconColor, ssfTextSections } from "./ssf-parts.ts"
 
 /** The nine-key letter groups' digits, the minor label Sogou shows when the skin turns it on. */
 export const NINE_KEY_DIGITS: Record<string, string> = {
@@ -119,19 +119,22 @@ export class SsfStyles {
   }
 
   /** keys.ini FG_IMAGES (the `_ON` state on letter keys, which pinyin boards start in) or an ICON. */
-  async foreground(binding: SsfKeyBinding, on: boolean, pressed: boolean): Promise<{ visual: Visual; rect?: number[] } | "none" | undefined> {
+  async foreground(binding: SsfKeyBinding, on: boolean, pressed: boolean, iconRect?: number[]): Promise<{ visual: Visual; rect?: number[] } | "none" | undefined> {
     const found = ssfForeground(this.skin, this.keys, binding)
     if (found?.kind === "keys") {
       const state = (name: string) => firstValue(this.keys.get(found.images, on ? `${name}_ON` : name)) ?? firstValue(this.keys.get(found.images, name))
-      const visual = await this.file((pressed ? state("PRESSED") : undefined) ?? state("NORMAL"))
+      const name = (pressed ? state("PRESSED") : undefined) ?? state("NORMAL")
+      if (/^transparent\.png$/i.test(name ?? "")) return "none"
+      const visual = await this.file(name)
       return visual && { visual, rect: found.rect }
     }
     if (found?.kind === "icon") {
-      const icon = (pressed ? firstValue(this.skin.get(found.owner, "ICON_PRESSED")) : undefined) ?? firstValue(this.skin.get(found.owner, "ICON"))
+      const pair = ssfIconPair(this.skin, found.owner)!
+      const icon = pressed ? pair.pressed : pair.normal
+      if (/^transparent\.png$/i.test(icon)) return "none"
       const visual = await this.file(icon)
-      return visual && { visual }
+      return visual && { visual, rect: iconRect }
     }
-    if (binding.sections.some((section) => /^transparent\.png$/i.test(firstValue(this.skin.get(section, "ICON")) ?? ""))) return "none"
   }
 }
 
@@ -180,21 +183,6 @@ function scaled(visual: Visual, scale: number, x: number, y: number): SceneLayer
 type SsfSkeleton = { layout: IniDocument; template: IniDocument; resolver: AtlasResolver; offsets?: IniDocument; scale: number }
 
 /**
- * The FG_STYLE Sogou's own key definitions give a key, with its label and minor label TextStyles, for
- * the keys skins restyle through those sections (the APK's py_9 / qwerty layouts). Others keep the
- * skeleton's placement.
- */
-function defaultForeground(binding: SsfKeyBinding, layoutName: string): { fgStyle: string; label?: string; minor?: string } | undefined {
-  const board = ssfBoard(layoutName)
-  if (binding.keyClass === "char") return { fgStyle: ssfQwerty(layoutName) ? "FGStyle_Qwerty" : "FGStyle_Phone" }
-  if (board !== "py9" && board !== "en9") return
-  const nine = board === "py9" ? "Py9" : "En9"
-  if (binding.sections.includes("Key_SymbolTable")) return { fgStyle: `FGStyle_SymbolTable_${nine}` }
-  if (binding.sections.includes("Key_SwitchToEN")) return { fgStyle: "FGStyle_Switch_Py9", label: "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
-  if (binding.sections.includes("Key_EnSwitchToCH")) return { fgStyle: "FGStyle_SwitchToCh_En9", label: "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
-}
-
-/**
  * The skeleton key's built-in layers: glyphs tinted to the skin's label colour, the label and minor
  * label in their TextStyles. A label the skin places with FG_STYLE sits centred in that box, as large
  * as fits unless the TextStyle sets TEXT_SIZE, and bold unless it sets BOLD (as Sogou's own skin
@@ -203,9 +191,8 @@ function defaultForeground(binding: SsfKeyBinding, layoutName: string): { fgStyl
 async function builtInLayers(styles: SsfStyles, skeleton: SsfSkeleton, section: string, binding: SsfKeyBinding, layoutName: string, landscape: boolean, rect: Rect, pressed: boolean): Promise<SceneLayer[]> {
   const { template, resolver, offsets, scale } = skeleton
   const qwerty = ssfQwerty(layoutName)
-  const own = ssfLabelStyle(styles.skin, binding)
-  const defaults = own ? undefined : defaultForeground(binding, layoutName)
-  const fgStyle = own?.fgStyle ?? (defaults && `${defaults.fgStyle}${landscape ? "_Land" : ""}`)
+  const defaults = ssfForegroundLayout(styles.skin, binding, layoutName, landscape)
+  const fgStyle = defaults?.fgStyle
   const fg = (key: string) => fgStyle ? styles.skin.get(fgStyle, key)?.split(",").map(Number) : undefined
   const labelSections = [...defaults?.label ? [defaults.label] : [], ...ssfTextSections(binding, qwerty, styles.skin)]
   const minorStyle = (fgStyle && firstValue(styles.skin.get(fgStyle, "MINOR_LABEL_STYLE"))) ?? defaults?.minor
@@ -240,13 +227,17 @@ async function builtInLayers(styles: SsfStyles, skeleton: SsfSkeleton, section: 
     if (text) {
       const minor = count > 0
       const shown = texts[count++] ?? text.text
+      if (fg(minor ? "MINOR_LABEL_VISIBLE" : "LABEL_VISIBLE")?.[0] === 0) continue
       const fallbackColor = text.color ?? "#373737"
       write(caps ? shown.toUpperCase() : shown, minor ? minorText : label, (minor ? minorColor : labelColor) ?? fallbackColor, minor ? minorBox : labelBox, at, (text.fontSize ?? 24) * scale)
       continue
     }
     const glyph = await resolver.resolve(id, pressed)
     if (!glyph?.image) continue
-    const layer = scaled(labelColor ? await tintedVisual(glyph, labelColor) : glyph, scale, ...at)
+    const iconColor = (binding.keyClass === "space" ? argbColor(ssfSpaceIconColor(styles.skin, pressed)) : undefined) ?? labelColor
+    const visual = iconColor ? await tintedVisual(glyph, iconColor) : glyph
+    const iconBox = box(rect, fg("ICON_RECT"))
+    const layer = iconBox ? fitted(visual, iconBox) : scaled(visual, scale, ...at)
     if (layer) layers.push(layer)
   }
   // User-symbol keys are supplied by Sogou at runtime and have no static skeleton foreground.
@@ -331,7 +322,9 @@ export async function ssfBoardScene(
       const [normal, down] = await styles.pair(background?.images)
       const visual = pressed ? down : normal
       const back: SceneLayer[] = visual ? [{ kind: "image", rect, visual }] : []
-      const fore = await styles.foreground(binding, on, pressed)
+      const fgStyle = ssfForegroundLayout(styles.skin, binding, layoutName, landscape)?.fgStyle
+      const iconRect = fgStyle ? styles.skin.get(fgStyle, "ICON_RECT")?.split(",").map(Number) : undefined
+      const fore = await styles.foreground(binding, on, pressed, iconRect)
       if (fore === "none") return { back, fore: [] }
       if (fore) {
         const area = box(rect, fore.rect)

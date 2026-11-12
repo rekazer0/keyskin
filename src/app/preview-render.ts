@@ -2,7 +2,7 @@ import { appState } from "./state"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
 import { setSimulatedComposition, toolbarPreview, currentDeviceValue, deviceGeometryProperties, preview, resizeKeyboardPreviews, schedulePreviewInteractionFrame, paintPreviewInteraction, applySkinState, REFERENCE_PHONE_WIDTH_SCALE, deviceFrameProperties } from "./canvas-interaction"
-import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, candidateBackgroundCanvas, candidateInputBackgroundCanvas, previewCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, toggleGuides, mobileToggleGuides } from "./dom"
+import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, candidateBackgroundCanvas, candidateInputBackgroundCanvas, previewCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, mobilePreviewGuides, mobilePreviewState, toggleGuides } from "./dom"
 import { candidatePreview } from "../simulation.ts"
 import { isConfiguredSymbolLayout, knownSkinStates, skinStateLabel } from "../actions.ts"
 import { textDocument, visualResolver, currentBdaAppearance, bdaBasePath, bdaAvailableLayoutPaths } from "./bda-documents"
@@ -553,6 +553,7 @@ export function updatePanelTools(
   skinState.value = selectedState !== undefined && states.includes(selectedState) ? selected : ""
   skinStateValue.textContent = skinState.value ? `S${Number(skinState.value)}` : "默认"
   skinStateControl.hidden = states.length === 0
+  mobilePreviewState.hidden = states.length === 0
   applySkinState(skinState.value ? Number(skinState.value) : undefined)
   requestAnimationFrame(() => {
     if (currentDeviceValue() === "canvas") return
@@ -618,7 +619,7 @@ export function updateDevicePreview(): void {
 export function setGuidesVisible(enabled: boolean): void {
   appState.guidesVisible = enabled
   ;($("#settings-layout-guides") as HTMLInputElement).checked = enabled
-  for (const button of [toggleGuides, mobileToggleGuides]) {
+  for (const button of [toggleGuides, mobilePreviewGuides]) {
     button.setAttribute("aria-pressed", String(appState.guidesVisible))
   }
   preview.setGuides(appState.guidesVisible)

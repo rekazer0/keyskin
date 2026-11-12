@@ -12,7 +12,7 @@ import { bdaSoundResourceType, encodedField, encodeVarint, join, rawFields, rawS
 import { SkinArchive } from "../skin.ts"
 import { SsfLook, type LookColors, type LookImage, type LookPair } from "./ssf-look.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
-import { decodePng, encodePng, isPng, tintImage } from "./ssf-png.ts"
+import { decodePng, encodePng, isPng, pngSize, tintImage } from "./ssf-png.ts"
 import { ssfPreview, ssfUnsupportedWarnings, type SsfConversion } from "./ssf-to-baidu.ts"
 
 const STYLE_TYPES = { image: 0, color: 1, text: 2 } as const
@@ -162,8 +162,8 @@ class ThemeImages {
   }
 }
 
-function refType(field: { bytes?: Uint8Array }): number {
-  return field.bytes ? rawFields(field.bytes).find((item) => item.number === 1)?.varint ?? 0 : -1
+function refType(field: { bytes?: Uint8Array } | undefined): number {
+  return field?.bytes ? rawFields(field.bytes).find((item) => item.number === 1)?.varint ?? 0 : -1
 }
 
 function refKey(field: { bytes?: Uint8Array }): number {
@@ -198,19 +198,20 @@ class BdaThemeConverter {
   }
 
   /** Template image styles used as foreground icons, recoloured whole-file like the BDS glyphs. */
-  private recolouredImage(writer: AppearanceWriter, appearance: ReturnType<typeof decodeBdaAppearanceUncached>, key: number, colors: LookColors): Uint8Array | undefined {
+  private recolouredImage(writer: AppearanceWriter, appearance: ReturnType<typeof decodeBdaAppearanceUncached>, key: number, colors: LookColors | undefined, iconRect?: number[], size?: [number, number]): Uint8Array | undefined {
+    if (!colors && !iconRect) return
     const style = appearance.imageStyles.get(key)
-    const tinted = (resourceID: string | undefined, color: string): LookImage | undefined => {
+    const tinted = (resourceID: string | undefined, color: string | undefined): LookImage | undefined => {
       const id = `template:${resourceID}:${color}`
       if (!this.tinted.has(id)) {
         const bytes = resourceID && this.template.getBytes(`light/skin/res/${resourceID.replace(/\.png$/i, "")}.png`)
-        this.tinted.set(id, bytes && isPng(bytes) ? { id, bytes: encodePng(tintImage(decodePng(bytes), color)) } : undefined)
+        this.tinted.set(id, bytes && isPng(bytes) ? { id, bytes: color ? encodePng(tintImage(decodePng(bytes), color)) : bytes } : undefined)
       }
       return this.tinted.get(id)
     }
-    const normal = tinted(style?.normalImage?.resource?.resourceID, colors.normal)
+    const normal = tinted(style?.normalImage?.resource?.resourceID, colors?.normal)
     if (!normal) return
-    return writer.imageStyle({ normal, pressed: tinted(style?.highlightImage?.resource?.resourceID, colors.pressed) ?? normal })
+    return writer.imageStyle(this.look.placeIcon({ normal, pressed: tinted(style?.highlightImage?.resource?.resourceID, colors?.pressed) ?? normal }, iconRect, size))
   }
 
   private key(writer: AppearanceWriter, appearance: ReturnType<typeof decodeBdaAppearanceUncached>, panel: string, name: string, bytes: Uint8Array, landscape: boolean): Uint8Array {
@@ -223,14 +224,18 @@ class BdaThemeConverter {
     }
     if (look.fore) {
       key = join([removeFields(key, new Set([2, 3])), encodedField(2, 2, writer.imageStyle(look.fore))])
-    } else if (look.label) {
-      const label = look.label
+    } else if (look.label || look.icon || look.iconRect || look.visible.includes(false)) {
+      let labelIndex = 0
+      let offsetIndex = 0
+      const foregrounds = rawFields(key).filter((field) => field.number === 2)
       key = join(rawFields(key).map((field) => {
         const original = key.slice(field.start, field.end)
+        if (field.number === 3 && look.iconRect && refType(foregrounds[offsetIndex++]) === STYLE_TYPES.image) return encodedField(3, 2, new Uint8Array())
         if (field.number !== 2) return original
-        const replacement = refType(field) === STYLE_TYPES.text
-          ? writer.recolouredText(refKey(field), label)
-          : refType(field) === STYLE_TYPES.image ? this.recolouredImage(writer, appearance, refKey(field), label) : undefined
+        const colors = refType(field) === STYLE_TYPES.text && look.visible[labelIndex++] === false ? { normal: "00000000", pressed: "00000000" } : look.label
+        const replacement = refType(field) === STYLE_TYPES.text && colors
+          ? writer.recolouredText(refKey(field), colors)
+          : refType(field) === STYLE_TYPES.image ? this.recolouredImage(writer, appearance, refKey(field), look.icon ?? look.label, look.iconRect, look.back && pngSize(look.back.normal.bytes)) : undefined
         return replacement ? encodedField(2, 2, replacement) : original
       }))
     }

@@ -5,6 +5,7 @@ import { SkinArchive } from "./skin.ts"
 import { skinStylePaths } from "./font-files.ts"
 import { BAKED_IMAGE, packTiles } from "./font-bake.ts"
 import { type TileRect } from "./tiles.ts"
+import { normalizeBdsStyles } from "./bds-styles.ts"
 
 /** 百度只加载 css 里先出现的这么多张图片，之后的图片整张不画。 */
 export const MAX_IMAGE_FILES = 128
@@ -25,14 +26,20 @@ const rectOf = (value: string | undefined): TileRect | undefined => {
 /** 补齐百度安卓要求的 BDS 结构；已经符合时原样返回。 */
 export async function completeBdsPackage(bytes: Uint8Array, compose: ComposeAtlas): Promise<Uint8Array> {
   const archive = SkinArchive.open(bytes, "bds")
-  let changed = false
+  let changed = normalizeBdsStyles(archive)
   const update = (path: string, text: string) => {
     if (archive.getBytes(path) && text === archive.getText(path)) return
     archive.setText(path, text)
     changed = true
   }
+  // 安卓按 SupportDarkMode 决定从根目录还是 light/dark 找配置，必须与实际目录一致。
   // Info.txt 换行不是 CRLF 时报错 288（“当前皮肤不完整”）。
-  if (archive.getBytes("Info.txt")) update("Info.txt", archive.getText("Info.txt").replace(/\r?\n/g, "\r\n"))
+  if (archive.getBytes("Info.txt")) {
+    const info = IniDocument.parse(archive.getText("Info.txt"))
+    const themed = archive.sourcePaths().some((path) => /^(?:light|dark)\/(?:port|land|res)\//.test(path))
+    if (themed || info.get("", "SupportDarkMode") !== undefined) info.set("", "SupportDarkMode", themed ? "1" : "0")
+    update("Info.txt", info.toString().replace(/\r?\n/g, "\r\n"))
+  }
   // default.css 的 [GLOBAL] 不在开头时能启用，但键盘一片空白。
   for (const path of skinStylePaths(archive.names())) update(path, globalFirst(archive.getText(path)))
 

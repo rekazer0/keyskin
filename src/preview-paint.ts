@@ -358,17 +358,22 @@ export async function paintPreview(self: Preview): Promise<void> {
 
   }
 
-  if (scene?.effects) {
-    const press = self.nativePress && { section: self.nativePress.section, elapsed: Date.now() - self.nativePress.startedAt, seed: self.nativePress.seed }
-    for (const sprite of [...scene.effects.panel?.(Date.now() - self.nativeShownAt, press) ?? [], ...sprites]) drawSprite(context, sprite)
-  }
+  const press = self.nativePress && { section: self.nativePress.section, elapsed: Date.now() - self.nativePress.startedAt, seed: self.nativePress.seed }
+  const nativeSprites = [...scene?.effects?.panel?.(Date.now() - self.nativeShownAt, press) ?? [], ...sprites]
+  const overlaySprites = nativeSprites.filter(sprite => sprite.overlay && self.hintCanvas)
+  for (const sprite of nativeSprites) if (!sprite.overlay || !self.hintCanvas) drawSprite(context, sprite)
   self.drawnScene = scene
   scheduleNativeFrame(self, scene)
 
-  const popup = self.active ? sceneKeys.get(self.active.key.section)?.popup : undefined
+  const popupKey = self.active && sceneKeys.get(self.active.key.section)
+  const holdPopup = self.active?.direction === "hold" && popupKey?.holdPopup
+  if (holdPopup && self.active) self.active.hintCellWidth = holdPopup.cellWidth
+  const popup = holdPopup && self.active
+    ? holdPopup.layers(self.active.hintIndex ?? holdPopup.selected)
+    : undefined
   const shouldDrawHint = Boolean(popup?.length || self.active && (isLegacyHintInputKey(self.active.key) || hintCandidates.length) && hintIcon)
   let hintContext = context
-  if (self.hintCanvas && (shouldDrawHint || self.hintVisible)) {
+  if (self.hintCanvas && (shouldDrawHint || self.hintVisible || overlaySprites.length || self.nativeOverlayVisible)) {
     const overlayBounds = self.hintCanvas.getBoundingClientRect()
     const previewBounds = self.canvas.getBoundingClientRect()
     const scale = globalThis.devicePixelRatio || 1
@@ -388,6 +393,9 @@ export async function paintPreview(self: Preview): Promise<void> {
       hintContext = overlayContext
     }
   }
+
+  self.nativeOverlayVisible = overlaySprites.length > 0
+  for (const sprite of overlaySprites) drawSprite(hintContext, sprite)
 
   if (popup?.length) {
     self.hintVisible = true

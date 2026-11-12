@@ -6,6 +6,7 @@ import { IniDocument } from "../ini.ts"
 import type { SkinArchive } from "../skin.ts"
 import { documentPackage } from "../ssf/ssf-convert.ts"
 import { ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "../ssf/ssf-keymap.ts"
+import { ssfSoundSection } from "../ssf/ssf-parts.ts"
 import type { SsfPackage, SsfTheme } from "../ssf/ssf-package.ts"
 import { orientation, theme } from "./dom"
 import { appState } from "./state"
@@ -75,15 +76,28 @@ export function ssfBoardDocument(path: string): IniDocument | undefined {
   return skeleton?.isText(path) ? IniDocument.parse(skeleton.getText(path)) : undefined
 }
 
+/** The Sogou classes canvas key `section` of the open board is drawn from. */
+function ssfSectionBinding(section: string): { section: string; action: string; binding: SsfKeyBinding } | undefined {
+  const document = appState.layoutDocument
+  if (!document || !isSsfBoardPath(appState.layoutPath)) return
+  const action = document.get(section, "CENTER")?.trim()
+  const layout = appState.layoutPath.split("/").pop()!
+  return action ? { section, action, binding: ssfKeyBinding(layout, action, orientation.value === "land", document.get(section, "SSF_SECTION"), document.get(section, "SSF_BG")) } : undefined
+}
+
 /** The Sogou classes the selected canvas key is drawn from. */
 export function ssfSelectedBindings(): Array<{ section: string; action: string; binding: SsfKeyBinding }> {
-  const document = appState.layoutDocument
-  if (!document || !isSsfBoardPath(appState.layoutPath)) return []
-  const layout = appState.layoutPath.split("/").pop()!
-  return appState.selectedKeySections.flatMap((section) => {
-    const action = document.get(section, "CENTER")?.trim()
-    return action ? [{ section, action, binding: ssfKeyBinding(layout, action, orientation.value === "land", document.get(section, "SSF_SECTION"), document.get(section, "SSF_BG")) }] : []
-  })
+  return appState.selectedKeySections.flatMap((section) => ssfSectionBinding(section) ?? [])
+}
+
+/** The file canvas key `section` plays, read from the skin's own sound_android.ini: its class's `sound`, else `[Key]`. */
+export function ssfKeySoundPath(section: string): string | undefined {
+  const pkg = ssfPackage()
+  if (!pkg) return
+  const sounds = pkg.ini(SSF_SOUNDS_PATH)
+  const owner = ssfSoundSection(sounds, ssfSectionBinding(section)?.binding) ?? ssfSoundSection(sounds, undefined)
+  const sound = owner && sounds.get(owner, "sound")?.trim()
+  return sound ? pkg.soundPath(ssfTheme(), sound) : undefined
 }
 
 /** 26-key boards read their own `_Qwerty` / `_Latin` classes (the preview decides the same way). */

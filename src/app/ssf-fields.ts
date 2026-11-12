@@ -53,7 +53,7 @@ type TextChange = Extract<Change, { kind: "text" }>
 /** A section rows write to; `create` is what a missing section starts with (RootView needs BG_STYLE). */
 type SsfLocation = { path: string; section: string; create?: SsfEntry[]; bind?: { section: string; key: string } }
 
-function editTargets(targets: SsfLocation[], change: (document: IniDocument, target: SsfLocation) => void): void {
+function editTargets(targets: SsfLocation[], change: (document: IniDocument, target: SsfLocation) => void, refreshInspector = true): void {
   const archive = appState.archive
   if (!archive || archive.format !== "ssf" || !isEditing()) return
   const changes = [...new Set(targets.map((target) => target.path))].flatMap((path) => {
@@ -77,7 +77,7 @@ function editTargets(targets: SsfLocation[], change: (document: IniDocument, tar
   const source = changes.find((change) => change.path === sourceEditPath())
   if (source) setSourceValue(source.after)
   refreshPreview()
-  populateKeyInspector()
+  if (refreshInspector) populateKeyInspector()
   updateDirty()
 }
 
@@ -226,28 +226,77 @@ function ssfNumberParts(row: HTMLElement, key: string, affixes: string[], values
 
 /** The stretch band shared by a section's state images: Sogou's order is left, right, top, bottom. */
 function stretchField(path: string, section: string, targets = [{ path, section }]): HTMLElement {
-  const document = ssfDocument(path)
-  const stretch = parseSsfImage(document.get(section, "NORMAL"))?.stretch
+  const stretch = parseSsfImage(ssfDocument(path).get(section, "NORMAL"))?.stretch
   const row = element("div", "ui-field")
   row.dataset.stack = ""
   caption(row, "STRETCH", "拉伸区域")
-  row.title = "九宫格可拉伸的像素区间：左、右、上、下"
+  row.title = "原图中的像素坐标：0 ≤ 左 < 右 ≤ 图片宽度，0 ≤ 上 < 下 ≤ 图片高度"
+  let width = Infinity
+  let height = Infinity
+  const bands = () => targets.map((target) => parseSsfImage(ssfDocument(target.path).get(target.section, "NORMAL"))?.stretch ?? [0, 1, 0, 1])
+  const updateBounds = () => {
+    const current = bands()
+    const minimum = [0, Math.min(width, Math.max(...current.map((band) => band[0] + 1))), 0, Math.min(height, Math.max(...current.map((band) => band[2] + 1)))]
+    const maximum = [Math.min(width - 1, ...current.map((band) => band[1] - 1)), width, Math.min(height - 1, ...current.map((band) => band[3] - 1)), height]
+    for (const [index, input] of inputs.entries()) {
+      input.min = String(minimum[index])
+      input.max = Number.isFinite(maximum[index]) ? String(maximum[index]) : ""
+      input.step = "1"
+    }
+  }
   ssfNumberParts(row, "STRETCH", ["左", "右", "上", "下"], stretch?.map(String) ?? ["", "", "", ""], (values) => {
-    const bands = targets.map((target) => {
-      const current = parseSsfImage(ssfDocument(target.path).get(target.section, "NORMAL"))?.stretch
-      const defaults = [0, 1, 0, 1]
-      return values.map((value, index) => value === "" ? current?.[index] ?? defaults[index] : Number(value)) as SsfStretch
+    const next = bands().map((current) => {
+      const band = values.map((value, index) => value === "" ? current[index] : Number(value)) as SsfStretch
+      band[1] = Math.max(1, Math.min(width, band[1]))
+      band[3] = Math.max(1, Math.min(height, band[3]))
+      band[0] = Math.max(0, Math.min(band[1] - 1, band[0]))
+      band[2] = Math.max(0, Math.min(band[3] - 1, band[2]))
+      return band
     })
-    if (bands.some((next) => next.some((value) => !Number.isInteger(value)) || next[0] >= next[1] || next[2] >= next[3])) return
-    editTargets(targets, (target, { path, section }) => {
-      const next = bands[targets.findIndex((item) => item.path === path && item.section === section)]
+    if (next.some((band) => band.some((value) => !Number.isInteger(value)))) return
+    editTargets(targets, (document, target) => {
+      const band = next[targets.findIndex((item) => item.path === target.path && item.section === target.section)]
       for (const key of IMAGE_STATES) {
-        const value = target.get(section, key)
-        const file = value && parseSsfImage(value)?.file
-        if (file) target.set(section, key, [file, ...next].join(","))
+        const file = parseSsfImage(document.get(target.section, key))?.file
+        if (file) document.set(target.section, key, [file, ...band].join(","))
       }
-    })
+    }, false)
+    updateBounds()
+    const saved = JSON.parse(row.dataset.inspectorValue ?? "[]") as Array<{ path: string; section: string; values: Record<string, string | null> }>
+    for (const item of saved) for (const key of Object.keys(item.values)) {
+      const value = ssfDocument(item.path).get(item.section, key)
+      item.values[key] = value === undefined ? null : value.split(",").slice(1).join(",")
+    }
+    row.dataset.inspectorValue = JSON.stringify(saved)
+    row.dispatchEvent(new Event("input", { bubbles: true }))
   })
+  const inputs = [...row.querySelectorAll("input")]
+  for (const input of inputs) input.disabled = true
+  // Decode before editing, so commits stay synchronous and retain the numeric gesture's undo token.
+  void Promise.all(targets.flatMap((target) => IMAGE_STATES.map((key) => imageVisual(ssfDocument(target.path).get(target.section, key))))).then((images) => {
+    if (!row.isConnected) return
+    for (const image of images) if (image?.source) {
+      width = Math.min(width, image.source[2])
+      height = Math.min(height, image.source[3])
+    }
+    updateBounds()
+    for (const input of inputs) input.disabled = !isEditing()
+  })
+  const constrain = (event: Event) => {
+    const input = event.target
+    if (!(input instanceof HTMLInputElement) || !input.value.trim()) return
+    const value = Number(input.value)
+    if (!Number.isFinite(value)) return
+    // A leading digit can be below min while the user is still typing a valid multi-digit value.
+    if (event.type === "input" && value >= 0 && value < Number(input.min)) return
+    input.value = String(Math.min(input.max === "" ? Infinity : Number(input.max), Math.max(Number(input.min), Math.round(value))))
+    if (event.type === "input") {
+      // Reuse the normal commit on every keystroke without replacing the focused control.
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+  }
+  row.addEventListener("input", constrain, true)
+  row.addEventListener("change", constrain, true)
   return row
 }
 

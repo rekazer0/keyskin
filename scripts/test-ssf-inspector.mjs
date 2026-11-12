@@ -2,10 +2,15 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
-import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
+import { encodePng } from '../src/ssf/ssf-png.ts'
+import { ssfFixture, solid } from '../tests/helpers/ssf-fixture.mjs'
 
 // Sogou reads key text through FG_STYLE → LABEL_STYLE; give Q and W the shared qwerty label style.
 const files = unzipSync(ssfFixture())
+// Different source/target sizes and a visible band make a valid stretch change alter real pixels.
+const patterned = solid(120, 160, [10, 200, 10])
+for (let y = 0; y < 20; y++) for (let x = 0; x < 120; x++) patterned.data.set([200, 10, 10, 255], (y * 120 + x) * 4)
+files['1080/status1/26keyq.png'] = encodePng(patterned)
 files['1080/status1/phoneSkin.ini'] = strToU8(strFromU8(files['1080/status1/phoneSkin.ini'])
   .replace('[Key_Q]\n', '[Key_Q]\nFG_STYLE=FGStyle_Qwerty\n')
   .replace('[TextStyle_Qwerty]', '[Key_W]\nFG_STYLE=FGStyle_Qwerty\n[FGStyle_Qwerty]\nLABEL_STYLE=TextStyle_Qwerty\nLABEL_POSITION=0,0,1,1\n[TextStyle_Qwerty]'))
@@ -103,6 +108,63 @@ try {
   assert.equal(await read(keys, 'Key_Q', 'FG_RECT'), '20,0.25,1,0.75')
   await page.locator('#desktop-undo').click()
   assert.equal(await read(keys, 'Key_Q', 'FG_RECT'), '0,0.25,1,0.75')
+  // Input limits cover all state images and opposing edges, for typing and numeric gestures.
+  const sourceAndHistory = () => page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return { text: appState.archive.getText('1080/status1/phoneSkin.ini'), undo: appState.undoStack.length }
+  })
+  const unchanged = await sourceAndHistory()
+  assert.deepEqual(await row('STRETCH').first().locator('input').evaluateAll(inputs => inputs.map(input => [input.min, input.max, input.step])), [['0', '95', '1'], ['3', '98', '1'], ['0', '138', '1'], ['4', '142', '1']])
+  for (const [index, value, expected] of [[1, '121', '98'], [1, '100', '98'], [3, '239', '142'], [0, '-1', '0'], [0, '96', '95']]) {
+    const input = row('STRETCH').locator('input').nth(index)
+    await input.fill(value)
+    assert.equal(await input.inputValue(), expected, 'the field clamps immediately')
+    assert.equal((await read(skin, 'SMA_Key26Bg_Q', 'NORMAL')).split(',')[index + 1], expected, 'typing writes a valid coordinate without blur or Enter')
+    assert.equal(await input.evaluate(input => input === document.activeElement), true, 'live preview retains keyboard focus')
+    await page.locator('#desktop-undo').click()
+    assert.deepEqual(await sourceAndHistory(), unchanged)
+  }
+  const rightInput = row('STRETCH').locator('input').nth(1)
+  await rightInput.fill('')
+  await rightInput.pressSequentially('20')
+  assert.equal(await rightInput.inputValue(), '20', 'a temporary leading digit below min does not corrupt multi-digit typing')
+  assert.equal(await read(skin, 'SMA_Key26Bg_Q', 'NORMAL'), '26keyq.png,2,20,3,139')
+  await page.locator('#desktop-undo').click()
+  assert.deepEqual(await sourceAndHistory(), unchanged)
+  const pixels = () => page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    await preview.sceneForState()
+    await preview.whenDrawn()
+    return document.querySelector('#preview').toDataURL()
+  })
+  await page.waitForFunction(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    return !preview.pressed && !preview.active && !preview.nativePress
+  })
+  const beforeStretch = await pixels()
+  await row('STRETCH').locator('input').nth(2).fill('40')
+  await page.waitForFunction(async () => (await import('/src/app/ssf-documents.ts')).ssfDocument('1080/status1/phoneSkin.ini').get('SMA_Key26Bg_Q', 'NORMAL') === '26keyq.png,2,96,40,139')
+  await page.waitForFunction((before) => document.querySelector('#preview').toDataURL() !== before, beforeStretch)
+  assert.equal(await read(skin, 'SMA_Key26Bg_Q', 'PRESSED'), '26keyq_press.png,2,96,40,139')
+  assert.equal(await row('STRETCH').locator('input').nth(2).evaluate(input => input === document.activeElement), true)
+  assert.equal(await page.locator('.inspector-changes').textContent(), '已改 1')
+  await page.locator('#desktop-undo').click()
+  assert.deepEqual(await sourceAndHistory(), unchanged, 'undo restores the original band and history')
+  const arrowInput = row('STRETCH').locator('input').nth(0)
+  await arrowInput.press('ArrowUp')
+  assert.equal(await arrowInput.inputValue(), '3')
+  assert.equal(await arrowInput.evaluate(input => input === document.activeElement), true, 'native arrows retain focus')
+  await page.locator('#desktop-undo').click()
+  assert.deepEqual(await sourceAndHistory(), unchanged)
+  const stretchInput = row('STRETCH').locator('input').nth(0)
+  await stretchInput.focus()
+  await page.keyboard.press('Shift+ArrowUp')
+  await page.keyboard.press('Shift+ArrowUp')
+  assert.equal((await sourceAndHistory()).undo, unchanged.undo + 1, 'continuous stretch editing is one undo step')
+  assert.equal(await stretchInput.inputValue(), '22')
+  assert.equal(await stretchInput.evaluate(input => input.isConnected && input === document.activeElement), true)
+  await page.locator('#desktop-undo').click()
+  assert.deepEqual(await sourceAndHistory(), unchanged)
   // Shared background + per-key background display mixed previews and retain each stretch band.
   await selectKey('w', true)
   assert.match(await page.locator('#selected-key-context').textContent(), /共同属性/)

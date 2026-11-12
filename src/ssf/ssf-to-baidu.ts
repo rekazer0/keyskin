@@ -9,7 +9,7 @@ import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
 import { SsfBaiduMotion } from "./ssf-anim-to-baidu.ts"
 import { cached, fingerprint } from "./ssf-cache.ts"
-import { ssfKeyActions } from "./ssf-keymap.ts"
+import { ssfKeyActions, ssfQwerty } from "./ssf-keymap.ts"
 import { SsfLook, type LookColors, type LookImage, type LookPair, type LookText } from "./ssf-look.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
 import { copySsfSkeleton, ssfSkeletonScale } from "./ssf-skeleton.ts"
@@ -149,7 +149,7 @@ class ThemeConverter {
    * Template glyph slices recoloured to the Sogou label colour, for keys Sogou draws as text; a text
    * style also takes the skin's `show` text, size, typeface and weight.
    */
-  private tintedTemplateStyle(styleID: string, colors: LookColors | undefined, white = false, show?: string, text?: LookText): string | undefined {
+  private tintedTemplateStyle(styleID: string, colors: LookColors | undefined, white = false, show?: string, text?: LookText, icons = colors, iconRect?: number[], size?: [number, number]): string | undefined {
     const value = this.resources.styles.get(`STYLE${styleID}`, "NM_IMG")
     const [imageName, tileValue] = value?.split(",").map((part) => part.trim()) ?? []
     if (!imageName || !tileValue) {
@@ -162,7 +162,7 @@ class ThemeConverter {
         ? this.resources.derivedStyle(styleID, overrides)
         : undefined
     }
-    if (!colors) return
+    if (!icons && !iconRect) return
     const atlasBytes = this.base.getBytes(`light/skin/res/${imageName}.png`)
     const tilePath = `light/skin/res/${imageName}.til`
     const source = numbers(this.base.isText(tilePath) ? IniDocument.parse(this.base.getText(tilePath)).get(`IMG${tileValue}`, "SOURCE_RECT") : undefined)
@@ -171,16 +171,16 @@ class ThemeConverter {
       if (!this.glyphs.has(imageName)) this.glyphs.set(imageName, decodePng(atlasBytes))
       return this.glyphs.get(imageName)!
     }
-    const tinted = (color: string): LookImage | undefined => {
+    const tinted = (color: string | undefined): LookImage | undefined => {
       const id = `tint:${source.join(",")}:${color}:${white}|${fingerprint(atlasBytes)}`
       return cached(id, () => {
         const glyph = cropImage(atlas(), source[0], source[1], source[2], source[3])
-        return { id, bytes: encodePng(tintImage(white ? whiteMask(glyph) : glyph, color)) }
+        return { id, bytes: encodePng(color ? tintImage(white ? whiteMask(glyph) : glyph, color) : glyph) }
       })
     }
-    const normal = tinted(colors.normal)
-    const pressed = tinted(colors.pressed)
-    return normal && pressed ? this.resources.imageStyle({ normal, pressed }) : undefined
+    const normal = tinted(icons?.normal)
+    const pressed = tinted(icons?.pressed)
+    return normal && pressed ? this.resources.imageStyle(this.look.placeIcon({ normal, pressed }, iconRect, size)) : undefined
   }
 
   /** Baidu style fields for a Sogou text look; the typeface file is copied next to the styles. */
@@ -224,17 +224,30 @@ class ThemeConverter {
         layout.set(section, "FORE_STYLE", this.resources.imageStyle(look.fore))
         layout.remove(section, "FORE_OFFSET")
         layout.remove(section, "POS_TYPE")
-      } else if (look.label || look.labelText) {
+      } else if (look.label || look.labelText || look.icon || look.iconRect || look.visible.includes(false)) {
         const templateFore = layout.get(section, "FORE_STYLE")?.split(",").map((value) => value.trim()).filter(Boolean)
         // The size is the main label's; a second layer (中/英's 英) keeps its own smaller size.
         const text = (index: number) => look.labelText && (index ? { ...look.labelText, fontSize: undefined } : look.labelText)
-        if (templateFore?.length) layout.set(section, "FORE_STYLE", templateFore.map((id, index) => this.tintedTemplateStyle(id, look.label, false, look.texts[index], text(index)) ?? id).join(","))
+        let labelIndex = 0
+        const colors = (index: number) => look.visible[index] === false ? { normal: "00000000", pressed: "00000000" } : look.label
+        if (templateFore?.length) {
+          const offsets = (layout.get(section, "FORE_OFFSET") ?? "").split(";")
+          layout.set(section, "FORE_STYLE", templateFore.map((id, index) => {
+            const image = this.resources.styles.get(`STYLE${id}`, "NM_IMG")
+            const label = image ? undefined : labelIndex++
+            if (image && look.iconRect) offsets[index] = "0,0"
+            return this.tintedTemplateStyle(id, label === undefined ? look.label : colors(label), false,
+              label === undefined ? undefined : look.texts[label], label === undefined ? undefined : text(label),
+              look.icon ?? look.label, look.iconRect, [width, height]) ?? id
+          }).join(","))
+          if (look.iconRect) layout.set(section, "FORE_OFFSET", offsets.join(";"))
+        }
         else if ([...action].length === 1) {
           // Sogou runtime symbol keys have an action but no static foreground in the skeleton.
           layout.set(section, "FORE_STYLE", this.resources.derivedStyle("", {
             SHOW: look.texts[0] ?? action,
             FONT_SIZE: String(Math.max(1, Math.round(boardWidth * 0.055))),
-            ...look.label ? { NM_COLOR: look.label.normal, HL_COLOR: look.label.pressed } : {},
+            ...colors(0) ? { NM_COLOR: colors(0)!.normal, HL_COLOR: colors(0)!.pressed } : {},
             ...this.textFields(look.labelText),
           }))
         }
@@ -260,6 +273,51 @@ class ThemeConverter {
         ...this.textFields(list),
       }))
     }
+  }
+
+  private convertHint(orientation: string, qwerty: boolean): string {
+    const name = qwerty ? "ssf_qwerty" : "ssf_phone"
+    const path = `${this.theme}/skin/${orientation}/${name}.pop`
+    if (this.output.has(path)) return name
+    const look = this.look.popup(qwerty)
+    const back = look.back ? this.resources.imageStyle(look.back) : this.resources.colorStyle(look.color)
+    const width = this.panelWidth || numbers(IniDocument.parse(this.base.getText("light/skin/port/gen.ini")).get("PANEL", "SIZE"))[0] || 480
+    const text = (colors: LookColors, label: LookText, fontSize: number) => this.resources.derivedStyle("", {
+      NM_COLOR: colors.normal, HL_COLOR: colors.pressed, FONT_SIZE: String(Math.max(1, Math.round(fontSize))), ...this.textFields(label),
+    })
+    const [w, h] = look.size
+    const [left, top, right, bottom] = look.labelBox
+    // 长按栏只拉伸文字框内的横带，避免把气泡两侧的透明留白一起拉宽到文字下面。
+    const barImage = (image: LookImage): LookImage => {
+      const [width, height] = pngSize(image.bytes)!
+      const start = Math.min(width - 1, Math.round(left * width))
+      const end = Math.max(start + 1, Math.round(right * width))
+      return { ...image, id: `${image.id}|popup-bar:${start},${end}`, stretch: [start, end, image.stretch?.[2] ?? 0, image.stretch?.[3] ?? height] }
+    }
+    const barBack = look.back ? this.resources.imageStyle({ normal: barImage(look.back.normal), pressed: barImage(look.back.pressed) }) : back
+    const padding = [...look.padding]
+    padding[0] = Math.max(padding[0], Math.round(left * w))
+    padding[2] = Math.max(padding[2], Math.round((1 - right) * w))
+    const hint = IniDocument.parse("[GLOBAL]\nICON_NUM=2\n[HINT]\nBACK_ICON=1\n[BAR]\nBACK_ICON=2\n[ICON1]\n[ICON2]\n")
+    hint.set("ICON1", "BACK_STYLE", back)
+    hint.set("ICON1", "FORE_STYLE", text(look.text, look.label, Math.min(width * 0.09, h * (bottom - top))))
+    hint.set("ICON1", "SIZE", look.size.join(","))
+    hint.set("ICON1", "POS", `0,${look.offset}`)
+    hint.set("ICON1", "PADDING", [left * w, top * h, (1 - right) * w, (1 - bottom) * h].map(Math.round).join(","))
+    hint.set("ICON2", "BACK_STYLE", barBack)
+    hint.set("ICON2", "FORE_STYLE", text(look.hold, look.holdLabel, width * 0.05))
+    hint.set("ICON2", "SIZE", look.size.join(","))
+    hint.set("ICON2", "POS", `0,${look.offset}`)
+    hint.set("ICON2", "PADDING", padding.join(","))
+    hint.set("BAR", "CELL_SIZE", `${Math.max(1, Math.round(width / 14))},${Math.max(1, h - padding[1] - padding[3])}`)
+    this.output.set(path, strToU8(hint.toString()))
+    return name
+  }
+
+  private bindHint(layout: IniDocument, name: string): void {
+    if (!layout.hasSection("HINT")) layout.appendSection("HINT", [])
+    layout.set("HINT", "LAYOUT_NAME", name)
+    layout.set("HINT", "TYPE", "0")
   }
 
   private keyboard(): { panel?: string; cand?: string; input?: string } {
@@ -290,7 +348,10 @@ class ThemeConverter {
     if (defaultSound) gen.set("PANEL", "SOUND_STYLE", defaultSound)
 
     const composing = this.look.color("ComposingView", "BG_COLOR")
-    if (composing && gen.get("INPUT", "BACK_STYLE")) gen.set("INPUT", "BACK_STYLE", this.resources.colorStyle(composing))
+    if (composing) {
+      if (!gen.hasSection("INPUT")) gen.appendSection("INPUT", [])
+      gen.set("INPUT", "BACK_STYLE", this.resources.colorStyle(composing))
+    }
     // Sogou colours the code it shows in the pinyin bar with the bar's own colour.
     const composingText = (this.inlineInput ? this.look.color("VPA_Bar", "COMPOSING_TEXT_COLOR") : undefined) ?? this.look.color("TextStyle_Composing")
     const inputFore = gen.get("INPUT", "FORE_STYLE")?.trim()
@@ -340,6 +401,7 @@ class ThemeConverter {
       if (!genBytes) continue
       const gen = IniDocument.parse(new TextDecoder().decode(genBytes))
       this.convertGeneral(gen, orientation)
+      this.bindHint(gen, this.convertHint(orientation, false))
       this.output.set(genPath, strToU8(gen.toString()))
       for (const path of [...this.output.keys()]) {
         const match = path.match(new RegExp(`^${this.theme}/skin/${orientation}/([^/]+)\\.ini$`))
@@ -347,6 +409,7 @@ class ThemeConverter {
         const layout = IniDocument.parse(new TextDecoder().decode(this.output.get(path)!))
         this.convertKeys(layout, match[1], orientation === "land", numbers(gen.get("PANEL", "SIZE")))
         this.convertLists(layout)
+        this.bindHint(layout, this.convertHint(orientation, ssfQwerty(match[1])))
         // Sogou paints one background behind every board, while the Baidu skeleton gives each board its own.
         if (this.panelStyle && layout.sections().includes("PANEL")) layout.set("PANEL", "BACK_STYLE", this.panelStyle)
         this.output.set(path, strToU8(layout.toString()))

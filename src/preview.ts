@@ -146,6 +146,7 @@ export class Preview {
   private renderInFlight: Promise<void> = Promise.resolve()
   private renderAgain = false
   hintVisible = false
+  nativeOverlayVisible = false
   dragDrawFrame = 0
   lastRenderCache?: {
     panel: Visual | undefined

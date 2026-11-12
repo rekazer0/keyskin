@@ -7,7 +7,7 @@ import { SsfMotion } from "../ssf/ssf-motion.ts"
 import { SsfStyles } from "../ssf/ssf-scene.ts"
 import { styleCard, styleKindIcon, styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
 import { bindDialog } from "./ask"
-import { preview } from "./canvas-interaction"
+import { preview, previewScreenWidth } from "./canvas-interaction"
 import { isEditing } from "./edit-history"
 import { selectFile } from "./navigation"
 import { fieldCaption } from "./property-rows"
@@ -22,9 +22,7 @@ function animationPath(path: string, key: string): string {
 }
 
 function soundPath(value: string): string | undefined {
-  const pkg = ssfPackage()
-  return ["wav", "ogg", "mp3"].map(extension => pkg?.path(ssfTheme(), `${value}.${extension}`)).find(Boolean)
-    ?? pkg?.path(ssfTheme(), value)
+  return ssfPackage()?.soundPath(ssfTheme(), value)
 }
 
 function options(path: string, key: string): string[] {
@@ -53,7 +51,7 @@ function animationPreview(path: string, key: string, value: string): HTMLElement
     const scene = await preview.sceneForState()
     const target = scene?.keys.find(item => item.section === appState.selectedKeySections[0]) ?? scene?.keys[0]
     if (!target) return
-    const motion = await SsfMotion.load(styles, { width: preview.panelWidth, height: preview.panelHeight }, document)
+    const motion = await SsfMotion.load(styles, { width: preview.panelWidth, height: preview.panelHeight }, document, previewScreenWidth())
     const effects = motion?.effects([{ section: target.section, rect: target.rect, binding: { sections: [], defaults: [], keyClass: "char" } }], {
       section: value, field: key === "ANIM_STYLE" ? undefined : key,
     })

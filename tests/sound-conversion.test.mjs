@@ -6,6 +6,7 @@ import { SkinArchive } from '../src/skin.ts'
 import { convertBdaArchive } from '../src/bda-convert.ts'
 import { bdaSoundResourceType, updateBdaKeySound } from "../src/bda-encode.ts"
 import { decodeAiffPcm } from '../src/sounds.ts'
+import { IniDocument } from '../src/ini.ts'
 
 const ogg = new Uint8Array(readFileSync(new URL('./fixtures/click.ogg', import.meta.url)))
 
@@ -187,6 +188,17 @@ test('BDA → BDS keeps key sounds', async () => {
   assert.ok(files[`${prefix}res/tap.ogg`] && files[`${prefix}res/del.ogg`])
   const layout = strFromU8(files[`${prefix}port/py_9.ini`] ?? files[`${prefix}port/py_26.ini`])
   assert.match(layout, new RegExp(`^SOUND_STYLE=${tapStyle}$`, 'm'))
+})
+
+test('BDA → BDS does not promote a single key\'s sound to the panel default', async () => {
+  const template = unzipSync(new Uint8Array(readFileSync(new URL('../public/default-template.bda', import.meta.url))))
+  const soundConfig = updateBdaKeySound(new Uint8Array(), 'KEY_DELETE', { type: bdaSoundResourceType('del.ogg'), resourceID: 'del.ogg' })
+  const source = SkinArchive.open(zipSync({ ...template, 'port/soundConfig': soundConfig, 'res/del.ogg': ogg }), 'bda')
+  const base = SkinArchive.open(new Uint8Array(readFileSync(new URL('../public/bda-base.bds', import.meta.url))))
+  const archive = convertBdaArchive(source, base, 'bds').archive
+  const layouts = archive.names().filter((name) => /\/port\/[^/]+\.ini$/.test(name))
+  assert.ok(layouts.length)
+  for (const path of layouts) assert.equal(IniDocument.parse(archive.getText(path)).get('PANEL', 'SOUND_STYLE'), undefined, path)
 })
 
 test('BDA → BDI prefers iOS key sounds', async () => {

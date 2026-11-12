@@ -81,3 +81,8 @@ test('Palm reads global referenced bubbles and board-local inline bubbles withou
   assert.equal(palmHint(inline).cellStyle, '25')
   assert.equal(JSON.stringify(skin), before)
 })
+
+test('four-letter nine-key groups keep all upper and lower case long-press characters', () => {
+  const key = { center: 'q', left: 'p', right: 'r', down: 's', up: '7', hold: '', holdSymbols: '' }
+  assert.deepEqual(legacyHintCandidates(key, 'hold', true), ['P', 'Q', 'R', 'S', '7', 'p', 'q', 'r', 's'])
+})
