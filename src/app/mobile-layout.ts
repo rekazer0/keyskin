@@ -1,11 +1,11 @@
-import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, mobileSplitHandle, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
 import { createIcon, groupIcon } from "../icons"
 import { bdaConfigPath } from "../bda.ts"
 import { selectFile } from "./navigation"
-import { mobilePortraitQuery, preview, toolbarPreview, source, keyboardFields, layoutActionButtons } from "./canvas-interaction"
+import { preview, toolbarPreview, source, keyboardFields, layoutActionButtons } from "./canvas-interaction"
 import { selectParentObject } from "./key-editing"
 import { isEditing } from "./edit-history"
 import { updateSourceFileActions } from "./source-files"
@@ -268,38 +268,6 @@ function railButton(): HTMLButtonElement {
   button.type = "button"
   button.dataset.layout = "tile"
   return button
-}
-
-export function setMobilePane(pane: "layout" | "inspector"): void {
-  document.documentElement.dataset.mobilePane = pane
-  for (const button of mobilePaneButtons) {
-    const active = button.dataset.mobilePane === pane
-    button.setAttribute("aria-pressed", String(active))
-  }
-  const mobile = mobilePortraitQuery.matches
-  sidebarPane.inert = mobile && pane !== "layout"
-  inspectorPane.inert = mobile && pane !== "inspector"
-}
-
-export function setMobileSplit(value: number, persist = true): void {
-  const clamped = Math.max(28, Math.min(72, value))
-  document.documentElement.style.setProperty("--mobile-workspace-split", `${clamped}%`)
-  mobileSplitHandle.setAttribute("aria-valuenow", String(Math.round(clamped)))
-  mobileSplitHandle.setAttribute("aria-valuetext", `画布占 ${Math.round(clamped)}%`)
-  if (persist) localStorage.setItem("mobile-workspace-split", String(clamped))
-}
-
-export function setMobilePreviewCollapsed(collapsed: boolean): void {
-  if (collapsed) {
-    appState.mobileSplitBeforeCollapse = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--mobile-workspace-split"),
-    ) || appState.mobileSplitBeforeCollapse
-  }
-  document.documentElement.dataset.mobilePreviewCollapsed = String(collapsed)
-  mobileSplitHandle.setAttribute("aria-expanded", String(!collapsed))
-  mobileSplitHandle.title = collapsed ? "展开预览" : "调整预览高度"
-  mobileSplitHandle.setAttribute("aria-label", mobileSplitHandle.title)
-  if (!collapsed) setMobileSplit(appState.mobileSplitBeforeCollapse)
 }
 
 export function updatePanelToolButtons(): void {

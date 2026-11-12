@@ -1,4 +1,6 @@
-import { source, keyboardFields, layoutActionButtons, preview, inspectorTabButtons, mobilePortraitQuery, activateSkinState, selectNativeToolbar } from "../canvas-interaction"
+import { source, keyboardFields, layoutActionButtons, preview, inspectorTabButtons, activateSkinState, selectNativeToolbar } from "../canvas-interaction"
+import { mobileShellQuery } from "../mobile-media"
+import { setMobileTab } from "../mobile-shell"
 import { bindDialog } from "../ask.ts"
 import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
@@ -11,7 +13,7 @@ import { scrollSelectedSource } from "../config-context"
 import { applyExactGap, moveMixedCoordinate, applyLayoutAction, copySelectedKeys, deleteSelectedKeys } from "../key-editing"
 import { shouldClearMixedInput } from "../../mixed-input.ts"
 import { syncCandidateSelection, updateDevicePreview, refreshPreview, setGuidesVisible } from "../preview-render"
-import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode, revealInspectorGroup } from "../mobile-layout"
+import { syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode, revealInspectorGroup } from "../mobile-layout"
 import { ensureAiChat, aiDesignErrorMessage } from "../ai-panel"
 import { switchSsfPreviewLayout } from "../ssf-preview"
 import { switchPalmLayout } from "../sxi-documents"
@@ -153,7 +155,7 @@ export function wireEditingControls(): void {
     button.addEventListener("click", () => {
       const tab = button.dataset.inspectorTab
       appState.inspectorTab = tab === "source" ? "source" : tab === "ai" ? "ai" : "properties"
-      if (mobilePortraitQuery.matches) setMobilePane("inspector")
+      if (mobileShellQuery.matches) setMobileTab("inspector")
       updateInspectorView()
       if (!quickInspector.hidden) populateKeyInspector()
       if (!aiDesignPanel.hidden) {
@@ -473,7 +475,7 @@ export function wireEditingControls(): void {
       populateKeyInspector()
       updateSourceHighlight()
       scrollSelectedSource()
-      if (mobilePortraitQuery.matches) setMobilePane("inspector")
+      if (mobileShellQuery.matches) setMobileTab("inspector")
       return
     }
     const path = toolbarStrip.dataset.path

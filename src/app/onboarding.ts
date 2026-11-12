@@ -1,6 +1,7 @@
 import { canvasWrap, mode, toolbarMenus } from "./dom"
 import { appState } from "./state"
-import { mobilePortraitQuery } from "./canvas-interaction"
+import { mobileShellQuery } from "./mobile-media"
+import { setMobileTab } from "./mobile-shell"
 import { runTour, type TourStep } from "../tour.ts"
 import { shortcutLabel } from "../dom-element"
 
@@ -9,7 +10,7 @@ const ONBOARDING_KEY = "onboarding-tour-v1"
 const hasSkin = () => Boolean(appState.archive) && !canvasWrap.classList.contains("empty")
 const closeMenus = () => { for (const menu of toolbarMenus) menu.open = false }
 
-/** 首次打开的使用教程：电脑（宽屏）与手机竖屏的界面不同，按启动时的布局选一套说明。 */
+/** 首次打开的使用教程：电脑（宽屏）与手机的界面不同，按启动时的布局选一套说明。 */
 function onboardingSteps(compact: boolean): TourStep[] {
   const menu = toolbarMenus[0]
   const menuSelector = ".pen-file-menu"
@@ -42,16 +43,17 @@ function onboardingSteps(compact: boolean): TourStep[] {
     {
       target: [".canvas-wrap"],
       title: "画布：实时预览",
+      enter: compact ? () => setMobileTab("canvas") : undefined,
       body: compact
         ? "下半屏是键盘的实际效果。「交互预览」模式下轻点按键会模拟打字，双指可以缩放画布。"
         : "这里显示键盘的实际效果。「交互预览」模式下点击按键会模拟打字；滚轮或右下角的按钮可以缩放画布。",
       when: hasSkin,
     },
     {
-      target: [".preview-toolbar"],
+      target: compact ? [".mobile-canvas-tools"] : [".preview-toolbar"],
       title: "预览选项",
       body: compact
-        ? "切换辅助线、预览设备（各款手机或纯画布）、竖屏 / 横屏和浅色 / 深色。皮肤里的每种组合都可以分别编辑。"
+        ? "画布右下角的按钮里是方向、外观、设备与画布、辅助线和全局预览；皮肤里的每种组合都可以分别编辑。"
         : "依次是辅助线、皮肤状态、预览设备（各款手机或纯画布）、竖屏 / 横屏、浅色 / 深色。皮肤里的每种组合都可以分别编辑。",
       when: hasSkin,
     },
@@ -65,8 +67,9 @@ function onboardingSteps(compact: boolean): TourStep[] {
     {
       target: [".canvas-wrap"],
       title: "选中一个按键",
+      enter: compact ? () => setMobileTab("canvas") : undefined,
       body: compact
-        ? "编辑模式下轻点按键即可选中，选中后上半屏会自动切到「属性检查器」。"
+        ? "编辑模式下轻点按键即可选中，选中后会自动切到「属性」页。"
         : `编辑模式下单击按键即可选中，拖动可以移动位置；${shortcutLabel("单击")}可以多选。`,
       action: { hint: compact ? "轻点画布上任意一个按键" : "点击画布上任意一个按键", done: () => appState.selectedKeySections.length > 0 },
       when: () => hasSkin() && mode.value === "edit",
@@ -74,16 +77,17 @@ function onboardingSteps(compact: boolean): TourStep[] {
     {
       target: ["section.source"],
       title: "属性检查器",
+      enter: compact ? () => setMobileTab("inspector") : undefined,
       body: compact
-        ? "在这里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点顶部的撤销按钮可以撤回。右侧分类栏可快速跳到对应分组。"
+        ? "属性页里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点顶部的撤销按钮可以撤回。右侧分类栏可快速跳到对应分组。"
         : `在这里修改选中对象的位置、尺寸、样式、文字和手势，改动立即显示在画布上，可随时撤销（${shortcutLabel("Z")}）。右侧分类栏点击即可跳到对应分组，放大镜可以筛选属性。`,
       when: hasSkin,
     },
     compact
       ? {
-          target: [".mobile-workspace-tabs"],
-          title: "切换编辑区域",
-          body: "上半屏可以在「文件与布局」和「属性检查器」之间切换，也可以左右滑动。「文件与布局」里可以换到 9 键、26 键、符号等面板；拖动右侧的手柄可以调整画布与编辑区的比例。",
+          target: [".ui-tabbar"],
+          title: "三个主页面",
+          body: "底部三个标签是「画布」「属性」「文件」，点按或左右滑动切换。「文件」里可以换到 9 键、26 键、符号等面板。",
           when: hasSkin,
         }
       : {
@@ -96,6 +100,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       target: [".titlebar-preferences"],
       title: "设置",
       body: "外观主题、强调色、默认预览设备、画布背景等偏好都在这里调整。",
+      when: () => !compact,
     },
     {
       target: [`${menuSelector} > summary`],
@@ -107,12 +112,13 @@ function onboardingSteps(compact: boolean): TourStep[] {
       target: [`${menuSelector}[open] .ui-menu`],
       title: "导出给输入法",
       body: compact
-        ? "改好后先「保存皮肤」，再按要使用的输入法选择导出格式；「分享皮肤」可以把皮肤直接发给输入法安装。"
+        ? "改好后先「保存皮肤」，再按要使用的输入法选择导出格式；「分享皮肤」可以把皮肤直接发给输入法安装。「设置」和「使用教程」也在这个菜单里。"
         : "改好后先「保存皮肤」，再按要使用的输入法选择导出格式：百度 iOS / Android、新版 BDA、手心或搜狗。",
       when: () => Boolean(menu?.open),
       leave: closeMenus,
     },
     {
+      target: compact ? [".ui-tabbar"] : undefined,
       title: "准备就绪",
       body: "以上就是基本流程。想再看一遍时，打开左上角菜单里的「使用教程」。祝你做出满意的皮肤！",
     },
@@ -127,7 +133,7 @@ function markOnboardingSeen(): void {
 export function startOnboarding(): void {
   appState.stopOnboarding?.()
   closeMenus()
-  appState.stopOnboarding = runTour(onboardingSteps(mobilePortraitQuery.matches), {
+  appState.stopOnboarding = runTour(onboardingSteps(mobileShellQuery.matches), {
     busy: () => appState.fileOperationRunning || Boolean(document.querySelector("dialog[open]")),
     onEnd: () => {
       appState.stopOnboarding = undefined

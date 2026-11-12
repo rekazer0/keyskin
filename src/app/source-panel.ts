@@ -7,7 +7,7 @@ import { files, sourceName, quickInspector, asset, resourceInspector, sourceEdit
 import { appState } from "./state"
 import { showsLayoutProperties, selectedSourceSections, styleConfigPath, sxiSourceRanges } from "./config-context"
 import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, visualResolver, bdaAppearanceStylePath } from "./bda-documents"
-import { inspectorTabButtons, source, mobilePortraitQuery, preview } from "./canvas-interaction"
+import { inspectorTabButtons, source, preview } from "./canvas-interaction"
 import { loadVisibleSourceEditor } from "./resource-inspector"
 import { refreshPreview, syncCandidateSelection } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
@@ -18,7 +18,8 @@ import { type SourceEditorValueRange, type SourceEditorValueClick } from "../laz
 import { retinaThumbnail, drawVisualPreview } from "../atlas.ts"
 import { bdaStyleRef } from "../bda.ts"
 import { selectFile } from "./navigation"
-import { setMobilePane } from "./mobile-layout"
+import { setMobileTab } from "./mobile-shell"
+import { mobileShellQuery } from "./mobile-media"
 import { isEditing } from "./edit-history"
 import { openStylePicker } from "./style-picker"
 import { openStyleReferenceStateImage } from "./style-references"
@@ -273,7 +274,7 @@ export function openSourceStyleDefinition(styleID: string): void {
     ? jsonPropertyRanges(source.value, [String(ref.key)])[0]
     : iniSectionRanges(source.value, [`STYLE${styleID}`])[0]
   if (range) source.setSelectionRange(range[0], range[1])
-  if (mobilePortraitQuery.matches) setMobilePane("inspector")
+  if (mobileShellQuery.matches) setMobileTab("inspector")
   void source.load().then(() => source.focus())
 }
 

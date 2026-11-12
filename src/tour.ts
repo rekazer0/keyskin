@@ -9,6 +9,8 @@ export interface TourStep {
   body: string
   /** 需要用户亲手点击高亮处才继续：`hint` 提示要点什么，`done()` 成立后自动进入下一步。 */
   action?: { hint: string; done: () => boolean }
+  /** 进入本步、测量目标之前的准备（例如手机上先切到目标所在的页面）。 */
+  enter?: () => void
   /** 返回 false 时跳过本步（例如还没打开皮肤）。 */
   when?: () => boolean
   /** 离开本步时调用（收起菜单等）。 */
@@ -125,6 +127,7 @@ export function runTour(steps: TourStep[], options: { busy: () => boolean; onEnd
     }
     steps[index]?.leave?.()
     index = candidate
+    steps[index].enter?.()
     render()
   }
 

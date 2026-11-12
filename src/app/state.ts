@@ -197,7 +197,6 @@ export const appState = {
   */
   inspectorGroupKey: "",
   singlePageInspectorContext: "",
-  mobileSplitBeforeCollapse: Number(localStorage.getItem("mobile-workspace-split")) || 50,
   mobileSwipeStart: undefined as { pointerId: number; x: number; y: number } | undefined,
   cachedVisualResolver: undefined as { key: readonly unknown[]; resolver: VisualResolver } | undefined,
   cachedSkinStates: undefined as { key: readonly unknown[]; byLayout: Map<string, number[]> } | undefined,

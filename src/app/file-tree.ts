@@ -4,8 +4,9 @@ import { symbolSpan } from "../icons"
 import { layout, files, theme, orientation, documentName } from "./dom"
 import { selectFile, overviewGroupState, currentNavigationMode } from "./navigation"
 import { isSsfBoardPath, ssfThemeFolder, SSF_SOUNDS_PATH } from "./ssf-documents"
-import { mobilePortraitQuery, sourceThumbnail } from "./canvas-interaction"
-import { setMobilePane } from "./mobile-layout"
+import { sourceThumbnail } from "./canvas-interaction"
+import { mobileShellQuery } from "./mobile-media"
+import { setMobileTab } from "./mobile-shell"
 import { palmBoardLabel } from "../palm/palm-labels.ts"
 import { boardFileName } from "../palm/sxi-layout.ts"
 import { asObject } from "../palm/sxi-ini.ts"
@@ -67,7 +68,7 @@ function addNavButton(
       appState.previewReturnName = path.split("/").pop() ?? layout.value
     }
     selectFile(path, "overview", navMode === "resource" ? "image" : navMode === "style" ? "style" : navMode === "sound" ? "sound" : navMode === "motion" || navMode === "particle" ? navMode : "document")
-    if (mobilePortraitQuery.matches) setMobilePane("inspector")
+    if (mobileShellQuery.matches) setMobileTab("inspector")
   })
   parent.append(button)
   if (appState.sidebarView === "overview" && path === appState.selectedPath && navMode === currentNavigationMode()) {
@@ -196,7 +197,7 @@ export function renderFiles(): void {
       const active = group.dataset.overviewGroup === title
       group.classList.toggle("mobile-overview-active", active)
       // The phone rail replaces the disclosure summary, so a closed group would render empty.
-      if (active && mobilePortraitQuery.matches) group.open = true
+      if (active && mobileShellQuery.matches) group.open = true
     }
   }
 
@@ -646,7 +647,7 @@ export function renderFiles(): void {
         if (appState.archive?.isText(path) || appState.archive?.isImage(path) || appState.archive?.isBdaConfig(path)) {
           appState.animationDesignMode = "all"
           selectFile(path, "source")
-          if (mobilePortraitQuery.matches) setMobilePane("inspector")
+          if (mobileShellQuery.matches) setMobileTab("inspector")
         } else selectSourceRow(button)
         updateSourceFileActions()
       })

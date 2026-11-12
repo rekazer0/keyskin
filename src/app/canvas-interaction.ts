@@ -1,4 +1,4 @@
-import { settingsDialog, $, sidebarViewControl, device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton } from "./dom"
+import { settingsDialog, $, sidebarViewControl, device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, undoButton, redoButton, desktopUndoButton, desktopRedoButton } from "./dom"
 import { LazySourceCodeEditor } from "../lazy-source-editor.ts"
 import { effectiveDeviceValue } from "../canvas-background.ts"
 import { deviceSpec } from "../devices.ts"
@@ -9,7 +9,8 @@ import { previewStateImpact } from "../preview-items.ts"
 import { appState } from "./state"
 import { syncCandidateSelection, setPreviewPan, refreshSimulationPreview, simulationLanguage } from "./preview-render"
 import { selectFile } from "./navigation"
-import { setMobilePane } from "./mobile-layout"
+import { setMobileTab } from "./mobile-shell"
+import { mobileShellQuery } from "./mobile-media"
 import { moveSelectedKeys } from "./key-editing"
 import { isEditing } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
@@ -35,8 +36,6 @@ export const scrollbarIdleTimers = new WeakMap<HTMLElement, number>()
 export const settingsNavItems = Array.from(settingsDialog.querySelectorAll<HTMLButtonElement>("[data-settings-page]"))
 
 export const settingsPages = Array.from(settingsDialog.querySelectorAll<HTMLElement>("[data-settings-panel]"))
-
-export const mobilePortraitQuery = matchMedia("(max-width: 760px) and (orientation: portrait)")
 
 export const exportButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-export-format]"),
@@ -129,7 +128,7 @@ export const preview = new Preview(
     if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview", "document", true)
     appState.selectedKeySections = sections
     if (!sections.length) source.collapseSelection()
-    if (sections.length && mobilePortraitQuery.matches) setMobilePane("inspector")
+    if (sections.length && mobileShellQuery.matches) setMobileTab("inspector")
     scheduleSelectionInspectorSync(preview)
   },
   false,
@@ -272,7 +271,7 @@ export function selectNativeToolbar(): void {
   toolbarPreview.setSelected([])
   syncCandidateSelection()
   scheduleSelectionInspectorSync(toolbarPreview)
-  if (mobilePortraitQuery.matches) setMobilePane("inspector")
+  if (mobileShellQuery.matches) setMobileTab("inspector")
 }
 
 export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections) => {
@@ -693,8 +692,6 @@ export function syncDeviceControlIcon(): void {
 }
 
 export function syncUndoButtons(): void {
-  mobileUndoButton.disabled = undoButton.disabled
-  mobileRedoButton.disabled = redoButton.disabled
   desktopUndoButton.disabled = undoButton.disabled
   desktopRedoButton.disabled = redoButton.disabled
 }

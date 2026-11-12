@@ -58,10 +58,6 @@ export const redoButton = $("#redo") as HTMLButtonElement
 export const toolbarMenus = Array.from(document.querySelectorAll<HTMLDetailsElement>(".toolbar-more"))
 
 
-export const mobileUndoButton = $("#mobile-undo") as HTMLButtonElement
-
-export const mobileRedoButton = $("#mobile-redo") as HTMLButtonElement
-
 export const desktopUndoButton = $("#desktop-undo") as HTMLButtonElement
 
 export const desktopRedoButton = $("#desktop-redo") as HTMLButtonElement
@@ -118,8 +114,6 @@ export const sourceValueHintsEnabled = $("#source-value-hints-enabled") as HTMLI
 
 export const sourceLineExplanationEnabled = $("#source-line-explanation-enabled") as HTMLInputElement
 
-export const mobilePreviewPosition = $("#mobile-preview-position") as HTMLSelectElement
-
 export const hintPreviewEnabled = $("#hint-preview-enabled") as HTMLInputElement
 
 export const editorCrosshair = $("#editor-crosshair") as HTMLInputElement
@@ -139,10 +133,6 @@ export const chooseSourceDirectory = $("#choose-source-directory") as HTMLButton
 export const resetSourceDirectory = $("#reset-source-directory") as HTMLButtonElement
 
 export const sourceDirectoryStatus = $("#source-directory-status")
-
-export const mobilePaneButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mobile-pane]"))
-
-export const mobileSplitHandle = $("#mobile-split-handle") as HTMLButtonElement
 
 export const sourceColorPicker = $("#source-color-picker") as HTMLInputElement
 
@@ -178,9 +168,13 @@ export const previewPanelViewport = $("#panel-viewport")
 
 export const mainWorkspace = $("main")
 
+export const workspacePane = $("section.workspace")
+
 export const sidebarPane = $("aside.sidebar")
 
 export const inspectorPane = $("section.source")
+
+export const mobileTabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mobile-tab]"))
 
 export const sourceHeading = $(".source-heading")
 

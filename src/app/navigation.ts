@@ -1,5 +1,6 @@
 import { appState } from "./state"
-import { source, toolbarPreview, preview, mobilePortraitQuery } from "./canvas-interaction"
+import { source, toolbarPreview, preview } from "./canvas-interaction"
+import { mobileShellQuery } from "./mobile-media"
 import { toggleGuides, mobilePreviewGuides, newTileButton, atlasCanvas, resourceListView, resourceDetail, sourceName, quickInspector, files } from "./dom"
 import { setGuidesVisible, refreshPreview, syncCandidateSelection } from "./preview-render"
 import { bdaAppearancePart, currentBdaAppearance, bdaBasePath, refreshBdaLayout, isBdaVirtualTextPath, isBdaLayoutPath, isBdaAppearancePartPath } from "./bda-documents"
@@ -207,7 +208,7 @@ export function selectFile(
     setSidebarView(appState.selectedFileButton.closest(".raw-files") ? "source" : "overview")
   }
   setRowSelected(appState.selectedFileButton, true)
-  if (mobilePortraitQuery.matches) {
+  if (mobileShellQuery.matches) {
     const group = appState.selectedFileButton?.closest<HTMLElement>(".nav-group")?.dataset.overviewGroup
     files.querySelector<HTMLButtonElement>(`.mobile-overview-groups button[data-overview-group="${CSS.escape(group ?? "")}"]`)?.click()
   }
