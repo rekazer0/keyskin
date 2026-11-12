@@ -246,6 +246,35 @@ test('panel show particles keep their binding and scalar parameter ranges (issue
   assert.equal(ini.get('ANIM1101', 'ALPHA_SPEED'), '50,50')
 })
 
+test('missing animation placeholders cannot cover keys; visible, actionable and valid animated decorations survive (issue 30)', () => {
+  const files = {}
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    files[`${theme}/${orientation}/gen.ini`] = '[PANEL]\nSIZE=500,300\n'
+    files[`${theme}/${orientation}/py_9.ini`] = [
+      '[KEY1]', 'VIEW_RECT=0,0,100,100', 'CENTER=q',
+      '[KEY62]', 'ANIM_STYLE=811', 'VIEW_RECT=90,5,40,40',
+      '[KEY63]', 'ANIM_STYLE=812', 'VIEW_RECT=20,50,40,40',
+      '[KEY64]', 'ANIM_STYLE=813', 'VIEW_RECT=200,50,40,40',
+      '[KEY65]', 'ANIM_STYLE=811', 'FORE_STYLE=1520', 'VIEW_RECT=250,50,40,40',
+      '[KEY66]', 'ANIM_STYLE=811', 'CENTER=F36', 'VIEW_RECT=300,50,40,40',
+      '[KEY67]', 'ANIM_STYLE=811', 'STAT_STYLE=S4_1', 'VIEW_RECT=350,50,40,40',
+      '[TIP1]', 'CENTER=F38',
+    ].join('\n')
+    files[`${theme}/${orientation}/res/default.css`] = [
+      '[STYLE811]', 'SHOW_ANIM=1001', '[STYLE812]', 'SHOW_ANIM=1002',
+      '[STYLE813]', 'SHOW_ANIM=1101', '[STYLE1520]', 'NM_IMG=sym,12',
+    ].join('\n')
+    files[`${theme}/${orientation}/res/anim.ini`] = '[ANIM1101]\nCATEGORY=3\nPARTICLE_IMAGE=1520\n'
+  }
+  const { skin, warnings } = convert(files)
+  for (const theme of ['default', 'night']) for (const orientation of ['port', 'land']) {
+    const keys = skin[theme][`${orientation}_layout`].b.t9Pinyin.keys
+    assert.deepEqual(keys.map((key) => key.id).sort(), ['1', '64', '65', '66', '67'])
+  }
+  assert.equal(warnings.length, 1, 'the same missing animations are reported once across themes and orientations')
+  assert.match(warnings[0], /ANIM1001、ANIM1002.*空占位.*跳过/)
+})
+
 test('off-screen native toolbar remains hidden behind a custom candidate row', () => {
   const { skin } = convert({
     'light/skin/port/gen.ini': '[PANEL]\nSIZE=1080,525\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1080,111\n',

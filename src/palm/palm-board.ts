@@ -135,18 +135,20 @@ export class PalmBoard {
     return asObject(this.board[field]) ?? asObject(this.global[field])
   }
 
-  /** The panel's show animation style (`asi`, Baidu's [PANEL] ANIM_STYLE). */
+  /** The panel's show animation style, including the global fallback. */
   get panelAnimation(): string {
-    return text(asObject(asObject(this.board.board)?.b ?? null)?.asi)
+    return text(this.panelClip.style)
   }
 
   /** The panel animation style (`base_pa`: shows with the board, plays on presses) and the region it fills (`a_insets`). */
   get panelClip(): { style: Json; region: Rect } {
     const board = asObject(this.board.board) ?? {}
-    const insets = asObject(board.a_insets ?? null) ?? {}
+    const base = asObject(board.b) ?? {}
+    const global = asObject(asObject(this.global.board)?.b) ?? {}
+    const insets = asObject(this.panel("a_insets")) ?? {}
     const inset = (side: string) => typeof insets[side] === "number" ? insets[side] as number : 0
     return {
-      style: asObject(board.b ?? null)?.base_pa,
+      style: base.base_pa ?? base.asi ?? global.base_pa ?? global.asi,
       region: { x: inset("left"), y: inset("top"), width: this.width - inset("left") - inset("right"), height: this.height - inset("top") - inset("bottom") },
     }
   }

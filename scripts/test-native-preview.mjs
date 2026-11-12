@@ -25,6 +25,26 @@ function animatedPalm() {
   return zipSync(files)
 }
 
+function particlePalm() {
+  const files = unzipSync(readFileSync(new URL('../public/templates/palm-harmony.sxi', import.meta.url)))
+  const skin = JSON.parse(strFromU8(files['skin.json']))
+  const theme = skin.default
+  theme.port_layout.b.defaultGlobal.board.b.base_pa = 9010
+  theme.port_layout.b.t9Pinyin.board = { b: {} }
+  theme.s_info.ss_1['9010'] = { s_5: { 1: 9011, 3: 9011 } }
+  theme.s_info.ss_1['9012'] = { s_2: { normal: 'issue30_particle,1' } }
+  theme.s_info.ss_2 = { 9011: { a4: {
+    b: { c: 3, t: 1 }, count: 1, rate: 1, life: [1000, 1000],
+    i_p: [9012], aera: [[0.5, 0.5], [0, 0]], velocity: [40, 40], v_direction: [0, 0],
+    scale: [1, 1], alpha: [255, 255],
+  } } }
+  theme.s_info.info.issue30_particle = [{ id: 'IMG1', rect1: [[0, 0], [12, 12]] }]
+  theme.r_info.push('light/skin/res/issue30_particle.png')
+  files['light/skin/res/issue30_particle.png'] = encodePng(solid(12, 12, [245, 5, 5]))
+  files['skin.json'] = strToU8(JSON.stringify(skin))
+  return zipSync(files)
+}
+
 // The Sogou fixture with an anim.ini that squeezes every key and throws a decoration straight up,
 // and a popup background.
 const SOGOU_ANIM = `[Anim_Style_Key]
@@ -262,6 +282,34 @@ try {
   assert.equal(editedPalm.width, 60, 'Palm reads CELL_SIZE from the bar icon')
   assert.ok(editedPalm.texts.every(({ font }) => font.includes('26px')), 'Palm bubble text edits reach the canvas')
   for (let index = 0; index < 4; index++) await history('undo')
+
+  await open('particles.sxi', particlePalm())
+  await selectLayout('skin.json/default/port_layout/b/t9Pinyin')
+  const palmParticles = await page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    const effects = (await preview.sceneForState()).effects
+    const start = effects.panel(0)[0]
+    const moved = effects.panel(500)[0]
+    const realNow = Date.now
+    const now = realNow()
+    Date.now = () => now
+    try {
+      preview.nativeShownAt = now - 500
+      await preview.whenDrawn()
+      const pixel = [...preview.canvas.getContext('2d').getImageData(
+        Math.floor((moved.rect.x + moved.rect.width / 2) * preview.canvas.width / preview.panelWidth),
+        Math.floor((moved.rect.y + moved.rect.height / 2) * preview.canvas.height / preview.surfaceHeight), 1, 1).data]
+      return { distance: moved.rect.x - start.rect.x, source: moved.visual.source, pixel,
+        pressing: effects.press('KEY2', 500, 1).sprites.length, ended: effects.panel(1100).length }
+    } finally {
+      Date.now = realNow
+    }
+  })
+  assert.equal(palmParticles.distance, 20, 'SXI particles move by their actual velocity')
+  assert.deepEqual(palmParticles.source, [0, 0, 12, 12], 'the real particle image is loaded')
+  assert.deepEqual(palmParticles.pixel, [245, 5, 5, 255], 'panel particles are painted onto the canvas')
+  assert.equal(palmParticles.pressing, 1, 'press events emit particles too')
+  assert.equal(palmParticles.ended, 0, 'particles disappear at the end of their life')
 
   // Sogou taps only play anim.ini; long presses show the native character bar.
   await open('animated.ssf', animatedSogou())

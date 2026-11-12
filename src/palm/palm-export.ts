@@ -18,7 +18,7 @@
 import { SkinArchive } from "../skin.ts"
 import { zipArchiveAsync } from "../skin-zip.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
-import { fitCandidateIcons, fitEnglishEnter } from "./palm-export-layout.ts"
+import { fitCandidateIcons, fitEnglishEnter, removeMissingAnimationKeys } from "./palm-export-layout.ts"
 import { separateOrientationResources } from "./palm-export-resources.ts"
 import { bakeBackgrounds, bakeBackgroundsSteps } from "./palm-export-backgrounds.ts"
 import { assembleSxiFiles, collectConverterEntries, packSxiFiles, type ConverterEntry } from "./palm-export-package.ts"
@@ -583,6 +583,7 @@ function* skinBaseSteps(context: ExportContext, struct: SkinStruct, base: number
   if (styles.land !== undefined) model.s_land = styles.land
   yield base + span * 0.9
   separateOrientationResources(model, context.entries)
+  removeMissingAnimationKeys(model, context.warnings)
   yield end
   return model
 }

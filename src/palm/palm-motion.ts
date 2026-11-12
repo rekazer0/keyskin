@@ -1,19 +1,23 @@
 // A Palm board's press and panel animations, read from `skin.json`: styles (`ss_1`) name their press
 // (`s_5` "1") and show (`s_5` "3") animation, `ss_2` holds them. `a1` animates one property of a key
 // layer, `a3` combines animations (at once, one after another, or one at random), `af2` plays an
-// animated image over the panel. A key's background follows `base_ba`, each foreground its `base_fa`
+// animated image over the panel, and `a4` emits particles. A key's background follows `base_ba`, each foreground its `base_fa`
 // entry (`asi` stands in for both), and `base_pa` names the panel animation a press plays; the board's
 // own `base_pa` shows with it and plays on presses of keys without one.
 
-import { animationEasing } from "../preview-animation.ts"
+import type { Visual } from "../atlas.ts"
+import type { PreviewClip } from "../animation-preview-model.ts"
+import { animationEasing, legacyParticleFrames } from "../preview-animation.ts"
 import { decodeFrames, frameAt, motionAt, seededShare, trackEnd, type Frame, type KeyMotion, type Pair, type SceneEffects, type SceneSprite, type Track } from "../native-motion.ts"
 import type { Rect } from "../preview-items.ts"
 import { list, type PalmBoard, type PalmKey, type PalmOrientation, type PalmTheme } from "./palm-board.ts"
 import type { PalmStyles } from "./palm-styles.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
+import { palmPreviewClip } from "./palm-preview-clip.ts"
 
 type FrameClip = { start: number; frames: Frame[]; passes: number; offset: Pair; slot?: number }
-type Clip = { tracks: Track[]; frames: FrameClip[] }
+type ParticleClip = PreviewClip["particles"][number] & { slot?: number }
+type Clip = { tracks: Track[]; frames: FrameClip[]; particles: ParticleClip[] }
 
 const PRESS = "1"
 const SHOW = "3"
@@ -31,23 +35,26 @@ function pair(value: Json | undefined, scale = 1): Pair | undefined {
 
 function clipEnd(clip: Clip): number {
   const frames = clip.frames.map((frame) => frame.start + frame.frames.reduce((sum, item) => sum + item.duration, 0) * frame.passes)
-  return Math.max(0, ...clip.tracks.map(trackEnd), ...frames)
+  return Math.max(0, ...clip.tracks.map(trackEnd), ...frames, ...clip.particles.map((item) => item.start + item.duration))
 }
 
 function shifted(clip: Clip, by: number, slot?: number): Clip {
   return {
     tracks: clip.tracks.map((track) => ({ ...track, start: track.start + by })),
     frames: clip.frames.map((frame) => ({ ...frame, start: frame.start + by, slot: slot ?? frame.slot })),
+    particles: clip.particles.map((item) => ({ ...item, start: item.start + by, slot: slot ?? item.slot })),
   }
 }
 
-const EMPTY: Clip = { tracks: [], frames: [] }
+const EMPTY: Clip = { tracks: [], frames: [], particles: [] }
 
 export class PalmMotion {
   private readonly board: PalmBoard
   private readonly animations: JsonObject
   private readonly styles: JsonObject
   private readonly images = new Map<string, Frame[]>()
+  private readonly particles = new Map<string, ParticleClip[]>()
+  private readonly particleImages = new Map<string, Visual>()
 
   private constructor(skin: JsonObject, theme: PalmTheme, orientation: PalmOrientation, board: PalmBoard) {
     this.board = board
@@ -71,6 +78,14 @@ export class PalmMotion {
       const bytes = styles.bytes(file)
       const type = /\.gif$/i.test(file) ? "image/gif" : /\.png$/i.test(file) ? "image/png" : "image/webp"
       if (bytes) motion.images.set(file, await decodeFrames(bytes, type))
+    }))
+    for (const [id, wrap] of Object.entries(motion.animations)) {
+      if (asObject(wrap)?.a4) motion.particles.set(id, palmPreviewClip(motion.animations, id).particles)
+    }
+    const ids = new Set([...motion.particles.values()].flatMap((items) => items.flatMap((item) => item.emitter.images)))
+    await Promise.all([...ids].map(async (id) => {
+      const visual = (await styles.paint(id, false))?.visual
+      if (visual) motion.particleImages.set(id, visual)
     }))
     return motion
   }
@@ -97,8 +112,9 @@ export class PalmMotion {
         if (group.a_method === "sequential") start = clipEnd(clip)
         return clip
       })
-      return { tracks: clips.flatMap((clip) => clip.tracks), frames: clips.flatMap((clip) => clip.frames) }
+      return { tracks: clips.flatMap((clip) => clip.tracks), frames: clips.flatMap((clip) => clip.frames), particles: clips.flatMap((clip) => clip.particles) }
     }
+    if (entry.a4) return { tracks: [], frames: [], particles: this.particles.get(String(id)) ?? [] }
     const frames = asObject(entry.af2 ?? null)
     if (frames) {
       const images = typeof frames.file === "string" ? this.images.get(frames.file) : undefined
@@ -106,7 +122,7 @@ export class PalmMotion {
       // `d` is the whole clip's length; without it the image's own frame durations play.
       const total = images.reduce((sum, frame) => sum + frame.duration, 0)
       const scale = typeof frames.d === "number" && frames.d > 0 && total > 0 ? frames.d / total : 1
-      return { tracks: [], frames: [{
+      return { tracks: [], particles: [], frames: [{
         start: typeof frames.delay === "number" ? frames.delay : 0,
         frames: scale === 1 ? images : images.map((frame) => ({ ...frame, duration: frame.duration * scale })),
         passes: passes(asObject(frames.b ?? null) ?? {}),
@@ -130,7 +146,7 @@ export class PalmMotion {
     const pivotPixels = pair(model.pxp)
     const pivot = pair(model.pp, 1 / 100) ?? (pivotPixels && [pivotPixels[0] / size.width, pivotPixels[1] / size.height] as const)
     const number = (value: Json | undefined) => typeof value === "number" ? value : 0
-    return { frames: [], tracks: [{
+    return { frames: [], particles: [], tracks: [{
       kind: type === 0 ? "opacity" : type === 1 ? "rotate" : type === 2 ? "translate" : "scale",
       start: number(model.delay) + number(model.c_delay),
       duration: number(model.duration),
@@ -147,9 +163,9 @@ export class PalmMotion {
     }] }
   }
 
-  /** The frame clips of `clip` `elapsed` ms in, filling `region` across, bottom-aligned. */
+  /** Frame clips fill `region`; particles keep their artwork's natural size and sampled motion. */
   private sprites(clip: Clip, elapsed: number, region: Rect): SceneSprite[] {
-    return clip.frames.flatMap((frame) => {
+    const frames = clip.frames.flatMap((frame) => {
       const visual = frameAt(frame.frames, elapsed - frame.start, frame.passes)
       const [, , width, height] = visual?.source ?? [0, 0, 0, 0]
       if (!visual || !width) return []
@@ -157,6 +173,19 @@ export class PalmMotion {
       const rect = { x: region.x + frame.offset[0], y: region.y + region.height - scaled + frame.offset[1], width: region.width, height: scaled }
       return [{ visual, rect, ...frame.slot === undefined ? {} : { slot: frame.slot } }]
     })
+    // shortcut: 沿用检查器的弹道采样，触摸跟随与路径发射需真机校准后扩展。
+    const particles = clip.particles.flatMap((item) => {
+      if (elapsed < item.start || elapsed >= item.start + item.duration) return []
+      return legacyParticleFrames(item.emitter, elapsed - item.start, region.width, region.height).flatMap((particle) => {
+        const visual = this.particleImages.get(particle.styleID)
+        if (!visual?.source) return []
+        const [, , width, height] = visual.source
+        return [{ visual, slot: item.slot, rect: {
+          x: region.x + particle.x - width / 2, y: region.y + particle.y - height / 2, width, height,
+        }, motion: { scale: [particle.scale, particle.scale] as Pair, rotation: particle.rotation, opacity: particle.opacity } }]
+      })
+    })
+    return [...frames, ...particles]
   }
 
   /** The animations of `keys` (one keyboard state). */
@@ -171,14 +200,15 @@ export class PalmMotion {
       const back = this.clip(this.styleAnimation(backAnimStyle || animStyle, PRESS), seed, size)
       const fores = key.base.fores.map((_, index) => this.clip(this.styleAnimation(foreAnimStyles[index] || foreAnimStyles[0] || animStyle, PRESS), seed, size))
       // A key's own panel animation replaces the board's.
-      const panel = [this.clip(this.styleAnimation(key.panelAnimation ?? panelStyle, PRESS), seed, size)]
+      const panel = [this.clip(this.styleAnimation(key.panelAnimation ?? panelStyle, PRESS), seed, region)]
       return { key, back, fores, panel }
     }
     const show = this.clip(this.styleAnimation(panelStyle, SHOW), 0, region)
     const pressing = keys.some((key) => this.styleAnimation(key.panelAnimation, PRESS) !== undefined)
       || this.styleAnimation(panelStyle, PRESS) !== undefined
       || Object.keys(this.styles).some((style) => this.styleAnimation(style, PRESS) !== undefined)
-    if (!show.frames.length && !pressing) return
+    const showing = show.frames.length + show.particles.length > 0
+    if (!showing && !pressing) return
     return {
       pressDuration: (section, seed) => {
         const found = clips(section, seed)
@@ -191,15 +221,19 @@ export class PalmMotion {
         return {
           back: motionAt(found.back.tracks, elapsed, size),
           fore: found.fores.map((clip) => motionAt(clip.tracks, elapsed, size)),
-          sprites: found.panel.flatMap((clip) => this.sprites(clip, elapsed, region)),
+          sprites: [
+            ...[found.back, ...found.fores].flatMap((clip) => this.sprites(clip, elapsed, found.key.rect)),
+            ...found.panel.flatMap((clip) => this.sprites(clip, elapsed, region)),
+          ],
         }
       },
       // A press clip takes the place of the show clip in its slot while it plays.
-      ...show.frames.length ? {
+      ...showing ? {
         panel: (elapsed, press) => {
           const playing = press ? clips(press.section, press.seed)?.panel.flatMap((clip) => this.sprites(clip, press.elapsed, region)) ?? [] : []
           const taken = new Set(playing.map((sprite) => sprite.slot))
-          return this.sprites(show, elapsed, region).filter((sprite) => !taken.has(sprite.slot))
+          return this.sprites(show, elapsed, region).filter((sprite) => sprite.slot === undefined
+            ? playing.length === 0 : !taken.has(undefined) && !taken.has(sprite.slot))
         },
       } : {},
     }

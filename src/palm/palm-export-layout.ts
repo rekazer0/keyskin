@@ -2,6 +2,37 @@
 import { numbers } from "./palm-board.ts"
 import { asObject, rectParts, type JsonObject } from "./sxi-ini.ts"
 
+/** Missing animations must not turn invisible decoration keys into Palm's default key faces. */
+export function removeMissingAnimationKeys(theme: JsonObject, warnings: string[]): void {
+  const removed = new Set<string>()
+  for (const orientation of ["port", "land"]) {
+    const shared = asObject(theme.s_info)
+    const own = asObject(theme[`s_${orientation}`])
+    const styles = { ...asObject(shared?.ss_1), ...asObject(own?.ss_1) }
+    const animations = { ...asObject(shared?.ss_2), ...asObject(own?.ss_2) }
+    for (const value of Object.values(asObject(asObject(theme[`${orientation}_layout`])?.b) ?? {})) {
+      const board = asObject(value)
+      if (!Array.isArray(board?.keys)) continue
+      board.keys = board.keys.filter((value) => {
+        const key = asObject(value)
+        const base = asObject(key?.b)
+        if (!key || !base || base.asi === undefined || Object.entries(base).some(([field, value]) => field !== "asi" && value !== undefined)
+          || !Array.isArray(key.values) || key.values.length
+          || Object.entries(key).some(([field, value]) => !["id", "b", "rect", "hit_rect", "values"].includes(field) && value !== undefined)) return true
+        const events = asObject(asObject(styles[String(base.asi)])?.s_5)
+        const ids = Object.values(events ?? {}).filter((id) => typeof id === "number")
+        if (!ids.length || ids.some((id) => animations[String(id)] !== undefined)) return true
+        ids.forEach((id) => removed.add(`ANIM${id}`))
+        return false
+      })
+    }
+  }
+  if (removed.size) {
+    const warning = `仅引用缺失动画 ${[...removed].join("、")} 的空占位按键已跳过，避免遮挡正常按键；原包缺少这些动效，无法恢复`
+    if (!warnings.includes(warning)) warnings.push(warning)
+  }
+}
+
 /** Android hides the dedicated English suggestion key; its gesture on the language key still works. */
 export function fitEnglishEnter(boards: JsonObject): void {
   for (const [type, value] of Object.entries(boards)) {
