@@ -352,7 +352,7 @@ try {
   await page.keyboard.press('Escape')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.emulateMedia({ colorScheme: 'dark' })
-  await page.evaluate(async () => (await import('/src/app/mobile-layout.ts')).setMobilePane('inspector'))
+  await page.evaluate(async () => (await import('/src/app/mobile-shell.ts')).setMobileTab('inspector'))
   assert.equal(await row('时长').isVisible(), true)
   assert.equal(await fields.evaluate((node) => node.scrollWidth <= node.clientWidth + 1), true)
 

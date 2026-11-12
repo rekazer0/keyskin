@@ -186,8 +186,8 @@ try {
     await page.locator('#inspector-filter').press('Escape')
     await page.setViewportSize({ width: 390, height: 844 })
     await page.evaluate(async () => {
-      const { setMobilePane } = await import('/src/app/mobile-layout.ts')
-      setMobilePane('inspector')
+      const { setMobileTab } = await import('/src/app/mobile-shell.ts')
+      setMobileTab('inspector')
     })
     await replaceButton.scrollIntoViewIfNeeded()
     const mobileGrid = await page.locator('.ui-toolbar-icons').evaluate(grid => ({ width: grid.clientWidth, scroll: grid.scrollWidth }))
