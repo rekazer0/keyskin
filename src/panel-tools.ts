@@ -26,6 +26,7 @@ export function availableSkinStates(...documents: IniDocument[]): number[] {
 }
 
 export function stateStyleValue(value: string | undefined, state: number): number | undefined {
+  if (state === 0) return
   const match = value?.match(new RegExp(`(?:^|\\|)S${state}_(\\d+)(?:\\||$)`))
   return match ? Number(match[1]) : undefined
 }
@@ -40,7 +41,8 @@ const DEFAULT_LAYOUT_STATE = 67
 
 function activeStates(state: number): Set<number> {
   const voiceLanguage = VOICE_LANGUAGE_STATES.includes(state) ? state : DEFAULT_VOICE_LANGUAGE_STATE
-  return new Set([state, voiceLanguage, DEFAULT_LAYOUT_STATE])
+  // S0 是用于叠层的空状态，不成立、不触发 TIP 替换。
+  return new Set([state, voiceLanguage, DEFAULT_LAYOUT_STATE].filter((id) => id !== 0))
 }
 
 export function stateTipSection(

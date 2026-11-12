@@ -7,7 +7,8 @@ import { encodePng } from '../src/ssf/ssf-png.ts'
 const files = {
   'skin/res/default.css': strToU8('[STYLE1]\nNM_IMG=picture,1\n[STYLE2]\nNM_COLOR=00000000\n[STYLE3]\nNM_COLOR=808080\n[STYLE4]\nFONT_SIZE=18\nNM_COLOR=63B8FF\n[STYLE5]\nSHOW=百度\nNM_COLOR=000000\n[STYLE6]\nSHOW=收回\nNM_COLOR=000000\n'),
   'skin/res/picture.png': encodePng({ width: 360, height: 250, data: Uint8Array.from({ length: 360 * 250 * 4 }, (_, i) => [Math.floor(i / 1440), 50, 100, 255][i % 4]) }),
-  'skin/res/picture.til': strToU8('[IMG1]\nSOURCE_RECT=0,0,360,250\n'),
+  // BDI 按出现顺序取第 1 张切片，不能按被打乱的 IMG 编号查找。
+  'skin/res/picture.til': strToU8('[GLOBAL]\nTILE_NUM=2\n[IMG14]\nSOURCE_RECT=0,0,360,250\n[IMG1]\nSOURCE_RECT=0,100,360,150\n'),
   'skin/port/gen.ini': strToU8('[PANEL]\nSIZE=360,200\nBACK_STYLE=1\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,360,50\n[INPUT]\nBACK_STYLE=3\nFORE_STYLE=4\n'),
   'skin/port/py_26.ini': strToU8('[PANEL]\nKEY_NUM=1\n[KEY1]\nVIEW_RECT=0,0,360,200\n'),
   'skin/port/cand1.cnd': strToU8('[CAND]\nBACK_STYLE=2\nFORE_STYLE=4\n[ICON1]\nSIZE=45,50\nPOS=0,0\nANCHOR_TYPE=1\nFORE_STYLE=5\nKEY=F31\n[ICON2]\nSIZE=270,50\nPOS=45,0\nANCHOR_TYPE=1\nKEY=F14\n[ICON3]\nSIZE=45,50\nPOS=315,0\nANCHOR_TYPE=1\nFORE_STYLE=6\nKEY=F8\t\n[ICON4]\nSIZE=1,1\nPOS=359,49\nANCHOR_TYPE=1\nBACK_STYLE=3\nKEY=F7\n'),

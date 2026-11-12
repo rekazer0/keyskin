@@ -451,6 +451,13 @@ export class AtlasResolver {
     return bytes && pngBitmap(bytes)
   }
 
+  private tileSection(tiles: IniDocument, index: number): string | undefined {
+    // iOS 按文件顺序取切片，Android 按 IMG 编号取切片。
+    return this.archive.format === "bdi"
+      ? tiles.sections().filter((section) => /^IMG\d+$/i.test(section))[index - 1]
+      : `IMG${index}`
+  }
+
   sourceSize(styleID: string, highlighted: boolean): { width: number; height: number } | undefined {
     if (!this.styles) return
     const spec = resolveVisualSpec(this.styles, styleID, highlighted)
@@ -464,7 +471,8 @@ export class AtlasResolver {
       tiles = IniDocument.parse(this.archive.getText(tilePath))
       this.tiles.set(tilePath, tiles)
     }
-    const source = numbers(tiles.get(`IMG${spec.tile}`, "SOURCE_RECT"))
+    const section = this.tileSection(tiles, spec.tile!)
+    const source = numbers(section === undefined ? undefined : tiles.get(section, "SOURCE_RECT"))
     return source ? { width: source[2], height: source[3] } : undefined
   }
 
@@ -495,9 +503,11 @@ export class AtlasResolver {
       tiles = IniDocument.parse(this.archive.getText(tilePath))
       this.tiles.set(tilePath, tiles)
     }
-    const source = numbers(tiles.get(`IMG${spec.tile}`, "SOURCE_RECT"))
+    const section = this.tileSection(tiles, spec.tile!)
+    if (section === undefined) return { color: spec.color, borderColor: spec.borderColor }
+    const source = numbers(tiles.get(section, "SOURCE_RECT"))
     if (!source) return { color: spec.color, borderColor: spec.borderColor }
-    const absoluteInner = numbers(tiles.get(`IMG${spec.tile}`, "INNER_RECT"))
+    const absoluteInner = numbers(tiles.get(section, "INNER_RECT"))
     // 工具书 V6 p162：无 INNER_RECT 或宽高为 0 时不拉伸。
     const inner = absoluteInner && absoluteInner[2] > 0 && absoluteInner[3] > 0
       ? ([
@@ -507,7 +517,7 @@ export class AtlasResolver {
           absoluteInner[3],
         ] as [number, number, number, number])
       : undefined
-    const scale = scaleNumbers(tiles.get(`IMG${spec.tile}`, "SCALE"))
+    const scale = scaleNumbers(tiles.get(section, "SCALE"))
     const bitmap = await image
     if (!bitmap) return { color: spec.color, borderColor: spec.borderColor }
     return { image: bitmap, imagePath, source, inner, scale, color: spec.color, borderColor: spec.borderColor }
