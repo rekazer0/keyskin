@@ -668,14 +668,16 @@ async function soundFiles(archive: SkinArchive, themes: Theme[], output: Map<str
         const filename = id && styles.get(`STYLE${id.split(",")[0].trim()}`, "PRESS_SOUND_PATH")?.trim()
         return filename ? copySound(theme, orientation, filename.split(/[\\/]/).pop()!) : undefined
       }
-      const generalID = gen?.get("PANEL", "SOUND_STYLE")?.trim()
-      const fallback = await soundForStyle(generalID)
-      if (fallback && !defaults.has(theme)) defaults.set(theme, fallback)
       const layouts = names.filter((path) => path.startsWith(prefix) && /^[^/]+\.ini$/i.test(path.slice(prefix.length)) && !/^gen\.ini$/i.test(path.slice(prefix.length)))
         .sort((a, b) => layoutRank(a) - layoutRank(b) || a.localeCompare(b))
-      for (const path of layouts) {
+        .map((path) => ({ path, layout: IniDocument.parse(archive.getText(path)) }))
+      // Without a gen.ini default (BDA exports write it per layout), the main board's panel sound is Sogou's [Key].
+      const generalID = gen?.get("PANEL", "SOUND_STYLE")?.trim()
+        || layouts.map(({ layout }) => layout.get("PANEL", "SOUND_STYLE")?.trim()).find(Boolean)
+      const fallback = await soundForStyle(generalID)
+      if (fallback && !defaults.has(theme)) defaults.set(theme, fallback)
+      for (const { path, layout } of layouts) {
         const layoutName = path.slice(prefix.length, -4)
-        const layout = IniDocument.parse(archive.getText(path))
         const panelID = layout.get("PANEL", "SOUND_STYLE")?.trim()
         const panelSound = panelID && panelID !== generalID ? await soundForStyle(panelID) : undefined
         for (const section of layout.sections().filter((name) => /^KEY\d+$/.test(name))) {

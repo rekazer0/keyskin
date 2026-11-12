@@ -107,3 +107,18 @@ test('搜狗没有对应按键区段的音效不会被复制成无人引用的�
   assert.deepEqual(Object.keys(files).filter((path) => /\.wav$/i.test(path)), ['default/click.wav'])
   assert.doesNotMatch(strFromU8(files['default/sound_android.ini']), /del/)
 })
+
+// BDA 转出的百度包把默认音写在每个布局的 [PANEL]、gen.ini 里没有；转搜狗时它应是 [Key]，而不是逐个按键类各写一份。
+test('gen.ini 没有默认音时，主布局 [PANEL] 的音效成为搜狗 [Key] 默认音', async () => {
+  const source = baiduSkin({
+    'port/gen.ini': strToU8('[PANEL]\r\nSIZE=1080,600\r\n'),
+    'port/py_9.ini': strToU8('[PANEL]\r\nKEY_NUM=2\r\nSOUND_STYLE=1\r\n\r\n[KEY1]\r\nCENTER=q\r\n\r\n[KEY2]\r\nCENTER=F36\r\nSOUND_STYLE=7\r\n'),
+    'port/py_26.ini': strToU8('[PANEL]\r\nKEY_NUM=1\r\nSOUND_STYLE=1\r\n\r\n[KEY1]\r\nCENTER=q\r\n'),
+    'res/default.css': strToU8('[GLOBAL]\r\nSTYLE_NUM=7\r\n\r\n[STYLE1]\r\nPRESS_SOUND_PATH=click.ogg\r\n\r\n[STYLE7]\r\nPRESS_SOUND_PATH=del.wav\r\n'),
+    'res/del.wav': wav(440),
+  })
+  const ini = strFromU8(unzipSync((await convertBaiduToSsf(source)).bytes)['default/sound_android.ini'])
+  assert.match(ini, /\[Key\]\r?\nsound=click/)
+  assert.match(ini, /\[Key_Backspace(?:_Qwerty)?\]\r?\nsound=del/)
+  assert.doesNotMatch(ini, /\[Key_Q\]/)
+})
