@@ -22,10 +22,10 @@ test('ssf parts: a key class names its own background, other letters fall back t
   assert.deepEqual(ssfBackground(skin, ssfKeyBinding('py_26.ini', 'q', false), (ref) => ref.file !== '26keyq.png'), { images: 'KeyBg_Default_Latin' })
 })
 
-test('ssf parts: foregrounds come from keys.ini first, then a phoneSkin icon; transparent icons are none', () => {
+test('ssf parts: foregrounds come from keys.ini first, then a phoneSkin icon; transparent icons keep their owner', () => {
   assert.deepEqual(ssfForeground(skin, keys, ssfKeyBinding('py_26.ini', 'q', false)), { kind: 'keys', owner: 'Key_Q', images: 'Foground_key_Q', rect: [0, 0.25, 1, 0.75] })
   assert.deepEqual(ssfForeground(skin, keys, ssfKeyBinding('py_26.ini', 'F36', false)), { kind: 'icon', owner: 'Key_Backspace_Qwerty' })
-  assert.equal(ssfForeground(skin, keys, ssfKeyBinding('py_26.ini', 'F38', false)), undefined)
+  assert.deepEqual(ssfForeground(skin, keys, ssfKeyBinding('py_26.ini', 'F38', false)), { kind: 'icon', owner: 'Key_Space' })
 })
 
 test('ssf parts: label colours and sounds are looked up from the key class to the shared styles', () => {

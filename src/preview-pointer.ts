@@ -7,6 +7,20 @@ import { isAdditiveSelection } from "./preview-items.ts"
 import { snapRectDelta } from "./layout.ts"
 import { legacyHintCandidates, legacyHintHasHold, legacyHintSelectedIndex } from "./preview-hints.ts"
 
+function nativeHold(self: Preview, key: PreviewItem) {
+  return self.drawnScene?.keys.find((item) => item.section === key.section)?.holdPopup
+}
+
+function hasHold(self: Preview, key: PreviewItem): boolean {
+  return Boolean(nativeHold(self, key)) || legacyHintHasHold(key, self.longHint ?? self.shortHint,
+    Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))
+}
+
+function holdCandidates(self: Preview, key: PreviewItem): string[] {
+  return nativeHold(self, key)?.candidates ?? legacyHintCandidates(key, "hold",
+    Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))
+}
+
 export function pointerDown(self: Preview, event: PointerEvent): void {
   if (self.pointerInteractionLocked || event.button !== 0) return
   const point = self.point(event)
@@ -92,7 +106,7 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
     holdTriggered: false,
     direction: "center",
   }
-  if (self.active.clearOnHold || legacyHintHasHold(key, self.longHint ?? self.shortHint, Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))) {
+  if (self.active.clearOnHold || hasHold(self, key)) {
     const active = self.active
     active.holdTimer = window.setTimeout(() => {
       if (self.active !== active) return
@@ -112,8 +126,8 @@ export function pointerMove(self: Preview, event: PointerEvent): void {
   if (self.active && event.pointerId === self.active.pointerId) {
     const point = self.point(event)
     if (self.active.direction === "hold" && self.active.hintCellWidth && !self.active.clearOnHold) {
-      const candidates = legacyHintCandidates(self.active.key, "hold", Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))
-      const index = Math.max(0, Math.min(candidates.length - 1, legacyHintSelectedIndex(self.active.key, candidates)
+      const candidates = holdCandidates(self, self.active.key)
+      const index = Math.max(0, Math.min(candidates.length - 1, (nativeHold(self, self.active.key)?.selected ?? legacyHintSelectedIndex(self.active.key, candidates))
         + Math.round((point.x - self.active.startX) / self.active.hintCellWidth)))
       if (self.active.hintIndex !== index) {
         self.active.hintIndex = index
@@ -125,7 +139,7 @@ export function pointerMove(self: Preview, event: PointerEvent): void {
       point.x - self.active.startX,
       point.y - self.active.startY,
       Date.now() - self.active.startedAt,
-      legacyHintHasHold(self.active.key, self.longHint ?? self.shortHint, Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates)) || self.active.clearOnHold,
+      hasHold(self, self.active.key) || self.active.clearOnHold,
     )
     if (direction !== self.active.direction) {
       self.active.direction = direction
@@ -222,10 +236,10 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     dx,
     dy,
     Date.now() - startedAt,
-    legacyHintHasHold(key, self.longHint ?? self.shortHint, Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates)) || clearOnHold,
+    hasHold(self, key) || clearOnHold,
   )
-  const candidates = direction === "hold" ? legacyHintCandidates(key, "hold", Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates)) : []
-  const index = active.hintIndex ?? legacyHintSelectedIndex(key, candidates)
+  const candidates = direction === "hold" ? holdCandidates(self, key) : []
+  const index = active.hintIndex ?? nativeHold(self, key)?.selected ?? legacyHintSelectedIndex(key, candidates)
   const code = direction === "hold" && clearOnHold ? "F48" : direction === "hold" && candidates.length ? candidates[index] : key[direction]
   self.onEvent({
     section: key.section,

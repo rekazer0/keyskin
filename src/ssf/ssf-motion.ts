@@ -11,17 +11,19 @@
 // - a decoration's size is RATE_KEY_W/H of the key (keeping the image's ratio) or RATE_W/H of the
 //   keyboard, else the image's own; it sits at POS_X/POS_Y, or with POS_ANCHOR at NEW_POS_X/Y from that
 //   anchor of the key (ranges pick at random; shares of the key with RELATETO 1, else of the keyboard);
-// - a tap pops the key's label (and nine-key digit) on PopupBG_Phone / PopupBG, placed by
-//   FGStyle_Phone_Popup / FGStyle_Popup_Qwerty in TextStyle_Popup_*.
+// - only a long press shows the character bar; tapping keeps the key's press animation and decorations.
 
 import type { Visual } from "../atlas.ts"
 import type { IniDocument } from "../ini.ts"
 import { androidInterpolation, motionAt, seededShare, trackEnd, type KeyMotion, type Pair, type SceneEffects, type SceneSprite, type Track } from "../native-motion.ts"
 import type { NativeScene, SceneKey, SceneLayer } from "../native-scene.ts"
 import { parseRect, type Rect } from "../preview-items.ts"
-import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
+import { legacyHintCandidates, legacyHintSelectedIndex } from "../preview-hints.ts"
+import { argbColor } from "../native-scene.ts"
+import { ssfKeyActions, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
 import { firstValue, ssfAnimStyle } from "./ssf-parts.ts"
-import { NINE_KEY_DIGITS, box, centre, fitText, type SsfStyles } from "./ssf-scene.ts"
+import { ssfColor } from "./ssf-package.ts"
+import type { SsfStyles } from "./ssf-scene.ts"
 
 type Size = { width: number; height: number }
 type Part = { image?: Visual; object: string; tracks: Track[] }
@@ -53,19 +55,21 @@ export class SsfMotion {
   /** Layout units per Sogou pixel, and the keyboard the shares refer to. */
   private readonly unit: number
   private readonly board: Size
+  private readonly pixelUnit: number
 
-  private constructor(anim: IniDocument, styles: SsfStyles, board: Size) {
+  private constructor(anim: IniDocument, styles: SsfStyles, board: Size, screenWidth: number) {
     this.anim = anim
     this.styles = styles
     this.board = board
     this.unit = board.width / styles.sogouWidth
+    this.pixelUnit = board.width / screenWidth
   }
 
   /** The theme's anim.ini with every decoration image decoded; none without the file. */
-  static async load(styles: SsfStyles, board: Size, document?: IniDocument): Promise<SsfMotion | undefined> {
+  static async load(styles: SsfStyles, board: Size, document?: IniDocument, screenWidth = 2160): Promise<SsfMotion | undefined> {
     const path = styles.pkg.path(styles.theme, "anim.ini")
     if (!path && !document) return
-    const motion = new SsfMotion(document ?? styles.pkg.ini(path!), styles, board)
+    const motion = new SsfMotion(document ?? styles.pkg.ini(path!), styles, board, screenWidth)
     const files = new Set(motion.anim.sections().map((section) => firstValue(motion.anim.get(section, "IMG"))).filter((file): file is string => Boolean(file)))
     await Promise.all([...files].map(async (file) => {
       const visual = await styles.file(file)
@@ -171,7 +175,8 @@ export class SsfMotion {
   private placed(part: Part & { image: Visual }, key: Rect, seed: number, salt: number): Rect {
     const [, , imageWidth, imageHeight] = part.image.source!
     const field = (name: string) => Number(this.value(part.object, name)) || 0
-    let [width, height] = [imageWidth * this.unit, imageHeight * this.unit]
+    // Unspecified sizes stay in physical pixels in Sogou (AnimationTarget component intrinsic size).
+    let [width, height] = [imageWidth * this.pixelUnit, imageHeight * this.pixelUnit]
     const [keyWidth, keyHeight] = [field("RATE_KEY_W"), field("RATE_KEY_H")]
     const [boardWidth, boardHeight] = [field("RATE_W"), field("RATE_H")]
     if (keyWidth > 0 || keyHeight > 0) {
@@ -222,7 +227,7 @@ export class SsfMotion {
           const rect = this.placed({ ...part, image: part.image }, found.key.rect, seed, index + 1)
           const motion = motionAt(part.tracks, elapsed, rect)
           const alpha = Number(this.value(part.object, "ALPHA"))
-          return [{ visual: part.image, rect, motion: { ...motion, opacity: motion?.opacity ?? (Number.isFinite(alpha) && this.value(part.object, "ALPHA") ? alpha / 255 : 1) } }]
+          return [{ visual: part.image, rect, overlay: found.deco.includes(part), motion: { ...motion, opacity: motion?.opacity ?? (Number.isFinite(alpha) && this.value(part.object, "ALPHA") ? alpha / 255 : 1) } }]
         })
         return { back: own(found.back), fore: [own(found.fore)], sprites }
       },
@@ -230,54 +235,39 @@ export class SsfMotion {
   }
 }
 
-// The popup boxes skins made with Sogou's skin maker write (both sample skins), for skins without them.
-const POPUP_BOXES = {
-  phone: { LABEL_POSITION: [0.217, 0.465, 0.783, 0.741], MINOR_LABEL_POSITION: [0.46, 0.195, 0.54, 0.457] },
-  qwerty: { LABEL_POSITION: [0.34, 0.34, 0.66, 0.66], MINOR_LABEL_POSITION: undefined },
-}
-
-/** The bubble a tap on a character key pops: its label (and nine-key digit) enlarged above it. */
-async function popup(styles: SsfStyles, key: SceneKey, binding: SsfKeyBinding, action: string, caps: boolean, qwerty: boolean, unit: number, panelWidth: number): Promise<SceneLayer[] | undefined> {
-  const skin = styles.skin
-  const background = [qwerty ? "PopupBG_Qwerty" : "PopupBG_Phone", "PopupBG"].map((section) => firstValue(skin.get(section, "BG_IMAGE"))).find(Boolean)
-  const visual = background ? await styles.image(skin.get(background, "NORMAL") ?? background) : undefined
-  // The key's own label texts; a key drawn with an image pops its label as text all the same.
-  const fore = key.layers(false).fore.flatMap((layer) => layer.kind === "text" ? [layer.text] : [])
-  const group = binding.sections.find((section) => NINE_KEY_DIGITS[section])
-  const labels = fore.length ? fore.map(({ text }) => text) : group ? [group.slice(4), NINE_KEY_DIGITS[group]] : [caps ? action.toUpperCase() : action]
-  const texts = labels.map((text, index) => ({ ...fore[index], text }))
-  // shortcut: 无背景图时按键尺寸估算气泡，取得搜狗系统气泡尺寸后校准。
-  const [, , imageWidth, imageHeight] = visual?.source ?? [0, 0, key.rect.width / unit, key.rect.height * 1.5 / unit]
-  const width = Math.max(key.rect.width, imageWidth * unit)
-  const height = Math.max(key.rect.height, imageHeight * unit)
-  const offset = Number(skin.get("General", "POPUP_OFFSET_VERTICAL")) || 0
-  const rect = { x: Math.max(0, Math.min(panelWidth - width, key.rect.x + (key.rect.width - width) / 2)), y: key.rect.y - height + offset * unit, width, height }
-  const fg = [qwerty ? "FGStyle_Popup_Qwerty" : "FGStyle_Phone_Popup", "FGStyle_Popup"].find((section) => skin.sections().includes(section))
-  const position = (field: "LABEL_POSITION" | "MINOR_LABEL_POSITION") => fg && skin.get(fg, field) ? numbers(skin.get(fg, field)) : POPUP_BOXES[qwerty ? "qwerty" : "phone"][field]
-  const labelBox = box(rect, position("LABEL_POSITION")) ?? rect
-  const layers: SceneLayer[] = [visual ? { kind: "image", rect, visual } : { kind: "fill", rect, color: styles.color("General", "POPUP_BG_COLOR") ?? "#ffffff" }]
-  const styleChain = (minor: boolean) => minor
-    ? ["TextStyle_Popup_Phone_Minor", "TextStyle_Popup"]
-    : [qwerty ? "TextStyle_Popup_Qwerty" : "TextStyle_Popup_Phone", "TextStyle_Popup"]
-  texts.slice(0, 2).forEach((text, index) => {
-    if (fg && skin.get(fg, index ? "MINOR_LABEL_VISIBLE" : "LABEL_VISIBLE")?.trim() === "0") return
-    const area = index ? box(rect, position("MINOR_LABEL_POSITION")) : labelBox
-    if (!area) return
-    const reference = fg && firstValue(skin.get(fg, index ? "MINOR_LABEL_STYLE" : "LABEL_STYLE"))
-    const chain = [...reference ? [reference] : [], ...styleChain(index > 0)]
-    const look = styles.text(chain, unit)
-    const weight = look.weight ?? text.weight ?? 700
-    const font = look.font ?? text.font
-    const [centerX, y] = centre(area)
-    const x = centerX + (Number(fg && skin.get(fg, index ? "MINOR_LABEL_HORIZONTAL_OFFSET" : "LABEL_HORIZONTAL_OFFSET")) || 0) * unit
-    const color = chain.map((section) => styles.color(section)).find(Boolean) ?? text.color ?? "#373737"
-    layers.push({ kind: "text", text: { text: text.text, x, y, weight, color, size: look.size ?? fitText(text.text, area, font, weight), ...font ? { font } : {} } })
+/** KeyPopupViewLayout: 90px cells, 27px end padding and a 78×117px selected cell at 1080. */
+function holdPopup(styles: SsfStyles, key: SceneKey, layout: IniDocument, layoutName: string, qwerty: boolean, unit: number, panelWidth: number): SceneKey["holdPopup"] {
+  const defaults = ssfKeyActions(layoutName, layout.get(key.section, "CENTER") ?? "", layout.get(key.section, "SSF_SECTION"))
+  const action = (name: string) => layout.get(key.section, name) ?? defaults[name] ?? ""
+  const actions = { center: action("CENTER"), up: action("UP"), down: action("DOWN"), left: action("LEFT"), right: action("RIGHT"), hold: action("HOLD"), holdSymbols: action("HOLDSYM") }
+  const candidates = legacyHintCandidates(actions, "hold", true)
+  if (!candidates.length) return
+  const width = Math.min(panelWidth, (candidates.length * 90 + 54) * unit)
+  const cellWidth = (width - 54 * unit) / candidates.length
+  const height = 171 * unit
+  const rect = { x: Math.max(0, Math.min(panelWidth - width, key.rect.x + (key.rect.width - width) / 2)), y: key.rect.y - height + (Number(styles.skin.get("General", "POPUP_OFFSET_VERTICAL")) || 0) * unit, width, height }
+  const fg = qwerty ? "FGStyle_Popup_LongPress" : "FGStyle_Phone_Popup_LongPress"
+  const chain = (minor: boolean) => [firstValue(styles.skin.get(fg, minor ? "MINOR_LABEL_STYLE" : "LABEL_STYLE")) ?? "", minor ? "TextStyle_Popup_Phone_Minor_LongPress" : "TextStyle_Popup_Phone_LongPress", "TextStyle_Popup"]
+  const looks = [false, true].map((minor) => {
+    const sections = chain(minor)
+    return { ...styles.text(sections, unit, "DROIDSANSFALLBACK.ttf"), color: sections.map((section) => styles.color(section)).find(Boolean) ?? "#373737" }
   })
-  return layers
+  const selectedColor = looks[0].color
+  // Sogou keeps the selected text's RGB and sets its background alpha to 0x1d.
+  const color = chain(false).map((section) => ssfColor(styles.skin.get(section, "TEXT_COLOR"))).find(Boolean) ?? "FF373737"
+  const highlight = argbColor(`1d${color.slice(-6)}`)!
+  return { candidates, selected: legacyHintSelectedIndex(actions, candidates), cellWidth, layers: (selected) => [
+    { kind: "fill", rect, color: styles.color("General", "POPUP_BG_COLOR") ?? "#ffffff" },
+    { kind: "fill", rect: { x: rect.x + 27 * unit + selected * cellWidth + (cellWidth - 78 * unit) / 2, y: rect.y + 27 * unit, width: 78 * unit, height: 117 * unit }, color: highlight, radius: 18 * unit },
+    ...candidates.map((text, index): SceneLayer => {
+      const look = looks[index === selected ? 0 : 1]
+      return { kind: "text", text: { text, x: rect.x + 27 * unit + (index + 0.5) * cellWidth, y: rect.y + height / 2 + 3 * unit, size: look.size ?? 0.061 * panelWidth, weight: look.weight ?? 400, font: look.font, color: index === selected ? selectedColor : look.color } }
+    }),
+  ] }
 }
 
-/** Adds a board's press animations and character-key popups (when `popups`) to its scene. */
-export async function animateSsfScene(scene: NativeScene, styles: SsfStyles, layout: IniDocument, layoutName: string, landscape: boolean, popups: boolean): Promise<NativeScene> {
+/** Adds native press animations and long-press character bars (when `popups`) to the scene. */
+export async function animateSsfScene(scene: NativeScene, styles: SsfStyles, layout: IniDocument, layoutName: string, landscape: boolean, popups: boolean, screenWidth = 2160): Promise<NativeScene> {
   const panel = numbers(layout.get("PANEL", "SIZE"))
   const board = { width: panel[0] || styles.sogouWidth, height: panel[1] || styles.sogouWidth / 2 }
   const unit = board.width / styles.sogouWidth
@@ -288,13 +278,11 @@ export async function animateSsfScene(scene: NativeScene, styles: SsfStyles, lay
     return action && rect ? [{ key, action, section: key.section, rect, binding: ssfKeyBinding(layoutName, action, landscape, layout.get(key.section, "SSF_SECTION"), layout.get(key.section, "SSF_BG")) }] : []
   })
   if (popups) {
-    const caps = ["py9", "py26"].includes(ssfBoard(layoutName))
-    await Promise.all(keys.filter(({ binding }) => binding.keyClass === "char").map(async ({ key, binding, action }) => {
-      const layers = await popup(styles, key, binding, action, caps, qwerty, unit, board.width)
-      if (layers) key.popup = layers
-    }))
+    for (const { key, binding } of keys) {
+      if (binding.keyClass === "char") key.holdPopup = holdPopup(styles, key, layout, layoutName, qwerty, unit, board.width)
+    }
   }
-  const effects = (await SsfMotion.load(styles, board))?.effects(keys)
+  const effects = (await SsfMotion.load(styles, board, undefined, screenWidth))?.effects(keys)
   await styles.ready()
   return effects ? { ...scene, effects } : scene
 }

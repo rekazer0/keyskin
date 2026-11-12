@@ -160,6 +160,18 @@
             <select id="theme" hidden><option value="light">浅色</option><option value="dark">深色</option></select>
             <button class="ui-icon-button mobile-choice-toggle" data-variant="filled" type="button" data-mobile-choice="orientation" title="切换方向" aria-label="切换方向（当前竖屏）"><span class="system-symbol" data-mobile-current-icon data-icon="rectangle-vertical" aria-hidden="true"></span></button>
             <button class="ui-icon-button mobile-choice-toggle" data-variant="filled" type="button" data-mobile-choice="theme" title="切换外观" aria-label="切换外观（当前浅色）"><span class="system-symbol" data-mobile-current-icon data-icon="sun" aria-hidden="true"></span></button>
+            <details id="mobile-preview-more" class="toolbar-more mobile-preview-more">
+              <summary class="ui-icon-button" data-variant="filled" title="更多预览选项" aria-label="更多预览选项" aria-haspopup="menu"><span class="system-symbol" data-icon="sliders-horizontal" aria-hidden="true"></span></summary>
+              <div class="ui-menu" role="menu" aria-label="更多预览选项">
+                <button id="mobile-preview-orientation" class="ui-list-item" type="button" role="menuitem" data-preview-action="orientation"><span class="system-symbol" data-icon="rectangle-horizontal" aria-hidden="true"></span><span>方向</span></button>
+                <button id="mobile-preview-theme" class="ui-list-item" type="button" role="menuitem" data-preview-action="theme"><span class="system-symbol" data-icon="sun" aria-hidden="true"></span><span>外观</span></button>
+                <hr class="ui-menu-separator">
+                <button id="mobile-preview-guides" class="ui-list-item" type="button" role="menuitem" data-preview-action="guides" aria-pressed="false"><span class="system-symbol" data-icon="crosshair" aria-hidden="true"></span><span>辅助线</span></button>
+                <button id="mobile-preview-device" class="ui-list-item" type="button" role="menuitem" data-preview-action="device"><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>设备</span></button>
+                <button id="mobile-preview-state" class="ui-list-item" type="button" role="menuitem" data-preview-action="state" hidden><span class="system-symbol" data-icon="layers" aria-hidden="true"></span><span>皮肤状态</span></button>
+                <button id="mobile-preview-overview" class="ui-list-item" type="button" role="menuitem" data-preview-action="overview"><span class="system-symbol" data-icon="maximize" aria-hidden="true"></span><span>全局预览</span></button>
+              </div>
+            </details>
             <select id="layout" class="ui-select" aria-label="预览布局" hidden><option value="py_9.ini">9 键</option><option value="py_26.ini">26 键</option></select>
           </div>
         </div>

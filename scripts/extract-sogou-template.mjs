@@ -90,6 +90,14 @@ function imageStyle(normal, pressed) {
 function background(ref) {
   return imageStyle(imageList.get(ref, 'NORMAL'), imageList.get(ref, 'PRESSED'))
 }
+// Composite slots inherit their initial display from the selected child; geometry stays on the slot.
+function foregroundField(doc, real, section) {
+  const toggle = doc.get(real, 'T_KEYS')?.split(',')[Number(doc.get(real, 'T_FLAG')) || 0]
+  const selected = doc.get(real, 'S_KEY') ?? doc.get(real, 'S_KEYS')?.split(',')[Number(doc.get(real, 'S_FLAG')) || 0]
+  const ownDisplay = ['ICON', 'ICONS', 'LABEL', 'TEXT'].some((key) => doc.get(real, key)?.trim())
+  const owners = ownDisplay ? [real] : [...new Set([real, toggle, selected, section].filter(Boolean))]
+  return (key) => owners.map((owner) => doc.get(owner, key)).find((value) => value?.trim())
+}
 const panelStyle = background('Background')
 const candStyle = background('BgCandidate1')
 const textStyle = style({ NM_COLOR: 'FF373737', HL_COLOR: 'FF373737', FONT_SIZE: 48 })
@@ -196,11 +204,15 @@ for (const orientation of ['port', 'land']) {
         const rect = [x + Number(doc.get(slot, 'X') ?? 0) * width, y, kw, kh].map(Math.round)
         assert.ok(rect.every(Number.isFinite) && rect[2] > 0 && rect[3] > 0, `${name} ${slot}`)
         const back = background(doc.get(real, 'BG_IMAGES') ?? doc.get('Key', 'BG_IMAGES'))
-        const icon = doc.get(real, 'ICON') ?? doc.get(section, 'ICON')
-        const label = doc.get(real, 'LABEL')?.split(',')[0] ?? doc.get(real, 'TEXT') ?? ''
-        const fgStyle = doc.get(real, 'FG_STYLE')?.split(',')[0]
+        const field = foregroundField(doc, real, section)
+        const label = field('LABEL')?.split(',')[0] ?? field('TEXT') ?? ''
+        // Language switches supply both labels and optional icon groups; their default display is text.
+        const iconGroup = !label ? field('ICONS')?.split(',')[0] : undefined
+        const icon = field('ICON')?.split(',')[0] ?? imageList.get(iconGroup, 'NORMAL') ?? iconGroup
+        const pressedIcon = field('ICON_PRESSED')?.split(',')[0] ?? imageList.get(iconGroup, 'PRESSED')
+        const fgStyle = field('FG_STYLE')?.split(',')[0]
         const fontSize = Number(doc.get(fgStyle, 'LABEL_FONT_SIZE')) || 42
-        const minor = doc.get(real, 'MINOR_LABEL')?.split(',')[0]
+        const minor = field('MINOR_LABEL')?.split(',')[0]
         // shortcut: only the language switch keys get their minor label ("中/英"); add other FG styles when their previews need it.
         const texts = !icon && label && minor && /Switch/.test(fgStyle ?? '') && doc.get(fgStyle, 'MINOR_LABEL_VISIBLE') === '1' && doc.get(fgStyle, 'LABEL_ORIENTATION') === '1'
           ? labelRow(label, minor, (key) => doc.get(fgStyle, key), kw, kh)
@@ -209,7 +221,7 @@ for (const orientation of ['port', 'land']) {
           if (!offsets.has(offset)) offsets.set(offset, offsets.size + 1)
           return offsets.get(offset)
         })
-        const fore = icon ? imageStyle(icon, doc.get(real, 'ICON_PRESSED'))
+        const fore = icon ? imageStyle(icon, pressedIcon)
           : texts ? texts.map((text) => text.style).join(',')
             : label ? style({ SHOW: label, FONT_SIZE: fontSize, NM_COLOR: 'FF373737', HL_COLOR: 'FF373737' }) : undefined
         layout.appendSection(`KEY${++count}`, [

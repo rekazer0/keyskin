@@ -2,8 +2,8 @@
 // key through these, so the sections the inspector edits are exactly the ones the canvas shows.
 
 import type { IniDocument } from "../ini.ts"
-import type { SsfKeyBinding } from "./ssf-keymap.ts"
-import { parseSsfImage, type SsfImageRef } from "./ssf-package.ts"
+import { ssfBoard, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
+import { parseSsfImage, ssfColor, type SsfImageRef } from "./ssf-package.ts"
 
 /** Accepts an image reference; converters also require the file to exist. */
 type SsfImageCheck = (ref: SsfImageRef) => boolean
@@ -23,6 +23,23 @@ type SsfForeground =
 
 export function firstValue(value: string | undefined): string | undefined {
   return value?.split(",")[0].trim() || undefined
+}
+
+/** The space glyph has its own normal/pressed colours, independent of its text labels. */
+export function ssfSpaceIconColor(skin: IniDocument, pressed: boolean): string | undefined {
+  const colors = skin.get("General", "SPACE_ICON_COLOR")?.split(",")
+  return ssfColor(colors?.[pressed ? 1 : 0]) ?? ssfColor(colors?.[0])
+}
+
+/** ICON overrides the first selectable ICONS entry; entries can be files or state-image sections. */
+export function ssfIconPair(skin: IniDocument, owner: string): { normal: string; pressed: string; images?: string } | undefined {
+  const name = firstValue(skin.get(owner, "ICON")) ?? firstValue(skin.get(owner, "ICONS"))
+  if (!name) return
+  const images = parseSsfImage(name) ? undefined : name
+  const normal = images ? firstValue(skin.get(images, "NORMAL")) : name
+  if (!normal) return
+  const pressed = firstValue(skin.get(owner, "ICON_PRESSED")) ?? (images && firstValue(skin.get(images, "PRESSED"))) ?? normal
+  return { normal, pressed, ...images ? { images } : {} }
 }
 
 const anyImage: SsfImageCheck = () => true
@@ -70,8 +87,7 @@ export function ssfForeground(skin: IniDocument, keys: IniDocument, binding: Ssf
     return { kind: "keys", owner, images, rect: rect?.length === 4 && rect.every(Number.isFinite) ? rect : undefined }
   }
   for (const owner of binding.sections) {
-    const icon = firstValue(skin.get(owner, "ICON"))
-    if (icon && !/^transparent\.png$/i.test(icon)) return { kind: "icon", owner }
+    if (ssfIconPair(skin, owner)) return { kind: "icon", owner }
   }
 }
 
@@ -81,6 +97,19 @@ export function ssfLabelStyle(skin: IniDocument, binding: SsfKeyBinding): { fgSt
     const fgStyle = firstValue(skin.get(owner, "FG_STYLE"))
     if (fgStyle) return { fgStyle, owner, style: firstValue(skin.get(fgStyle, "LABEL_STYLE")) }
   }
+}
+
+/** The explicit foreground style, or the style used by Sogou's built-in key definition. */
+export function ssfForegroundLayout(skin: IniDocument, binding: SsfKeyBinding, layout: string, landscape: boolean): { fgStyle: string; label?: string; minor?: string } | undefined {
+  const own = ssfLabelStyle(skin, binding)
+  if (own) return { fgStyle: own.fgStyle }
+  const suffix = landscape ? "_Land" : ""
+  if (binding.keyClass === "char") return { fgStyle: `${ssfQwerty(layout) ? "FGStyle_Qwerty" : "FGStyle_Phone"}${suffix}` }
+  const board = ssfBoard(layout)
+  if (board !== "py9" && board !== "en9") return
+  if (binding.sections.includes("Key_SymbolTable")) return { fgStyle: `FGStyle_SymbolTable_${board === "py9" ? "Py9" : "En9"}${suffix}` }
+  if (binding.sections.includes("Key_SwitchToEN")) return { fgStyle: `FGStyle_Switch_Py9${suffix}`, label: "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
+  if (binding.sections.includes("Key_EnSwitchToCH")) return { fgStyle: `FGStyle_SwitchToCh_En9${suffix}`, label: "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
 }
 
 /**

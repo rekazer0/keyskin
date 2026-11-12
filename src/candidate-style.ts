@@ -49,6 +49,7 @@ export type InputBarMetrics = {
   height: number
   inset: number
   textLeft: number
+  fullWidth?: boolean
 }
 
 type CandidateInputStyle = InputBarMetrics & { foregroundStyle: string }

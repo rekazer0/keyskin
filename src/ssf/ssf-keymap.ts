@@ -178,7 +178,9 @@ export function ssfKeyBinding(layout: string, action: string, landscape: boolean
   const board = ssfBoard(layout)
   const primary = primarySections(board, action)
   const fallback = landscape ? [...primary.flatMap(landscapeVariants), ...primary] : primary
-  const sections = sourceSection ? [...new Set([sourceSection, ...fallback])] : fallback
+  // The skeleton can name the portrait class even on a landscape board.
+  const source = sourceSection ? [...landscape && !/_Land(?:_|$)/.test(sourceSection) ? landscapeVariants(sourceSection) : [], sourceSection] : []
+  const sections = source.length ? [...new Set([...source, ...fallback])] : fallback
   const keyClass = sections.includes("Key_0_py9") ? "function" : ssfKeyClass(action)
   const qwerty = isQwerty(board)
   const defaults = keyClass === "space"

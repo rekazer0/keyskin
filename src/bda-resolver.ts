@@ -98,7 +98,7 @@ export class BdaResolver implements VisualResolver {
     if (!ref) return
     if (ref.type === "color") {
       const style = this.appearance.colorStyles.get(ref.key)
-      const normalColor = style?.normalColor ?? style?.highlightColor ?? 0
+      const normalColor = style?.normalColor ?? 0
       return style ? { color: bdaCssColor(highlighted ? style.highlightColor ?? normalColor : normalColor) } : undefined
     }
     if (ref.type === "text") {

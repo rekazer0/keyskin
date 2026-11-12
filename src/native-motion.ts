@@ -34,7 +34,7 @@ export type Track = {
 type Motion = { scale?: Pair; translation?: Pair; rotation?: number; opacity?: number; pivot?: Pair }
 
 /** An image an animation draws over the keys, with its own motion. `slot` pairs a press clip with the show clip it replaces. */
-export type SceneSprite = { visual: Visual; rect: Rect; motion?: Motion; slot?: number }
+export type SceneSprite = { visual: Visual; rect: Rect; motion?: Motion; slot?: number; overlay?: boolean }
 
 /** A key's motion `elapsed` ms into its press: its background, each foreground group, the sprites it throws. */
 export type KeyMotion = { back?: Motion; fore: Array<Motion | undefined>; sprites: SceneSprite[] }

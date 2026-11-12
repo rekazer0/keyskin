@@ -420,10 +420,16 @@ export const mode = $("#mode") as HTMLSelectElement
 export const device = $("#device") as HTMLSelectElement
 
 export const deviceControlIcon = $("#device-control .device-control-icon")
+export const deviceControl = $("#device-control")
 
 export const toggleGuides = $("#toggle-guides") as HTMLButtonElement
 
-export const mobileToggleGuides = document.createElement("button")
+export const mobilePreviewGuides = $("#mobile-preview-guides") as HTMLButtonElement
+export const mobilePreviewOrientation = $("#mobile-preview-orientation") as HTMLButtonElement
+export const mobilePreviewTheme = $("#mobile-preview-theme") as HTMLButtonElement
+export const mobilePreviewDevice = $("#mobile-preview-device") as HTMLButtonElement
+export const mobilePreviewState = $("#mobile-preview-state") as HTMLButtonElement
+export const mobilePreviewOverview = $("#mobile-preview-overview") as HTMLButtonElement
 
 export const skinStateControl = $("#skin-state-control")
 

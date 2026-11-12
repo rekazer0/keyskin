@@ -19,7 +19,7 @@ import type { SsfTheme } from "../ssf/ssf-package.ts"
 import { animateSsfScene } from "../ssf/ssf-motion.ts"
 import { SsfStyles, ssfBoardScene, ssfCandidateScene } from "../ssf/ssf-scene.ts"
 import { textDocument, visualResolver } from "./bda-documents"
-import { candidateBackgroundPreview, preview, toolbarPreview } from "./canvas-interaction"
+import { candidateBackgroundPreview, preview, previewScreenWidth, toolbarPreview } from "./canvas-interaction"
 import { applyCandidateSpacing, genConfigPath, hideCandidateInputBar, showCandidateInputBar, toolbarConfigPath } from "./config-context"
 import { candidateArea, candidateBackgroundCanvas, candidateInput, candidateWords, hintPreviewEnabled, theme as themeInput, toolbarCanvas, toolbarStrip } from "./dom"
 import { canvasEditable } from "./edit-history"
@@ -188,8 +188,9 @@ function ssfScenes(archive: SkinArchive): boolean {
   const barHeight = candidates && !toolbarPreview.canvas.closest("[hidden]") ? toolbarPreview.panelHeight : 0
   const size = { width: preview.panelWidth, height: preview.surfaceHeight }
   const popups = hintPreviewEnabled.checked
+  const screenWidth = previewScreenWidth()
   preview.setScene(() => ssfBoardScene(styles, skeleton, name, orientation === "land", { ...size, barHeight })
-    .then((scene) => animateSsfScene(scene, styles, layout, name, orientation === "land", popups)))
+    .then((scene) => animateSsfScene(scene, styles, layout, name, orientation === "land", popups, screenWidth)))
   const templateCandidates = candidatePath && templateText(candidatePath.split("/").pop()!)
   if (candidates && templateCandidates) {
     setCandidateScenes(() => ssfCandidateScene(styles, candidates, templateCandidates, resolver, {

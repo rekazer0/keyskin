@@ -7,7 +7,7 @@ import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
-import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, mainWorkspace, mobileSplitHandle, mobilePreviewPosition, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton } from "../dom"
+import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, mainWorkspace, mobileSplitHandle, mobilePreviewPosition, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
@@ -39,6 +39,39 @@ export function wireCanvasAndInspector(): void {
   wireWindowControls()
   initSegmentSlide()
   initDisclosureReveal(files)
+  const openMobilePicker = (control: HTMLElement, picker: HTMLSelectElement) => {
+    control.dataset.mobilePickerOpen = "true"
+    const close = () => {
+      delete control.dataset.mobilePickerOpen
+      picker.removeEventListener("change", close)
+      picker.removeEventListener("blur", close)
+    }
+    picker.addEventListener("change", close)
+    picker.addEventListener("blur", close)
+    picker.focus()
+    try {
+      const showPicker = (picker as HTMLSelectElement & { showPicker?: () => void }).showPicker
+      if (showPicker) showPicker.call(picker)
+      else picker.click()
+    } catch {
+      picker.click()
+    }
+  }
+  mobilePreviewDevice.addEventListener("click", () => {
+    openMobilePicker(deviceControl, device)
+  })
+  mobilePreviewState.addEventListener("click", () => {
+    openMobilePicker(skinStateControl, skinState)
+  })
+  mobilePreviewOrientation.addEventListener("click", () => {
+    const control = document.querySelector<HTMLElement>(".preview-toolbar [data-mobile-choice=\"orientation\"]")
+    openMobilePicker(control ?? orientation, orientation)
+  })
+  mobilePreviewTheme.addEventListener("click", () => {
+    const control = document.querySelector<HTMLElement>(".preview-toolbar [data-mobile-choice=\"theme\"]")
+    openMobilePicker(control ?? theme, theme)
+  })
+  mobilePreviewOverview.addEventListener("click", () => layoutOverviewToggle.click())
   preview.onAnimationKeys = pickAnimationKeys
   installNumberInputWheel(document, {
     isMixed: (field) => Boolean(mixedCoordinateDelta(field.dataset.keyField ?? "", field.placeholder, field.disabled, 1)),

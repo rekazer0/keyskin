@@ -284,3 +284,30 @@ test('SSF toolbar embedded in the root background is split by layout geometry, n
     assert.deepEqual(pixel(barImage, 0, barHeight - 1), [180, 90, 30, 255])
   }
 })
+
+test('SSF input backgrounds survive transparent VPA artwork and templates without INPUT BACK_STYLE', async () => {
+  const files = unzipSync(ssfFixture())
+  const skin = parse(files, '1080/status1/phoneSkin.ini')
+  skin.appendSection('VPA_Bar', [{ key: 'BG_IMAGE', value: 'vpabg.png' }, { key: 'BG_COLOR', value: '0xFF123456' }])
+  files['1080/status1/phoneSkin.ini'] = strToU8(skin.toString())
+  const artwork = solid(1080, 78, [0, 0, 0], 0)
+  artwork.data.set([200, 10, 20, 255], (20 * 1080 + 20) * 4)
+  files['1080/status1/vpabg.png'] = encodePng(artwork)
+  const pkg = await SsfPackage.open(zipSync(files))
+  const look = new SsfLook(pkg, 'light', [], 1080)
+  const image = decodePng(look.inputBar().bytes)
+  assert.deepEqual(pixel(image, 0, 0), [18, 52, 86, 255])
+  assert.deepEqual(pixel(image, 20, 20), [200, 10, 20, 255], 'decoration is kept over its configured base colour')
+  const base = SkinArchive.open(templateBytes)
+  for (const path of base.names().filter(path => path.endsWith('/gen.ini'))) {
+    const gen = IniDocument.parse(base.getText(path))
+    gen.remove('INPUT', 'BACK_STYLE')
+    base.setText(path, gen.toString())
+  }
+  const { archive } = convertSsfToBaidu(pkg, base)
+  for (const orientation of ['port', 'land']) {
+    const gen = IniDocument.parse(archive.getText(`light/skin/${orientation}/gen.ini`))
+    const css = IniDocument.parse(archive.getText('light/skin/res/default.css'))
+    assert.equal(css.get(`STYLE${gen.get('INPUT', 'BACK_STYLE')}`, 'NM_COLOR'), 'FFE9E9E9')
+  }
+})

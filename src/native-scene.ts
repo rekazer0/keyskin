@@ -20,7 +20,7 @@ export type SceneText = {
 }
 
 export type SceneLayer =
-  | { kind: "fill"; rect: Rect; color: string }
+  | { kind: "fill"; rect: Rect; color: string; radius?: number }
   | { kind: "border"; rect: Rect; color: string; width: number }
   /** Drawn to fill `rect`, nine-sliced when the visual has an inner rect. */
   | { kind: "image"; rect: Rect; visual: Visual }
@@ -36,8 +36,12 @@ export type SceneKey = {
   section: string
   rect: Rect
   layers(pressed: boolean): SceneLayers
-  /** The bubble a tap on the key pops, in scene units. */
-  popup?: SceneLayer[]
+  holdPopup?: {
+    candidates: string[]
+    selected: number
+    cellWidth: number
+    layers(selected: number): SceneLayer[]
+  }
 }
 
 export type NativeScene = {
@@ -55,7 +59,11 @@ function textFont(text: SceneText): string {
 export function drawSceneLayer(context: CanvasRenderingContext2D, layer: SceneLayer): void {
   if (layer.kind === "fill") {
     context.fillStyle = layer.color
-    context.fillRect(layer.rect.x, layer.rect.y, layer.rect.width, layer.rect.height)
+    if (layer.radius) {
+      context.beginPath()
+      context.roundRect(layer.rect.x, layer.rect.y, layer.rect.width, layer.rect.height, layer.radius)
+      context.fill()
+    } else context.fillRect(layer.rect.x, layer.rect.y, layer.rect.width, layer.rect.height)
   } else if (layer.kind === "border") {
     const inset = layer.width / 2
     context.strokeStyle = layer.color

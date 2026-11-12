@@ -229,7 +229,8 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
           keySounds.set(key, styleID)
         }
       }
-      const defaultSound = keySounds.get("default") ?? keySounds.values().next().value
+      // Only `default` applies to every key; any other entry (e.g. KEY_DELETE) is that key's own.
+      const defaultSound = keySounds.get("default")
 
       const basePrefix = `light/skin/${orientation}/`
       const targetPrefix = `${theme}/skin/${orientation}/`
