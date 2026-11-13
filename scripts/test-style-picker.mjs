@@ -21,10 +21,10 @@ async function open(page, name, buffer) {
   if (await close.isVisible()) await close.click()
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
 }
-async function chooseImage(page, toStyle) {
+async function chooseImage(page, toStyle, name = 'bg') {
   const library = picker(page)
   await library.locator('[data-library-mode="images"]').click()
-  await library.locator('.ui-image-card[data-path$="/bg.png"]').click()
+  await library.locator(`.ui-image-card[data-path$="/${name}.png"]`).click()
   assert.equal(await library.locator('#style-library-apply-to-style').isVisible(), true)
   await library.locator(toStyle ? '#style-library-apply-to-style' : '#style-library-apply').click()
   await library.locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
@@ -104,6 +104,71 @@ try {
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
     assert.deepEqual(await foreground(), beforeLayers)
     console.log(`${format}: foreground layer selection and undo passed`)
+    const imageSlices = () => page.evaluate(async () => {
+      const { appState } = await import('/src/app/state.ts')
+      const { palmTileSlices } = await import('/src/palm/palm-style-edit.ts')
+      const { openPalmSkin } = await import('/src/app/sxi-documents.ts')
+      const { IniDocument } = await import('/src/ini.ts')
+      const { tileSlices } = await import('/src/tiles.ts')
+      const path = 'light/skin/res/unsliced.til'
+      const text = appState.archive.isText(path) ? appState.archive.getText(path) : null
+      return { text, slices: appState.archive.format === 'sxi'
+        ? palmTileSlices(openPalmSkin(), 'light/skin/res/unsliced.png')
+        : text === null ? [] : tileSlices(IniDocument.parse(text)) }
+    })
+    for (const state of ['normal', 'pressed']) for (const toStyle of [false, true]) {
+      await page.evaluate(({ format, toStyle }) => {
+        return import('/src/app/state.ts').then(({ appState }) => {
+          appState.archive.setBytes('light/skin/res/unsliced.png', appState.archive.getBytes('light/skin/res/bg.png').slice())
+          if (format === 'bds' && toStyle) appState.archive.setText('light/skin/res/unsliced.til', '[GLOBAL]\nUSE_ALPHA=1\nTILE_NUM=0\n')
+          else appState.archive.delete('light/skin/res/unsliced.til')
+        })
+      }, { format, toStyle })
+      const before = await snapshot(page, format)
+      const beforeSlices = await imageSlices()
+      const stateImage = () => page.locator(referenceInput(format)).locator('..').locator(`.ui-style-state[data-state="${state}"]`)
+      // 只查看和取消不写入切片。
+      await stateImage().click()
+      await picker(page).locator('[data-library-mode="images"]').click()
+      await picker(page).locator('.ui-image-card[data-path$="/unsliced.png"]').click()
+      await picker(page).locator('#style-library-apply').click()
+      await picker(page).locator('#picker-canvas').waitFor({ state: 'visible' })
+      assert.deepEqual(await imageSlices(), beforeSlices)
+      await picker(page).locator('#picker-close').click()
+      await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+      assert.deepEqual(await snapshot(page, format), before)
+      await stateImage().click()
+      await chooseImage(page, toStyle, 'unsliced')
+      await page.waitForFunction(() => document.querySelector('#undo').disabled === false)
+      await page.waitForFunction(async () => {
+        const { appState } = await import('/src/app/state.ts')
+        return appState.pickerSelectedIndex === 1 || !appState.pickerTarget
+      })
+      const after = await snapshot(page, format)
+      const afterSlices = await imageSlices()
+      assert.deepEqual(afterSlices.slices, [{ index: 1, source: [0, 0, 2, 2] }], '无切片时自动创建整图切片')
+      if (format === 'bds' && toStyle) assert.match(afterSlices.text, /USE_ALPHA=1\nTILE_NUM=1/, '保留已有切片文件的设置')
+      assert.equal(after.undo, before.undo + 1, '切片、样式与引用合为一步撤销')
+      assert.equal(after.image[state === 'pressed' ? 'hl' : 'normal'], 'unsliced,1')
+      assert.equal(after.image[state === 'pressed' ? 'normal' : 'hl'], before.image[state === 'pressed' ? 'normal' : 'hl'])
+      if (toStyle) {
+        assert.equal(after.id, before.id)
+        // 应用至样式后窗口仍在，整张图已变为真正的切片，再次应用不重复创建。
+        await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
+        assert.deepEqual(await imageSlices(), afterSlices)
+        await picker(page).locator('#picker-close').click()
+      } else assert.notEqual(after.id, before.id)
+      await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+      await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+      assert.equal((await snapshot(page, format)).text, before.text)
+      assert.equal((await snapshot(page, format)).id, before.id)
+      assert.deepEqual(await imageSlices(), beforeSlices, '撤销恢复原切片信息，原本没有 TIL 时删除新文件')
+      await page.evaluate(async () => (await import('/src/app/edit-history.ts')).redo())
+      assert.equal((await snapshot(page, format)).text, after.text)
+      assert.deepEqual(await imageSlices(), afterSlices)
+      await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+    }
+    console.log(`${format}: unsliced images, normal / pressed, new / existing style, cancel and undo / redo passed`)
     await page.close()
   }
   {

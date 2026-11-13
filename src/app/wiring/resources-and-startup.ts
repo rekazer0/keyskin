@@ -3,7 +3,7 @@ import { ssfPackage, ssfTheme } from "../ssf-documents"
 import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
 import { bindDialog } from "../ask.ts"
 import { closeDialog } from "../../motion.ts"
-import { updateSelectedImageReference, pickerImageReference, resourcePickerPayload, selectImageResource, pickableImagePaths, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
+import { applyImageSliceSelection, resourcePickerPayload, selectImageResource, pickableImagePaths, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
 import { appState } from "../state"
 import { isTauri, isAndroidTauri, playSoundPath, syncDeviceControlIcon, clearSimulatedOutput } from "../canvas-interaction"
 import { listen } from "@tauri-apps/api/event"
@@ -12,7 +12,6 @@ import { type ProjectChoice } from "../../project-chooser"
 import { finishNativeProjectChoice } from "../new-document"
 import { emitStyleLibrary, emitStyleLibraryPreview, emitStyleLibraryImage, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle, sliceStyleLibrarySelection } from "../style-picker"
 import { canvasEditable, isEditing, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
-import { WHOLE_IMAGE_INDEX } from "../../slice-picker-canvas.ts"
 import { soundPathForFilename } from "../../sounds.ts"
 import { bindPaneResize, applyModeState } from "../mobile-layout"
 import { currentConfigPath } from "../config-context"
@@ -66,10 +65,7 @@ export function wireResourcesAndStartup(): void {
     pickerFrame.src = "about:blank"
   })
   void onPickerEvent<{ index: number }>("image-picker-select", ({ index }) => {
-    if (!isEditing() || !appState.pickerTarget) return
-    if (index === WHOLE_IMAGE_INDEX ? appState.pickerSlices.length : !appState.pickerSlices.some((slice) => slice.index === index)) return
-    appState.pickerSelectedIndex = index
-    updateSelectedImageReference(appState.pickerTarget, pickerImageReference(index))
+    void applyImageSliceSelection(index)
   })
   // 切片窗口返回「全部样式」：留在同一个窗口里切视图。
   void onPickerEvent("image-picker-back-styles", () => void emitStyleLibrary(true))

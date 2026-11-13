@@ -2,7 +2,7 @@ import { asObject } from "../palm/sxi-ini.ts"
 import { closeDialog } from "../motion.ts"
 import { editSxi } from "./sxi-fields"
 import { palmKeyForegrounds, palmKeyPointer, palmValue, setPalmStyleImage } from "./sxi-styles"
-import { addPalmStyle, palmTileSlices } from "../palm/palm-style-edit.ts"
+import { addPalmStyle, palmTileSlices, setPalmTile } from "../palm/palm-style-edit.ts"
 import { openPalmSkin, palmTheme } from "./sxi-documents"
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
@@ -10,7 +10,8 @@ import { styleConfigPath, effectiveKeyValue, currentSkinState, setSourceValue } 
 import { isListCell } from "../layout.ts"
 import { type StyleImagePickerTarget, type NativeResourcePickerPayload } from "./types"
 import { setStyleField } from "../keyboard.ts"
-import { commitText, updateDirty, isEditing } from "./edit-history"
+import { commitBytes, commitText, updateDirty, updateHistoryButtons, isEditing } from "./edit-history"
+import { pngImage, showError } from "./file-operations"
 import { refreshPreview } from "./preview-render"
 import { renderStyleResourceDetail } from "./resource-inspector"
 import { populateKeyInspector, selectedBdaRefs, updateBdaRefs } from "./key-inspector"
@@ -20,7 +21,7 @@ import { resourceImagePaths } from "../resources.ts"
 import { theme, orientation, pickerDialog, pickerFrame } from "./dom"
 import { nativePickerWindow, pickerEmitter, pickerListener } from "../picker-channel.ts"
 import { WHOLE_IMAGE_INDEX } from "../slice-picker-canvas.ts"
-import { type TileRect, tileSlices } from "../tiles.ts"
+import { type TileRect, nextTileIndex, tileSlices, updateTileSlice } from "../tiles.ts"
 import { ssfPackage, ssfThemeFolder } from "./ssf-documents"
 
 function selectedStyleImageSections(source: "BACK_STYLE" | "FORE_STYLE"): { document: IniDocument; path: string; sections: string[] } | undefined {
@@ -238,9 +239,59 @@ export function clearImageSlicePicker(): void {
   closePickerWindow()
 }
 
-export function pickerImageReference(index: number): string {
+function pickerImageReference(index: number): string {
   const name = appState.pickerPath.split("/").pop()?.replace(/\.png$/i, "") ?? appState.pickerPath
   return index === WHOLE_IMAGE_INDEX ? name : `${name},${index}`
+}
+
+export async function applyImageSliceSelection(index: number): Promise<void> {
+  const archive = appState.archive
+  const target = appState.pickerTarget
+  const path = appState.pickerPath
+  if (!archive || !target || !isEditing()) return
+  if (index === WHOLE_IMAGE_INDEX ? appState.pickerSlices.length : !appState.pickerSlices.some(slice => slice.index === index)) return
+  try {
+    if (index === WHOLE_IMAGE_INDEX && !target.selectImage && (archive.format === "bdi" || archive.format === "bds" || archive.format === "sxi")) {
+      const bytes = archive.getBytes(path)
+      if (!bytes) return
+      const revision = archive.revision
+      const bitmap = await pngImage(bytes)
+      const source: TileRect = [0, 0, bitmap.width, bitmap.height]
+      bitmap.close()
+      if (appState.archive !== archive || archive.revision !== revision || appState.pickerTarget !== target || appState.pickerPath !== path || !isEditing()) return
+      const previous = appState.undoStack.at(-1)
+      if (archive.format === "sxi") {
+        index = 1
+        editSxi(skin => setPalmTile(skin, path, { index, source }))
+        if (!palmTileSlices(openPalmSkin(), path).some(slice => slice.index === index)) return
+      } else {
+        const tilePath = path.replace(/\.png$/i, ".til")
+        const before = archive.getBytes(tilePath)
+        const tiles = IniDocument.parse(before ? archive.getText(tilePath) : "")
+        index = nextTileIndex(tiles)
+        updateTileSlice(tiles, { index, source })
+        if (before) commitText(tilePath, archive.getText(tilePath), tiles.toString())
+        else commitBytes(tilePath, undefined, new TextEncoder().encode(tiles.toString()))
+      }
+      appState.pickerSlices = [{ index, source }]
+      appState.pickerSelectedIndex = index
+      if (appState.nativeImagePickerPayload) {
+        appState.nativeImagePickerPayload.slices = appState.pickerSlices
+        appState.nativeImagePickerPayload.selectedIndex = index
+      }
+      updateSelectedImageReference(target, pickerImageReference(index))
+      // 自动补切片与应用图片是一笔操作，撤销时同时恢复。
+      const changes = appState.undoStack.splice(previous ? appState.undoStack.indexOf(previous) + 1 : 0)
+      if (changes.length) appState.undoStack.push(changes.length === 1 ? changes[0] : { kind: "batch", changes })
+      updateHistoryButtons()
+      if (appState.pickerTarget === target) await emitPickerView("image")
+      return
+    }
+    appState.pickerSelectedIndex = index
+    updateSelectedImageReference(target, pickerImageReference(index))
+  } catch (error) {
+    showError(error, "应用图片")
+  }
 }
 
 export function openImageSlicePicker(path: string, target: StyleImagePickerTarget, selectedSource?: TileRect): void {
