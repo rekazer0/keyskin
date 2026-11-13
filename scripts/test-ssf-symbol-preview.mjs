@@ -43,8 +43,8 @@ try {
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible()) await close.click()
   for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) for (const board of ['py_26', 'py_14', 'en_26']) {
-    await page.locator(`[data-theme-choice="${theme}"]`).click()
-    await page.locator(`[data-orientation-choice="${orientation}"]`).click()
+    if (await page.locator("#theme").inputValue() !== theme) await page.locator('[data-mobile-choice="theme"]').click()
+    if (await page.locator("#orientation").inputValue() !== orientation) await page.locator('[data-mobile-choice="orientation"]').click()
     const result = await page.evaluate(async ({ theme, orientation, board }) => {
       const { selectFile } = await import('/src/app/navigation.ts')
       const { preview } = await import('/src/app/canvas-interaction.ts')
@@ -75,8 +75,8 @@ try {
     }
   }
   if (process.env.SSF_SYMBOL_SCREENSHOT) {
-    await page.locator('[data-theme-choice="light"]').click()
-    await page.locator('[data-orientation-choice="port"]').click()
+    if (await page.locator("#theme").inputValue() !== "light") await page.locator('[data-mobile-choice="theme"]').click()
+    if (await page.locator("#orientation").inputValue() !== "port") await page.locator('[data-mobile-choice="orientation"]').click()
     await page.evaluate(async () => {
       const { selectFile } = await import('/src/app/navigation.ts')
       const { preview } = await import('/src/app/canvas-interaction.ts')

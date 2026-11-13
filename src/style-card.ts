@@ -67,15 +67,17 @@ export async function textStyleSample(canvas: HTMLCanvasElement, resolver: Visua
 }
 
 // 几千个样式时缩略图进入视口才绘制，打开列表不必一次画完；尺寸按实际布局取，卡片随窗口缩放后在可见时重画。
-const pendingDraws = new WeakMap<Element, () => void>()
+// 先量完这一批再统一绘制：边量边改画布尺寸，每张卡都会强制重排一次整个网格。
+const pendingDraws = new WeakMap<Element, () => (() => void) | void>()
 const drawing: { observer?: IntersectionObserver; resize?: ResizeObserver } = {}
 function drawObserver(): IntersectionObserver {
   return drawing.observer ??= new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue
+    const draws = entries.flatMap((entry) => {
+      if (!entry.isIntersecting) return []
       drawing.observer?.unobserve(entry.target)
-      pendingDraws.get(entry.target)?.()
-    }
+      return pendingDraws.get(entry.target)?.() ?? []
+    })
+    for (const draw of draws) draw()
   }, { rootMargin: "200px" })
 }
 function resizeObserver(): ResizeObserver {
@@ -94,8 +96,9 @@ function lazyDraw(owner: Element, target: Element, canvases: HTMLCanvasElement[]
     const size = canvases.map(canvas => `${canvas.clientWidth}x${canvas.clientHeight}`).join()
     if (size === drawnSize) return
     drawnSize = size
-    canvases.forEach((canvas, index) => {
-      retinaThumbnail(canvas, canvas.clientWidth || 160, canvas.clientHeight || 80)
+    const sizes = canvases.map(canvas => [canvas.clientWidth || 160, canvas.clientHeight || 80] as const)
+    return () => canvases.forEach((canvas, index) => {
+      retinaThumbnail(canvas, ...sizes[index])
       void draw(canvas, index)
     })
   })

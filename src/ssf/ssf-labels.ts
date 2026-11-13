@@ -26,6 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
   LABEL: "主文字",
   MINOR_LABEL: "副文字",
   LABEL_STYLE: "文字样式",
+  MINOR_LABEL_STYLE: "副文字样式",
   LABEL_POSITION: "主文字区域",
   LABEL_VISIBLE: "显示主文字",
   LABEL_ORIENTATION: "文字方向",

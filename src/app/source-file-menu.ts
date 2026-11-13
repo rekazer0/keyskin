@@ -1,6 +1,5 @@
 import { bindMenuKeys, element } from "../dom-element"
-import { closeDialog } from "../motion"
-import { bindDialog } from "./ask"
+import { openRenameDialog } from "./ask"
 import { source } from "./canvas-interaction"
 import { files, sourceFileToolbar, sourceRenameButton } from "./dom"
 import { commitBatch, isEditing } from "./edit-history"
@@ -13,63 +12,22 @@ function renameSourceFile(): void {
   const archive = appState.archive, selection = sourceSelection()
   if (!archive || !selection) return
   source.commit()
-  const dialog = element("dialog", "ui-dialog")
-  dialog.dataset.size = "sm"
-  dialog.setAttribute("aria-label", "重命名")
-  const form = element("form", "ui-form")
-  form.method = "dialog"
-  const header = element("header", "ui-dialog-header")
-  header.append(Object.assign(element("h2"), { textContent: "重命名" }))
-  const body = element("div", "ui-dialog-body")
-  const input = element("input", "ui-input")
-  input.value = selection.path.split("/").pop()!
-  input.setAttribute("aria-label", "名称")
-  input.spellcheck = false
-  const error = element("p", "ui-field-error")
-  error.setAttribute("role", "alert")
-  body.append(input, error)
-  const footer = element("footer", "ui-dialog-footer")
-  const cancel = element("button", "ui-button")
-  cancel.type = "button"
-  cancel.textContent = "取消"
-  cancel.addEventListener("click", () => closeDialog(dialog, "cancel"))
-  const save = element("button", "ui-button")
-  save.textContent = "重命名"
-  save.dataset.variant = "primary"
-  footer.append(cancel, save)
-  form.append(header, body, footer)
-  form.addEventListener("submit", event => {
-    event.preventDefault()
-    if (appState.archive !== archive || !isEditing()) { closeDialog(dialog, "cancel"); return }
-    const name = input.value.trim()
-    if (!name || name === "." || name === ".." || /[\\/:\x00-\x1f]/.test(name)) {
-      error.textContent = "请输入有效名称，不能包含路径分隔符或控制字符"
-      input.focus()
-      return
-    }
+  openRenameDialog(selection.path.split("/").pop()!, name => {
+    if (appState.archive !== archive || !isEditing()) return
     const target = selection.path.slice(0, selection.path.lastIndexOf("/") + 1) + name
-    if (target === selection.path) { closeDialog(dialog); return }
+    if (target === selection.path) return
     if (archive.names().some(path => path.toLowerCase() === target.toLowerCase() || path.toLowerCase().startsWith(`${target.toLowerCase()}/`))) {
-      error.textContent = "已存在同名文件或文件夹"
-      input.focus()
-      return
+      throw new Error("已存在同名文件或文件夹")
     }
     const paths = sourcePaths(selection)
-    if (!paths.length) { error.textContent = "原文件或文件夹已不存在"; return }
+    if (!paths.length) throw new Error("原文件或文件夹已不存在")
     // shortcut: 不改写配置内的文件引用；需要资源重构时再按格式解析引用。
     commitBatch(paths.flatMap(path => [
       { kind: "bytes", path: target + path.slice(selection.path.length), after: archive.getBytes(path)!.slice() },
       { kind: "bytes", path, before: archive.getBytes(path)!.slice() },
     ]))
-    closeDialog(dialog)
     refreshAfterSourceMutation(target + paths[0].slice(selection.path.length))
   })
-  dialog.append(form)
-  bindDialog(dialog)
-  dialog.addEventListener("close", () => dialog.remove(), { once: true })
-  document.body.append(dialog)
-  dialog.showModal()
-  cancel.focus()
 }
 
 /** 右键菜单直接调用工具栏按钮，操作顺序与禁用状态只有一个来源。 */

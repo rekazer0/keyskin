@@ -275,7 +275,7 @@ export function populateKeyInspector(): void {
   const nativeSelected = ssfSelected || sxiSelected
   const candidateSelected = Boolean(bdaSelected && appState.selectedCandidate && appState.selectedPath === appState.layoutPath)
   skinFieldsGroup.hidden = !skinSelected || bdaSelected || sxiSelected
-  toolbarFieldsGroup.hidden = !toolbarSelected || bdaSelected || sxiSelected || toolbarHasSelection
+  toolbarFieldsGroup.hidden = !toolbarSelected || bdaSelected || sxiSelected || toolbarHasSelection || appState.selectedCandidate === "input"
   keyboardFieldsGroup.hidden = bdaSelected || nativeSelected || skinSelected || toolbarSelected || bdaConfigSelected || candidateSelected || appState.selectedPath !== appState.layoutPath || hasSelection
   for (const group of keyOnlyGroups) {
     const availableForBda = group === keyTypographyFieldsGroup
@@ -316,6 +316,7 @@ export function populateKeyInspector(): void {
     selectedKeyContext.textContent = nativeTitle.context
     selectedKeyContext.title = nativeTitle.context
   }
+  if (appState.selectedCandidate === "input") selectedKeyName.textContent = "拼音栏"
   selectedKeyName.title = selectedKeyName.textContent ?? ""
   syncAiDesignContext()
   quickInspector.dataset.selectionCount = String(hasSelection ? sections.length : 0)

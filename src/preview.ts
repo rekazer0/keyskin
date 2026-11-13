@@ -152,7 +152,7 @@ export class Preview {
   dragDrawFrame = 0
   lastRenderCache?: {
     panel: Visual | undefined
-    visuals: Array<{ back: Visual | undefined; fore: Array<Visual | undefined>; text: TextVisual | undefined; styleTexts: Array<StyleTextVisual | undefined> }>
+    visuals: Map<string, { back: Visual | undefined; fore: Array<Visual | undefined>; text: TextVisual | undefined; styleTexts: Array<StyleTextVisual | undefined> }>
     toolbarImages: Visual[]
   }
   private readonly resizeObserver: ResizeObserver

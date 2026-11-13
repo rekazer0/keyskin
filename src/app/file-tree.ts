@@ -21,7 +21,11 @@ import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
 import { askToCreateAnimationConfig, canCreateAnimationConfig } from "./animation-resource"
+import { decorateLayoutGroup } from "./sidebar-layouts"
 import { releaseOnRemove } from "../dom-lifecycle"
+
+const layoutGroups = ["键盘布局", "数字与符号", "手写与语音", "手写与选择"]
+const resourceTileLabels: Record<string, string> = { 图片: "图片资源", 样式: "按键样式", 音效: "音效资源" }
 
 function addNavButton(
   parent: HTMLElement,
@@ -67,7 +71,7 @@ function addNavButton(
       appState.previewReturnName = path.split("/").pop() ?? layout.value
     }
     selectFile(path, "overview", navMode === "resource" ? "image" : navMode === "style" ? "style" : navMode === "sound" ? "sound" : navMode === "motion" || navMode === "particle" ? navMode : "document")
-    if (mobilePortraitQuery.matches) setMobilePane("inspector")
+    if (mobilePortraitQuery.matches) setMobilePane(path === appState.layoutPath && navMode === "document" ? "canvas" : "inspector")
   })
   parent.append(button)
   if (appState.sidebarView === "overview" && path === appState.selectedPath && navMode === currentNavigationMode()) {
@@ -132,7 +136,7 @@ const iniTypes: Record<string, Omit<NavEntry, "path">> = {
   "symbol_h.ini": { group: "数字与符号", label: "符号面板（加高）", className: "nav-component", icon: "percent" },
   "help.ini": { group: "手写与选择", label: "帮助面板", className: "nav-component", icon: "circle-help" },
   "logo.ini": { group: "键盘组件", label: "输入法标识", className: "nav-component", icon: "app-window" },
-  "gen.ini": { group: "资源配置", label: "通用配置", className: "nav-style", icon: "settings" },
+  "gen.ini": { group: "资源配置", label: "通用配置", className: "nav-style", icon: "sliders-horizontal" },
 }
 
 /** Overview name of a keyboard layout file (`py_9.ini` → 拼音 9 键). */
@@ -179,32 +183,14 @@ export function renderFiles(): void {
   overview.className = "sidebar-overview"
   files.append(overview)
 
-  const mobileGroups = document.createElement("nav")
-  mobileGroups.className = "mobile-overview-groups"
-  mobileGroups.setAttribute("aria-label", "布局分组")
-  overview.append(mobileGroups)
   const skinCard = document.createElement("div")
   skinCard.className = "skin-card"
 
-  const setMobileOverviewGroup = (title: string): void => {
-    appState.mobileOverviewGroup = title
-    for (const button of Array.from(mobileGroups.querySelectorAll<HTMLButtonElement>("button"))) {
-      const active = button.dataset.overviewGroup === title
-      button.setAttribute("aria-pressed", String(active))
-    }
-    for (const group of Array.from(overview.querySelectorAll<HTMLDetailsElement>(".nav-group"))) {
-      const active = group.dataset.overviewGroup === title
-      group.classList.toggle("mobile-overview-active", active)
-      // The phone rail replaces the disclosure summary, so a closed group would render empty.
-      if (active && mobilePortraitQuery.matches) group.open = true
-    }
-  }
-
-  const section = (title: string, count = 0): HTMLElement => {
+  const section = (title: string): HTMLElement => {
     const disclosure = document.createElement("details")
     disclosure.className = "nav-group"
     disclosure.dataset.overviewGroup = title
-    disclosure.open = overviewGroupState.get(title) ?? ["皮肤", "资源配置", "键盘布局"].includes(title)
+    disclosure.open = overviewGroupState.get(title) ?? ["皮肤", "皮肤信息", "资源配置", ...layoutGroups].includes(title)
     disclosure.addEventListener("toggle", () => overviewGroupState.set(title, disclosure.open))
     const summary = document.createElement("summary")
     summary.className = "ui-list-item nav-section"
@@ -212,24 +198,13 @@ export function renderFiles(): void {
     marker.className = "source-disclosure"
     const label = document.createElement("span")
     label.className = "nav-label"
-    label.textContent = title
-    const countNode = document.createElement("span")
-    countNode.className = "ui-badge nav-section-count"
-    countNode.dataset.variant = "pill"
-    countNode.textContent = String(count)
-    summary.append(marker, label, countNode)
+    label.textContent = title === "资源配置" ? "资源" : title
+    summary.append(label)
+    if (!["皮肤", "皮肤信息", "资源配置", ...layoutGroups].includes(title)) summary.append(marker)
     const body = document.createElement("div")
     body.className = "nav-group-body"
     disclosure.append(summary, body)
     overview.append(disclosure)
-    const mobileButton = document.createElement("button")
-    mobileButton.className = "ui-list-item"
-    mobileButton.type = "button"
-    mobileButton.dataset.layout = "tile"
-    mobileButton.textContent = title
-    mobileButton.dataset.overviewGroup = title
-    mobileButton.addEventListener("click", () => setMobileOverviewGroup(title))
-    mobileGroups.append(mobileButton)
     return body
   }
 
@@ -264,12 +239,12 @@ export function renderFiles(): void {
       ...preview ? [{ group: "皮肤", label: "效果预览", path: preview, className: "nav-overview", icon: "image" }] : [],
       { group: "皮肤", label: "外观切换", path: "time.ini", className: "nav-overview", icon: "sun" },
       { group: "资源配置", label: "按键样式", path: `${folder}phoneSkin.ini`, className: "nav-style", icon: "palette" },
-      { group: "资源配置", label: "按键前景", path: `${folder}keys.ini`, className: "nav-style", icon: "layers" },
+      { group: "资源配置", label: "按键前景", path: `${folder}keys.ini`, className: "nav-style", icon: "type" },
       { group: "资源配置", label: "按键动画", path: `${folder}anim.ini`, className: "nav-style", icon: "wand-sparkles" },
       { group: "资源配置", label: "按键音效", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "volume-2", navMode: "document" },
       ...images.length ? [{ group: "资源配置", label: "图片", path: images[0], className: "nav-resource", icon: "images", navMode: "resource", meta: `${images.length} 张图片` }] : [],
-      { group: "资源配置", label: "音效", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "audio-lines", navMode: "sound" },
-      { group: "资源配置", label: "运营配置", path: "op.ini", className: "nav-style", icon: "sparkles" },
+      { group: "资源配置", label: "音效", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "music", navMode: "sound" },
+      { group: "资源配置", label: "运营配置", path: "op.ini", className: "nav-style", icon: "sliders-horizontal" },
     )
     // 搜狗手机输入法的全部键盘（取自官方安装包），按它的叫法列出；键位来自官方骨架，外观来自 phoneSkin.ini。
     const boards = [
@@ -317,14 +292,13 @@ export function renderFiles(): void {
     for (const panelName of appearance.panels.keys()) {
       const name = `${panelName}.ini`
       const info = iniTypes[name] ?? {
-        group: "面板样式",
+        group: "扩展布局",
         label: panelName.replaceAll("_", " "),
         className: "nav-layout",
         icon: "",
       }
       entries.push({
         ...info,
-        group: "面板样式",
         path: `${configPrefix}${name}`,
         meta: panelName,
       })
@@ -403,14 +377,14 @@ export function renderFiles(): void {
   for (const path of animationPaths) {
     const suffix = animationPaths.length > 1 ? ` · ${path.split("/").pop()}` : ""
     entries.push(
-      { group: "资源配置", label: `动效设计${suffix}`, path, className: "nav-style", icon: "film", navMode: "motion" },
-      { group: "资源配置", label: `粒子设计${suffix}`, path, className: "nav-style", icon: "wand-sparkles", navMode: "particle" },
+      { group: "资源配置", label: `动效设计${suffix}`, path, className: "nav-style", icon: "zap", navMode: "motion" },
+      { group: "资源配置", label: `粒子设计${suffix}`, path, className: "nav-style", icon: "sparkles", navMode: "particle" },
     )
   }
   if (!animationPaths.length && canCreateAnimationConfig()) {
     entries.push(
-      { group: "资源配置", label: "动效设计", path: "", className: "nav-style", icon: "film", navMode: "motion", meta: "未创建" },
-      { group: "资源配置", label: "粒子设计", path: "", className: "nav-style", icon: "wand-sparkles", navMode: "particle", meta: "未创建" },
+      { group: "资源配置", label: "动效设计", path: "", className: "nav-style", icon: "zap", navMode: "motion", meta: "未创建" },
+      { group: "资源配置", label: "粒子设计", path: "", className: "nav-style", icon: "sparkles", navMode: "particle", meta: "未创建" },
     )
   }
   if (appState.archive.format === "bda") {
@@ -467,11 +441,15 @@ export function renderFiles(): void {
     const author = appState.archive.infoField("Author")
     button.classList.add("skin-card-info")
     button.querySelector(".nav-label")!.textContent = name
-    button.querySelector(".nav-meta")!.textContent = author ? `${author} · 皮肤信息` : "皮肤信息"
+    button.querySelector(".nav-meta")!.textContent = author ? `${author} · 皮肤` : "皮肤信息"
+    const format = document.createElement("span")
+    format.className = "skin-card-format"
+    format.textContent = appState.archive.format.toUpperCase()
+    button.append(format, symbolSpan("chevron-right"))
     button.title = `皮肤信息 · ${name}`
   }
   const groups = appState.archive.format === "bda"
-    ? ["皮肤信息", "资源配置", "面板样式", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
+    ? ["皮肤信息", "资源配置", "键盘布局", "数字与符号", "手写与选择", "键盘组件", "扩展布局", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
     : ["皮肤", "资源配置", "键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局"]
   for (const group of groups) {
     const grouped = entries.filter((entry) => entry.group === group && !skinEntries.includes(entry) && (
@@ -486,7 +464,7 @@ export function renderFiles(): void {
         return (layoutRank[aName] ?? 2) - (layoutRank[bName] ?? 2)
       })
     }
-    if (appState.archive.format === "bda" && group === "面板样式") {
+    if (appState.archive.format === "bda" && layoutGroups.includes(group)) {
       const bdaLayoutOrder = ["py_9", "py_26", "en_26", "en_26s", "en_9", "en_9s", "num_9", "num_26", "symbol", "sym_26_cn", "sym_26_en", "hw_grid", "hw_full", "bh", "sel_ch", "sel_en", "voice"]
       const rank = (name: string) => bdaLayoutOrder.includes(name) ? bdaLayoutOrder.indexOf(name) : 100
       grouped.sort((a, b) => rank(a.meta ?? "") - rank(b.meta ?? "") || (a.meta ?? "").localeCompare(b.meta ?? ""))
@@ -494,20 +472,20 @@ export function renderFiles(): void {
     // 皮肤卡片放在它原来所在的分组（「皮肤」/ BDA 的「皮肤信息」）里，分组照常可折叠。
     const card = skinCard.childElementCount && group === skinEntries[0]?.group ? skinCard : undefined
     if (!grouped.length && !card) continue
-    const body = section(group, grouped.length + (card?.childElementCount ?? 0))
+    const body = section(group)
     if (card) body.append(card)
     for (const entry of grouped) {
-      const button = addNavButton(body, entry.label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
+      const label = group === "资源配置" ? resourceTileLabels[entry.label] ?? entry.label.replace(/ · .+$/, "") : entry.label
+      const button = addNavButton(body, label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
       // 资源配置条目少且各自独立，排成磁贴
-      if (button && group === "资源配置") button.dataset.layout = "tile"
+      if (button && group === "资源配置") {
+        button.dataset.layout = "tile"
+        button.dataset.variant = "resource"
+        button.setAttribute("aria-label", label)
+      }
     }
+    if (layoutGroups.includes(group)) decorateLayoutGroup(body)
   }
-  const availableMobileGroups = Array.from(mobileGroups.querySelectorAll<HTMLButtonElement>("button"))
-  if (!availableMobileGroups.some((button) => button.dataset.overviewGroup === appState.mobileOverviewGroup)) {
-    appState.mobileOverviewGroup = availableMobileGroups[0]?.dataset.overviewGroup ?? ""
-  }
-  setMobileOverviewGroup(appState.mobileOverviewGroup)
-
   const sourceFiles = document.createElement("div")
   sourceFiles.className = "raw-files"
   sourceFiles.setAttribute("role", "tree")

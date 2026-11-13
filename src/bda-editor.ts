@@ -11,7 +11,7 @@ import { configField } from "./app/config-value-control.ts"
 import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "./style-card.ts"
 
 type BdaStyleChange = (ref: BdaStyleRef, property: string, value: string) => void
-type BdaLayoutScope = "panel" | "candidate" | "list"
+type BdaLayoutScope = "panel" | "candidate" | "input" | "list"
 
 type LayoutEditorOptions = {
   appearance: BdaAppearance
@@ -281,15 +281,15 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
   container.dataset.bdaScope = options.keys.length ? "key" : scope
   container.classList.toggle("bda-key-inspector", options.keys.length > 0)
   container.classList.toggle("bda-panel-inspector", options.keys.length === 0 && scope === "panel")
-  container.classList.toggle("bda-candidate-inspector", options.keys.length === 0 && scope === "candidate")
+  container.classList.toggle("bda-candidate-inspector", options.keys.length === 0 && (scope === "candidate" || scope === "input"))
   const context = element("div", "bda-inspector-context")
   const badge = element("span", "ui-badge")
-  badge.textContent = options.keys.length ? "按键" : scope === "candidate" ? "候选栏" : scope === "list" ? "列表" : "面板"
+  badge.textContent = options.keys.length ? "按键" : scope === "input" ? "拼音栏" : scope === "candidate" ? "候选栏" : scope === "list" ? "列表" : "面板"
   const name = element("strong")
   name.textContent = options.panelName
   context.append(badge, name)
   container.append(context)
-  const groups = bdaLayoutStyleGroups(panel, options.keys, scope)
+  const groups = bdaLayoutStyleGroups(panel, options.keys, scope === "input" ? "candidate" : scope).filter(group => scope !== "input" || group.key === "input")
 
   const styleReferenceField = (item: BdaLayoutStyleItem): HTMLElement => {
     const isForeStyle = /^foreStyles\[\d+\]$/.test(item.field)

@@ -294,6 +294,25 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false): v
   void showPickerWindow("styles", "全部样式", 1100, 760)
 }
 
+type StyleLibraryCache = {
+  archive: SkinArchive
+  signature: string
+  session: string
+  images: Map<string, () => string>
+  bitmapKeys: Map<ImageBitmap, string>
+  previews: Map<string, Promise<StyleLibraryPreview | undefined>>
+  styles?: StyleLibraryPayload["styles"]
+  imageList?: StyleLibraryPayload["images"]
+  sounds?: StyleLibraryPayload["sounds"]
+}
+// 打开「全部样式」是高频操作：样式列表、预览和图片编码只依赖皮肤内容与主题方向，改动前反复打开都复用。
+let styleLibraryCache: StyleLibraryCache | undefined
+
+function memo(make: () => string): () => string {
+  let value: string | undefined
+  return () => value ??= make()
+}
+
 async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayload | undefined> {
   const target = appState.stylePickerTarget
   if (target?.dataset.ssfAnimationPath) return ssfAnimationLibraryPayload(target)
@@ -309,9 +328,13 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
   const names = source.names()
   const ids = availableStyleIDs()
   const resolver = visualResolver()
-  const session = crypto.randomUUID()
-  const images = new Map<string, () => string>()
-  const bitmapKeys = new Map<ImageBitmap, string>()
+  const canAdd = canAddStyle()
+  const signature = `${revision}|${theme.value}|${orientation.value}|${canAdd}`
+  if (styleLibraryCache?.archive !== source || styleLibraryCache.signature !== signature) {
+    styleLibraryCache = { archive: source, signature, session: crypto.randomUUID(), images: new Map(), bitmapKeys: new Map(), previews: new Map() }
+  }
+  const cache = styleLibraryCache
+  const { session, images, bitmapKeys, previews } = cache
   const wireVisual = (visual: Visual | undefined): StyleLibraryVisual | null => {
     if (!visual) return null
     const { image, ...rest } = visual
@@ -319,18 +342,17 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     const bytes = visual.imagePath ? source.getBytes(visual.imagePath) : undefined
     const imageKey = bytes ? visual.imagePath! : bitmapKeys.get(image) ?? `bitmap:${bitmapKeys.size}`
     bitmapKeys.set(image, imageKey)
-    if (!images.has(imageKey)) images.set(imageKey, () => {
+    if (!images.has(imageKey)) images.set(imageKey, memo(() => {
       if (bytes) return imageDataURL(bytes)
       const canvas = document.createElement("canvas")
       canvas.width = image.width
       canvas.height = image.height
       canvas.getContext("2d")?.drawImage(image, 0, 0)
       return canvas.toDataURL()
-    })
+    }))
     return { ...rest, imageKey }
   }
   const valid = () => appState.archive === source && source.revision === revision
-  const previews = new Map<string, Promise<StyleLibraryPreview | undefined>>()
   appState.styleLibrarySession = {
     session,
     image: imageKey => valid() ? images.get(imageKey)?.() : undefined,
@@ -354,7 +376,7 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
   const payload: StyleLibraryPayload = {
     session, sliceBack, imageSelection,
     editable: isEditing() && !target?.disabled,
-    canAdd: canAddStyle(), soundOnly: key === "SOUND_STYLE",
+    canAdd, soundOnly: key === "SOUND_STYLE",
     foreground: styleReferenceForeground(key), bda: source.format === "bda",
     kind: styleKindForKey(key), currentID,
     imagesCompatible: !targetType || targetType === "image",
@@ -362,11 +384,18 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     bitmaps: {}, animationText: "", animationFiles: {}, particleVisuals: {}, styles: [], images: [], sounds: [],
   }
   if (payload.soundOnly) {
-    payload.sounds = ids.flatMap(styleID => {
+    payload.sounds = cache.sounds ??= ids.flatMap(styleID => {
       const filename = styleSoundFile(styleID, styles)
       return filename ? [{ styleID, filename, playable: Boolean(soundPathForFilename(names, theme.value, orientation.value, filename)),
-        uses: payload.canAdd ? styleUsages(styleID).length : undefined }] : []
+        uses: canAdd ? styleUsages(styleID).length : undefined }] : []
     })
+    return payload
+  }
+  // 只有「能否选用」随打开的引用字段变，其余整份复用。
+  const compatible = (styleID: string, kind: string) => imageSelection ? kind === "image" : !targetType || bdaStyleRef(styleID)?.type === targetType
+  if (cache.styles && cache.imageList) {
+    payload.styles = cache.styles.map(style => ({ ...style, compatible: compatible(style.styleID, style.kind) }))
+    payload.images = cache.imageList
     return payload
   }
   const imageCategories = new Map<string, Set<string>>()
@@ -386,17 +415,19 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     return {
       styleID, label: stylePickerLabel(styleID), kind, categories: [...uses], imagePaths, visuals: [],
       info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
-      compatible: imageSelection ? kind === "image" : !targetType || bdaStyleRef(styleID)?.type === targetType,
-      uses: payload.canAdd ? styleUsages(styleID).length : undefined,
+      compatible: compatible(styleID, kind),
+      uses: canAdd ? styleUsages(styleID).length : undefined,
       summary: kind === "anim" && styles ? styleAnimationSummary(styleID, styles) : undefined,
       textVisuals: kind === "text" ? [false, true].map(pressed => resolver?.resolveStyleText?.(styleID, pressed) ?? resolver?.resolveText(styleID, pressed)) : undefined,
       sound, soundPlayable: Boolean(sound && soundPathForFilename(names, theme.value, orientation.value, sound)),
     }
   })
   payload.images = resourceImagePaths(names, theme.value, orientation.value).map(path => {
-    images.set(path, () => imageDataURL(source.getBytes(path)!))
+    if (!images.has(path)) images.set(path, memo(() => imageDataURL(source.getBytes(path)!)))
     return { path, categories: [...imageCategories.get(path) ?? []], uses: imageUses.get(path) ?? 0 }
   })
+  cache.styles = payload.styles
+  cache.imageList = payload.images
   return payload
 }
 

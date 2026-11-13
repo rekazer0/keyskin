@@ -32,6 +32,15 @@ import { type SsfTemplates } from "../ssf/ssf-convert.ts"
 import { type JsonObject } from "../palm/sxi-ini.ts"
 import { type SsfPackage } from "../ssf/ssf-package.ts"
 export const appState = {
+  pinnedToolbar: {
+    actions: [] as string[],
+    editing: false,
+    suppressClick: false,
+    gesture: undefined as {
+      pointerId: number; x: number; y: number; action: string; fromMenu: boolean;
+      timer?: number; preview?: HTMLElement;
+    } | undefined,
+  },
   fileOperationProgressVisible: false,
   simulatedComposition: "",
   lastSimulationLanguage: undefined as "zh" | "en" | undefined,
@@ -59,7 +68,7 @@ export const appState = {
   layoutDocument: undefined as IniDocument | undefined,
   selectedKeySections: [] as string[],
   selectedToolbarSections: [] as string[],
-  selectedCandidate: false,
+  selectedCandidate: false as boolean | "input",
   /** Which text the 文字 group edits for the candidate bar or whole layout (候选字、首选、输入码……). */
   textStyleTarget: "",
   /** Which text layers of the selected BDA keys the 文字 fields edit: the main text or the hints after it. */
@@ -145,7 +154,7 @@ export const appState = {
   selectedBdaStyleGroup: "imageStyles" as BdaAppearanceStyleGroup,
   styleReturnPath: "",
   styleReturnSelection: [] as string[],
-  styleReturnCandidate: false,
+  styleReturnCandidate: false as boolean | "input",
   styleReturnScrollTop: 0,
   styleReturnInspectorGroup: "",
   bdaSliceReturn: undefined as { path: string; styleID: string } | undefined,
@@ -198,8 +207,9 @@ export const appState = {
   */
   inspectorGroupKey: "",
   singlePageInspectorContext: "",
-  mobileSplitBeforeCollapse: Number(localStorage.getItem("mobile-workspace-split")) || 50,
-  mobileSwipeStart: undefined as { pointerId: number; x: number; y: number } | undefined,
+  mobileInspectorCategory: "appearance",
+  mobileInspectorContext: "",
+  mobileInspectorExpanded: new Set<string>(),
   cachedVisualResolver: undefined as { key: readonly unknown[]; resolver: VisualResolver } | undefined,
   cachedSkinStates: undefined as { key: readonly unknown[]; byLayout: Map<string, number[]> } | undefined,
   // 切换布局时在点击处理中途读取尺寸会强制整页重排；改由 ResizeObserver 回调（布局已就绪）缓存。
@@ -261,7 +271,6 @@ export const appState = {
   // Thumbnails redraw a frame later so they don't share a task with the inspector rebuild.
   stylePreviewsPending: false,
   pickerSelectedIndex: undefined as number | undefined,
-  mobileOverviewGroup: "",
   newProjectOptions: undefined as ProjectChoice | undefined,
   projectChooserInitialized: false,
   nativeProjectChoice: undefined as Promise<string | undefined> | undefined,

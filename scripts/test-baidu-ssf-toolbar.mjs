@@ -38,7 +38,7 @@ const open = async (name, buffer) => {
   await closeDialog()
 }
 const toolbar = async (theme) => {
-  await page.locator(`[data-theme-choice="${theme}"]`).click()
+  if (await page.locator("#theme").inputValue() !== theme) await page.locator('[data-mobile-choice="theme"]').click()
   return page.evaluate(async () => {
     const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
     await toolbarPreview.resolver.ready()

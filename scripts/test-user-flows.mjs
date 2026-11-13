@@ -255,12 +255,12 @@ await check("preview: typing, devices, orientation, theme, guides, zoom, skin st
     await page.selectOption("#device", device)
     await page.waitForFunction(() => document.querySelector("#preview").getBoundingClientRect().height > 40)
   }
-  await page.locator('[data-orientation-choice="land"]').click()
+  await page.locator('[data-mobile-choice="orientation"]').click()
   assert.equal(await page.locator("#orientation").inputValue(), "land")
-  await page.locator('[data-orientation-choice="port"]').click()
-  await page.locator('[data-theme-choice="dark"]').click()
+  await page.locator('[data-mobile-choice="orientation"]').click()
+  await page.locator('[data-mobile-choice="theme"]').click()
   assert.equal(await page.locator("#theme").inputValue(), "dark")
-  await page.locator('[data-theme-choice="light"]').click()
+  await page.locator('[data-mobile-choice="theme"]').click()
   await page.locator("#toggle-guides").click()
   assert.equal(await page.locator("#toggle-guides").getAttribute("aria-pressed"), "true")
   await page.locator("#toggle-guides").click()
@@ -438,7 +438,7 @@ await check("styles: library filters, search, preview, apply, new and delete sty
   await library.locator("#style-library-apply").click()
   await pickerDialog.waitFor({ state: "hidden" })
   // 侧栏样式列表：末尾的虚线卡直接新建（编号自动取下一个）并选中；没被引用的样式在卡片上删除，可撤销。
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("样式", { exact: true }) }).first().click()
+  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("按键样式", { exact: true }) }).first().click()
   const gallery = page.locator("#resource-gallery")
   const ids = await gallery.locator(".ui-style-card[data-style-id]").evaluateAll((cards) => cards.map((card) => Number(card.dataset.styleId)))
   const next = String(Math.max(...ids) + 1)
@@ -469,7 +469,7 @@ await check("overview: every sidebar item, image slices, sounds and info", () =>
     // So do 动效设计 / 粒子设计 (without an anim.ini they create one directly, as an undoable step).
     if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library button[aria-label="返回"]').click()
   }
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片", { exact: true }) }).first().click()
+  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片资源", { exact: true }) }).first().click()
   const sidebarWidth = () => page.locator(".sidebar").evaluate((el) => el.getBoundingClientRect().width)
   const initialWidth = await sidebarWidth()
   const resizeSidebar = async (delta) => {
@@ -489,7 +489,7 @@ await check("overview: every sidebar item, image slices, sounds and info", () =>
   assert.ok(Math.abs(resizedWidth - initialWidth - 40) < 2, "image sidebar shrinks when dragged left")
   assert.equal(await page.evaluate(() => Number(localStorage.getItem("sidebarWidthV2"))), resizedWidth, "image sidebar width is saved")
   await page.locator("#atlas-back").click()
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片", { exact: true }) }).first().click()
+  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片资源", { exact: true }) }).first().click()
   assert.equal(await sidebarWidth(), resizedWidth, "image sidebar width survives reopening")
   await page.setViewportSize({ width: 1100, height: 900 })
   assert.equal(await sidebarWidth(), resizedWidth, "compact desktop respects the resized width")
@@ -768,10 +768,8 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   assert.equal(await page.locator('.sidebar-overview button[data-path="phoneTheme.ini"]').count(), 1)
   assert.equal(await page.locator('.sidebar-overview button[data-path="1080/status1/phoneSkin.ini"]').count(), 1)
   assert.equal(await page.locator('.sidebar-overview button[data-path^="light/"]').count(), 31)
-  for (const group of await page.locator('.sidebar-overview .nav-group').all()) {
-    assert.equal(Number(await group.locator('.nav-section-count').textContent()), await group.locator('button[data-path]').count())
-  }
-  const images = page.locator('.sidebar-overview button.nav-resource').filter({ has: page.getByText('图片', { exact: true }) })
+  assert.equal(await page.locator('.sidebar-overview .nav-section-count').count(), 0)
+  const images = page.locator('.sidebar-overview button.nav-resource').filter({ has: page.getByText('图片资源', { exact: true }) })
   const imagePath = await images.getAttribute('data-path')
   assert.match(imagePath, /\.(png|webp|jpe?g)$/i, 'image gallery points at a real image, not phoneSkin.ini')
   assert.ok(ownPaths.has(imagePath))
@@ -785,7 +783,7 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   await page.locator('.sidebar-overview button[data-path="light/skin/port/py_9.ini"]').click()
   assert.equal(await page.locator("#selected-key").textContent(), "拼音 9 键")
   assert.equal(await page.locator("#selected-key-context").textContent(), "1080/status1/phoneSkin.ini")
-  await page.locator('[data-orientation-choice="land"]').click()
+  await page.locator('[data-mobile-choice="orientation"]').click()
   await page.waitForFunction(() => document.querySelector("#panel-status")?.textContent.includes("1920 × 570"))
   const landscapeGeometry = () => page.evaluate(async () => {
     const { preview } = await import('/src/app/canvas-interaction.ts')
@@ -805,7 +803,7 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   assert.ok(landscapePaths.length > 0)
   for (const path of landscapePaths) assert.match(path, /^light\/skin\/land\//, 'landscape keeps only its own preview boards')
   assert.equal(await page.locator("#selected-key-context").textContent(), "1080/status1/phoneSkin.ini")
-  await page.locator('[data-orientation-choice="port"]').click()
+  await page.locator('[data-mobile-choice="orientation"]').click()
   await page.waitForFunction(() => document.querySelector("#panel-status")?.textContent.includes("1080 × 642"))
   const groups = await page.locator("#document-fields > [data-inspector-group-label]").evaluateAll((items) => items.map((item) => item.dataset.inspectorGroupLabel))
   for (const group of ["键盘背景"]) assert.ok(groups.includes(group), group)
@@ -859,7 +857,7 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   await page.locator("#browser-open").setInputFiles({ name: "单外观.ssf", mimeType: "application/octet-stream", buffer: Buffer.from(ssfFixture({ single: true })) })
   await page.waitForFunction(() => document.querySelector("#document-name")?.textContent === "单外观.ssf", null, { timeout: 60000 })
   await closeOperationDialog(page)
-  await page.locator('[data-theme-choice="dark"]').first().click()
+  await page.locator('[data-mobile-choice="theme"]').first().click()
   await page.waitForFunction(() => /没有这种外观/.test(document.querySelector("#event-log")?.textContent ?? ""))
   assert.equal(await page.locator("#theme").inputValue(), "light")
   assert.equal(await page.locator('#files [data-path^="dark/"]').count(), 0)

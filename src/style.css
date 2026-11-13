@@ -143,6 +143,15 @@
   padding-top: calc(40px + var(--safe-area-top));
 }
 
+.titlebar > .ui-app-brand { display: none; }
+:root.macos .titlebar > .ui-app-brand {
+  position: absolute;
+  top: var(--safe-area-top);
+  left: calc(var(--space-2xl) * 2 + var(--space-lg));
+  display: flex;
+  height: var(--control-height-lg);
+}
+
 .glass-module {
   border: 1px solid var(--glass-border);
   background: var(--glass-surface);
@@ -291,19 +300,18 @@ h2 {
   display: none;
 }
 
-/* 左侧栏：概览与源文件树的行都是 .ui-list-item（选中：概览 aria-current，树 aria-selected），这里只排版 */
+/* 概览沿同一条纵向滚动轴排列，源文件仍使用原来的树。 */
 .sidebar-overview, .raw-files { min-height: 0; }
 #files .sidebar-overview { padding: 0 var(--space-xs); }
 :is(.nav-group, .raw-folder) { margin: 0; }
 :is(.nav-group, .raw-folder) > summary { list-style: none; user-select: none; }
 :is(.nav-group, .raw-folder) > summary::-webkit-details-marker { display: none; }
-.nav-group-body { display: grid; gap: 1px; }
-/* 分组标题：小一档的段落分隔行，数量用胶囊角标 */
-#files .nav-section { min-height: var(--control-height-sm); margin-top: var(--space-md); color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
-#files .nav-group:first-of-type > .nav-section { margin-top: 0; }
-.nav-section-count, .source-item-count { margin-left: auto; }
-.source-item-count { color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); }
-/* 展开箭头：分组标题与文件夹行同一个字形 */
+.nav-group-body { display: grid; gap: var(--space-xs); }
+#files .nav-section { min-height: var(--control-height-lg); margin: var(--space-md) 0 var(--space-sm); padding: 0; color: var(--tertiary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+#files .nav-group:first-of-type > .nav-section { margin-top: var(--space-sm); }
+.nav-section > .ui-icon-button { margin-left: auto; }
+.nav-section > .source-disclosure { margin-left: auto; margin-right: var(--space-sm); }
+.source-item-count { margin-left: auto; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); }
 .source-disclosure { flex: none; width: 8px; height: 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; color: var(--tertiary); transform: rotate(-45deg); transition: transform var(--duration-base) var(--ease-standard); }
 :is(.nav-group, .raw-folder)[open] > summary > .source-disclosure { transform: rotate(45deg); }
 :is(.nav-item, .source-tree-row) > .system-symbol { color: var(--tertiary); }
@@ -312,49 +320,38 @@ h2 {
 .source-tree-row > .nav-label { flex: 1; }
 .source-thumbnail { max-width: var(--icon-size-md); max-height: var(--icon-size-md); border-radius: var(--radius-sm); object-fit: contain; }
 .source-tree-group { margin: var(--space-xs) 0 var(--space-xs) var(--space-xl); padding-left: var(--space-sm); border-left: 1px solid var(--line-soft); }
-/* 概览条目两行：名字在上、文件名在下，图标跨两行；「显示概览源文件」关闭时只留名字 */
-.nav-item:not([data-layout="tile"]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: center; column-gap: var(--space-sm); }
+.nav-item:not([data-layout="tile"]) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-content: center; column-gap: var(--space-sm); }
 .nav-item:not([data-layout="tile"]) > .system-symbol { grid-row: 1 / 3; }
-.nav-item > .nav-meta { color: var(--tertiary); font-size: var(--font-size-xxs); }
+.nav-item > .nav-meta { grid-column: 2; color: var(--tertiary); font-size: var(--font-size-xxs); }
 #files:not([data-overview-meta]) .nav-item > .nav-meta, .nav-item[data-layout="tile"] > .nav-meta { display: none; }
-#files:not([data-overview-meta]) .nav-item > .system-symbol { grid-row: auto; }
-.nav-group-body:has(> [data-layout="tile"]) { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
-/* 概览行：二级色中等字重，44 高；选中加粗；分组标题矮一档、字距放开 */
-#files .nav-item { color: var(--secondary); font-weight: var(--font-weight-medium); }
-#files .nav-item:not([data-layout="tile"]) { min-height: 44px; column-gap: var(--space-lg); row-gap: var(--space-2xs); line-height: 1.2; }
-#files .nav-item[aria-current="true"] { color: var(--accent); font-weight: var(--font-weight-semibold); }
-#files .nav-item[aria-current="true"] > .system-symbol { color: var(--accent); }
-#files .sidebar-overview > .nav-group > .nav-section { min-height: var(--control-height-sm); letter-spacing: 0.04em; }
-#files .nav-section-count { min-width: 20px; justify-content: center; color: var(--tertiary); font-weight: var(--font-weight-medium); }
-/* 资源配置磁贴：浅底块，名字小一号常规字重 */
-#files .nav-item[data-layout="tile"] { gap: var(--space-sm); background: var(--hover); }
-#files .nav-item[data-layout="tile"] > .nav-label { font-weight: var(--font-weight-regular); color: color-mix(in srgb, currentColor 75%, transparent); }
-@media (hover: hover) { #files .nav-item[data-layout="tile"]:hover { background: var(--material-content); } }
-#files .nav-item[data-layout="tile"][aria-current="true"] { background: var(--accent-soft); }
-/* 皮肤卡片：左边效果预览图，右边皮肤名与作者，两半各自是可选中的条目 */
-.skin-card { display: grid; grid-template-columns: var(--skin-preview-size) minmax(0, max-content); justify-content: start; gap: var(--space-xs); margin-bottom: var(--space-sm); }
-#files .skin-card > .skin-card-preview { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: var(--skin-preview-size); padding: 0; overflow: hidden; background: var(--material-content); }
+#files:not([data-overview-meta]) .nav-item:not(.skin-card-info) > .system-symbol { grid-row: auto; }
+.nav-item > .source-item-count { grid-column: 3; grid-row: 1 / 3; }
+.nav-group-body:has(> [data-layout="tile"]) { grid-template-columns: repeat(auto-fill, var(--resource-tile-size)); gap: var(--space-sm); }
+#files .nav-item[data-layout="tile"] > .system-symbol > .ui-icon { stroke-width: var(--resource-tile-icon-stroke-width); }
+#files .nav-item:not([data-layout="tile"]) { color: var(--text); font-weight: var(--font-weight-regular); }
+#files .nav-item[hidden] { display: none; }
+#files .nav-item:not([data-layout="tile"]) { min-height: var(--control-height-lg); row-gap: var(--space-2xs); line-height: 1.4; }
+#files .nav-item[aria-current="true"] { color: var(--accent); font-weight: var(--font-weight-medium); }
+#files .nav-item[aria-current="true"] > :is(.system-symbol, .source-item-count) { color: var(--accent); }
+.skin-card { display: grid; grid-template-columns: var(--skin-preview-size) minmax(0, 1fr); gap: var(--space-sm); padding: var(--space-sm); border-radius: var(--radius-lg); background: var(--hover); }
+#files .skin-card > .skin-card-preview { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: var(--skin-preview-size); min-height: 0; padding: 0; overflow: hidden; border-radius: var(--radius-md); background: var(--content); }
 .skin-card > .skin-card-preview > img { width: 100%; height: 100%; object-fit: cover; }
-.skin-card > .skin-card-preview > :is(.nav-label, .nav-meta), .skin-card > .skin-card-info > .system-symbol { display: none; }
+.skin-card > .skin-card-preview > :is(.nav-label, .nav-meta) { display: none; }
 .skin-card > .skin-card-preview[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
 .skin-card > :only-child { grid-column: 1 / -1; }
-.skin-card > .skin-card-info { grid-template-columns: minmax(0, 1fr); }
-.skin-card > .skin-card-info > .nav-label { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-#files .skin-card > .skin-card-info > .nav-meta { display: block; font-size: var(--font-size-xs); }
-.mobile-overview-groups { display: none; }
+#files .skin-card > .skin-card-info { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2xs) var(--space-xs); padding: 0 var(--space-xs); }
+.skin-card > .skin-card-info > .nav-label { grid-column: 1; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
+#files .skin-card > .skin-card-info > .nav-meta { display: block; grid-column: 1; font-size: var(--font-size-xs); }
+.skin-card-info > .system-symbol:first-child { display: none; }
+.skin-card-info > .system-symbol:last-child { grid-column: 2; grid-row: 1 / 4; }
+.skin-card-format { grid-column: 1; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); }
 .pane-heading > .sidebar-view-control { flex: 1; }
 aside:has(.sidebar-overview:not([hidden])) { display: grid; grid-template-rows: auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) #files { height: 100%; }
 @media (max-width: 760px) and (orientation: portrait) {
-  /* 手机概览：左侧一列分组磁贴，右侧只显示当前分组 */
-  .sidebar-overview { display: grid; grid-template-columns: 70px minmax(0, 1fr); height: 100%; overflow: hidden; }
-  .mobile-overview-groups { display: flex; flex-direction: column; gap: var(--space-2xs); min-height: 0; padding: var(--space-2xs); overflow-y: auto; border-right: 1px solid var(--line-soft); }
-  .sidebar-overview > .nav-group { display: none; min-height: 0; overflow-y: auto; }
-  .sidebar-overview > .nav-group.mobile-overview-active { display: block; }
-  .sidebar-overview > .nav-group.mobile-overview-active > .nav-group-body { padding-top: var(--space-xs); }
-  #files .sidebar-overview > .nav-group > .nav-section { display: none; }
-  aside #files:has(.sidebar-overview:not([hidden])) { overflow: hidden; padding-bottom: 0; }
+  aside:has(.sidebar-overview:not([hidden])) #mobile-file-search-box { display: none; }
+  aside:has(.raw-files:not([hidden])) { grid-template-rows: auto auto auto minmax(0, 1fr); }
 }
 
 /* 旧的源文件树样式已移至 source-files-redesign.css */
@@ -608,6 +605,7 @@ aside:has(.raw-files:not([hidden])) #files { height: 100%; }
 
 .preview-zoom-control button {
   width: 26px;
+  min-width: 0;
   height: 26px;
   padding: 6px;
   border-radius: var(--radius-md);
@@ -1829,25 +1827,7 @@ input[type="search"]:focus {
 }
 
 @media (max-width: 760px) and (orientation: portrait) {
-
-  .app-window {
-    background: var(--toolbar);
-  }
-
-  .titlebar {
-    padding-top: calc(6px + var(--safe-area-top));
-    padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right));
-  }
-
-  .mobile-quick-actions {
-    flex: none;
-    gap: 2px;
-  }
-
-  .titlebar > .spacer {
-    display: none;
-  }
-
+  .app-window { background: var(--toolbar); }
   main {
     height: calc(var(--viewport-height) - var(--titlebar-height));
     min-height: 0;
@@ -1855,246 +1835,10 @@ input[type="search"]:focus {
     position: relative;
     overflow: hidden;
   }
-
-  .mobile-workspace-tabs {
-    display: flex;
-    position: absolute;
-    z-index: 12;
-    right: 0;
-    left: 0;
-    border-bottom: 1px solid var(--line);
-    background: var(--toolbar);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    backdrop-filter: saturate(180%) blur(20px);
-  }
-
-  .mobile-split-handle {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    touch-action: none;
-    cursor: row-resize;
-  }
-
-  .mobile-split-handle::before {
-    content: "";
-    width: 28px;
-    height: 3px;
-    position: absolute;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--secondary) 48%, transparent);
-  }
-
-  .mobile-split-icon,
-  .mobile-split-icon svg {
-    width: 16px;
-    height: 16px;
-    display: block;
-  }
-
-  .mobile-split-icon {
-    color: var(--secondary);
-    background: var(--toolbar);
-  }
-
-  .mobile-split-icon svg {
-    fill: none;
-    stroke: currentColor;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 1.7;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] .workspace {
-    display: none;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] :is(aside, .source) {
-    top: 18px;
-    height: calc(100% - 18px);
-  }
-
-  :root[data-mobile-preview-collapsed="true"] .mobile-workspace-tabs {
-    top: 0;
-  }
-
-  .mobile-split-handle.dragging,
-  .mobile-split-handle:focus-visible {
-    color: var(--accent);
-  }
-
-  
-
-  
-
-  
-
-  .workspace {
-    width: 100%;
-    height: var(--mobile-workspace-split, 50%);
-    position: absolute;
-    right: 0;
-    left: 0;
-    grid-template-rows: minmax(0, 1fr) 24px;
-    border-top: 1px solid var(--line);
-    transition: opacity var(--duration-base) var(--ease-standard);
-  }
-
-  aside {
-    width: 100%;
-    height: calc(50% - 18px);
-    min-height: 0;
-    position: absolute;
-    right: 0;
-    left: 0;
-    border-right: 0;
-    border-left: 0;
-    touch-action: pan-y;
-    transition: transform var(--duration-base) var(--ease-emphasized);
-    will-change: transform;
-  }
-
-  aside {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  aside #files {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-bottom: var(--space-xl);
-  }
-
-  :root[data-mobile-pane="inspector"] aside {
-    pointer-events: none;
-    transform: translateX(-100%);
-  }
-
-  :root:not([data-mobile-pane="inspector"]) aside {
-    transform: translateX(0);
-  }
-
-  :root[data-mobile-preview-position="top"] .workspace {
-    top: 0;
-  }
-
-  :root[data-mobile-preview-position="top"] .mobile-workspace-tabs {
-    top: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-position="top"] :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + 18px);
-    height: calc(100% - var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) .workspace {
-    top: calc(100% - var(--mobile-workspace-split, 50%) + 18px);
-    height: calc(var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) :is(aside, .source) {
-    top: 18px;
-    height: calc(100% - var(--mobile-workspace-split, 50%) - 18px);
-  }
-
-  :root:not([data-mobile-preview-position="top"]) .mobile-workspace-tabs {
-    top: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  .inspector-resize-handle {
-    display: none;
-  }
-
-  :root:has(.source :is(input, textarea, select):focus) .mobile-split-handle,
-  :root[data-keyboard-open="true"] .mobile-split-handle {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .preview-toolbar {
-    display: none;
-    overflow-x: auto;
-  }
-
-  .preview-toolbar .field-control {
-    width: 100%;
-    min-width: 0;
-    position: static;
-    transform: none;
-  }
-
-  #skin-state-control {
-    width: 100%;
-  }
-
-  .preview-toolbar select {
-    width: 100%;
-    min-width: 0;
-    height: 34px;
-    padding-inline: 8px 24px;
-    font-size: var(--font-size-md);
-  }
-
-  #preview-coordinates {
-    display: none;
-  }
-
-  .workspace-status {
-    padding-inline: 8px;
-  }
-
-  #event-log,
-  #panel-status {
-    padding-block: 6px;
-  }
-
-  #panel-status {
-    max-width: 52%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .pane-heading {
-    min-height: 36px;
-    padding: 4px 8px;
-  }
-
-  /* Keep key actions beside the file name, with the view switch at the edge. */
-
-  #mobile-inspector-selection {
-    display: block;
-    overflow: hidden;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  #resource-inspector,
-  #source-editor {
-    touch-action: pan-y;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  #resource-inspector,
-  #source-editor {
-    scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom));
-  }
-
-  #resource-inspector {
-    padding: 8px 8px 16px;
-  }
-
+  aside #files { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: var(--space-xl); }
+  .inspector-resize-handle, #preview-coordinates { display: none; }
+  #resource-inspector, #source-editor { touch-action: pan-y; overscroll-behavior-y: contain; }
+  #resource-inspector { padding: var(--space-sm) var(--space-sm) var(--space-lg); }
 }
 
 @media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
@@ -2564,7 +2308,7 @@ main {
 
 .sidebar {
   border-color: var(--line);
-  background: var(--material-panel);
+  background: var(--sidebar);
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -2626,6 +2370,12 @@ main {
 }
 
 #source-file-toolbar { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+
+.resource-actions:has(#resource-rename:not([hidden])) {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
 
 /* The grid above outranks the user-agent [hidden] rule, so hide the 概览 view explicitly. */
 .source-file-toolbar[hidden] {
@@ -2769,9 +2519,6 @@ main {
 
 @media (max-width: 760px) {
 
-  .mobile-workspace-tabs {
-    display: flex;
-  }
 
   
 
@@ -2954,107 +2701,6 @@ main {
 }
 
 /* =================================================================================================
- * 15 · Mobile — 组件 / 移动 · 底部导航 rendered as the pane switcher.
- *
- * The pen draws a labelled dock (56px raised bar, 40px tabs, $brand-soft ground
- * on the live tab). style.css had reduced the same control to an invisible 18px
- * strip of 4px indicator bars, so this section restores the component and moves
- * the hard-coded 18px layout budgets onto one variable.
- * ================================================================================================= */
-
-@media (max-width: 760px) {
-
-  .mobile-workspace-tabs {
-    height: var(--mobile-dock-h);
-    gap: 6px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--material-panel);
-    box-shadow: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane] {
-    height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    border-radius: var(--radius-md);
-    color: var(--secondary);
-    background: transparent;
-    font-size: var(--font-size-sm);
-    font-weight: 400;
-    line-height: 1;
-  }
-
-  
-
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"] {
-    color: var(--accent);
-    background: var(--accent-soft);
-    box-shadow: none;
-    font-weight: 500;
-  }
-
-  /* The pane splitter is a grab handle on the dock's lower edge. */
-  .mobile-split-handle {
-    width: 72px;
-    height: 12px;
-    top: auto;
-    bottom: 0;
-    border-radius: var(--radius-full);
-  }
-
-  .mobile-split-handle::before {
-    width: 32px;
-    height: 3px;
-    top: 50%;
-    margin-top: -2px;
-    border-radius: var(--radius-full);
-    background: var(--line-strong);
-  }
-
-  /* Layout budgets below used to hard-code the retired 18px strip; .source gets the same height in inspector.css */
-  aside {
-    height: calc(50% - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-position="top"] body .mobile-workspace-tabs {
-    top: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-position="top"] body :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .mobile-workspace-tabs {
-    top: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .workspace {
-    top: calc(100% - var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-dock-h));
-  }
-
-  #event-log {
-    display: none;
-  }
-}
-
-/* =================================================================================================
  * 17 · Title bar layout  (组件 / 标题栏: 54px bar · 16px padding · left 打开/保存/导出 ·
  *      centred document pill · right mode switch + 更多)
  *
@@ -3095,6 +2741,10 @@ main {
   flex: 0 1 0;
   min-width: 0;
 }
+
+.titlebar-left { gap: var(--space-xs); }
+.titlebar-left > .ui-pinned-toolbar { flex: 1; max-width: calc((var(--control-height-lg) + var(--space-sm)) * 8); }
+.pen-file-menu [data-toolbar-action] [data-icon] { touch-action: none; }
 
 .titlebar-center {
   display: flex;
@@ -3223,6 +2873,7 @@ main {
 .toolbar-more { position: relative; flex: none; }
 .toolbar-more > summary { list-style: none; }
 .toolbar-more > summary::-webkit-details-marker { display: none; }
+.mobile-file-header { display: none; }
 .pen-file-menu > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); left: 0; z-index: 100; width: 268px; max-width: calc(100vw - var(--space-xl)); transform-origin: top left; }
 .mobile-preview-more { display: none; }
 .mobile-preview-more > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); right: 0; z-index: 20; width: 220px; max-width: calc(100vw - var(--space-xl)); max-height: calc(var(--viewport-height) - var(--space-2xl)); overflow-y: auto; transform-origin: top right; }
@@ -3245,7 +2896,6 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 @media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
   body:not(:has(.canvas-wrap.empty)) .preview-toolbar { overflow: visible; }
   .preview-toolbar .preview-choice { display: none; }
-  .preview-toolbar .mobile-choice-toggle,
   .preview-toolbar #toggle-guides { display: none; }
   .mobile-preview-more { display: block; }
   .preview-toolbar :is(#device-control, #skin-state-control) { display: none; }
@@ -3585,6 +3235,9 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     justify-content: flex-start;
   }
 
+  .titlebar-left:has(.ui-pinned-tool:not([hidden]), [data-drop-target]) { flex: 0 1 calc(var(--control-height-lg) * 3); max-width: 40%; }
+  .titlebar-left > .ui-pinned-toolbar:empty:not([data-drop-target]) { display: none; }
+
   /* The phone menu mirrors the desktop file menu and also carries the panel tools,
      so the desktop-only buttons leave the bar. */
   .titlebar-left > .spacer,
@@ -3598,14 +3251,15 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     gap: 2px;
   }
 
-  /* Document name: an inline, truncating pill instead of an absolutely centred label. */
+  /* 手机文档名让出触控空间，长名称只在自身范围内省略。 */
   .titlebar .document-title {
     position: static;
     min-width: 0;
     max-width: 100%;
     display: inline-flex;
     gap: 6px;
-    padding: 8px 12px;
+    padding: var(--space-sm) var(--space-xs);
+    background: transparent;
     transform: none;
     pointer-events: auto;
   }
@@ -3634,15 +3288,29 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   .titlebar .mobile-choice-toggle { display: inline-flex; }
   .titlebar :is(.ui-icon-button, .ui-button) { --_height: var(--control-height-lg); }
   .titlebar .mobile-choice-toggle .mode-toggle-icon { display: none; }
+  .titlebar .ui-icon { width: var(--icon-size-lg); height: var(--icon-size-lg); }
   .pen-file-menu > .ui-menu {
     position: fixed;
-    top: calc(var(--titlebar-height) + var(--space-xs));
-    left: max(var(--space-sm), env(safe-area-inset-left));
-    max-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--space-lg) - env(safe-area-inset-bottom));
+    inset: 0 auto 0 0;
+    display: flex;
+    flex-direction: column;
+    width: min(var(--mobile-drawer-width), calc(100vw - var(--control-height-lg)));
+    max-width: none;
+    max-height: var(--viewport-height);
+    padding: max(var(--space-lg), var(--safe-area-top)) var(--space-md) max(var(--space-lg), var(--safe-area-bottom)) max(var(--space-md), env(safe-area-inset-left));
+    border-width: 0 1px 0 0;
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    animation: ui-mobile-drawer var(--duration-slow) var(--ease-emphasized);
   }
-  .pen-file-menu > .ui-menu > .ui-list-item { min-height: 44px; }
+  .pen-file-menu[open]::before { content: ""; position: fixed; z-index: 99; inset: 0; background: var(--backdrop); }
+  .pen-file-menu > .ui-menu > * { flex: none; }
+  .pen-file-menu > .ui-menu > .ui-list-item { min-height: var(--control-height-lg); }
+  .pen-file-menu .ui-menu-separator { align-self: stretch; }
+  .pen-file-menu .desktop-export-separator { display: none; }
+  .pen-file-menu .mobile-file-header { display: flex; justify-content: space-between; min-height: var(--control-height-lg); padding: 0 var(--space-xs) var(--space-md); }
+  .pen-file-menu .mobile-file-header h2 { font-size: var(--font-size-xl); }
 
   /* 手机标题栏很窄，未保存提示只保留圆点 */
   .titlebar .document-title #dirty {
@@ -3679,6 +3347,7 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   }
 
   body:has(.canvas-wrap.empty) main > .workspace {
+    visibility: visible;
     top: 0;
     height: 100%;
     display: grid;
@@ -3686,10 +3355,7 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     border-top: 0;
   }
 
-  /* 手机上用双指缩放画布，不显示缩放按钮 */
-  .preview-zoom-control {
-    display: none;
-  }
+  .preview-zoom-control { display: flex; }
 
   .canvas-wrap:not(.empty) {
     touch-action: none;
@@ -3703,10 +3369,12 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     -webkit-overflow-scrolling: touch;
   }
   .welcome-main {
-    gap: 24px;
+    gap: var(--space-xl);
     padding: 20px max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     overflow: visible;
   }
+  .welcome-main > * { flex-shrink: 0; }
+  .welcome-recent:has(#welcome-recent-grid[hidden]) { display: none; }
 
   .welcome-section-head {
     flex-wrap: wrap;
@@ -3735,15 +3403,13 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 
   .template-grid,
   .recent-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+    gap: var(--space-md);
   }
 
-  .template-card {
-    min-width: 0;
-    gap: 12px;
-    padding: 12px;
-  }
+  .template-card { min-width: 0; gap: var(--space-md); padding: var(--space-md); }
 
   .template-grid .template-preview,
   .recent-grid .template-preview {
@@ -3767,221 +3433,122 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   }
 }
 
-/* -------------------------------------------------------------------------------------------------
- * 3 · Split editor (portrait phones)
- *     Panes above, dock (pane switch + grab handle) in between, canvas below — or mirrored
- *     when 「预览位置」 is set to top. The Pen dock is 56px tall; the older budget reserved a
- *     dock-sized gap above the panes even when the dock sits at the split.
- * ------------------------------------------------------------------------------------------------- */
+/* 手机：属性与画布同屏，文件独占工作区；底部导航负责一次安全区留白。 */
+.mobile-app-more, .mobile-welcome-hero, .mobile-local-note, #mobile-welcome-open, #mobile-preview-summary, .mobile-export-entry, #mobile-inspector-resize, #mobile-file-search-box { display: none; }
+.mobile-export-formats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+.mobile-export-formats .ui-list-item { min-height: var(--control-height-lg); border: 1px solid var(--line); background: var(--control); }
+.mobile-export-formats .ui-list-item > span:first-of-type { flex: 1; display: grid; gap: var(--space-xs); font-family: var(--font-mono); }
+.mobile-export-formats small { font-family: var(--font-ui); font-size: var(--font-size-xs); color: var(--secondary); }
 
 @media (max-width: 760px) and (orientation: portrait) {
-  :root:not([data-mobile-preview-position="top"]) body main > :is(aside, .source) {
-    top: 0;
-    height: calc(100% - var(--mobile-workspace-split, 50%));
-  }
-
-  :root[data-mobile-preview-position="top"] body main > :is(aside, .source) {
-    top: calc(var(--mobile-workspace-split, 50%) + var(--mobile-dock-h));
-    height: calc(100% - var(--mobile-workspace-split, 50%) - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-position="top"] body main > .workspace {
-    top: 0;
-    height: var(--mobile-workspace-split, 50%);
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body main > :is(aside, .source) {
-    top: var(--mobile-dock-h);
-    height: calc(100% - var(--mobile-dock-h));
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body .mobile-workspace-tabs {
-    top: 0;
-  }
-
-  main > :is(aside, .source) {
-    border-top: 0;
-    border-bottom: 0;
-    background: var(--material-panel);
-  }
-
-  /* 停靠条：两个面板标签 + 拖动调高的手柄，44 触控目标，选中用 --accent-soft */
   .mobile-workspace-tabs {
+    display: flex;
+    position: absolute;
+    z-index: 12;
+    inset: auto var(--space-lg) var(--safe-area-bottom);
     height: var(--mobile-dock-h);
-    align-items: center;
     gap: var(--space-xs);
-    padding: 0 var(--space-md);
-    border-top: 1px solid var(--line-soft);
-    border-bottom: 1px solid var(--line-soft);
+    padding: var(--space-xs);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full);
+    background: var(--material-content);
   }
-
-  .mobile-workspace-tabs button[data-mobile-pane] {
-    flex: 1 1 0;
+  .mobile-workspace-tabs > .ui-button {
+    --_height: 100%;
+    flex: 1;
     min-width: 0;
-    height: var(--control-height-lg);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-xs);
-    padding: 0 var(--space-sm);
+    flex-direction: column;
+    gap: var(--space-2xs);
+    padding: var(--space-xs) var(--space-sm);
     border: 0;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-full);
     background: transparent;
-    color: var(--secondary);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    font-weight: 400;
-    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+    color: var(--tertiary);
+    font-size: var(--font-size-xs);
   }
-
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"] {
-    background: var(--accent-soft);
-    color: var(--accent);
-    font-weight: 500;
-  }
-
-  .mobile-preview-more > summary {
-    --_height: var(--control-height-lg);
-  }
-
-  .mobile-split-handle {
-    position: static;
-    flex: none;
-    width: var(--control-height-lg);
-    height: var(--control-height-lg);
-    border-radius: var(--radius-md);
-    color: var(--secondary);
-    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
-  }
-
-  .mobile-split-handle .mobile-split-icon {
-    width: var(--icon-size-md);
-    height: var(--icon-size-md);
-    background: transparent;
-  }
-
-  .mobile-split-handle.dragging,
-  .mobile-split-handle:focus-visible {
-    background: var(--accent-soft);
-    color: var(--accent);
-  }
-
-  /* Canvas: compact preview toolbar on top, canvas fills the rest. The desktop grid
-     (48px · 1fr · 30px) used to squeeze the canvas into the 48px toolbar row. */
-  :root:not([data-mobile-preview-collapsed="true"]) body:not(:has(.canvas-wrap.empty)) main > .workspace {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-columns: minmax(0, 1fr);
-    border-top: 0;
-  }
-
-  :root[data-mobile-preview-collapsed="true"] body main > .workspace {
-    display: none;
-  }
-
-  main > .workspace > .workspace-status {
-    display: none;
-  }
-
-  body:not(:has(.canvas-wrap.empty)) .preview-toolbar {
-    height: auto;
+  .mobile-workspace-tabs .ui-icon { width: var(--icon-size-lg); height: var(--icon-size-lg); }
+  .mobile-workspace-tabs > .ui-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+  main > :is(aside, .workspace) {
+    position: absolute;
+    inset: 0 0 auto;
+    width: 100%;
+    height: calc(100% - var(--mobile-dock-h) - var(--safe-area-bottom) - var(--space-lg));
     min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    padding: 6px max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left));
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    border-bottom: 1px solid var(--line);
-    background: var(--material-panel);
-  }
-
-  .preview-toolbar-start,
-  .preview-toolbar-end {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    position: static;
-  }
-
-  .preview-toolbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .preview-toolbar #device-control {
-    width: auto;
-    flex: 1 1 auto;
-    min-width: 116px;
-    position: static;
+    border: 0;
     transform: none;
   }
-
-  .preview-toolbar #skin-state-control {
-    flex: none;
+  main > aside { display: flex; flex-direction: column; background: var(--window); }
+  :root:not([data-mobile-pane="layout"]) main > aside { visibility: hidden; pointer-events: none; }
+  :root[data-mobile-pane="layout"] body:not(:has(.canvas-wrap.empty)) main > .workspace { visibility: hidden; pointer-events: none; }
+  :root[data-mobile-pane="inspector"] body:not(:has(.canvas-wrap.empty)) main > .workspace { height: var(--mobile-inspector-split); }
+  main > .workspace { display: grid; grid-template-rows: auto minmax(0, 1fr); transition: none; }
+  main > .workspace > .workspace-status { display: none; }
+  :root:not([data-mobile-pane="inspector"]) body:not(:has(.canvas-wrap.empty)) .preview-toolbar {
+    display: flex;
+    height: auto;
+    min-height: var(--control-height-lg);
+    margin: var(--space-md) var(--space-lg);
+    padding: 0 var(--space-sm) 0 var(--space-md);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-lg);
+    background: var(--panel);
+    overflow: visible;
   }
-
-  .preview-toolbar #device-control select,
-  .preview-toolbar #device {
-    width: 100%;
-    min-width: 0;
-    height: 30px;
-    padding: 0 16px 0 0;
-    font-size: var(--font-size-md);
+  :root[data-mobile-pane="inspector"] .preview-toolbar { display: none; }
+  .preview-toolbar-start, .preview-toolbar-end { position: static; flex: none; }
+  .preview-toolbar-end { margin-left: auto; }
+  #mobile-preview-summary { display: block; overflow: hidden; color: var(--secondary); font-size: var(--font-size-sm); text-overflow: ellipsis; white-space: nowrap; }
+  .preview-toolbar #device-control { flex: 1; width: auto; min-width: 0; position: static; transform: none; }
+  .preview-toolbar #skin-state-control { position: static; width: auto; transform: none; }
+  .canvas-wrap { min-height: 0; padding: var(--space-sm); background: var(--window); }
+  .canvas-multi-toolbar { bottom: var(--space-lg); }
+  .titlebar .titlebar-preferences, .titlebar .mobile-choice-toggle { display: none; }
+  .mobile-app-more { display: block; }
+  .pen-file-menu .mobile-export-entry { display: flex; }
+  .pen-file-menu [data-export-format] { display: none; }
+  .mobile-app-more[open]::before {
+    content: "";
+    position: fixed;
+    inset: var(--titlebar-height) 0 0;
+    background: var(--backdrop);
   }
-
-  .preview-toolbar #device-control .device-control-icon {
-    display: none;
+  .mobile-app-more > .ui-menu {
+    position: fixed;
+    z-index: 30;
+    inset: auto var(--space-lg) calc(var(--mobile-dock-h) + var(--safe-area-bottom) + var(--space-lg));
+    padding: var(--space-md);
+    border-radius: var(--radius-xl);
+    max-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-dock-h) - var(--safe-area-bottom) - var(--space-2xl));
+    overflow-y: auto;
+    animation: ui-mobile-sheet var(--duration-slow) var(--ease-emphasized);
   }
+  .mobile-app-more .ui-pane-header { padding: 0; justify-content: space-between; }
+  .mobile-app-more .ui-list-item { min-height: var(--control-height-lg); }
+  .mobile-app-more .ui-list-item > :nth-child(2) { flex: 1; }
+  .mobile-app-more .ui-list-item > :last-child { color: var(--tertiary); }
+  .mobile-app-more .ui-switch { pointer-events: none; }
+  .mobile-welcome-hero { display: grid; gap: var(--space-sm); order: -2; }
+  .mobile-welcome-hero h1 { margin: 0; font-size: var(--font-size-xl); font-weight: 600; }
+  .mobile-welcome-hero p { margin: 0; color: var(--secondary); font-size: var(--font-size-sm); }
+  #mobile-welcome-open { display: flex; order: -1; min-height: calc(var(--control-height-lg) + var(--space-xl)); padding: var(--space-lg); border-radius: var(--radius-lg); background: var(--panel); }
+  #mobile-welcome-open > :nth-child(2) { flex: 1; display: grid; gap: var(--space-xs); font-weight: 500; }
+  #mobile-welcome-open small { color: var(--tertiary); font-size: var(--font-size-xs); font-weight: 400; }
+  .welcome-recent .welcome-section-head h2 { font-size: var(--font-size-md); }
+  .welcome-recent #welcome-recent-open { display: none; }
+  .mobile-local-note { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); margin-top: auto; color: var(--tertiary); font-size: var(--font-size-xs); }
+  .welcome-note, .welcome-formats { display: none; }
+  #mobile-file-search-box { display: flex; flex: none; margin: var(--space-md) var(--space-lg); }
+  #mobile-inspector-resize { position: absolute; z-index: 5; top: calc(var(--mobile-inspector-split) - var(--space-lg)); left: 50%; transform: translateX(-50%); width: calc(var(--control-height-lg) * 2); height: var(--space-xl); min-height: 0; padding: 0; border: 0; background: transparent; touch-action: none; cursor: ns-resize; }
+  :root[data-mobile-pane="inspector"] #mobile-inspector-resize { display: grid; place-items: center; }
+  #mobile-inspector-resize > span { width: var(--space-2xl); height: var(--space-xs); border-radius: var(--radius-full); background: var(--line-strong); }
+  :root[data-mobile-pane="inspector"] .preview-zoom-control { display: none; }
+  .preview-zoom-control { right: var(--space-lg); bottom: var(--space-lg); gap: 0; padding: var(--space-xs); border-radius: var(--radius-full); background: var(--panel); box-shadow: var(--shadow-sm); }
+  .preview-overview-control { right: auto; left: var(--space-lg); }
+  .preview-zoom-control > button { display: grid; place-items: center; width: var(--control-height-lg); height: var(--control-height-lg); min-width: var(--control-height-lg); min-height: var(--control-height-lg); padding: var(--space-md); border-radius: var(--radius-full); }
+  .preview-zoom-control > button[aria-pressed="true"] { background: var(--accent-soft); box-shadow: none; }
+  .preview-zoom-control svg { width: var(--icon-size-lg); height: var(--icon-size-lg); stroke-width: 1.5; }
 
-  .preview-toolbar #device-control,
-  .preview-toolbar #skin-state-control {
-    height: 32px;
-    padding: 0 8px;
-  }
-
-  .preview-toolbar #skin-state-control {
-    align-items: center;
-  }
-
-  /* 窄屏控件只有 58–72px，且移动端下拉不画箭头；沿用桌面端给箭头留的 26px 会把“默认”裁掉一截。 */
-  .preview-toolbar #skin-state-control .skin-state-value {
-    left: var(--space-sm);
-    right: var(--space-sm);
-    line-height: 30px;
-  }
-
-  .canvas-wrap {
-    min-height: 0;
-    padding: 8px;
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .canvas-wrap:not(.empty) {
-    padding-bottom: calc(var(--space-sm) + var(--safe-area-bottom));
-  }
-
-  :root:not([data-mobile-preview-position="top"]) body .canvas-multi-toolbar {
-    bottom: calc(var(--space-lg) + var(--space-2xs) + var(--safe-area-bottom));
-  }
 }
-
-/* -------------------------------------------------------------------------------------------------
- * 4 · Panes: overview rail and inspector group rail
- * ------------------------------------------------------------------------------------------------- */
-
-@media (max-width: 760px) and (orientation: portrait) {
-  .preview-toolbar #skin-state-control {
-    width: 58px;
-    max-width: 58px;
-  }
-
-  /* The rail already names the group; a collapsible summary would only hide its items. */
-
-}
-
-/* Narrow phones (iPhone SE, 360dp Android): the mode pill drops its label for the icon. */
 
 /* -------------------------------------------------------------------------------------------------
  * 5 · Landscape phones
@@ -3990,10 +3557,8 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
  * ------------------------------------------------------------------------------------------------- */
 
 @media (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
-  :root:not([data-mobile-preview-collapsed="true"]) body:not(:has(.canvas-wrap.empty)) main > .workspace {
-    grid-template-rows: auto minmax(0, 1fr);
-  }
 
+  body:not(:has(.canvas-wrap.empty)) main > .workspace { grid-template-rows: auto minmax(0, 1fr); }
   main > .workspace > .workspace-status {
     display: none;
   }

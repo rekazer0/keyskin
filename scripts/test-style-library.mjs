@@ -80,12 +80,20 @@ try {
     }
     window.postMessage({ pickerEvent: 'style-library-data', payload: window.largeLibrary }, location.origin)
   })
-  await page.waitForFunction(() => document.querySelectorAll('#style-library-grid > .ui-style-card').length === 1000)
   await page.locator('#style-library-grid .ui-animation-player[data-playing="true"]').first().waitFor()
   assert.equal(await page.evaluate(() => window.animationParses), 1, '同一批动画配置只解析一次')
+  assert.ok(await page.locator('#style-library-grid > .ui-style-card').count() < 200, '只渲染可见的几行卡片')
   assert.ok(await page.locator('#style-library-grid .ui-animation-player').count() < 50, '屏幕外不批量创建播放器')
-  const last = page.locator('#style-library-grid > .ui-style-card').last()
-  await last.scrollIntoViewIfNeeded()
+  // 滚到中段和底部：渲染出的卡片始终盖住视口，占位高度与真实行高一致。
+  for (const ratio of [0.5, 1]) {
+    await page.locator('#style-library-scroll').evaluate((scroll, ratio) => { scroll.scrollTop = (scroll.scrollHeight - scroll.clientHeight) * ratio }, ratio)
+    await page.waitForFunction(() => {
+      const scroll = document.querySelector('#style-library-scroll').getBoundingClientRect()
+      const cards = document.querySelectorAll('#style-library-grid > .ui-style-card')
+      return cards.length && cards[0].getBoundingClientRect().top <= scroll.top && cards[cards.length - 1].getBoundingClientRect().bottom >= scroll.bottom - 24
+    })
+  }
+  const last = page.locator('#style-library-grid > .ui-style-card[data-style-id="1000"]')
   await last.locator('.ui-animation-player[data-playing="true"]').waitFor()
   assert.equal(await page.evaluate(() => window.animationParses), 1, '滚动复用解析结果')
   await last.click()
@@ -97,7 +105,7 @@ try {
   })
   await page.waitForFunction(() => window.animationParses === 2)
   assert.deepEqual(errors, [])
-  console.log(`style library: shared cards, combined filters, looping (${frames}fps), hidden stop/resume and 1000-card lazy previews passed`)
+  console.log(`style library: shared cards, combined filters, looping (${frames}fps), hidden stop/resume and 1000-card windowed previews passed`)
 } finally {
   await browser.close()
   await server.close()

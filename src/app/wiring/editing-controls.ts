@@ -1,10 +1,10 @@
-import { source, keyboardFields, layoutActionButtons, preview, inspectorTabButtons, mobilePortraitQuery, activateSkinState, selectNativeToolbar } from "../canvas-interaction"
+import { source, keyboardFields, layoutActionButtons, preview, toolbarPreview, inspectorTabButtons, mobilePortraitQuery, activateSkinState, selectNativeToolbar } from "../canvas-interaction"
 import { bindDialog } from "../ask.ts"
 import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
 import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight } from "../source-panel"
-import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, styleFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, themeChoiceButtons, orientationChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontFileSelect, fontImportButton, fontImportInput, fontRemoveButton } from "../dom"
+import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, styleFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontFileSelect, fontImportButton, fontImportInput, fontRemoveButton } from "../dom"
 import { appState } from "../state"
 import { syncActionCodeSuggestions, updateSelectedKey, updateSelectedStyle, updateKeyboard, updateToolbar, updateSkinInfo, populateKeyInspector } from "../key-inspector"
 import { scrollSelectedSource } from "../config-context"
@@ -210,19 +210,13 @@ export function wireEditingControls(): void {
   })
   // 只读表单里的禁用控件仍接收指针（components.css），点击统一提示切换模式。
   document.addEventListener("pointerdown", (event) => {
-    const target = event.target
-    if (!(target instanceof Element) || !target.matches(":disabled") || !target.closest('.ui-form[data-readonly="true"]')) return
+    const target = event.target instanceof Element ? event.target.closest(":disabled") : null
+    if (!target?.closest('.ui-form[data-readonly="true"]')) return
     event.preventDefault()
     requestEditMode()
   })
   for (const button of modeChoiceButtons) {
     button.addEventListener("click", () => selectChoice(mode, button.dataset.modeChoice ?? "preview"))
-  }
-  for (const button of themeChoiceButtons) {
-    button.addEventListener("click", () => selectChoice(theme, button.dataset.themeChoice ?? "light"))
-  }
-  for (const button of orientationChoiceButtons) {
-    button.addEventListener("click", () => selectChoice(orientation, button.dataset.orientationChoice ?? "port"))
   }
   for (const button of mobileChoiceButtons) {
     button.addEventListener("click", () => {
@@ -466,17 +460,26 @@ export function wireEditingControls(): void {
     closeDialog(panelScaleDialog)
     void runFileOperation("复制面板", copyPanel)
   })
+  candidateArea.addEventListener("keydown", (event) => {
+    if (event.target instanceof HTMLElement && event.target.id === "candidate-input" && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault()
+      event.target.click()
+    }
+  })
   candidateArea.addEventListener("click", (event) => {
     if (!isEditing()) return
-    if (appState.archive?.format === "ssf" || appState.archive?.format === "sxi") return selectNativeToolbar()
+    const inputRegion = event.target instanceof Element && Boolean(event.target.closest("#candidate-input"))
+    if (inputRegion) appState.textStyleTarget = "input"
+    if (appState.archive?.format === "ssf" || appState.archive?.format === "sxi") return selectNativeToolbar(inputRegion)
     if (event.target === toolbarCanvas && appState.selectedToolbarSections.length) return
     if (appState.archive?.format === "bda") {
       if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview")
-      appState.selectedCandidate = true
+      appState.selectedCandidate = inputRegion ? "input" : true
       appState.selectedKeySections = []
       preview.setSelected([])
       syncCandidateSelection()
       populateKeyInspector()
+      if (inputRegion) revealInspectorGroup("输入区")
       updateSourceHighlight()
       scrollSelectedSource()
       if (mobilePortraitQuery.matches) setMobilePane("inspector")
@@ -484,8 +487,12 @@ export function wireEditingControls(): void {
     }
     const path = toolbarStrip.dataset.path
     if (!path) return
-    const inputRegion = event.target instanceof Element && Boolean(event.target.closest("#candidate-input"))
     selectFile(path)
+    appState.selectedToolbarSections = []
+    toolbarPreview.setSelected([])
+    appState.selectedCandidate = inputRegion ? "input" : true
+    syncCandidateSelection()
+    populateKeyInspector()
     // 输入码区域定位到它的「输入区」分组；候选栏其它位置仍从候选栏开始。
     if (inputRegion) revealInspectorGroup("INPUT")
   })

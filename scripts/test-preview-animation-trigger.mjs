@@ -116,8 +116,44 @@ try {
   await open('py_26')
   await page.waitForTimeout(100)
   assert.equal((await state()).panel, 0, '返回布局后仍不自动播放')
+  await click('KEY2')
+  await page.locator('[data-key-mode="move"]').click()
+  const documentBefore = await page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    preview.cancelPointerInteraction()
+    preview.setLegacyAnimation(preview.legacyAnimation)
+    preview.setSelected([])
+    await preview.whenDrawn()
+    return preview.document.toString()
+  })
+  const otherKeyPixels = () => page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    await preview.whenDrawn()
+    const { rect } = preview.keys.find(key => key.section === 'KEY2')
+    const sx = preview.canvas.width / preview.panelWidth, sy = preview.canvas.height / preview.surfaceHeight
+    return [...preview.canvas.getContext('2d').getImageData(
+      Math.ceil((rect.x + 6) * sx), Math.ceil((rect.y + 6) * sy),
+      Math.floor((rect.width - 12) * sx), Math.floor((rect.height - 12) * sy),
+    ).data]
+  })
+  const baseline = await otherKeyPixels()
+  const start = await point('KEY1')
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  assert.deepEqual(await otherKeyPixels(), baseline, '移动模式按下 KEY1 时，KEY2 的像素保持不变')
+  await page.mouse.up()
+  assert.deepEqual(await otherKeyPixels(), baseline, '移动模式单击后，KEY2 的像素保持不变')
+  assert.equal(await page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).preview.document.toString()), documentBefore, '单击选中不修改布局')
+  await page.mouse.down()
+  await page.mouse.move(start.x, start.y + 30, { steps: 5 })
+  assert.deepEqual(await otherKeyPixels(), baseline, '拖动 KEY1 时，KEY2 的像素保持不变')
+  await page.mouse.up()
+  assert.deepEqual(await otherKeyPixels(), baseline, '拖动松手后，KEY2 的像素保持不变')
+  assert.notEqual(await page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).preview.document.toString()), documentBefore, '拖动仍然修改按键位置')
+  await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+  assert.equal(await page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).preview.document.toString()), documentBefore, '拖动仍然可以撤销')
   assert.deepEqual(errors, [])
-  console.log('preview animation trigger: idle load, inherited panel particles, real sprites, rapid clicks, layout changes, edit clicks and touch taps passed')
+  console.log('preview animation trigger: idle load, inherited particles, real sprites, rapid clicks, layout changes, edit clicks, touch taps and stable move-tool styles passed')
 } finally {
   await browser.close()
   await server.close()

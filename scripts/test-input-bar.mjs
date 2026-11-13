@@ -81,7 +81,7 @@ try {
   const iphone = await measure()
   assert.ok(Math.abs(iphone.box.width - iphone.area.width) < 2, 'iPhone input background fills the row')
   assert.ok(iphone.input.y >= iphone.area.y && iphone.input.bottom <= iphone.words.y + 2, 'iPhone input occupies the row before candidates')
-  await page.locator('[data-theme-choice="dark"]').click()
+  if (await page.locator("#theme").inputValue() !== "dark") await page.locator('[data-mobile-choice="theme"]').click()
   await settle()
   await page.screenshot({ path: '/tmp/bdi-input-iphone.png' })
   await page.locator('#device').selectOption('pixel-10-pro')
@@ -131,6 +131,59 @@ try {
     assert.equal(await page.locator('#candidate-words').isVisible(), false, 'idle state shows toolbar instead of candidate words')
     assert.equal(await page.locator('#candidate-input-text').textContent(), '', 'clearing input removes the code text')
   }
+  await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  for (const device of ['canvas-checkerboard', 'iphone-17-pro', 'pixel-10-pro']) {
+    await page.locator('#device').selectOption(device)
+    await compose("ni'hao")
+    const before = await page.evaluate(async () => {
+      const { appState } = await import('/src/app/state.ts')
+      const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
+      const { selectFile } = await import('/src/app/navigation.ts')
+      selectFile(document.getElementById('toolbar-strip').dataset.path)
+      appState.selectedToolbarSections = ['ICON1']
+      toolbarPreview.setSelected(['ICON1'])
+      return { revision: appState.archive.revision, undo: appState.undoStack.length }
+    })
+    const inputBox = await page.locator('#candidate-input').boundingBox()
+    await page.locator('#candidate-input').click({ position: { x: inputBox.width - 4, y: inputBox.height / 2 } })
+    await page.waitForFunction(() => document.getElementById('candidate-input').getAttribute('aria-selected') === 'true')
+    assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), 'false', `${device}: selects the input row separately`)
+    assert.equal(await page.locator('#selected-key').textContent(), '拼音栏')
+    const selected = await page.evaluate(async () => {
+      const { appState } = await import('/src/app/state.ts')
+      return {
+        toolbar: appState.selectedToolbarSections,
+        revision: appState.archive.revision, undo: appState.undoStack.length,
+        outline: getComputedStyle(document.getElementById('candidate-input'), '::after').content,
+      }
+    })
+    assert.deepEqual(selected.toolbar, [], `${device}: clears the previous toolbar icon selection`)
+    assert.deepEqual({ revision: selected.revision, undo: selected.undo }, before, 'selection does not write skin files or history')
+    assert.equal(selected.outline, '""', `${device}: input has its own selection outline`)
+    const sections = await page.locator('#document-fields > section .document-section-code').allTextContents()
+    assert.deepEqual([...new Set(sections)].sort(), ['CAND', 'INPUT', 'SCAND'], 'only input-related configuration is shown')
+    const inputGroup = page.locator('#document-fields > section').filter({ has: page.locator('.document-section-code:text-is("INPUT")') }).first()
+    const background = inputGroup.locator('[data-document-key="BACK_STYLE"] .ui-style-ref-number')
+    assert.equal(await background.inputValue(), '9001', 'reads the inherited input background from gen.ini')
+    await background.fill('9002')
+    await background.press('Tab')
+    assert.equal(await page.evaluate(async () => {
+      const { appState } = await import('/src/app/state.ts')
+      const { genConfigPath } = await import('/src/app/config-context.ts')
+      const { IniDocument } = await import('/src/ini.ts')
+      return IniDocument.parse(appState.archive.getText(genConfigPath())).get('INPUT', 'BACK_STYLE')
+    }), '9002', 'writes the inherited value back to its owning file')
+    await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+    assert.equal(await page.locator('#candidate-input').getAttribute('aria-selected'), 'true', 'undo preserves input selection')
+    assert.equal(await background.inputValue(), '9001', 'undo restores the input background')
+    await page.waitForFunction(() => (document.querySelector('#mobile-inspector-groups button[aria-pressed="true"]')?.textContent ?? '').includes('输入区'))
+    await page.locator('#toolbar-preview').click({ position: { x: 10, y: 10 } })
+    assert.equal(await page.locator('#candidate-input').getAttribute('aria-selected'), 'false', 'candidate selection clears input selection')
+    await page.locator('#candidate-input').focus()
+    await page.keyboard.press('Enter')
+    assert.equal(await page.locator('#candidate-input').getAttribute('aria-selected'), 'true', 'keyboard can select the input row')
+  }
+  await page.screenshot({ path: '/tmp/bdi-input-selected.png' })
   assert.deepEqual(errors, [])
   console.log('Input bar phone geometry and background checks passed')
 } finally {

@@ -463,13 +463,19 @@
   height: 17px;
 }
 
-.device-shell[data-mode="edit"] #candidate-area.candidate-selected::after {
+.device-shell[data-mode="edit"] #candidate-area.candidate-selected::after,
+.device-shell[data-mode="edit"] #candidate-input[aria-selected="true"]::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 3;
-  box-shadow: inset 0 0 0 3px var(--accent);
+  box-shadow: inset 0 0 0 var(--space-2xs) var(--selection);
   pointer-events: none;
+}
+
+.device-shell #candidate-input:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
 }
 
 /* On iOS the input code fills the keyboard row above the candidates and starts where their text does. */

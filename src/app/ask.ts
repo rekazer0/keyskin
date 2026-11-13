@@ -3,6 +3,54 @@ import { closeDialog } from "../motion.ts"
 
 type AskAction = { value: string; label: string; variant?: "primary" | "quiet" | "danger" }
 
+export function openRenameDialog(name: string, commit: (name: string) => void): void {
+  const dialog = element("dialog", "ui-dialog")
+  dialog.dataset.size = "sm"
+  dialog.setAttribute("aria-label", "重命名")
+  const form = element("form", "ui-form")
+  form.method = "dialog"
+  const header = element("header", "ui-dialog-header")
+  header.append(Object.assign(element("h2"), { textContent: "重命名" }))
+  const body = element("div", "ui-dialog-body")
+  const input = element("input", "ui-input")
+  input.value = name
+  input.setAttribute("aria-label", "名称")
+  input.spellcheck = false
+  const error = element("p", "ui-field-error")
+  error.setAttribute("role", "alert")
+  body.append(input, error)
+  const footer = element("footer", "ui-dialog-footer")
+  const cancel = element("button", "ui-button")
+  cancel.type = "button"
+  cancel.textContent = "取消"
+  cancel.addEventListener("click", () => closeDialog(dialog, "cancel"))
+  const save = element("button", "ui-button")
+  save.textContent = "重命名"
+  save.dataset.variant = "primary"
+  footer.append(cancel, save)
+  form.append(header, body, footer)
+  form.addEventListener("submit", event => {
+    event.preventDefault()
+    try {
+      const next = input.value.trim()
+      if (!next || next === "." || next === ".." || /[\\/:\x00-\x1f]/.test(next)) {
+        throw new Error("请输入有效名称，不能包含路径分隔符或控制字符")
+      }
+      commit(next)
+      closeDialog(dialog)
+    } catch (reason) {
+      error.textContent = reason instanceof Error ? reason.message : String(reason)
+      input.focus()
+    }
+  })
+  dialog.append(form)
+  bindDialog(dialog)
+  dialog.addEventListener("close", () => dialog.remove(), { once: true })
+  document.body.append(dialog)
+  dialog.showModal()
+  cancel.focus()
+}
+
 /**
  * .ui-dialog 的统一行为（DESIGN.md §7）：头部加关闭按钮，Esc / 点遮罩 / 关闭按钮都走 cancel（默认以 "cancel" 关闭）；
  * 表单提交（method=dialog）以提交按钮的 value 播放退出动效后关闭。表单自己的 submit 处理先 preventDefault 时不接管。

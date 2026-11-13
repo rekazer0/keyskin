@@ -27,7 +27,11 @@
 .style-library-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--line); }
 .style-library-bar > [hidden] { display: none; }
 .style-library-bar > .ui-list-toolbar { margin-left: auto; }
-.style-library-view > .style-library-grid { padding: var(--space-lg); overflow: auto; }
+/* 网格只渲染可见的行（picker-window.ts renderLibraryWindow），上下 padding 撑出其余行的高度；滚动放在外层，padding 才不会撑大视口。 */
+.style-library-scroll { min-height: 0; overflow: auto; overflow-anchor: none; }
+/* 已经只渲染可见行，卡片不再跳过布局：未渲染过的卡片按占位高度报 offsetHeight，行高会量错。 */
+.style-library-grid > .ui-style-card { content-visibility: visible; }
+.style-library-scroll > .style-library-grid { padding: calc(var(--space-lg) + var(--_library-before, 0px)) var(--space-lg) calc(var(--space-lg) + var(--_library-after, 0px)); }
 .style-library-empty { position: absolute; inset: 50% 0 auto; pointer-events: none; }
 .style-library-empty[hidden] { display: none; }
 .style-library-preview { display: flex; align-items: flex-start; gap: var(--space-lg); padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--line); background: var(--panel); }

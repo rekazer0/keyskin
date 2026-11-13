@@ -61,6 +61,7 @@ try {
     await choose('theme', theme)
     await choose('orientation', orientation)
     for (const button of await page.locator('#files .sidebar-overview button.nav-layout').all()) {
+      if (!await button.isVisible()) await page.locator('.nav-layout-more > summary').click()
       await button.click()
       const result = await state()
       assert.ok(result.keys.length > 0, `${result.path}: no keys`)

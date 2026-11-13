@@ -1,9 +1,11 @@
 import { wireSourceFileMenu } from "../source-file-menu"
 import { wireAiSessions } from "../ai-sessions"
+import { wireMobileExport } from "../mobile-export"
+import { wirePinnedToolbar } from "../pinned-toolbar"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
-import { requestEditMode } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, mobilePreviewPosition, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { requestEditMode, setMobilePane } from "../mobile-layout"
+import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
 import { sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelection, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
@@ -38,6 +40,7 @@ import { keyEventElement } from "../key-editing"
 
 /** 源文件工具栏、源码目录、设置项、窗口事件与拖放。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireFilesAndSettings(): void {
+  wirePinnedToolbar()
   wireAdbShare()
   wireSourceFileMenu()
   for (const button of [sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton]) {
@@ -117,6 +120,40 @@ export function wireFilesAndSettings(): void {
     menu.addEventListener("click", (event) => {
       if ((event.target as Element).closest("button")) menu.open = false
     })
+    if (menu.classList.contains("pen-file-menu")) {
+      const mobile = matchMedia("(max-width: 760px)")
+      const summary = menu.querySelector("summary")!
+      const blocked = new Map<HTMLElement, boolean>()
+      const syncDrawer = () => {
+        summary.setAttribute("aria-expanded", String(menu.open))
+        if (mobile.matches && menu.open) {
+          for (const other of toolbarMenus) if (other !== menu) other.open = false
+          for (const region of document.querySelectorAll<HTMLElement>("main, .titlebar-center, .titlebar-right")) {
+            if (!blocked.has(region)) blocked.set(region, region.inert)
+            region.inert = true
+          }
+          menu.querySelector<HTMLButtonElement>(".mobile-file-header button")!.focus()
+        } else {
+          for (const [region, inert] of blocked) region.inert = inert
+          blocked.clear()
+          if (!menu.open && menu.contains(document.activeElement)) summary.focus()
+        }
+      }
+      menu.addEventListener("toggle", syncDrawer)
+      mobile.addEventListener("change", syncDrawer)
+      menu.addEventListener("click", event => {
+        if (!mobile.matches || event.target !== menu && !(event.target as Element).closest("button")) return
+        menu.open = false
+        syncDrawer()
+      }, true)
+      menu.addEventListener("keydown", event => {
+        if (!mobile.matches || !menu.open || event.key !== "Tab") return
+        const items = [...menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")].filter(item => item.getClientRects().length)
+        const index = items.indexOf(document.activeElement as HTMLButtonElement)
+        event.preventDefault()
+        items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length]?.focus()
+      })
+    }
   }
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return
@@ -153,10 +190,12 @@ export function wireFilesAndSettings(): void {
     renderRecentFiles()
   })
   $("#welcome-recent-open")?.addEventListener("click", () => openButton.click())
+  $("#mobile-welcome-open").addEventListener("click", () => openButton.click())
   // 回到启动页但不关闭当前皮肤；在启动页打开别的皮肤时仍会先询问保存。
   $("#recent-files")?.addEventListener("click", () => {
     dismissLayoutOverview()
     canvasWrap.classList.add("empty")
+    setMobilePane("canvas")
     renderRecentFiles()
   })
   renderRecentFiles()
@@ -182,6 +221,7 @@ export function wireFilesAndSettings(): void {
       void runFileOperation("导出", () => saveArchive(true, format, platform))
     })
   }
+  wireMobileExport()
   checkUpdateButton.addEventListener("click", () => void refreshUpdateStatus())
   aboutDiagnostics.hidden = !isTauri()
   exportLogsButton.addEventListener("click", () => void runFileOperation("导出日志", async () => {
@@ -329,12 +369,6 @@ export function wireFilesAndSettings(): void {
       refreshPreview()
     }
   })
-  mobilePreviewPosition.value = localStorage.getItem("mobile-preview-position") === "top" ? "top" : "bottom"
-  document.documentElement.dataset.mobilePreviewPosition = mobilePreviewPosition.value
-  mobilePreviewPosition.addEventListener("change", () => {
-    localStorage.setItem("mobile-preview-position", mobilePreviewPosition.value)
-    document.documentElement.dataset.mobilePreviewPosition = mobilePreviewPosition.value
-  })
   hintPreviewEnabled.checked = localStorage.getItem("hint-preview-enabled") !== "off"
   hintPreviewEnabled.addEventListener("change", () => {
     localStorage.setItem("hint-preview-enabled", hintPreviewEnabled.checked ? "on" : "off")
@@ -385,7 +419,7 @@ export function wireFilesAndSettings(): void {
       event.detail !== 1 ||
       !(event.target instanceof Element) ||
       !event.target.closest("[data-tauri-drag-region]") ||
-      event.target.closest("button, input, select, textarea, a, summary, [contenteditable='true'], [role='button'], [role='link']")
+      event.target.closest("button, input, select, textarea, a, summary, .ui-pinned-toolbar, [contenteditable='true'], [role='button'], [role='link']")
     ) return
     event.preventDefault()
     event.stopImmediatePropagation()

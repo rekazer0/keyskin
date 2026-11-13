@@ -7,7 +7,7 @@ import { updateBdaRefs } from "./key-inspector"
 import { isEditing, commitText, updateDirty, commitBytes } from "./edit-history"
 import { currentBdaAppearance, bdaAppearancePart, visualResolver, bdaAppearanceStyleGroups } from "./bda-documents"
 import { resourceImagePaths } from "../resources.ts"
-import { theme, orientation, resourceName, resourceMeta, imageResourceDetail, styleResourceDetail, styleDetailPreviews, styleDetailFields, styleDetailNormal, styleDetailHighlighted, resourceListView, resourceDetail, resourceInspector, tileModeButtons, resourceGallery, resourceCategory, resourceSearch, resourceListTitle, resourceCount, resourceUploadButton, resourceDownloadButton, resourceDeleteButton, resourceUploadInput, sourceName, atlasCanvas, assetImage, workspaceImageError, workspaceImageFigure, deviceShell, sourceEditor } from "./dom"
+import { theme, orientation, resourceName, resourceMeta, imageResourceDetail, styleResourceDetail, styleDetailPreviews, styleDetailFields, styleDetailNormal, styleDetailHighlighted, resourceListView, resourceDetail, resourceInspector, tileModeButtons, resourceGallery, resourceCategory, resourceSearch, resourceListTitle, resourceCount, resourceUploadButton, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceUploadInput, sourceName, atlasCanvas, assetImage, workspaceImageError, workspaceImageFigure, deviceShell, sourceEditor } from "./dom"
 import { selectFile } from "./navigation"
 import { populateTileInspector, drawAtlas, loadTiles, syncAtlasWorkspace, bdaImageUsageCounts, bdaImageResourceID, setDrawingTile } from "./tile-editing"
 import { styleConfigPath, setSourceValue, scrollSelectedSource } from "./config-context"
@@ -479,6 +479,7 @@ export function renderResourceInspector(): void {
   delete resourceGallery.dataset.kind
   resourceGallery.removeAttribute("role")
   styleListToolbar.hidden = true
+  resourceRenameButton.hidden = appState.resourceInspectorMode !== "image"
   if (appState.resourceInspectorMode === "style") {
     void renderStyleResourceGallery(galleryCanvas)
     return
@@ -579,6 +580,7 @@ export function updateResourceActionButtons(): void {
   const soundSelected = appState.resourceInspectorMode === "sound"
     && Boolean(currentSoundEntries().find((entry) => entry.id === appState.selectedSoundID)?.path)
   resourceDownloadButton.disabled = !imageSelected && !soundSelected
+  resourceRenameButton.disabled = !imageSelected || !isEditing()
   resourceDeleteButton.disabled = !imageSelected || !isEditing()
   resourceUploadButton.disabled = !isEditing()
   styleListToolbar.querySelector("button")!.disabled = appState.resourceInspectorMode !== "style" || !appState.selectedStyleID || !isEditing()

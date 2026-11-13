@@ -11,7 +11,7 @@ import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { element, listToolbar } from "../dom-element.ts"
 import { appState } from "./state"
 import { editSxi, gestureRows, renderSxiGroup, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
-import { openPalmSkin, palmTheme, sxiPointer } from "./sxi-documents"
+import { openPalmSkin, palmTheme, sxiPointer, PALM_SHARED_BOARD } from "./sxi-documents"
 import { isEditing } from "./edit-history"
 import { palmStylePointer } from "./sxi-styles"
 import { populateSxiAnimationInspector, sxiAnimationInspectorTitle } from "./sxi-animation-inspector"
@@ -159,6 +159,15 @@ export function populateSxiInspector(container: HTMLElement): boolean {
   const skin = openPalmSkin()
   const selected = skin && palmSelection(skin)
   if (!skin || !selected) return false
+  if (appState.selectedCandidate === "input") {
+    const board = sxiPointer(appState.layoutPath)
+    if (!board) return false
+    const own = [...board, "input"]
+    const pointer = asObject(sxiValue(skin, own)) ? own : [...board.slice(0, 3), PALM_SHARED_BOARD, "input"]
+    container.append(...modelGroups(pointer, asObject(sxiValue(skin, pointer)) ?? {}, "拼音栏").filter((group): group is HTMLElement => Boolean(group)))
+    container.dataset.path = appState.selectedPath
+    return container.childElementCount > 0
+  }
   const groups = selected.kind === "keys"
     ? palmKeyGroups(skin, selected.models)
     : selected.kind === "board"

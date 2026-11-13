@@ -298,6 +298,7 @@ export function openStyleReferenceEditor(styleID: string): void {
   selectFile(path, "overview", "style")
   appState.styleReturnPath = returnPath === path ? "" : returnPath
   appState.styleReturnSelection = returnSelection
+  appState.styleReturnCandidate = returnCandidate
   appState.styleReturnScrollTop = returnScrollTop
   appState.styleReturnInspectorGroup = returnInspectorGroup
   selectStyleResource(styleID)

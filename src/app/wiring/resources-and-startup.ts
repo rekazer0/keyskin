@@ -1,5 +1,6 @@
+import { renameResourceImage } from "../image-rename"
 import { ssfPackage, ssfTheme } from "../ssf-documents"
-import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
+import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
 import { bindDialog } from "../ask.ts"
 import { closeDialog } from "../../motion.ts"
 import { updateSelectedImageReference, pickerImageReference, resourcePickerPayload, selectImageResource, pickableImagePaths, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
@@ -99,7 +100,13 @@ export function wireResourcesAndStartup(): void {
     card.click()
     card.focus()
   })
+  resourceRenameButton.addEventListener("click", renameResourceImage)
   resourceGallery.addEventListener("keydown", (event) => {
+    if (event.key === "F2" && !resourceRenameButton.disabled && !resourceRenameButton.hidden) {
+      event.preventDefault()
+      renameResourceImage()
+      return
+    }
     if (event.key.toLowerCase() !== "d" || !(event.metaKey || event.ctrlKey) || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID) return
     event.preventDefault()
     const id = duplicateStyle(appState.selectedStyleID)

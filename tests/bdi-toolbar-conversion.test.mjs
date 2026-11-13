@@ -13,6 +13,13 @@ test('BDI → BDS writes point-calibrated heights and complete edge artwork into
   const source = fixture()
   const before = source.toBytes()
   const converted = SkinArchive.open(await source.toBytesAsync('bds'), 'bds')
+  const generatedTiles = converted.names().filter(path => /\/res\/keyskin_.*\.til$/.test(path))
+  assert.equal(generatedTiles.length, 20, 'both themes and orientations include the background and both edge image states')
+  for (const path of generatedTiles) {
+    const tiles = IniDocument.parse(converted.getText(path))
+    assert.equal(tiles.get('GLOBAL', 'TILE_NUM'), '1', `${path}: Android requires the slice count to load IMG1`)
+    assert.equal(tiles.get('GLOBAL', 'USE_ALPHA'), '1', `${path}: preserve the artwork alpha`)
+  }
   const menu = IniDocument.parse(converted.getText('light/skin/res/logo/pop_menu_icons.til'))
   assert.equal(menu.get('IMG27', 'SOURCE_RECT'), '0,0,68,68', 'Android receives point-calibrated function bitmaps too')
   for (const theme of ['light', 'dark']) for (const [orientation, height] of [['port', 106], ['land', 49]]) {

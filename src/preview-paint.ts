@@ -12,7 +12,6 @@ import { visiblePreviewItems } from "./preview-items.ts"
 import { effectivePreviewItem } from "./preview-items.ts"
 import { type Visual } from "./atlas.ts"
 import { type TextVisual } from "./atlas.ts"
-import { type StyleTextVisual } from "./atlas.ts"
 import { previewSurfaceColor } from "./preview-items.ts"
 import { drawVisual } from "./preview-draw.ts"
 import { previewSelectionVisible } from "./preview-items.ts"
@@ -129,12 +128,12 @@ export async function paintPreview(self: Preview): Promise<void> {
 
   // 拖拽时优先使用缓存的视觉数据，避免重复异步解析
   let panel: Visual | undefined
-  let visuals: Array<{ back: Visual | undefined; fore: Array<Visual | undefined>; text: TextVisual | undefined; styleTexts: Array<StyleTextVisual | undefined> }>
+  let visuals: NonNullable<Preview["lastRenderCache"]>["visuals"]
   let toolbarImages: Visual[]
 
   if (scene && !scene.partial) {
     panel = undefined
-    visuals = keys.map(() => ({ back: undefined, fore: [], text: undefined, styleTexts: [] }))
+    visuals = new Map()
     toolbarImages = []
   } else if (isDragging && self.lastRenderCache) {
     // 使用缓存数据进行快速拖拽渲染
@@ -176,16 +175,16 @@ export async function paintPreview(self: Preview): Promise<void> {
               styleTexts: [],
             }
           }
-        })),
+        })).then((resolved) => new Map(keys.map((key, index) => [key.section, resolved[index]]))),
         self.resolveToolbar().catch(() => []),
       ])
-      // 保存缓存供拖拽时使用
+      // 按键按下动画会改变绘制顺序，缓存必须按 section 匹配。
       self.lastRenderCache = { panel, visuals, toolbarImages }
     } catch (error) {
       console.warn("预览渲染解析失败:", error)
       // 使用空数据继续渲染，避免完全失败
       panel = undefined
-      visuals = keys.map(() => ({ back: undefined, fore: [], text: undefined, styleTexts: [] }))
+      visuals = new Map()
       toolbarImages = []
     }
   }
@@ -221,7 +220,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   )
 
   const sprites: SceneSprite[] = []
-  for (const [index, key] of keys.entries()) {
+  for (const key of keys) {
     const keyAnimation = self.legacyAnimationStates.get(key.section)
     const animationElapsed = keyAnimation ? Date.now() - keyAnimation.startedAt : -1
     const activeBdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
@@ -264,12 +263,13 @@ export async function paintPreview(self: Preview): Promise<void> {
       continue
     }
     const area = paddedRect(key)
-    const styleTexts = visuals[index].styleTexts
-    const foregrounds = phoneForegroundLayers(visuals[index].fore)
+    const visual = visuals.get(key.section)
+    const styleTexts = visual?.styleTexts ?? []
+    const foregrounds = phoneForegroundLayers(visual?.fore ?? [])
     const hasForeground = foregrounds.some(Boolean) || styleTexts.some(Boolean)
     if (shouldDrawItemBackground(key, self.panelStyle, self.panelWidth, self.panelHeight)) {
       withTransform(context, area, backScale, backTranslation, backRotation, backOpacity, () => {
-        drawVisual(context, visuals[index].back, area, true)
+        drawVisual(context, visual?.back, area, true)
       })
     }
     for (const [layer, fore] of foregrounds.entries()) {
@@ -325,7 +325,7 @@ export async function paintPreview(self: Preview): Promise<void> {
 
     strokeSelection(self, context, key)
 
-    const textVisual: TextVisual | undefined = visuals[index].text
+    const textVisual: TextVisual | undefined = visual?.text
     context.fillStyle = textVisual?.color ?? (self.theme === "dark" ? "#f5f5f7" : "#17191c")
     const fontSize = textVisual?.fontSize ?? Math.max(18, Math.min(42, area.height * 0.25))
     context.font = canvasFont(fontSize, textVisual)

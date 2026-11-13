@@ -188,13 +188,14 @@ try {
   const elapsed = Date.now() - start
   const initial = await page.evaluate(() => ({ resolves: window.previewResolves, requests: window.libraryMessages.length }))
   assert.ok(initial.resolves < 100, `首屏不解析全部样式：${initial.resolves}`)
-  await picker(page).locator('.ui-style-card[data-style-id="2199"]').scrollIntoViewIfNeeded()
+  // 网格只渲染可见的行：滚到底部，最后一个样式才会出现。
+  await picker(page).locator('#style-library-scroll').evaluate(scroll => { scroll.scrollTop = scroll.scrollHeight })
   await picker(page).locator('.ui-style-card[data-style-id="2199"]').click()
   await page.waitForFunction(() => window.libraryMessages.includes('2199'))
   const requests = await page.evaluate(() => window.libraryMessages)
   assert.equal(new Set(requests).size, requests.length, '列表和选中预览共用请求，滚动不重复获取')
   assert.ok(requests.length < 120, `滚动跳过的卡片不请求预览：${requests.length}`)
-  const frames = await picker(page).locator('#style-library-grid').evaluate(async grid => {
+  const frames = await picker(page).locator('#style-library-scroll').evaluate(async grid => {
     grid.scrollTop = 0
     await new Promise(resolve => requestAnimationFrame(resolve))
     const delays = []
@@ -209,6 +210,22 @@ try {
     return { max: Math.max(...delays), p95: delays.sort((a, b) => a - b)[Math.floor(delays.length * .95)] }
   })
   assert.ok(frames.max < 250, `滚动不产生长时间停顿：${frames.max}ms`)
+  assert.ok(await picker(page).locator('#style-library-grid > .ui-style-card').count() < 200, '大列表只渲染可见的几行')
+  // 皮肤没改时再次打开复用主页面的样式列表与预览缓存，不重新解析已看过的样式。
+  await picker(page).locator('#picker-close').click()
+  await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+  const resolvedBefore = await page.evaluate(() => window.previewResolves)
+  await page.evaluate(async () => {
+    const target = document.createElement('input')
+    target.dataset.keyField = 'BACK_STYLE'
+    target.value = '1000'
+    ;(await import('/src/app/style-picker.ts')).openStylePicker(target)
+  })
+  await picker(page).locator('.ui-style-card[data-style-id="1000"][aria-selected="true"] canvas').first().waitFor()
+  await picker(page).locator('#style-library-preview-image canvas').first().evaluate(async canvas => {
+    while (!canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value)) await new Promise(resolve => requestAnimationFrame(resolve))
+  })
+  assert.equal(await page.evaluate(() => window.previewResolves), resolvedBefore, '再次打开复用预览缓存')
   console.log(`scroll frames: p95 ${frames.p95.toFixed(1)}ms, max ${frames.max.toFixed(1)}ms`)
   console.log(`1200 image styles: first preview ${elapsed}ms, initial resolves ${initial.resolves}, after scroll ${requests.length} unique preview requests`)
   await page.close()

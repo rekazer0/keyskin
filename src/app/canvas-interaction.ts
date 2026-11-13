@@ -9,7 +9,7 @@ import { previewStateImpact } from "../preview-items.ts"
 import { appState } from "./state"
 import { syncCandidateSelection, setPreviewPan, refreshSimulationPreview, simulationLanguage } from "./preview-render"
 import { selectFile } from "./navigation"
-import { setMobilePane } from "./mobile-layout"
+import { setMobilePane, revealInspectorGroup } from "./mobile-layout"
 import { moveSelectedKeys } from "./key-editing"
 import { isEditing } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
@@ -256,16 +256,17 @@ export function scheduleSelectionInspectorSync(canvasPreview: Preview): void {
   afterNextPaint(() => void canvasPreview.rendered().then(() => {
     appState.selectionInspectorSyncPending = false
     populateKeyInspector()
+    if (appState.selectedCandidate === "input") revealInspectorGroup(appState.archive?.format === "ssf" ? "输入码" : "INPUT")
     updateSourceHighlight()
     scrollSelectedSource()
   }))
 }
 
-export function selectNativeToolbar(): void {
+export function selectNativeToolbar(inputRegion = false): void {
   const path = appState.archive?.format === "ssf" ? appState.layoutPath : toolbarStrip.dataset.path
   if (!path) return
   if (appState.selectedPath !== path) selectFile(path, "overview", "document", true)
-  appState.selectedCandidate = true
+  appState.selectedCandidate = inputRegion ? "input" : true
   appState.selectedKeySections = []
   appState.selectedToolbarSections = []
   preview.setSelected([])
@@ -280,6 +281,7 @@ export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (se
   const path = toolbarStrip.dataset.path
   if (!path) return
   if (appState.selectedPath !== path) selectFile(path, "overview", "document", true)
+  appState.selectedCandidate = false
   appState.selectedToolbarSections = sections
   toolbarPreview.setSelected(sections)
   syncCandidateSelection()

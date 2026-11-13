@@ -7,11 +7,11 @@ import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
-import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, mainWorkspace, mobileSplitHandle, mobilePreviewPosition, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme } from "../dom"
+import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
-import { syncSinglePageInspectorGroup, setMobileSplit, setMobilePane, syncMobileInspectorHeader, setMobilePreviewCollapsed } from "../mobile-layout"
+import { syncSinglePageInspectorGroup, setMobilePane, syncMobileInspectorHeader } from "../mobile-layout"
 import { fitCandidateInputBar } from "../config-context"
 import { measureCanvasWrapInnerSize, scheduleFitCanvasPreview, applyPreviewZoom, setPreviewPan, finishPreviewPan, schedulePreviewPan } from "../preview-render"
 import { canvasEditable, isEditing } from "../edit-history"
@@ -28,6 +28,9 @@ import { writeToChosenFile } from "../archive-io"
 import { rememberAiDesignModel, syncAiDesignThinking, setAiDesignScope } from "../ai-panel"
 import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
+import { syncMobileKeyPreview } from "../mobile-key-preview"
+import { wireMobileInspector } from "../mobile-inspector"
+import { mobileKeyPreview, mobileWorkspaceTabs, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel } from "../dom"
 
 /** 启动环境、全局指针、画布预览、检查器与缩放。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireCanvasAndInspector(): void {
@@ -191,101 +194,70 @@ export function wireCanvasAndInspector(): void {
       }
     })
   }
-  setMobileSplit(Number(localStorage.getItem("mobile-workspace-split")) || 50, false)
-  setMobilePane("layout")
+  wireMobileInspector()
+  setMobilePane("canvas")
+  mobileKeyPreview.addEventListener("pointerdown", (event) => {
+    mobileKeyPreview.setPointerCapture(event.pointerId)
+    syncMobileKeyPreview(true)
+  })
+  for (const event of ["pointerup", "pointercancel", "lostpointercapture"] as const) {
+    mobileKeyPreview.addEventListener(event, () => syncMobileKeyPreview())
+  }
+  mobileKeyPreview.addEventListener("keydown", (event) => {
+    if (event.key === " " || event.key === "Enter") { event.preventDefault(); syncMobileKeyPreview(true) }
+  })
+  mobileKeyPreview.addEventListener("keyup", () => syncMobileKeyPreview())
+  mobileKeyPreview.addEventListener("blur", () => syncMobileKeyPreview())
   syncMobileInspectorHeader()
   for (const button of mobilePaneButtons) {
-    button.addEventListener("click", () => setMobilePane(button.dataset.mobilePane === "inspector" ? "inspector" : "layout"))
+    button.addEventListener("click", () => {
+      const pane = button.dataset.mobilePane
+      setMobilePane(pane === "inspector" || pane === "layout" ? pane : "canvas")
+    })
   }
+  mobileWorkspaceTabs.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+    const buttons = Array.from(mobileWorkspaceTabs.querySelectorAll<HTMLButtonElement>("button"))
+    const index = buttons.indexOf(event.target as HTMLButtonElement)
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length
+    event.preventDefault()
+    buttons[next].focus()
+    buttons[next].click()
+  })
   mobilePortraitQuery.addEventListener("change", () => {
-    if (!mobilePortraitQuery.matches) setMobilePreviewCollapsed(false)
-    else {
-      const activeGroup = files.querySelector<HTMLDetailsElement>(".nav-group.mobile-overview-active")
-      if (activeGroup) activeGroup.open = true
-    }
-    setMobilePane(document.documentElement.dataset.mobilePane === "inspector" ? "inspector" : "layout")
+    const pane = document.documentElement.dataset.mobilePane
+    setMobilePane(pane === "inspector" || pane === "layout" ? pane : "canvas")
     syncMobileInspectorHeader()
     updateSourceFindVisibility()
   })
-  mainWorkspace.addEventListener("pointerdown", (event) => {
-    if (!mobilePortraitQuery.matches || event.pointerType === "mouse" && event.button !== 0 ||
-      !(event.target as Element).closest("aside, .source")) return
-    appState.mobileSwipeStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+  mobileAppMore.addEventListener("click", (event) => {
+    if (event.target === mobileAppMore) mobileAppMore.open = false
+    if ((event.target as Element).closest("button")) mobileAppMore.querySelector<HTMLElement>("summary")!.focus()
   })
-  mainWorkspace.addEventListener("pointermove", (event) => {
-    if (!appState.mobileSwipeStart || appState.mobileSwipeStart.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - appState.mobileSwipeStart.x
-    const deltaY = event.clientY - appState.mobileSwipeStart.y
-    if (Math.abs(deltaY) > 12 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      appState.mobileSwipeStart = undefined
-      return
+  const syncMobileMenu = () => {
+    for (const button of mobileMoreActions) {
+      const target = document.getElementById(button.dataset.mobileAction!)
+      button.disabled = !appState.archive || target instanceof HTMLButtonElement && target.disabled
+      if (button.dataset.mobileAction === "toggle-guides") {
+        button.setAttribute("aria-pressed", String(appState.guidesVisible))
+        button.querySelector<HTMLInputElement>("input")!.checked = appState.guidesVisible
+      }
     }
-    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return
-    appState.mobileSwipeStart = undefined
-    setMobilePane(deltaX < 0 ? "inspector" : "layout")
-  })
-  mainWorkspace.addEventListener("pointerup", (event) => {
-    if (!appState.mobileSwipeStart || appState.mobileSwipeStart.pointerId !== event.pointerId) return
-    const deltaX = event.clientX - appState.mobileSwipeStart.x
-    const deltaY = event.clientY - appState.mobileSwipeStart.y
-    appState.mobileSwipeStart = undefined
-    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return
-    setMobilePane(deltaX < 0 ? "inspector" : "layout")
-  })
-  mainWorkspace.addEventListener("pointercancel", (event) => {
-    if (appState.mobileSwipeStart?.pointerId === event.pointerId) appState.mobileSwipeStart = undefined
-  })
-  {
-    let dragging = false
-    let moved = false
-    let pointerId = -1
-    let pointerStartY = 0
-
-    mobileSplitHandle.addEventListener("pointerdown", (event) => {
-      if (!mobilePortraitQuery.matches) return
-      dragging = true
-      moved = false
-      pointerId = event.pointerId
-      pointerStartY = event.clientY
-      mobileSplitHandle.classList.add("dragging")
-      mobileSplitHandle.setPointerCapture(pointerId)
-      event.preventDefault()
-    })
-
-    mobileSplitHandle.addEventListener("pointermove", (event) => {
-      if (!dragging || event.pointerId !== pointerId) return
-      moved ||= Math.abs(event.clientY - pointerStartY) > 3
-      const rect = mainWorkspace.getBoundingClientRect()
-      if (!rect.height) return
-      const fromTop = (event.clientY - rect.top) / rect.height * 100
-      const split = mobilePreviewPosition.value === "top" ? fromTop : 100 - fromTop
-      setMobileSplit(split)
-    })
-
-    const finishMobileSplitDrag = (event: PointerEvent) => {
-      if (!dragging || event.pointerId !== pointerId) return
-      dragging = false
-      pointerId = -1
-      mobileSplitHandle.classList.remove("dragging")
-      if (mobileSplitHandle.hasPointerCapture(event.pointerId)) mobileSplitHandle.releasePointerCapture(event.pointerId)
-    }
-    mobileSplitHandle.addEventListener("pointerup", finishMobileSplitDrag)
-    mobileSplitHandle.addEventListener("pointercancel", finishMobileSplitDrag)
-    mobileSplitHandle.addEventListener("click", () => {
-      const wasMoved = moved
-      moved = false
-      if (!mobilePortraitQuery.matches || wasMoved) return
-      setMobilePreviewCollapsed(document.documentElement.dataset.mobilePreviewCollapsed !== "true")
-    })
-    mobileSplitHandle.addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
-      const current = Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--mobile-workspace-split"),
-      ) || 50
-      setMobileSplit(current + (event.key === "ArrowUp" ? 2 : -2))
-      event.preventDefault()
-    })
+    mobileModeLabel.textContent = mode.value === "edit" ? "编辑模式" : "交互预览"
+    mobileSkinThemeLabel.textContent = theme.value === "dark" ? "深色" : "浅色"
   }
+  mobileAppMore.querySelector("summary")!.addEventListener("click", syncMobileMenu)
+  mobileAppMore.addEventListener("toggle", syncMobileMenu)
+  for (const button of mobileMoreActions) button.addEventListener("click", () => {
+    if (button.dataset.mobileAction === "mode") {
+      document.querySelector<HTMLButtonElement>('.titlebar [data-mobile-choice="mode"]')!.click()
+    } else {
+      const target = document.getElementById(button.dataset.mobileAction!)
+      if (button.dataset.mobileAction === "layout-overview-toggle") setMobilePane("canvas")
+      target?.click()
+    }
+  })
   new ResizeObserver(() => {
     appState.canvasWrapInnerSize = measureCanvasWrapInnerSize()
     scheduleFitCanvasPreview()

@@ -191,7 +191,7 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
       input.addEventListener("change", () => send(input.checked, {}))
       return input
     }
-    case "choice": return choiceControl(spec, label, disabled, (value) => send(value, {}))
+    case "choice": return choiceControl(state.mixed ? { ...spec, value: "", layout: "select" } : spec, label, disabled, (value) => send(value, {}), placeholder)
     case "flags": return flagsControl(spec, label, disabled, (values) => send(values, {}))
     case "color": return colorControl(spec.value, spec.codec, label, disabled, Boolean(state.mixed), (value, merge) => send(value, { merge }))
     case "colorPair": {
@@ -379,7 +379,7 @@ export function numberParts(row: HTMLElement, label: string, affixes: string[], 
 }
 
 /* —— 选项 —— */
-function choiceControl(spec: Extract<FieldSpec, { kind: "choice" }>, label: string, disabled: boolean, commit: (value: string) => void): HTMLElement {
+function choiceControl(spec: Extract<FieldSpec, { kind: "choice" }>, label: string, disabled: boolean, commit: (value: string) => void, placeholder = "未设置"): HTMLElement {
   const known = spec.options.some(([value]) => value === spec.value)
   const icons = spec.options.every(([, , icon]) => icon)
   const labeled = icons && spec.layout === "labeled"
@@ -411,7 +411,7 @@ function choiceControl(spec: Extract<FieldSpec, { kind: "choice" }>, label: stri
   const select = element("select")
   select.disabled = disabled
   select.setAttribute("aria-label", label)
-  if (!spec.value && (spec.unset || !known)) select.append(new Option("未设置", ""))
+  if (!spec.value && (spec.unset || !known)) select.append(new Option(placeholder, ""))
   else if (!known) select.append(new Option(`${spec.value}（自定义值）`, spec.value))
   select.append(...spec.options.map(([value, text]) => new Option(text, value)))
   select.value = spec.value

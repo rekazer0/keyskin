@@ -7,7 +7,7 @@ import { SkinArchive } from '../src/skin.ts'
 const root = new URL('..', import.meta.url).pathname
 const archive = SkinArchive.open(new Uint8Array(readFileSync(`${root}/public/templates/xiaomi-unified-rounded-blur.bds`)))
 archive.setText('Info.txt', 'Name=控件测试\nVersionCode=3\nMinImeCode=3\nSupportPlatform=IA\nSupportDarkMode=1\nSkinType=0\nSkinFlags=1\nAbilities=Sound,Custom\nSupportPatch=Accessory|Sound\n')
-archive.setText('light/skin/port/controls.ini', '[PANEL]\nSIZE=1080,600\nNO_BLUR=1\n[LIST1]\nLIST_ORDER=1\nLIST_LEVEL=0\nTYPE=2\nSCROLL_SIDE=0\n[ICON1]\nANCHOR_TYPE=5\nPERSIST=3\n[BAR]\nTYPE=0\nANCHOR_TYPE=1\n[STYLE1]\nFONT_CLEARTYPE=1\nNM_COLOR=80123456\n[EXTRA]\nTYPE=custom\nSIZE=1/3,2/3\n')
+archive.setText('light/skin/port/controls.pop', '[PANEL]\nSIZE=1080,600\nNO_BLUR=1\n[LIST1]\nLIST_ORDER=1\nLIST_LEVEL=0\nTYPE=2\nSCROLL_SIDE=0\n[ICON1]\nANCHOR_TYPE=5\nPERSIST=3\n[BAR]\nTYPE=0\nANCHOR_TYPE=1\n[STYLE1]\nFONT_CLEARTYPE=1\nNM_COLOR=80123456\n[EXTRA]\nTYPE=custom\nSIZE=1/3,2/3\n')
 const server = await createServer({ root, logLevel: 'error', server: { host: '127.0.0.1', port: 41936, strictPort: false } })
 await server.listen()
 const browser = await chromium.launch()
@@ -48,7 +48,7 @@ try {
   await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
   assert.equal(await value('', 'SkinType'), '0')
   assert.equal(await skinRow('SkinType').getByRole('switch').isChecked(), true)
-  await selectFile('light/skin/port/controls.ini')
+  await selectFile('light/skin/port/controls.pop')
   const row = key => page.locator(`#document-fields [data-document-key="${key}"]`).first()
   assert.equal(await row('NO_BLUR').getByRole('switch').isChecked(), true)
   assert.equal(await row('LIST_ORDER').getByRole('button', { name: '横排', exact: true }).getAttribute('aria-pressed'), 'true')
@@ -102,6 +102,10 @@ try {
     input.value = 'future-value'
     const control = configValueControl(input, 'ICON1', 'PERSIST', '显示时机')
     if (input.value !== 'future-value' || control.querySelector('select').value !== 'future-value') throw new Error('unknown enum lost')
+    const { fieldControl } = await import('/src/app/property-rows.ts')
+    const mixed = fieldControl({ kind: 'choice', value: '1', options: [['0', '竖排'], ['1', '横排']] }, '文字方向', () => {}, { editable: true, mixed: true })
+    const select = mixed.querySelector('select')
+    if (!select || select.value !== '' || select.selectedOptions[0].textContent !== '混合') throw new Error('mixed choice shows a stale selection')
   })
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 })

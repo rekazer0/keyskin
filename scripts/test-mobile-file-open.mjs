@@ -24,7 +24,7 @@ try {
       assert.equal(await input.getAttribute('accept'), platform === 'desktop' ? '.bdi,.bds,.bda,.ssf,.mssf,.sxi' : null)
       if (platform === 'Android') {
         const picker = page.waitForEvent('filechooser')
-        await page.locator('#welcome-recent-open').click()
+        await page.locator('#mobile-welcome-open').click()
         await (await picker).setFiles({ name: '安卓搜狗.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
         await page.waitForFunction(() => document.querySelector('#document-name').textContent === '安卓搜狗.ssf' && !document.querySelector('#open').disabled)
         assert.ok(await page.locator('#preview').evaluate((canvas) => canvas.getBoundingClientRect().height > 20))

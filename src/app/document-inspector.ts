@@ -1,13 +1,14 @@
 import { sourceKeyLabels } from "../config-labels.ts"
 import { baiduInspectorEntries, baiduInspectorTuple } from "../baidu-inspector-fields.ts"
 import { LEGACY_ANIMATION_FIELDS } from "../legacy-animation.ts"
-import { visualResolver, isBdaLayoutPath, currentBdaAppearance, bdaAppearancePart, refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
+import { visualResolver, isBdaLayoutPath, currentBdaAppearance, bdaAppearancePart, refreshBdaLayout, refreshSelectedBdaSource, textDocument } from "./bda-documents"
 import { documentFields, documentFieldsGroup, skinFields, toolbarFields, bdaConfigFields, bdaConfigFieldsGroup } from "./dom"
 import { appState } from "./state"
 import { preview } from "./canvas-interaction"
 import type { PreviewItem } from "../preview-items.ts"
 import { isListCell } from "../layout.ts"
-import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue, effectiveKeySection, currentSkinState } from "./config-context"
+import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue, effectiveKeySection, currentSkinState, genConfigPath } from "./config-context"
+import { IniDocument } from "../ini.ts"
 import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { isStyleReferenceKey, openStyleReferenceEditor, openBdaStyleReferencePicker, layoutAnimationFields } from "./style-references"
@@ -282,7 +283,17 @@ export function populateDocumentInspector(): void {
   }
   // 整体布局（选中当前布局、没选按键）不重复展开候选栏和输入区。
   const overallLayout = appState.selectedPath === appState.layoutPath && !listSelected
-  const entries = baiduInspectorEntries(appState.selectedDocument, appState.selectedPath, overallLayout).filter((entry) =>
+  const inputSelected = appState.selectedCandidate === "input"
+  const general = inputSelected ? textDocument(genConfigPath()) : undefined
+  // 候选栏覆盖全局配置；继承的字段仍写回 gen.ini。
+  const inputDocument = inputSelected ? IniDocument.parse(general?.toString() ?? "") : appState.selectedDocument
+  if (inputSelected) for (const entry of appState.selectedDocument.entries()) {
+    if (!entry.value.trim()) continue
+    if (!inputDocument.hasSection(entry.section)) inputDocument.appendSection(entry.section, [])
+    inputDocument.set(entry.section, entry.key, entry.value)
+  }
+  const entries = baiduInspectorEntries(inputDocument, inputSelected ? genConfigPath() : appState.selectedPath, overallLayout).filter((entry) =>
+    (!inputSelected || ["INPUT", "SCAND"].includes(entry.section) || entry.section === "CAND" && entry.key === "INPUT_STYLE") &&
     (!listSelected || /^LIST\d*$/i.test(entry.section)) &&
     !/^KEY\d+$/.test(entry.section) &&
     (/\.pop$/i.test(appState.selectedPath) || !/^ICON\d+$/i.test(entry.section) || toolbarSections.has(entry.section)) &&
@@ -302,25 +313,28 @@ export function populateDocumentInspector(): void {
   documentFieldsGroup.hidden = entries.length === 0
   if (!entries.length) return
 
-  const update = (section: string, key: string, value: string): void => {
+  const update = (section: string, key: string, value: string, path: string): void => {
     if (!appState.selectedDocument || appState.selectedPath !== documentFieldsGroup.dataset.path || !isEditing()) return
-    const before = appState.selectedDocument.toString()
-    if (appState.selectedDocument.get(section, key) === undefined && !value) return
-    if (!appState.selectedDocument.sections().includes(section)) {
+    const document = path === appState.selectedPath ? appState.selectedDocument : textDocument(path)
+    if (!document) return
+    const before = document.toString()
+    if (document.get(section, key) === undefined && !value) return
+    if (!document.sections().includes(section)) {
       if (!value) return
-      appState.selectedDocument.appendSection(section, [{ key, value }])
-    } else if (!appState.selectedDocument.set(section, key, value)) return
-    const text = appState.selectedDocument.toString()
-    commitText(appState.selectedPath, before, text)
-    setSourceValue(text)
+      document.appendSection(section, [{ key, value }])
+    } else if (!document.set(section, key, value)) return
+    const text = document.toString()
+    commitText(path, before, text)
+    if (path === appState.selectedPath) setSourceValue(text)
     if (appState.selectedPath === appState.layoutPath) appState.layoutDocument = appState.selectedDocument
     refreshPreview()
     updateDirty()
   }
   const renderEntry = (entry: typeof entries[number]): HTMLElement[] => {
     const label = translatedConfigLabel(entry.key)
-    const commit = (value: string) => update(entry.section, entry.key, value)
-    const rowKey = [appState.selectedPath, entry.section, entry.key]
+    const path = inputSelected && entry.section !== "CAND" && general && !appState.selectedDocument?.get(entry.section, entry.key)?.trim() ? genConfigPath() : appState.selectedPath
+    const commit = (value: string) => update(entry.section, entry.key, value, path)
+    const rowKey = [path, entry.section, entry.key]
     const row = (spec: FieldSpec, commitValue: (value: never) => void, extra: { label?: string; key?: unknown } = {}) => field({
       key: entry.key, label: extra.label ?? label, name: extra.label && `${label}${extra.label}`, spec,
       commit: commitValue as (value: unknown) => void, rowKey: extra.key === undefined ? rowKey : [...rowKey, extra.key],
@@ -394,7 +408,7 @@ export function selectedBdaKeyNames(): string[] {
 
 export function selectedBdaSourceKeys(): string[] {
   if (appState.resourceConfigActive && appState.resourceInspectorMode === "style") return appState.selectedStyleID ? [appState.selectedStyleID] : []
-  if (appState.selectedCandidate && appState.selectedPath === appState.layoutPath) return ["cand"]
+  if (appState.selectedCandidate && appState.selectedPath === appState.layoutPath) return [appState.selectedCandidate === "input" ? "input" : "cand"]
   return isBdaLayoutPath(appState.selectedPath) ? selectedBdaKeyNames() : []
 }
 
@@ -442,7 +456,7 @@ export function populateBdaConfigInspector(): void {
       appearance: info.appearance,
       panelName,
       keys: selectedKeys,
-      scope: appState.selectedCandidate ? "candidate" : appState.selectedKeySections.some(isListCell) ? "list" : "panel",
+      scope: appState.selectedCandidate === "input" ? "input" : appState.selectedCandidate ? "candidate" : appState.selectedKeySections.some(isListCell) ? "list" : "panel",
       resolver: visualResolver(),
       editable: isEditing(),
       onStyleChange: (ref, property, value) => { updateBdaRefs([ref], property, value) },

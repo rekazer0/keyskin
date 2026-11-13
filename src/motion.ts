@@ -68,6 +68,14 @@ export function playEnter(element: Element | null | undefined): void {
   entering.set(element, element.animate([{ opacity: 0 }, { opacity: 1 }], options))
 }
 
+/** 方向图标从上一个方向旋转到当前方向。 */
+export function playRotation(element: Element, fromDegrees: number): void {
+  entering.get(element)?.cancel()
+  const options = timing("base", "standard")
+  if (!options) return
+  entering.set(element, element.animate([{ transform: `rotate(${fromDegrees}deg)` }, { transform: "rotate(0deg)" }], options))
+}
+
 /**
  * 关闭 .ui-dialog：先淡出（入场由 components.css 的 ui-dialog-in 播放），再 close(value)。
  * 时长为 0 时直接关；淡出途中再次调用不重复播放。

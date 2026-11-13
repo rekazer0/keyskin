@@ -191,13 +191,15 @@ export function bindMenuKeys(menu: HTMLDetailsElement): void {
       summary.focus()
       return
     }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
+    menu.open = true
     const items = [...menu.querySelectorAll<HTMLButtonElement>(":scope > :not(summary) button:not(:disabled)")]
+      .filter(item => item.getClientRects().length > 0)
     const index = items.indexOf(document.activeElement as HTMLButtonElement)
     const next = event.key === "ArrowDown" ? index + 1 : event.key === "ArrowUp" ? (index < 0 ? items.length - 1 : index - 1)
       : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : undefined
     if (next === undefined || !items.length) return
     event.preventDefault()
-    menu.open = true
     items[(next + items.length) % items.length]!.focus()
   })
 }

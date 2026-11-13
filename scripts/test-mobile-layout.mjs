@@ -135,7 +135,7 @@ const portraitPhones = [
 ]
 
 async function assertPreviewToggles(page) {
-  assert.equal(await page.locator(".preview-toolbar .preview-choice button:visible").count(), 0, "segmented choices hidden on phones")
+  assert.equal(await page.locator(".preview-toolbar .preview-choice:visible").count(), 0, "preview toggles hidden on phones")
   assert.equal(await page.locator('.preview-toolbar [data-mobile-choice="orientation"]:visible').count(), 0, "orientation is secondary on phones")
   assert.equal(await page.locator('.preview-toolbar [data-mobile-choice="theme"]:visible').count(), 0, "theme is secondary on phones")
   assert.equal(await page.locator(".preview-toolbar #toggle-guides:visible").count(), 0, "guides are secondary on phones")
@@ -157,332 +157,234 @@ async function assertPreviewSecondaryMenu(page) {
   assert.equal(await page.locator("#mobile-preview-more[open]").count(), 0, "secondary menu closes after an action")
 }
 
+const tab = (page, pane) => page.locator(`.mobile-workspace-tabs [data-mobile-pane="${pane}"]`)
+
+async function setEditMode(page) {
+  await page.locator('#mobile-app-more > summary').click()
+  await page.locator('#mobile-app-more [data-mobile-action="mode"]').click()
+  await page.waitForFunction(() => document.querySelector('#mode').value === 'edit')
+}
+
+async function selectKey(page) {
+  const canvas = await rect(page, '#preview')
+  await page.mouse.click(canvas.x + canvas.width * 0.45, canvas.y + canvas.height * 0.45)
+  await page.waitForSelector('#selected-key')
+}
+
 for (const viewport of portraitPhones) {
   const tag = `${viewport.width}×${viewport.height}`
 
-  await check(`${tag} welcome page fills the window`, () => withPage(viewport, async (page) => {
-    await assertTitlebarClean(page, "welcome")
-    await assertNoPageOverflow(page, "welcome")
-    assert.equal((await rect(page, ".mobile-workspace-tabs")).visible, false, "pane dock is hidden without a skin")
-    const main = await rect(page, "main")
-    const workspace = await rect(page, "main > .workspace")
-    assert.ok(Math.abs(workspace.y - main.y) <= 1 && Math.abs(workspace.height - main.height) <= 1, "welcome page covers main")
-    const recent = await rect(page, ".welcome-recent")
-    const hero = await rect(page, ".welcome-hero")
-    assert.ok(recent.bottom <= hero.y, "recent section sits above the hero")
-    const cards = await page.$$eval(".template-card", (nodes) => nodes.map((node) => {
-      const box = node.getBoundingClientRect()
-      return { left: box.left, right: box.right }
-    }))
-    assert.ok(cards.every((card) => card.left >= 0 && card.right <= viewport.width), "template cards stay on screen")
+  await check(`${tag} welcome and file entry`, () => withPage(viewport, async (page) => {
+    await assertTitlebarClean(page, 'welcome')
+    await assertNoPageOverflow(page, 'welcome')
+    assert.equal((await rect(page, '.mobile-workspace-tabs')).visible, false, 'welcome has no document navigation')
+    const main = await rect(page, 'main'), workspace = await rect(page, 'main > .workspace')
+    assert.equal(workspace.y, main.y)
+    assert.equal(workspace.height, main.height)
+    assert.ok(await page.locator('#mobile-welcome-open').isVisible(), 'open-file entry is visible')
+    assert.equal(await page.locator('.mobile-welcome-hero h1').textContent(), '把皮肤改到刚刚好')
+    const cards = await page.locator('.template-card').evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().toJSON()))
+    assert.ok(cards.every(card => card.left >= 0 && card.right <= viewport.width), 'all templates stay inside the phone')
   }))
 
-  await check(`${tag} split editor layout`, () => withPage(viewport, async (page) => {
-    await openTemplate(page, "official-android-bds")
+  await check(`${tag} full canvas and three tabs`, () => withPage(viewport, async (page) => {
+    await openTemplate(page)
+    await assertTitlebarClean(page, 'canvas')
+    await assertNoPageOverflow(page, 'canvas')
+    assert.equal(await page.locator('html').getAttribute('data-mobile-pane'), 'canvas')
+    assert.ok(await page.locator('main > aside').evaluate(n => n.inert), 'files cannot take focus')
+    assert.ok(await page.locator('main > .source').evaluate(n => n.inert), 'properties cannot take focus')
+    const main = await rect(page, 'main'), workspace = await rect(page, 'main > .workspace'), dock = await rect(page, '.mobile-workspace-tabs')
+    assert.equal(workspace.y, main.y)
+    assert.equal(workspace.bottom + 16, dock.y, 'canvas clears navigation')
+    assert.equal(dock.bottom, viewport.height)
+    const tabs = await page.locator('.mobile-workspace-tabs > button').evaluateAll(nodes => nodes.map(n => ({text:n.textContent.trim(),width:n.offsetWidth,height:n.offsetHeight})))
+    assert.deepEqual(tabs.map(t => t.text), ['画布', '属性', '文件'])
+    assert.ok(tabs.every(t => t.width >= 44 && t.height >= 44), 'navigation has touch targets')
+    assert.equal(dock.height, 64, 'navigation stays compact')
+    assert.ok(tabs.every(t => Math.abs(t.height - (dock.height - 10)) <= 1), 'tab backgrounds fill the navigation height inside its padding and border')
+    const zoomIcon = await rect(page, '#preview-zoom-fit svg')
+    assert.equal(zoomIcon.width, 20, 'zoom icons keep the design-system size inside the touch target')
+    assert.equal(zoomIcon.height, 20)
+    assert.ok((await rect(page, '.canvas-wrap')).height > workspace.height * 0.75, 'canvas owns the page')
     await assertPreviewToggles(page)
     await assertPreviewSecondaryMenu(page)
-    await assertTitlebarClean(page, "editor")
-    await assertNoPageOverflow(page, "editor")
-    const main = await rect(page, "main")
-    const sidebar = await rect(page, "main > aside")
-    const dock = await rect(page, ".mobile-workspace-tabs")
-    const workspace = await rect(page, "main > .workspace")
-    // 停靠条是手指尺寸的面板切换器：两个 44 高的标签 + 拖动调高的手柄
-    assert.equal(dock.height, 56, "pane dock keeps the 56px touch bar")
-    const tabs = await page.$$eval('.mobile-workspace-tabs button[data-mobile-pane]', (buttons) => buttons.map((button) => {
-      const box = button.getBoundingClientRect()
-      const style = getComputedStyle(button)
-      return { x: box.x, width: box.width, height: box.height, text: button.textContent.trim(), background: style.backgroundColor, pointer: style.pointerEvents }
-    }))
-    assert.deepEqual(tabs.map((tab) => tab.text), ["文件与布局", "属性检查器"], "pane tabs keep their labels")
-    assert.ok(tabs.every((tab) => tab.height >= 44), "pane tabs are finger sized")
-    assert.ok(tabs.every((tab) => tab.pointer !== "none"), "pane tabs take taps")
-    assert.ok(tabs[0].width > dock.width / 3 && tabs[1].width > dock.width / 3, "each tab owns its half of the dock")
-    assert.notEqual(tabs[0].background, tabs[1].background, "current pane is visually distinct")
-    assert.ok(Math.abs(sidebar.y - main.y) <= 1, `panes start at the top of main (gap ${sidebar.y - main.y}px)`)
-    assert.ok(Math.abs(sidebar.bottom - dock.y) <= 1, "panes end at the dock")
-    assert.ok(Math.abs(dock.bottom - workspace.y) <= 1, "canvas starts below the dock")
-    assert.ok(Math.abs(workspace.bottom - main.bottom) <= 1, "canvas reaches the bottom")
-    const canvasWrap = await rect(page, "main > .workspace > .canvas-wrap")
-    assert.ok(canvasWrap.height > workspace.height * 0.6, `canvas gets the workspace (${canvasWrap.height}/${workspace.height})`)
-    assert.equal((await rect(page, ".workspace-status")).visible, false, "status strip is hidden on phones")
-    const toolbar = await rect(page, ".preview-toolbar")
-    assert.ok(toolbar.visible && toolbar.y >= workspace.y && toolbar.bottom <= canvasWrap.y + 1, "preview toolbar sits above the canvas")
-    const items = await page.$$eval(".sidebar-overview .mobile-overview-active .nav-item", (nodes) =>
-      nodes.filter((node) => node.getBoundingClientRect().height > 0 && node.checkVisibility()).length)
-    assert.ok(items > 0, "the active overview group lists its items")
   }))
 
-  await check(`${tag} pane switching and collapse`, () => withPage(viewport, async (page) => {
+  await check(`${tag} page switching and keyboard navigation`, () => withPage(viewport, async (page) => {
     await openTemplate(page)
-    const hidden = await rect(page, "main > .source")
-    assert.ok(hidden.x >= viewport.width - 1, `inspector stays off screen on the layout pane (x ${hidden.x})`)
-    // 点标签切换（拖动手柄只调高度，不切换面板）
-    await page.locator('button[data-mobile-pane="inspector"]').click()
-    await page.waitForTimeout(350)
-    const source = await rect(page, "main > .source")
-    assert.ok(source.x >= -1 && source.right <= viewport.width + 1, "inspector slides in")
-    assert.equal(await page.locator('button[data-mobile-pane="inspector"]').getAttribute("aria-pressed"), "true", "inspector tab is selected")
-    const handle = await rect(page, "#mobile-split-handle")
-    assert.ok(handle.width >= 32 && handle.height >= 32, "split handle keeps a finger sized drag target")
-    await page.locator("#mobile-split-handle").click()
-    await page.waitForTimeout(250)
-    assert.equal((await rect(page, "main > .workspace")).visible, false, "collapsing hides the canvas")
-    const main = await rect(page, "main")
-    const expanded = await rect(page, "main > .source")
-    assert.ok(Math.abs(expanded.bottom - main.bottom) <= 1, "panes use the freed space")
+    await tab(page, 'layout').click()
+    assert.equal((await rect(page, 'main > aside')).visible, true)
+    assert.equal((await rect(page, 'main > .source')).visible, false)
+    assert.equal((await rect(page, 'main > .workspace')).visible, false)
+    await tab(page, 'inspector').click()
+    assert.equal((await rect(page, 'main > .source')).visible, true)
+    assert.equal((await rect(page, 'main > aside')).visible, false)
+    await page.getByRole('button', {name:'完成',exact:true}).click()
+    assert.equal((await rect(page, 'main > .workspace')).visible, true)
+    await tab(page, 'canvas').focus()
+    await page.keyboard.press('ArrowRight')
+    assert.equal(await tab(page, 'inspector').getAttribute('aria-pressed'), 'true')
+    await page.keyboard.press('End')
+    assert.equal(await tab(page, 'layout').getAttribute('aria-pressed'), 'true')
+    await page.keyboard.press('Home')
+    assert.equal(await tab(page, 'canvas').getAttribute('aria-pressed'), 'true')
+    await assertNoPageOverflow(page, 'navigation')
   }))
 
-  await check(`${tag} mode switch keeps the title readable`, () => withPage(viewport, async (page) => {
-    await openTemplate(page)
-    await page.locator('[data-mobile-choice="mode"]').click()
-    await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
-    await assertTitlebarClean(page, "edit mode")
-    const title = await rect(page, "#document-name")
-    assert.ok(title.width >= 40, `document name keeps room (${title.width}px)`)
-  }))
-
-  await check(`${tag} settings sheet`, () => withPage(viewport, async (page) => {
-    // 极窄手机的标题栏不留设置按钮（入口在文件菜单里）
-    const preferences = page.locator(".titlebar-preferences")
-    if (await preferences.isVisible()) await preferences.click()
-    else {
-      await page.locator(".pen-file-menu summary").click()
-      await page.locator('.pen-file-menu [data-app-dialog="settings"]').click()
-    }
-    await page.waitForSelector("#settings-dialog[open]")
-    const dialog = await rect(page, "#settings-dialog")
-    assert.ok(dialog.x >= -1 && dialog.right <= viewport.width + 1 && dialog.bottom <= viewport.height + 1, "sheet fits the screen")
-    const tabs = await page.$$eval("#settings-dialog .settings-nav-item", (nodes) => nodes
-      .filter((node) => node.checkVisibility())
-      .map((node) => ({ page: node.dataset.settingsPage, top: Math.round(node.getBoundingClientRect().top), scrollW: node.scrollWidth, clientW: node.clientWidth })))
-    assert.equal(new Set(tabs.map((tab) => tab.top)).size, 1, "category chips stay on one row")
-    assert.ok(tabs.every((tab) => tab.scrollW <= tab.clientW + 1), "category labels are not clipped")
-    for (const tab of tabs) {
-      await page.locator(`#settings-dialog [data-settings-page="${tab.page}"]`).click()
-      const overflow = await page.$eval("#settings-dialog", (sheet) => {
-        const bounds = sheet.getBoundingClientRect()
-        const panel = sheet.querySelector(".settings-page:not([hidden])")
-        return Array.from(panel.querySelectorAll("*"))
-          .filter((element) => element.checkVisibility() && element.getBoundingClientRect().width > 0)
-          .filter((element) => {
-            const box = element.getBoundingClientRect()
-            return box.left < bounds.left - 1 || box.right > bounds.right + 1
-          })
-          .map((element) => element.id || element.className || element.tagName)
+  await check(`${tag} more and settings sheets`, () => withPage(viewport, async (page) => {
+    await page.locator('#mobile-app-more > summary').click()
+    const menu = await rect(page, '#mobile-app-more > .ui-menu')
+    assert.ok(menu.x >= 0 && menu.right <= viewport.width && menu.bottom <= viewport.height, 'more fits the phone')
+    assert.equal(await page.locator('#mobile-app-more [data-mobile-action="mode"]').isDisabled(), true, 'document actions are disabled without a skin')
+    await page.keyboard.press('Escape')
+    assert.equal(await page.locator('#mobile-app-more').getAttribute('open'), null)
+    await page.locator('#mobile-app-more > summary').click()
+    await page.locator('#mobile-app-more [data-app-dialog="settings"]').click()
+    await page.waitForSelector('#settings-dialog[open]')
+    const dialog = await rect(page, '#settings-dialog')
+    assert.ok(dialog.x >= -1 && dialog.right <= viewport.width + 1 && dialog.bottom <= viewport.height + 1)
+    for (const button of await page.locator('#settings-dialog .settings-nav-item:visible').all()) {
+      await button.click()
+      const overflow = await page.locator('#settings-dialog .settings-page:not([hidden])').evaluate(panel => {
+        const bounds = panel.closest('dialog').getBoundingClientRect()
+        return Array.from(panel.querySelectorAll('*')).filter(el => el.checkVisibility()).filter(el => {
+          const r = el.getBoundingClientRect()
+          return r.width && (r.left < bounds.left - 1 || r.right > bounds.right + 1)
+        }).map(el => el.id || el.className)
       })
-      assert.deepEqual(overflow, [], `${tab.page} page stays inside the sheet`)
-      const labelOverlaps = await page.$eval("#settings-dialog .settings-page:not([hidden])", (panel) =>
-        Array.from(panel.querySelectorAll(".settings-row")).filter((row) => {
-          const children = Array.from(row.children).filter((child) => child.checkVisibility())
-          for (let i = 0; i < children.length; i += 1) {
-            for (let j = i + 1; j < children.length; j += 1) {
-              const a = children[i].getBoundingClientRect()
-              const b = children[j].getBoundingClientRect()
-              if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1) return true
-            }
-          }
-          return false
-        }).length)
-      assert.equal(labelOverlaps, 0, `${tab.page} rows do not overlap their controls`)
+      assert.deepEqual(overflow, [], 'settings content stays inside the sheet')
     }
-    const save = await rect(page, "#settings-save")
-    assert.ok(save.visible && save.bottom <= viewport.height + 1, "save button is reachable")
-  }))
-
-  await check(`${tag} new skin sheet keeps its buttons on screen`, () => withPage(viewport, async (page) => {
-    await page.evaluate(() => document.getElementById("new-project-dialog").showModal())
-    const create = await rect(page, '#new-project-form button[value="create"]')
-    assert.ok(create.visible && create.bottom <= viewport.height + 1, "create button is visible without scrolling the sheet")
+    assert.ok((await rect(page, '#settings-save')).bottom <= viewport.height)
   }))
 }
 
-await check("390×844 preview above the panes", () => withPage({ width: 390, height: 844 }, async (page) => {
-  await openTemplate(page)
-  const main = await rect(page, "main")
-  const workspace = await rect(page, "main > .workspace")
-  const dock = await rect(page, ".mobile-workspace-tabs")
-  const sidebar = await rect(page, "main > aside")
-  assert.ok(Math.abs(workspace.y - main.y) <= 1, "canvas on top")
-  assert.ok(Math.abs(workspace.bottom - dock.y) <= 1, "dock under the canvas")
-  assert.ok(Math.abs(dock.bottom - sidebar.y) <= 1 && Math.abs(sidebar.bottom - main.bottom) <= 1, "panes below the dock")
-}, { storage: { "mobile-preview-position": "top" } }))
-
-// 检查器为手指而改：44 触控目标、数值用 − / + 步进、复制 / 交换 / 删除进「更多」。
-await check("390×844 inspector is finger sized", () => withPage({ width: 390, height: 844 }, async (page) => {
-  await openTemplate(page, "official-android-bds")
-  await page.locator('[data-mobile-choice="mode"]').click()
-  await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
-  const canvas = await rect(page, "#preview")
-  await page.mouse.click(canvas.x + canvas.width * 0.45, canvas.y + canvas.height * 0.45)
-  await page.waitForSelector('#quick-inspector .ui-field:has(.ui-step)')
-  assert.equal(await page.locator('button[data-mobile-pane="inspector"]').getAttribute("aria-pressed"), "true", "selecting a key opens the inspector")
-
-  const rows = await page.$$eval("#quick-inspector .ui-field", (fields) => fields
-    .filter((field) => field.checkVisibility() && field.getBoundingClientRect().width > 0 && !field.closest("[hidden]"))
-    .map((field) => Math.round(field.getBoundingClientRect().height)))
-  assert.ok(rows.length > 4, `inspector lists property rows (${rows.length})`)
-  assert.ok(Math.min(...rows) >= 44, `property rows are 44 tall (min ${Math.min(...rows)})`)
-
-  await page.waitForTimeout(300)
-  const numericRow = page.locator("#quick-inspector .ui-field:has(.ui-step)").first()
-  const numericInput = numericRow.locator("input").first()
-  const before = Number(await numericInput.inputValue())
-  await numericRow.locator(".ui-step").nth(1).click()
+await check('editing, real key preview, undo and selection survive navigation', () => withPage({width:393,height:852}, async page => {
+  await openTemplate(page, 'official-android-bds')
+  await setEditMode(page)
+  await selectKey(page)
+  assert.equal(await tab(page, 'inspector').getAttribute('aria-pressed'), 'true')
+  const selected = await page.locator('#selected-key').textContent()
+  await page.waitForFunction(() => document.querySelector('#mobile-key-canvas').width > 1)
+  assert.ok(await page.locator('#mobile-key-preview').isVisible())
+  assert.match(await page.locator('#mobile-key-size').textContent(), /\d+ × \d+/)
+  await page.locator('#mobile-property-tabs [data-mobile-category="all"]').click()
+  await page.locator('.mobile-group-disclosure').getByText('布局', { exact: true }).click()
+  const normal = await page.locator('#mobile-key-canvas').evaluate(n => n.toDataURL())
+  const sample = await page.locator('#mobile-key-preview').boundingBox()
+  await page.mouse.move(sample.x + sample.width / 2, sample.y + sample.height / 2)
+  await page.mouse.down()
+  await page.waitForFunction(normal => document.querySelector('#mobile-key-canvas').toDataURL() !== normal, normal)
+  await page.mouse.up()
   await page.waitForTimeout(200)
-  assert.equal(Number(await numericInput.inputValue()), before + 1, "plus step adds one")
-  assert.equal(await page.locator("#mobile-undo").isEnabled(), true, "stepping is undoable")
-
-  const actions = await rect(page, ".inspector-object-actions")
-  assert.ok(actions.visible, "object actions stay in the inspector header")
-  assert.equal(await page.locator('.inspector-object-actions > button[data-key-action="copy"]').isVisible(), false, "copy leaves the header on phones")
-  await page.locator("#inspector-actions-more summary").click()
-  assert.equal(await page.locator('#inspector-actions-more [data-key-action-ref="copy"]').isVisible(), true, "copy moves into the more menu")
-  assert.equal(await page.locator("#inspector-actions-more").getAttribute("open"), "", "menu opens")
-  // 菜单项真的执行同一个对象操作：删除后选中对象回到空态
-  const selected = await page.locator("#selected-key").textContent()
+  assert.equal(await page.locator('#selected-key').textContent(), selected)
+  assert.ok(normal.length > 100, 'preview contains rendered pixels')
+  const rows = await page.locator('#quick-inspector .ui-field').evaluateAll(ns => ns.filter(n => n.checkVisibility() && !n.closest('[hidden]')).map(n => n.getBoundingClientRect().height))
+  assert.ok(rows.length > 4 && Math.min(...rows) >= 44, 'property rows have finger-sized controls')
+  const position = page.locator('#quick-inspector [data-key-field="x"]')
+  const before = Number(await position.inputValue())
+  await position.fill(String(before + 1))
+  await position.dispatchEvent('change')
+  await page.waitForTimeout(200)
+  assert.equal(Number(await position.inputValue()), before + 1)
+  assert.equal(await page.locator('#mobile-undo').isEnabled(), true)
+  await tab(page, 'canvas').click()
+  await tab(page, 'inspector').click()
+  assert.equal(Number(await position.inputValue()), before + 1, 'editing survives page switching')
+  assert.equal(await page.locator('#selected-key').textContent(), selected)
+  await page.locator('#mobile-undo').click()
+  await page.waitForTimeout(200)
+  assert.equal(Number(await position.inputValue()), before)
+  await page.locator('#inspector-actions-more > summary').click()
   await page.locator('#inspector-actions-more [data-key-action-ref="delete"]').click()
-  await page.waitForTimeout(500)
-  assert.equal(await page.locator("#inspector-actions-more").getAttribute("open"), null, "menu closes after the action")
-  assert.notEqual(await page.locator("#selected-key").textContent(), selected, "more menu runs the same delete action")
+  await page.waitForTimeout(200)
+  assert.notEqual(await page.locator('#selected-key').textContent(), selected, 'object menu delegates deletion')
 }))
 
-await check("1280×800 keeps inline object actions", () => withPage({ width: 1280, height: 800 }, async (page) => {
-  await openTemplate(page, "official-android-bds")
-  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
-  const canvas = await rect(page, "#preview")
-  // 画布比例随窗口变化，逐个点位试到选中一个按键为止
-  for (const [fx, fy] of [[0.5, 0.6], [0.45, 0.45], [0.5, 0.85], [0.25, 0.65]]) {
-    await page.mouse.click(canvas.x + canvas.width * fx, canvas.y + canvas.height * fy)
-    await page.waitForTimeout(400)
-    if (await page.locator("#quick-inspector .ui-field").count() > 0) break
-  }
-  // 数值行一定在可见分组里（未显示的皮肤信息分组里也有 .ui-field）
-  await page.waitForSelector("#quick-inspector .ui-field:has(.ui-step)")
-  assert.equal(await page.locator('.inspector-object-actions > button[data-key-action="copy"]').isVisible(), true, "desktop keeps the inline copy button")
-  assert.equal(await page.locator("#inspector-actions-more").isVisible(), false, "desktop hides the mobile more menu")
-  assert.equal(await page.locator("#quick-inspector .ui-step").first().isVisible(), false, "desktop has no step buttons")
-}))
-
-for (const { top, position } of [
-  { top: 52, position: "top" }, { top: 52, position: "bottom" },
-  { top: 59, position: "top" }, { top: 59, position: "bottom" },
-]) {
-  await check(`Dynamic Island ${top}px safe area with preview at ${position}`, () => withPage({ width: 393, height: 852 }, async (page) => {
+for (const colorScheme of ['light','dark']) {
+  await check(`safe areas, theme and orientation (${colorScheme})`, () => withPage({width:393,height:852}, async page => {
     const session = await page.context().newCDPSession(page)
-    // The application must read browser values; no device-specific inset
-    // belongs in app code.
-    await session.send("Emulation.setSafeAreaInsetsOverride", { insets: { top, bottom: 34 } })
-    await openTemplate(page, "official-android-bds")
-    await assertTitlebarClean(page, "Dynamic Island")
-    const titlebar = await rect(page, ".titlebar")
-    assert.equal(titlebar.height, top + 52, "toolbar reserves the browser safe area above its 52px control row")
-    for (const selector of [".titlebar-left", ".titlebar-center", ".titlebar-right"]) {
-      const controls = await rect(page, selector)
-      assert.ok(controls.y >= top, `${selector} stays below the Dynamic Island safe area`)
-      assert.ok(controls.bottom <= titlebar.bottom, `${selector} stays inside the toolbar`)
-    }
-    assert.equal((await rect(page, "main")).y, titlebar.bottom, "workspace starts after the full toolbar")
-    await session.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 0, bottom: 0 } })
-    assert.equal((await rect(page, ".titlebar")).height, 52, "removing the browser inset removes the reserved space")
-  }, { colorScheme: "dark", storage: { "mobile-preview-position": position } }))
+    await session.send('Emulation.setSafeAreaInsetsOverride', {insets:{top:59,bottom:34}})
+    await openTemplate(page, 'official-android-bds')
+    await assertTitlebarClean(page, 'safe area')
+    const bar = await rect(page, '.titlebar'), dock = await rect(page, '.mobile-workspace-tabs'), canvas = await rect(page, 'main > .workspace')
+    assert.equal(bar.height, 111, 'header reserves top inset once')
+    assert.equal(canvas.y, bar.bottom)
+    assert.equal(dock.bottom, 818, 'navigation clears home indicator once')
+    assert.equal(canvas.bottom + 16, dock.y)
+    const colors = await page.evaluate(() => ({root:getComputedStyle(document.documentElement).backgroundColor,bar:getComputedStyle(document.querySelector('.titlebar')).backgroundColor,accent:getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()}))
+    assert.equal(colors.root, colors.bar)
+    assert.equal(colors.accent.toLowerCase(), colorScheme === 'dark' ? '#4c8dff' : '#2563eb')
+    await tab(page, 'inspector').click()
+    await page.setViewportSize({width:844,height:390})
+    assert.equal((await rect(page, '.mobile-workspace-tabs')).visible, false)
+    for (const selector of ['main > aside','main > .source','main > .workspace']) assert.equal(await page.locator(selector).evaluate(n=>n.inert), false, 'landscape releases all panes')
+    await page.setViewportSize({width:393,height:852})
+    assert.equal(await tab(page,'inspector').getAttribute('aria-pressed'), 'true', 'portrait restores the selected page')
+    assert.equal((await rect(page,'main > .source')).visible,true)
+  }, {colorScheme}))
 }
 
-for (const colorScheme of ["light", "dark"]) {
-  await check(`browser safe areas and split position (${colorScheme})`, () => withPage({ width: 390, height: 844 }, async (page) => {
-    await openTemplate(page)
-    const session = await page.context().newCDPSession(page)
-    await session.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 24, bottom: 20 } })
-    const background = await page.evaluate(() => ({
-      root: getComputedStyle(document.documentElement).backgroundColor,
-      toolbar: getComputedStyle(document.querySelector(".titlebar")).backgroundColor,
-      browser: document.querySelector('meta[name="theme-color"]').content,
-      toolbarToken: getComputedStyle(document.documentElement).getPropertyValue("--material-toolbar").trim(),
-    }))
-    assert.equal(background.root, background.toolbar, "top safe area continues the toolbar background")
-    assert.equal(background.browser, background.toolbarToken, "browser chrome follows the app theme")
-
-    const insets = () => page.evaluate(() => ({
-      top: parseFloat(getComputedStyle(document.querySelector(".titlebar")).paddingTop),
-      canvas: parseFloat(getComputedStyle(document.querySelector(".canvas-wrap")).paddingBottom),
-      editor: parseFloat(getComputedStyle(document.querySelector("main > .source")).paddingBottom),
-      controls: parseFloat(getComputedStyle(document.querySelector(".canvas-multi-toolbar")).bottom),
-    }))
-    assert.equal((await insets()).top, 24, "top inset comes from the browser safe area")
-    assert.equal((await insets()).canvas, 28, "bottom canvas clears the system safe area")
-    const editorPadding = (await insets()).editor
-
-    const setViewport = async (top, bottom, scale = 1) => {
-      await page.evaluate(({ top, bottom, scale }) => {
-        Object.defineProperties(visualViewport, {
-          height: { configurable: true, value: innerHeight - top - bottom },
-          offsetTop: { configurable: true, value: top },
-          scale: { configurable: true, value: scale },
-        })
-        visualViewport.dispatchEvent(new Event("resize"))
-      }, { top, bottom, scale })
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-    }
-    await setViewport(32, 52)
-    assert.equal((await insets()).top, 32, "top controls clear the visual viewport overlap")
-    assert.equal((await insets()).canvas, 60, "bottom inset uses the reported overlap without adding it twice")
-    assert.equal((await insets()).controls, 70, "floating canvas controls clear the bottom overlap")
-    await setViewport(0, 36)
-    assert.equal((await insets()).canvas, 44, "browser control height updates after resizing")
-
-    await page.evaluate(() => {
-      const select = document.querySelector("#mobile-preview-position")
-      select.value = "top"
-      select.dispatchEvent(new Event("change"))
-    })
-    assert.equal((await insets()).canvas, 8, "top canvas needs no bottom avoidance")
-    assert.equal((await insets()).editor, editorPadding, "bottom editor gains no safe area padding")
-    await page.locator("#mobile-split-handle").click()
-    assert.equal((await insets()).editor, editorPadding, "collapsed canvas adds no editor padding")
-
-    await setViewport(60, 200, 2)
-    assert.equal((await insets()).top, 24, "pinch zoom is not browser chrome")
-    await setViewport(0, 0)
-    await page.evaluate(() => {
-      const input = document.createElement("input")
-      input.id = "keyboard-viewport-probe"
-      document.body.append(input)
-      input.focus()
-    })
-    await setViewport(0, 300)
-    assert.equal(await page.locator("html").getAttribute("data-keyboard-open"), "true", "keyboard shrink is detected")
-    assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue("--browser-occlusion-bottom")), "0px", "keyboard height is not a browser inset")
-    await setViewport(0, 0)
-    await page.locator("#keyboard-viewport-probe").evaluate((input) => input.remove())
-  }, { colorScheme }))
-}
-
-await check("844×390 landscape phone keeps the canvas", () => withPage({ width: 844, height: 390 }, async (page) => {
-  await assertNoPageOverflow(page, "landscape welcome")
-  await openTemplate(page, "official-android-bds")
-  await assertPreviewToggles(page)
-  await assertTitlebarClean(page, "landscape")
-  const workspace = await rect(page, "main > .workspace")
-  const canvasWrap = await rect(page, "main > .workspace > .canvas-wrap")
-  assert.ok(canvasWrap.height > workspace.height * 0.6, `canvas gets the workspace (${canvasWrap.height}/${workspace.height})`)
-}))
-
-await check("1280×800 desktop title bar is unchanged", () => withPage({ width: 1280, height: 800 }, async (page) => {
+await check('more uses shared guide and mode state', () => withPage({width:393,height:852}, async page => {
   await openTemplate(page)
-  await assertTitlebarClean(page, "desktop")
-  assert.equal(await page.locator('[data-mobile-choice]:visible').count(), 0, "mobile toggles hidden on desktop")
-  assert.equal(await page.locator('.preview-choice button:visible').count(), 4, "desktop keeps both options")
-  assert.equal((await rect(page, ".pen-file-menu")).visible, true, "desktop file menu")
-  assert.equal((await rect(page, ".mobile-workspace-tabs")).visible, false, "phone dock hidden")
-  assert.equal((await rect(page, "main > aside")).visible, true, "sidebar column")
-}, { mobile: false }))
+  await page.locator('#mobile-app-more > summary').click()
+  const guides=page.locator('#mobile-app-more [data-mobile-action="toggle-guides"]')
+  const before=await guides.getAttribute('aria-pressed')
+  await guides.click()
+  assert.equal(await page.locator('#mobile-app-more').getAttribute('open'),null)
+  await page.locator('#mobile-app-more > summary').click()
+  assert.notEqual(await guides.getAttribute('aria-pressed'),before)
+  await page.keyboard.press('Escape')
+  await setEditMode(page)
+  await page.locator('#mobile-app-more > summary').click()
+  assert.equal(await page.locator('#mobile-mode-label').textContent(),'编辑模式')
+  await page.locator('[data-mobile-menu-close]').click()
+  assert.equal(await page.locator('#mobile-app-more').getAttribute('open'),null)
+}))
+
+await check('export format selection delegates to the real export flow', () => withPage({width:320,height:568}, async page => {
+  await page.evaluate(() => { window.showSaveFilePicker = undefined })
+  await openTemplate(page, 'official-android-bds')
+  await page.locator('#mobile-app-more > summary').click()
+  await page.locator('#mobile-app-more [data-mobile-action="mobile-export-open"]').click()
+  await page.waitForSelector('#mobile-export-dialog[open]')
+  const sheet = await rect(page, '#mobile-export-dialog')
+  assert.ok(sheet.x >= 0 && sheet.right <= 320 && sheet.bottom <= 568, 'format sheet fits the narrow phone')
+  assert.equal(await page.locator('#mobile-export-dialog input[type="radio"]').count(), 6, 'all existing targets are available')
+  assert.equal(await page.locator('#mobile-export-dialog input:checked').inputValue(), 'bds')
+  await page.locator('#mobile-export-dialog button[value="cancel"]').click()
+  await page.waitForSelector('#mobile-export-dialog[open]', {state:'hidden'})
+  assert.equal(await page.locator('#file-operation-dialog[open]').count(), 0, 'cancelling does not start export')
+  await page.locator('.pen-file-menu > summary').click()
+  await page.locator('#mobile-export-open').click()
+  const download = page.waitForEvent('download')
+  await page.locator('#mobile-export-dialog button[value="export"]').click()
+  const result = await download
+  assert.match(result.suggestedFilename(), /\.bds$/)
+  await page.waitForSelector('#file-operation-dialog[open]')
+  await page.waitForFunction(() => !document.querySelector('#file-operation-close').disabled)
+  assert.match(await page.locator('#file-operation-dialog').textContent(), /完成/)
+}))
+
+for (const viewport of [{width:740,height:360},{width:1280,height:800}]) {
+  await check(`${viewport.width}×${viewport.height} keeps desktop columns`, () => withPage(viewport, async page => {
+    await openTemplate(page)
+    await assertTitlebarClean(page,'desktop')
+    await assertNoPageOverflow(page,'desktop')
+    assert.equal((await rect(page,'.mobile-workspace-tabs')).visible,false)
+    assert.equal((await rect(page,'#mobile-app-more')).visible,false)
+    assert.equal((await rect(page,'main > aside')).visible,true)
+    assert.equal((await rect(page,'main > .source')).visible,true)
+    assert.equal((await rect(page,'main > .workspace')).visible,true)
+  }, {mobile:false}))
+}
 
 await browser.close()
 await server.close()
-
 for (const result of results) {
-  console.log(`${result.ok ? "ok  " : "FAIL"} ${result.name}${result.ok ? "" : `\n     ${result.error.message.split("\n")[0]}`}`)
+  console.log(`${result.ok ? 'PASS' : 'FAIL'}: ${result.name}`)
+  if (!result.ok) console.error(result.error)
 }
-const failed = results.filter((result) => !result.ok).length
-console.log(`\n${results.length - failed}/${results.length} passed`)
-process.exit(failed ? 1 : 0)
+const failed=results.filter(result=>!result.ok).length
+console.log(`${results.length-failed}/${results.length} mobile layout checks passed`)
+if(failed) process.exitCode=1

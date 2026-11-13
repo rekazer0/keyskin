@@ -14,7 +14,7 @@ import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
 import { aiDesignStatus, aiDesignPanel, theme, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationClose, fileOperationDetail, fileOperationResult } from "./dom"
 import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
-import { applyModeState, syncSegmentedControls } from "./mobile-layout"
+import { applyModeState, syncSegmentedControls, setMobilePane } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
 import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
@@ -171,6 +171,7 @@ export async function loadArchive(
   }
   // The canvas edits keys only for Baidu skins, so the mode state follows the document's format.
   applyModeState()
+  setMobilePane("canvas")
   updateFileOperationProgress(92, "正在连接源码工作区…")
   await activateSourceWorkspace(nextSourceWorkspace, sourcePrefix)
   if (pendingSourceDirectory !== undefined) {

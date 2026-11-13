@@ -44,7 +44,10 @@
   --dialog-max-height: 480px;
   --style-card-width: 160px; /* 样式库与动画列表卡片的最小宽度，随容器拉伸并自动加列 */
   --toolbar-icon-card-width: 72px;
-  --skin-preview-size: 96px;
+  --skin-preview-size: 56px;
+  --resource-tile-size: 80px; /* 资源磁贴固定宽度，高度为宽度的 4/5，随侧栏宽度自动增减列 */
+
+  --resource-tile-icon-stroke-width: 2;
 
   /* 控件高度：3 档 */
   --control-height-sm: 24px;  /* 行内小按钮、角标按钮 */
@@ -58,12 +61,13 @@
   --icon-size-md: 16px;
   --icon-size-lg: 20px;
 
-  /* 动效：3 档时长 + 2 条曲线 */
+  /* 动效：3 档时长，进入、展开与平滑往复曲线 */
   --duration-fast: 120ms;   /* hover、按下、颜色变化 */
   --duration-base: 200ms;   /* 展开收起、浮层出现 */
   --duration-slow: 320ms;   /* 对话框、sheet、页面切换 */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
 
   /* 交互状态 */
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
@@ -181,7 +185,7 @@
 @media (max-width: 760px) {
   :root, :root.macos { --titlebar-height: calc(52px + var(--safe-area-top)); }
   /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
-  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-dock-h: 56px; }
+  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-dock-h: 64px; --mobile-inspector-split: 38%; --mobile-drawer-width: 320px; }
 }
 
 :root[data-app-theme="dark"] {
@@ -231,6 +235,7 @@
   --syntax-value-style: #ff7b72;
 }
 
+@media (min-width: 761px) {
 :root.windows[data-window-material="on"] {
   --material-window: #e9ebef;
   --material-toolbar: #ffffff;
@@ -335,12 +340,57 @@
   --control: #1e2126;
   --glass-surface: #1e2126;
 }
+}
 
 @media (prefers-reduced-motion: reduce) {
   :root {
     --duration-fast: 0ms;
     --duration-base: 0ms;
     --duration-slow: 0ms;
+  }
+}
+
+/* 移动端 Pen 最终稿：同一套中性色，蓝色只表示当前值与主操作。 */
+@media (max-width: 760px) {
+  :root {
+    --line: #DFE3E9;
+    --line-soft: #ECEEF2;
+    --text: #101318;
+    --secondary: #59616D;
+    --muted: #59616D;
+    --tertiary: #858D99;
+    --accent: #2563EB;
+    --accent-soft: #E8F0FE;
+    --material-window: #F7F8FA;
+    --material-toolbar: #F7F8FA;
+    --material-sidebar: #F7F8FA;
+    --material-inspector: #F7F8FA;
+    --material-panel: #FFFFFF;
+    --material-menu: #FFFFFF;
+    --material-content: #F1F3F6;
+    --material-control: #F1F3F6;
+    --canvas: #F7F8FA;
+    --canvas-surface: #F7F8FA;
+  }
+  :root[data-app-theme="dark"] {
+    --line: #2A3038;
+    --line-soft: #1E232A;
+    --text: #F4F6F8;
+    --secondary: #9AA3AF;
+    --muted: #9AA3AF;
+    --tertiary: #7C8590;
+    --accent: #4C8DFF;
+    --accent-soft: #132743;
+    --material-window: #0B0C0E;
+    --material-toolbar: #0B0C0E;
+    --material-sidebar: #0B0C0E;
+    --material-inspector: #0B0C0E;
+    --material-panel: #14171B;
+    --material-menu: #14171B;
+    --material-content: #1B1F25;
+    --material-control: #242932;
+    --canvas: #0B0C0E;
+    --canvas-surface: #0B0C0E;
   }
 }
 

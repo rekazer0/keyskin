@@ -631,8 +631,10 @@ export function setGuidesVisible(enabled: boolean): void {
 export function syncCandidateSelection(): void {
   const selected = appState.selectedCandidate && (appState.selectedPath === appState.layoutPath || appState.selectedPath === toolbarStrip.dataset.path)
     || appState.archive?.format !== "bda" && isToolbarPath(appState.selectedPath) && !appState.selectedToolbarSections.length
-  candidateArea.classList.toggle("candidate-selected", selected)
-  candidateArea.setAttribute("aria-selected", String(selected))
+  const inputSelected = Boolean(selected && appState.selectedCandidate === "input")
+  candidateArea.classList.toggle("candidate-selected", Boolean(selected && !inputSelected))
+  candidateArea.setAttribute("aria-selected", String(Boolean(selected && !inputSelected)))
+  candidateInput.setAttribute("aria-selected", String(inputSelected))
 }
 
 /** The keyboard as drawn on the canvas at canvas resolution: the candidate bar layers (which overlap) over the panel; transparent unless a background is given. */

@@ -273,7 +273,7 @@ function boardGroups(): Group[] {
     ]] as [string, SsfBlock[]]] : [],
   ]
   return groups
-    .filter(([label]) => appState.selectedCandidate
+    .filter(([label]) => appState.selectedCandidate === "input" ? label === "输入码" : appState.selectedCandidate
       ? ["候选栏", "候选字", "输入码"].includes(label)
       : label === (appState.selectedKeySections.some(isListCell) ? "符号列" : "键盘背景"))
     .map(([label, blocks]) => renderGroup(label, blocks))
@@ -370,7 +370,7 @@ export function populateSsfInspector(container: HTMLElement): boolean {
     const group = renderSsfGroup(label, blocks, code, key)
     return group ? [group] : []
   }))
-  if (appState.selectedCandidate || /phoneSkin\.ini$/i.test(path)) container.append(toolbarIconSection())
+  if (appState.selectedCandidate !== "input" && (appState.selectedCandidate || /phoneSkin\.ini$/i.test(path))) container.append(toolbarIconSection())
   for (const details of container.querySelectorAll<HTMLDetailsElement>("details[data-ssf-states]")) {
     details.open = expanded.has(details.dataset.ssfStates)
   }

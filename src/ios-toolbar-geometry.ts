@@ -106,7 +106,7 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>): void {
           let name = `keyskin_${orientation}_${section}_${entry.key.toLowerCase()}`
           while (files.has(`${root}res/${name}.png`)) name = `_${name}`
           files.set(`${root}res/${name}.png`, encodePng(output))
-          files.set(`${root}res/${name}.til`, strToU8(`[IMG1]\nSOURCE_RECT=0,0,${output.width},${output.height}\n`))
+          files.set(`${root}res/${name}.til`, strToU8(`[GLOBAL]\nUSE_ALPHA=1\nTILE_NUM=1\n\n[IMG1]\nSOURCE_RECT=0,0,${output.width},${output.height}\n`))
           entry.value = `${name},1`
           changed = true
         }
@@ -127,7 +127,7 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>): void {
       let name = `keyskin_${orientation}_candidate_${entry.key.toLowerCase()}`
       while (files.has(`${root}res/${name}.png`)) name = `_${name}`
       files.set(`${root}res/${name}.png`, encodePng(output))
-      files.set(`${root}res/${name}.til`, strToU8(`[IMG1]\nSOURCE_RECT=0,0,${width},${height}\n`))
+      files.set(`${root}res/${name}.til`, strToU8(`[GLOBAL]\nUSE_ALPHA=1\nTILE_NUM=1\n\n[IMG1]\nSOURCE_RECT=0,0,${width},${height}\n`))
       entry.value = `${name},1`
       baked = true
     }

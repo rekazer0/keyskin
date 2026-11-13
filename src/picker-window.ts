@@ -108,6 +108,7 @@ const imageView = $("#image-picker-view")
 const canvas = $("#picker-canvas") as HTMLCanvasElement
 const libraryView = $("#style-library-view")
 const libraryGrid = $("#style-library-grid")
+const libraryScroll = $("#style-library-scroll")
 const libraryEmpty = $("#style-library-empty")
 const libraryKinds = $("#style-library-kinds")
 const libraryFilters = $("#style-library-filters")
@@ -141,6 +142,13 @@ let libraryFilter = "all"
 let librarySelected: { styleID?: string; imagePath?: string } | undefined
 const libraryBitmaps = new Map<string, Promise<ImageBitmap | undefined>>()
 let libraryAnimations: IniDocument | undefined
+// 几千张卡片全插进文档时，WebKit 打开和滚动都要重排、逐张算可见性；网格只放可见的几行，上下用 padding 占位。
+const LIBRARY_BUFFER = 800
+let libraryItems: LibraryCard[] = []
+let libraryStart = 0
+let libraryColumns = 0
+let libraryPitch = 0
+let libraryFrame = 0
 const previewRequests = new Map<string, { promise: Promise<void>; done(): void }>()
 const imageRequests = new Map<string, { promise: Promise<string | undefined>; done(src?: string): void }>()
 
@@ -280,6 +288,67 @@ function emitLibrary(event: string, payload: unknown = {}): void {
 }
 
 type LibraryTarget = { styleID?: string; imagePath?: string }
+type LibraryCard = { key: string; build(): HTMLElement }
+
+function buildLibraryCard(index: number): HTMLElement {
+  const item = libraryItems[index]!
+  const card = item.build()
+  // 滚出窗口再滚回来的卡片是新建的，选中状态按 librarySelected 补上。
+  if (item.key && item.key === (librarySelected?.styleID ?? librarySelected?.imagePath)) card.setAttribute("aria-selected", "true")
+  return card
+}
+
+function libraryCardAt(index: number): HTMLElement | undefined {
+  return libraryGrid.children[index - libraryStart] as HTMLElement | undefined
+}
+
+/** 按滚动位置换上可见的行，保留仍在窗口里的卡片；列数或行高变了就整窗重建。 */
+function renderLibraryWindow(): void {
+  libraryFrame = 0
+  // 视图隐藏时量不出列数和行高，保留现有卡片，重新显示时 ResizeObserver 会再排一次。
+  if (!libraryScroll.clientHeight) return
+  for (let pass = 0; pass < 2; pass++) {
+    // 先量完再改 DOM：清空网格后再读 scrollTop，浏览器会按变矮的高度把滚动位置截掉。
+    const style = getComputedStyle(libraryGrid)
+    const columns = Math.max(1, style.gridTemplateColumns.split(" ").length)
+    const sample = libraryGrid.firstElementChild as HTMLElement | null
+    const pitch = sample?.offsetHeight ? sample.offsetHeight + (parseFloat(style.rowGap) || 0) : libraryPitch || 200
+    const padding = parseFloat(libraryGrid.style.getPropertyValue("--_library-before")) || 0
+    const top = libraryScroll.scrollTop - (parseFloat(style.paddingTop) - padding)
+    if (columns === libraryColumns && Math.abs(pitch - libraryPitch) < 1 && pass) return
+    if (columns !== libraryColumns || Math.abs(pitch - libraryPitch) >= 1) {
+      libraryColumns = columns
+      libraryPitch = pitch
+      libraryGrid.replaceChildren()
+      libraryStart = 0
+    }
+    const rows = Math.ceil(libraryItems.length / columns)
+    const firstRow = Math.min(rows, Math.max(0, Math.floor((top - LIBRARY_BUFFER) / pitch)))
+    const lastRow = Math.min(rows, Math.max(firstRow, Math.ceil((top + libraryScroll.clientHeight + LIBRARY_BUFFER) / pitch)))
+    const start = firstRow * columns
+    const end = Math.min(libraryItems.length, lastRow * columns)
+    const rendered = libraryStart + libraryGrid.children.length
+    if (end <= libraryStart || start >= rendered) {
+      libraryGrid.replaceChildren()
+      libraryStart = start
+    } else {
+      for (let index = libraryStart; index < start; index++) libraryGrid.firstElementChild?.remove()
+      for (let index = end; index < rendered; index++) libraryGrid.lastElementChild?.remove()
+      libraryGrid.prepend(...Array.from({ length: Math.max(0, libraryStart - start) }, (_, offset) => buildLibraryCard(start + offset)))
+      libraryStart = start
+    }
+    const from = libraryStart + libraryGrid.children.length
+    libraryGrid.append(...Array.from({ length: Math.max(0, end - from) }, (_, offset) => buildLibraryCard(from + offset)))
+    libraryGrid.style.setProperty("--_library-before", `${firstRow * pitch}px`)
+    libraryGrid.style.setProperty("--_library-after", `${(rows - lastRow) * pitch}px`)
+  }
+}
+
+function scheduleLibraryWindow(): void {
+  libraryFrame ||= requestAnimationFrame(renderLibraryWindow)
+}
+libraryScroll.addEventListener("scroll", scheduleLibraryWindow, { passive: true })
+new ResizeObserver(scheduleLibraryWindow).observe(libraryScroll)
 
 /** 单击选中并在底部预览；选中只用 aria-selected 表示。 */
 function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
@@ -390,29 +459,29 @@ function bindLibraryCard(card: HTMLElement, target: LibraryTarget, chooser: bool
   if (!chooser) card.addEventListener("dblclick", () => { if (!libraryApply.disabled) emitLibrary("style-library-apply", target) })
 }
 
-function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean, images: boolean, query: string): HTMLElement[] {
-  if (chooser) return resources.filter(({ path }) => path.toLowerCase().includes(query)).map(({ path, dataURL }) => {
+function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean, images: boolean, query: string): LibraryCard[] {
+  if (chooser) return resources.filter(({ path }) => path.toLowerCase().includes(query)).map(({ path, dataURL }) => ({ key: path, build: () => {
     const card = imageResourceCard({ path, src: dataURL })
     card.setAttribute("aria-selected", String(path === imagePayload?.path))
     bindLibraryCard(card, { imagePath: path }, true)
     return card
-  })
+  } }))
   if (!payload) return []
   if (payload.soundOnly) {
-    return payload.sounds.filter(({ styleID, filename }) => !query || styleID.toLowerCase().includes(query) || filename.toLowerCase().includes(query)).map(({ styleID, label, filename, playable, uses }) => {
+    return payload.sounds.filter(({ styleID, filename }) => !query || styleID.toLowerCase().includes(query) || filename.toLowerCase().includes(query)).map(({ styleID, label, filename, playable, uses }) => ({ key: styleID, build: () => {
       const card = styleCard({ id: styleID, label: label ?? `STYLE${styleID}`, kind: "sound", sound: () => librarySound(filename, playable), uses })
       bindLibraryCard(card, { styleID }, false)
       return card
-    })
+    } }))
   }
   if (images) {
-    return payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter))).map(({ path, uses }) => {
+    return payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter))).map(({ path, uses }) => ({ key: path, build: () => {
       const card = imageResourceCard({ path, load: () => libraryImageURL(path), uses })
       bindLibraryCard(card, { imagePath: path }, false)
       return card
-    })
+    } }))
   }
-  return payload.styles.filter(style => styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter, query)).map((style) => {
+  return payload.styles.filter(style => styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
     const card = styleCard({
       id: style.styleID, label: payload.ssfAnimation ? style.label : `STYLE${style.label}`, info: style.info, kind: style.kind,
       draw: (canvas, highlighted) => style.kind === "text"
@@ -424,7 +493,7 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
     })
     bindLibraryCard(card, { styleID: style.styleID }, false)
     return card
-  })
+  } }))
 }
 
 function renderLibrary(): void {
@@ -449,16 +518,26 @@ function renderLibrary(): void {
   libraryFilters.hidden = sound
   const query = search.value.trim().toLowerCase().replace(/^#/, "")
   const cards = libraryCards(payload, chooser, images, query)
-  libraryGrid.replaceChildren(...cards)
-  if (payload && !chooser && !images && payload.canAdd && payload.editable) libraryGrid.append(styleAddCard(() => emitLibrary("style-library-add")))
+  libraryItems = payload && !chooser && !images && payload.canAdd && payload.editable
+    ? [...cards, { key: "", build: () => styleAddCard(() => emitLibrary("style-library-add")) }] : cards
+  libraryGrid.replaceChildren()
+  libraryColumns = 0
+  libraryScroll.scrollTop = 0
+  renderLibraryWindow()
+  // 选中项（切片窗口的当前图片、引用卡进来的当前样式）可能在几千张之后：先滚到它所在的行再渲染窗口。
+  const selectedKey = chooser ? imagePayload?.path : !images ? payload?.currentID : undefined
+  const selectedIndex = selectedKey ? cards.findIndex(card => card.key === selectedKey) : -1
+  if (selectedIndex >= 0) {
+    libraryScroll.scrollTop = Math.floor(selectedIndex / libraryColumns) * libraryPitch - (libraryScroll.clientHeight - libraryPitch) / 2
+    renderLibraryWindow()
+  }
   // 数量只在标题旁出现一次。
   count.textContent = String(cards.length)
   count.hidden = !(chooser ? resourcesLoaded : payload)
   libraryEmpty.replaceChildren(emptyState(query ? "search-x" : images ? "image-off" : "layers"))
   libraryEmpty.hidden = cards.length > 0 || !(chooser ? resourcesLoaded : payload)
-  libraryGrid.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" })
   // 打开时定位当前样式（检查器的引用卡单击进来），预览栏里可以应用或改切片。
-  const current = payload?.currentID && !chooser && !images ? cards.find(card => card.dataset.styleId === payload.currentID) : undefined
+  const current = !chooser && selectedIndex >= 0 ? libraryCardAt(selectedIndex) : undefined
   if (current) {
     current.click()
     current.scrollIntoView({ block: "nearest" })
@@ -474,13 +553,25 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
   styleName.hidden = true
   back.title = "返回图片切片"
   if (payload) {
-    for (const request of previewRequests.values()) request.done()
-    for (const request of imageRequests.values()) request.done()
-    previewRequests.clear()
-    imageRequests.clear()
+    if (payload.session && payload.session === library?.session) {
+      // 皮肤没改过的同一批数据（例如从切片返回）：已加载的预览、位图和解析过的动画都留着。
+      const loaded = new Map(library.styles.map(style => [style.styleID, style]))
+      for (const style of payload.styles) {
+        const previous = loaded.get(style.styleID)
+        if (previous) Object.assign(style, { visuals: previous.visuals, animationSections: previous.animationSections })
+      }
+      payload.animationText ||= library.animationText
+      Object.assign(payload.animationFiles, library.animationFiles)
+      Object.assign(payload.particleVisuals, library.particleVisuals)
+    } else {
+      for (const request of previewRequests.values()) request.done()
+      for (const request of imageRequests.values()) request.done()
+      previewRequests.clear()
+      imageRequests.clear()
+      libraryAnimations = undefined
+      releaseLibraryBitmaps()
+    }
     library = payload
-    libraryAnimations = undefined
-    releaseLibraryBitmaps()
     libraryMode = payload.imageSelection ? "images" : "styles"
     libraryKind = payload.kind
     libraryFilter = "all"

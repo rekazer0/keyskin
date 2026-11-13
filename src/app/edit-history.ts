@@ -180,7 +180,7 @@ function refreshHistorySelection(): void {
     selectFile(appState.selectedPath, appState.sidebarView, resourceMode)
   }
   if (candidate) {
-    appState.selectedCandidate = true
+    appState.selectedCandidate = candidate
     syncCandidateSelection()
     populateKeyInspector()
   }

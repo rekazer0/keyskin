@@ -160,7 +160,9 @@ function palmTargets(): { scope: "candidate"; targets: TextTarget[] } | undefine
 function textTargets(): { scope: "candidate"; targets: TextTarget[] } | undefined {
   const archive = appState.archive
   if (!archive || archive.format === "ssf" || appState.selectedKeySections.length) return
-  return archive.format === "bda" ? bdaTargets() : archive.format === "sxi" ? palmTargets() : cssTargets()
+  const context = archive.format === "bda" ? bdaTargets() : archive.format === "sxi" ? palmTargets() : cssTargets()
+  if (context && appState.selectedCandidate === "input") context.targets = context.targets.filter(target => target.id === "input")
+  return context
 }
 
 function targetValues(target: TextTarget, property: TextProperty): string[] {

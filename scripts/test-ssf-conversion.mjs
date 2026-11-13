@@ -169,8 +169,8 @@ for (const theme of ["light", "dark"]) for (const orientation of ["port", "land"
   for (const board of ["py_9", "py_26", "py_9_big_enter_double_input", "big_9"]) views.push({ theme, orientation, board, name: `${theme}-${orientation}-${board}` })
 }
 const chooseView = async ({ theme, orientation, board }) => {
-  await page.locator(`[data-theme-choice="${theme}"]`).click()
-  await page.locator(`[data-orientation-choice="${orientation}"]`).click()
+  if (await page.locator("#theme").inputValue() !== theme) await page.locator('[data-mobile-choice="theme"]').click()
+  if (await page.locator("#orientation").inputValue() !== orientation) await page.locator('[data-mobile-choice="orientation"]').click()
   await page.evaluate(() => document.querySelectorAll("#files .nav-group").forEach((group) => { group.open = true }))
   await page.locator(`.sidebar-overview button[data-path="${theme}/skin/${orientation}/${board}.ini"]`).click()
 }

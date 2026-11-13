@@ -10,6 +10,11 @@
 /* —— 图标：尺寸由 createIcon(name, size) 写在属性上 —— */
 .ui-icon { flex: none; stroke: currentColor; }
 
+/* —— 应用标题 —— */
+.ui-app-brand { display: flex; align-items: baseline; gap: var(--space-md); line-height: var(--control-height-lg); white-space: nowrap; color: var(--text); }
+.ui-app-brand strong { font-family: var(--font-ui); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); }
+.ui-app-brand span { color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
+
 /* —— 按钮 —— */
 .ui-button,
 .ui-icon-button {
@@ -48,6 +53,17 @@
 .ui-button:active, .ui-icon-button:active { background: color-mix(in srgb, var(--text) 12%, transparent); transform: scale(0.96); }
 .ui-button[aria-pressed="true"], .ui-icon-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
+/* —— 标题栏常驻入口 —— */
+.ui-pinned-toolbar { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; min-height: var(--control-height-lg); padding: var(--space-xs); overflow-x: auto; border-radius: var(--radius-md); }
+.ui-pinned-toolbar[data-drop-target="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.ui-pinned-tool { position: relative; display: flex; align-items: center; flex: none; border-radius: var(--radius-md); touch-action: none; }
+.ui-pinned-tool[hidden] { display: none; }
+.ui-pinned-toolbar[data-editing="true"] .ui-pinned-tool > :first-child { animation: ui-toolbar-edit calc(var(--duration-slow) * 2) var(--ease-in-out) calc(var(--duration-slow) / -2) infinite; }
+.ui-pinned-tool > .ui-pinned-tool-remove { position: absolute; top: calc(var(--space-xs) * -1); right: calc(var(--space-xs) * -1); z-index: 1; width: var(--space-lg); min-width: var(--space-lg); height: var(--space-lg); border-radius: var(--radius-full); background: var(--menu); color: var(--text); box-shadow: var(--shadow-sm); opacity: 0; transform: scale(0.6); pointer-events: none; transition: opacity var(--duration-fast) var(--ease-standard), transform var(--duration-base) var(--ease-emphasized), background-color var(--duration-fast) var(--ease-standard); }
+.ui-pinned-toolbar[data-editing="true"] .ui-pinned-tool-remove { opacity: 1; transform: scale(1); pointer-events: auto; }
+.ui-toolbar-drag-preview { position: fixed; top: 0; left: 0; z-index: 200; display: grid; place-items: center; width: var(--control-height-lg); height: var(--control-height-lg); border-radius: var(--radius-md); background: var(--menu); color: var(--text); box-shadow: var(--shadow-lg); pointer-events: none; transform: translate(-50%, -50%); will-change: transform; }
+@keyframes ui-toolbar-edit { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+
 /* —— 对话框：外壳 + 头 / 正文 / 底。入场 slow + emphasized；退出由 src/motion.ts 的 closeDialog() 播放 —— */
 .ui-dialog {
   --_width: 560px;
@@ -83,6 +99,8 @@
 .ui-dialog:is([data-variant="ask"], [data-variant="operation"]) > form { display: flex; flex-direction: column; max-height: min(var(--dialog-max-height), calc(var(--viewport-height) - var(--space-2xl))); }
 .ui-dialog:is([data-variant="ask"], [data-variant="operation"]) :is(.ui-dialog-header, .ui-dialog-footer, .ui-dialog-meter) { flex-shrink: 0; }
 .ui-dialog:is([data-variant="ask"], [data-variant="operation"]) .ui-dialog-body { overflow-y: auto; overscroll-behavior: contain; }
+@keyframes ui-mobile-sheet { from { opacity: 0; transform: translateY(var(--space-lg)); } }
+@keyframes ui-mobile-drawer { from { opacity: 0; transform: translateX(-100%); } }
 @keyframes ui-dialog-in { from { opacity: 0; transform: scale(0.98); } }
 @keyframes ui-fade-in { from { opacity: 0; } }
 /* 文件操作（data-variant="operation"）：进度、降级确认、结果共用同一个窗口 */
@@ -401,6 +419,7 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 }
 .ui-field > :first-child { color: var(--secondary); font-size: var(--font-size-sm); }
 .ui-field[data-stack] { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
+.ui-field:has(> .ui-field-pair[data-columns="4"]) { container-type: inline-size; grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
 .ui-field-pair { display: grid; grid-template-columns: repeat(var(--_columns, 2), minmax(0, 1fr)); gap: var(--space-sm); }
 .ui-field-pair[hidden], .ui-field[hidden], .ui-field > [hidden] { display: none; }
 .ui-field-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
@@ -431,8 +450,8 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
   padding: 0 var(--space-lg);
 }
 .ui-section > header > h3 { flex: 1; margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-.ui-subsection { display: grid; gap: var(--space-sm); }
-.ui-subsection + .ui-subsection { margin-top: var(--space-sm); }
+.ui-subsection { display: grid; gap: var(--_field-gap, var(--space-sm)); }
+.ui-subsection + .ui-subsection { margin-top: var(--space-lg); }
 .ui-subsection > h4 { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .ui-disclosure > summary { list-style: none; justify-content: flex-start; }
 .ui-disclosure > summary::-webkit-details-marker { display: none; }
@@ -467,6 +486,12 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 /* 磁贴：图标在上、文字在下（资源配置、检查器分类栏、手机概览分组） */
 .ui-list-item[data-layout="tile"] { flex-direction: column; justify-content: center; gap: var(--space-2xs); min-height: 52px; padding: var(--space-xs); font-size: var(--font-size-xs); text-align: center; }
 .ui-list-item[data-layout="tile"] > :not(.ui-icon) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-list-item[data-layout="tile"][data-variant="resource"] { min-height: 0; height: calc(var(--resource-tile-size) * 4 / 5); padding: var(--space-sm); gap: var(--space-sm); background: var(--content); border-radius: var(--radius-lg); color: var(--secondary); font-size: var(--font-size-sm); transition: background-color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard); }
+.ui-list-item[data-variant="resource"] :is(.system-symbol, .ui-icon) { width: var(--icon-size-md); height: var(--icon-size-md); color: inherit; }
+.ui-list-item[data-variant="resource"] > .nav-label { font-weight: var(--font-weight-medium); }
+@media (hover: hover) { .ui-list-item[data-variant="resource"]:hover { background: color-mix(in srgb, var(--text) 8%, transparent); } }
+.ui-list-item[data-variant="resource"][aria-current="true"] { background: var(--accent-soft); color: var(--accent); }
+.ui-list-item[data-variant="resource"]:active { background: color-mix(in srgb, var(--text) 10%, transparent); transform: scale(0.99); }
 
 /* —— 角标 —— */
 .ui-badge {
@@ -536,11 +561,14 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
   background-repeat: no-repeat;
 }
 :where(.ui-form) :where(input, select, textarea):disabled { border-color: transparent; background-color: transparent; color: var(--secondary); opacity: 1; }
-:where(.ui-form[data-readonly="true"]) :where(input, select, textarea):disabled { cursor: not-allowed; pointer-events: auto; }
+:where(.ui-form[data-readonly="true"]) :where(input, select, textarea, button):disabled { cursor: not-allowed; pointer-events: auto; }
 :where(.ui-form[data-readonly="true"]) :where(input:not([type="checkbox"], [type="radio"], [type="color"], [type="range"]), select, textarea):disabled { background-color: var(--material-content); }
 :where(.ui-form) :where(input::placeholder) { color: var(--tertiary); }
 .ui-field-pair[data-columns="3"] { --_columns: 3; }
-.ui-field-pair[data-columns="4"] { --_columns: 4; }
+.ui-field-pair[data-columns="4"] { --_columns: 2; }
+@container (min-width: 456px) {
+  .ui-field-pair[data-columns="4"] { --_columns: 4; }
+}
 
 /* —— 基础：所有窗口共用（盒模型、字体、表单继承、焦点、滚动条） —— */
 *, ::before, ::after {

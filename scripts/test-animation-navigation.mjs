@@ -80,7 +80,8 @@ try {
       for (const mode of ["motion", "particle"]) {
         const button = entry(path, mode)
         assert.equal(await button.count(), 1)
-        assert.equal(await button.locator(".nav-label").textContent(), `${mode === "motion" ? "动效设计" : "粒子设计"}${fixture.paths.length > 1 ? ` · ${path.split("/").pop()}` : ""}`)
+        assert.equal(await button.locator(".nav-label").textContent(), mode === "motion" ? "动效设计" : "粒子设计")
+        if (fixture.paths.length > 1) assert.ok((await button.getAttribute("title")).includes(path.split("/").pop()), "file names remain available in tooltips")
         assert.equal(await button.evaluate((node) => node.closest(".nav-group").dataset.overviewGroup), "资源配置")
         if (fixture.format === "sxi") assert.equal(await button.locator(".nav-meta").textContent(), "skin.json")
         await back()

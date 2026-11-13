@@ -1,7 +1,11 @@
 import { defineConfig } from "vite"
+import { realpathSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 
 export default defineConfig({
   base: "./",
+  // worktree 共用 node_modules 时，预构建缓存仍须各自独立。
+  cacheDir: ".tmp/vite",
   build: {
     manifest: true,
     rollupOptions: {
@@ -40,6 +44,9 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 1420,
     strictPort: true,
+    fs: {
+      allow: [fileURLToPath(new URL(".", import.meta.url)), realpathSync(new URL("./node_modules", import.meta.url))],
+    },
     watch: { ignored: ["**/src-tauri/**"] },
   },
   // 优化依赖预构建

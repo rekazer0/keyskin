@@ -3,6 +3,18 @@ import test from 'node:test'
 import { IniDocument } from '../src/ini.ts'
 import { declarations, run } from './helpers/app-source.mjs'
 
+test('SSF input selection shows composing view and text without candidate properties', () => {
+  const context = run(declarations('boardGroups'), {
+    selectedCandidate: 'input', selectedKeySections: [], orientation: { value: 'port' },
+    ssfSkinPath: () => 'phoneSkin.ini', ssfDocument: () => IniDocument.parse(''),
+    firstValue: value => value, imageBlocks: () => [], CANDIDATE_TEXT_KEYS: [],
+    textBlock: (_path, section) => ({ section }), renderGroup: (label, blocks) => ({ label, blocks }),
+  })
+  const groups = context.boardGroups()
+  assert.deepEqual(Array.from(groups, group => group.label), ['输入码'])
+  assert.deepEqual(Array.from(groups[0].blocks, block => block.section), ['ComposingView', 'TextStyle_Composing'])
+})
+
 test('SSF multi-selection intersects properties and omits single-key actions', () => {
   const docs = { one: IniDocument.parse('[A]\nNORMAL=a.png\nPRESSED=b.png\nTYPE=1\n'), two: IniDocument.parse('[B]\nNORMAL=c.png\nTYPE=2\n') }
   const context = run(declarations('commonKeyGroups'), { ssfEntries: (path, section) => docs[path].entries(section) })
@@ -23,6 +35,36 @@ test('SSF numeric controls keep names, versions and unknown values as text', () 
   for (const key of ['skin_name', 'skin_version', 'sound', 'CUSTOM']) assert.equal(context.textField(key, '001', targets).kind, 'text')
   assert.equal(context.textField('TEXT_SIZE', '18', targets).kind, 'number')
   assert.equal(context.textField('TEXT_SIZE', 'default', targets).kind, 'text')
+})
+
+test('SSF controls follow field definitions, preserve unknown values and show mixed selections', () => {
+  const docs = { one: IniDocument.parse('[FG]\nLABEL_VISIBLE=0\nBG_STYLE=9\n[TextStyle_Default]\n[CustomLabel]\nTEXT_COLOR=0xFFFFFFFF\n'), two: IniDocument.parse('[FG]\nLABEL_VISIBLE=1\n') }
+  const writes = []
+  const context = run(declarations('ssfConfigField'), {
+    element: () => ({ append(control) { this.control = control } }), caption() {}, isEditing: () => true,
+    ssfFieldLabel: key => key, ssfSectionLabel: section => section,
+    ssfDocument: path => docs[path], fieldControl: (spec, _label, commit, state) => ({ spec, commit, state }),
+    writeValue: (targets, key, value) => writes.push([targets.length, key, value]),
+  })
+  const targets = [{ path: 'one', section: 'FG' }]
+  const missing = context.ssfConfigField('MINOR_LABEL_VISIBLE', '', targets).control
+  assert.equal(missing.spec.kind, 'switch')
+  assert.equal(missing.spec.checked, true, 'the parser shows labels by default without writing a value')
+  missing.commit(false)
+  assert.deepEqual(writes, [[1, 'MINOR_LABEL_VISIBLE', '0']])
+  const mixed = context.ssfConfigField('LABEL_VISIBLE', '0', [...targets, { path: 'two', section: 'FG' }]).control
+  assert.equal(mixed.state.mixed, true)
+  const unknown = context.ssfConfigField('BG_STYLE', '9', targets).control
+  assert.equal(unknown.spec.kind, 'choice')
+  assert.equal(unknown.spec.value, '9', 'unknown enums reach the shared custom-value selector unchanged')
+  const style = context.ssfConfigField('MINOR_LABEL_STYLE', 'MissingStyle', targets).control
+  assert.equal(style.spec.layout, 'select')
+  assert.equal(style.spec.value, 'MissingStyle')
+  assert.equal(style.spec.options[0][0], 'TextStyle_Default')
+  assert.equal(style.spec.options[1][0], 'CustomLabel', 'text style definitions need not use a standard section name')
+  assert.equal(context.ssfConfigField('CUSTOM', '1', targets), undefined)
+  docs.one.set('FG', 'LABEL_VISIBLE', 'future')
+  assert.equal(context.ssfConfigField('LABEL_VISIBLE', 'future', targets), undefined, 'unknown boolean values remain editable as raw text')
 })
 
 test('SSF edits to multiple files commit together and preview only after committing', () => {

@@ -3,7 +3,7 @@ import { strToU8, unzipSync, zipSync } from 'fflate'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { IniDocument } from '../src/ini.ts'
-import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
+import { SIZES, ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
 
 const skinPath = '1080/status1/phoneSkin.ini'
 const original = '[RootView]\nBG_STYLE=1\nBG_IMAGE=bg.png\n[Extension]\nCUSTOM=keep\n'
@@ -59,7 +59,8 @@ async function addImage(label, action, key, file) {
 async function checkView(label) {
   assert.equal(await group(label).count(), 1, `${label} remains discoverable without its section`)
   for (const key of ['MARGINS', 'PADDINGS']) assert.equal(await row(label, key).locator('input[type=number]').count(), 4, `${label}.${key} has typed controls before configuration`)
-  assert.equal(await row(label, 'BG_STYLE').locator('input[type=number]').count(), 1)
+  assert.equal(await row(label, 'BG_STYLE').getByRole('group', { name: '背景类型', exact: true }).count(), 1)
+  assert.equal(await row(label, 'BG_STYLE').getByRole('button', { name: '纯色', exact: true }).count(), 1)
   assert.equal(await row(label, 'BG_COLOR').locator('.ui-swatch').count(), 1)
   for (const key of ['BG_IMAGE', 'BG_IMAGES']) assert.equal(await row(label, key).count(), 0, `${label}.${key} does not degrade to a file or text field`)
 }
@@ -88,6 +89,10 @@ try {
   await page.locator('#candidate-area').click()
   await group('候选栏').waitFor()
   await checkView('候选栏')
+  await checkChange(() => row('候选栏', 'BG_STYLE').getByRole('button', { name: '纯色', exact: true }).click(), document => {
+    assert.equal(document.get('CandidateView', 'BG_STYLE'), '2')
+    assert.equal(document.get('RootView', 'BG_IMAGE'), 'bg.png', 'changing background type keeps image resources')
+  })
   for (const label of ['候选栏', '候选字', '输入码']) assert.equal(await group(label).count(), 1, `${label} remains available when the candidate bar is selected without configuration`)
   assert.equal(await group('候选栏').locator('h4').count(), 0, 'group and add button already name the candidate background')
   assert.deepEqual(await group('候选字').locator('h4').allTextContents(), ['首选字'], 'only the distinct candidate text style needs a subheading')
@@ -134,8 +139,16 @@ try {
     assert.equal(document.get(section, 'NORMAL_ON'), undefined)
     assert.equal(document.get(section, 'PRESSED_ON'), undefined)
   })
-  await checkChange(() => edit(row('候选栏', 'STRETCH').locator('input[type=number]').nth(1), '5'), (document) => {
-    assert.equal(document.get(document.get('CandidateView', 'BG_IMAGE'), 'NORMAL'), 'bar.png,0,5,0,1', 'an absent stretch band can be created one part at a time')
+  assert.equal(await row('候选栏', 'STRETCH').count(), 0, 'reference cards have no duplicate stretch inputs')
+  await checkChange(async () => {
+    await ref.locator('.ui-style-state').first().click()
+    const editor = page.getByRole('dialog', { name: '编辑图片', exact: true })
+    await page.waitForFunction(() => document.querySelector('.ui-image-editor input[type=number]')?.disabled === false)
+    await editor.locator('input[type=number]').nth(1).fill('5')
+    await editor.getByRole('button', { name: '完成', exact: true }).click()
+    await editor.waitFor({ state: 'hidden' })
+  }, (document) => {
+    assert.equal(document.get(document.get('CandidateView', 'BG_IMAGE'), 'NORMAL'), `bar.png,0,5,0,${SIZES.bar[1]}`, 'the image editor creates an absent band from the full image')
   })
   const reference = await ref.locator('input').inputValue()
   await checkChange(async () => { await ref.locator('input').fill(`${reference}_other`); await ref.locator('input').blur() }, (document) => {
@@ -156,7 +169,20 @@ try {
   await page.mouse.click(point.x, point.y)
   await row('前景', 'LABEL_POSITION').waitFor()
   for (const key of ['LABEL_POSITION', 'MINOR_LABEL_POSITION', 'ICON_RECT']) assert.equal(await row('前景', key).locator('input[type=number]').count(), 4, `${key} can be created before FG_STYLE exists`)
+  assert.equal(await row('前景', 'LABEL_VISIBLE').getByRole('switch').isChecked(), true)
+  assert.equal(await row('前景', 'MINOR_LABEL_VISIBLE').getByRole('switch').isChecked(), true)
+  assert.equal(await row('前景', 'MINOR_LABEL_STYLE').getByRole('combobox').count(), 1)
+  assert.equal(await row('前景', 'MINOR_LABEL_STYLE').locator('.document-field-name').textContent(), '副文字样式')
   assert.equal((await state()).text, original, 'showing missing foreground layout controls does not create a style')
+  await checkChange(() => row('前景', 'LABEL_VISIBLE').getByRole('switch').uncheck(), document => {
+    assert.equal(document.get(document.get('Key_Q', 'FG_STYLE'), 'LABEL_VISIBLE'), '0')
+  })
+  await checkChange(() => row('前景', 'LABEL_ORIENTATION').getByRole('button', { name: '横排', exact: true }).click(), document => {
+    assert.equal(document.get(document.get('Key_Q', 'FG_STYLE'), 'LABEL_ORIENTATION'), '1')
+  })
+  await checkChange(() => row('前景', 'LABEL_STYLE').getByRole('combobox').selectOption('TextStyle_Qwerty'), document => {
+    assert.equal(document.get(document.get('Key_Q', 'FG_STYLE'), 'LABEL_STYLE'), 'TextStyle_Qwerty')
+  })
   await checkChange(() => edit(row('前景', 'LABEL_POSITION').locator('input[type=number]').first(), '0.2'), (document) => {
     const style = document.get('Key_Q', 'FG_STYLE')
     assert.ok(style, 'the first layout edit binds the new style to the selected key')

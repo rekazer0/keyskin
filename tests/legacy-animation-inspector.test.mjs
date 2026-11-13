@@ -76,8 +76,8 @@ test("检查器导出对象头与填充两个入口，标题跟随动效设计 /
 })
 
 test("资源配置里百度 anim.ini 与 BDA animationConfig 都分成动效设计与粒子设计", () => {
-  assert.match(tree, /label: `动效设计\$\{suffix\}`, path, className: "nav-style", icon: "film", navMode: "motion"/)
-  assert.match(tree, /label: `粒子设计\$\{suffix\}`, path, className: "nav-style", icon: "wand-sparkles", navMode: "particle"/)
+  assert.match(tree, /label: `动效设计\$\{suffix\}`, path, className: "nav-style", icon: "zap", navMode: "motion"/)
+  assert.match(tree, /label: `粒子设计\$\{suffix\}`, path, className: "nav-style", icon: "sparkles", navMode: "particle"/)
   assert.match(tree, /bdaConfigPaths\(appState\.archive, theme\.value, orientation\.value, "animation"\)/)
   assert.doesNotMatch(tree, /"动画效果"|动画与动效/, "不再有单独的动画分组或混合入口")
 })

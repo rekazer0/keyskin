@@ -7,6 +7,41 @@ import { strToU8, zipSync } from 'fflate'
 import { SkinArchive } from '../src/skin.ts'
 import { appSource, declarations, run } from './helpers/app-source.mjs'
 
+test('input and candidate bar selections are mutually exclusive and clear on key selection', () => {
+  const area = {}, input = {}
+  const context = run(declarations('syncCandidateSelection'), {
+    selectedCandidate: 'input', selectedPath: 'cand.cnd', layoutPath: 'py_9.ini',
+    archive: { format: 'bdi' }, selectedToolbarSections: [],
+    toolbarStrip: { dataset: { path: 'cand.cnd' } },
+    isToolbarPath: path => path === 'cand.cnd',
+    candidateArea: { classList: { toggle: (_, value) => { area.outlined = value } }, setAttribute: (_, value) => { area.selected = value } },
+    candidateInput: { setAttribute: (_, value) => { input.selected = value } },
+  })
+  context.syncCandidateSelection()
+  assert.equal(input.selected, 'true')
+  assert.equal(area.selected, 'false')
+  assert.equal(area.outlined, false)
+  context.selectedCandidate = true
+  context.syncCandidateSelection()
+  assert.equal(input.selected, 'false')
+  assert.equal(area.outlined, true)
+  context.selectedCandidate = false
+  context.selectedPath = context.layoutPath
+  context.syncCandidateSelection()
+  assert.equal(input.selected, 'false')
+  assert.equal(area.outlined, false)
+})
+
+test('the input row exposes only its own text target', () => {
+  const targets = [{ id: 'candidate' }, { id: 'first' }, { id: 'input' }]
+  const context = run(declarations('textTargets'), {
+    archive: { format: 'bdi' }, selectedKeySections: [], selectedCandidate: 'input',
+    cssTargets: () => ({ scope: 'candidate', targets: [...targets] }),
+  })
+  assert.deepEqual(Array.from(context.textTargets().targets, target => target.id), ['input'])
+  context.selectedCandidate = true
+  assert.equal(context.textTargets().targets.length, 3)
+})
 
 test('key selection paints the canvas before the inspector is rebuilt', async () => {
   const frames = [], timers = [], calls = []

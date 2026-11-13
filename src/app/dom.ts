@@ -57,6 +57,9 @@ export const redoButton = $("#redo") as HTMLButtonElement
 
 export const toolbarMenus = Array.from(document.querySelectorAll<HTMLDetailsElement>(".toolbar-more"))
 
+export const fileMenu = $<HTMLDetailsElement>(".pen-file-menu")
+export const pinnedToolbar = $("#pinned-toolbar")
+
 
 export const mobileUndoButton = $("#mobile-undo") as HTMLButtonElement
 
@@ -118,7 +121,6 @@ export const sourceValueHintsEnabled = $("#source-value-hints-enabled") as HTMLI
 
 export const sourceLineExplanationEnabled = $("#source-line-explanation-enabled") as HTMLInputElement
 
-export const mobilePreviewPosition = $("#mobile-preview-position") as HTMLSelectElement
 
 export const hintPreviewEnabled = $("#hint-preview-enabled") as HTMLInputElement
 
@@ -142,7 +144,15 @@ export const sourceDirectoryStatus = $("#source-directory-status")
 
 export const mobilePaneButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mobile-pane]"))
 
-export const mobileSplitHandle = $("#mobile-split-handle") as HTMLButtonElement
+export const mobileWorkspaceTabs = $(".mobile-workspace-tabs")
+export const workspacePane = $("main > .workspace")
+export const mobileAppMore = $("#mobile-app-more") as HTMLDetailsElement
+export const mobileMoreActions = Array.from(mobileAppMore.querySelectorAll<HTMLButtonElement>("[data-mobile-action]"))
+export const mobileModeLabel = $("#mobile-mode-label")
+export const mobileExportOpen = $("#mobile-export-open") as HTMLButtonElement
+export const mobileExportDialog = $("#mobile-export-dialog") as HTMLDialogElement
+export const mobileExportFormats = Array.from(mobileExportDialog.querySelectorAll<HTMLInputElement>('input[name="mobile-export-format"]'))
+
 
 export const sourceColorPicker = $("#source-color-picker") as HTMLInputElement
 
@@ -176,7 +186,6 @@ export const previewCanvas = $("#preview") as HTMLCanvasElement
 
 export const previewPanelViewport = $("#panel-viewport")
 
-export const mainWorkspace = $("main")
 
 export const sidebarPane = $("aside.sidebar")
 
@@ -185,6 +194,11 @@ export const inspectorPane = $("section.source")
 export const sourceHeading = $(".source-heading")
 
 export const mobileInspectorSelection = $("#mobile-inspector-selection")
+
+export const mobileKeyPreview = $("#mobile-key-preview") as HTMLButtonElement
+export const mobileKeyCanvas = $("#mobile-key-canvas") as HTMLCanvasElement
+export const mobileKeySize = $("#mobile-key-size")
+export const mobilePreviewSummary = $("#mobile-preview-summary")
 
 export const asset = $("#asset")
 
@@ -219,6 +233,7 @@ export const sidebarViewButtons = Array.from(document.querySelectorAll<HTMLButto
 export const sidebarViewControl = $(".sidebar-view-control")
 
 export const documentName = $("#document-name")
+export const appBrandVersion = $("#app-brand-version")
 
 export const sidebarProjectName = $("#sidebar-project-name")
 
@@ -491,6 +506,8 @@ export const resourceUploadButton = $("#resource-upload") as HTMLButtonElement
 
 export const resourceDownloadButton = $("#resource-download") as HTMLButtonElement
 
+export const resourceRenameButton = $("#resource-rename") as HTMLButtonElement
+
 export const resourceDeleteButton = $("#resource-delete") as HTMLButtonElement
 
 export const resourceUploadInput = $("#resource-upload-input") as HTMLInputElement
@@ -585,10 +602,6 @@ export const candidateWords = $("#candidate-words")
 
 export const modeChoiceButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mode-choice]"))
 
-export const themeChoiceButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-theme-choice]"))
-
-export const orientationChoiceButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-orientation-choice]"))
-
 export const mobileChoiceButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mobile-choice]"))
 
 export const pickerDialog = $("#picker-dialog") as HTMLDialogElement
@@ -600,3 +613,8 @@ export const sourceStyleProxy = document.createElement("input")
 
 // 只渲染真正滚进视野的卡片：9 张十几 MB 的皮肤不该在启动时全部读一遍。
 export const welcomeScroller = document.querySelector<HTMLElement>(".welcome-main")
+
+export const mobileInspectorResize = $("#mobile-inspector-resize") as HTMLButtonElement
+export const mobilePropertyTabs = $("#mobile-property-tabs")
+export const mobileFileSearch = $("#mobile-file-search") as HTMLInputElement
+export const mobileSkinThemeLabel = $("#mobile-skin-theme-label")

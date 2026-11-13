@@ -87,7 +87,7 @@ try {
   assert.deepEqual((await foreground('e')).layers, [])
   await history('undo')
   assert.deepEqual(await foreground('e'), label)
-  await page.locator('[data-orientation-choice="land"]').click()
+  if (await page.locator("#orientation").inputValue() !== "land") await page.locator('[data-mobile-choice="orientation"]').click()
   assert.deepEqual((await foreground('F38')).layers, [])
   assert.equal((await foreground('F38', true)).layers[0].kind, 'image')
   assert.deepEqual(errors, [])

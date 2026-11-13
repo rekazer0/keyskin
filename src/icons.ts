@@ -18,14 +18,14 @@ import {
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
-  UserRound, Plug, Gamepad2,
+  UserRound, Plug, Gamepad2, ShieldCheck,
   Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
   SkipBack, Rotate3d, ArrowUpRight, Square, ImageOff, SunMoon, SearchX, ArrowUpLeft, ArrowDownLeft, ArrowDownRight,
 } from "lucide"
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
 const icons: Record<string, IconNode> = {
-  "key-round": KeyRound, component: Component, "square-dashed": SquareDashed,
+  "shield-check": ShieldCheck, "key-round": KeyRound, component: Component, "square-dashed": SquareDashed,
   ellipsis: Ellipsis, "layout-grid": LayoutGrid, palette: Palette, type: Type,
   zap: Zap, images: Images, "panel-top": PanelTop, clapperboard: Clapperboard,
   "volume-2": Volume2, "mouse-pointer-2": MousePointer2, move: Move, copy: Copy,

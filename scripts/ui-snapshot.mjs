@@ -23,7 +23,7 @@ const outDir = mode === "save" ? dir : join(root, ".ui-current")
 mkdirSync(outDir, { recursive: true })
 
 const { createServer } = await import("vite")
-const server = await createServer({ root, logLevel: "error", server: { port: 41790, strictPort: false, host: "127.0.0.1" } })
+const server = await createServer({ root, logLevel: "error", server: { port: 41790, strictPort: false, host: "127.0.0.1", hmr: false } })
 await server.listen()
 const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
 const browser = await chromium.launch()
@@ -148,7 +148,7 @@ await withPage(async (page) => {
   await capture(page, "settings")
   await page.keyboard.press("Escape")
   // 图片编辑：资源列表与切片工具栏会挪进画布工作区
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片", { exact: true }) }).first().click()
+  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片资源", { exact: true }) }).first().click()
   await capture(page, "bds-images")
   await page.locator("#resource-gallery > *").first().click()
   await capture(page, "bds-image")
@@ -228,12 +228,26 @@ await withPage(async (page) => {
   await editAndSelectKey(page)
   await capture(page, "dark-bds-key")
 }, { colorScheme: "dark" })
-await withPage(async (page) => {
+for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
+  const suffix = colorScheme === "dark" ? "-dark" : ""
   await page.waitForSelector(".template-card")
-  await capture(page, "mobile-welcome")
+  await capture(page, `mobile-welcome${suffix}`)
   await openTemplate(page, "official-android-bds")
-  await capture(page, "mobile-bds")
-}, { viewport: { width: 390, height: 844 } })
+  await capture(page, `mobile-bds${suffix}`)
+  await page.locator("#mobile-app-more > summary").click()
+  await page.locator('#mobile-app-more [data-mobile-action="mode"]').click()
+  const box = await page.locator("#preview").boundingBox()
+  await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.45)
+  await page.waitForSelector("#mobile-key-preview:not([hidden])")
+  await page.waitForFunction(() => document.querySelector("#mobile-key-canvas").width > 1)
+  await capture(page, `mobile-properties${suffix}`)
+  await page.locator('.mobile-workspace-tabs [data-mobile-pane="layout"]').click()
+  await capture(page, `mobile-files${suffix}`)
+  await page.locator("#mobile-app-more > summary").click()
+  await capture(page, `mobile-more${suffix}`)
+  await page.locator('#mobile-app-more [data-mobile-action="mobile-export-open"]').click()
+  await capture(page, `mobile-export${suffix}`)
+}, { viewport: { width: 390, height: 844 }, colorScheme })
 await withPage(async (page) => { await page.waitForTimeout(800); await capture(page, "new-project") }, { url: `${baseURL}new-project.html` })
 await withPage(async (page) => { await page.waitForTimeout(800); await capture(page, "picker") }, { url: `${baseURL}picker.html` })
 

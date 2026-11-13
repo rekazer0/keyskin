@@ -1,4 +1,4 @@
-import { modeChoiceButtons, mode, themeChoiceButtons, theme, orientationChoiceButtons, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, mobileSplitHandle, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
@@ -11,18 +11,14 @@ import { isEditing } from "./edit-history"
 import { updateSourceFileActions } from "./source-files"
 import { updateSourceSearchStatus } from "./source-panel"
 import { syncAiDesignContext } from "./ai-panel"
+import { syncMobileKeyPreview } from "./mobile-key-preview"
+import { workspacePane } from "./dom"
+import { syncMobilePropertyGroups } from "./mobile-inspector"
+import { playEnter, playRotation } from "../motion"
 
 export function syncSegmentedControls(): void {
   for (const button of modeChoiceButtons) {
     const on = button.dataset.modeChoice === mode.value
-    button.setAttribute("aria-pressed", String(on))
-  }
-  for (const button of themeChoiceButtons) {
-    const on = button.dataset.themeChoice === theme.value
-    button.setAttribute("aria-pressed", String(on))
-  }
-  for (const button of orientationChoiceButtons) {
-    const on = button.dataset.orientationChoice === orientation.value
     button.setAttribute("aria-pressed", String(on))
   }
   const values: Record<string, string> = { mode: mode.value, theme: theme.value, orientation: orientation.value }
@@ -42,16 +38,26 @@ export function syncSegmentedControls(): void {
     const currentIcon = button.querySelector<HTMLElement>("[data-mobile-current-icon]")
     if (currentIcon) {
       const icons: Record<string, string> = { port: "rectangle-vertical", land: "rectangle-horizontal", light: "sun", dark: "moon" }
-      currentIcon.replaceChildren(createIcon(icons[value]))
+      const icon = icons[value]
+      if (currentIcon.dataset.icon !== icon) {
+        currentIcon.replaceChildren(createIcon(icon))
+        currentIcon.dataset.icon = icon
+        if (button.dataset.mobileChoice === "orientation") playRotation(currentIcon, value === "land" ? -90 : 90)
+        else playEnter(currentIcon)
+      }
     }
     if (button.dataset.mobileChoice === "mode") button.setAttribute("aria-pressed", String(value === "edit"))
-    button.setAttribute("aria-label", `切换${label || "选项"}（当前${label}）`)
+    const name = button.dataset.mobileChoice === "orientation" ? "方向" : button.dataset.mobileChoice === "theme" ? "外观" : "工作模式"
+    const description = `切换${name}（当前${label}）`
+    button.setAttribute("aria-label", description)
+    button.title = description
   }
 }
 
 export function syncMobileInspectorHeader(): void {
   mobileInspectorSelection.textContent = selectedKeyName.textContent
   sourceHeading.dataset.mobileKeyTools = appState.selectedKeySections.length ? "on" : "off"
+  syncMobileKeyPreview()
 }
 
 function mobileInspectorGroupLabel(group: HTMLElement): string {
@@ -179,6 +185,7 @@ export function syncMobileInspectorGroups(): void {
       }
       return [group]
     })
+  syncMobilePropertyGroups(groups)
   const managed = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
   if (appState.archive?.format !== "bda" && groups.length === managed.length && groups.every((group, index) =>
     group === managed[index] && mobileInspectorGroupLabel(group) === mobileInspectorGroups.children[index]?.querySelector(".inspector-group-label")?.textContent,
@@ -270,36 +277,17 @@ function railButton(): HTMLButtonElement {
   return button
 }
 
-export function setMobilePane(pane: "layout" | "inspector"): void {
+export function setMobilePane(pane: "canvas" | "layout" | "inspector"): void {
+  source.commit()
   document.documentElement.dataset.mobilePane = pane
   for (const button of mobilePaneButtons) {
-    const active = button.dataset.mobilePane === pane
-    button.setAttribute("aria-pressed", String(active))
+    button.setAttribute("aria-pressed", String(button.dataset.mobilePane === pane))
   }
   const mobile = mobilePortraitQuery.matches
   sidebarPane.inert = mobile && pane !== "layout"
   inspectorPane.inert = mobile && pane !== "inspector"
-}
-
-export function setMobileSplit(value: number, persist = true): void {
-  const clamped = Math.max(28, Math.min(72, value))
-  document.documentElement.style.setProperty("--mobile-workspace-split", `${clamped}%`)
-  mobileSplitHandle.setAttribute("aria-valuenow", String(Math.round(clamped)))
-  mobileSplitHandle.setAttribute("aria-valuetext", `画布占 ${Math.round(clamped)}%`)
-  if (persist) localStorage.setItem("mobile-workspace-split", String(clamped))
-}
-
-export function setMobilePreviewCollapsed(collapsed: boolean): void {
-  if (collapsed) {
-    appState.mobileSplitBeforeCollapse = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--mobile-workspace-split"),
-    ) || appState.mobileSplitBeforeCollapse
-  }
-  document.documentElement.dataset.mobilePreviewCollapsed = String(collapsed)
-  mobileSplitHandle.setAttribute("aria-expanded", String(!collapsed))
-  mobileSplitHandle.title = collapsed ? "展开预览" : "调整预览高度"
-  mobileSplitHandle.setAttribute("aria-label", mobileSplitHandle.title)
-  if (!collapsed) setMobileSplit(appState.mobileSplitBeforeCollapse)
+  workspacePane.inert = mobile && pane === "layout" && Boolean(appState.archive)
+  if (mobile && pane === "inspector") syncMobileInspectorHeader()
 }
 
 export function updatePanelToolButtons(): void {
