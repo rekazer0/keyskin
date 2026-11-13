@@ -6,6 +6,7 @@ import { documentFields, documentFieldsGroup, skinFields, toolbarFields, bdaConf
 import { appState } from "./state"
 import { preview } from "./canvas-interaction"
 import type { PreviewItem } from "../preview-items.ts"
+import { isListCell } from "../layout.ts"
 import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue, effectiveKeySection, currentSkinState } from "./config-context"
 import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
 import { refreshPreview } from "./preview-render"
@@ -248,11 +249,11 @@ function isHiddenConfigEntry(section: string, key: string, showTips = false): bo
 }
 
 export function populateDocumentInspector(): void {
-  documentFields.replaceChildren()
   if (appState.archive?.format === "ssf") {
     documentFieldsGroup.hidden = !populateSsfInspector(documentFields)
     return
   }
+  documentFields.replaceChildren()
   if (appState.archive?.format === "sxi") {
     documentFieldsGroup.hidden = !populateSxiInspector(documentFields)
     return
@@ -263,7 +264,8 @@ export function populateDocumentInspector(): void {
     return
   }
   const hasSelection = appState.selectedPath === appState.layoutPath && appState.selectedKeySections.length > 0
-  if (appState.archive?.format === "bda" || !appState.selectedDocument || hasSelection || !appState.archive?.isText(appState.selectedPath)) {
+  const listSelected = hasSelection && appState.selectedKeySections.every(isListCell)
+  if (appState.archive?.format === "bda" || !appState.selectedDocument || hasSelection && !listSelected || !appState.archive?.isText(appState.selectedPath)) {
     documentFieldsGroup.hidden = true
     return
   }
@@ -279,8 +281,9 @@ export function populateDocumentInspector(): void {
     }
   }
   // 整体布局（选中当前布局、没选按键）不重复展开候选栏和输入区。
-  const overallLayout = appState.selectedPath === appState.layoutPath
+  const overallLayout = appState.selectedPath === appState.layoutPath && !listSelected
   const entries = baiduInspectorEntries(appState.selectedDocument, appState.selectedPath, overallLayout).filter((entry) =>
+    (!listSelected || /^LIST\d*$/i.test(entry.section)) &&
     !/^KEY\d+$/.test(entry.section) &&
     (/\.pop$/i.test(appState.selectedPath) || !/^ICON\d+$/i.test(entry.section) || toolbarSections.has(entry.section)) &&
     !isHiddenConfigEntry(entry.section, entry.key, isToolbarPath(appState.selectedPath)) &&
@@ -439,7 +442,7 @@ export function populateBdaConfigInspector(): void {
       appearance: info.appearance,
       panelName,
       keys: selectedKeys,
-      scope: appState.selectedCandidate ? "candidate" : "panel",
+      scope: appState.selectedCandidate ? "candidate" : appState.selectedKeySections.some(isListCell) ? "list" : "panel",
       resolver: visualResolver(),
       editable: isEditing(),
       onStyleChange: (ref, property, value) => { updateBdaRefs([ref], property, value) },

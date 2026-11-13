@@ -180,10 +180,8 @@
 }
 @media (max-width: 760px) {
   :root, :root.macos { --titlebar-height: calc(52px + var(--safe-area-top)); }
-  :root { --mobile-dock-h: 56px; }
-}
-@media (max-width: 760px) and (orientation: portrait) {
-  :root { --mobile-dock-h: 1px; }
+  /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
+  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-dock-h: 56px; }
 }
 
 :root[data-app-theme="dark"] {

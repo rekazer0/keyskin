@@ -208,6 +208,8 @@ export const sourcePasteButton = $("#source-paste") as HTMLButtonElement
 
 export const sourceMoveButton = $("#source-move") as HTMLButtonElement
 
+export const sourceRenameButton = $("#source-rename") as HTMLButtonElement
+
 export const sourceDeleteButton = $("#source-delete") as HTMLButtonElement
 
 export const sourceUploadInput = $("#source-upload-input") as HTMLInputElement
@@ -362,6 +364,8 @@ export const canvasMultiCount = $("#canvas-multi-count") as HTMLElement
 export const keyModeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-key-mode]"))
 
 export const keyActionButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-key-action]"))
+/** 手机「更多」菜单里的对象操作：只把点击转给同一个按钮，可用状态仍由 keyActionButtons 决定。 */
+export const keyActionMenuItems = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-key-action-ref]"))
 
 export const baiduActionCodes = $("#baidu-action-codes") as HTMLDataListElement
 

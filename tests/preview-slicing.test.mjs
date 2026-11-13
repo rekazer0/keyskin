@@ -24,9 +24,9 @@ function setup() {
   return {
     frames,
     clears,
-    draw(image, width, height) {
+    draw(image, width, height, nineSlicePixelScale = 1) {
       drawNineSliceImage(context, {
-        image, source: [10, 20, 106, 151], inner: [52, 64, 2, 17],
+        image, source: [10, 20, 106, 151], inner: [52, 64, 2, 17], nineSlicePixelScale,
       }, { x: 13, y: 12, width, height }, () => buffer)
     },
   }
@@ -56,6 +56,16 @@ test('different bitmap objects and repeated frames keep their own background', (
     assert.equal(frames[index].slices.length, 9)
     for (const slice of frames[index].slices) assert.equal(slice[0], image)
   }
+})
+
+test('device pixels stretch a narrow band even when source and layout sizes match', () => {
+  const { draw, frames } = setup()
+  draw({}, 106, 151)
+  draw({}, 106, 151, 2)
+  const centre = (frame) => frame.slices[4].slice(1)
+  assert.deepEqual(centre(frames[0]), [62, 84, 2, 17, 52, 64, 2, 17])
+  assert.deepEqual(centre(frames[1]), [62, 84, 2, 17, 52, 64, 108, 168])
+  assert.deepEqual(frames[1].args, [0, 0, 212, 302, 13, 12, 106, 151])
 })
 
 test('thumbnail backing size stays within its pixel budget', () => {

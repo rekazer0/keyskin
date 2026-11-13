@@ -10,7 +10,7 @@ test('SSF multi-selection intersects properties and omits single-key actions', (
     [{ label: '背景', blocks: [{ path: 'one', section: 'A', omit: ['TYPE'], actions: ['copy'] }] }],
     [{ label: '背景', blocks: [{ path: 'two', section: 'B' }] }],
   ])
-  assert.deepEqual(JSON.parse(JSON.stringify(result)), [{ label: '背景', blocks: [{ path: 'one', section: 'A', only: ['NORMAL'], note: '作用于所有选中按键', peers: [{ path: 'two', section: 'B' }] }] }])
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), [{ label: '背景', blocks: [{ path: 'one', section: 'A', only: ['NORMAL'], peers: [{ path: 'two', section: 'B' }] }] }])
   assert.equal(context.commonKeyGroups([[{ label: '前景', blocks: [{ path: 'one', section: 'A' }] }], []]).length, 0)
 })
 
@@ -60,6 +60,31 @@ test('SSF choosing an image creates the required view defaults', () => {
   context.replaceImage([{ section: 'RootView', create: [{ key: 'BG_STYLE', value: '1' }] }], 'BG_IMAGE', 'background.png')
   assert.equal(document.get('RootView', 'BG_STYLE'), '1')
   assert.equal(document.get('RootView', 'BG_IMAGE'), 'background.png')
+})
+
+test('SSF image replacement links only states with identical filenames and stretch bands', () => {
+  for (const [primary, linked] of [['NORMAL', 'DISABLED'], ['NORMAL', 'NORMAL_ON'], ['PRESSED', 'PRESSED_ON']]) {
+    for (const old of ['key.png,1,9,1,19', 'other.png,1,9,1,19', 'key.png,2,9,1,19', undefined]) {
+      const document = IniDocument.parse(`[Images]\n${primary}=key.png,1,9,1,19\n${old === undefined ? '' : `${linked}=${old}\n`}`)
+      const context = run(declarations('LINKED_STATES', 'replaceImage', 'stateImage', 'withFile', 'setSsfValue'), {
+        editTargets: (targets, change) => targets.forEach(target => change(document, target)),
+      })
+      context.replaceImage([{ section: 'Images' }], primary, 'new.png')
+      assert.equal(document.get('Images', primary), 'new.png,1,9,1,19')
+      assert.equal(document.get('Images', linked), old === 'key.png,1,9,1,19' ? 'new.png,1,9,1,19' : old)
+    }
+  }
+})
+
+test('SSF extended state image edits leave normal and pressed states independent', () => {
+  const document = IniDocument.parse('[Images]\nNORMAL=key.png\nPRESSED=key.png\nDISABLED=key.png\nNORMAL_ON=key.png\nPRESSED_ON=key.png\n')
+  const context = run(declarations('LINKED_STATES', 'replaceImage', 'stateImage', 'withFile', 'setSsfValue'), {
+    editTargets: (targets, change) => targets.forEach(target => change(document, target)),
+  })
+  for (const key of ['DISABLED', 'NORMAL_ON', 'PRESSED_ON']) context.replaceImage([{ section: 'Images' }], key, `${key}.png`)
+  assert.equal(document.get('Images', 'NORMAL'), 'key.png')
+  assert.equal(document.get('Images', 'PRESSED'), 'key.png')
+  for (const key of ['DISABLED', 'NORMAL_ON', 'PRESSED_ON']) assert.equal(document.get('Images', key), `${key}.png`)
 })
 
 test('SSF first foreground layout edit creates and binds a usable style in one commit', () => {

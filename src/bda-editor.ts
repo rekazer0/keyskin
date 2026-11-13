@@ -11,7 +11,7 @@ import { configField } from "./app/config-value-control.ts"
 import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "./style-card.ts"
 
 type BdaStyleChange = (ref: BdaStyleRef, property: string, value: string) => void
-type BdaLayoutScope = "panel" | "candidate"
+type BdaLayoutScope = "panel" | "candidate" | "list"
 
 type LayoutEditorOptions = {
   appearance: BdaAppearance
@@ -284,7 +284,7 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
   container.classList.toggle("bda-candidate-inspector", options.keys.length === 0 && scope === "candidate")
   const context = element("div", "bda-inspector-context")
   const badge = element("span", "ui-badge")
-  badge.textContent = options.keys.length ? "按键" : scope === "candidate" ? "候选栏" : "面板"
+  badge.textContent = options.keys.length ? "按键" : scope === "candidate" ? "候选栏" : scope === "list" ? "列表" : "面板"
   const name = element("strong")
   name.textContent = options.panelName
   context.append(badge, name)

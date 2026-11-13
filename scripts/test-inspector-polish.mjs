@@ -18,35 +18,34 @@ try {
     const { appState } = await import("/src/app/state.ts")
     await (await import("/src/app/navigation.ts")).selectFile(appState.layoutPath)
   })
-  const group = page.locator(".text-style-fields")
+  assert.equal(await page.locator(".text-style-fields").isVisible(), false, "panel properties exclude key text")
+  await page.evaluate(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    const { preview } = await import("/src/app/canvas-interaction.ts")
+    appState.selectedKeySections = [preview.keys.find((key) => /^KEY/.test(key.section)).section]
+    ;(await import("/src/app/key-inspector.ts")).populateKeyInspector()
+  })
+  const group = page.locator(".key-typography-fields")
   const styleText = () => page.evaluate(async () => {
     const { appState } = await import("/src/app/state.ts")
     const { styleConfigPath } = await import("/src/app/config-context.ts")
     return appState.archive.getText(styleConfigPath())
   })
-  const note = group.locator("#text-style-note")
-  assert.match(await note.textContent(), /\d+ 个样式/)
-  assert.match(await note.getAttribute("title"), /修改本布局/)
-  assert.equal(await note.locator("svg").count(), 1)
-  assert.equal(await note.getAttribute("tabindex"), "0")
   // 皮肤字体是整个皮肤共用的内嵌字体；字体名称是这个文字样式自己的字体，两者的悬停说明写清生效平台。
   assert.equal((await group.locator("#font-file-field > span").first().textContent()).trim(), "皮肤字体")
   assert.match(await group.locator("#font-file-field").getAttribute("title"), /GLOBAL FONT_PATH/)
-  assert.match(await group.locator('[data-document-key="FONT_NAME"] .document-field-caption').getAttribute("title"), /系统字体名/)
-  assert.equal(await group.locator('input[aria-label="按键文字字号"]').locator("..").locator(".ui-input-affix").textContent(), "px")
-  // 字重有自然范围：滑块 + 数值，不是裸输入框。
-  assert.equal(await group.locator('[data-document-key="FONT_WEIGHT"] .ui-slider-field').count(), 1)
+  assert.match(await group.locator('[data-style-field="FONT_NAME"]').locator('..').getAttribute("title"), /系统字体名/)
   // 文字颜色是「正常 | 按下」一行两个色块：色块旁是不透明度 %，点色块弹出取色与色值。
-  const swatch = group.getByRole("button", { name: "按键文字颜色正常", exact: true })
-  const color = group.locator('input[aria-label="按键文字颜色正常色值"]')
-  const alpha = group.locator('input[aria-label="按键文字颜色正常不透明度"]')
+  const swatch = group.getByRole("button", { name: "文字颜色正常", exact: true })
+  const color = group.locator('input[aria-label="文字颜色正常色值"]')
+  const alpha = group.locator('input[aria-label="文字颜色正常不透明度"]')
   assert.match(await swatch.getAttribute("title"), /^正常 · /)
-  assert.match(await group.getByRole("button", { name: "按键文字颜色按下", exact: true }).getAttribute("title"), /^按下 · /)
+  assert.match(await group.getByRole("button", { name: "文字颜色按下", exact: true }).getAttribute("title"), /^按下 · /)
   const change = async (input, value) => { await input.fill(value); await input.press("Enter") }
   await swatch.click()
   await change(color, "80123456")
   assert.equal(await alpha.inputValue(), "50")
-  const picker = group.locator('input[aria-label="按键文字颜色正常取色"]')
+  const picker = group.locator('input[aria-label="文字颜色正常取色"]')
   await swatch.click()
   await picker.fill("#abcdef")
   await picker.dispatchEvent("change")
@@ -58,7 +57,7 @@ try {
   await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
   assert.equal(await color.inputValue(), "00ABCDEF")
   // 字体平滑：布尔值用开关，不写时按开启（百度 StyleParam.f = 1）；关掉写回 0，撤销恢复。
-  const cleartype = group.getByRole("switch", { name: "按键文字字体平滑", exact: true })
+  const cleartype = group.getByRole("switch", { name: "字体平滑", exact: true })
   assert.equal(await cleartype.count(), 1)
   assert.equal(await cleartype.isChecked(), true)
   await cleartype.click()
@@ -77,6 +76,8 @@ try {
   assert.match(await styleText(), /BORDER_SIZE\s*=\s*6/)
   await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
   await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
+  await page.locator('.canvas-wrap').click({ position: { x: 8, y: 8 } })
+  await page.locator('.key-layout-fields').waitFor({ state: 'hidden' })
   const filterButton = page.locator(".inspector-filter-open")
   await filterButton.click()
   assert.equal(await filterButton.getAttribute("aria-expanded"), "true")
@@ -109,7 +110,7 @@ try {
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 })
     await page.evaluate(() => { document.documentElement.dataset.mobilePane = "inspector" })
-    assert.equal(await group.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, "text controls fit the inspector")
+    assert.equal(await page.locator("#document-fields").evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, "text controls fit the inspector")
   }
   // 选中按键只是换选择对象：右侧停在「动画」分类或「AI 设计」标签时保持该选项。
   await page.setViewportSize({ width: 1440, height: 1000 })

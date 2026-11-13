@@ -24,14 +24,11 @@ const CANDIDATE_SECTION_ORDER = ["CAND", "INPUT", "SWITCH"]
 
 const sectionKind = (section: string) => section.replace(/\d+$/i, "").toUpperCase()
 
-/** 候选栏与输入区属于候选栏文件：选中候选栏/输入码区域时才编辑，整体布局里不展开。 */
-const CANDIDATE_AREA_SECTIONS = new Set(["CAND", "INPUT"])
-
-/** 整体布局不重复列出候选栏与输入区；其他配置仍由调用方决定是否展示。 */
+/** 整体布局只展示面板，其他对象由各自的选择入口编辑。 */
 function overallLayoutEntries(document: IniDocument) {
-  const entries = document.entries().filter(({ section }) => !CANDIDATE_AREA_SECTIONS.has(sectionKind(section)))
-  for (const section of document.sections()) {
-    if (CANDIDATE_AREA_SECTIONS.has(sectionKind(section))) continue
+  const sections = document.sections().filter((section) => sectionKind(section) === "PANEL")
+  const entries = document.entries().filter(({ section }) => sections.includes(section))
+  for (const section of sections) {
     for (const key of SECTION_KEYS[sectionKind(section)] ?? []) {
       if (document.get(section, key) === undefined) entries.push({ section, key, value: "" })
     }

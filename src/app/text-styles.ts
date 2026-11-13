@@ -1,10 +1,10 @@
-// 候选栏与整体布局的「文字」分组，以及按键文字的写入。百度 BDS/BDI 写 default.css 的 STYLE 文字属性，
+// 候选栏的「文字」分组，以及按键文字的写入。百度 BDS/BDI 写 default.css 的 STYLE 文字属性，
 // BDA 写 appearanceConfig 的文字样式，手心直接写 skin.json 样式的 s_1（sxi-text.ts）；
 // 搜狗皮肤的文字由 ssf-inspector.ts 处理。皮肤没有的文字样式在第一次修改时新建。
 import { appState } from "./state"
 import { cachedIniDocument } from "./style-document"
 import { IniDocument } from "../ini.ts"
-import { textStyleSections, textStyleValue, writeTextStyleProperty, type TextStyleRef } from "../style-properties.ts"
+import { textStyleValue, writeTextStyleProperty, type TextStyleRef } from "../style-properties.ts"
 import { candidateFirstForeground, candidateInputForegroundStyle, candidateInputSizeForeground, candidateWordsForeground } from "../candidate-style.ts"
 import { type BdaStyleRef } from "../bda.ts"
 import { element } from "../dom-element.ts"
@@ -14,9 +14,8 @@ import { commitTextChanges, isEditing } from "./edit-history"
 import { currentBdaAppearance, bdaAppearancePart } from "./bda-documents"
 import { bdaStyleValue, createBdaPanelTextStyle, updateBdaRefs } from "./key-inspector"
 import { field } from "./property-rows"
-import { skinFontNameOptions } from "./skin-fonts"
-import { fontFileField, textStyleGroup, textStyleNote, textStyleRows, textStyleTargetSwitch } from "./dom"
-import { palmSharedTextCount, palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
+import { textStyleGroup, textStyleNote, textStyleRows, textStyleTargetSwitch } from "./dom"
+import { palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
 import { createIcon } from "../icons"
 
 export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "FONT_WEIGHT" | "FONT_CLEARTYPE" | "NM_COLOR" | "HL_COLOR" | "BORDER_COLOR" | "BORDER_SIZE"
@@ -31,7 +30,6 @@ type TextTarget = {
   bdaCreate?: { path: string[]; copyFrom?: BdaStyleRef }
   palm?: PalmText
   note?: string
-  summary?: string
 }
 
 type PalmProperty = Exclude<TextProperty, "FONT_WEIGHT" | "FONT_CLEARTYPE" | "BORDER_COLOR" | "BORDER_SIZE">
@@ -45,11 +43,6 @@ const HINTS: Partial<Record<TextProperty, string>> = {
   BORDER_COLOR: "阴影颜色（BORDER_COLOR）：文字样式下的 BORDER_COLOR 是向下阴影的颜色",
   BORDER_SIZE: "阴影大小（BORDER_SIZE）：配合阴影颜色使用，0 为无阴影；百度新版安卓不绘制文字阴影，导出时按这个设置切片",
 }
-/** 字重只有 100–900 这九档；有自然范围，按设计规范配滑块 + 数值。 */
-const WEIGHT_RANGE = { min: 100, step: 100 } as const
-const KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "NM_COLOR", "HL_COLOR"]
-// 百度 CSS 没有字重，BDS 导出时切成图片（font-bake-export.ts）；BDA / 手心的文字样式不支持。
-const CSS_KEY_PROPERTIES: TextProperty[] = ["FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR", "BORDER_COLOR", "BORDER_SIZE"]
 // 真机候选字用用户字体（candidate-style.ts），皮肤只能改字号与颜色。
 const CANDIDATE_PROPERTIES: TextProperty[] = ["FONT_SIZE", "NM_COLOR", "HL_COLOR"]
 const CANDIDATE_NOTE = "真机候选字使用用户字体，皮肤只能改字号与颜色"
@@ -97,21 +90,7 @@ export function writeTextRefs(refs: readonly TextStyleRef[], property: TextPrope
   commitTextChanges([...documents].map(([path, document]) => ({ path, before: before.get(path)!, after: document.toString() })))
 }
 
-/** Text styles the other layouts of this folder draw, so a layout-wide edit can say what else it changes. */
-function otherLayoutTextStyles(styles: IniDocument): Set<string> {
-  const folder = appState.layoutPath.slice(0, appState.layoutPath.lastIndexOf("/") + 1)
-  const used = new Set<string>()
-  for (const path of appState.archive?.names() ?? []) {
-    if (path === appState.layoutPath || !path.startsWith(folder) || !/^[^/]+\.ini$/i.test(path.slice(folder.length))) continue
-    const document = cachedIniDocument(path)
-    for (const section of document?.sections() ?? []) {
-      for (const style of textStyleSections(styles, document!.get(section, "FORE_STYLE") ?? "")) used.add(style)
-    }
-  }
-  return used
-}
-
-function cssTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } | undefined {
+function cssTargets(): { scope: "candidate"; targets: TextTarget[] } | undefined {
   const styles = cachedIniDocument(styleConfigPath())
   if (!styles) return
   if (isToolbarPath(appState.selectedPath)) {
@@ -141,38 +120,9 @@ function cssTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } 
       ],
     }
   }
-  const layout = appState.layoutDocument
-  if (appState.selectedPath !== appState.layoutPath || !layout) return
-  // A key's first text layer is its label; further text layers are hints (smaller, often another colour).
-  const label: TextStyleRef[] = []
-  const hint: TextStyleRef[] = []
-  for (const section of layout.sections().filter((name) => /^KEY\d+$/.test(name))) {
-    const tokens = (effectiveKeyValue(section, "FORE_STYLE") ?? "").split(",").map((token) => token.trim())
-      .filter((token) => textStyleSections(styles, token).length)
-    if (tokens[0]) label.push({ foreground: tokens[0] })
-    hint.push(...tokens.slice(1).map((foreground) => ({ foreground })))
-  }
-  const others = otherLayoutTextStyles(styles)
-  const note = (refs: TextStyleRef[]) => {
-    const sections = new Set(refs.flatMap((ref) => textStyleSections(styles, ref.foreground)))
-    const shared = [...sections].filter((section) => others.has(section)).length
-    return `修改本布局按键用到的 ${sections.size} 个文字样式${shared ? `，其中 ${shared} 个也用于其他布局，会一并改变` : ""}`
-  }
-  const summary = (refs: TextStyleRef[]) => {
-    const sections = new Set(refs.flatMap((ref) => textStyleSections(styles, ref.foreground)))
-    const shared = [...sections].filter((section) => others.has(section)).length
-    return `${sections.size} 个样式${shared ? ` · ${shared} 个跨布局共享` : ""}`
-  }
-  return {
-    scope: "layout",
-    targets: [
-      { id: "label", label: "按键文字", properties: CSS_KEY_PROPERTIES, css: label, summary: label.length ? summary(label) : "无文字层", note: label.length ? note(label) : "本布局的按键没有文字层（字画在图片里）；选中按键修改文字会为它新建文字层" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: CSS_KEY_PROPERTIES, css: hint, summary: summary(hint), note: note(hint) }] : [],
-    ],
-  }
 }
 
-function bdaTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } | undefined {
+function bdaTargets(): { scope: "candidate"; targets: TextTarget[] } | undefined {
   const info = currentBdaAppearance()
   if (!info || bdaAppearancePart(appState.selectedPath)?.kind !== "panel" || appState.selectedPath !== appState.layoutPath) return
   const panel = info.appearance.panels.get(appState.selectedPath.split("/").pop()?.replace(/\.ini$/i, "") ?? "")
@@ -189,19 +139,9 @@ function bdaTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } 
       ],
     }
   }
-  const keys = [...panel.keys.values()].map((key) => key.foreStyles.filter((ref) => ref.type === "text"))
-  const label = text(keys.map((refs) => refs[0]))
-  const hint = text(keys.flatMap((refs) => refs.slice(1)))
-  return {
-    scope: "layout",
-    targets: [
-      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, bda: label, summary: label.length ? `${label.length} 个样式 · 跨布局共享` : "无文字层", note: label.length ? `修改本布局按键用到的 ${label.length} 个文字样式，其他布局共用的样式会一并改变` : "本布局的按键没有文字层" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, bda: hint, summary: `${hint.length} 个样式 · 跨布局共享`, note: `修改本布局按键用到的 ${hint.length} 个提示文字样式，其他布局共用的样式会一并改变` }] : [],
-    ],
-  }
 }
 
-function palmTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } | undefined {
+function palmTargets(): { scope: "candidate"; targets: TextTarget[] } | undefined {
   const palm = palmTextTargets()
   if (!palm) return
   if (palm.scope === "candidate") {
@@ -214,34 +154,17 @@ function palmTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] }
       ],
     }
   }
-  const note = (ids: string[]) => {
-    const shared = palmSharedTextCount(ids)
-    return `修改本布局按键用到的 ${ids.length} 个文字样式${shared ? `，其中 ${shared} 个也用于其他布局，会一并改变` : ""}`
-  }
-  const summary = (ids: string[]) => {
-    const shared = palmSharedTextCount(ids)
-    return `${ids.length} 个样式${shared ? ` · ${shared} 个跨布局共享` : ""}`
-  }
-  const label = palm.label?.ids ?? []
-  const hint = palm.hint?.ids ?? []
-  return {
-    scope: "layout",
-    targets: [
-      { id: "label", label: "按键文字", properties: KEY_PROPERTIES, palm: palm.label, summary: label.length ? summary(label) : "无文字样式", note: label.length ? note(label) : "本布局的按键没有文字样式（字画在图片里）；选中按键可以在「样式」里添加文字样式" },
-      ...hint.length ? [{ id: "hint", label: "提示文字", properties: KEY_PROPERTIES, palm: palm.hint, summary: summary(hint), note: note(hint) }] : [],
-    ],
-  }
 }
 
-/** The candidate bar's or whole layout's text targets; keys keep their own 文字 group. */
-function textTargets(): { scope: "candidate" | "layout"; targets: TextTarget[] } | undefined {
+/** The selected candidate bar's text targets; keys keep their own 文字 group. */
+function textTargets(): { scope: "candidate"; targets: TextTarget[] } | undefined {
   const archive = appState.archive
   if (!archive || archive.format === "ssf" || appState.selectedKeySections.length) return
   return archive.format === "bda" ? bdaTargets() : archive.format === "sxi" ? palmTargets() : cssTargets()
 }
 
 function targetValues(target: TextTarget, property: TextProperty): string[] {
-  // 手心与 BDA 的目标只列 KEY_PROPERTIES，不会有 FONT_WEIGHT。
+  // 候选栏只提供字号与颜色。
   if (target.palm) return palmTextValues(target.palm, property as PalmProperty)
   if (target.bda) {
     const info = currentBdaAppearance()
@@ -257,7 +180,7 @@ function writeTarget(target: TextTarget, property: TextProperty, value: string):
   else writeTextRefs(target.css ?? [], property, value)
 }
 
-/** A target nothing can be written to yet (a layout whose keys have no text, a BDA bar without a style). */
+/** Whether this text has a style or can create one on its first edit. */
 function writable(target: TextTarget): boolean {
   if (target.palm) return target.palm.ids.length > 0 || Boolean(target.palm.create)
   return target.bda ? target.bda.length > 0 || Boolean(target.bdaCreate) : (target.css ?? []).some((ref) => ref.owner || ref.foreground)
@@ -272,27 +195,8 @@ function valueRow(target: TextTarget, property: TextProperty, values: string[]):
   const mixed = new Set(values).size > 1
   const editable = isEditing() && writable(target)
   const options = { key: property, label: LABELS[property], hint: HINTS[property], name: `${target.label}${LABELS[property]}`, mixed, editable }
-  if (property === "FONT_WEIGHT") {
-    return field({ ...options, spec: { kind: "number", value: common, ...WEIGHT_RANGE, range: "weight" },
-      commit: (value) => writeTarget(target, property, value) })
-  }
-  if (property === "FONT_CLEARTYPE") {
-    // 缺省值是开启（Android StyleParam.f = 1）：没写这一项的样式按开启显示；重置交回原值，不补写 0。
-    const effective = values.map((value) => value || "1")
-    return field({ ...options, mixed: new Set(effective).size > 1, baseline: common,
-      spec: { kind: "switch", checked: effective.every((value) => value === "1") },
-      commit: (checked) => writeTarget(target, property, checked ? "1" : "0"),
-      reset: (value) => writeTarget(target, property, String(value ?? "")) })
-  }
-  if (property === "BORDER_SIZE") {
-    return field({ ...options, spec: { kind: "number", value: common, unit: "px", min: 0, step: 1, range: "border" },
-      commit: (value) => writeTarget(target, property, value) })
-  }
-  return property === "FONT_SIZE"
-    ? field({ ...options, spec: { kind: "number", value: common, unit: "px", min: 1, step: 1, range: "fontSize" },
-      commit: (value) => writeTarget(target, property, value) })
-    : field({ ...options, spec: { kind: "text", value: common, suggestions: skinFontNameOptions() },
-      commit: (value) => writeTarget(target, property, value) })
+  return field({ ...options, spec: { kind: "number", value: common, unit: "px", min: property === "BORDER_SIZE" ? 0 : 1, step: 1, range: property === "BORDER_SIZE" ? "border" : "fontSize" },
+    commit: (value) => writeTarget(target, property, value) })
 }
 
 /** 单色阴影字段（BORDER_COLOR）：有值时带不透明度，点色块取色。 */
@@ -324,7 +228,7 @@ function colorRow(target: TextTarget, values: Record<"NM_COLOR" | "HL_COLOR", st
   })
 }
 
-/** 选中按键的文字阴影两行（BORDER_COLOR / BORDER_SIZE），与整体布局的文字组用同一套控件。 */
+/** 选中按键的文字阴影两行（BORDER_COLOR / BORDER_SIZE）。 */
 export function renderKeyTextShadow(container: HTMLElement): void {
   container.replaceChildren()
   const refs = selectedKeyTextRefs()
@@ -351,7 +255,6 @@ export function renderKeyTextColor(container: HTMLElement): void {
 
 export function populateTextStyleGroup(): void {
   const context = textTargets()
-  if (context?.scope !== "layout") fontFileField.hidden = true
   textStyleGroup.hidden = !context
   textStyleTargetSwitch.replaceChildren()
   textStyleRows.replaceChildren()
@@ -362,7 +265,7 @@ export function populateTextStyleGroup(): void {
   textStyleNote.setAttribute("aria-label", target.note ?? "")
   textStyleNote.tabIndex = 0
   textStyleNote.hidden = !target.note
-  if (target.note) textStyleNote.append(createIcon(target.summary ? "layers" : "info"), target.summary ?? (context.scope === "candidate" ? "跟随用户字体" : target.note))
+  if (target.note) textStyleNote.append(createIcon("info"), "跟随用户字体")
   textStyleTargetSwitch.hidden = context.targets.length < 2
   for (const item of context.targets) {
     const button = element("button")

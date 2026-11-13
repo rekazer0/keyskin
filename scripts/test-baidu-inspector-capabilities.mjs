@@ -10,7 +10,7 @@ const CAND = "light/skin/port/cand1.cnd"
 const LAYOUT = "light/skin/port/py_26.ini"
 archive.setText(GEN, "[PANEL]\nSIZE=1080,600\nBACK_STYLE=1\n[MORE]\nBACK_STYLE=1\nBACK_ANIM_STYLE=2\n")
 archive.setText(CAND, `[CAND]\n${Array.from({ length: 5 }, (_, index) => `[ICON${index + 1}]\nKEY=F${index === 0 ? 14 : index + 1}\n`).join("")}[SWITCH]\n`)
-archive.setText(LAYOUT, "[PANEL]\nSIZE=1080,600\n[LIST]\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=a\n[MORE]\nBACK_STYLE=1\nBACK_ANIM_STYLE=2\n")
+archive.setText(LAYOUT, "[PANEL]\nSIZE=1080,600\n[LIST]\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=a\n[MORE]\nBACK_STYLE=1\nBACK_ANIM_STYLE=2\n[SCAND]\nBACK_STYLE=1\n[HINT]\nBACK_STYLE=1\n[LOGO]\nBACK_STYLE=1\n[EMOJI]\nBACK_STYLE=1\n[GLOBAL]\nVERSION=1\n")
 const server = await createServer({ root: new URL("..", import.meta.url).pathname, logLevel: "error", server: { host: "127.0.0.1", port: 41944, strictPort: false, hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
@@ -59,12 +59,19 @@ try {
   await select(LAYOUT)
   const layoutBefore = await source(LAYOUT)
   // 整体布局只列这个布局自己的分区：候选栏和输入区由候选栏文件提供。
-  assert.deepEqual(await sectionCodes(), ["PANEL", "LIST"])
+  assert.deepEqual(await sectionCodes(), ["PANEL"])
   assert.equal((await railTitles()).some((title) => title.includes("更多面板")), false)
   assert.equal(await value("MORE", "BACK_STYLE"), "1")
   assert.equal(await value("MORE", "BACK_ANIM_STYLE"), "2")
   // 动画分组按分区命名，不出现「动画 2」「动画 3」这类重名编号。
-  assert.deepEqual(await railTitles(), ["文字", "面板（PANEL）", "面板动画（PANEL）", "列表（LIST）", "列表动画（LIST）"])
+  assert.deepEqual(await railTitles(), ["面板（PANEL）", "面板动画（PANEL）"])
+  assert.equal(await page.locator(".text-style-fields").isVisible(), false)
+  await page.evaluate(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    appState.selectedKeySections = ["LIST"]
+    ;(await import("/src/app/key-inspector.ts")).populateKeyInspector()
+  })
+  assert.deepEqual(await sectionCodes(), ["LIST"])
   assert.equal(await row("LIST", "CELL_SIZE").locator("input[type=number]").count(), 2)
   assert.equal(await row("LIST", "LIST_NUM").getByRole("spinbutton").count(), 1)
   await row("LIST", "LIST_ORDER").getByRole("button", { name: "横排", exact: true }).click()

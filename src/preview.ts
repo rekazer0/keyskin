@@ -14,6 +14,8 @@ import { playAnimation, restartLegacyPanelAnimation, syncLegacyPanelAnimation } 
 import { pointerDown } from "./preview-pointer.ts"
 import { pointerMove } from "./preview-pointer.ts"
 import { pointerUp } from "./preview-pointer.ts"
+import { defaultToolbarIcon } from "./preview-draw.ts"
+import { candidateWordsForeground } from "./candidate-style.ts"
 
 export type PreviewEvent = {
   section: string
@@ -380,7 +382,14 @@ export class Preview {
   resolveToolbar(): Promise<Visual[]> {
     if (!this.toolbarImagesCache) {
       this.toolbarImagesCache = this.toolbarSlots && !this.persistentOnly
-        ? this.resolver?.resolveToolbarImages() ?? Promise.resolve([])
+        ? (this.resolver?.resolveToolbarImages() ?? Promise.resolve([])).then((visuals) => Promise.all(visuals.map(async (visual) => {
+          if (visual.image || !visual.defaultIcon) return visual
+          const size = Math.min(this.panelWidth / 18, this.panelHeight * 0.45)
+          const color = this.resolver?.resolveText(candidateWordsForeground(this.document, this.offsets), false)?.color
+            ?? getComputedStyle(this.canvas).color
+          const fallback = await defaultToolbarIcon(visual.defaultIcon, size, color)
+          return { ...visual, ...fallback, imageSource: undefined }
+        })))
         : Promise.resolve([])
     }
     return this.toolbarImagesCache
@@ -388,6 +397,7 @@ export class Preview {
 
   setOffsets(offsets?: IniDocument): void {
     this.offsets = offsets
+    this.toolbarImagesCache = undefined
     void this.draw()
   }
 
@@ -523,6 +533,7 @@ export class Preview {
       this.playerParticles = undefined
     }
     this.document = document
+    this.toolbarImagesCache = undefined
     this.documentIdentity = identity
     // An edit to the layout is an edit to the skin a scene is built from.
     this.scenes.clear()

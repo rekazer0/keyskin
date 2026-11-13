@@ -332,10 +332,7 @@ await check("edit keys: geometry, keyboard nudge, undo/redo, multi-select, layou
   await page.locator('[data-inspector-tab="source"]').click()
   await page.waitForFunction(() => /SHOW=测/.test(document.querySelector("#source .cm-content")?.innerText ?? ""))
   await page.locator('[data-inspector-tab="properties"]').click()
-  // The skin font applies to every key, so it sits in the whole layout's 文字 group.
-  await page.evaluate(() => document.activeElement?.blur())
-  await page.keyboard.press("Escape")
-  await page.locator(".text-style-fields #font-file-field").waitFor({ state: "visible" })
+  await page.locator(".key-typography-fields #font-file-field").waitFor({ state: "visible" })
   // The font is picked from the skin's own font files; the system font is always offered.
   assert.equal(await page.locator("#font-file-select option").first().textContent(), "系统默认")
   // Import is available in edit mode; removing the system default is not possible.
@@ -369,7 +366,7 @@ await check("edit keys: geometry, keyboard nudge, undo/redo, multi-select, layou
 /* ------------------------------------------------------------------------------------------------
  * 6 · Styles: library, filters, search, apply, new style
  * ---------------------------------------------------------------------------------------------- */
-await check("text: candidate bar and whole layout edit their text styles", () => withPage(async (page) => {
+await check("text: candidate bar and selected keys edit their text styles", () => withPage(async (page) => {
   const styleText = () => page.evaluate(async () => {
     const { appState } = await import("/src/app/state.ts")
     const { styleConfigPath } = await import("/src/app/config-context.ts")
@@ -394,20 +391,21 @@ await check("text: candidate bar and whole layout edit their text styles", () =>
   await page.waitForFunction(() => document.querySelector(".text-style-fields input[aria-label='候选字字号']")?.value === "41")
   assert.match(await styleText(), /FONT_SIZE\s*=\s*41/)
   assert.equal(await undoEnabled(page), true)
-  // The whole layout writes every key's text style at once; mixed values say so.
-  await page.keyboard.press("Escape")
   await page.evaluate(async () => {
     const { selectFile } = await import("/src/app/navigation.ts")
     const { appState } = await import("/src/app/state.ts")
     selectFile(appState.layoutPath)
   })
-  await group.waitFor({ state: "visible" })
-  await group.getByRole("button", { name: "按键文字颜色正常", exact: true }).click()
-  const color = group.locator("input[aria-label='按键文字颜色正常色值']")
+  assert.equal(await group.isVisible(), false, "panel properties exclude key text")
+  await selectKey(page)
+  await railTab(page, "文字")
+  const text = page.locator(".key-typography-fields")
+  await text.getByRole("button", { name: "文字颜色正常", exact: true }).click()
+  const color = text.locator("input[aria-label='文字颜色正常色值']")
   await color.fill("FF123456")
   await color.press("Enter")
-  await page.waitForFunction(() => document.querySelector(".text-style-fields input[aria-label='按键文字颜色正常色值']")?.value === "FF123456")
   assert.match(await styleText(), /NM_COLOR\s*=\s*FF123456/)
+
 }))
 
 await check("styles: library filters, search, preview, apply, new and delete style", () => withPage(async (page) => {
@@ -810,7 +808,10 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   await page.locator('[data-orientation-choice="port"]').click()
   await page.waitForFunction(() => document.querySelector("#panel-status")?.textContent.includes("1080 × 642"))
   const groups = await page.locator("#document-fields > [data-inspector-group-label]").evaluateAll((items) => items.map((item) => item.dataset.inspectorGroupLabel))
-  for (const group of ["键盘背景", "候选栏", "候选字", "按键背景", "音效"]) assert.ok(groups.includes(group), group)
+  for (const group of ["键盘背景"]) assert.ok(groups.includes(group), group)
+  for (const group of ["候选栏", "候选字", "输入码", "按键文字", "符号列"]) assert.ok(!groups.includes(group), `${group} requires candidate selection`)
+  await page.locator('#candidate-area').click()
+  await page.locator('#document-fields [data-inspector-group-label="候选字"]').waitFor()
   const candidateColor = () => page.locator("#candidate-words").evaluate((node) => node.style.color)
   assert.equal(await candidateColor(), "rgb(1, 2, 3)")
   // A Sogou property is written to the skin's own INI and the canvas redraws from it.

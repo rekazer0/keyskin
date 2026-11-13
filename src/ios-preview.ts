@@ -1,10 +1,9 @@
 import type { Visual, VisualResolver } from "./atlas.ts"
-import { iconMarkup } from "./icons.ts"
 import { candidateWordsForeground } from "./candidate-style.ts"
 import type { IniDocument } from "./ini.ts"
 import { sceneKey, type NativeScene, type SceneLayer } from "./native-scene.ts"
 import type { PreviewItem, Rect } from "./preview-items.ts"
-import { toolbarImageRect } from "./preview-draw.ts"
+import { defaultToolbarIcon, toolbarImageRect } from "./preview-draw.ts"
 import { iosToolbarScale } from "./ios-toolbar-geometry.ts"
 
 /** Oversized CND hit boxes must not drag the fixed-size artwork below the visible native bar. */
@@ -14,13 +13,19 @@ export async function iosToolbarImageScene(
   width: number,
   height: number,
   devicePointWidth: number | undefined,
+  color = "currentColor",
 ): Promise<NativeScene> {
   const scale = iosToolbarScale(width, devicePointWidth)
   const keys = await Promise.all(items.filter((item) => item.center.trim() === "F14" || item.foreRect && ["F31", "F8", "F9"].includes(item.center.trim())).map(async (item) => {
     const rect = item.rect
     if (rect.x + rect.width <= 0 || rect.x >= width || rect.y + rect.height <= 0 || rect.y >= height) return
     if (item.center.trim() === "F14") {
-      const images = await resolver.resolveToolbarImages()
+      const images = await Promise.all((await resolver.resolveToolbarImages()).map(async (visual) => {
+        if (visual.image || !visual.defaultIcon) return visual
+        const size = Math.min(width / 18, height * 0.45)
+        const fallback = await defaultToolbarIcon(visual.defaultIcon, size, color)
+        return { ...visual, ...fallback, imagePath: undefined }
+      }))
       if (!images.length) return
       const fore: SceneLayer[] = images.map((visual, index) => ({
         kind: "image", visual,
@@ -74,13 +79,7 @@ export async function iosDefaultToolbarScene(
   const color = resolver.resolveText(candidateWordsForeground(candidate, general), false)?.color
     ?? "currentColor"
   const side = Math.min(width / 18, height * 0.45)
-  const icon = async (name: string): Promise<Visual> => {
-    const image = new Image()
-    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconMarkup(name, side * 3).replaceAll("currentColor", color))}`
-    await image.decode()
-    const bitmap = await createImageBitmap(image)
-    return { image: bitmap, source: [0, 0, bitmap.width, bitmap.height] }
-  }
+  const icon = (name: string) => defaultToolbarIcon(name, side, color)
   // shortcut: the phone owns the function order; use its standard controls when the skin supplies no artwork.
   const functions = await Promise.all(["keyboard", "type", "clipboard-paste"].map(icon))
   const [logo, hide, more] = await Promise.all([icon("hand"), icon("chevron-down"), icon("chevron-right")])

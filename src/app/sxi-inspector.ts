@@ -162,7 +162,12 @@ export function populateSxiInspector(container: HTMLElement): boolean {
   const groups = selected.kind === "keys"
     ? palmKeyGroups(skin, selected.models)
     : selected.kind === "board"
-      ? modelGroups(selected.board, asObject(sxiValue(skin, selected.board)) ?? {}, "键盘", ["keys", "type"])
+      ? modelGroups(selected.board, asObject(sxiValue(skin, selected.board)) ?? {}, "键盘", [
+        "keys", "type", "more",
+        ...selected.board[3] === "defaultGlobal" ? [] : [
+          "comm", "input", "cand", "hint", "emoji", "top_cand", "logo", "key_fix", "offset", "force", "list", "seg",
+        ],
+      ])
       : modelGroups(selected.pointer, asObject(sxiValue(skin, selected.pointer)) ?? {}, partTitle(selected.pointer))
   if (selected.kind === "part" && selected.pointer[2] === "h") {
     const icons = asObject(sxiValue(skin, [...selected.pointer, "icon_info"])) ?? {}

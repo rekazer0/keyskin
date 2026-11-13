@@ -111,6 +111,7 @@
           <button id="source-copy" class="ui-icon-button" type="button" title="复制" aria-label="复制" disabled><span class="icon system-symbol" data-icon="copy" aria-hidden="true"></span></button>
           <button id="source-paste" class="ui-icon-button" type="button" title="粘贴" aria-label="粘贴" disabled><span class="icon system-symbol" data-icon="clipboard-paste" aria-hidden="true"></span></button>
           <button id="source-move" class="ui-icon-button" type="button" title="剪切" aria-label="剪切" disabled><span class="icon system-symbol" data-icon="scissors" aria-hidden="true"></span></button>
+          <button id="source-rename" class="ui-icon-button" type="button" title="重命名…" aria-label="重命名" disabled><span class="icon system-symbol" data-icon="pencil-line" aria-hidden="true"></span></button>
           <button id="source-delete" class="ui-icon-button" type="button" data-list-action="remove" title="删除" aria-label="删除" disabled><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
           <input id="source-upload-input" type="file" multiple hidden>
         </div>
@@ -394,6 +395,14 @@
                 <button class="ui-icon-button" type="button" data-key-action="copy" title="复制按键" aria-label="复制按键" data-icon="copy"></button>
                 <button class="ui-icon-button" type="button" data-key-action="swap" title="交换位置" aria-label="交换位置" data-icon="arrow-left-right"></button>
                 <button class="ui-icon-button" type="button" data-key-action="delete" title="删除按键" aria-label="删除按键" data-icon="trash-2"></button>
+                <details id="inspector-actions-more" class="toolbar-more inspector-actions-more">
+                  <summary class="ui-icon-button" data-variant="filled" title="更多对象操作" aria-label="更多对象操作" aria-haspopup="menu"><span class="system-symbol" data-icon="ellipsis" aria-hidden="true"></span></summary>
+                  <div class="ui-menu" role="menu" aria-label="更多对象操作">
+                    <button class="ui-list-item" type="button" role="menuitem" data-key-action-ref="copy"><span class="system-symbol" data-icon="copy" aria-hidden="true"></span><span>复制按键</span></button>
+                    <button class="ui-list-item" type="button" role="menuitem" data-key-action-ref="swap"><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span><span>交换位置</span></button>
+                    <button class="ui-list-item" type="button" role="menuitem" data-key-action-ref="delete"><span class="system-symbol" data-icon="trash-2" aria-hidden="true"></span><span>删除按键</span></button>
+                  </div>
+                </details>
               </div>
             </div>
           </div>
@@ -450,8 +459,6 @@
             <h3>文字<span id="text-style-targets" class="ui-segmented" data-size="sm" role="group" aria-label="文字对象"></span></h3>
             <p id="text-style-note" class="inspector-group-subtitle"></p>
             <div class="inspector-grid">
-              <div id="font-file-field" class="ui-field" title="皮肤字体（GLOBAL FONT_PATH）：整份皮肤共用的内嵌字体文件；Android 真机不直接使用，导出 BDS 时用它把按键文字切成图片，iOS 用它作为按键文字的字体"><span>皮肤字体</span><span class="font-file-controls"><span class="ui-input ui-select"><select id="font-file-select" aria-label="皮肤字体文件"></select></span><button id="font-import" class="ui-icon-button" type="button" title="导入字体文件（.ttf / .otf / .ttc）" aria-label="导入字体文件" data-icon="upload"></button><button id="font-remove" class="ui-icon-button" type="button" title="移除皮肤字体" aria-label="移除皮肤字体" data-icon="trash-2" disabled></button></span></div>
-              <input id="font-import-input" type="file" accept=".ttf,.otf,.ttc" hidden>
               <div id="text-style-rows" class="inspector-grid"></div>
             </div>
           </section>
@@ -545,6 +552,8 @@
               <div id="primary-css-fields" class="primary-css-fields"></div>
             </div>
             <div class="appearance-typography-fields">
+              <div id="font-file-field" class="ui-field" title="皮肤字体（GLOBAL FONT_PATH）：整份皮肤共用的内嵌字体文件；Android 真机不直接使用，导出 BDS 时用它把按键文字切成图片，iOS 用它作为按键文字的字体"><span>皮肤字体</span><span class="font-file-controls"><span class="ui-input ui-select"><select id="font-file-select" aria-label="皮肤字体文件"></select></span><button id="font-import" class="ui-icon-button" type="button" title="导入字体文件（.ttf / .otf / .ttc）" aria-label="导入字体文件" data-icon="upload"></button><button id="font-remove" class="ui-icon-button" type="button" title="移除皮肤字体" aria-label="移除皮肤字体" data-icon="trash-2" disabled></button></span></div>
+              <input id="font-import-input" type="file" accept=".ttf,.otf,.ttc" hidden>
               <label class="ui-field" data-text-style data-bda-text title="contentText"><span>显示文字</span><input data-style-field="CONTENT_TEXT" aria-label="显示文字" /></label>
               <label class="ui-field" data-text-style title="字体名称（FONT_NAME）：这个文字样式使用的字体，可填系统字体名（iOS，如 PingFang SC）或皮肤内字体文件名；Android 真机只认皮肤内字体文件"><span>字体名称</span><input data-style-field="FONT_NAME" aria-label="字体名称" list="skin-font-names" /></label>
               <datalist id="skin-font-names"></datalist>

@@ -132,6 +132,22 @@ try {
   assert.equal((await nativeGeometry(124)).height, 124, 'Android keeps the skin coordinate height')
   await page.locator('#device').selectOption('canvas-checkerboard')
   assert.ok(Math.abs((await nativeGeometry(124 * 1125 / 1320)).height - 124 * 1125 / 1320) < 0.000001, 'returning to canvas restores native sizing')
+  const menuOnly = { ...native,
+    'skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist': strToU8('<plist><array>' + ['26', '19', '18', '17'].map(id =>
+      `<dict><key>Position</key><string>menu</string><key>Name</key><string>${id}</string><key>Images</key><dict><key>Normal</key><dict><key>Normal</key><string>${id === '26' ? 'missing-function' : 'function'}</string></dict></dict></dict>`
+    ).join('') + '</array></plist>'),
+  }
+  await page.locator('#browser-open').setInputFiles({ name: 'menu-only-toolbar.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(menuOnly)) })
+  await page.waitForFunction(() => !document.querySelector('#open').disabled)
+  if (await close.isVisible()) await close.click()
+  const menuGeometry = await nativeGeometry(124 * 1125 / 1320)
+  assert.equal(menuGeometry.layers.length, 5, 'menu-only skins render four common functions alongside the fixed logo')
+  const fallback = await page.evaluate(async () => {
+    const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
+    return toolbarPreview.drawnScene.keys.find(key => key.section === 'ICON2').layers(false).fore.map(layer => Boolean(layer.visual.image))
+  })
+  assert.deepEqual(fallback, Array(4).fill(true), 'missing iOS artwork uses a default icon alongside custom menu images')
+  assert.equal(menuGeometry.revision, 0, 'menu-only fallback never rewrites the skin')
   assert.deepEqual(errors, [])
   console.log('iOS background, native toolbar, input and device-switch checks passed')
 } finally {

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { strToU8, zipSync } from 'fflate'
-import { bdiMenuIcons } from '../src/ios-toolbar-menu.ts'
+import { bdiMenuIcons, bdiToolbarIcons } from '../src/ios-toolbar-menu.ts'
 import { AtlasResolver } from '../src/atlas.ts'
 import { SkinArchive } from '../src/skin.ts'
 
@@ -32,7 +32,7 @@ test('BDI menu functions match by ID even with obfuscated labels, custom filenam
   assert.deepEqual(icons.slice(0, 29).map(icon => icon.label), labels)
   assert.deepEqual(icons.find(icon => icon.id === '55'), { id: '55', label: '次遇', path: 'jyx/55dq', icon: 'smile-plus', position: 'menu' })
   assert.equal(icons.find(icon => icon.id === '45').path, 'custom/ai')
-  assert.equal(icons.find(icon => icon.id === '99').label, '扩展 & 功能')
+  assert.equal(icons.find(icon => icon.id === '99').label, '功能 99')
   assert.equal(icons.at(-1).label, '功能 98')
 })
 
@@ -43,6 +43,96 @@ test('BDI files without function IDs can match canonical image names and known a
   ]))
   assert.equal(icons.length, 29)
   assert.equal(icons.find(icon => icon.id === '43').path, '1.0/toolbarMenuItem_OCR_Normal')
+})
+
+test('BDI ignores invalid function records and replaces obfuscated extension titles with IDs', () => {
+  const icons = bdiMenuIcons(plist([
+    item('54', `${'c7d8e9f0'.repeat(8)}MjI1MzI3Nzk4OQ==`, '/dq/54'),
+    item('139', 'MjI1MzI3Nzk4OQ==', '/dq/139'),
+    item('98', 'undefined', '/dq/98'),
+    item('undefined', 'undefined', '/dq/2'),
+    item('undefined', 'undefined', '/dq/3'),
+    item('undefined', 'undefined', '/dq/1'),
+    item('undefined', '旧标题', '1.0/toolbarMenuItem_KBSwitch_Normal'),
+    item('0', '混淆标题', '/dq/0').replace('<string>0</string>', '<integer>0</integer>'),
+  ]))
+  assert.deepEqual(icons.slice(29).map(icon => icon.label), ['功能 54', '功能 139', '功能 98'])
+  assert.equal(icons.find(icon => icon.id === '17').path, '1.0/toolbarMenuItem_KBSwitch_Normal')
+  assert.equal(icons.find(icon => icon.id === '0').path, 'dq/0')
+})
+
+test('BDI labels depend on function IDs for arbitrary titles and resource paths', () => {
+  for (const title of ['自定义名称', 'plain English title', 'undefined', '!!!混淆内容!!!', 'z'.repeat(100)]) {
+    const icons = bdiMenuIcons(plist([item('17', title, 'arbitrary/image'), item('99', title, 'other/image')]))
+    assert.equal(icons.find(icon => icon.id === '17').label, '键盘类型')
+    assert.equal(icons.find(icon => icon.id === '99').label, '功能 99')
+  }
+})
+
+test('BDI keeps declared toolbar order and recognises full native filenames without IDs', () => {
+  const icons = bdiToolbarIcons(plist([
+    item('35', 'title', 'custom/clipboard', 'toolbar'),
+    item('', 'title', '/custom/toolbarMenuItem_Emoji_Normal_iphone@3x.png', 'toolbar'),
+    item('', 'title', '/toolbarMenuItem_OCR_Normal@3x.png', 'toolbar'),
+    item('17', 'title', 'custom/keyboard', 'toolbar'),
+    item('18', 'title', 'custom/cursor', 'toolbar'),
+    item('23', 'title', 'custom/voice', 'menu'),
+  ]))
+  assert.deepEqual(icons.map(icon => icon.id), ['35', '19', '43', '17'])
+  assert.equal(icons[1].path, 'custom/toolbarMenuItem_Emoji_Normal_iphone@3x')
+})
+
+test('menu-only BDI can preview functions outside the usual four and deduplicates by function', () => {
+  const icons = bdiToolbarIcons(plist([
+    item('23', 'title', 'voice'), item('23', 'duplicate', 'other-voice'),
+    item('35', 'title', 'clipboard'), item('99', 'title', 'extension'),
+  ]))
+  assert.deepEqual(icons.map(icon => icon.id), ['23', '35', '99'])
+  assert.equal(icons[0].path, 'voice')
+  assert.deepEqual(bdiToolbarIcons(strToU8('invalid')), [])
+})
+
+test('menu-only BDI previews common function artwork and leaves the archive unchanged', async () => {
+  const archive = SkinArchive.open(zipSync({
+    'skin/light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist': plist([
+      item('13', '特技字体', '/dq/13'),
+      ...['26', '19', '18', '17'].map(id => item(id, '混淆标题', `/dq/${id}`)),
+    ]),
+    ...Object.fromEntries(['13', '26', '19', '18', '17'].map(id => [`skin/light/skin/res/logo/dq/${id}.png`, new Uint8Array([1])])),
+  }), 'bdi')
+  const before = archive.toBytes()
+  const original = globalThis.createImageBitmap
+  globalThis.createImageBitmap = async () => ({ width: 80, height: 80 })
+  try {
+    const resolver = new AtlasResolver(archive, 'light', 'port')
+    const icons = await resolver.resolveToolbarImages()
+    assert.deepEqual(icons.map(icon => icon.label), labels.slice(0, 4))
+    assert.deepEqual(icons.map(icon => icon.imagePath), ['17', '18', '19', '26'].map(id => `light/skin/res/logo/dq/${id}.png`))
+    assert.equal((await resolver.resolveToolbarImages(2)).length, 2)
+    assert.deepEqual(archive.toBytes(), before)
+  } finally { globalThis.createImageBitmap = original }
+})
+
+test('BDI resolves declared PNG, @3x and full iPhone image references in either theme', async () => {
+  const original = globalThis.createImageBitmap
+  globalThis.createImageBitmap = async () => ({ width: 60, height: 60 })
+  try {
+    for (const theme of ['light', 'dark']) {
+      for (const filename of ['custom.png', 'custom@3x.png', 'custom_iphone@3x.png']) {
+        const root = `skin/${theme}/skin/res/logo/`
+        const archive = SkinArchive.open(zipSync({
+          [`${root}com.baidu.inputmethod.toolbarMenuItems.plist`]: plist([item('17', '任意标题', `/nested/${filename}`, 'toolbar')]),
+          [`${root}nested/${filename}`]: new Uint8Array([1]),
+        }), 'bdi')
+        const resolver = new AtlasResolver(archive, theme, 'port')
+        const [icon] = await resolver.resolveToolbarImages()
+        assert.equal(icon.imagePath, `${theme}/skin/res/logo/nested/${filename}`)
+        assert.ok(icon.image)
+        assert.equal(icon.label, '键盘类型')
+        assert.equal(archive.revision, 0)
+      }
+    }
+  } finally { globalThis.createImageBitmap = original }
 })
 
 test('BDI full icon resolution retains missing or corrupt PNGs as defaults without mutating the archive', async () => {

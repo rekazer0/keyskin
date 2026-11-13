@@ -2611,7 +2611,7 @@ main {
 /* The panes are content, never scrollers: #files handles scrolling.
    The phone layout keeps its own two-column overview grid, so this stays desktop-only. */
 
-/* 文件操作栏（源文件、图片列表共用）：六等分的圆角底条。 */
+/* 文件操作栏：按操作数量等分的圆角底条。 */
 .source-file-toolbar {
   height: auto;
   display: grid;
@@ -2624,6 +2624,8 @@ main {
   background: var(--material-content);
   border-bottom: 0;
 }
+
+#source-file-toolbar { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 
 /* The grid above outranks the user-agent [hidden] rule, so hide the 概览 view explicitly. */
 .source-file-toolbar[hidden] {
@@ -3224,6 +3226,10 @@ main {
 .pen-file-menu > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); left: 0; z-index: 100; width: 268px; max-width: calc(100vw - var(--space-xl)); transform-origin: top left; }
 .mobile-preview-more { display: none; }
 .mobile-preview-more > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); right: 0; z-index: 20; width: 220px; max-width: calc(100vw - var(--space-xl)); max-height: calc(var(--viewport-height) - var(--space-2xl)); overflow-y: auto; transform-origin: top right; }
+/* 检查器对象操作：手机上复制 / 交换 / 删除收进右上角的「更多」，桌面仍是三个图标按钮 */
+.inspector-actions-more { display: none; }
+.inspector-actions-more > .ui-menu { position: absolute; top: calc(100% + var(--space-xs)); right: 0; z-index: 20; width: 200px; transform-origin: top right; }
+.inspector-actions-more:not(:has([data-key-action-ref]:not([hidden]))) { display: none; }
 .ui-menu > .ui-list-item > .ui-badge { margin-left: auto; }
 /* 组件里的图标包裹层按图标本身的尺寸（14/16/20）排版，不按字号的 1em */
 :is(.ui-icon-button, .ui-button, .ui-list-item, .ui-segmented > button, .ui-empty) > .system-symbol { display: inline-flex; width: auto; height: auto; }
@@ -3655,6 +3661,11 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   .titlebar .mobile-choice-toggle .mobile-choice-label { display: none; }
 }
 
+/* 极窄手机（iPhone SE 宽度）：设置入口也在文件菜单里，标题栏让位给皮肤名称 */
+@media (max-width: 359px) {
+  .titlebar .titlebar-preferences { display: none; }
+}
+
 /* -------------------------------------------------------------------------------------------------
  * 2 · Welcome screen (no skin open)
  *     Older phone rules target the bare `aside` element, which also matches the welcome
@@ -3794,66 +3805,65 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
     background: var(--material-panel);
   }
 
-  /* Each half of the hairline represents its pane: layout on the left, inspector on the right. */
-
+  /* 停靠条：两个面板标签 + 拖动调高的手柄，44 触控目标，选中用 --accent-soft */
   .mobile-workspace-tabs {
     height: var(--mobile-dock-h);
-    justify-content: center;
     align-items: center;
-    gap: 0;
-    padding: 0;
-    border: 0;
+    gap: var(--space-xs);
+    padding: 0 var(--space-md);
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
   }
 
   .mobile-workspace-tabs button[data-mobile-pane] {
-    position: relative;
-    z-index: 3;
-    pointer-events: none;
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
-    height: 100%;
-    padding: 0;
+    height: var(--control-height-lg);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-md);
     background: transparent;
-    box-shadow: none;
-    color: transparent;
-    font-size: 0;
-  }
-
-  .mobile-workspace-tabs button[data-mobile-pane]::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: var(--line-strong);
-    transition: background-color var(--duration-base) var(--ease-standard);
+    color: var(--secondary);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
   }
 
   .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"] {
-    background: transparent;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 500;
   }
 
-  .mobile-workspace-tabs button[data-mobile-pane][aria-pressed="true"]::after {
-    background: var(--accent);
+  .mobile-preview-more > summary {
+    --_height: var(--control-height-lg);
   }
 
   .mobile-split-handle {
-    z-index: 2;
-    inset: calc(-1 * var(--space-sm)) 0 auto;
-    width: auto;
-    height: calc(var(--space-lg) + var(--mobile-dock-h));
-    border-radius: 0;
-    transform: none;
+    position: static;
+    flex: none;
+    width: var(--control-height-lg);
+    height: var(--control-height-lg);
+    border-radius: var(--radius-md);
+    color: var(--secondary);
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
   }
 
-  .mobile-split-handle::before,
   .mobile-split-handle .mobile-split-icon {
-    display: none;
+    width: var(--icon-size-md);
+    height: var(--icon-size-md);
+    background: transparent;
   }
 
   .mobile-split-handle.dragging,
   .mobile-split-handle:focus-visible {
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 
   /* Canvas: compact preview toolbar on top, canvas fills the rest. The desktop grid

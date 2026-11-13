@@ -33,12 +33,14 @@ export class SsfStyles {
   readonly skin: IniDocument
   readonly keys: IniDocument
   private readonly archive: SkinArchive
+  private readonly pixelScale: number
   private readonly fonts: Promise<void>[] = []
 
-  constructor(archive: SkinArchive, pkg: SsfPackage, theme: SsfTheme) {
+  constructor(archive: SkinArchive, pkg: SsfPackage, theme: SsfTheme, pixelScale = 1) {
     this.archive = archive
     this.pkg = pkg
     this.theme = theme
+    this.pixelScale = pixelScale
     this.skin = pkg.skin(theme)
     this.keys = pkg.keys(theme)
   }
@@ -60,7 +62,7 @@ export class SsfStyles {
     const inner = stretch && stretch[1] <= bitmap.width && stretch[3] <= bitmap.height
       ? [stretch[0], stretch[2], stretch[1] - stretch[0], stretch[3] - stretch[2]] as [number, number, number, number]
       : undefined
-    return { image: bitmap, source: [0, 0, bitmap.width, bitmap.height], ...inner ? { inner } : {} }
+    return { image: bitmap, source: [0, 0, bitmap.width, bitmap.height], ...inner ? { inner, nineSlicePixelScale: this.pixelScale } : {} }
   }
 
   /** 原生固定文件名；缺图时只展示默认图标，确认更换才写入资源。 */

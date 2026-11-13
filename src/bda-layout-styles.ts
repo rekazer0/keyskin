@@ -49,7 +49,7 @@ const refID = (ref: BdaStyleRef | undefined) => ref ? `${ref.type}:${ref.key}` :
 export function bdaLayoutStyleGroups(
   panel: BdaPanel,
   keys: Array<{ name: string; key: BdaKey }>,
-  scope: "panel" | "candidate" = "panel",
+  scope: "panel" | "candidate" | "list" = "panel",
 ): BdaLayoutStyleGroup[] {
   const group = (key: string, title: string, items: BdaLayoutStyleItem[]): BdaLayoutStyleGroup | undefined => {
     const unique = uniqueStyleItems(items)
@@ -93,35 +93,24 @@ export function bdaLayoutStyleGroups(
     const aiIcon = keyStyleItems("AI 图标", cand?.aiIcon, ["cand", "aiIcon"])
     return [
       group("candidate", "候选栏", candidate),
+      group("input", "输入区", [
+        slot(panel.inputRegionBackStyle, "输入区整体背景", "inputRegionBackStyle", ["inputRegionBackStyle"]),
+        slot(panel.input?.backStyle, "输入区背景", "input.backStyle", ["input", "backStyle"]),
+        slot(panel.input?.textStyle, "输入区文字", "input.textStyle", ["input", "textStyle"], "text"),
+      ]),
       group("candidateSwitch", "候选切换", switchItems),
       group("candidateKeys", "候选键", candKeys),
       group("candidateMenu", "候选菜单", [...menuKeys, ...aiIcon]),
     ].filter((value): value is BdaLayoutStyleGroup => Boolean(value))
   }
 
-  // Built-in hint/list names remain available before their first style is assigned.
-  const groups = [
+  if (scope === "panel") return [
     { key: "panel", title: "面板", items: [
       slot(panel.wholeBackStyle, "面板整体背景", "wholeBackStyle", ["wholeBackStyle"]),
       slot(panel.backStyle, "面板背景", "backStyle", ["backStyle"]),
-      slot(panel.inputRegionBackStyle, "输入区整体背景", "inputRegionBackStyle", ["inputRegionBackStyle"]),
     ] },
-    { key: "input", title: "输入区", items: [
-      slot(panel.input?.backStyle, "输入区背景", "input.backStyle", ["input", "backStyle"]),
-      slot(panel.input?.textStyle, "输入区文字", "input.textStyle", ["input", "textStyle"], "text"),
-    ] },
-    { key: "more", title: "更多面板", items: [
-      slot(panel.more?.backStyle, "更多面板背景", "more.backStyle", ["more", "backStyle"]),
-      slot(panel.more?.cellBackStyle, "更多面板单元背景", "more.cellBackStyle", ["more", "cellBackStyle"]),
-      slot(panel.more?.cellForeStyle, "更多面板单元前景", "more.cellForeStyle", ["more", "cellForeStyle"]),
-    ] },
-    group("hints", "按键提示", [...new Set(["short", "long", ...panel.hints.keys()])].flatMap((key) => { const name = bdaEntryLabel(key), hint = panel.hints.get(key); return [
-      slot(hint?.backStyle, `${name} · 背景`, "backStyle", ["hints", key, "backStyle"]),
-      slot(hint?.barStyle, `${name} · 提示条`, "barStyle", ["hints", key, "barStyle"]),
-      slot(hint?.foreStyle, `${name} · 前景`, "foreStyle", ["hints", key, "foreStyle"]),
-      slot(hint?.cellStyle, `${name} · 单元背景`, "cellStyle", ["hints", key, "cellStyle"]),
-    ] })),
-    group("lists", "列表", [...new Set(["port", ...panel.lists.keys()])].flatMap((key) => { const name = bdaEntryLabel(key), list = panel.lists.get(key); return [
+  ]
+  const groups = [group("lists", "列表", [...panel.lists].flatMap(([key, list]) => { const name = bdaEntryLabel(key); return [
       slot(list?.backStyle, `${name} · 背景`, "backStyle", ["lists", key, "backStyle"]),
       slot(list?.cellBackStyle, `${name} · 单元背景`, "cellBackStyle", ["lists", key, "cellBackStyle"]),
       slot(list?.cellForeStyle, `${name} · 单元文字`, "cellForeStyle", ["lists", key, "cellForeStyle"], "text"),

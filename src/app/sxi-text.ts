@@ -1,14 +1,12 @@
-// The 文字 group of a Palm board or candidate bar: the text styles (`ss_1.<id>.s_1`) its keys or bar
-// draw, read and written in skin.json. A bar without a style of its own gets one on its first edit.
+// The 文字 group of a Palm candidate bar: its text styles read and written in skin.json. A bar without a style of its own gets one on its first edit.
 
 import { PalmBoard } from "../palm/palm-board.ts"
 import { asObject, type Json, type JsonObject } from "../palm/sxi-ini.ts"
 import { sxiFragment } from "../palm/sxi-json.ts"
-import { currentSkinState } from "./config-context"
 import { appState } from "./state"
 import { editSxi } from "./sxi-fields"
-import { isSxiBoardAddress, openPalmSkin, PALM_SHARED_BOARD, palmTheme, sxiPointer } from "./sxi-documents"
-import { palmKeyForegrounds, palmStyle, palmStylePointer, palmValue, type PalmPointer } from "./sxi-styles"
+import { openPalmSkin, PALM_SHARED_BOARD, palmTheme, sxiPointer } from "./sxi-documents"
+import { palmStyle, palmStylePointer, palmValue, type PalmPointer } from "./sxi-styles"
 import { addPalmStyle } from "../palm/palm-style-edit.ts"
 
 type PalmTextProperty = "FONT_NAME" | "FONT_SIZE" | "NM_COLOR" | "HL_COLOR"
@@ -24,37 +22,8 @@ function textStyle(id: Json): string | undefined {
   return text && text.for_back !== true ? String(id) : undefined
 }
 
-/**
- * Labels (each key's first text layer) and hints (its further text layers) of a board's keys; the open
- * board's keys as the current keyboard state swaps them.
- */
-function keyTexts(skin: JsonObject, board: readonly string[], open = false): { label: string[]; hint: string[] } {
-  const model = asObject(sxiFragment(skin, [...board]))
-  const label = new Set<string>()
-  const hint = new Set<string>()
-  for (const key of Array.isArray(model?.keys) ? model.keys : []) {
-    const section = `KEY${asObject(key)?.id ?? ""}`
-    const texts = (open ? palmKeyForegrounds(skin, section, currentSkinState()) : [asObject(asObject(key)?.b)?.base_f].flat())
-      .flatMap((id) => textStyle(id) ?? [])
-    if (texts[0]) label.add(texts[0])
-    for (const id of texts.slice(1)) hint.add(id)
-  }
-  return { label: [...label], hint: [...hint] }
-}
-
-/** How many of `ids` other boards of the theme and orientation also draw, so a board-wide edit can say so. */
-export function palmSharedTextCount(ids: readonly string[]): number {
-  const skin = openPalmSkin()
-  const board = sxiPointer(appState.layoutPath)
-  if (!skin || !board) return 0
-  const others = new Set(Object.keys(asObject(sxiFragment(skin, board.slice(0, 3))) ?? {})
-    .filter((type) => type !== board[3] && type !== PALM_SHARED_BOARD)
-    .flatMap((type) => { const texts = keyTexts(skin, [...board.slice(0, 3), type]); return [...texts.label, ...texts.hint] }))
-  return ids.filter((id) => others.has(id)).length
-}
-
-/** The open board's key texts, or the selected candidate bar's words, first candidate and input code. */
-export function palmTextTargets(): { scope: "candidate" | "layout"; label?: PalmText; hint?: PalmText; words?: PalmText; first?: PalmText; input?: PalmText } | undefined {
+/** The selected candidate bar's words, first candidate and input code. */
+export function palmTextTargets(): { scope: "candidate"; words?: PalmText; first?: PalmText; input?: PalmText } | undefined {
   const skin = openPalmSkin()
   const pointer = sxiPointer(appState.selectedPath)
   const board = sxiPointer(appState.layoutPath)
@@ -71,9 +40,6 @@ export function palmTextTargets(): { scope: "candidate" | "layout"; label?: Palm
       input: { ids: [...new Set(input)], create: { owner: [...layout, "b", PALM_SHARED_BOARD, "input", "b"], field: "base_f", list: true } },
     }
   }
-  if (!isSxiBoardAddress(appState.selectedPath) || appState.selectedPath !== appState.layoutPath) return
-  const texts = keyTexts(skin, pointer, true)
-  return { scope: "layout", label: { ids: texts.label }, hint: { ids: texts.hint } }
 }
 
 export function palmTextValues(text: PalmText, property: PalmTextProperty): string[] {

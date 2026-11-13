@@ -10,7 +10,7 @@ const skin = {
   info: { name: '空配置手心' },
   default: {
     port_layout: {
-      b: { full26Pinyin: { keys: [{ id: '1', rect: [[0, 0], [100, 100]], extension: 'keep-key' }], extension: 'keep-board' } },
+      b: { defaultGlobal: {}, full26Pinyin: { keys: [{ id: '1', rect: [[0, 0], [100, 100]], extension: 'keep-key' }], extension: 'keep-board' } },
       c: { cand1: { extension: 'keep-candidate' } },
     },
     s_info: {
@@ -79,7 +79,8 @@ try {
   const opened = await state()
   assert.equal(opened.text, original, 'opening a sparse native skin must preserve its source')
   const groups = await fields.locator('[data-inspector-group-label]').evaluateAll((nodes) => nodes.map((node) => node.dataset.inspectorGroupLabel))
-  for (const name of ['面板', '候选栏', '输入码', '气泡', '符号列表']) assert.ok(groups.includes(name), `missing supported board part: ${name}`)
+  assert.ok(groups.includes('面板'), 'panel properties remain available without configuration')
+  for (const name of ['候选栏', '输入码', '气泡', '符号列表', '更多候选', '状态按键', '偏移', '按压力度']) assert.equal(groups.includes(name), false, `${name} is not part of this board selection`)
   await select(candidatePath)
   const candidateGroup = fields.locator('[data-inspector-group-label="候选栏 cand1"]')
   for (const key of ['rect.origin', 'rect.size', 'f_size']) assert.equal(await row(key, candidateGroup).locator('input[type="number"]').count(), 2, `${key} keeps paired number controls when absent`)
@@ -119,8 +120,7 @@ try {
   await history('undo')
 
   await select(boardPath)
-  const boardCandidate = fields.locator('[data-inspector-group-label="候选栏"]')
-  await checkEdit(row('gap', boardCandidate).locator('input[type="number"]'), '12', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.cand, { gap: 12 }))
+  assert.equal(await fields.locator('[data-inspector-group-label="候选栏"]').count(), 0, 'candidate controls disappear when the board is selected')
   const panel = fields.locator('[data-inspector-group-label="面板"]')
   await checkChange(() => row('exact', panel).locator('input[role="switch"]').check(), (next) => assert.equal(next.default.port_layout.b.full26Pinyin.board.exact, true))
   assert.equal(await row('b.a', panel).locator('.ui-style-ref-append').count(), 1, 'an absent border animation exposes its add button')
@@ -130,12 +130,14 @@ try {
   await checkEdit(row('b.r', panel).locator('input[type="number"]').first(), '0.25', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.board.bd.b.r, [[0.25, 1]]))
   await checkChange(() => panel.getByRole('button', { name: '删除播放范围 1', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.board.bd.b.r, []))
   await history('undo')
+  await select('skin.json/default/port_layout/b/defaultGlobal')
   const fixes = fields.locator('[data-inspector-group-label="状态按键"]')
-  await checkChange(() => fixes.getByRole('button', { name: '添加状态按键', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.key_fix, { 1: {} }))
+  await checkChange(() => fixes.getByRole('button', { name: '添加状态按键', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.defaultGlobal.key_fix, { 1: {} }))
   const offsets = fields.locator('[data-inspector-group-label="偏移"]')
-  await checkChange(() => offsets.getByRole('button', { name: '添加偏移', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.offset, { 1: {} }))
+  await checkChange(() => offsets.getByRole('button', { name: '添加偏移', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.defaultGlobal.offset, { 1: {} }))
   const forces = fields.locator('[data-inspector-group-label="按压力度"]')
-  await checkChange(() => forces.getByRole('button', { name: '添加按压力度', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.force, [{}]))
+  await checkChange(() => forces.getByRole('button', { name: '添加按压力度', exact: true }).click(), (next) => assert.deepEqual(next.default.port_layout.b.defaultGlobal.force, [{}]))
+  await select(boardPath)
   await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
     const { populateKeyInspector } = await import('/src/app/key-inspector.ts')
@@ -214,7 +216,8 @@ try {
   assert.equal(await row('i_normal', switchGroup).locator('.ui-style-ref-append').count(), 1, 'a null switch keeps its add button')
   await checkEdit(row('gap', candidateGroup).locator('input[type="number"]'), '4', (next) => assert.equal(next.default.port_layout.c.cand1.gap, 4))
   await select(boardPath)
-  await checkEdit(row('gap', boardCandidate).locator('input[type="number"]'), '6', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.cand, { gap: 6 }))
+  assert.equal(await fields.locator('[data-inspector-group-label="候选栏"]').count(), 0, 'a null candidate override does not appear in board properties')
+  assert.equal((await state()).skin.default.port_layout.b.full26Pinyin.cand, null, 'changing selections preserves hidden configuration')
   assert.deepEqual(errors, [])
   console.log('Palm empty inspector: supported controls, lazy object creation, typed edits, undo/redo, unknown fields and save/reopen passed')
 } catch (error) {

@@ -188,7 +188,7 @@ export function styleCard(options: {
   let remove: HTMLButtonElement | undefined
   if (options.remove) {
     const { run, blocked } = options.remove
-    remove = removeStrip(`删除${options.label}`, (event) => { event.stopPropagation(); run() })
+    remove = removeStrip(`删除${options.label}`, run)
     remove.disabled = Boolean(blocked)
     if (blocked) remove.title = blocked
   }
@@ -232,8 +232,13 @@ export function styleCard(options: {
 }
 
 /** 样式卡、样式引用卡右侧的移除条（.ui-style-remove）：悬停卡片时半透明出现，悬停自身时加宽变红。 */
-function removeStrip(label: string, run: (event: MouseEvent) => void): HTMLButtonElement {
-  const button = iconButton("trash-2", label, run)
+function removeStrip(label: string, run: () => void): HTMLButtonElement {
+  const button = iconButton("trash-2", label, event => {
+    // 移除后 label 中的控件会重建，阻止默认点击转发给新的添加按钮。
+    event.preventDefault()
+    event.stopPropagation()
+    run()
+  })
   button.className = "ui-style-remove"
   return button
 }

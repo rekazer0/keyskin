@@ -15,7 +15,7 @@ import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
 import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes } from "./canvas-interaction"
 import { shouldSuggestActionCodes, actionDescription } from "../actions.ts"
-import { keyFields, styleFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, textStyleLabels, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, gapFields, mode, theme } from "./dom"
+import { keyFields, styleFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, textStyleLabels, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { effectivePanelSection } from "../panel-tools.ts"
 import { createIcon } from "../icons"
@@ -252,6 +252,7 @@ export function populateKeyInspector(): void {
   const sections = appState.selectedKeySections
   // A Palm board has no layout document; its keys are read from skin.json.
   const hasSelection = Boolean((document || appState.archive?.format === "sxi") && sections.length && appState.selectedPath === appState.layoutPath)
+  const listSelected = sections.some(isListCell)
   // 动效设计 / 粒子设计：列表进左侧栏、播放器上画布（animation-workspace.ts）。
   appState.animationWorkspace?.update(!hasSelection && appState.animationDesignMode !== "all")
   preview.animationView = appState.animationDesignMode !== "all"
@@ -278,10 +279,10 @@ export function populateKeyInspector(): void {
   keyboardFieldsGroup.hidden = bdaSelected || nativeSelected || skinSelected || toolbarSelected || bdaConfigSelected || candidateSelected || appState.selectedPath !== appState.layoutPath || hasSelection
   for (const group of keyOnlyGroups) {
     const availableForBda = group === keyTypographyFieldsGroup
-    group.hidden = skinSelected || bdaConfigSelected || !hasSelection || nativeSelected || bdaSelected && !availableForBda
+    group.hidden = skinSelected || bdaConfigSelected || !hasSelection || nativeSelected || (bdaSelected || listSelected) && !availableForBda
   }
   selectedKeyName.textContent = hasSelection
-    ? sections.length > 1 ? `已选 ${sections.length} 个按键` : `按键 ${sections[0]?.match(/\d+$/)?.[0] ?? ""}`.trim()
+    ? listSelected ? "符号列表" : sections.length > 1 ? `已选 ${sections.length} 个按键` : `按键 ${sections[0]?.match(/\d+$/)?.[0] ?? ""}`.trim()
     : skinSelected
     ? "皮肤信息"
     : bdaConfigSelected
@@ -504,13 +505,18 @@ export function populateKeyInspector(): void {
   canvasMultiCount.textContent = multiLabel
   const layoutNote = keyLayoutFieldsGroup.querySelector<HTMLElement>(".inspector-heading-note")!
   layoutNote.hidden = appState.archive?.format !== "bda"
-  const listSelected = sections.some(isListCell)
   const keyToolsAvailable = hasSelection && isEditing() && !bdaSelected && !ssfSelected && !listSelected
   // Sogou skins carry no key geometry, so there is nothing to move, copy or delete.
   for (const button of [...keyModeButtons, ...keyActionButtons]) button.hidden = ssfSelected
   for (const button of keyModeButtons) button.disabled = !keyToolsAvailable
   for (const button of keyActionButtons) {
     button.disabled = !keyToolsAvailable || button.dataset.keyAction === "swap" && appState.selectedKeySections.length !== 2
+  }
+  // 手机「更多」菜单项跟着同一个按钮走：隐藏与禁用都取它的状态
+  for (const item of keyActionMenuItems) {
+    const target = keyActionButtons.find((button) => button.dataset.keyAction === item.dataset.keyActionRef)
+    item.hidden = target?.hidden ?? true
+    item.disabled = target?.disabled ?? true
   }
   if (!keyToolsAvailable && appState.keyMode === "move") {
     appState.keyMode = "select"

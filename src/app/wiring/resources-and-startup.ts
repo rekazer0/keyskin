@@ -1,3 +1,4 @@
+import { ssfPackage, ssfTheme } from "../ssf-documents"
 import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
 import { bindDialog } from "../ask.ts"
 import { closeDialog } from "../../motion.ts"
@@ -85,7 +86,8 @@ export function wireResourcesAndStartup(): void {
   void onPickerEvent<{ styleID: string }>("style-library-duplicate", ({ styleID }) => { if (duplicateStyle(styleID)) void emitStyleLibrary() })
   void onPickerEvent<{ styleID: string }>("style-library-slice", ({ styleID }) => sliceStyleLibrarySelection(styleID))
   void onPickerEvent<{ filename: string }>("style-library-play", ({ filename }) => {
-    const path = soundPathForFilename(appState.archive?.names() ?? [], theme.value, orientation.value, filename)
+    const path = appState.archive?.format === "ssf" ? ssfPackage()?.soundPath(ssfTheme(), filename)
+      : soundPathForFilename(appState.archive?.names() ?? [], theme.value, orientation.value, filename)
     if (path) playSoundPath(path)
   })
   void onPickerEvent("image-picker-resources-request", () => void emitToPicker("image-picker-resources-data", resourcePickerPayload()))

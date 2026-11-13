@@ -46,7 +46,8 @@ test("the category rail only navigates: there is no grouped display mode", () =>
 
 test("sections are always expanded; edits can be reset from the rail", () => {
   assert.doesNotMatch(shell, /collapse|chevron/)
-  assert.doesNotMatch(pane, /<details|<summary/)
+  // 属性分组不折叠；唯一的 <details> 是手机上的对象操作菜单（.toolbar-more，与预览「更多」同一套）
+  assert.doesNotMatch(pane.replace(/<details[^>]*class="[^"]*toolbar-more[^"]*"[\s\S]*?<\/details>/g, ""), /<details|<summary/)
   assert.match(shell, /function resetAll/)
   assert.match(shell, /export function setInspectorKind/)
   assert.match(main, /setInspectorKind\(appState\.archive\?\.format === "bda" \? "bda" : appState\.archive \? "bds" : ""\)/)

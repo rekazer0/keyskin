@@ -4,7 +4,7 @@ import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
 import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight } from "../source-panel"
-import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, styleFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, themeChoiceButtons, orientationChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontFileSelect, fontImportButton, fontImportInput, fontRemoveButton } from "../dom"
+import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, styleFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, themeChoiceButtons, orientationChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontFileSelect, fontImportButton, fontImportInput, fontRemoveButton } from "../dom"
 import { appState } from "../state"
 import { syncActionCodeSuggestions, updateSelectedKey, updateSelectedStyle, updateKeyboard, updateToolbar, updateSkinInfo, populateKeyInspector } from "../key-inspector"
 import { scrollSelectedSource } from "../config-context"
@@ -21,7 +21,7 @@ import { selectFile } from "../navigation"
 import { IniDocument } from "../../ini.ts"
 import { importFontFile, removeSelectedFont, setGlobalFont } from "../skin-fonts"
 import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, updateSelectedTile, nextSliceIndex } from "../tile-editing"
-import { canvasEditable, isEditing } from "../edit-history"
+import { isEditing } from "../edit-history"
 import { selectStyleResource, showResourceList, renderResourceInspector, renderStyleResourceDetail } from "../resource-inspector"
 import { revealSourceFile } from "../source-files"
 import { type BdaAppearanceStyleGroup } from "../../bda.ts"
@@ -147,6 +147,12 @@ export function wireEditingControls(): void {
       if (button.dataset.keyAction === "copy") copySelectedKeys()
       else if (button.dataset.keyAction === "swap") applyLayoutAction("swap")
       else deleteSelectedKeys()
+    })
+  }
+  // 手机「更多」菜单项：点它等于点同一个对象操作按钮（动作、撤销、提示都只写一遍）
+  for (const item of keyActionMenuItems) {
+    item.addEventListener("click", () => {
+      keyActionButtons.find((button) => button.dataset.keyAction === item.dataset.keyActionRef)?.click()
     })
   }
   for (const button of inspectorTabButtons) {
@@ -461,7 +467,7 @@ export function wireEditingControls(): void {
     void runFileOperation("复制面板", copyPanel)
   })
   candidateArea.addEventListener("click", (event) => {
-    if (!canvasEditable()) return
+    if (!isEditing()) return
     if (appState.archive?.format === "ssf" || appState.archive?.format === "sxi") return selectNativeToolbar()
     if (event.target === toolbarCanvas && appState.selectedToolbarSections.length) return
     if (appState.archive?.format === "bda") {

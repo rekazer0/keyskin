@@ -1,5 +1,5 @@
 import { appState } from "./state"
-import { sidebarViewButtons, files, sourceFileToolbar, sourceUploadButton, sourceDownloadButton, sourceCopyButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton } from "./dom"
+import { sidebarViewButtons, files, sourceFileToolbar, sourceUploadButton, sourceDownloadButton, sourceCopyButton, sourcePasteButton, sourceMoveButton, sourceRenameButton, sourceDeleteButton } from "./dom"
 import { isEditing, updateDirty, commitBatch } from "./edit-history"
 import { type SourceTransfer, type SourceUpload } from "./types"
 import { renderFiles } from "./file-tree"
@@ -42,6 +42,7 @@ export function updateSourceFileActions(): void {
   sourceCopyButton.disabled = appState.fileOperationRunning || !selection
   sourcePasteButton.disabled = !available || !appState.sourceTransfer?.files.length
   sourceMoveButton.disabled = !available || !selection
+  sourceRenameButton.disabled = !available || !selection
   sourceDeleteButton.disabled = !available || !selection
   sourceCopyButton.setAttribute("aria-pressed", String(appState.sourceTransfer?.mode === "copy"))
   sourceMoveButton.setAttribute("aria-pressed", String(appState.sourceTransfer?.mode === "move"))

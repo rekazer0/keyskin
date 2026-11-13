@@ -187,15 +187,18 @@ for (const viewport of portraitPhones) {
     const sidebar = await rect(page, "main > aside")
     const dock = await rect(page, ".mobile-workspace-tabs")
     const workspace = await rect(page, "main > .workspace")
-    assert.equal(dock.height, 1, "pane divider occupies one pixel")
-    const indicators = await page.$$eval('.mobile-workspace-tabs button[data-mobile-pane]', (buttons) => buttons.map((button) => {
+    // 停靠条是手指尺寸的面板切换器：两个 44 高的标签 + 拖动调高的手柄
+    assert.equal(dock.height, 56, "pane dock keeps the 56px touch bar")
+    const tabs = await page.$$eval('.mobile-workspace-tabs button[data-mobile-pane]', (buttons) => buttons.map((button) => {
       const box = button.getBoundingClientRect()
-      return { x: box.x, width: box.width, color: getComputedStyle(button, "::after").backgroundColor }
+      const style = getComputedStyle(button)
+      return { x: box.x, width: box.width, height: box.height, text: button.textContent.trim(), background: style.backgroundColor, pointer: style.pointerEvents }
     }))
-    assert.equal(indicators[0].x, dock.x, "layout indicator starts on the left")
-    assert.equal(indicators[1].x, dock.x + dock.width / 2, "inspector indicator starts on the right")
-    assert.ok(indicators.every((indicator) => indicator.width === dock.width / 2), "each pane owns half the line")
-    assert.notEqual(indicators[0].color, indicators[1].color, "current pane is visually distinct")
+    assert.deepEqual(tabs.map((tab) => tab.text), ["文件与布局", "属性检查器"], "pane tabs keep their labels")
+    assert.ok(tabs.every((tab) => tab.height >= 44), "pane tabs are finger sized")
+    assert.ok(tabs.every((tab) => tab.pointer !== "none"), "pane tabs take taps")
+    assert.ok(tabs[0].width > dock.width / 3 && tabs[1].width > dock.width / 3, "each tab owns its half of the dock")
+    assert.notEqual(tabs[0].background, tabs[1].background, "current pane is visually distinct")
     assert.ok(Math.abs(sidebar.y - main.y) <= 1, `panes start at the top of main (gap ${sidebar.y - main.y}px)`)
     assert.ok(Math.abs(sidebar.bottom - dock.y) <= 1, "panes end at the dock")
     assert.ok(Math.abs(dock.bottom - workspace.y) <= 1, "canvas starts below the dock")
@@ -214,14 +217,14 @@ for (const viewport of portraitPhones) {
     await openTemplate(page)
     const hidden = await rect(page, "main > .source")
     assert.ok(hidden.x >= viewport.width - 1, `inspector stays off screen on the layout pane (x ${hidden.x})`)
-    // indicators are pointer-transparent (the dock is the split handle); switch via keyboard
-    await page.locator('button[data-mobile-pane="inspector"]').press("Enter")
+    // 点标签切换（拖动手柄只调高度，不切换面板）
+    await page.locator('button[data-mobile-pane="inspector"]').click()
     await page.waitForTimeout(350)
     const source = await rect(page, "main > .source")
     assert.ok(source.x >= -1 && source.right <= viewport.width + 1, "inspector slides in")
-    assert.equal(await page.locator('button[data-mobile-pane="inspector"]').getAttribute("aria-pressed"), "true", "right pane indicator is selected")
+    assert.equal(await page.locator('button[data-mobile-pane="inspector"]').getAttribute("aria-pressed"), "true", "inspector tab is selected")
     const handle = await rect(page, "#mobile-split-handle")
-    assert.ok(handle.height >= 16, "hairline retains a usable drag target")
+    assert.ok(handle.width >= 32 && handle.height >= 32, "split handle keeps a finger sized drag target")
     await page.locator("#mobile-split-handle").click()
     await page.waitForTimeout(250)
     assert.equal((await rect(page, "main > .workspace")).visible, false, "collapsing hides the canvas")
@@ -240,7 +243,13 @@ for (const viewport of portraitPhones) {
   }))
 
   await check(`${tag} settings sheet`, () => withPage(viewport, async (page) => {
-    await page.locator(".titlebar-preferences").click()
+    // 极窄手机的标题栏不留设置按钮（入口在文件菜单里）
+    const preferences = page.locator(".titlebar-preferences")
+    if (await preferences.isVisible()) await preferences.click()
+    else {
+      await page.locator(".pen-file-menu summary").click()
+      await page.locator('.pen-file-menu [data-app-dialog="settings"]').click()
+    }
     await page.waitForSelector("#settings-dialog[open]")
     const dialog = await rect(page, "#settings-dialog")
     assert.ok(dialog.x >= -1 && dialog.right <= viewport.width + 1 && dialog.bottom <= viewport.height + 1, "sheet fits the screen")
@@ -298,6 +307,62 @@ await check("390×844 preview above the panes", () => withPage({ width: 390, hei
   assert.ok(Math.abs(workspace.bottom - dock.y) <= 1, "dock under the canvas")
   assert.ok(Math.abs(dock.bottom - sidebar.y) <= 1 && Math.abs(sidebar.bottom - main.bottom) <= 1, "panes below the dock")
 }, { storage: { "mobile-preview-position": "top" } }))
+
+// 检查器为手指而改：44 触控目标、数值用 − / + 步进、复制 / 交换 / 删除进「更多」。
+await check("390×844 inspector is finger sized", () => withPage({ width: 390, height: 844 }, async (page) => {
+  await openTemplate(page, "official-android-bds")
+  await page.locator('[data-mobile-choice="mode"]').click()
+  await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
+  const canvas = await rect(page, "#preview")
+  await page.mouse.click(canvas.x + canvas.width * 0.45, canvas.y + canvas.height * 0.45)
+  await page.waitForSelector('#quick-inspector .ui-field:has(.ui-step)')
+  assert.equal(await page.locator('button[data-mobile-pane="inspector"]').getAttribute("aria-pressed"), "true", "selecting a key opens the inspector")
+
+  const rows = await page.$$eval("#quick-inspector .ui-field", (fields) => fields
+    .filter((field) => field.checkVisibility() && field.getBoundingClientRect().width > 0 && !field.closest("[hidden]"))
+    .map((field) => Math.round(field.getBoundingClientRect().height)))
+  assert.ok(rows.length > 4, `inspector lists property rows (${rows.length})`)
+  assert.ok(Math.min(...rows) >= 44, `property rows are 44 tall (min ${Math.min(...rows)})`)
+
+  await page.waitForTimeout(300)
+  const numericRow = page.locator("#quick-inspector .ui-field:has(.ui-step)").first()
+  const numericInput = numericRow.locator("input").first()
+  const before = Number(await numericInput.inputValue())
+  await numericRow.locator(".ui-step").nth(1).click()
+  await page.waitForTimeout(200)
+  assert.equal(Number(await numericInput.inputValue()), before + 1, "plus step adds one")
+  assert.equal(await page.locator("#mobile-undo").isEnabled(), true, "stepping is undoable")
+
+  const actions = await rect(page, ".inspector-object-actions")
+  assert.ok(actions.visible, "object actions stay in the inspector header")
+  assert.equal(await page.locator('.inspector-object-actions > button[data-key-action="copy"]').isVisible(), false, "copy leaves the header on phones")
+  await page.locator("#inspector-actions-more summary").click()
+  assert.equal(await page.locator('#inspector-actions-more [data-key-action-ref="copy"]').isVisible(), true, "copy moves into the more menu")
+  assert.equal(await page.locator("#inspector-actions-more").getAttribute("open"), "", "menu opens")
+  // 菜单项真的执行同一个对象操作：删除后选中对象回到空态
+  const selected = await page.locator("#selected-key").textContent()
+  await page.locator('#inspector-actions-more [data-key-action-ref="delete"]').click()
+  await page.waitForTimeout(500)
+  assert.equal(await page.locator("#inspector-actions-more").getAttribute("open"), null, "menu closes after the action")
+  assert.notEqual(await page.locator("#selected-key").textContent(), selected, "more menu runs the same delete action")
+}))
+
+await check("1280×800 keeps inline object actions", () => withPage({ width: 1280, height: 800 }, async (page) => {
+  await openTemplate(page, "official-android-bds")
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  const canvas = await rect(page, "#preview")
+  // 画布比例随窗口变化，逐个点位试到选中一个按键为止
+  for (const [fx, fy] of [[0.5, 0.6], [0.45, 0.45], [0.5, 0.85], [0.25, 0.65]]) {
+    await page.mouse.click(canvas.x + canvas.width * fx, canvas.y + canvas.height * fy)
+    await page.waitForTimeout(400)
+    if (await page.locator("#quick-inspector .ui-field").count() > 0) break
+  }
+  // 数值行一定在可见分组里（未显示的皮肤信息分组里也有 .ui-field）
+  await page.waitForSelector("#quick-inspector .ui-field:has(.ui-step)")
+  assert.equal(await page.locator('.inspector-object-actions > button[data-key-action="copy"]').isVisible(), true, "desktop keeps the inline copy button")
+  assert.equal(await page.locator("#inspector-actions-more").isVisible(), false, "desktop hides the mobile more menu")
+  assert.equal(await page.locator("#quick-inspector .ui-step").first().isVisible(), false, "desktop has no step buttons")
+}))
 
 for (const { top, position } of [
   { top: 52, position: "top" }, { top: 52, position: "bottom" },

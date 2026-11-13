@@ -4,7 +4,7 @@
 // paints phoneSkin.ini onto them.
 
 import { AtlasResolver, type TextVisual } from "../atlas.ts"
-import { inputBarMetrics } from "../candidate-style.ts"
+import { candidateWordsForeground, inputBarMetrics } from "../candidate-style.ts"
 import { IniDocument } from "../ini.ts"
 import { iosCandidateBackground, iosDefaultToolbarScene, iosToolbarImageScene } from "../ios-preview.ts"
 import { previewItems } from "../preview-items.ts"
@@ -15,7 +15,7 @@ import type { PalmStyles } from "../palm/palm-styles.ts"
 import { PalmMotion } from "../palm/palm-motion.ts"
 import type { Json } from "../palm/sxi-ini.ts"
 import type { SkinArchive } from "../skin.ts"
-import type { SsfTheme } from "../ssf/ssf-package.ts"
+import type { SsfPackage, SsfTheme } from "../ssf/ssf-package.ts"
 import { animateSsfScene } from "../ssf/ssf-motion.ts"
 import { SsfStyles, ssfBoardScene, ssfCandidateScene } from "../ssf/ssf-scene.ts"
 import { textDocument, visualResolver } from "./bda-documents"
@@ -165,7 +165,7 @@ export function refreshPalmPreview(): boolean {
   return true
 }
 
-function ssfScenes(archive: SkinArchive): boolean {
+function ssfScenes(archive: SkinArchive, draft?: SsfPackage): boolean {
   const template = appState.ssfTemplates?.sogou
   const match = appState.layoutPath.match(/^(light|dark)\/skin\/(port|land)\/([^/]+)\.ini$/)
   const layout = appState.layoutDocument
@@ -175,8 +175,9 @@ function ssfScenes(archive: SkinArchive): boolean {
   const templateText = (file: string) => template.isText(templatePath(file)) ? IniDocument.parse(template.getText(templatePath(file))) : undefined
   const templateLayout = templateText(`${name}.ini`)
   if (!templateLayout) return false
-  const pkg = ssfDocumentPackage(archive)
-  const styles = new SsfStyles(archive, pkg, theme as SsfTheme)
+  const pkg = draft ?? ssfDocumentPackage(archive)
+  const screenWidth = previewScreenWidth()
+  const styles = new SsfStyles(archive, pkg, theme as SsfTheme, screenWidth / preview.panelWidth)
   const resolver = new AtlasResolver(template, "light", orientation)
   const templateGen = templateText("gen.ini")
   const width = (document?: IniDocument) => Number(document?.get("PANEL", "SIZE")?.split(",")[0])
@@ -188,7 +189,6 @@ function ssfScenes(archive: SkinArchive): boolean {
   const barHeight = candidates && !toolbarPreview.canvas.closest("[hidden]") ? toolbarPreview.panelHeight : 0
   const size = { width: preview.panelWidth, height: preview.surfaceHeight }
   const popups = hintPreviewEnabled.checked
-  const screenWidth = previewScreenWidth()
   preview.setScene(() => ssfBoardScene(styles, skeleton, name, orientation === "land", { ...size, barHeight })
     .then((scene) => animateSsfScene(scene, styles, layout, name, orientation === "land", popups, screenWidth)))
   const templateCandidates = candidatePath && templateText(candidatePath.split("/").pop()!)
@@ -203,10 +203,10 @@ function ssfScenes(archive: SkinArchive): boolean {
 }
 
 /** Points a Sogou document's canvases at its native scenes; other formats paint their layout's styles. */
-export function refreshNativeScenes(): void {
+export function refreshNativeScenes(draft?: SsfPackage): void {
   const archive = appState.archive
   for (const canvas of [preview, toolbarPreview, candidateBackgroundPreview]) canvas.setNativeItems(undefined)
-  if (archive?.format === "ssf" && ssfScenes(archive)) return
+  if (archive?.format === "ssf" && ssfScenes(archive, draft)) return
   for (const canvas of [preview, toolbarPreview, candidateBackgroundPreview]) canvas.setScene(undefined)
   preview.setPanelTopInset(0)
   if (archive?.format !== "bdi" || !inputBarInKeyboard() || candidateArea.hidden) return
@@ -230,6 +230,7 @@ export function refreshNativeScenes(): void {
   } else {
     toolbarPreview.setScene(() => iosToolbarImageScene(
       resolver, items, width, height, toolbarPreview.devicePointWidth,
+      resolver.resolveText(candidateWordsForeground(candidate, general), false)?.color ?? getComputedStyle(toolbarPreview.canvas).color,
     ))
   }
   candidateBackgroundPreview.setScene(() => iosCandidateBackground(

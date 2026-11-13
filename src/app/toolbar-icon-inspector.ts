@@ -7,7 +7,8 @@ import { refreshPreview } from "./preview-render"
 import { runFileOperation } from "./file-operations"
 import { section } from "./property-rows"
 import { showPickerWindow } from "./image-pickers"
-import type { TileRect } from "../tiles.ts"
+import { tileSlices, updateTileSlice, type TileRect } from "../tiles.ts"
+import { IniDocument } from "../ini.ts"
 import type { Change } from "../history.ts"
 import { createIcon } from "../icons.ts"
 import { SsfStyles } from "../ssf/ssf-scene.ts"
@@ -69,21 +70,44 @@ async function replaceIcon(visual: ToolbarVisual, imagePath: string, source?: Ti
   try {
     if (appState.archive !== archive || !isEditing()) return false
     const before = archive.getBytes(path)
-    const original = before && await createImageBitmap(new Blob([new Uint8Array(before)], { type: "image/png" })).catch(() => undefined)
+    const original = before && await createImageBitmap(new Blob([new Uint8Array(before)], { type: "image/png" })).catch(() => {
+      if (visual.atlas) throw new Error("工具栏图集无法读取，请先修复图片")
+      return undefined
+    })
     try {
+      const atlas = visual.atlas
+      const tilesBefore = atlas && archive.getBytes(atlas.path)
+      const tiles = atlas && IniDocument.parse(tilesBefore ? archive.getText(atlas.path) : "")
+      const tileCount = Number(tiles?.get("GLOBAL", "TILE_NUM")) || 0
+      const slice = atlas && tiles && tileSlices(tiles).find(slice => slice.index === atlas.index)
+      const sourceRect = slice?.source
+      if (sourceRect && (!sourceRect.every(Number.isInteger) || sourceRect[0] < 0 || sourceRect[1] < 0 || sourceRect[2] <= 0 || sourceRect[3] <= 0 || original && (sourceRect[0] + sourceRect[2] > original.width || sourceRect[1] + sourceRect[3] > original.height))) {
+        throw new Error("工具栏图标切片范围无效，请先修复配置")
+      }
+      const rect: TileRect = atlas
+        ? sourceRect ?? [0, original?.height ?? 0, source?.[2] ?? replacement.width, source?.[3] ?? replacement.height]
+        : visual.imageSource ?? visual.source ?? [0, 0, original?.width ?? source?.[2] ?? replacement.width, original?.height ?? source?.[3] ?? replacement.height]
       const canvas = element("canvas")
-      canvas.width = original?.width ?? source?.[2] ?? replacement.width
-      canvas.height = original?.height ?? source?.[3] ?? replacement.height
+      canvas.width = Math.max(original?.width ?? 0, rect[0] + rect[2])
+      canvas.height = Math.max(original?.height ?? 0, rect[1] + rect[3])
       const context = canvas.getContext("2d")!
       if (original) context.drawImage(original, 0, 0)
-      const rect = visual.imageSource ?? visual.source ?? [0, 0, canvas.width, canvas.height]
       context.clearRect(...rect)
       context.drawImage(replacement, ...(source ?? [0, 0, replacement.width, replacement.height] as TileRect), ...rect)
       const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("无法生成图标图片")), "image/png"))
       const after = new Uint8Array(await blob.arrayBuffer())
       if (appState.archive !== archive || !isEditing()) return false
       if (archive.getBytes(path) !== before) throw new Error("图标图片已改变，请重新选择后替换")
-      commitBatch([{ kind: "bytes", path, before, after }, ...toolbarIconBinding(visual)])
+      const binding = toolbarIconBinding(visual)
+      if (atlas && tiles) {
+        if (archive.getBytes(atlas.path) !== tilesBefore) throw new Error("图标配置已改变，请重新选择后替换")
+        if (!slice) updateTileSlice(tiles, { index: atlas.index, source: rect })
+        if (!tiles.sections().includes("GLOBAL")) tiles.appendSection("GLOBAL", [])
+        if (tiles.get("GLOBAL", "USE_ALPHA") === undefined) tiles.set("GLOBAL", "USE_ALPHA", "1")
+        tiles.set("GLOBAL", "TILE_NUM", String(Math.max(tileCount, ...tileSlices(tiles).map(slice => slice.index + 1))))
+        binding.push({ kind: "bytes", path: atlas.path, before: tilesBefore, after: new TextEncoder().encode(tiles.toString()) })
+      }
+      commitBatch([{ kind: "bytes", path, before, after }, ...binding])
       refreshPreview()
       updateDirty()
       void refreshToolbarIconCards()

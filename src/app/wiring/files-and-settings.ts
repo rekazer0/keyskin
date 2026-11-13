@@ -1,3 +1,4 @@
+import { wireSourceFileMenu } from "../source-file-menu"
 import { wireAiSessions } from "../ai-sessions"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
@@ -38,6 +39,7 @@ import { keyEventElement } from "../key-editing"
 /** 源文件工具栏、源码目录、设置项、窗口事件与拖放。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireFilesAndSettings(): void {
   wireAdbShare()
+  wireSourceFileMenu()
   for (const button of [sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton]) {
     button.addEventListener("click", (event) => {
       if (isEditing()) return

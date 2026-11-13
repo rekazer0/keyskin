@@ -3,9 +3,11 @@
 
 import { drawVisualPreview, pngBitmap, type Visual } from "../atlas.ts"
 import { createIcon } from "../icons"
+import { initDisclosureReveal } from "../motion"
 import { IniDocument } from "../ini.ts"
 import { ssfFieldLabel, ssfSectionLabel } from "../ssf/ssf-labels.ts"
-import { parseSsfImage, type SsfStretch } from "../ssf/ssf-package.ts"
+import { parseSsfImage, SsfPackage, type SsfStretch } from "../ssf/ssf-package.ts"
+import { strToU8 } from "fflate"
 import { mirrorSsfEdit, ssfResolutionOf, ssfResolutionTwins } from "../ssf/ssf-resolutions.ts"
 import { setSourceValue } from "./config-context"
 import { commitBatch, commitText, isEditing, updateDirty } from "./edit-history"
@@ -22,10 +24,13 @@ import { showError, showStatus } from "./file-operations"
 import { validateFont } from "./skin-fonts"
 import { fieldCaption, fieldControl, numberParts, section } from "./property-rows"
 import { ssfMediaField } from "./ssf-media-fields"
+import { openSsfImageEditor } from "./ssf-image-editor"
+import { refreshNativeScenes } from "./native-preview"
+import { preview, previewScreenWidth } from "./canvas-interaction"
 
 type SsfEntry = { key: string; value: string }
 
-/** State images that follow NORMAL / PRESSED when those are replaced and still show the same file. */
+/** State images follow NORMAL / PRESSED only when the whole image value, including its band, matches. */
 const LINKED_STATES: Record<string, string[]> = { NORMAL: ["DISABLED", "NORMAL_ON"], PRESSED: ["PRESSED_ON"] }
 const IMAGE_STATES = ["NORMAL", "PRESSED", "DISABLED", "NORMAL_ON", "PRESSED_ON", "FOCUSED"]
 const IMAGE_FIELDS = new Set([...IMAGE_STATES, "BG_IMAGE", "ICON", "ICON_PRESSED", "pic_path", "keyboard_bg", "preview_square", "preview_comp"])
@@ -53,7 +58,7 @@ type TextChange = Extract<Change, { kind: "text" }>
 /** A section rows write to; `create` is what a missing section starts with (RootView needs BG_STYLE). */
 type SsfLocation = { path: string; section: string; create?: SsfEntry[]; bind?: { section: string; key: string } }
 
-function editTargets(targets: SsfLocation[], change: (document: IniDocument, target: SsfLocation) => void, refreshInspector = true): void {
+function editTargets(targets: SsfLocation[], change: (document: IniDocument, target: SsfLocation) => void, refreshInspector = true, previewOnly = false): void {
   const archive = appState.archive
   if (!archive || archive.format !== "ssf" || !isEditing()) return
   const changes = [...new Set(targets.map((target) => target.path))].flatMap((path) => {
@@ -69,6 +74,11 @@ function editTargets(targets: SsfLocation[], change: (document: IniDocument, tar
     const after = document.toString()
     return before === after ? [] : [{ kind: "text" as const, path, before, after }]
   })
+  if (previewOnly) {
+    const pkg = ssfPackage()
+    if (pkg) refreshNativeScenes(SsfPackage.fromFiles(new Map([...pkg.files, ...changes.map(({ path, after }) => [path, strToU8(after)] as const)])))
+    return
+  }
   if (!changes.length) return
   const all: TextChange[] = [...changes, ...resolutionTwins(changes)]
   if (all.length === 1) commitText(all[0].path, all[0].before, all[0].after)
@@ -113,7 +123,7 @@ async function imageVisual(value: string | undefined): Promise<Visual | undefine
 }
 
 function caption(row: HTMLElement, key: string, label = ssfFieldLabel(key)): void {
-  fieldCaption(row, key, label)
+  fieldCaption(row, key, label, key === "POPUP_OFFSET_VERTICAL" ? `气泡垂直偏移（${key}）` : undefined)
 }
 
 /** Replaces the file of an image value and keeps its stretch band. */
@@ -143,6 +153,24 @@ function chooseImage(targets: SsfLocation[], key: string): void {
   openImageResourceChooser((resourceID) => replaceImage(targets, key, /\.\w+$/.test(resourceID) ? resourceID : `${resourceID}.png`))
 }
 
+function editImage(targets: SsfLocation[], key: string): void {
+  if (!isEditing()) return
+  const { path, section } = targets[0]
+  openSsfImageEditor({
+    label: ssfFieldLabel(key),
+    value: () => stateImage(ssfDocument(path), section, key),
+    load: () => imageVisual(stateImage(ssfDocument(path), section, key)),
+    stretch: () => stretchField(path, section, targets, [key]),
+    size: () => preview.keys.find((item) => appState.selectedKeySections.includes(item.section))?.rect ?? { width: preview.panelWidth, height: preview.surfaceHeight },
+    pixelScale: () => previewScreenWidth() / preview.panelWidth,
+    replace: (refresh) => openImageResourceChooser((resourceID) => {
+      replaceImage(targets, key, /\.\w+$/.test(resourceID) ? resourceID : `${resourceID}.png`)
+      refresh()
+    }),
+    close: () => { refreshNativeScenes(); populateKeyInspector() },
+  })
+}
+
 type CardReference = { path: string; section: string; key: string }
 
 /** A Sogou field that names another image section: show the reference as a card, not a text input. */
@@ -164,7 +192,7 @@ function referenceCard(label: string, reference: CardReference, target: SsfLocat
   const states = ["NORMAL", "PRESSED"].map((key) => ({
     label: `${key === "PRESSED" ? "按下" : "正常"}${label}`,
     draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await imageVisual(stateImage(image, target.section, key))], false),
-    onClick: isEditing() ? () => chooseImage([target], key) : undefined,
+    onClick: isEditing() ? () => editImage([target], key) : undefined,
   }))
   const row = element("div", "ui-field style-reference-field")
   caption(row, reference.key, label)
@@ -211,7 +239,7 @@ function imageCard(label: string, keys: readonly string[], targets: SsfLocation[
       label: `${stateLabel}${label}：${file ?? "未设置"}${own ? "" : "（沿用正常图片）"}`,
       // Thumbnails decode images; a whole phoneSkin.ini has hundreds, so only visible ones are drawn.
       draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await imageVisual(value)], false),
-      onClick: isEditing() ? () => chooseImage(targets, key) : undefined,
+      onClick: isEditing() ? () => editImage(targets, key) : undefined,
     }
   })
   const configured = targets.some(target => keys.some(key => parseSsfImage(stateImage(ssfDocument(target.path), target.section, key))?.file))
@@ -225,15 +253,15 @@ function ssfNumberParts(row: HTMLElement, key: string, affixes: string[], values
 }
 
 /** The stretch band shared by a section's state images: Sogou's order is left, right, top, bottom. */
-function stretchField(path: string, section: string, targets = [{ path, section }]): HTMLElement {
-  const stretch = parseSsfImage(ssfDocument(path).get(section, "NORMAL"))?.stretch
+function stretchField(path: string, section: string, targets: SsfLocation[] = [{ path, section }], keys: readonly string[] = IMAGE_STATES): HTMLElement {
+  const stretch = parseSsfImage(stateImage(ssfDocument(path), section, keys[0]))?.stretch
   const row = element("div", "ui-field")
   row.dataset.stack = ""
   caption(row, "STRETCH", "拉伸区域")
   row.title = "原图中的像素坐标：0 ≤ 左 < 右 ≤ 图片宽度，0 ≤ 上 < 下 ≤ 图片高度"
   let width = Infinity
   let height = Infinity
-  const bands = () => targets.map((target) => parseSsfImage(ssfDocument(target.path).get(target.section, "NORMAL"))?.stretch ?? [0, 1, 0, 1])
+  const bands = () => targets.map((target) => parseSsfImage(stateImage(ssfDocument(target.path), target.section, keys[0]))?.stretch ?? [0, keys.length === 1 ? width : 1, 0, keys.length === 1 ? height : 1])
   const updateBounds = () => {
     const current = bands()
     const minimum = [0, Math.min(width, Math.max(...current.map((band) => band[0] + 1))), 0, Math.min(height, Math.max(...current.map((band) => band[2] + 1)))]
@@ -244,7 +272,7 @@ function stretchField(path: string, section: string, targets = [{ path, section 
       input.step = "1"
     }
   }
-  ssfNumberParts(row, "STRETCH", ["左", "右", "上", "下"], stretch?.map(String) ?? ["", "", "", ""], (values) => {
+  const update = (values: string[], previewOnly = false) => {
     const next = bands().map((current) => {
       const band = values.map((value, index) => value === "" ? current[index] : Number(value)) as SsfStretch
       band[1] = Math.max(1, Math.min(width, band[1]))
@@ -256,11 +284,14 @@ function stretchField(path: string, section: string, targets = [{ path, section 
     if (next.some((band) => band.some((value) => !Number.isInteger(value)))) return
     editTargets(targets, (document, target) => {
       const band = next[targets.findIndex((item) => item.path === target.path && item.section === target.section)]
-      for (const key of IMAGE_STATES) {
-        const file = parseSsfImage(document.get(target.section, key))?.file
-        if (file) document.set(target.section, key, [file, ...band].join(","))
+      const current = stateImage(document, target.section, keys[0])
+      const linked = keys.length === 1 ? (LINKED_STATES[keys[0]] ?? []).filter((key) => document.get(target.section, key) === current) : []
+      for (const key of [...keys, ...linked]) {
+        const file = parseSsfImage(keys.length === 1 ? stateImage(document, target.section, key) : document.get(target.section, key))?.file
+        if (file) setSsfValue(document, target.section, key, [file, ...band].join(","), target.create)
       }
-    }, false)
+    }, false, previewOnly)
+    if (previewOnly) return
     updateBounds()
     const saved = JSON.parse(row.dataset.inspectorValue ?? "[]") as Array<{ path: string; section: string; values: Record<string, string | null> }>
     for (const item of saved) for (const key of Object.keys(item.values)) {
@@ -269,22 +300,32 @@ function stretchField(path: string, section: string, targets = [{ path, section 
     }
     row.dataset.inspectorValue = JSON.stringify(saved)
     row.dispatchEvent(new Event("input", { bubbles: true }))
-  })
+  }
+  ssfNumberParts(row, "STRETCH", ["左", "右", "上", "下"], stretch?.map(String) ?? ["", "", "", ""], (values) => update(values))
   const inputs = [...row.querySelectorAll("input")]
+  row.addEventListener("ssf-stretch-preview", () => update(inputs.map((input) => input.value), true))
   for (const input of inputs) input.disabled = true
   // Decode before editing, so commits stay synchronous and retain the numeric gesture's undo token.
-  void Promise.all(targets.flatMap((target) => IMAGE_STATES.map((key) => imageVisual(ssfDocument(target.path).get(target.section, key))))).then((images) => {
+  void Promise.all(targets.flatMap((target) => keys.map((key) => imageVisual(stateImage(ssfDocument(target.path), target.section, key))))).then((images) => {
     if (!row.isConnected) return
     for (const image of images) if (image?.source) {
       width = Math.min(width, image.source[2])
       height = Math.min(height, image.source[3])
     }
     updateBounds()
-    for (const input of inputs) input.disabled = !isEditing()
+    const currentBands = bands()
+    for (const [index, input] of inputs.entries()) {
+      if (keys.length === 1 && Number.isFinite(width) && Number.isFinite(height)) {
+        const mixed = currentBands.some((band) => band[index] !== currentBands[0][index])
+        input.value = mixed ? "" : String(currentBands[0][index])
+        if (mixed) input.placeholder = "混合"
+      }
+      input.disabled = !isEditing() || keys.length === 1 && (!Number.isFinite(width) || !Number.isFinite(height))
+    }
   })
   const constrain = (event: Event) => {
     const input = event.target
-    if (!(input instanceof HTMLInputElement) || !input.value.trim()) return
+    if (!(input instanceof HTMLInputElement) || input.type === "range" || !input.value.trim()) return
     const value = Number(input.value)
     if (!Number.isFinite(value)) return
     // A leading digit can be below min while the user is still typing a valid multi-digit value.
@@ -483,10 +524,7 @@ function blockHeading(block: SsfBlock): HTMLElement {
   const title = element("span")
   title.textContent = block.title ?? ssfSectionLabel(block.section)
   heading.append(title)
-  const code = element("code")
-  code.textContent = `${block.path.split("/").pop()} · [${block.section}]`
-  code.title = block.path
-  heading.append(code)
+  heading.title = `${block.path} · [${block.section}]`
   return heading
 }
 
@@ -612,11 +650,25 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
     })
     if (block.peers?.length) markMixed(row, targets, rowKeys)
   }
+  const extended = Array.from(grid.children).filter((row) => ["DISABLED", "NORMAL_ON", "PRESSED_ON"].includes((row as HTMLElement).dataset.documentKey ?? ""))
+  if (extended.length) {
+    const disclosure = element("details", "ui-disclosure")
+    disclosure.dataset.ssfStates = JSON.stringify([block.path, block.section])
+    const summary = element("summary", "ui-button")
+    summary.dataset.variant = "quiet"
+    summary.dataset.size = "sm"
+    summary.append(createIcon("chevron-right", 14), "扩展配置")
+    const content = element("div", "ui-subsection")
+    content.append(...extended)
+    disclosure.append(summary, content)
+    initDisclosureReveal(disclosure)
+    grid.append(disclosure)
+  }
   nodes.push(...Array.from(grid.children) as HTMLElement[])
   return nodes
 }
 
-/** One inspector group (a rail entry): several sections under one title, each with its own subheading. */
+/** One inspector group; subheadings only distinguish content the group or card does not already name. */
 export function renderGroup(label: string, blocks: SsfBlock[], code?: string, key = label): HTMLElement | undefined {
   const shown = blocks.filter((block) => block.template || block.expect || ssfDocument(block.path).sections().includes(block.section))
   if (!shown.length) return
@@ -625,7 +677,9 @@ export function renderGroup(label: string, blocks: SsfBlock[], code?: string, ke
   for (const [index, block] of shown.entries()) {
     const subsection = element("div", "ui-subsection")
     const references = shown.flatMap(({ reference }) => reference?.path === block.path && reference.section === block.section ? [reference.key] : [])
-    subsection.append(...renderBlock({ ...block, omit: [...block.omit ?? [], ...references] }, many || Boolean(block.title && block.title !== label)))
+    const title = block.title ?? ssfSectionLabel(block.section)
+    const showHeading = title !== label && !block.reference && block.only?.length !== 0 && (many || Boolean(block.title))
+    subsection.append(...renderBlock({ ...block, omit: [...block.omit ?? [], ...references] }, showHeading))
     for (const row of Array.from(subsection.querySelectorAll<HTMLElement>("[data-inspector-row-key]"))) {
       row.dataset.inspectorRowKey = JSON.stringify([key, index, row.dataset.documentKey])
     }

@@ -4,6 +4,7 @@ import { createServer } from 'vite'
 import { strToU8, unzipSync, zipSync } from 'fflate'
 import { bdsFixture } from '../tests/helpers/baidu-fixture.mjs'
 import { encodePng } from '../src/ssf/ssf-png.ts'
+import { ANDROID_TOOLBAR_ICONS } from '../src/android-toolbar.ts'
 
 const png = color => encodePng({ width: 8, height: 4, data: new Uint8Array(Array.from({ length: 32 }, () => color).flat()) })
 const files = unzipSync(bdsFixture())
@@ -55,9 +56,9 @@ try {
     const row = page.locator(`[data-document-key="TOOLBAR_ICON_${iconIndex}"]`)
     const replaceButton = page.getByRole('button', { name: `更换${ios ? labels[iconIndex - 1] : '键盘类型'}图标`, exact: true })
     await row.waitFor()
-    assert.equal(await page.locator('[data-document-key^="TOOLBAR_ICON_"]').count(), ios ? 29 : 2, 'inspector lists every toolbar and menu icon')
+    assert.equal(await page.locator('[data-document-key^="TOOLBAR_ICON_"]').count(), ios ? 29 : 70, 'inspector lists every toolbar and menu icon, including missing artwork')
     assert.equal(await page.locator('.ui-toolbar-icons .ui-style-ref').count(), 0, 'toolbar icons have their own component')
-    assert.deepEqual(await page.locator('.ui-toolbar-icon-label').allTextContents(), ios ? labels : ['表情', '键盘类型'])
+    assert.deepEqual(await page.locator('.ui-toolbar-icon-label').allTextContents(), ios ? labels : ANDROID_TOOLBAR_ICONS.map(([, label]) => label))
     const boxes = await page.locator('.ui-toolbar-icon-preview').evaluateAll(nodes => nodes.map(node => {
       const rect = node.getBoundingClientRect()
       return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
@@ -69,6 +70,14 @@ try {
       const { visualResolver } = await import('/src/app/bda-documents.ts')
       return (await visualResolver().resolveToolbarImages()).length
     }), 4, 'iOS canvas preview keeps its native four-icon limit')
+    if (!ios) {
+      const painted = await page.evaluate(async () => {
+        const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
+        const icons = await toolbarPreview.resolveToolbar()
+        return icons.map(icon => Boolean(icon.image && icon.source))
+      })
+      assert.deepEqual(painted, Array(6).fill(true), 'partial Android atlases combine custom and default artwork')
+    }
     const path = ios ? 'light/skin/res/logo/icon6.png' : 'light/skin/res/logo/pop_menu_icons.png'
     const snapshot = () => page.evaluate(async path => {
       const { appState } = await import('/src/app/state.ts')
@@ -177,6 +186,67 @@ try {
         }, { menuPath, imagePath })
         assert.deepEqual(restored, saved, 'undo restores the exact plist and removes newly created image files')
       }
+    } else {
+      const tilPath = 'light/skin/res/logo/pop_menu_icons.til'
+      const nativeSnapshot = () => page.evaluate(async ({ path, tilPath }) => {
+        const { appState } = await import('/src/app/state.ts')
+        return { png: Array.from(appState.archive.getBytes(path) ?? []), til: Array.from(appState.archive.getBytes(tilPath) ?? []), undo: appState.undoStack.length }
+      }, { path, tilPath })
+      const applyMissing = async () => {
+        await page.getByRole('button', { name: '更换超会写图标', exact: true }).click()
+        await page.locator('#picker-dialog').waitFor({ state: 'visible' })
+        await page.evaluate(async () => {
+          const { appState } = await import('/src/app/state.ts')
+          appState.pickerTarget.selectImage('light/skin/res/replacement.png', [4, 0, 4, 4])
+        })
+        await page.getByRole('button', { name: '更换超会写图标', exact: true }).locator('canvas').waitFor()
+        await picker.locator('#picker-close').click()
+        await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+      }
+      for (const missing of [[], [tilPath], [path, tilPath]]) {
+        await page.evaluate(async missing => {
+          const { appState } = await import('/src/app/state.ts')
+          const { populateKeyInspector } = await import('/src/app/key-inspector.ts')
+          for (const path of missing) appState.archive.delete(path)
+          populateKeyInspector()
+        }, missing)
+        await page.getByRole('button', { name: '更换超会写图标', exact: true }).locator('svg').waitFor()
+        const saved = await nativeSnapshot()
+        await applyMissing()
+        const applied = await nativeSnapshot()
+        assert.equal(applied.undo, saved.undo + 1, 'atlas PNG and TIL are one undo step')
+        const geometry = await page.evaluate(async ({ path, tilPath }) => {
+          const { appState } = await import('/src/app/state.ts')
+          const { IniDocument } = await import('/src/ini.ts')
+          const tiles = IniDocument.parse(appState.archive.getText(tilPath))
+          const image = await createImageBitmap(new Blob([appState.archive.getBytes(path)]))
+          return { rect: tiles.get('IMG70', 'SOURCE_RECT'), count: tiles.get('GLOBAL', 'TILE_NUM'), width: image.width, height: image.height }
+        }, { path, tilPath })
+        assert.equal(geometry.count, '71', 'Android TILE_NUM exceeds the highest function index')
+        assert.equal(geometry.rect, `0,${saved.png.length ? 4 : 0},4,4`)
+        if (!missing.length) {
+          const atlas = await page.evaluate(async path => {
+            const { appState } = await import('/src/app/state.ts')
+            const image = await createImageBitmap(new Blob([appState.archive.getBytes(path)]))
+            const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+            const context = canvas.getContext('2d'); context.drawImage(image, 0, 0)
+            return Array.from(context.getImageData(0, 0, image.width, 4).data)
+          }, path)
+          assert.deepEqual(atlas, Array.from({ length: 4 }, () => [...Array.from({ length: 4 }, () => [10, 20, 30, 255]).flat(), ...Array.from({ length: 4 }, () => [240, 50, 60, 255]).flat()]).flat(), 'adding a missing icon preserves every existing pixel')
+        }
+        await applyMissing()
+        const repeated = await nativeSnapshot()
+        assert.deepEqual(repeated.png, applied.png, 'replacing the new icon uses its current slice instead of appending again')
+        assert.deepEqual(repeated.til, applied.til)
+        await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+        await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+        await page.getByRole('button', { name: '更换超会写图标', exact: true }).locator('svg').waitFor()
+        assert.deepEqual(await nativeSnapshot(), saved, 'undo restores exact files, including absent PNG/TIL')
+        await page.evaluate(async () => (await import('/src/app/edit-history.ts')).redo())
+        await page.getByRole('button', { name: '更换超会写图标', exact: true }).locator('canvas').waitFor()
+        assert.deepEqual(await nativeSnapshot(), applied)
+        await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+      }
     }
     await page.locator('.inspector-filter-open').click()
     await page.locator('#inspector-filter').fill(ios ? '剪贴板' : '键盘类型')
@@ -192,7 +262,7 @@ try {
     await replaceButton.scrollIntoViewIfNeeded()
     const mobileGrid = await page.locator('.ui-toolbar-icons').evaluate(grid => ({ width: grid.clientWidth, scroll: grid.scrollWidth }))
     assert.equal(mobileGrid.width, mobileGrid.scroll, 'wrapped icons do not overflow the mobile inspector')
-    assert.equal(await page.locator('.ui-toolbar-icon:visible').count(), ios ? 29 : 2, 'mobile inspector keeps every icon')
+    assert.equal(await page.locator('.ui-toolbar-icon:visible').count(), ios ? 29 : 70, 'mobile inspector keeps every icon')
     assert.equal(await page.locator('.ui-toolbar-icon-label').evaluateAll(nodes => nodes.every(node => node.scrollHeight === node.clientHeight)), true, 'function names are never clipped')
     await page.evaluate(async () => {
       const { mode } = await import('/src/app/dom.ts')
@@ -205,6 +275,29 @@ try {
     assert.deepEqual(errors, [])
     await page.close()
     console.log(`${ios ? 'iOS plist' : 'Android atlas'} toolbar: visible picker, replacement, isolation, undo/redo passed`)
+  }
+  for (const resource of ['absent', 'corrupt']) {
+    const fixture = { ...files }
+    delete fixture['light/res/logo/pop_menu_icons.png']
+    delete fixture['light/res/logo/pop_menu_icons.til']
+    if (resource === 'corrupt') {
+      fixture['light/res/logo/pop_menu_icons.png'] = strToU8('invalid PNG')
+      fixture['light/res/logo/pop_menu_icons.til'] = strToU8('[IMG26]\nSOURCE_RECT=-1,0,4,4\n')
+    }
+    const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
+    await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await page.locator('#browser-open').setInputFiles({ name: 'default-toolbar.bds', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(fixture)) })
+    await page.waitForFunction(() => !document.querySelector('#open').disabled && !document.querySelector('.canvas-wrap').classList.contains('empty'))
+    const result = await page.evaluate(async () => {
+      const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
+      const { appState } = await import('/src/app/state.ts')
+      await toolbarPreview.rendered()
+      const icons = await toolbarPreview.resolveToolbar()
+      const pixels = toolbarPreview.canvas.getContext('2d').getImageData(0, 0, toolbarPreview.canvas.width, toolbarPreview.canvas.height).data
+      return { images: icons.filter(icon => icon.image && icon.source).length, painted: pixels.some((value, index) => index % 4 === 3 && value > 0), revision: appState.archive.revision }
+    })
+    assert.deepEqual(result, { images: 6, painted: true, revision: 0 }, `${resource} Android resources use visible defaults without modifying files`)
+    await page.close()
   }
 } finally {
   await browser.close()

@@ -41,27 +41,41 @@ const IMAGE_ALIASES: Record<string, string> = {
 
 type BdiMenuIcon = { id: string; path: string; label: string; icon: string; position: string }
 
-/** 检查器列全量菜单；缺少声明或图片的功能也保留，读取时不补写皮肤。 */
-export function bdiMenuIcons(bytes?: Uint8Array): BdiMenuIcon[] {
+function menuEntries(bytes?: Uint8Array): BdiMenuIcon[] {
   const plist = bytes && parseXmlPlist(bytes)
-  const entries = (Array.isArray(plist) ? plist : []).map(asObject)
+  return (Array.isArray(plist) ? plist : []).map(asObject)
     .filter((item) => item?.Position === "toolbar" || item?.Position === "menu")
     .map((item) => {
       const image = asObject(asObject(item?.Images)?.Normal)?.Normal
       const path = typeof image === "string" ? image.trim().replace(/^\/+/, "").replace(/\.png$/i, "") : ""
-      const name = path.split("/").pop() ?? ""
-      const id = String(item?.Name || FUNCTIONS.find((entry) => entry[2] === name)?.[0] || IMAGE_ALIASES[name] || "")
-      const title = asObject(asObject(item?.Titles)?.Normal)?.Normal
-      const label = typeof title === "string" && !/^[a-f0-9]{32,}$/i.test(title) ? title : ""
-      return { id, path, label, position: String(item?.Position) }
-    })
+      const name = path.split("/").pop()?.replace(/(?:_iphone)?@3x$/i, "") ?? ""
+      const rawID = String(item?.Name ?? "").trim()
+      const id = /^\d+$/.test(rawID) ? rawID : FUNCTIONS.find((entry) => entry[2] === name)?.[0] || IMAGE_ALIASES[name] || ""
+      const known = FUNCTIONS.find((entry) => entry[0] === id)
+      return { id, path, label: known?.[1] ?? `功能 ${id}`, icon: known?.[3] ?? "component", position: String(item?.Position) }
+    }).filter((item) => item.id)
+}
+
+/** 检查器列全量菜单；名称只按客户端功能 ID 识别，不猜测皮肤标题的编码。 */
+export function bdiMenuIcons(bytes?: Uint8Array): BdiMenuIcon[] {
+  const entries = menuEntries(bytes)
   const result: BdiMenuIcon[] = FUNCTIONS.map(([id, label, name, icon], index) => {
     const entry = entries.find((item) => item.id === id)
     return { id, label, icon, path: entry?.path || `1.0/${name}`, position: entry?.position ?? (index < 4 ? "toolbar" : "menu") }
   })
   for (const entry of entries) {
-    if (result.some((item) => entry.id ? item.id === entry.id : item.path === entry.path)) continue
-    result.push({ ...entry, label: entry.label || (entry.id ? `功能 ${entry.id}` : "未知功能"), icon: "component" })
+    if (result.some((item) => item.id === entry.id)) continue
+    result.push(entry)
   }
   return result
+}
+
+/** 有 toolbar 声明时保持原顺序；只有菜单时优先预览常用功能，手机端顺序由用户设置决定。 */
+export function bdiToolbarIcons(bytes?: Uint8Array): BdiMenuIcon[] {
+  const entries = menuEntries(bytes)
+  const toolbar = entries.filter((item) => item.position === "toolbar")
+  if (toolbar.length) return toolbar.slice(0, 4)
+  // shortcut: 无工具栏声明时用已有菜单取图；真实功能列表需读取手机端设置。
+  const common = FUNCTIONS.slice(0, 4).flatMap(([id]) => entries.find((item) => item.id === id) ?? [])
+  return [...common, ...entries].filter((item, index, items) => items.findIndex((entry) => entry.id === item.id) === index).slice(0, 4)
 }

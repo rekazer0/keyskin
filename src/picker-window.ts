@@ -7,7 +7,10 @@ import { hydrateIcons } from "./icons.ts"
 import { nativePickerWindow, pickerEmitter, pickerListener } from "./picker-channel.ts"
 import { imageResourceCard, soundStyleSample, styleAddCard, styleCard, styleFilterButtons, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "./style-card"
 import { animationPlayer } from "./animation-player"
-import { iniPreviewClip } from "./animation-preview-model"
+import { emptyClip, iniPreviewClip } from "./animation-preview-model"
+import { SsfMotion } from "./ssf/ssf-motion"
+import type { SceneLayer, SceneLayers } from "./native-scene"
+import type { Rect } from "./preview-items"
 import { IniDocument } from "./ini"
 import type { TextVisual, VisualResolver } from "./atlas"
 import { bindListActionKeys, bindListboxKeys, emptyState, hydrateShortcuts, listToolbar, searchField } from "./dom-element"
@@ -26,7 +29,20 @@ type ResourcePayload = { path: string; dataURL: string }[]
 
 // 位图不能跨窗口传，图片以 bitmaps 里的 data URL 传过来，由 imageKey 引用。
 export type StyleLibraryVisual = Omit<Visual, "image"> & { imageKey?: string }
+type LibrarySceneLayer = Exclude<SceneLayer, { kind: "image" }> | { kind: "image"; rect: Rect; visual: StyleLibraryVisual }
+export type SsfLibraryAnimation = {
+  text: string
+  skin: string
+  keys: string
+  sogouWidth: number
+  screenWidth: number
+  board: { width: number; height: number }
+  field?: string
+  key?: { section: string; rect: Rect; layers: { back: LibrarySceneLayer[]; fore: LibrarySceneLayer[]; groups?: number[] }[] }
+  images: Record<string, StyleLibraryVisual>
+}
 export type StyleLibraryPayload = {
+  ssfAnimation?: SsfLibraryAnimation
   session?: string
   sliceBack: boolean
   editable: boolean
@@ -61,7 +77,7 @@ export type StyleLibraryPayload = {
     uses?: number
   }[]
   images: { path: string; categories: string[]; uses: number }[]
-  sounds: { styleID: string; filename: string; playable: boolean; uses?: number }[]
+  sounds: { styleID: string; label?: string; filename: string; playable: boolean; uses?: number }[]
 }
 
 export type StyleLibraryPreview = {
@@ -281,6 +297,8 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
     libraryPreviewImage.append(image)
   } else if (sound) {
     libraryPreviewImage.append(librarySound(sound.filename, sound.playable))
+  } else if (style?.kind === "sound") {
+    libraryPreviewImage.append(librarySound(style.sound!, Boolean(style.soundPlayable)))
   } else if (style?.kind === "anim") {
     const selection = librarySelected
     void libraryAnimationPlayers(style).then(players => {
@@ -293,7 +311,7 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
       libraryPreviewImage.append(canvas)
     }
   }
-  $("#style-library-preview-title").textContent = selected.imagePath?.split("/").pop() ?? `样式 ${style?.label ?? selected.styleID}`
+  $("#style-library-preview-title").textContent = selected.imagePath?.split("/").pop() ?? (sound?.label ?? `样式 ${style?.label ?? selected.styleID}`)
   $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? "")
   const compatible = selected.imagePath ? library.imagesCompatible : library.imageSelection ? style?.kind === "image" : Boolean(style?.compatible ?? sound)
   libraryApply.disabled = !compatible || !library.editable
@@ -324,6 +342,22 @@ async function libraryAnimationPlayers(style: StyleLibraryPayload["styles"][numb
   const payload = library
   await loadLibraryStyle(style)
   if (library !== payload) return []
+  if (payload?.ssfAnimation) {
+    const data = payload.ssfAnimation
+    if (!data.key) return []
+    const visual = async ({ imageKey, ...rest }: StyleLibraryVisual): Promise<Visual> => ({ ...rest, image: await libraryBitmap(imageKey) })
+    const layers = await Promise.all(data.key.layers.map(async (layers): Promise<SceneLayers> => {
+      const hydrate = (items: LibrarySceneLayer[]) => Promise.all(items.map(async layer => layer.kind === "image" ? { ...layer, visual: await visual(layer.visual) } : layer))
+      return { ...layers, back: await hydrate(layers.back), fore: await hydrate(layers.fore) }
+    }))
+    const key = { ...data.key, layers: (pressed: boolean) => layers[Number(pressed)] }
+    const motion = await SsfMotion.fromDocument({
+      sogouWidth: data.sogouWidth, skin: IniDocument.parse(data.skin), keys: IniDocument.parse(data.keys),
+      file: async name => name && data.images[name] ? visual(data.images[name]) : undefined,
+    }, data.board, IniDocument.parse(data.text), data.screenWidth)
+    const effects = motion.effects([{ section: key.section, rect: key.rect, binding: { sections: [], defaults: [], keyClass: "char" } }], { section: style.styleID, field: data.field })
+    return effects ? [animationPlayer({ thumbnail: true, key: style.styleID, clip: emptyClip(), native: async () => ({ key, effects }) })] : []
+  }
   if (!payload?.animationText) return []
   const document = libraryAnimations ??= IniDocument.parse(payload.animationText)
   const resolver: VisualResolver = {
@@ -365,8 +399,8 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
   })
   if (!payload) return []
   if (payload.soundOnly) {
-    return payload.sounds.filter(({ styleID, filename }) => !query || styleID.includes(query) || filename.toLowerCase().includes(query)).map(({ styleID, filename, playable, uses }) => {
-      const card = styleCard({ id: styleID, label: `STYLE${styleID}`, kind: "sound", sound: () => librarySound(filename, playable), uses })
+    return payload.sounds.filter(({ styleID, filename }) => !query || styleID.toLowerCase().includes(query) || filename.toLowerCase().includes(query)).map(({ styleID, label, filename, playable, uses }) => {
+      const card = styleCard({ id: styleID, label: label ?? `STYLE${styleID}`, kind: "sound", sound: () => librarySound(filename, playable), uses })
       bindLibraryCard(card, { styleID }, false)
       return card
     })
@@ -380,7 +414,7 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
   }
   return payload.styles.filter(style => styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter, query)).map((style) => {
     const card = styleCard({
-      id: style.styleID, label: `STYLE${style.label}`, info: style.info, kind: style.kind,
+      id: style.styleID, label: payload.ssfAnimation ? style.label : `STYLE${style.label}`, info: style.info, kind: style.kind,
       draw: (canvas, highlighted) => style.kind === "text"
         ? textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
         : loadLibraryStyle(style).then(() => drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(payload.foreground))),
@@ -406,7 +440,7 @@ function renderLibrary(): void {
   setWindowTitle(title.textContent)
   for (const button of libraryButtons("[data-library-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.libraryMode === libraryMode))
-    button.disabled = sound && button.dataset.libraryMode === "images"
+    button.disabled = (sound || Boolean(payload?.ssfAnimation)) && button.dataset.libraryMode === "images"
   }
   libraryModes.hidden = chooser
   libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => { libraryKind = value; renderLibrary() }))

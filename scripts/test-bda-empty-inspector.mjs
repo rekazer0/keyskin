@@ -9,7 +9,8 @@ import { removeFields, updateStringMapValue } from '../src/bda-encode.ts'
 
 const archive = SkinArchive.open(new Uint8Array(readFileSync(new URL('../public/default-template.bda', import.meta.url))), 'bda')
 const appearancePath = 'light/skin/port/appearanceConfig'
-archive.setBytes(appearancePath, updateStringMapValue(archive.getBytes(appearancePath), 4, 'py_9', (bytes) => removeFields(bytes, new Set([1, 2, 4, 5, 6]))))
+archive.setBytes(appearancePath, updateStringMapValue(archive.getBytes(appearancePath), 4, 'py_9', (bytes) =>
+  updateStringMapValue(removeFields(bytes, new Set([1, 4, 5, 6])), 2, 'port', (list) => removeFields(list, new Set([1, 2, 3, 4])))))
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41947, strictPort: false, hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
@@ -40,7 +41,16 @@ try {
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   await page.evaluate(async () => (await import('/src/app/navigation.ts')).selectFile('light/skin/port/py_9.ini', 'overview'))
   const baseline = await bytes(), original = await snapshot()
-  for (const path of ['input.backStyle', 'more.backStyle', 'hints.short.backStyle', 'hints.long.cellStyle', 'lists.port.cellForeStyle']) assert.equal(await row(path).locator('.ui-style-ref-append').count(), 1, path)
+  for (const path of ['input.backStyle', 'more.backStyle', 'hints.short.backStyle', 'hints.long.cellStyle']) assert.equal(await row(path).count(), 0, `${path} does not belong to the selected panel`)
+  assert.equal(await row('lists.port.cellForeStyle').count(), 0, 'panel selection hides list properties')
+  assert.equal(await page.locator('.text-style-fields').isVisible(), false)
+  await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    appState.selectedKeySections = ['LIST']
+    ;(await import('/src/app/key-inspector.ts')).populateKeyInspector()
+  })
+  assert.equal(await row('backStyle').count(), 0, 'list selection hides panel properties')
+  assert.equal(await row('lists.port.cellForeStyle').locator('.ui-style-ref-append').count(), 1, 'an existing list keeps its unconfigured fields')
   assert.equal(await row('lists.port.foreStyles.0').getByRole('button', { name: '添加前景', exact: true }).count(), 1)
   assert.deepEqual(await bytes(), baseline, 'opening empty panel controls does not write source')
   assert.equal((await snapshot()).undo, original.undo)
@@ -59,10 +69,10 @@ try {
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
   }
   const image = { type: 'image', key: original.image }, text = { type: 'text', key: original.text }
-  await firstEdit('more.backStyle', image.key, (panel) => assert.deepEqual(panel.more.backStyle, image))
-  await firstEdit('hints.short.backStyle', image.key, (panel) => assert.deepEqual(panel.hints.short.backStyle, image))
   await firstEdit('lists.port.cellForeStyle', text.key, (panel) => assert.deepEqual(panel.lists.port.cellForeStyle, text))
   await candidate(true)
+  assert.equal(await row('lists.port.cellForeStyle').count(), 0, 'candidate selection hides list properties')
+  await firstEdit('input.backStyle', image.key, (panel) => assert.deepEqual(panel.input.backStyle, image))
   for (const path of ['cand.candBarStyle', 'cand.switch.selectFore', 'cand.cellForeStyle', 'cand.candKeys.CAND_F31.backStyle', 'cand.menuKeys.MENU_PASTE.backStyle', 'cand.aiIcon.backStyle']) assert.equal(await row(path).locator('.ui-style-ref-append').count(), 1, path)
   assert.deepEqual(await bytes(), baseline)
   await firstEdit('cand.candBarStyle', image.key, (panel) => assert.deepEqual(panel.cand.candBarStyle, image))
@@ -77,7 +87,7 @@ try {
   await page.getByRole('button', { name: '交互预览', exact: true }).click()
   assert.equal(await row('cand.cellForeStyle').locator('.ui-style-ref-append').isDisabled(), true)
   assert.deepEqual(errors, [])
-  console.log('BDA empty inspector: candidate, toolbar, input, more, hints and lists; first edits, undo/redo, removal and read-only passed')
+  console.log('BDA selection inspector: panel, existing lists, candidate and input scopes; first edits, undo/redo, removal and read-only passed')
 } finally {
   await browser.close()
   await server.close()

@@ -37,14 +37,14 @@ test("new candidate, input, global list and bubble configurations are discoverab
 })
 
 test("the whole layout lists only this layout's own sections", () => {
-  const source = "[PANEL]\nSIZE=1080,642\nKEY_NUM=17\n[KEY1]\nCENTER=a\n[LIST]\nPOS=6,5\n[CAND]\nTYPE=4\n[INPUT]\nPOS=1,2\n"
+  const source = "[PANEL]\nSIZE=1080,642\nKEY_NUM=17\n[KEY1]\nCENTER=a\n[LIST]\nPOS=6,5\n[CAND]\nTYPE=4\n[INPUT]\nPOS=1,2\n[SCAND]\nBACK_STYLE=3\n[HINT]\nTYPE=1\n[LOGO]\nBACK_STYLE=4\n[EMOJI]\nBOTTOM_LINE=1\n[GLOBAL]\nVERSION=1\n[MORE]\nBACK_STYLE=5\n"
   const document = IniDocument.parse(source)
   const entries = baiduInspectorEntries(document, "port/py_9.ini", true)
   // 候选栏、输入区由候选栏文件提供，不在整体布局里重复。
-  assert.deepEqual([...new Set(entries.map(({ section }) => section))].filter((section) => !/^KEY\d+$/.test(section)), ["PANEL", "LIST"])
-  // 面板与列表里缺的项照常列出，查看不写文件。
+  assert.deepEqual([...new Set(entries.map(({ section }) => section))].filter((section) => !/^KEY\d+$/.test(section)), ["PANEL"])
+  // 面板里缺的项照常列出，查看不写文件。
   assert.ok(entries.some(({ section, key }) => section === "PANEL" && key === "BACK_ANIM_STYLE"))
-  assert.ok(entries.some(({ section, key }) => section === "LIST" && key === "CELL_SIZE"))
+  assert.ok(!entries.some(({ section }) => section === "LIST"))
   assert.equal(document.toString(), source)
   // 没有列表的 26 键布局不硬造一个列表分组。
   const keysOnly = baiduInspectorEntries(IniDocument.parse("[PANEL]\nSIZE=1,2\n[KEY1]\nCENTER=a\n"), "port/py_26.ini", true)

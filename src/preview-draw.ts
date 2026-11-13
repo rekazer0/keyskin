@@ -1,5 +1,16 @@
 import { type StyleTextVisual, type Visual, canvasFont, isTransparentColor, withTextShadow } from "./atlas.ts"
 import { type Rect } from "./preview-items.ts"
+import { iconMarkup } from "./icons.ts"
+
+/** 默认图标只用于预览，不写入皮肤图片或配置。 */
+export async function defaultToolbarIcon(name: string, size: number, color: string): Promise<Visual> {
+  const image = new Image()
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconMarkup(name, size * 3).replaceAll("currentColor", color))}`
+  await image.decode()
+  const side = Math.max(1, Math.round(size))
+  const bitmap = await createImageBitmap(image, { resizeWidth: side, resizeHeight: side })
+  return { image: bitmap, source: [0, 0, bitmap.width, bitmap.height] }
+}
 
 export function toolbarImageRect(visual: Visual, slot: Rect, panelWidth: number, devicePointWidth?: number): Rect {
   const [, , width, height] = visual.source ?? [0, 0, slot.width, slot.height]
@@ -65,8 +76,9 @@ export function drawNineSliceImage(
   if (!visual.image || !visual.source || !visual.inner) return
   const [sx, sy, sw, sh] = visual.source
   const [ix, iy, iw, ih] = visual.inner
-  const width = Math.max(1, Math.round(destination.width))
-  const height = Math.max(1, Math.round(destination.height))
+  const pixelScale = visual.nineSlicePixelScale ?? 1
+  const width = Math.max(1, Math.round(destination.width * pixelScale))
+  const height = Math.max(1, Math.round(destination.height * pixelScale))
   // 此画布会被下一次绘制覆盖，不能作为不同样式或尺寸的缓存结果。
   // 只增不减：WebKit 每次改画布尺寸都重新分配 GPU 缓冲，逐键重设会让每次重绘分配几十次。
   const buffer = createCanvas()

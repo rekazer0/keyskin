@@ -461,6 +461,31 @@
     height: calc(50% - var(--mobile-dock-h));
     border-color: var(--line);
   }
+
+  /* 手指尺寸：分类栏与属性行都抬到 44 触控目标；复制 / 交换 / 删除收进右上角「更多」 */
+  .source {
+    --_rail: 60px;
+  }
+  .source .inspector-object-actions > button[data-key-action] {
+    display: none;
+  }
+  /* 触控目标：对象操作与分类栏筛选一律 44 */
+  .source .inspector-object-actions :is(button, summary) {
+    --_height: var(--control-height-lg);
+  }
+  .source .inspector-rail > .inspector-filter-open {
+    height: var(--control-height-lg);
+  }
+  .source .inspector-actions-more {
+    display: block;
+  }
+  .source #mobile-inspector-groups {
+    gap: var(--space-xs);
+    padding-top: var(--space-xs);
+  }
+  .source :is(#mobile-inspector-groups > button, .inspector-reset) {
+    padding: var(--space-sm) 0;
+  }
 }
 
 /* —— 搜狗、手心（ssf-inspector.ts / sxi-inspector.ts）：分组与百度共用同一套样式；一个分组里的多个配置段各有一行小标题 —— */

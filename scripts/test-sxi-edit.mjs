@@ -105,7 +105,7 @@ try {
   await selectKey(1)
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '样式', exact: true }).click()
   // The Palm inspector shows the key's skin.json model: styles, text styles, gestures and rect.
-  const add = fields.locator('.ui-style-ref-append')
+  const add = fields.locator('[data-document-key="b.base_f"] .ui-style-ref-append')
   const picker = page.frameLocator('#picker-frame')
   const pickerDialog = page.locator('#picker-dialog')
   await add.click()
@@ -156,7 +156,7 @@ try {
   await page.waitForFunction(async () => (await import('/src/app/state.ts')).appState.pickerFrameReady)
   await page.keyboard.press('Escape')
   await pickerDialog.waitFor({ state: 'hidden' })
-  // Text edits on a key and on the whole layout land in the styles' s_1 inside skin.json.
+  // Text edits on a selected key land in the styles' s_1 inside skin.json.
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '文字', exact: true }).click()
   const keySize = fields.locator('[data-inspector-group-label="文字"] .ui-subsection').filter({ hasText: 'ss_1.3.s_1' }).locator('[data-document-key="f_s"] input[type=number]')
   await keySize.fill('44')
@@ -167,15 +167,9 @@ try {
   })
   await page.evaluate(() => document.activeElement?.blur())
   await page.keyboard.press('Escape')
-  // Labels (each key's first text layer) change; the second layer (STYLE4, a hint) keeps its size.
-  const layoutSize = page.locator(".text-style-fields input[aria-label='按键文字字号']")
-  await layoutSize.fill('33')
-  await layoutSize.press('Enter')
-  await page.waitForFunction(async () => {
-    const { appState } = await import('/src/app/state.ts')
-    const styles = JSON.parse(appState.archive.getText('skin.json')).default.s_info.ss_1
-    return styles[3].s_1.f_s === 33 && styles[4].s_1.f_s === undefined
-  })
+  assert.equal(await page.locator('.text-style-fields').isVisible(), false, 'panel selection hides key text')
+  assert.equal(await fields.locator('[data-inspector-group-label="符号列表"]').count(), 0, 'panel selection hides symbols')
+  assert.equal((await state()).skin.default.s_info.ss_1[3].s_1.f_s, 44, 'clearing selection keeps text edits')
   // Gestures and geometry are written to the key in skin.json too.
   await selectKey(1)
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '手势', exact: true }).click()

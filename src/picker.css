@@ -34,6 +34,8 @@
 .style-library-preview[hidden] { display: none; }
 .style-library-preview > .ui-icon-button { margin-left: auto; }
 .style-library-preview-image { display: flex; flex: 0 0 180px; height: 120px; overflow: hidden; border-radius: var(--radius-sm); }
+.style-library-preview-image:has(> .ui-style-sound) { height: auto; flex-basis: calc(var(--style-card-width) * 2); }
+.style-library-preview-image > .ui-style-sound { width: 100%; box-sizing: border-box; }
 .style-library-preview-image :is(img, canvas) { min-width: 0; width: 100%; height: 100%; object-fit: contain; }
 .style-library-preview-image canvas { width: 50%; }
 .style-library-preview-image > .ui-animation-player { flex: 1; min-width: 0; }

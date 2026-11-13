@@ -275,10 +275,34 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
     if (validNumber(text, spec.expression)) commit(accepted = text)
     else input.value = accepted
   })
-  box.append(input)
+  // 手机上左右两端是 − / + 步进按钮（桌面由 .ui-step 隐藏，改用拖标签、滚轮）
+  const step = spec.step === undefined ? 1 : Math.abs(spec.step)
+  if (spec.expression) box.append(input)
+  else box.append(stepButton(-1, input, step, spec.min, label, disabled), input)
   if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
+  if (!spec.expression) box.append(stepButton(1, input, step, spec.min, label, disabled))
   const range = spec.range && RANGES[spec.range]
   return range && input.type === "number" ? sliderField(box, input, range) : box
+}
+
+/** 数值的 − / + 按钮：一次一格，走输入框的 change，撤销与改动标记照旧。 */
+function stepButton(direction: -1 | 1, input: HTMLInputElement, step: number, min: number | undefined, label: string, disabled: boolean): HTMLButtonElement {
+  const button = element("button", "ui-step")
+  button.type = "button"
+  button.disabled = disabled
+  button.title = `${direction < 0 ? "减小" : "增大"}${label}`
+  button.setAttribute("aria-label", button.title)
+  button.append(createIcon(direction < 0 ? "minus" : "plus"))
+  // 所在行是 <label>：拦下默认动作，点步进按钮不把焦点交给输入框（手机上会弹键盘）
+  button.addEventListener("pointerdown", (event) => event.preventDefault())
+  button.addEventListener("click", (event) => {
+    event.preventDefault()
+    const current = Number(input.value.trim())
+    const next = (Number.isFinite(current) ? current : 0) + direction * step
+    input.value = String(Number(Math.max(min ?? next, next).toFixed(4)))
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  return button
 }
 
 function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string, placeholder: string, disabled: boolean, commit: (values: string[], index: number) => void): HTMLElement {

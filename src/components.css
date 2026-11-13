@@ -109,6 +109,9 @@
 /* —— 浮层菜单：外壳；菜单项用 .ui-list-item，分组之间用 .ui-menu-separator —— */
 .ui-menu { display: grid; gap: var(--space-2xs); min-width: 200px; padding: var(--space-xs); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--menu); box-shadow: var(--shadow-lg); animation: ui-menu var(--duration-base) var(--ease-emphasized); }
 .ui-menu > .ui-list-item { min-height: var(--control-height-lg); }
+.ui-menu[data-variant="context"] { position: fixed; margin: 0; overflow: visible; }
+.ui-menu[data-variant="context"]:not(:popover-open) { display: none; }
+.ui-menu[data-variant="context"] > [role="menu"] { display: grid; gap: var(--space-2xs); }
 .ui-menu-separator { height: 1px; margin: var(--space-sm) 0; border: 0; background: var(--line-soft); }
 /* 菜单从触发按钮所在的角展开（各菜单自己的 transform-origin） */
 @keyframes ui-menu {
@@ -330,6 +333,64 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 /* 滑块 + 数值：有自然范围的数值（透明度、时长、数量）左边拖、右边输入 */
 .ui-slider-field { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: var(--space-sm); min-width: 0; }
 
+/* —— 数值步进（.ui-step）：手机上的 − / + 两个按钮，桌面隐藏（桌面拖标签、滚轮微调） —— */
+.ui-input > .ui-step {
+  display: none;
+  place-items: center;
+  flex: none;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--secondary);
+  transition: background-color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+}
+/* 手指尺寸：手机上的步进按钮出现在数值框两端（DESIGN.md §14） */
+@media (max-width: 760px) {
+  .ui-input > .ui-step { display: grid; width: var(--control-height-md); height: var(--control-height-md); }
+  .ui-input:has(> .ui-step) { padding: 0 var(--space-xs); }
+  .ui-input > .ui-step:active { background: color-mix(in srgb, var(--text) 16%, transparent); transform: scale(0.94); }
+  .ui-input > input[type="number"] { text-align: center; }
+  /* 字段标签右端的追加按钮跟着属性行一起放大 */
+  .ui-icon-button.ui-style-ref-append { --_height: var(--control-height-md); }
+}
+
+/* SSF 图片编辑：原图辅助线与四条拉伸坐标滑块 */
+.ui-image-editor { --_width: var(--content-max-width); overflow: hidden; }
+.ui-image-editor > form { display: flex; flex-direction: column; height: min(calc(var(--viewport-height) - var(--space-2xl) * 2), calc(var(--content-max-width) * 0.75)); max-height: calc(var(--viewport-height) - var(--space-2xl)); }
+.ui-image-editor .ui-dialog-body { flex: 1; grid-template-columns: minmax(0, 1fr) calc(var(--control-height-md) * 8); overflow-y: auto; overscroll-behavior: contain; }
+.ui-image-editor :is(.ui-dialog-header, .ui-dialog-footer) { flex-shrink: 0; }
+.ui-image-editor-preview { position: relative; min-height: 0; border-radius: var(--radius-lg); overflow: hidden; }
+.ui-image-editor-preview > canvas { display: block; width: 100%; height: 100%; }
+.ui-image-editor-controls { display: grid; align-content: start; gap: var(--space-lg); min-width: 0; }
+.ui-image-editor-result { height: calc(var(--control-height-md) * 4); border-radius: var(--radius-lg); overflow: hidden; }
+.ui-image-editor-result > canvas { display: block; width: 100%; height: 100%; }
+.ui-image-editor .ui-field { align-self: start; }
+.ui-image-editor .ui-field-pair { grid-template-columns: minmax(0, 1fr); }
+.ui-image-editor .ui-slider-field { grid-template-columns: minmax(0, 1fr) calc(var(--control-height-md) * 2.5); }
+.ui-image-editor-guide { appearance: none; -webkit-appearance: none; position: absolute; padding: 0; border: 0; outline: 0; border-radius: 0; background: transparent; box-shadow: none; cursor: grab; touch-action: none; }
+.ui-image-editor-guide[data-axis="x"] { top: 0; width: var(--control-height-sm); height: 100%; transform: translateX(-50%); }
+.ui-image-editor-guide[data-axis="y"] { left: 0; width: 100%; height: var(--control-height-sm); transform: translateY(-50%); }
+.ui-image-editor-guide::after { content: ""; position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: var(--state-warn); pointer-events: none; }
+.ui-image-editor-guide[data-axis="y"]::after { left: 0; top: 50%; width: 100%; height: 1px; }
+.ui-image-editor-guide::before { content: ""; position: absolute; z-index: 1; width: var(--space-md); height: var(--space-xs); left: 50%; top: var(--space-xs); transform: translateX(-50%); border: 1px solid var(--content); border-radius: var(--radius-full); background: var(--accent); box-shadow: var(--shadow-sm); opacity: 0; pointer-events: none; }
+.ui-image-editor-guide[data-axis="y"]::before { left: var(--space-xs); top: 50%; transform: translateY(-50%); }
+.ui-image-editor-guide[data-variant="end"]::after { background: var(--state-ok); }
+.ui-image-editor-guide[data-dragging] { cursor: grabbing; }
+.ui-image-editor .ui-image-editor-guide:focus-visible { outline: 0; box-shadow: none; }
+.ui-image-editor-guide[data-dragging]::before, .ui-image-editor-guide:focus-visible::before { opacity: 1; }
+@media (hover: hover) {
+  .ui-image-editor-guide:hover::before { opacity: 1; }
+  .ui-image-editor-guide:hover::after { box-shadow: 0 0 0 1px var(--hover); }
+}
+@media (max-width: 760px) {
+  .ui-image-editor .ui-dialog-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .ui-image-editor-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-image-editor .ui-field-pair { gap: var(--space-xs); }
+}
+
 /* —— 属性行：左标签右控件 —— */
 .ui-field {
   display: grid;
@@ -351,6 +412,14 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 /* 音效字段：试听在上，选择文件在下 */
 .ui-sound-field { display: grid; gap: var(--space-xs); min-width: 0; }
 
+/* 手指尺寸：手机上的属性行与滑块抬到 44 触控目标（DESIGN.md §14） */
+@media (max-width: 760px) {
+  .ui-field { min-height: var(--control-height-lg); }
+  /* 滑块独占一行，数值与步进按钮排在下面 */
+  .ui-slider-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
+  .ui-slider { height: var(--control-height-md); }
+}
+
 /* —— 分组 —— */
 .ui-section { border-top: 1px solid var(--line-soft); }
 .ui-section:first-child { border-top: 0; }
@@ -365,6 +434,11 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 .ui-subsection { display: grid; gap: var(--space-sm); }
 .ui-subsection + .ui-subsection { margin-top: var(--space-sm); }
 .ui-subsection > h4 { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.ui-disclosure > summary { list-style: none; justify-content: flex-start; }
+.ui-disclosure > summary::-webkit-details-marker { display: none; }
+.ui-disclosure > summary > .ui-icon { transition: transform var(--duration-fast) var(--ease-standard); }
+.ui-disclosure[open] > summary > .ui-icon { transform: rotate(90deg); }
+.ui-disclosure > .ui-subsection { margin-top: var(--space-sm); }
 
 /* —— 列表行 —— */
 .ui-list-item {
@@ -595,11 +669,11 @@ body {
 .ui-style-state > canvas { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; border-radius: var(--radius-sm); }
 .ui-style-preview[data-variant="animation"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); }
 .ui-style-card[data-style-kind="empty"] .ui-style-preview { place-items: center; border: 1px dashed var(--line); border-radius: var(--radius-sm); color: var(--tertiary); }
-.ui-style-sound { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; padding: var(--space-xs); border-radius: var(--radius-sm); background: var(--control); }
+.ui-style-sound { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; padding: var(--space-sm); border-radius: var(--radius-md); background: var(--control); }
 .ui-style-sound > .ui-icon-button { flex-shrink: 0; border-radius: var(--radius-full); background: var(--content); }
 .ui-style-sound[data-playing="true"] > .ui-icon-button { background: var(--accent-soft); color: var(--accent); }
 .ui-style-sound-info { display: grid; gap: var(--space-xs); min-width: 0; }
-.ui-style-sound-info > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-xs); font-weight: 400; color: var(--secondary); }
+.ui-style-sound-info > strong { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-xs); font-weight: 400; color: var(--secondary); }
 .ui-style-sound-info > small { font-size: var(--font-size-xs); color: var(--tertiary); }
 .ui-style-sound-info > small:empty { display: none; }
 .ui-style-card-heading > .ui-style-sound { padding: 0; background: none; }
@@ -636,6 +710,7 @@ body {
 .ui-style-ref-list { display: grid; gap: var(--space-xs); min-width: 0; }
 .ui-style-ref-list > input { display: none; }
 .ui-style-ref { position: relative; display: grid; grid-template-columns: 84px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 88px; min-width: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--content); }
+.ui-style-ref:has(> .ui-style-ref-meta > .ui-style-ref-name) { grid-template-columns: minmax(84px, 7fr) minmax(0, 13fr); }
 .ui-style-ref-meta { display: grid; place-content: center; justify-items: center; gap: var(--space-xs); min-width: 0; padding: 0 var(--space-xs); border-right: 1px solid var(--line-soft); }
 .ui-style-ref-meta > input { width: 100%; min-width: 0; height: auto; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); font: var(--font-weight-semibold) var(--font-size-lg) var(--font-ui); text-align: center; }
 .ui-style-ref-meta > input:focus { outline: 0; box-shadow: var(--focus-ring); }
@@ -720,6 +795,7 @@ body {
 .ui-image-card-size[hidden] { display: none; }
 /* 预览与图片卡片同为固定高度，改宽时卡片高度不变；文字只留一行标题与一行摘要。 */
 .ui-listbox > .ui-style-card > .ui-style-preview { order: -1; aspect-ratio: auto; }
+.ui-style-card[data-style-kind="sound"] > .ui-style-preview { aspect-ratio: auto; height: auto; grid-template-columns: minmax(0, 1fr); border: 0; background: none; }
 .ui-listbox > .ui-style-card > .ui-style-card-caption { padding: 0 var(--space-xs); }
 .ui-listbox > .ui-style-card .ui-animation-stage { height: 100%; border-radius: 0; }
 .ui-image-card-caption { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; padding: 0 var(--space-xs); }

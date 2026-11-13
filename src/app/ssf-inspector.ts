@@ -3,6 +3,7 @@
 // section of a Sogou file. The canvas layout is the preview overlay and is never shown or edited here.
 
 import type { IniDocument } from "../ini.ts"
+import { isListCell } from "../layout.ts"
 import type { SsfKeyBinding } from "../ssf/ssf-keymap.ts"
 import { ssfSectionLabel } from "../ssf/ssf-labels.ts"
 import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground, ssfIconPair, ssfLabelStyle, ssfSoundSection, ssfTextSections } from "../ssf/ssf-parts.ts"
@@ -17,7 +18,7 @@ import { toolbarIconSection } from "./toolbar-icon-inspector"
 
 type Group = { label: string; blocks: SsfBlock[]; code?: string; key?: string }
 
-const IMAGE_KEYS = ["NORMAL", "PRESSED"]
+const IMAGE_KEYS = ["NORMAL", "PRESSED", "DISABLED", "NORMAL_ON", "PRESSED_ON"]
 const FG_STYLE_KEYS = ["LABEL_STYLE", "LABEL_POSITION", "LABEL_VISIBLE", "LABEL_ORIENTATION", "LABEL_HORIZONTAL_OFFSET", "MINOR_LABEL_STYLE", "MINOR_LABEL_POSITION", "MINOR_LABEL_VISIBLE", "MINOR_LABEL_HORIZONTAL_OFFSET", "ICON_RECT"]
 const KEY_KEYS = ["LABEL", "MINOR_LABEL", "L_KEY", "TYPE"]
 const VIEW_KEYS = ["BG_STYLE", "BG_COLOR", "MARGINS", "PADDINGS"]
@@ -88,7 +89,7 @@ function backgroundGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBin
   return renderGroup("背景", [{
     path: skinPath,
     section: background.images,
-    note: `共享：影响所有使用 ${background.images} 的按键`,
+    note: "共享背景，修改影响其他按键",
     actions: [copy],
   }], background.images)
 }
@@ -153,7 +154,7 @@ function textGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBinding):
   const source = label?.style ?? fallbacks.find((section) => skin.sections().includes(section)) ?? fallbacks[0]
   if (!label?.style) {
     return renderGroup("文字", [textBlock(skinPath, source, TEXT_KEYS, {
-      note: "使用键盘默认文字样式",
+      note: "使用默认文字样式",
     })], source)
   }
   const { owner, fgStyle, style } = label
@@ -168,7 +169,7 @@ function textGroup(skinPath: string, skin: IniDocument, binding: SsfKeyBinding):
     setSsfValue(document, owner, "FG_STYLE", [ownFgStyle, ...rest].join(","))
   }))
   return renderGroup("文字", [textBlock(skinPath, style, TEXT_KEYS, {
-    note: `共享：影响所有使用 ${style} 的按键`,
+    note: "共享文字样式，修改影响其他按键",
     actions: [copy],
   })], style)
 }
@@ -192,7 +193,7 @@ function soundGroup(binding: SsfKeyBinding | undefined): Group | undefined {
     return renderGroup("音效", [{
       path: SSF_SOUNDS_PATH,
       section,
-      note: binding && section === "Key" ? "使用默认按键音效" : undefined,
+      note: binding && section === "Key" ? "使用默认音效" : undefined,
     }], section)
   }
   const owner = binding ? binding.sections.find((name) => !/_Land/.test(name)) ?? binding.sections[0] : "Key"
@@ -201,7 +202,7 @@ function soundGroup(binding: SsfKeyBinding | undefined): Group | undefined {
     section: owner,
     title: "按键音效",
     expect: ["sound"],
-    note: binding && sounds.get("Key", "sound") ? `使用默认按键音效 ${sounds.get("Key", "sound")}` : undefined,
+    note: binding && sounds.get("Key", "sound") ? `默认音效：${sounds.get("Key", "sound")}` : undefined,
   }])
 }
 
@@ -248,30 +249,11 @@ function imageBlocks(skinPath: string, skin: IniDocument, section: string, key: 
   return [block(section, { title, only: [], template: [], actions: [add] })]
 }
 
-function bubbleGroup(path: string, skin: IniDocument): Group | undefined {
-  const qwerty = ssfQwertyBoard()
-  const existing = (sections: string[]) => sections.find((name) => skin.sections().includes(name)) ?? sections[0]
-  const backgrounds = [qwerty ? "PopupBG_Qwerty" : "PopupBG_Phone", "PopupBG"]
-  const background = backgrounds.find((name) => firstValue(skin.get(name, "BG_IMAGE"))) ?? existing(backgrounds)
-  const foreground = existing([qwerty ? "FGStyle_Popup_Qwerty" : "FGStyle_Phone_Popup", "FGStyle_Popup"])
-  const text = existing([qwerty ? "TextStyle_Popup_Qwerty" : "TextStyle_Popup_Phone", "TextStyle_Popup"])
-  const minor = existing(["TextStyle_Popup_Phone_Minor", "TextStyle_Popup"])
-  return renderGroup("气泡", [
-    { path, section: "General", only: ["POPUP_BG_COLOR", "POPUP_OFFSET_VERTICAL"], expect: ["POPUP_BG_COLOR", "POPUP_OFFSET_VERTICAL"] },
-    { path, section: background, only: ["BG_IMAGE"], expect: ["BG_IMAGE"] },
-    ...imageBlocks(path, skin, background, "BG_IMAGE", "气泡背景"),
-    { path, section: foreground, only: FG_STYLE_KEYS.filter((key) => !["ICON_RECT", "LABEL_ORIENTATION"].includes(key)), expect: ["LABEL_POSITION", ...qwerty ? [] : ["MINOR_LABEL_POSITION"]] },
-    textBlock(path, firstValue(skin.get(foreground, "LABEL_STYLE")) ?? text),
-    ...qwerty || text === minor && !skin.get(foreground, "MINOR_LABEL_STYLE") ? [] : [textBlock(path, firstValue(skin.get(foreground, "MINOR_LABEL_STYLE")) ?? minor)],
-  ])
-}
-
-/** What every key of the current board shares: backgrounds, candidate bar, default classes, colours. */
+/** Only the selected board or candidate area contributes property groups. */
 function boardGroups(): Group[] {
   const skinPath = ssfSkinPath()
   if (!skinPath) return []
   const skin = ssfDocument(skinPath)
-  const qwerty = ssfQwertyBoard()
   const nineKey = appState.layoutDocument?.sections().includes("LIST")
   const block = (section: string, extra: Partial<SsfBlock> = {}): SsfBlock => ({ path: skinPath, section, ...extra })
   const referenced = (section: string, key: string, title: string) => imageBlocks(skinPath, skin, section, key, title)
@@ -282,14 +264,6 @@ function boardGroups(): Group[] {
     ["候选栏", [block(candidate, { omit: /\.\w+$/.test(firstValue(skin.get(candidate, "BG_IMAGE")) ?? "") ? [] : ["BG_IMAGE"], expect: ["BG_STYLE", "BG_COLOR", "MARGINS"], create: [{ key: "BG_STYLE", value: "1" }] }), ...referenced(candidate, "BG_IMAGE", "候选栏背景")]],
     ["候选字", [textBlock(skinPath, "TextStyle_Candidate", CANDIDATE_TEXT_KEYS), textBlock(skinPath, "TextStyle_Candidate_Highlight", ["TEXT_COLOR"])]],
     ["输入码", [block("ComposingView", { expect: ["BG_STYLE", "BG_COLOR"], create: [{ key: "BG_STYLE", value: "2" }] }), textBlock(skinPath, "TextStyle_Composing", CANDIDATE_TEXT_KEYS)]],
-    ["按键背景", (qwerty ? ["KeyBg_Default_Latin", "KeyBg_Function_Qwerty", "KeyBg_Space_Qwerty"] : ["KeyBg_Default", "KeyBg_Function", "KeyBg_Space"]).map((section) => block(section, { expect: ["NORMAL", "PRESSED"] }))],
-    ["按键文字", [
-      textBlock(skinPath, qwerty ? "TextStyle_Qwerty" : "TextStyle_Phone_Label"),
-      textBlock(skinPath, qwerty ? "TextStyle_FuncKey_26char" : "TextStyle_FuncKey_T9"),
-      textBlock(skinPath, "TextStyle_Space_Label"),
-      textBlock(skinPath, "TextStyle"),
-      block("General", { only: ["ICON_COLOR", "HIGH_LIGHT_ICON_COLOR"], expect: ["ICON_COLOR", "HIGH_LIGHT_ICON_COLOR"] }),
-    ]],
     ...nineKey ? [["符号列", [
       block("CandidateCodeView", { omit: ["BG_IMAGE", "BG_IMAGES"].filter((key) => !/\.\w+$/.test(firstValue(skin.get("CandidateCodeView", key)) ?? "")), create: [{ key: "BG_STYLE", value: "1" }] }),
       ...referenced("CandidateCodeView", "BG_IMAGE", "符号列背景"),
@@ -298,11 +272,12 @@ function boardGroups(): Group[] {
       block("TextStyle_Popup_Code"),
     ]] as [string, SsfBlock[]]] : [],
   ]
-  return [
-    ...groups.map(([label, blocks]) => renderGroup(label, blocks)),
-    bubbleGroup(skinPath, skin),
-    soundGroup(undefined),
-  ].filter((group): group is Group => Boolean(group))
+  return groups
+    .filter(([label]) => appState.selectedCandidate
+      ? ["候选栏", "候选字", "输入码"].includes(label)
+      : label === (appState.selectedKeySections.some(isListCell) ? "符号列" : "键盘背景"))
+    .map(([label, blocks]) => renderGroup(label, blocks))
+    .filter((group): group is Group => Boolean(group))
 }
 
 /** Every section of a Sogou INI file, one group each. */
@@ -363,7 +338,6 @@ function commonKeyGroups(selections: Group[][]): Group[] {
       const entries = matches.map((match) => ssfEntries(match.path, match.section).filter((entry) => !match.omit?.includes(entry.key) && (!match.only || match.only.includes(entry.key))))
       const only = entries[0].filter((entry) => entries.every((list) => list.some((item) => item.key === entry.key))).map((entry) => entry.key)
       return only.length || block.expect ? [{ path: block.path, section: block.section, title: block.title, only, options: block.options, expect: block.expect, create: block.create, bind: block.bind,
-        note: "作用于所有选中按键",
         peers: matches.slice(1).map(({ path, section, create, bind }) => ({ path, section, create, bind })),
       }] : []
     })
@@ -376,13 +350,19 @@ function commonKeyGroups(selections: Group[][]): Group[] {
  * Multiple selected keys expose only their common fields and write to every matching class.
  */
 export function populateSsfInspector(container: HTMLElement): boolean {
+  const context = JSON.stringify([appState.selectedPath, appState.selectedKeySections, appState.selectedCandidate])
+  const expanded = new Set(container.dataset.ssfContext === context
+    ? Array.from(container.querySelectorAll<HTMLDetailsElement>("details[data-ssf-states][open]"), (details) => details.dataset.ssfStates)
+    : [])
   container.replaceChildren()
   if (!ssfPackage()) return false
   const path = appState.selectedPath
   let groups: Group[] = []
   if (isSsfBoardPath(path) && path === appState.layoutPath) {
     const bindings = ssfSelectedBindings()
-    groups = appState.selectedCandidate ? boardGroups().filter(({ label }) => ["候选栏", "候选字", "输入码"].includes(label)) : bindings.length > 1 ? commonKeyGroups(bindings.map(({ binding }) => keyGroups(binding))) : bindings.length ? keyGroups(bindings[0].binding) : boardGroups()
+    groups = appState.selectedCandidate || !bindings.length
+      ? boardGroups()
+      : bindings.length > 1 ? commonKeyGroups(bindings.map(({ binding }) => keyGroups(binding))) : keyGroups(bindings[0].binding)
   } else if (appState.archive?.isText(path) && /\.ini$/i.test(path)) {
     groups = fileGroups(path)
   }
@@ -391,6 +371,10 @@ export function populateSsfInspector(container: HTMLElement): boolean {
     return group ? [group] : []
   }))
   if (appState.selectedCandidate || /phoneSkin\.ini$/i.test(path)) container.append(toolbarIconSection())
+  for (const details of container.querySelectorAll<HTMLDetailsElement>("details[data-ssf-states]")) {
+    details.open = expanded.has(details.dataset.ssfStates)
+  }
+  container.dataset.ssfContext = context
   container.dataset.path = path
   return groups.length > 0
 }

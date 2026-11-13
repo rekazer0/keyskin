@@ -15,6 +15,7 @@ import { openImageSlicePicker, imageDataURL, showPickerWindow, closePickerWindow
 import { type Visual, type VisualResolver } from "../atlas.ts"
 import { afterNextPaint } from "./canvas-interaction"
 import { selectFile } from "./navigation"
+import { renderResourceInspector } from "./resource-inspector"
 import { resourceImagePaths } from "../resources.ts"
 import { soundPathForFilename } from "../sounds.ts"
 import { type StyleLibraryPayload, type StyleLibraryVisual, type StyleLibraryPreview } from "../picker-window.ts"
@@ -28,6 +29,9 @@ import { openPalmSkin, palmOrientation, palmTheme } from "./sxi-documents"
 import { setSourceValue } from "./config-context"
 import { refreshPreview } from "./preview-render"
 import { asObject, type JsonObject } from "../palm/sxi-ini.ts"
+import { ssfSoundLibraryPayload } from "./ssf-media-fields"
+import { ssfPackage, ssfTheme, SSF_SOUNDS_PATH } from "./ssf-documents"
+import { editSsfAnimation, ssfAnimationLibraryPayload } from "./ssf-animation-picker"
 
 export function stylePickerLabel(styleID: string): string {
   return appState.archive?.format === "bda" ? String(bdaStyleRef(styleID)?.key ?? styleID) : styleID
@@ -268,7 +272,16 @@ export function editStyleLibrarySelection(): void {
   const selected = appState.styleLibrarySelected
   if (!selected) return
   closeStylePicker()
-  if (selected.styleID) openStyleReferenceEditor(selected.styleID)
+  const target = appState.stylePickerTarget
+  if (selected.styleID && target?.dataset.ssfSound) {
+    const path = ssfPackage()?.soundPath(ssfTheme(), selected.styleID)
+    if (path) {
+      selectFile(SSF_SOUNDS_PATH, "overview", "sound")
+      appState.selectedSoundID = `file:${path}`
+      renderResourceInspector()
+    }
+  } else if (selected.styleID && target?.dataset.ssfAnimationPath) editSsfAnimation(target.dataset.ssfAnimationPath, target.dataset.ssfAnimationField!, selected.styleID)
+  else if (selected.styleID) openStyleReferenceEditor(selected.styleID)
   else if (selected.imagePath) selectFile(selected.imagePath, "overview")
 }
 
@@ -283,6 +296,8 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false): v
 
 async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibraryPayload | undefined> {
   const target = appState.stylePickerTarget
+  if (target?.dataset.ssfAnimationPath) return ssfAnimationLibraryPayload(target)
+  if (target?.dataset.ssfSound) return ssfSoundLibraryPayload(target)
   const imageSelection = Boolean(appState.pickerTarget?.selectImage)
   if (!appState.archive || !target && !imageSelection) return
   const source = appState.archive

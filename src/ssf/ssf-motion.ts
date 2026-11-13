@@ -27,6 +27,7 @@ import type { SsfStyles } from "./ssf-scene.ts"
 
 type Size = { width: number; height: number }
 type Part = { image?: Visual; object: string; tracks: Track[] }
+type MotionStyles = Pick<SsfStyles, "sogouWidth" | "skin" | "keys" | "file">
 
 // AnimationTarget's anchors, as shares of the target: 0 (and none) the centre, 1–4 the left, top,
 // right and bottom middles, 5–8 the corners.
@@ -50,14 +51,14 @@ function ranged(range: number[], share: number, reference: number, unit: number)
 
 export class SsfMotion {
   private readonly anim: IniDocument
-  private readonly styles: SsfStyles
+  private readonly styles: MotionStyles
   private readonly images = new Map<string, Visual>()
   /** Layout units per Sogou pixel, and the keyboard the shares refer to. */
   private readonly unit: number
   private readonly board: Size
   private readonly pixelUnit: number
 
-  private constructor(anim: IniDocument, styles: SsfStyles, board: Size, screenWidth: number) {
+  private constructor(anim: IniDocument, styles: MotionStyles, board: Size, screenWidth: number) {
     this.anim = anim
     this.styles = styles
     this.board = board
@@ -69,7 +70,12 @@ export class SsfMotion {
   static async load(styles: SsfStyles, board: Size, document?: IniDocument, screenWidth = 2160): Promise<SsfMotion | undefined> {
     const path = styles.pkg.path(styles.theme, "anim.ini")
     if (!path && !document) return
-    const motion = new SsfMotion(document ?? styles.pkg.ini(path!), styles, board, screenWidth)
+    return SsfMotion.fromDocument(styles, board, document ?? styles.pkg.ini(path!), screenWidth)
+  }
+
+  /** 原生预览与独立选择窗口共用解析，只需文档和已解析的图片。 */
+  static async fromDocument(styles: MotionStyles, board: Size, document: IniDocument, screenWidth: number): Promise<SsfMotion> {
+    const motion = new SsfMotion(document, styles, board, screenWidth)
     const files = new Set(motion.anim.sections().map((section) => firstValue(motion.anim.get(section, "IMG"))).filter((file): file is string => Boolean(file)))
     await Promise.all([...files].map(async (file) => {
       const visual = await styles.file(file)
