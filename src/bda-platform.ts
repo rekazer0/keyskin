@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, zipSync } from "fflate"
+import { strFromU8, strToU8 } from "fflate"
 import { convertBdaAppearancePlatform, convertBdaSoundPlatform, IOS_BDA_PANELS } from "./bda-encode.ts"
 import { decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
 import { SkinArchive } from "./skin.ts"
@@ -83,7 +83,7 @@ export function convertBdaPlatform(source: SkinArchive, platform: Exclude<BdaPla
       ? strToU8(setInfoAtomSkinNames(strFromU8(bytes), platform === "ios" ? ["skin_light", "skin_dark"] : ["light", "dark"]))
       : bytes
   }
-  const archive = SkinArchive.open(zipSync(output, { level: 6 }), "bda")
+  const archive = SkinArchive.fromFiles(new Map(Object.entries(output)), "bda")
   if (bdaPlatform(archive) !== platform) throw new Error(`无法转换为${platform === "ios" ? " iOS" : " Android"} BDA`)
   return archive
 }

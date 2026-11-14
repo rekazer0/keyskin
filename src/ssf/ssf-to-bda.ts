@@ -5,7 +5,6 @@
 // image styles appended to `appearanceConfig` and its style references repointed; text glyphs get
 // recoloured copies of their template text styles. Unknown protobuf fields are kept byte for byte.
 
-import { zipSync } from "fflate"
 import { bdaPanelKeyName, type BdaStyleRef } from "../bda.ts"
 import { decodeBdaAppearanceUncached } from "../bda-decode.ts"
 import { bdaSoundResourceType, encodedField, encodeVarint, join, rawFields, rawString, removeFields, replaceField, updateBdaKeySound } from "../bda-encode.ts"
@@ -401,5 +400,5 @@ export function convertSsfToBda(pkg: SsfPackage, template: SkinArchive): SsfConv
     const themed = path.match(/^(light|dark)\/skin\/(.*)$/)!
     raw[dual ? `${themed[1]}/${themed[2]}` : themed[2]] = bytes
   }
-  return { archive: SkinArchive.open(zipSync(raw, { level: 6 }), "bda"), warnings: [...new Set(warnings)] }
+  return { archive: SkinArchive.fromFiles(new Map(Object.entries(raw)), "bda"), warnings: [...new Set(warnings)] }
 }

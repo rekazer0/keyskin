@@ -56,12 +56,12 @@ function renderLabel(
  * 要切的：用了皮肤字体（样式 FONT_PATH / FONT_NAME 指向的字体文件，否则 GLOBAL FONT_PATH）、设了字重、
  * 设了文字阴影，或之前切过的样式。只写系统字体名的不切：换台电脑字形就不同，真机也只会用系统字体。
  */
-async function bakeStyle(archive: SkinArchive, path: string): Promise<number> {
+async function bakeStyle(archive: SkinArchive, path: string): Promise<void> {
   const css = archive.getText(path)
   const names = archive.names()
   const layouts = layoutsUsingStyle(names, path).map((layout) => archive.getText(layout))
   const candidates = bakeableStyles(css, keyForegroundStyleIDs(layouts))
-  if (!candidates.length) return 0
+  if (!candidates.length) return
   const embedded = (reference: string | undefined, extensions = false) => {
     const file = embeddedFontPath(names, path, reference, extensions)
     return file ? loadEmbeddedFont(archive, file) : undefined
@@ -75,7 +75,7 @@ async function bakeStyle(archive: SkinArchive, path: string): Promise<number> {
     const shadow = textShadow(style.fields)
     return font || weight || shadow || style.baked ? [{ ...style, font, weight, shadow }] : []
   })
-  if (!styles.length) return 0
+  if (!styles.length) return
   updateFileOperationProgress(88, "正在把按键文字切成字体图片…")
   await waitForInterfacePaint()
   await Promise.all(styles.map(({ font }) => font?.ready))
@@ -96,18 +96,14 @@ async function bakeStyle(archive: SkinArchive, path: string): Promise<number> {
   archive.setBytes(`${base}.png`, await composePng(atlas.width, atlas.height, labels.map((image, index) => ({ image, rect: atlas.rects[index] }))))
   archive.setBytes(`${base}.til`, new TextEncoder().encode(bakedTileText(atlas.rects)))
   archive.setText(path, withBakedStyles(css, tiles))
-  return styles.length
 }
 
 /**
  * 导出的 BDI/BDS 把输入法不能解析的按键字体和字重切成图片。
- * 没有要切的文字时原样返回，不重新打包。
+ * 与背景、图集合用同一份导出副本，全部处理完才打包。
  */
-export async function bakeExportedFonts(bytes: Uint8Array, format: "bdi" | "bds"): Promise<Uint8Array> {
-  const archive = SkinArchive.open(bytes, format)
-  let baked = 0
-  for (const path of skinStylePaths(archive.names())) baked += await bakeStyle(archive, path)
-  return baked ? archive.toBytesAsync(format) : bytes
+export async function bakeExportedFonts(archive: SkinArchive): Promise<void> {
+  for (const path of skinStylePaths(archive.names())) await bakeStyle(archive, path)
 }
 
 /** 皮肤里是否有导出时切过的字体图片。 */

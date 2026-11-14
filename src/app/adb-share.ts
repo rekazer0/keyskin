@@ -6,10 +6,8 @@ import { isTauri } from "./canvas-interaction"
 import { appState } from "./state"
 import { exportArchive } from "./archive-io"
 import { runFileOperation, showFileOperationProgress, updateFileOperationProgress } from "./file-operations"
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
-import { IniDocument } from "../ini.ts"
-import { withDirectoryEntries } from "../skin-zip.ts"
-import { loadBuiltInProjectTemplate } from "../operations.ts"
+import { prepareSogouShare, prepareShouXinShare } from "../adb-package.ts"
+import { invokeBinary } from "../native-binary.ts"
 
 /** 手机端输入法决定能安装的皮肤格式；包名前缀与 Rust 端 SkinTarget 一致。 */
 type AdbTarget = "baidu" | "sogou" | "shouxin" | "custom"
@@ -19,55 +17,6 @@ function adbTarget(packageName: string): AdbTarget {
   if (packageName.startsWith("com.sohu.inputmethod.sogou")) return "sogou"
   if (packageName.startsWith("com.xinshuru.inputmethod")) return "shouxin"
   return "custom"
-}
-
-function prepareSogouShare(bytes: Uint8Array): { bytes: Uint8Array; name: string } {
-  const files = unzipSync(bytes)
-  const theme = files["phoneTheme.ini"]
-  if (!theme) throw new Error("搜狗皮肤缺少 phoneTheme.ini，无法分享到手机")
-  const id = `keyskin-${Date.now().toString(36)}`
-  const metadata = IniDocument.parse(strFromU8(theme))
-  metadata.set("General", "skin_id", id)
-  metadata.set("General", "local_skin_id", id)
-  metadata.set("General", "local_ugc", "true")
-  // 运营皮肤标记会让搜狗把本地皮肤当成云端皮肤，详情页打不开也就无法启用。
-  metadata.remove("General", "operational_skin")
-  const skinType = Number(metadata.get("General", "skin_type"))
-  if (Number.isInteger(skinType) && (skinType & 2048) !== 0) {
-    metadata.set("General", "skin_type", String(skinType & ~2048))
-  }
-  files["phoneTheme.ini"] = strToU8(metadata.toString())
-  return { bytes: zipSync(Object.fromEntries(withDirectoryEntries(Object.entries(files))), { level: 6 }), name: `${id}.ssf` }
-}
-
-/**
- * 手心 Android 的 .piska 导入入口（FTInputSettingsActivity 的 ACTION_VIEW）会校验旧版皮肤包根级的
- * skin.ini / skin.proto / preview.png / preview_small.png，缺任何一项就提示「皮肤包缺失关键文件」，
- * 而渲染仍读取 SXI 自己的 skin.json 与 light、dark 资源。保留导出包内容，只补上校验文件。
- */
-async function prepareShouXinShare(bytes: Uint8Array): Promise<{ bytes: Uint8Array; name: string }> {
-  const source = unzipSync(bytes)
-  const template = unzipSync(await loadBuiltInProjectTemplate("palm-harmony"))
-  const proto = template["light/res/skin.proto"]
-  const preview = source["preview.png"] ?? source["light/preview.png"] ?? source["dark/preview.png"] ?? template["preview.png"]
-  if (!source["skin.json"] || !proto || !preview) throw new Error("手心皮肤缺少 skin.json 或模板资源，无法分享到手机")
-  const id = `keyskin-${Date.now().toString(36)}`
-  const files: Record<string, Uint8Array> = { ...source }
-  files["skin.proto"] = proto
-  files["preview.png"] = preview
-  files["preview_small.png"] = preview
-  // 手心按 GBK 读取 skin.ini，写中文会变成乱码；名字只用于手机端皮肤列表，保持英文。
-  files["skin.ini"] = strToU8([
-    "[skin]",
-    `name = KeySkin ${id.slice("keyskin-".length)}`,
-    "author = KeySkin",
-    "email =",
-    "major_version = 1",
-    "minor_version = 1",
-    `build = ${id}`,
-    "",
-  ].join("\n"))
-  return { bytes: zipSync(Object.fromEntries(withDirectoryEntries(Object.entries(files))), { level: 6 }), name: `${id}.piska` }
 }
 
 /** Windows/macOS only: web and mobile clients must not expose native process execution. */
@@ -179,7 +128,7 @@ export function wireAdbShare(): void {
       const progress = new Channel<string>()
       progress.onmessage = (detail) => updateFileOperationProgress(94, detail)
       updateFileOperationProgress(92, "正在通过 ADB 推送皮肤…")
-      await invoke<string>("share_skin_adb", { settings: config, name, format, data: bytes, progress })
+      await invokeBinary<string>("share_skin_adb", bytes, { settings: config, name, format, progress })
       return true
     }, async () => {
       cancelRequested = true

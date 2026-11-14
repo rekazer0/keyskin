@@ -1,7 +1,7 @@
 // 新版百度安卓启用 BDS 前会做完整性检查，加载时也有限制。以下规则都是在 MuMu 上逐项试出来的，
 // 对照的是能正常启用的官方皮肤（孤岛记录、简）。
 import { IniDocument } from "./ini.ts"
-import { SkinArchive } from "./skin.ts"
+import type { SkinArchive } from "./skin.ts"
 import { skinStylePaths } from "./font-files.ts"
 import { BAKED_IMAGE, packTiles } from "./font-bake.ts"
 import { type TileRect } from "./tiles.ts"
@@ -23,14 +23,12 @@ const rectOf = (value: string | undefined): TileRect | undefined => {
   return parts?.length === 4 && parts.every(Number.isFinite) ? parts as TileRect : undefined
 }
 
-/** 补齐百度安卓要求的 BDS 结构；已经符合时原样返回。 */
-export async function completeBdsPackage(bytes: Uint8Array, compose: ComposeAtlas): Promise<Uint8Array> {
-  const archive = SkinArchive.open(bytes, "bds")
-  let changed = normalizeBdsStyles(archive)
+/** 在导出副本上补齐百度安卓要求的 BDS 结构，交给调用方统一打包。 */
+export async function completeBdsPackage(archive: SkinArchive, compose: ComposeAtlas): Promise<void> {
+  normalizeBdsStyles(archive)
   const update = (path: string, text: string) => {
     if (archive.getBytes(path) && text === archive.getText(path)) return
     archive.setText(path, text)
-    changed = true
   }
   // 安卓按 SupportDarkMode 决定从根目录还是 light/dark 找配置，必须与实际目录一致。
   // Info.txt 换行不是 CRLF 时报错 288（“当前皮肤不完整”）。
@@ -59,9 +57,8 @@ export async function completeBdsPackage(bytes: Uint8Array, compose: ComposeAtla
         update(path, withInheritedSections(archive.getText(path)))
       }
     }
-    if (await packImages(archive, theme, compose)) changed = true
+    await packImages(archive, theme, compose)
   }
-  return changed ? archive.toBytesAsync("bds") : bytes
 }
 
 export function globalFirst(css: string): string {
@@ -138,10 +135,11 @@ const pngSize = (png: Uint8Array) => {
 }
 
 /** 图片超过 MAX_IMAGE_FILES 张时，把 res 根目录的图片合成几张图集，并改写 til 与样式引用。 */
-async function packImages(archive: SkinArchive, theme: string, compose: ComposeAtlas): Promise<boolean> {
+async function packImages(archive: SkinArchive, theme: string, compose: ComposeAtlas): Promise<void> {
   const res = `${theme}/skin/res/`
   const paths = archive.names()
     .filter((path) => path.startsWith(res) && /^[^/]+\.png$/i.test(path.slice(res.length)))
+  if (paths.length <= MAX_IMAGE_FILES) return
   const images = paths
     .map((path) => ({ name: path.slice(res.length, -4), png: archive.getBytes(path)!, til: archive.getBytes(path.replace(/\.png$/i, ".til")) }))
     .filter((image) => image.til && !image.name.startsWith(BAKED_IMAGE))
@@ -150,7 +148,7 @@ async function packImages(archive: SkinArchive, theme: string, compose: ComposeA
       return size ? [{ ...image, ...size, tiles: IniDocument.parse(archive.getText(`${res}${image.name}.til`)) }] : []
     })
   const available = MAX_IMAGE_FILES - (paths.length - images.length)
-  if (images.length <= available) return false
+  if (images.length <= available) return
 
   // 按高度分组，每组排成一张不超过 ATLAS_MAX_HEIGHT 的图。
   const groups: (typeof images)[] = []
@@ -200,5 +198,4 @@ async function packImages(archive: SkinArchive, theme: string, compose: ComposeA
       }).join(";"))
     if (next !== text) archive.setText(path, next)
   }
-  return true
 }

@@ -1,5 +1,5 @@
 import { IniDocument } from "./ini.ts"
-import { SkinArchive } from "./skin.ts"
+import type { SkinArchive } from "./skin.ts"
 import { layoutsUsingStyle } from "./font-bake.ts"
 import { skinStylePaths } from "./font-files.ts"
 import { decodePng, encodePng, MAX_PIXELS, nineSliceImage } from "./ssf/ssf-png.ts"
@@ -23,28 +23,31 @@ function styleEntries(css: IniDocument, id: number): Array<{ key: string; value:
 }
 
 /** Complete Android's unsupported light-mode INNER_RECT before it stretches a background. */
-export function bakeBdsBackgrounds(bytes: Uint8Array): Uint8Array {
-  const archive = SkinArchive.open(bytes, "bds")
-  let changed = false
+export function bakeBdsBackgrounds(archive: SkinArchive): void {
   // Only the ordinary light renderer ignores INNER_RECT; night mode builds a real NinePatch.
   const names = archive.names()
   const stylePaths = skinStylePaths(names).filter((path) => path.startsWith("light/"))
   const bakedImages = new Map<string, string>()
+  const tileDocuments = new Map<string, IniDocument>()
+  let decodedPng: { bytes: Uint8Array; image: ReturnType<typeof decodePng> } | undefined
   let nextStyle = Math.max(0, ...stylePaths.flatMap((path) => IniDocument.parse(archive.getText(path)).sections()
     .flatMap((name) => /^STYLE(\d+)$/.test(name) ? [Number(name.slice(5))] : []))) + 1
   const res = "light/skin/res"
   for (const cssPath of stylePaths) {
     const css = IniDocument.parse(archive.getText(cssPath))
+    const styles = new Map<number, ReturnType<typeof styleEntries>>()
     const variants = new Map<string, number>()
     let themeChanged = false
     for (const path of layoutsUsingStyle(names, cssPath)) {
       const roots = [`${path.slice(0, path.lastIndexOf("/"))}/res`, res]
       const layout = IniDocument.parse(archive.getText(path))
+      let layoutChanged = false
       for (const section of layout.sections()) {
         const styleID = Number(layout.get(section, "BACK_STYLE"))
         const size = section === "PANEL" ? rect(layout.get(section, "SIZE")) : rect(layout.get(section, "VIEW_RECT"))
         if (!Number.isInteger(styleID) || !size || size[2] <= 0 || size[3] <= 0 || size[2] * size[3] > MAX_PIXELS) continue
-        const entries = styleEntries(css, styleID)
+        if (!styles.has(styleID)) styles.set(styleID, styleEntries(css, styleID))
+        const entries = styles.get(styleID)
         if (!entries) continue
         const images = entries.filter(({ key }) => key === "NM_IMG" || key === "HL_IMG").map((entry) => {
           const ref = imageRef(entry.value)
@@ -68,7 +71,8 @@ export function bakeBdsBackgrounds(bytes: Uint8Array): Uint8Array {
             const tilBytes = archive.getBytes(tilPath)
             const pngBytes = archive.getBytes(pngPath)
             if (!tilBytes || !pngBytes) continue
-            const tiles = IniDocument.parse(archive.getText(tilPath))
+            let tiles = tileDocuments.get(tilPath)
+            if (!tiles) tileDocuments.set(tilPath, tiles = IniDocument.parse(archive.getText(tilPath)))
             const source = rect(tiles.get(`IMG${ref.tile}`, "SOURCE_RECT"))
             const inner = rect(tiles.get(`IMG${ref.tile}`, "INNER_RECT"))
             if (!source || !inner || inner[2] <= 0 || inner[3] <= 0 || source[2] <= 0 || source[3] <= 0) continue
@@ -77,7 +81,9 @@ export function bakeBdsBackgrounds(bytes: Uint8Array): Uint8Array {
             const imageKey = `${base},${ref.tile}:${size[2]},${size[3]}`
             let outputName = bakedImages.get(imageKey)
             if (!outputName) {
-              const decoded = decodePng(pngBytes)
+              // 同一图集的不同尺寸紧接着烘焙；只保留最近一张解码图，避免大包累积像素内存。
+              if (decodedPng?.bytes !== pngBytes) decodedPng = { bytes: pngBytes, image: decodePng(pngBytes) }
+              const decoded = decodedPng.image
               if (source[0] < 0 || source[1] < 0 || source[0] + source[2] > decoded.width || source[1] + source[3] > decoded.height) continue
               outputName = `keyskin_bds_${nextStyle}_${image.key.toLowerCase()}`
               archive.setBytes(`${res}/${outputName}.png`, encodePng(nineSliceImage(decoded, source, inner, size[2], size[3])))
@@ -87,28 +93,25 @@ export function bakeBdsBackgrounds(bytes: Uint8Array): Uint8Array {
             const target = variantEntries.find((entry) => entry.key === image.key && entry.value === image.value)
             if (target) target.value = `${outputName},1`
             baked = true
-            changed = true
             themeChanged = true
           }
           if (baked) {
             variant = nextStyle++
             css.appendSection(`STYLE${variant}`, variantEntries)
-            variants.set(key, variant)
           }
+          variants.set(key, variant)
         }
         if (variant !== styleID) {
           layout.set(section, "BACK_STYLE", String(variant))
-          changed = true
+          layoutChanged = true
           themeChanged = true
         }
       }
-      archive.setText(path, layout.toString())
+      if (layoutChanged) archive.setText(path, layout.toString())
     }
     if (themeChanged && nextStyle > Math.max(0, Number(css.get("GLOBAL", "STYLE_NUM") ?? 0))) {
       css.set("GLOBAL", "STYLE_NUM", String(nextStyle))
-      changed = true
     }
     if (themeChanged) archive.setText(cssPath, css.toString())
   }
-  return changed ? archive.toBytes("bds") : bytes
 }

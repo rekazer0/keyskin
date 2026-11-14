@@ -9,6 +9,7 @@ use tauri::window::{Effect, EffectsBuilder};
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 mod adb;
+mod binary_ipc;
 use adb::{pair_adb_device, share_skin_adb, test_adb_connection};
 mod model_oauth;
 #[cfg(target_os = "macos")]
@@ -844,7 +845,20 @@ async fn read_skin_file(
 
 #[tauri::command]
 async fn write_file(path: String, data: Vec<u8>) -> Result<(), String> {
-    fs::write(path, data).map_err(|error| error.to_string())
+    tauri::async_runtime::spawn_blocking(move || fs::write(path, data).map_err(|error| error.to_string()))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn write_binary_file(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    #[derive(serde::Deserialize)]
+    struct Arguments {
+        path: String,
+    }
+    let args: Arguments = binary_ipc::arguments(request.headers())?;
+    let data = binary_ipc::bytes(request.body())?.to_vec();
+    write_file(args.path, data).await
 }
 
 #[tauri::command]
@@ -1744,6 +1758,7 @@ pub fn run() {
         read_skin_file,
         write_file,
         append_client_log,
+        write_binary_file,
         read_client_logs,
         share_file,
         share_skin_adb,
@@ -1789,6 +1804,7 @@ pub fn run() {
         read_skin_file,
         write_file,
         append_client_log,
+        write_binary_file,
         read_client_logs,
         share_file,
         share_skin_adb,

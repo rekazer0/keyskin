@@ -1,4 +1,4 @@
-import { strToU8, zipSync } from "fflate"
+import { strToU8 } from "fflate"
 import { bdaAppearancePath, bdaConfigPath, bdaLayoutDocument, bdaStyleID, bdaPanelKeyName, type BdaAnimation, type BdaImageAtom, type BdaPanel, type BdaResource, type BdaStyleRef } from "./bda.ts"
 import { bdaColorHex } from "./bda-resolver.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "./bda-decode.ts"
@@ -452,5 +452,5 @@ export function convertBdaArchive(source: SkinArchive, base: SkinArchive, format
   }
 
   if (!output.size) throw new Error("BDA 中没有可转换的外观配置")
-  return { archive: SkinArchive.open(zipSync(Object.fromEntries(output), { level: 6 })), warnings }
+  return { archive: SkinArchive.fromFiles(output), warnings }
 }

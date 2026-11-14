@@ -71,8 +71,8 @@ try {
       const archive = SkinArchive.open(new Uint8Array(bytes), 'bds')
       archive.setText('light/skin/res/default.css', `[GLOBAL]\n[STYLE900]\nSHOW=Test\nFONT_SIZE=24\nNM_COLOR=ffffff\n${extra}`)
       archive.setText('light/skin/port/py_9.ini', '[KEY1]\nFORE_STYLE=900\n')
-      const baked = await bakeExportedFonts(await archive.toBytesAsync('bds'), 'bds')
-      return SkinArchive.open(baked, 'bds').getText('light/skin/res/default.css')
+      await bakeExportedFonts(archive)
+      return archive.getText('light/skin/res/default.css')
     }
     return {
       opaque: await bake('BORDER_COLOR=FF000000\nBORDER_SIZE=6\n'),
@@ -93,8 +93,8 @@ try {
       archive.setText(cssPath, '[GLOBAL]\n[STYLE900]\nSHOW=Test\nFONT_SIZE=24\nFONT_WEIGHT=700\nNM_COLOR=ffffff\n')
       archive.setText(layoutPath, '[KEY1]\nFORE_STYLE=900\n')
       const source = await archive.toBytesAsync(format)
-      const baked = await bakeExportedFonts(source, format)
-      const opened = SkinArchive.open(baked, format)
+      const opened = SkinArchive.open(source, format)
+      await bakeExportedFonts(opened)
       window.fontBakeArchive = opened
       return { format: opened.format, css: opened.getText(cssPath), names: opened.names(), sourceCss: archive.getText(cssPath) }
     }, { bytes: [...bdsFixture()], format })

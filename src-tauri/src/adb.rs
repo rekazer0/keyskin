@@ -193,11 +193,13 @@ fn run_adb_input(executable: &str, args: &[&str], input: Option<&str>) -> Result
         }
     }
     let started = Instant::now();
+    let mut interval = Duration::from_millis(2);
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Ok(status),
             Ok(None) if started.elapsed() < Duration::from_secs(60) => {
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(interval);
+                interval = (interval * 2).min(Duration::from_millis(50));
             }
             result => {
                 let _ = child.kill();
@@ -450,19 +452,21 @@ fn dump_ui(adb: &impl Fn(&[&str]) -> Result<String, String>) -> Result<String, S
 
 fn tap_ui_text(
     adb: &impl Fn(&[&str]) -> Result<String, String>,
+    xml: &str,
     text: &str,
 ) -> Result<bool, String> {
-    let xml = dump_ui(adb)?;
-    if let Some((x, y)) = ui_bounds_for_label(&xml, text) {
+    if let Some((x, y)) = ui_bounds_for_label(xml, text) {
         adb(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
         return Ok(true);
     }
     Ok(false)
 }
 
-fn tap_ui_local_card(adb: &impl Fn(&[&str]) -> Result<String, String>) -> Result<bool, String> {
-    let xml = dump_ui(adb)?;
-    if let Some((x, y)) = ui_bounds_for_local_card(&xml) {
+fn tap_ui_local_card(
+    adb: &impl Fn(&[&str]) -> Result<String, String>,
+    xml: &str,
+) -> Result<bool, String> {
+    if let Some((x, y)) = ui_bounds_for_local_card(xml) {
         adb(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
         return Ok(true);
     }
@@ -473,7 +477,7 @@ fn tap_ui_local_card(adb: &impl Fn(&[&str]) -> Result<String, String>) -> Result
 fn open_sogou_skins(
     adb: &impl Fn(&[&str]) -> Result<String, String>,
     package: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     // CLEAR_TASK 让深链从任何残留页面（详情/试打页）都能重新落到「我的皮肤」。
     let deep_link = [
         "shell",
@@ -496,18 +500,15 @@ fn open_sogou_skins(
         if !launched {
             adb(&deep_link)?;
             launched = true;
+            // 搜狗先扫描新推送的文件；旧的本地卡片可先于扫描结果出现，不能把它当作新皮肤就绪。
             std::thread::sleep(Duration::from_secs(2));
-            continue;
         }
         let xml = dump_ui(adb)?;
-        if ui_bounds_for_local_card(&xml).is_some()
-            || ui_bounds_for_label(&xml, "我的制作").is_some()
-        {
-            return Ok(());
+        if ui_bounds_for_local_card(&xml).is_some() {
+            return Ok(xml);
         }
-        if tap_ui_text(adb, "皮肤")? {
-            std::thread::sleep(Duration::from_secs(2));
-            continue;
+        if ui_bounds_for_label(&xml, "我的制作").is_none() {
+            tap_ui_text(adb, &xml, "皮肤")?;
         }
         if !retried && started.elapsed() > Duration::from_secs(8) {
             retried = true;
@@ -520,22 +521,22 @@ fn open_sogou_skins(
 }
 
 /// 打开第一张「(本地)」皮肤并点「立即启用」，顺带处理音效确认弹窗。
-fn apply_sogou_skin(adb: &impl Fn(&[&str]) -> Result<String, String>) -> Result<(), String> {
-    if !tap_ui_local_card(adb)? {
+fn apply_sogou_skin(
+    adb: &impl Fn(&[&str]) -> Result<String, String>,
+    xml: &str,
+) -> Result<(), String> {
+    if !tap_ui_local_card(adb, xml)? {
         return Err("搜狗输入法的「我的皮肤」里没有本地皮肤，请确认皮肤已推送".into());
     }
-    std::thread::sleep(Duration::from_millis(1200));
     let started = Instant::now();
     let mut opened = false;
     while started.elapsed() < Duration::from_secs(12) {
-        if tap_ui_text(adb, "立即启用")? || tap_ui_text(adb, "启用")? {
+        let xml = dump_ui(adb)?;
+        if tap_ui_text(adb, &xml, "立即启用")? || tap_ui_text(adb, &xml, "启用")? {
             opened = true;
             break;
         }
-        if tap_ui_text(adb, "暂不定制")? {
-            std::thread::sleep(Duration::from_millis(800));
-            continue;
-        }
+        tap_ui_text(adb, &xml, "暂不定制")?;
         std::thread::sleep(Duration::from_millis(400));
     }
     if !opened {
@@ -543,7 +544,8 @@ fn apply_sogou_skin(adb: &impl Fn(&[&str]) -> Result<String, String>) -> Result<
     }
     // 带音效的皮肤会额外询问是否开启播放；没有弹窗就直接继续。
     for _ in 0..6 {
-        if tap_ui_text(adb, "确定")? {
+        let xml = dump_ui(adb)?;
+        if tap_ui_text(adb, &xml, "确定")? {
             break;
         }
         std::thread::sleep(Duration::from_millis(400));
@@ -599,6 +601,7 @@ fn share(
     if !valid_skin_name(&name, extension) {
         return Err("皮肤文件名无效，请使用不含路径的皮肤文件名".into());
     }
+    ensure_not_cancelled(cancel)?;
     let serial = connect(&settings)?;
     let adb = |args: &[&str]| {
         ensure_not_cancelled(cancel)?;
@@ -637,9 +640,12 @@ fn share(
             target.name()
         ));
         // 搜狗只扫描 wallpaper 目录得到本地皮肤，再在「我的皮肤」里启用。
+        let mut sogou_ui = None;
         if target == SkinTarget::Sogou {
-            open_sogou_skins(&adb, &settings.package)
-                .map_err(|e| format!("皮肤已推送到 {remote}，但{e}"))?;
+            sogou_ui = Some(
+                open_sogou_skins(&adb, &settings.package)
+                    .map_err(|e| format!("皮肤已推送到 {remote}，但{e}"))?,
+            );
         } else {
             // ACTION_VIEW 与 Android 客户端的分享入口一致；仅传递校验过的参数，绝不执行自定义 shell。
             let uri = device_file_uri(&remote);
@@ -693,15 +699,6 @@ fn share(
             ));
             let started = Instant::now();
             loop {
-                // 兼容性/权限提示会挡住导入页，点掉后再等它退出。
-                if let Ok(xml) = dump_ui(&adb) {
-                    for label in ["确定", "继续"] {
-                        if let Some((x, y)) = ui_bounds_for_label(&xml, label) {
-                            adb(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
-                            break;
-                        }
-                    }
-                }
                 let activities = adb(&["shell", "dumpsys", "activity", "activities"])?;
                 let importing = activities
                     .lines()
@@ -715,6 +712,15 @@ fn share(
                 if !importing {
                     break;
                 }
+                // 兼容性/权限提示会挡住导入页，点掉后再等它退出。
+                if let Ok(xml) = dump_ui(&adb) {
+                    for label in ["确定", "继续"] {
+                        if let Some((x, y)) = ui_bounds_for_label(&xml, label) {
+                            adb(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
+                            break;
+                        }
+                    }
+                }
                 if started.elapsed() > Duration::from_secs(45) {
                     return Err(format!(
                         "皮肤已推送，{}仍停留在导入页；请在设备上处理兼容性/权限提示后重新分享",
@@ -724,9 +730,9 @@ fn share(
                 std::thread::sleep(Duration::from_millis(300));
             }
         }
-        if target == SkinTarget::Sogou {
+        if let Some(xml) = sogou_ui {
             progress("正在搜狗「我的皮肤」里启用刚推送的皮肤…");
-            apply_sogou_skin(&adb)?;
+            apply_sogou_skin(&adb, &xml)?;
         }
         Ok(serial.clone())
     })();
@@ -737,23 +743,41 @@ fn share(
 
 #[tauri::command]
 pub async fn share_skin_adb(
-    settings: AdbSettings,
-    format: String,
-    name: String,
-    data: Vec<u8>,
-    progress: tauri::ipc::Channel<String>,
+    webview: tauri::Webview,
+    request: tauri::ipc::Request<'_>,
 ) -> Result<String, String> {
     if !cfg!(any(target_os = "windows", target_os = "macos")) {
         return Err("ADB 分享仅支持 Windows 和 macOS 客户端".into());
     }
+    #[derive(serde::Deserialize)]
+    struct Arguments {
+        settings: AdbSettings,
+        format: String,
+        name: String,
+        progress: tauri::ipc::JavaScriptChannelId,
+    }
+    let args: Arguments = crate::binary_ipc::arguments(request.headers())?;
+    let data = crate::binary_ipc::bytes(request.body())?;
+    if data.is_empty() || data.len() > 64 * 1024 * 1024 {
+        return Err("无效的 Android 皮肤包（最大 64 MB）".into());
+    }
+    let data = data.to_vec();
+    let progress = args.progress.channel_on(webview);
     let cancel = std::sync::Arc::new(AtomicBool::new(false));
     if let Ok(mut active) = ACTIVE_SHARE_CANCEL.lock() {
         *active = Some(cancel.clone());
     }
     let result = tauri::async_runtime::spawn_blocking(move || {
-        share(settings, format, name, data, &cancel, |detail| {
-            let _ = progress.send(detail.to_owned());
-        })
+        share(
+            args.settings,
+            args.format,
+            args.name,
+            data,
+            &cancel,
+            |detail| {
+                let _ = progress.send(detail.to_owned());
+            },
+        )
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -1178,6 +1202,35 @@ mod tests {
         </hierarchy>"#;
         assert_eq!(ui_bounds_for_label(xml, "立即启用"), None);
         assert_eq!(ui_bounds_for_local_card(xml), Some((60, 120)));
+    }
+
+    #[test]
+    fn sogou_share_reuses_one_snapshot_for_each_ready_screen() {
+        let dumps = std::cell::Cell::new(0);
+        let taps = std::cell::Cell::new(0);
+        let adb = |args: &[&str]| -> Result<String, String> {
+            match args {
+                ["shell", "uiautomator", "dump", _] => {
+                    dumps.set(dumps.get() + 1);
+                    Ok("UI hierarchy dumped to: /data/local/tmp/keyskin-window.xml".into())
+                }
+                ["shell", "cat", _] => Ok(match dumps.get() {
+                    1 => r#"<node class="android.widget.ImageView" clickable="true" bounds="[0,0][100,100]"/><node text="(本地)"/>"#,
+                    2 => r#"<node text="启用" bounds="[0,0][100,100]"/>"#,
+                    3 => r#"<node text="确定" bounds="[0,0][100,100]"/>"#,
+                    _ => panic!("重复读取已经就绪的界面"),
+                }.into()),
+                ["shell", "input", "tap", _, _] => {
+                    taps.set(taps.get() + 1);
+                    Ok(String::new())
+                }
+                _ => Ok(String::new()),
+            }
+        };
+        let xml = open_sogou_skins(&adb, "com.sohu.inputmethod.sogou").unwrap();
+        apply_sogou_skin(&adb, &xml).unwrap();
+        assert_eq!(dumps.get(), 3);
+        assert_eq!(taps.get(), 3);
     }
 
     #[test]

@@ -8,6 +8,30 @@ const LOCAL_SIGNATURE = 0x04034b50
 const CENTRAL_SIGNATURE = 0x02014b50
 const END_SIGNATURE = 0x06054b50
 
+test('直接从文件建档保持格式、隔离输入，首次同步和异步导出都写入完整文件', async () => {
+  const files = new Map([
+    ['Info.txt', strToU8('Name=from files\n')],
+    ['light/port/py_26.ini', strToU8('[KEY1]\nCENTER=a\n')],
+  ])
+  const archive = SkinArchive.fromFiles(files, 'bds')
+  files.get('Info.txt')[0] = 0
+  assert.equal(archive.format, 'bds')
+  assert.equal(archive.infoField('Name'), 'from files')
+  assert.equal(archive.changed.size, 0)
+  for (const bytes of [archive.toBytes(), await archive.toBytesAsync()]) {
+    const opened = SkinArchive.open(bytes, 'bds')
+    assert.equal(opened.infoField('Name'), 'from files')
+    assert.equal(opened.getText('light/skin/port/py_26.ini'), '[KEY1]\nCENTER=a\n')
+  }
+  archive.setText('Info.txt', 'Name=edited\n')
+  const saved = await archive.toBytesAsync()
+  archive.markSaved(saved)
+  assert.equal(archive.changed.size, 0)
+  assert.equal(SkinArchive.open(await archive.toBytesAsync(), 'bds').infoField('Name'), 'edited')
+  assert.throws(() => SkinArchive.fromFiles(new Map([['../bad', new Uint8Array()]])), /不安全路径/)
+  assert.throws(() => SkinArchive.fromFiles(new Map(Array.from({ length: 5001 }, (_, i) => [`file${i}`, new Uint8Array()]))), /过多文件/)
+})
+
 function sampleArchive() {
   return zipSync({
     'Info.txt': strToU8('AtomSkinName=test'),

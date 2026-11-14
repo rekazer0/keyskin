@@ -85,18 +85,34 @@ for (const path of ['/Users/test/皮肤/保存.bds', 'content://provider/documen
     const events = []
     const context = run(declarations('writeNativePath'), {
       updateFileOperationProgress: () => {},
-      invoke: async (command, data) => { assert.equal(command, 'write_file'); assert.equal(data.path, path); events.push('write') },
+      isAndroidTauri: () => false,
+      invokeBinary: async (command, bytes, data) => { assert.equal(command, 'write_binary_file'); assert.equal(data.path, path); assert.ok(bytes instanceof Uint8Array); events.push('write') },
       writeFile: async destination => { assert.equal(destination, path); events.push('write') },
       showFileOperationResult: detail => events.push(detail),
     })
     await context.writeNativePath(path, new Uint8Array([1]))
     assert.deepEqual(events, ['write', `保存位置：${path}`])
     events.length = 0
-    context.invoke = context.writeFile = async () => { throw new Error('磁盘已满') }
+    context.invokeBinary = context.writeFile = async () => { throw new Error('磁盘已满') }
     await assert.rejects(context.writeNativePath(path, new Uint8Array([1])), /磁盘已满/)
     assert.deepEqual(events, [])
   })
 }
+
+test('Android local writes retain the JSON command because its bridge does not support raw bodies', async () => {
+  const bytes = new Uint8Array([1, 2, 255])
+  const path = '/storage/emulated/0/Download/皮肤.bds'
+  const context = run(declarations('writeNativePath'), {
+    updateFileOperationProgress() {}, showFileOperationResult() {},
+    isAndroidTauri: () => true,
+    invoke: async (command, args) => {
+      assert.equal(command, 'write_file')
+      assert.equal(args.path, path)
+      assert.equal(args.data, bytes)
+    },
+  })
+  await context.writeNativePath(path, bytes)
+})
 
 test('a warning repeated for many keys or animations is listed once with its count', async () => {
   const keys = Array.from({ length: 30 }, (_, i) => `light/skin/port/py_9.ini [KEY${i + 1}] 在 BDA 模板中没有可映射的目标，未绑定`)

@@ -4,7 +4,7 @@
 // Sogou look (ssf-look.ts) is painted onto it as new single-image styles. Keys Sogou draws as text keep
 // the template glyph, recoloured to the Sogou label colour. Day/night statuses become light/dark themes.
 
-import { strToU8, zipSync } from "fflate"
+import { strToU8 } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
 import { SsfBaiduMotion } from "./ssf-anim-to-baidu.ts"
@@ -475,5 +475,5 @@ export function convertSsfToBaidu(pkg: SsfPackage, base: SkinArchive, panelWidth
     const themed = path.match(/^(light|dark)\/skin\/(.*)$/)!
     return [dual ? `${themed[1]}/${themed[2]}` : themed[2], bytes]
   }))
-  return { archive: SkinArchive.open(zipSync(raw, { level: 6 }), "bds"), warnings }
+  return { archive: SkinArchive.fromFiles(new Map(Object.entries(raw)), "bds"), warnings }
 }

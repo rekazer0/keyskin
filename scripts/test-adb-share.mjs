@@ -26,11 +26,18 @@ try {
       window.adbCalls = []
       window.__TAURI_INTERNALS__ = {
         transformCallback: fn => { window.adbProgress = fn; return 1 },
-        invoke: async (cmd, args) => {
+        invoke: async (cmd, payload, options) => {
+          let args = payload
+          if (cmd === 'share_skin_adb') {
+            if (!(payload instanceof Uint8Array)) throw new Error('ADB must use a binary IPC body')
+            const metadata = options.headers['x-keyskin-args']
+            if (!/^[\x20-\x7e]*$/.test(metadata)) throw new Error('IPC metadata must be ASCII')
+            args = { ...JSON.parse(metadata), data: payload }
+          }
           window.adbCalls.push({ cmd, args })
           if (window.adbFailure) throw window.adbFailure
           if (cmd === 'share_skin_adb') {
-            args.progress.onmessage('等待百度输入法完成导入；请在设备上查看兼容性或权限提示')
+            window.adbProgress({ index: 0, message: '等待百度输入法完成导入；请在设备上查看兼容性或权限提示' })
             await new Promise((resolve, reject) => { window.finishAdbShare = resolve; window.rejectAdbShare = reject })
           }
           if (cmd === 'cancel_adb_share') {

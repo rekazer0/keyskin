@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { strToU8, zipSync } from 'fflate'
 import { IniDocument } from '../src/ini.ts'
 import { SkinArchive } from '../src/skin.ts'
-import { bakeBdsBackgrounds } from '../src/bds-backgrounds.ts'
+import { bakeBdsBytes } from './helpers/bds-export.mjs'
 import { decodePng, encodePng, nineSliceImage } from '../src/ssf/ssf-png.ts'
 
 test('BDS 背景跨样式、状态和布局复用切片，只为不同尺寸或源切片生成图片', () => {
@@ -17,7 +17,7 @@ test('BDS 背景跨样式、状态和布局复用切片，只为不同尺寸或�
     'light/res/key.png': encodePng(image),
     'light/res/key.til': strToU8('[IMG1]\nSOURCE_RECT=0,0,4,4\nINNER_RECT=1,1,2,2\n[IMG2]\nSOURCE_RECT=0,0,4,4\nINNER_RECT=0,0,2,2\n'),
   })
-  const output = SkinArchive.open(bakeBdsBackgrounds(source), 'bds')
+  const output = SkinArchive.open(bakeBdsBytes(source), 'bds')
   const css = IniDocument.parse(output.getText('light/skin/res/default.css'))
   const port = IniDocument.parse(output.getText('light/skin/port/py_26.ini'))
   const land = IniDocument.parse(output.getText('light/skin/land/py_26.ini'))
@@ -59,7 +59,7 @@ test('BDS 背景使用布局自己的 CSS 和图片目录，不把新样式写�
     'dark/res/default.css': strToU8(rootCss),
   }
   for (const orientation of ['port', 'land']) files[`light/${orientation}/py_26.ini`] = strToU8('[KEY1]\nBACK_STYLE=1\nVIEW_RECT=0,0,8,6\n')
-  const output = SkinArchive.open(bakeBdsBackgrounds(zipSync(files)), 'bds')
+  const output = SkinArchive.open(bakeBdsBytes(zipSync(files)), 'bds')
   for (const [orientation, size, image] of [['port', '20', shared], ['land', '30', local]]) {
     const layout = IniDocument.parse(output.getText(`light/skin/${orientation}/py_26.ini`))
     const css = IniDocument.parse(output.getText(`light/skin/${orientation}/res/default.css`))

@@ -19,6 +19,7 @@ import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.t
 import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
 import { bakeBdsBackgrounds } from "../bds-backgrounds.ts"
+import { invokeBinary } from "../native-binary.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
 import { recordRecentFile } from "./recent-files"
 import { dismissLayoutOverview } from "./layout-overview"
@@ -369,12 +370,16 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   if (format !== "bds" && format !== "bdi") return result
   updateFileOperationProgress(88, "正在检查字体兼容性…")
   await waitForInterfacePaint()
-  const bytes = await bakeExportedFonts(result.bytes, format)
-  if (format !== "bds") return { ...result, bytes }
-  updateFileOperationProgress(88, "正在适配并打包 BDS 图片…")
-  await waitForInterfacePaint()
-  // Bake before the image-count pass so generated variants are packed together with the source images.
-  return { ...result, bytes: await completeBdsPackage(bakeBdsBackgrounds(bytes), composeAtlasPng) }
+  const archive = SkinArchive.open(result.bytes, format)
+  await bakeExportedFonts(archive)
+  if (format === "bds") {
+    updateFileOperationProgress(88, "正在适配并打包 BDS 图片…")
+    await waitForInterfacePaint()
+    // Bake before the image-count pass so generated variants are packed together with the source images.
+    bakeBdsBackgrounds(archive)
+    await completeBdsPackage(archive, composeAtlasPng)
+  }
+  return { ...result, bytes: await archive.toBytesAsync(format) }
 }
 
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<PackagedResult> {
@@ -548,8 +553,10 @@ export async function writeNativePath(path: string, bytes: Uint8Array): Promise<
   updateFileOperationProgress(90, "正在写入文件…")
   if (path.startsWith("content://")) {
     await writeFile(path, bytes)
-  } else {
+  } else if (isAndroidTauri()) {
     await invoke("write_file", { path, data: bytes })
+  } else {
+    await invokeBinary("write_binary_file", bytes, { path })
   }
   showFileOperationResult(`保存位置：${path}`)
 }

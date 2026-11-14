@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { strToU8, zipSync } from 'fflate'
 import { SkinArchive } from '../src/skin.ts'
 import { IniDocument } from '../src/ini.ts'
-import { completeBdsPackage } from '../src/bds-package.ts'
+import { completeBdsBytes } from './helpers/bds-export.mjs'
 
 const noAtlas = () => { throw new Error('no atlas needed') }
 
@@ -21,7 +21,7 @@ test('BDS 压缩 BDA 样式编号，同步横竖屏、候选栏、气泡与粒�
     'light/port/hint1.pop': '[HINT]\nBACK_STYLE=1010001\n',
     'light/port/anim.ini': '[ANIM100]\nPARTICLE_IMAGE=1010001\n',
   }).map(([path, text]) => [path, strToU8(text)])))
-  const bytes = await completeBdsPackage(input, noAtlas)
+  const bytes = await completeBdsBytes(input, noAtlas)
   const archive = SkinArchive.open(bytes, 'bds')
   for (const orientation of ['port', 'land']) {
     const document = IniDocument.parse(archive.getText(`light/skin/${orientation}/py_26.ini`))
@@ -38,11 +38,11 @@ test('BDS 压缩 BDA 样式编号，同步横竖屏、候选栏、气泡与粒�
   assert.equal(IniDocument.parse(archive.getText('light/skin/port/hint1.pop')).get('HINT', 'BACK_STYLE'), '1')
   assert.equal(IniDocument.parse(archive.getText('light/skin/port/anim.ini')).get('ANIM100', 'PARTICLE_IMAGE'), '1')
   assert.equal(archive.infoField('SupportDarkMode'), '1')
-  assert.deepEqual(await completeBdsPackage(bytes, noAtlas), bytes)
+  assert.deepEqual(await completeBdsBytes(bytes, noAtlas), bytes)
 })
 
 test('平铺 BDS 修正双主题声明，普通样式编号不重排并修复 STYLE_NUM', async () => {
-  const archive = SkinArchive.open(await completeBdsPackage(zipSync({
+  const archive = SkinArchive.open(await completeBdsBytes(zipSync({
     'Info.txt': strToU8('Name=test\r\nSupportDarkMode=1\r\n'),
     'res/default.css': strToU8('[GLOBAL]\nSTYLE_NUM=1\n[STYLE9]\nNM_COLOR=FFFFFFFF\n'),
   }), noAtlas), 'bds')

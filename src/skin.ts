@@ -5,7 +5,7 @@ import { adaptPackageSounds } from "./sounds.ts"
 import { adaptAndroidToolbar, adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
 import { adaptIosToolbarGeometry } from "./ios-toolbar-geometry.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
-import { parseZip, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, changedLocal, writeUint32, writeUint16, addZipEntry } from "./skin-zip.ts"
+import { parseZip, patchZip, zipArchiveAsync, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, addZipEntry } from "./skin-zip.ts"
 
 const TEXT_EXTENSIONS = new Set(["ini", "css", "til", "cnd", "pop", "txt", "plist"])
 
@@ -296,6 +296,18 @@ export class SkinArchive {
     return SkinArchive.open(zipSync(Object.fromEntries(files.map((file) => [file.path, file.data])), { level: 0 }))
   }
 
+  /** 转换器已经持有文件时直接建档，避免为了创建对象先压缩、再整包解压。 */
+  static fromFiles(files: ReadonlyMap<string, Uint8Array>, formatHint?: ExportFormat): SkinArchive {
+    if (files.size > MAX_FILES) throw new Error(`皮肤包含过多文件（${files.size}）`)
+    let total = 0
+    for (const [name, data] of files) {
+      if (!safePath(name)) throw new Error(`皮肤包含不安全路径：${name}`)
+      total += data.byteLength
+      if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
+    }
+    return new SkinArchive(new Map([...files].map(([name, data]) => [name, data.slice()])), new Uint8Array(), formatHint)
+  }
+
   names(): string[] {
     this.cachedNames ??= [...this.canonicalToRaw.keys()].sort()
     return this.cachedNames.slice()
@@ -525,7 +537,7 @@ export class SkinArchive {
   /** `warnings` collects key sounds the target cannot play; `notes` (by default the same list) what packaging for iOS adjusted. */
   async toBytesAsync(format?: ExportFormat, warnings?: string[], notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
-    if (this.changed.size === 0 && (!format || (format === this.format && this.layout !== "legacy-ios"))) {
+    if (this.sourceBytes.length && this.changed.size === 0 && (!format || (format === this.format && this.layout !== "legacy-ios"))) {
       return this.sourceBytes.slice()
     }
     // Avoid fflate's one-worker-per-large-file async ZIP path, which can exhaust WebView workers.
@@ -533,6 +545,7 @@ export class SkinArchive {
     if ((format === "bdi" || format === "bds") && (format !== this.format || this.layout === "legacy-ios")) {
       return this.platformBytesAsync(format, warnings, format === "bdi" && this.layout.startsWith("bds"), notes)
     }
+    if (!this.sourceZip && this.format !== "bdi") return zipArchiveAsync(Object.fromEntries(this.files))
     return this.toBytes(format)
   }
 
@@ -550,7 +563,7 @@ export class SkinArchive {
     if (format === "bds" && this.format === "bdi") adaptAndroidToolbar(files, notes)
     const adapted = await adaptPackageSounds(files, format)
     warnings?.push(...adapted.warnings)
-    return zipSync(Object.fromEntries(files), { level: 6 })
+    return zipArchiveAsync(Object.fromEntries(files))
   }
 
   toBytes(format?: ExportFormat): Uint8Array {
@@ -559,58 +572,17 @@ export class SkinArchive {
     if (format && (format !== this.format || this.layout === "legacy-ios")) {
       return this.packagedBytes(format)
     }
-    if (this.changed.size === 0) return this.sourceBytes.slice()
+    if (this.sourceBytes.length && this.changed.size === 0) return this.sourceBytes.slice()
     if (!this.sourceZip) {
       return zipSync(Object.fromEntries(this.files), { level: 6 })
     }
 
-    const locals: Uint8Array[] = []
-    const centrals: Uint8Array[] = []
-    let localOffset = 0
+    const changes = new Map<string, Uint8Array | undefined>()
     const sourceNames = new Set(this.sourceZip.entries.map((entry) => entry.name))
-    const added = [...this.files.entries()]
-      .filter(([name]) => !sourceNames.has(name))
-      .map(([name, data]) => parseZip(zipSync({
-        [name]: [data, { level: 6, mtime: new Date(1980, 0, 1) }],
-      })).entries[0])
-    const entries = [
-      ...this.sourceZip.entries.filter((entry) => this.files.has(entry.name)),
-      ...added,
-    ]
-    for (const entry of entries) {
-      let local = entry.local
-      let crc: number | undefined
-      let compressedSize: number | undefined
-      if (sourceNames.has(entry.name) && this.changedRaw.has(entry.name)) {
-        const changed = changedLocal(entry, this.files.get(entry.name)!)
-        local = changed.local
-        crc = changed.crc
-        compressedSize = changed.compressedSize
-      }
-      const central = entry.central.slice()
-      writeUint32(central, 42, localOffset)
-      if (crc !== undefined && compressedSize !== undefined) {
-        writeUint32(central, 16, crc)
-        writeUint32(central, 20, compressedSize)
-        writeUint32(central, 24, this.files.get(entry.name)!.length)
-      }
-      locals.push(local)
-      centrals.push(central)
-      localOffset += local.length
+    for (const name of sourceNames) if (!this.files.has(name)) changes.set(name, undefined)
+    for (const [name, data] of this.files) {
+      if (!sourceNames.has(name) || this.changedRaw.has(name)) changes.set(name, data)
     }
-    const centralSize = centrals.reduce((total, bytes) => total + bytes.length, 0)
-    const end = this.sourceZip.end.slice()
-    writeUint16(end, 8, entries.length)
-    writeUint16(end, 10, entries.length)
-    writeUint32(end, 12, centralSize)
-    writeUint32(end, 16, localOffset)
-    const total = localOffset + centralSize + end.length
-    const output = new Uint8Array(total)
-    let offset = 0
-    for (const part of [...locals, ...centrals, end]) {
-      output.set(part, offset)
-      offset += part.length
-    }
-    return output
+    return patchZip(this.sourceZip, changes)
   }
 }

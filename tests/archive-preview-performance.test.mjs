@@ -79,13 +79,16 @@ for (const root of ['', 'light/']) test(`BDA Android → iOS → Android retains
   }
 })
 
-test('BDA conversion only packs and opens the final archive once', () => {
+test('BDA conversion creates its result without an intermediate ZIP round trip', () => {
   let packs = 0
   let opens = 0
   const exports = {}
   const context = vm.createContext({ exports, require: name => {
     if (name === 'fflate') return { strFromU8, strToU8, zipSync: (...args) => { packs++; return zipSync(...args) } }
-    if (name === './skin.ts') return { SkinArchive: { open: (...args) => { opens++; return SkinArchive.open(...args) } } }
+    if (name === './skin.ts') return { SkinArchive: {
+      open: (...args) => { opens++; return SkinArchive.open(...args) },
+      fromFiles: (...args) => SkinArchive.fromFiles(...args),
+    } }
     if (name === './bda-encode.ts') return { convertBdaAppearancePlatform: encode.convertBdaAppearancePlatform, convertBdaSoundPlatform: encode.convertBdaSoundPlatform, IOS_BDA_PANELS: encode.IOS_BDA_PANELS }
     if (name === './bda-decode.ts') return { decodeBdaAppearance, decodeBdaSoundConfig }
     throw new Error(name)
@@ -93,9 +96,10 @@ test('BDA conversion only packs and opens the final archive once', () => {
   vm.runInContext(ts.transpile(read('src/bda-platform.ts'), { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }), context)
   const archive = source('light/')
   archive.normalizedBytes = () => { throw new Error('must not repack source') }
-  exports.convertBdaPlatform(archive, 'ios')
-  assert.equal(packs, 1)
-  assert.equal(opens, 1)
+  const converted = exports.convertBdaPlatform(archive, 'ios')
+  assert.equal(bdaPlatform(converted), 'ios')
+  assert.equal(packs, 0)
+  assert.equal(opens, 0)
 })
 import * as encode from '../src/bda-encode.ts'
 

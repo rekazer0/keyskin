@@ -199,11 +199,11 @@ export async function zipArchiveAsync(
   return output
 }
 
-export function writeUint32(bytes: Uint8Array, offset: number, value: number): void {
+function writeUint32(bytes: Uint8Array, offset: number, value: number): void {
   view(bytes).setUint32(offset, value, true)
 }
 
-export function writeUint16(bytes: Uint8Array, offset: number, value: number): void {
+function writeUint16(bytes: Uint8Array, offset: number, value: number): void {
   view(bytes).setUint16(offset, value, true)
 }
 
@@ -220,7 +220,7 @@ function compressedPayload(data: Uint8Array, level: 0 | 6): {
   return { crc: packedView.getUint32(14, true), compressed: packed.slice(start, start + size) }
 }
 
-export function changedLocal(entry: ZipEntry, data: Uint8Array): {
+function changedLocal(entry: ZipEntry, data: Uint8Array): {
   local: Uint8Array
   crc: number
   compressedSize: number
@@ -248,6 +248,46 @@ export function changedLocal(entry: ZipEntry, data: Uint8Array): {
   output.set(compressed, header.length)
   output.set(trailer, header.length + compressed.length)
   return { local: output, crc, compressedSize: compressed.length }
+}
+
+/** 只压缩新增或改动的条目，其他本地文件头和压缩数据原样复用。undefined 表示删除。 */
+export function patchZip(source: ReturnType<typeof parseZip>, changes: ReadonlyMap<string, Uint8Array | undefined>): Uint8Array {
+  const sourceNames = new Set(source.entries.map((entry) => entry.name))
+  const added = [...changes].flatMap(([name, data]) => !sourceNames.has(name) && data
+    ? [parseZip(zipSync({ [name]: [data, { level: 6, mtime: new Date(1980, 0, 1) }] })).entries[0]]
+    : [])
+  const entries = [...source.entries.filter((entry) => !changes.has(entry.name) || changes.get(entry.name)), ...added]
+  const locals: Uint8Array[] = []
+  const centrals: Uint8Array[] = []
+  let localOffset = 0
+  for (const entry of entries) {
+    const data = sourceNames.has(entry.name) ? changes.get(entry.name) : undefined
+    const changed = data ? changedLocal(entry, data) : undefined
+    const local = changed?.local ?? entry.local
+    const central = entry.central.slice()
+    writeUint32(central, 42, localOffset)
+    if (changed && data) {
+      writeUint32(central, 16, changed.crc)
+      writeUint32(central, 20, changed.compressedSize)
+      writeUint32(central, 24, data.length)
+    }
+    locals.push(local)
+    centrals.push(central)
+    localOffset += local.length
+  }
+  const centralSize = centrals.reduce((total, bytes) => total + bytes.length, 0)
+  const end = source.end.slice()
+  writeUint16(end, 8, entries.length)
+  writeUint16(end, 10, entries.length)
+  writeUint32(end, 12, centralSize)
+  writeUint32(end, 16, localOffset)
+  const output = new Uint8Array(localOffset + centralSize + end.length)
+  let offset = 0
+  for (const part of [...locals, ...centrals, end]) {
+    output.set(part, offset)
+    offset += part.length
+  }
+  return output
 }
 
 export function safePath(path: string): boolean {
