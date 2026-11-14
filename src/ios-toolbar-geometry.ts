@@ -11,6 +11,12 @@ export function iosToolbarScale(width: number, devicePointWidth: number | undefi
   return devicePointWidth && devicePointWidth > 0 ? width / (3 * devicePointWidth) : 1
 }
 
+/** 菜单图片声明不决定坐标单位；旧皮肤补建 plist 后仍使用布局像素。 */
+export function hasIosToolbarGeometry(general: IniDocument | undefined, candidate: IniDocument | undefined): boolean {
+  return Boolean(general?.get("LOGO", "LAYOUT_NAME")?.trim() || candidate?.sections().some((section) =>
+    /^ICON\d+$/.test(section) && candidate.get(section, "FIX_SIZE")?.trim()))
+}
+
 /** Materialise iOS point sizes in exported layout units before another keyboard reads them. */
 export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>): void {
   const text = (path: string) => {
@@ -26,9 +32,9 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>): void {
     const [, root, orientation] = match
     const gen = text(path)!
     const plist = files.get(`${root}res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`)
-    if (!gen.get("LOGO", "LAYOUT_NAME") && !plist) continue
     const candPath = `${root}${orientation}/${gen.get("CAND", "LAYOUT_NAME")?.trim()}.cnd`
     const cand = text(candPath)
+    if (!hasIosToolbarGeometry(gen, cand)) continue
     const cssPath = files.has(`${root}${orientation}/res/default.css`)
       ? `${root}${orientation}/res/default.css` : `${root}res/default.css`
     const css = text(cssPath)

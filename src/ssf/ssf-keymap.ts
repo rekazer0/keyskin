@@ -13,6 +13,8 @@ export type SsfKeyBinding = {
   sections: string[]
   /** Shared background classes used when no key section names a background. */
   defaults: string[]
+  /** Foreground layout inherited from the official board, when the skin does not bind its own. */
+  foreground?: string
   keyClass: SsfKeyClass
 }
 
@@ -64,7 +66,7 @@ export function ssfKeyActions(layout: string, action: string, sourceSection?: st
   if (board === "py26" || board === "en26") {
     const symbolIndex = "asdfghjklzxcvbnm".indexOf(letter)
     if (symbolIndex >= 0) {
-      const symbol = "!@#$%&*()~/-_:;?"[symbolIndex]
+      const symbol = (board === "py26" ? "~！@#%“”*？()-_:;/" : "~!@#%'&*?()-_:;/")[symbolIndex]
       return { UP: symbol, LEFT: symbol, RIGHT: symbol }
     }
   }
@@ -174,7 +176,7 @@ function ssfKeyClass(action: string): SsfKeyClass {
 }
 
 /** `sourceBackground` is the background class the Sogou app itself names for the key (`SSF_BG`). */
-export function ssfKeyBinding(layout: string, action: string, landscape: boolean, sourceSection?: string, sourceBackground?: string): SsfKeyBinding {
+export function ssfKeyBinding(layout: string, action: string, landscape: boolean, sourceSection?: string, sourceBackground?: string, sourceForeground?: string): SsfKeyBinding {
   const board = ssfBoard(layout)
   const primary = primarySections(board, action)
   const fallback = landscape ? [...primary.flatMap(landscapeVariants), ...primary] : primary
@@ -188,5 +190,5 @@ export function ssfKeyBinding(layout: string, action: string, landscape: boolean
     : keyClass === "function"
       ? qwerty ? ["KeyBg_Function_Qwerty", "KeyBg_Function"] : ["KeyBg_Function"]
       : qwerty ? ["KeyBg_Default_Latin", "KeyBg_Default"] : ["KeyBg_Default"]
-  return { sections, defaults: sourceBackground ? [...new Set([sourceBackground, ...defaults])] : defaults, keyClass }
+  return { sections, defaults: sourceBackground ? [...new Set([sourceBackground, ...defaults])] : defaults, keyClass, ...sourceForeground ? { foreground: sourceForeground } : {} }
 }

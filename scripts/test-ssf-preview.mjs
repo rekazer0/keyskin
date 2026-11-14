@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { strToU8, unzipSync, zipSync } from 'fflate'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
-import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
+import { encodePng } from '../src/ssf/ssf-png.ts'
+import { ssfFixture, solid } from '../tests/helpers/ssf-fixture.mjs'
 
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { port: 41809, strictPort: false, host: '127.0.0.1' } })
 await server.listen()
@@ -11,10 +13,20 @@ const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, by
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 const sample = process.env.SSF_SKIN_PATH
+const files = unzipSync(ssfFixture())
+for (const status of ['status1', 'status2']) {
+  const path = `1080/${status}/phoneSkin.ini`
+  files[path] = strToU8(new TextDecoder().decode(files[path]) + '\n[VPA_Bar]\nBG_IMAGE=transparent.png\n')
+  files[`1080/${status}/transparent.png`] = encodePng(solid(10, 10, [0, 0, 0], 0))
+}
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-  await page.locator('#browser-open').setInputFiles({ name: sample?.split('/').pop() ?? '搜狗骨架.ssf', mimeType: 'application/octet-stream', buffer: sample ? readFileSync(sample) : Buffer.from(ssfFixture()) })
-  await page.waitForFunction(() => !document.querySelector('#open').disabled)
+  await page.locator('#browser-open').setInputFiles({ name: sample?.split('/').pop() ?? '搜狗骨架.ssf', mimeType: 'application/octet-stream', buffer: sample ? readFileSync(sample) : Buffer.from(zipSync(files)) })
+  await page.waitForFunction(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return appState.archive?.format === 'ssf' && !document.querySelector('#open').disabled &&
+      (!document.querySelector('#file-operation-dialog').open || !document.querySelector('#file-operation-close').disabled)
+  })
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible()) await close.click()
   const state = () => page.evaluate(async () => {
@@ -30,11 +42,33 @@ try {
   assert.ok(find('F1').x < find('F6').x && find('F6').x < find('F38').x && find('F38').x < find('F16').x && find('F16').x < find('F39').x)
   assert.ok(find('F36').y < find('F40').y && find('F40').y < find('0').y && find('0').y < find('F39').y)
   assert.deepEqual(initial.changed, [])
+  await page.evaluate(async () => {
+    const { setSimulatedComposition } = await import('/src/app/canvas-interaction.ts')
+    const { refreshSimulationPreview } = await import('/src/app/preview-render.ts')
+    setSimulatedComposition('nihao')
+    refreshSimulationPreview()
+  })
+  const input = await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    const row = document.querySelector('#candidate-input').getBoundingClientRect()
+    const panel = document.querySelector('#preview').getBoundingClientRect()
+    return {
+      height: appState.candidateInputBar?.metrics.height,
+      rowHeight: row.height,
+      panelHeight: panel.height,
+      visible: !document.querySelector('#candidate-input').hidden,
+    }
+  })
+  assert.ok(input.visible)
+  assert.ok(input.height > 0 && input.height < initial.width / 4, `input row height: ${input.height}`)
+  assert.ok(input.rowHeight > 0 && input.rowHeight < input.panelHeight / 4, 'input row occupies a single line on the canvas')
   await page.screenshot({ path: '/tmp/bdi-sogou-canvas-fixed.png' })
   if (sample) await page.screenshot({ path: '/tmp/bdi-sogou-skin-fixed.png' })
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   const layouts = ['py_9.ini', 'py_26.ini']
-  const choose = (kind, value) => page.locator(`[data-${kind}-choice="${value}"]`).click()
+  const choose = async (kind, value) => {
+    if (await page.locator(`#${kind}`).inputValue() !== value) await page.locator(`.preview-choice[data-mobile-choice="${kind}"]`).click()
+  }
   for (const theme of ['light', 'dark']) {
     await choose('theme', theme)
     for (const orientation of ['port', 'land']) {

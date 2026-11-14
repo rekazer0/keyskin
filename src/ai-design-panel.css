@@ -202,7 +202,7 @@
   gap: 8px;
   padding: 12px 12px 8px;
 }
-#ai-design-panel .ai-draft-head h3 { margin: 0; color: var(--text); font-size: var(--font-size-sm); font-weight: 600; }
+#ai-design-panel .ai-draft-head h3 { flex: none; margin: 0; color: var(--text); font-size: var(--font-size-sm); font-weight: 600; }
 #ai-design-panel #ai-draft-summary { color: var(--secondary); font-size: var(--font-size-xs); }
 
 #ai-design-panel .ai-draft-files {
@@ -339,6 +339,7 @@
   #ai-design-panel .ai-bar { padding: 8px 16px 2px; }
   #ai-design-panel .ai-design-composer { min-height: 0; }
   #ai-design-panel .ai-design-toolbar { bottom: 18px; }
-  #ai-design-panel .ai-draft-panel:not([hidden]) { max-height: 72%; margin: 0 12px 12px; }
+  #ai-design-panel .ai-design-composer:has(#ai-design-chat[data-draft]) { display: none; }
+  #ai-design-panel .ai-draft-panel:not([hidden]) { flex: 1; max-height: none; margin: 0 var(--space-md) var(--space-md); }
   #ai-design-panel .ai-draft-note { display: none; }
 }

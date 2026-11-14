@@ -45,6 +45,7 @@ export const appState = {
   simulatedComposition: "",
   lastSimulationLanguage: undefined as "zh" | "en" | undefined,
   archive: undefined as SkinArchive | undefined,
+  recentStyles: new WeakMap<SkinArchive, Map<string, string[]>>(),
   bdaBase: undefined as SkinArchive | undefined,
   ssfTemplates: undefined as SsfTemplates | undefined,
   /** Sogou's official skeleton for the open SSF document's resolution and looks; never part of the document. */

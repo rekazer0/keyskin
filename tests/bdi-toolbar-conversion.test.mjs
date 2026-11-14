@@ -1,4 +1,4 @@
-import { nativeToolbarFixture as fixture } from './helpers/native-toolbar-fixture.mjs'
+import { legacyToolbarFixture, nativeToolbarFixture as fixture } from './helpers/native-toolbar-fixture.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { SkinArchive } from '../src/skin.ts'
@@ -8,6 +8,31 @@ import { PalmBoard } from '../src/palm/palm-board.ts'
 import { convertBaiduToSsf } from '../src/ssf/baidu-to-ssf.ts'
 import { SsfPackage } from '../src/ssf/ssf-package.ts'
 import { decodePng } from '../src/ssf/ssf-png.ts'
+import { plist, toolbarMenuItem } from '../src/ios-toolbar.ts'
+
+test('adding toolbar artwork to a legacy BDI preserves layout dimensions across exports', async () => {
+  const source = legacyToolbarFixture()
+  const before = await convertBaiduToSsf(source, { animations: false })
+  const beforeSsf = await SsfPackage.open(before.bytes)
+  for (const theme of ['light', 'dark']) source.setText(`${theme}/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`,
+    plist([toolbarMenuItem('17', '键盘类型', 'toolbar', 'function', 'function')]))
+  const android = SkinArchive.open(await source.toBytesAsync('bds'), 'bds')
+  const palm = SkinArchive.open(buildSxiZip(source).bytes, 'sxi')
+  const skin = JSON.parse(palm.getText('skin.json'))
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    for (const file of ['gen.ini', 'cand1.cnd']) {
+      const path = `${theme}/skin/${orientation}/${file}`
+      assert.equal(android.getText(path), source.getText(path), 'an icon plist does not opt into iOS point geometry')
+    }
+    assert.equal(new PalmBoard(skin, theme === 'light' ? 'default' : 'night', orientation, 'full26Pinyin').candidateSize.height, 50)
+  }
+  const after = await convertBaiduToSsf(source, { animations: false })
+  const afterSsf = await SsfPackage.open(after.bytes)
+  for (const theme of ['light', 'dark']) for (const image of ['bar.png', 'bg.png']) {
+    assert.ok(beforeSsf.file(theme, image))
+    assert.deepEqual(afterSsf.file(theme, image), beforeSsf.file(theme, image), 'menu artwork cannot resize the exported background')
+  }
+})
 
 test('BDI → BDS writes point-calibrated heights and complete edge artwork into the package', async () => {
   const source = fixture()

@@ -13,32 +13,38 @@ async function checkResourceTiles(page) {
     const bounds = grid.getBoundingClientRect()
     const nodes = Array.from(grid.children)
     const rects = nodes.map((node) => node.getBoundingClientRect())
+    const navNodes = nodes.filter((node) => node.matches(".nav-item"))
     const gap = parseFloat(getComputedStyle(grid).columnGap)
-    const columns = rects.filter((rect) => Math.abs(rect.top - rects[0].top) < 1).length
+    const firstRow = rects.filter((rect) => Math.abs(rect.top - rects[0].top) < 1)
+    const columns = firstRow.length
+    const gaps = firstRow.slice(1).map((rect, index) => rect.left - firstRow[index].right)
     return {
       columns,
       expectedColumns: Math.min(nodes.length, Math.max(1, Math.floor((bounds.width + gap) / (80 + gap)))),
       fixedSize: rects.every((rect) => Math.abs(rect.width - 80) < 1 && Math.abs(rect.height - 64) < 1),
       plainGrid: getComputedStyle(grid).backgroundColor === "rgba(0, 0, 0, 0)",
       fits: rects.every((rect) => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1),
-      startsLeft: Math.abs(rects[0].left - bounds.left) < 1,
+      symmetric: Math.abs(firstRow[0].left - bounds.left - (bounds.right - firstRow.at(-1).right)) < 1,
+      evenGaps: gaps.every((value) => value >= gap - 1 && Math.abs(value - gaps[0]) < 1),
+      gap: gaps[0],
       iconsFit: nodes.every((node) => {
         const icon = node.querySelector(".ui-icon").getBoundingClientRect()
         const tile = node.getBoundingClientRect()
         return icon.left >= tile.left && icon.right <= tile.right && icon.top >= tile.top && icon.bottom <= tile.bottom
       }),
-      labelsVisible: nodes.every((node) => {
+      labelsVisible: navNodes.every((node) => {
         const label = node.querySelector(".nav-label")
         const bounds = label.getBoundingClientRect()
         const tile = node.getBoundingClientRect()
         return bounds.width > 0 && bounds.height > 0 && label.scrollWidth <= label.clientWidth && bounds.top >= node.querySelector(".ui-icon").getBoundingClientRect().bottom && bounds.bottom <= tile.bottom
       }),
-      namesAccessible: nodes.every((node) => node.getAttribute("aria-label") === node.querySelector(".nav-label").textContent && node.title.startsWith(node.getAttribute("aria-label"))),
+      namesAccessible: navNodes.every((node) => node.getAttribute("aria-label") === node.querySelector(".nav-label").textContent && node.title.startsWith(node.getAttribute("aria-label"))),
     }
   })
   assert.equal(geometry.columns, geometry.expectedColumns, "resource columns follow available sidebar width")
-  assert.ok(geometry.fixedSize && geometry.plainGrid && geometry.fits && geometry.startsLeft && geometry.iconsFit && geometry.labelsVisible && geometry.namesAccessible, JSON.stringify(geometry))
+  assert.ok(geometry.fixedSize && geometry.plainGrid && geometry.fits && geometry.symmetric && geometry.evenGaps && geometry.iconsFit && geometry.labelsVisible && geometry.namesAccessible, JSON.stringify(geometry))
   assert.ok(await page.locator('[data-layout="tile"] > .nav-label').evaluateAll((labels) => labels.every((label) => /^[\u4e00-\u9fff]{4}$/.test(label.textContent))), "all resource tile labels have four Chinese characters")
+  return geometry
 }
 
 try {
@@ -53,9 +59,11 @@ try {
       await page.waitForFunction(() => !document.querySelector("#open").disabled)
       const close = page.locator("#file-operation-dialog[open] #file-operation-close")
       if (await close.isVisible()) await close.click()
-      assert.equal(await page.locator('.sidebar-overview [data-layout="tile"]').count(), 6)
+      assert.equal(await page.locator('.sidebar-overview [data-layout="tile"]').count(), 7)
+      assert.equal(await page.getByRole("button", { name: "资源清单", exact: true }).count(), 1)
       assert.deepEqual(await page.locator('[data-layout="tile"] > .nav-label').allTextContents(), ["通用配置", "图片资源", "按键样式", "音效资源", "动效设计", "粒子设计"])
-      for (const sidebarWidth of [180, 248, 320, 480, 700, 248]) {
+      let previousGeometry
+      for (const sidebarWidth of [180, 248, 260, 320, 480, 700, 248]) {
         const sidebar = page.locator(".sidebar")
         const initialWidth = await sidebar.evaluate((node) => node.getBoundingClientRect().width)
         const handle = await page.locator("#sidebar-resize-handle").boundingBox()
@@ -64,6 +72,12 @@ try {
         await page.mouse.move(x, y)
         await page.mouse.down()
         await page.mouse.move(x + sidebarWidth - initialWidth, y, { steps: 8 })
+        const geometry = await checkResourceTiles(page)
+        if (sidebarWidth === 260) {
+          assert.equal(geometry.columns, previousGeometry.columns)
+          assert.ok(geometry.gap > previousGeometry.gap, "resource gaps grow while dragging within the same column count")
+        }
+        previousGeometry = geometry
         await page.mouse.up()
         await page.evaluate(() => new Promise(requestAnimationFrame))
         assert.ok(Math.abs(await sidebar.evaluate((node) => node.getBoundingClientRect().width) - sidebarWidth) < 1)

@@ -70,12 +70,13 @@ export function bdiMenuIcons(bytes?: Uint8Array): BdiMenuIcon[] {
   return result
 }
 
-/** 有 toolbar 声明时保持原顺序；只有菜单时优先预览常用功能，手机端顺序由用户设置决定。 */
+/** 保留已声明的顺序，缺少的功能位补默认图标；手机端顺序由用户设置决定。 */
 export function bdiToolbarIcons(bytes?: Uint8Array): BdiMenuIcon[] {
   const entries = menuEntries(bytes)
   const toolbar = entries.filter((item) => item.position === "toolbar")
-  if (toolbar.length) return toolbar.slice(0, 4)
+  const defaults = bdiMenuIcons(bytes).slice(0, 4)
   // shortcut: 无工具栏声明时用已有菜单取图；真实功能列表需读取手机端设置。
   const common = FUNCTIONS.slice(0, 4).flatMap(([id]) => entries.find((item) => item.id === id) ?? [])
-  return [...common, ...entries].filter((item, index, items) => items.findIndex((entry) => entry.id === item.id) === index).slice(0, 4)
+  return [...(toolbar.length ? toolbar : [...common, ...entries]), ...defaults]
+    .filter((item, index, items) => items.findIndex((entry) => entry.id === item.id) === index).slice(0, 4)
 }

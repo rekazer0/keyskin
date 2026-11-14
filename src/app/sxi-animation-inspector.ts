@@ -4,6 +4,9 @@
 // into skin.json as one undo step through the same helpers the rest of the Palm inspector uses.
 
 import { element, iconButton } from "../dom-element.ts"
+import { ANIMATION_PRESETS } from "../animation-presets.ts"
+import { buildAnimationWrap } from "../palm/palm-animation.ts"
+import { addPalmStyle } from "../palm/palm-style-edit.ts"
 import {
   animationModeTitle, animationWarning, comboList, renderAnimationResource,
   type AnimationListItem,
@@ -45,7 +48,7 @@ import { field as propertyField, section, type FieldSpec } from "./property-rows
 import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
 import type { PreviewItem } from "../preview-items.ts"
-import { openPalmSkin, sxiPointer } from "./sxi-documents"
+import { openPalmSkin, palmTheme, sxiPointer } from "./sxi-documents"
 import { appState } from "./state"
 import { animationStyleActions, animationStyleCard } from "./animation-style-inspector"
 
@@ -327,6 +330,7 @@ function comboSection(pointer: SxiPointer, entry: AnimationEntry, table: JsonObj
   }))
   node.append(comboList({
     editable: isEditing(),
+
     empty: "没有子动画",
     children: children.map((id) => {
       const child = asObject(table[String(id)])
@@ -510,6 +514,23 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
       readFile: resolver instanceof PalmStyles ? file => resolver.bytes(file) : undefined }),
     styleFilter,
     editable: isEditing(),
+    presets: {
+      items: ANIMATION_PRESETS.filter(preset => shownInAnimationView(preset.category === "particle")),
+      label: appState.animationKeys.length ? `应用到 ${appState.animationKeys.length} 个按键` : "应用",
+      apply: preset => editSxi(current => appendAnimation(current, pointer, id => {
+        const wrap = asObject(buildAnimationWrap({ name: `ANIM${id}`, entries: { ...preset.fields, INFO: preset.label } }))!
+        const board = sxiPointer(appState.layoutPath)
+        const keys = board && asObject(sxiValue(current, board))?.keys
+        if (Array.isArray(keys) && appState.animationKeys.length) {
+          const selected = keys.map(asObject).filter(key => key && appState.animationKeys.includes(`KEY${key.id}`))
+          if (selected.length) {
+            const style = Number(addPalmStyle(current, palmTheme(), { s_5: { "1": Number(id) } }))
+            for (const key of selected) { key!.b = { ...asObject(key!.b), asi: style } }
+          }
+        }
+        return wrap
+      })),
+    },
     onSelect: selectAnimation,
     create: {
       options: ANIMATION_FAMILIES.filter((candidate) => shownInAnimationView(candidate.id === "a4"))

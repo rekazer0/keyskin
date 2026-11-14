@@ -25,7 +25,7 @@ import { isSsfBoardPath, ssfDocumentPackage, ssfSelectedBindings, ssfSkeleton } 
 import type { SkinArchive } from "../skin.ts"
 import { SsfLook } from "../ssf/ssf-look.ts"
 import { pngSize } from "../ssf/ssf-png.ts"
-import { iosToolbarScale } from "../ios-toolbar-geometry.ts"
+import { hasIosToolbarGeometry, iosToolbarScale } from "../ios-toolbar-geometry.ts"
 
 export function selectedSourceSections(): string[] {
   if (appState.resourceConfigActive && appState.selectedResourcePath) {
@@ -332,7 +332,7 @@ export function refreshToolbarPreview(
   const { width } = candidateRect
   const pointWidth = toolbarDevicePointWidth()
   toolbarPreview.setDevicePointWidth(pointWidth)
-  const nativeToolbar = gen?.get("LOGO", "LAYOUT_NAME") || appState.archive.isText(path.replace(/\/(port|land)\/[^/]+$/, "/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist"))
+  const nativeToolbar = hasIosToolbarGeometry(gen, document)
   // shortcut: native iOS toolbar height is calibrated against iPhone screenshots; recheck when its layout changes.
   const scale = appState.archive.format === "bdi" && inputBarInKeyboard() && nativeToolbar
     ? iosToolbarScale(width, pointWidth) : 1

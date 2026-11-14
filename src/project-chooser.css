@@ -8,7 +8,7 @@
 .project-chooser-body { overflow: auto; min-height: 0; }
 .project-chooser fieldset { display: block; margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
 .project-chooser legend { margin-bottom: 12px; padding: 0; font-size: var(--font-size-md); font-weight: 600; }
-.project-template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.project-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(0, var(--project-template-card-width))); gap: var(--space-md); }
 .project-chooser .project-template-card {
   position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 12px;
   min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md);

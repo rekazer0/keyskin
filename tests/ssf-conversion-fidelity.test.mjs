@@ -285,6 +285,27 @@ test('SSF toolbar embedded in the root background is split by layout geometry, n
   }
 })
 
+test('SSF transparent VPA placeholders do not define the input row height', async () => {
+  const files = unzipSync(ssfFixture())
+  const skin = parse(files, '1080/status1/phoneSkin.ini')
+  skin.appendSection('VPA_Bar', [{ key: 'BG_IMAGE', value: 'placeholder.png' }])
+  files['1080/status1/phoneSkin.ini'] = strToU8(skin.toString())
+  for (const size of [1, 10]) {
+    files['1080/status1/placeholder.png'] = encodePng(solid(size, size, [20, 40, 60], 0))
+    const pkg = await SsfPackage.open(zipSync(files))
+    for (const width of [480, 1080]) {
+      assert.equal(new SsfLook(pkg, 'light', [], width).inputBar(), undefined)
+    }
+    const { archive } = convertSsfToBaidu(pkg, template, undefined, 'bdi')
+    const gen = IniDocument.parse(archive.getText('light/skin/port/gen.ini'))
+    assert.equal(gen.get('SCAND', 'BACK_STYLE'), undefined)
+  }
+  files['1080/status1/placeholder.png'] = encodePng(solid(1080, 78, [0, 0, 0], 0))
+  const pkg = await SsfPackage.open(zipSync(files))
+  const row = decodePng(new SsfLook(pkg, 'light', [], 1080).inputBar().bytes)
+  assert.equal(row.height, 78, 'full-width artwork still defines the authored row height')
+})
+
 test('SSF input backgrounds survive transparent VPA artwork and templates without INPUT BACK_STYLE', async () => {
   const files = unzipSync(ssfFixture())
   const skin = parse(files, '1080/status1/phoneSkin.ini')

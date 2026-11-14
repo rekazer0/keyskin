@@ -80,8 +80,8 @@ export async function iosDefaultToolbarScene(
     ?? "currentColor"
   const side = Math.min(width / 18, height * 0.45)
   const icon = (name: string) => defaultToolbarIcon(name, side, color)
-  // shortcut: the phone owns the function order; use its standard controls when the skin supplies no artwork.
-  const functions = await Promise.all(["keyboard", "type", "clipboard-paste"].map(icon))
+  const images = await resolver.resolveToolbarImages()
+  const functions = await Promise.all(images.map((visual) => visual.image && visual.source ? visual : icon(visual.defaultIcon ?? "image-off")))
   const [logo, hide, more] = await Promise.all([icon("hand"), icon("chevron-down"), icon("chevron-right")])
   const layer = (visual: Visual, slot: Rect): SceneLayer => {
     const [, , w, h] = visual.source!

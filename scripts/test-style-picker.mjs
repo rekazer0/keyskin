@@ -53,10 +53,11 @@ async function snapshot(page, format) {
   }, format)
 }
 try {
-  for (const format of ['bds', 'sxi']) {
+  for (const format of ['bdi', 'bds', 'sxi']) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
     page.on('pageerror', error => errors.push(error.message))
-    const bytes = format === 'sxi' ? buildSxiZip(SkinArchive.open(bdsFixture())).bytes : bdsFixture()
+    const bytes = format === 'sxi' ? buildSxiZip(SkinArchive.open(bdsFixture())).bytes
+      : format === 'bdi' ? SkinArchive.open(bdsFixture()).toBytes('bdi') : bdsFixture()
     await open(page, `picker.${format}`, bytes)
     await selectKey(page, format)
     const before = await snapshot(page, format)
@@ -75,6 +76,11 @@ try {
     assert.equal(after.undo, before.undo + 1, '新建和替换引用只记一步撤销')
     assert.equal(after.image.normal, before.image.normal, '保留正常图')
     assert.equal(after.image.hl, 'bg,0', '只替换进入时点击的按下图')
+    await pressed().click()
+    await picker(page).getByRole('button', { name: '最近使用', exact: true }).click()
+    assert.equal(await picker(page).locator(`.ui-style-card[data-style-id="${after.id}"]`).count(), 1, '最近使用保留刚应用的样式')
+    await picker(page).locator('#picker-close').click()
+    await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
     assert.equal((await snapshot(page, format)).text, before.text, '撤销同时删除新样式')
     assert.equal((await snapshot(page, format)).id, before.id)
@@ -139,7 +145,6 @@ try {
       assert.deepEqual(await snapshot(page, format), before)
       await stateImage().click()
       await chooseImage(page, toStyle, 'unsliced')
-      await page.waitForFunction(() => document.querySelector('#undo').disabled === false)
       await page.waitForFunction(async () => {
         const { appState } = await import('/src/app/state.ts')
         return appState.pickerSelectedIndex === 1 || !appState.pickerTarget
@@ -150,6 +155,10 @@ try {
       if (format === 'bds' && toStyle) assert.match(afterSlices.text, /USE_ALPHA=1\nTILE_NUM=1/, '保留已有切片文件的设置')
       assert.equal(after.undo, before.undo + 1, '切片、样式与引用合为一步撤销')
       assert.equal(after.image[state === 'pressed' ? 'hl' : 'normal'], 'unsliced,1')
+      assert.deepEqual(await page.evaluate(async ({ id, state }) => {
+        const { visualResolver } = await import('/src/app/bda-documents.ts')
+        return (await visualResolver().resolve(id, state === 'pressed')).source
+      }, { id: after.id, state }), [0, 0, 2, 2], '应用后的样式能解析到真实切片')
       assert.equal(after.image[state === 'pressed' ? 'normal' : 'hl'], before.image[state === 'pressed' ? 'normal' : 'hl'])
       if (toStyle) {
         assert.equal(after.id, before.id)

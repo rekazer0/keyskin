@@ -25,6 +25,7 @@ import { field, section } from "./app/property-rows.ts"
 import { BDA_EVENT_LABELS } from "./bda-motion.ts"
 import { styleCard } from "./style-card.ts"
 import { animationPlayer } from "./animation-player.ts"
+import { ANIMATION_PRESETS, bdaPresetFields } from "./animation-presets.ts"
 
 /** Which effects the inspector lists, and the remembered selection (kept by the caller). */
 export type BdaAnimationView = {
@@ -47,6 +48,7 @@ type BdaAnimationEditorOptions = {
   onDesignWidth: (value: number) => void
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
+  onAnimationPreset?: (key: string, fields: Record<string, number>) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
   /** The player's keyboard for an effect: plays it on a keyboard key bound to it. */
   keyboardPlayback?: (effectID: string) => KeyboardPlayback
@@ -427,6 +429,10 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     thumbnail: id => ({ clip: bdaPreviewClip(animation, id), key: `${options.path}|${id}`, resolver: options.resolver, resourceParticles: true }),
     styleFilter,
     editable: options.editable,
+    presets: effect && options.onAnimationPreset ? {
+      items: ANIMATION_PRESETS.filter(preset => bdaPresetFields(preset, effect.kind)),
+      apply: preset => options.onAnimationPreset!(effectID(effect), bdaPresetFields(preset, effect.kind)!),
+    } : undefined,
     onSelect: view.onSelect,
     listRows: [width],
     player: effect && {

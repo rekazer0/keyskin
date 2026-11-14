@@ -18,6 +18,32 @@ test('BDI inspector lists all 29 screenshot functions even without a menu plist'
   assert.ok(icons.slice(4).every(icon => icon.position === 'menu'))
 })
 
+test('BDI preview keeps four function slots before and after configuring a single icon', () => {
+  for (const bytes of [undefined, plist([item('17', '键盘类型', 'custom/keyboard', 'toolbar')])]) {
+    const icons = bdiToolbarIcons(bytes)
+    assert.deepEqual(icons.map(icon => icon.id), ['17', '18', '19', '26'])
+    assert.ok(icons.every(icon => icon.icon && icon.path))
+    assert.equal(icons[0].path, bytes ? 'custom/keyboard' : '1.0/toolbarMenuItem_KBSwitch_Normal')
+  }
+})
+
+test('partial BDI artwork retains unconfigured functions as defaults without creating resources', async () => {
+  const original = globalThis.createImageBitmap
+  globalThis.createImageBitmap = async () => ({ width: 60, height: 60 })
+  try {
+    const archive = SkinArchive.open(zipSync({
+      'skin/light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist': plist([item('17', '键盘类型', 'custom/keyboard', 'toolbar')]),
+      'skin/light/skin/res/logo/custom/keyboard.png': new Uint8Array([1]),
+    }), 'bdi')
+    const before = archive.toBytes()
+    const icons = await new AtlasResolver(archive, 'light', 'port').resolveToolbarImages()
+    assert.deepEqual(icons.map(icon => icon.label), labels.slice(0, 4))
+    assert.deepEqual(icons.map(icon => Boolean(icon.image)), [true, false, false, false])
+    assert.deepEqual(icons.map(icon => icon.defaultIcon), ['keyboard', 'arrow-left-right', 'smile', 'search'])
+    assert.deepEqual(archive.toBytes(), before)
+  } finally { globalThis.createImageBitmap = original }
+})
+
 test('BDI menu functions match by ID even with obfuscated labels, custom filenames, or menu position', () => {
   const bytes = plist([
     item('55', 'a'.repeat(64), '/jyx/55dq.png'),
@@ -87,9 +113,9 @@ test('menu-only BDI can preview functions outside the usual four and deduplicate
     item('23', 'title', 'voice'), item('23', 'duplicate', 'other-voice'),
     item('35', 'title', 'clipboard'), item('99', 'title', 'extension'),
   ]))
-  assert.deepEqual(icons.map(icon => icon.id), ['23', '35', '99'])
+  assert.deepEqual(icons.map(icon => icon.id), ['23', '35', '99', '17'])
   assert.equal(icons[0].path, 'voice')
-  assert.deepEqual(bdiToolbarIcons(strToU8('invalid')), [])
+  assert.deepEqual(bdiToolbarIcons(strToU8('invalid')).map(icon => icon.id), ['17', '18', '19', '26'])
 })
 
 test('menu-only BDI previews common function artwork and leaves the archive unchanged', async () => {

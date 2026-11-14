@@ -20,6 +20,8 @@ export type AiDraft = {
   conversation: AiDesignConversation
   response: string
   variants?: AiDraftVariant[]
+  excludedPaths?: Set<string>
+  excludedEdits?: Map<string, Set<string>>
 }
 
 export type AiDraftVariant = {

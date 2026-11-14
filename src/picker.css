@@ -27,18 +27,18 @@
 .style-library-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--line); }
 .style-library-bar > [hidden] { display: none; }
 .style-library-bar > .ui-list-toolbar { margin-left: auto; }
+.style-library-bar:not(:has(> :not([hidden]))) { display: none; }
 /* 网格只渲染可见的行（picker-window.ts renderLibraryWindow），上下 padding 撑出其余行的高度；滚动放在外层，padding 才不会撑大视口。 */
-.style-library-scroll { min-height: 0; overflow: auto; overflow-anchor: none; }
+.style-library-scroll { grid-row: 2; min-height: 0; overflow: auto; overflow-anchor: none; }
 /* 已经只渲染可见行，卡片不再跳过布局：未渲染过的卡片按占位高度报 offsetHeight，行高会量错。 */
 .style-library-grid > .ui-style-card { content-visibility: visible; }
 .style-library-scroll > .style-library-grid { padding: calc(var(--space-lg) + var(--_library-before, 0px)) var(--space-lg) calc(var(--space-lg) + var(--_library-after, 0px)); }
 .style-library-empty { position: absolute; inset: 50% 0 auto; pointer-events: none; }
 .style-library-empty[hidden] { display: none; }
-.style-library-preview { display: flex; align-items: flex-start; gap: var(--space-lg); padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--line); background: var(--panel); }
+.style-library-preview { grid-row: 3; display: flex; align-items: flex-start; gap: var(--space-lg); padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--line); background: var(--panel); }
 .style-library-preview[hidden] { display: none; }
 .style-library-preview > .ui-icon-button { margin-left: auto; }
 .style-library-preview-image { display: flex; flex: 0 0 180px; height: 120px; overflow: hidden; border-radius: var(--radius-sm); }
-.style-library-preview-image:has(> .ui-style-sound) { height: auto; flex-basis: calc(var(--style-card-width) * 2); }
 .style-library-preview-image > .ui-style-sound { width: 100%; box-sizing: border-box; }
 .style-library-preview-image :is(img, canvas) { min-width: 0; width: 100%; height: 100%; object-fit: contain; }
 .style-library-preview-image canvas { width: 50%; }
@@ -49,6 +49,15 @@
 .style-library-preview-info small { color: var(--secondary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
 .style-library-preview-actions { display: flex; align-items: center; gap: var(--space-xs); }
 .style-library-preview-actions > [hidden] { display: none; }
+.style-library-preview[data-variant="sound"] { align-items: center; gap: var(--space-md); }
+.style-library-preview[data-variant="sound"] .style-library-preview-image { flex: none; width: var(--control-height-lg); height: auto; overflow: visible; }
+.style-library-preview[data-variant="sound"] .ui-style-sound { padding: 0; background: none; }
+.style-library-preview[data-variant="sound"] .ui-style-sound > .ui-icon-button { width: var(--control-height-lg); height: var(--control-height-lg); background: var(--content); }
+.style-library-preview[data-variant="sound"] .ui-style-sound-info { display: none; }
+.style-library-preview[data-variant="sound"] .style-library-preview-info { flex: 1; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-lg); align-items: center; }
+.style-library-preview[data-variant="sound"] .style-library-preview-info > :is(strong, small) { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.style-library-preview[data-variant="sound"] .style-library-preview-info > strong { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.style-library-preview[data-variant="sound"] .style-library-preview-actions { grid-column: 2; grid-row: 1 / 3; }
 /* 网页端手机宽度：搜索框单独占第二行。 */
 @media (max-width: 640px) {
   .picker-window:has(.picker-toolbar .ui-search:not([hidden])) { --_toolbar-h: 96px; }
@@ -56,4 +65,6 @@
   .picker-toolbar .ui-pane-header-actions { display: contents; }
   #picker-close { order: 1; margin-left: auto; }
   .picker-toolbar .ui-search { order: 2; flex-basis: 100%; width: 100%; }
+  .style-library-preview[data-variant="sound"] .style-library-preview-info { grid-template-columns: minmax(0, 1fr); }
+  .style-library-preview[data-variant="sound"] .style-library-preview-actions { grid-column: 1; grid-row: 3; padding-top: var(--space-xs); }
 }

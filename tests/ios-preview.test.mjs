@@ -1,9 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { iosCandidateBackground, iosToolbarImageScene } from '../src/ios-preview.ts'
-import { iosToolbarScale } from '../src/ios-toolbar-geometry.ts'
+import { hasIosToolbarGeometry, iosToolbarScale } from '../src/ios-toolbar-geometry.ts'
 import { IniDocument } from '../src/ini.ts'
 import { previewItems } from '../src/preview-items.ts'
+
+test('iOS point geometry comes from layout declarations, independently of menu artwork', () => {
+  assert.equal(hasIosToolbarGeometry(undefined, undefined), false)
+  assert.equal(hasIosToolbarGeometry(IniDocument.parse('[CAND]\nVIEW_RECT=0,0,360,50\n'), IniDocument.parse('[ICON1]\nKEY=F14\nSIZE=250,34\n')), false)
+  assert.equal(hasIosToolbarGeometry(IniDocument.parse('[LOGO]\nLAYOUT_NAME=logo\n'), undefined), true)
+  assert.equal(hasIosToolbarGeometry(undefined, IniDocument.parse('[ICON1]\nFIX_SIZE=50,52\n')), true)
+})
 
 test('native iOS toolbar keeps its point height while the keyboard stretches to the phone width', () => {
   const scale = iosToolbarScale(1125, 440)

@@ -98,10 +98,13 @@ try {
   await page.evaluate(async () => {
     const { appState } = await import("/src/app/state.ts")
     const { populateKeyInspector } = await import("/src/app/key-inspector.ts")
+    appState.selectedCandidate = false
     appState.selectedToolbarSections = ["ICON1"]
     populateKeyInspector()
   })
   assert.deepEqual(await sectionCodes(), ["ICON1", "SWITCH"])
+  assert.deepEqual(await group("ICON1").locator(".document-section-title").allTextContents(), ["按钮", "按钮动画"])
+  assert.ok((await railTitles()).some(title => title.startsWith("按钮")), "分类栏与正文使用相同的简洁名称")
   assert.equal(await row("ICON1", "SIZE").getByRole("spinbutton").count(), 2)
   assert.equal(await row("ICON1", "PERSIST").getByRole("button", { name: "始终", exact: true }).count(), 1)
   assert.equal(await source(CAND), candBefore)

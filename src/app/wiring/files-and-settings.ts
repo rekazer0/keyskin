@@ -21,7 +21,7 @@ import { type ExportFormat } from "../../export.ts"
 import { type BdaPlatform } from "../../bda-platform.ts"
 import { refreshUpdateStatus, settingsController, showSettingsPage, nativeSettings, savedDefaultDevice, applyCanvasBackground, initialCanvasBackground, applyEditorCrosshairSetting, applyAppTheme, systemTheme, savedSourceFontSize, applySourceFontSize, saveSourceFontSize, initializeWindowMaterial, handleWindowMaterialError, applyWindowMaterialWithRetry, currentWindowMaterialOpacity, applyWindowMaterialOpacity, startWindowsWindowDrag, restoreWindowMaterialAfterDrag, applySidebarViewVisibility, applyInspectorTabsVisibility, applySourceEditorFeatures, setCanvasDropState } from "../preferences"
 import { clientLogZip, clientLog } from "../../client-log.ts"
-import { applyAiDesignDraft, discardAiDesignDraft } from "../ai-panel"
+import { applyAiDesignDraft, discardAiDesignDraft, toggleAiDraftComparison } from "../ai-panel"
 import { activateSourceWorkspace, chooseAndroidSourceDirectory, applySourceDirectory } from "../source-workspace"
 import { open } from "@tauri-apps/plugin-dialog"
 import { canvasDeviceValue, type CanvasBackground } from "../../canvas-background.ts"
@@ -292,6 +292,7 @@ export function wireFilesAndSettings(): void {
   showSettingsPage("appearance")
   wireAiSessions()
   aiDraftApply.addEventListener("click", () => applyAiDesignDraft())
+  $("#ai-draft-compare").addEventListener("click", toggleAiDraftComparison)
   aiDraftCancel.addEventListener("click", () => {
     discardAiDesignDraft("草稿已丢弃 · 本轮未修改皮肤，可调整要求后重试")
   })

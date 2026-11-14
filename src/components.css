@@ -92,6 +92,8 @@
 .ui-dialog-header > .ui-icon-button { flex: none; margin: calc(var(--space-xs) * -1) calc(var(--space-xs) * -1) 0 0; }
 .ui-dialog-body { display: grid; gap: var(--space-md); min-height: 0; }
 .ui-dialog-body[hidden] { display: none; }
+.ui-dialog-body[data-layout="stack"] { display: flex; flex-direction: column; }
+.ui-dialog-body[data-layout="stack"] > * { flex-shrink: 0; }
 .ui-dialog-footer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-sm); padding-top: var(--space-lg); border-top: 1px solid var(--line-soft); }
 .ui-dialog-status { flex: 1; min-width: 0; color: var(--secondary); font-size: var(--font-size-xs); }
 .ui-dialog-footer > .ui-button { flex-shrink: 0; min-width: 64px; }
@@ -453,7 +455,7 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 .ui-subsection { display: grid; gap: var(--_field-gap, var(--space-sm)); }
 .ui-subsection + .ui-subsection { margin-top: var(--space-lg); }
 .ui-subsection > h4 { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.ui-disclosure > summary { list-style: none; justify-content: flex-start; }
+.ui-disclosure > summary { list-style: none; justify-content: flex-start; padding: 0; border: 0; }
 .ui-disclosure > summary::-webkit-details-marker { display: none; }
 .ui-disclosure > summary > .ui-icon { transition: transform var(--duration-fast) var(--ease-standard); }
 .ui-disclosure[open] > summary > .ui-icon { transform: rotate(90deg); }
@@ -704,6 +706,17 @@ body {
 .ui-style-sound-info > strong { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-xs); font-weight: 400; color: var(--secondary); }
 .ui-style-sound-info > small { font-size: var(--font-size-xs); color: var(--tertiary); }
 .ui-style-sound-info > small:empty { display: none; }
+.ui-style-sound[data-variant="card"] { height: 100%; box-sizing: border-box; gap: var(--space-md); padding: var(--space-md); border-radius: 0; background: none; }
+.ui-style-sound[data-variant="card"] > .ui-icon-button { width: var(--control-height-lg); height: var(--control-height-lg); background: var(--panel); }
+.ui-style-sound[data-variant="card"] > .ui-icon-button > .ui-icon { width: var(--icon-size-md); height: var(--icon-size-md); }
+.ui-style-sound[data-variant="card"][data-playing="true"] > .ui-icon-button { background: var(--accent-soft); }
+.ui-style-sound[data-variant="card"] > .ui-icon-button:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
+@media (hover: hover) { .ui-style-sound[data-variant="card"] > .ui-icon-button:hover { background: var(--hover); } }
+.ui-style-sound[data-variant="card"] > .ui-style-sound-info { flex: 1; }
+.ui-style-sound[data-variant="card"] .ui-style-card-heading > strong { font-size: var(--font-size-sm); }
+.ui-style-card[data-style-kind="sound"] { grid-template-rows: minmax(0, 1fr); min-height: calc(var(--control-height-lg) + var(--space-xl) * 2); padding: 0; gap: 0; }
+.ui-style-card[data-style-kind="sound"] .ui-style-card-heading > .ui-list-item-meta { flex: none; margin-left: auto; }
+.ui-style-card[data-style-kind="sound"]:has(> .ui-style-remove) > .ui-style-sound { padding-right: calc(var(--space-2xl) + var(--space-sm)); }
 .ui-style-card-heading > .ui-style-sound { padding: 0; background: none; }
 .ui-style-card-heading > .ui-style-sound .ui-style-sound-info { display: none; }
 .ui-style-card-heading > .ui-style-sound > .ui-icon-button { width: var(--control-height-sm); height: var(--control-height-sm); }
@@ -737,8 +750,8 @@ body {
 /* —— 样式引用卡（检查器，styleReferenceCard()）：左侧可输入的编号与类型图标，右侧正常 | 按下两格预览或单格内容 —— */
 .ui-style-ref-list { display: grid; gap: var(--space-xs); min-width: 0; }
 .ui-style-ref-list > input { display: none; }
-.ui-style-ref { position: relative; display: grid; grid-template-columns: 84px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 88px; min-width: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--content); }
-.ui-style-ref:has(> .ui-style-ref-meta > .ui-style-ref-name) { grid-template-columns: minmax(84px, 7fr) minmax(0, 13fr); }
+.ui-style-ref { position: relative; display: grid; grid-template-columns: var(--style-reference-meta-width) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: var(--style-reference-height); min-width: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--content); }
+.ui-style-ref:has(> .ui-style-ref-meta > .ui-style-ref-name) { grid-template-columns: minmax(var(--style-reference-meta-width), 7fr) minmax(0, 13fr); }
 .ui-style-ref-meta { display: grid; place-content: center; justify-items: center; gap: var(--space-xs); min-width: 0; padding: 0 var(--space-xs); border-right: 1px solid var(--line-soft); }
 .ui-style-ref-meta > input { width: 100%; min-width: 0; height: auto; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text); font: var(--font-weight-semibold) var(--font-size-lg) var(--font-ui); text-align: center; }
 .ui-style-ref-meta > input:focus { outline: 0; box-shadow: var(--focus-ring); }
@@ -752,6 +765,13 @@ body {
 @media (hover: hover) { .ui-style-ref .ui-style-state[tabindex="0"]:hover { background: var(--hover); } }
 .ui-style-ref .ui-style-state[tabindex="0"]:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
 .ui-style-ref .ui-style-state:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--accent); }
+/* 音效引用合为一个播放器：试听在左，名称与文件信息共用右侧文字区。 */
+.ui-style-ref[data-variant="sound"] { grid-template-columns: minmax(0, 1fr); }
+.ui-style-ref[data-variant="sound"] :is(.ui-style-ref-states, .ui-style-state) { padding: 0; border-radius: 0; }
+.ui-style-ref[data-variant="sound"]:has(> .ui-style-remove) .ui-style-sound { padding-right: calc(var(--space-2xl) + var(--space-sm)); }
+.ui-style-ref[data-variant="sound"] .ui-style-ref-meta { display: block; padding: 0; border: 0; }
+.ui-style-ref[data-variant="sound"] .ui-style-ref-meta > input { display: block; font: var(--font-weight-medium) var(--font-size-sm) var(--font-mono); text-align: left; }
+.ui-style-ref[data-variant="sound"] .ui-style-ref-meta > .ui-style-card-kind { display: none; }
 /* 移除条（removeStrip()）：样式卡、样式引用卡右边缘叠一条窄的 trash-2 区，不占布局；鼠标不在卡片上时连背景一起隐藏，
    悬停卡片时半透明出现，悬停自身时加宽并变为实色红底（触屏常显）。被引用时禁用（不变红）。 */
 .ui-style-card { position: relative; }
@@ -823,7 +843,6 @@ body {
 .ui-image-card-size[hidden] { display: none; }
 /* 预览与图片卡片同为固定高度，改宽时卡片高度不变；文字只留一行标题与一行摘要。 */
 .ui-listbox > .ui-style-card > .ui-style-preview { order: -1; aspect-ratio: auto; }
-.ui-style-card[data-style-kind="sound"] > .ui-style-preview { aspect-ratio: auto; height: auto; grid-template-columns: minmax(0, 1fr); border: 0; background: none; }
 .ui-listbox > .ui-style-card > .ui-style-card-caption { padding: 0 var(--space-xs); }
 .ui-listbox > .ui-style-card .ui-animation-stage { height: 100%; border-radius: 0; }
 .ui-image-card-caption { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; padding: 0 var(--space-xs); }
@@ -834,3 +853,15 @@ body {
 .ui-image-card:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
 .ui-image-card[aria-selected="true"], .ui-listbox > .ui-style-card[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .ui-image-card:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+.ui-measurements {
+  position: absolute;
+  inset-inline: var(--space-xs);
+  bottom: var(--space-xs);
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xs);
+  pointer-events: none;
+}
+.ui-measurements[hidden] { display: none; }
+.ui-measurements > .ui-button { pointer-events: auto; background: var(--panel); font-family: var(--font-mono); }

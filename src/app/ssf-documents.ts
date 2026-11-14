@@ -82,7 +82,7 @@ function ssfSectionBinding(section: string): { section: string; action: string; 
   if (!document || !isSsfBoardPath(appState.layoutPath)) return
   const action = document.get(section, "CENTER")?.trim()
   const layout = appState.layoutPath.split("/").pop()!
-  return action ? { section, action, binding: ssfKeyBinding(layout, action, orientation.value === "land", document.get(section, "SSF_SECTION"), document.get(section, "SSF_BG")) } : undefined
+  return action ? { section, action, binding: ssfKeyBinding(layout, action, orientation.value === "land", document.get(section, "SSF_SECTION"), document.get(section, "SSF_BG"), document.get(section, "SSF_FG")) } : undefined
 }
 
 /** The Sogou classes the selected canvas key is drawn from. */

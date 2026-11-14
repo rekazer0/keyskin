@@ -10,6 +10,7 @@
 import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { resolveCandidateRect } from "../candidate-style.ts"
+import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
 import { parseXmlPlist } from "../palm/palm-plist.ts"
 import { offsetFromSection, previewItems } from "../preview-items.ts"
 import { SkinArchive } from "../skin.ts"
@@ -405,7 +406,7 @@ function keyboardBackground(styles: BaiduStyles, archive: SkinArchive, theme: Th
     if (pair?.normal) return resizeImage(pair.normal.image, SOGOU_WIDTH, height)
     return pair?.color ? resizeImage(solid(pair.color), SOGOU_WIDTH, height) : undefined
   }
-  const native = sources.panel[0]?.get("LOGO", "LAYOUT_NAME") || archive.getBytes(`${theme}/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`)
+  const native = hasIosToolbarGeometry(sources.panel[0], sources.cand[0])
   // Native toolbar artwork follows the 1080-wide Sogou skeleton, not the older 126/720 image canvas.
   const barHeight = native ? 120 : SOGOU_BAR_HEIGHT
   const panelHeight = native ? 642 : SOGOU_KEYBOARD_HEIGHT

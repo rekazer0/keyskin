@@ -164,7 +164,7 @@ async function refreshToolbarIconCards(): Promise<void> {
 }
 /** F14 的图标是原生图片资源，不是 SWITCH 的文字样式。 */
 export function toolbarIconSection(): HTMLElement {
-  const group = section("工具栏图标", [])
+  const group = section("图标", [])
   const archive = appState.archive
   const images = toolbarImages()
   void images.then(visuals => {

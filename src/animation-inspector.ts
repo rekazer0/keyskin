@@ -10,6 +10,7 @@ import { animationPlayer, type AnimationPlayerOptions } from "./animation-player
 import { animationWorkspaceHosts } from "./animation-workspace.ts"
 import { styleCard } from "./style-card.ts"
 import { section } from "./app/property-rows.ts"
+import { openAnimationPresets, type AnimationPreset } from "./animation-presets.ts"
 
 export type AnimationMode = "all" | "motion" | "particle"
 
@@ -75,6 +76,7 @@ type AnimationResourceView = {
   onSelect(id: string): void
   /** One option creates directly; several show a type menu. */
   create?: { options: Array<[kind: string, label: string]>; run(kind: string): void }
+  presets?: { items: readonly AnimationPreset[]; label?: string; apply(preset: AnimationPreset): void }
   duplicate?(): void
   remove?: { run(): void; blocked?: string }
   keyFilter?: AnimationKeyFilter
@@ -320,7 +322,18 @@ function styleSection(view: AnimationResourceView): HTMLElement | undefined {
 
 type ListActions = Pick<AnimationResourceView, "create" | "duplicate" | "remove" | "editable"> & { noun: string; current?: string }
 
-const listActions = (view: AnimationResourceView) => actionsToolbar({ ...view, noun: MODE_NOUN[view.mode], current: view.items.find((item) => item.id === view.selected)?.title })
+const listActions = (view: AnimationResourceView) => {
+  const toolbar = actionsToolbar({ ...view, noun: MODE_NOUN[view.mode], current: view.items.find((item) => item.id === view.selected)?.title }) ??
+    (view.presets?.items.length ? element("div", "ui-list-toolbar") : undefined)
+  if (toolbar && view.presets?.items.length) {
+    const button = Object.assign(element("button", "ui-button"), { type: "button", textContent: "预设" })
+    button.setAttribute("aria-label", "动效预设")
+    button.disabled = !view.editable
+    button.addEventListener("click", () => openAnimationPresets(view.presets!.items, view.presets!.apply, view.presets!.label))
+    toolbar.append(button)
+  }
+  return toolbar
+}
 
 function styleActions(view: AnimationResourceView): HTMLElement | undefined {
   const styles = view.styles

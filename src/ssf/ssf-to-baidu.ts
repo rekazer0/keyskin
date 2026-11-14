@@ -215,10 +215,10 @@ class ThemeConverter {
       const action = layout.get(section, "CENTER")?.trim()
       if (!action) continue
       for (const [field, value] of Object.entries(ssfKeyActions(layoutName, action, layout.get(section, "SSF_SECTION")))) {
-        if (layout.get(section, field) === undefined) layout.set(section, field, value)
+        layout.set(section, field, value)
       }
       const [, , width, height] = numbers(layout.get(section, "VIEW_RECT"))
-      const look = this.look.key(layoutName, action, landscape, width > 0 && height > 0 ? [width, height] : undefined, layout.get(section, "SSF_SECTION"), layout.get(section, "SSF_BG"))
+      const look = this.look.key(layoutName, action, landscape, width > 0 && height > 0 ? [width, height] : undefined, layout.get(section, "SSF_SECTION"), layout.get(section, "SSF_BG"), layout.get(section, "SSF_FG"))
       if (look.back) layout.set(section, "BACK_STYLE", this.resources.imageStyle(look.back))
       if (look.fore) {
         layout.set(section, "FORE_STYLE", this.resources.imageStyle(look.fore))

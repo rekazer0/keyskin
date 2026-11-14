@@ -13,6 +13,7 @@ import { isTauri, source, currentDeviceValue, preview } from "./canvas-interacti
 import { isEditing, commitBatch, updateDirty } from "./edit-history"
 import { type AiDraftVariant, type AiDraft } from "./types"
 import { changedJsonSections, createDraftReview } from "../ai-draft-review"
+import { draftEdits, selectedDraftChanges } from "../ai-draft-selection.ts"
 import { IniDocument } from "../ini.ts"
 import { renderFiles } from "./file-tree"
 import { selectFile } from "./navigation"
@@ -30,7 +31,7 @@ import { tileSlices } from "../tiles.ts"
 import { invoke } from "@tauri-apps/api/core"
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core"
 import { modelThinking, modelThinkingLevel } from "../model-thinking"
-import { syncAiSessionControls } from "./ai-sessions"
+import { recordAiApplication, syncAiSessionControls } from "./ai-sessions"
 
 /** Files a panel-scoped request may change: a Sogou look keeps every key class in its own folder. */
 function aiPanelFiles(target: SkinArchive): Set<string | undefined> {
@@ -401,7 +402,8 @@ function createAiVariantReview(variant: AiDraftVariant, index: number): HTMLLIEl
   button.type = "button"
   button.className = "ai-variant-select"
   button.dataset.variantId = variant.id
-  button.innerHTML = `<span class="ai-variant-index">${index + 1}</span><span class="ai-variant-copy"><strong></strong><small></small></span><span class="system-symbol" data-system-symbol="chevron.right" aria-hidden="true"></span>`
+  button.innerHTML = `<span class="ai-variant-index">${index + 1}</span><span class="ai-variant-copy"><strong></strong><small></small></span>`
+  button.append(symbolSpan("chevron-right"))
   button.querySelector("strong")!.textContent = variant.title
   button.querySelector("small")!.textContent = `${variant.changes.length} 个文件 · ${variant.sections.length} 个配置块`
   button.addEventListener("click", () => chooseAiVariant(variant.id))
@@ -435,6 +437,10 @@ export function setAiDesignDraft(draft: AiDraft | undefined): void {
   aiDraftPanel.hidden = !draft
   // The draft card takes the composer's place until it is applied or discarded.
   aiDesignChat.toggleAttribute("data-draft", Boolean(draft))
+  const compare = $("#ai-draft-compare")
+  compare.setAttribute("aria-pressed", "false")
+  compare.textContent = "查看原稿"
+  if (draft && !draft.variants?.length) draft.sections = aiDraftSections(selectedDraftChanges(draft.drafts, draft.excludedPaths, draft.excludedEdits))
   preview.setDraftSections(draft?.sections ?? [])
   syncAiDesignControls()
   if (draft) {
@@ -450,9 +456,43 @@ export function setAiDesignDraft(draft: AiDraft | undefined): void {
     aiDraftFiles.replaceChildren(...draft.variants.map((variant, index) => createAiVariantReview(variant, index)))
     return
   }
-  aiDraftSummary.textContent = `涉及 ${draft.changes.length} 个文件` +
-    (draft.sections.length ? ` · ${draft.sections.length} 个配置块` : "")
-  aiDraftFiles.replaceChildren(...draft.drafts.map(createDraftReview))
+  const selected = selectedDraftChanges(draft.drafts, draft.excludedPaths, draft.excludedEdits)
+  const selectedPaths = new Set(selected.map(change => change.path))
+  const totalEdits = draft.drafts.flatMap(change => draftEdits(change))
+  const selectedEdits = draft.drafts.reduce((count, change) => count + (draft.excludedPaths?.has(change.path) ? 0
+    : draftEdits(change).filter(edit => !draft.excludedEdits?.get(change.path)?.has(edit.id)).length), 0)
+  aiDraftSummary.textContent = totalEdits.length
+    ? `已选 ${selectedEdits} / ${totalEdits.length} 项 · ${selected.length} / ${draft.drafts.length} 文件`
+    : `已选 ${selected.length} / ${draft.drafts.length} 个文件`
+  aiDraftFiles.replaceChildren(...draft.drafts.map(change => createDraftReview(change, {
+    checked: selectedPaths.has(change.path),
+    indeterminate: selectedPaths.has(change.path) && Boolean(draft.excludedEdits?.get(change.path)?.size),
+    toggle(checked) {
+      draft.excludedPaths ??= new Set()
+      if (checked) draft.excludedPaths.delete(change.path)
+      else draft.excludedPaths.add(change.path)
+      if (checked) draft.excludedEdits?.delete(change.path)
+      setAiDesignDraft(draft)
+      Array.from(aiDraftFiles.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+        .find(input => input.getAttribute("aria-label") === `应用 ${change.path} 的修改`)?.focus()
+    },
+    edits: draftEdits(change).map(edit => ({
+      label: edit.label,
+      checked: !draft.excludedPaths?.has(change.path) && !draft.excludedEdits?.get(change.path)?.has(edit.id),
+      toggle(checked) {
+        draft.excludedEdits ??= new Map()
+        const excluded = draft.excludedEdits.get(change.path) ?? new Set<string>()
+        if (draft.excludedPaths?.has(change.path)) for (const item of draftEdits(change)) excluded.add(item.id)
+        draft.excludedPaths?.delete(change.path)
+        if (checked) excluded.delete(edit.id)
+        else excluded.add(edit.id)
+        draft.excludedEdits.set(change.path, excluded)
+        setAiDesignDraft(draft)
+        Array.from(aiDraftFiles.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+          .find(input => input.getAttribute("aria-label") === `应用 ${change.path} · ${edit.label} 的修改`)?.focus()
+      },
+    })),
+  })))
   previewAiDraft(draft)
 }
 
@@ -473,7 +513,7 @@ export function previewAiDraft(draft: AiDraft): void {
   try {
     source.commit()
     // Revalidate before writing: never overwrite edits made since generation.
-    draft.changes = validatedAiChanges(draft.target, draft.drafts)
+    draft.changes = validatedAiChanges(draft.target, selectedDraftChanges(draft.drafts, draft.excludedPaths, draft.excludedEdits))
   } catch (error) {
     aiDesignStatus.textContent = `${aiDesignErrorMessage(error)}。无法在画布预览，请丢弃后重新生成。`
     return
@@ -491,6 +531,19 @@ export function revertAiDraftPreview(): void {
   if (appState.archive === current.target) refreshAfterAiDraft(current.target)
 }
 
+/** 在同一份画布切换原稿与已勾选草稿，不写入撤销记录。 */
+export function toggleAiDraftComparison(): void {
+  const draft = appState.aiDesignDraft
+  if (!draft || draft.variants?.length || appState.aiDesignBusy) return
+  const original = Boolean(appState.aiDraftPreview)
+  if (original) revertAiDraftPreview()
+  else previewAiDraft(draft)
+  preview.setDraftSections(original ? [] : draft.sections)
+  const compare = $("#ai-draft-compare")
+  compare.setAttribute("aria-pressed", String(original))
+  compare.textContent = original ? "查看草稿" : "查看原稿"
+}
+
 /** Turns the previewed draft into a normal undoable edit; the archive already holds its content. */
 export function acceptAiDraftPreview(): void {
   const current = appState.aiDraftPreview
@@ -501,6 +554,7 @@ export function acceptAiDraftPreview(): void {
   setAiDesignDraft(undefined)
   aiDesignPanel.dataset.state = "done"
   aiDesignStatus.textContent = `已应用 ${current.changes.length} 个文件的修改，可使用撤销恢复。`
+  recordAiApplication(current.changes.length)
 }
 
 export function discardAiDesignDraft(message: string): void {
@@ -537,6 +591,9 @@ export function applyAiDesignDraft(): void {
     return
   }
   if (!appState.aiDraftPreview) {
+    previewAiDraft(draft)
+  }
+  if (!appState.aiDraftPreview) {
     aiDesignPanel.dataset.state = "error"
     aiDesignStatus.textContent = "草稿无法在画布预览，请丢弃后重新生成。"
     return
@@ -570,7 +627,9 @@ export function syncAiDesignControls(): void {
   // button during a run, so only the idle submit state is affected.
   appState.aiChatController?.setEnabled(!appState.aiDesignDraft && !fetchingThinking && appState.savedModels.length > 0)
   aiDraftApply.disabled = appState.aiDesignBusy || !isEditing() || Boolean(appState.aiDesignDraft?.variants?.length)
+    || Boolean(appState.aiDesignDraft && !selectedDraftChanges(appState.aiDesignDraft.drafts, appState.aiDesignDraft.excludedPaths, appState.aiDesignDraft.excludedEdits).length)
   aiDraftCancel.disabled = appState.aiDesignBusy
+  ;($("#ai-draft-compare") as HTMLButtonElement).disabled = appState.aiDesignBusy || !appState.aiDesignDraft || Boolean(appState.aiDesignDraft.variants?.length)
 }
 
 const AI_DESIGN_MODEL_KEY = "ai-design-model"

@@ -6,7 +6,7 @@ import type { IniDocument } from "../ini.ts"
 import { isListCell } from "../layout.ts"
 import type { SsfKeyBinding } from "../ssf/ssf-keymap.ts"
 import { ssfSectionLabel } from "../ssf/ssf-labels.ts"
-import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground, ssfIconPair, ssfLabelStyle, ssfSoundSection, ssfTextSections } from "../ssf/ssf-parts.ts"
+import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground, ssfForegroundLayout, ssfIconPair, ssfLabelStyle, ssfSoundSection, ssfTextSections } from "../ssf/ssf-parts.ts"
 import { orientation } from "./dom"
 import { editSsfFile, renderGroup as renderSsfGroup, setSsfValue, ssfButton, ssfEntries, ssfFontImportButton, ssfFontOptions, type SsfBlock } from "./ssf-fields"
 import { openImageResourceChooser } from "./resource-inspector"
@@ -123,7 +123,7 @@ function foregroundGroup(skinPath: string, keysPath: string, skin: IniDocument, 
   }
   // FG_STYLE places the icon and labels inside the key.
   const owner = binding.sections.find((section) => firstValue(skin.get(section, "FG_STYLE"))) ?? ownSection(skin, binding)
-  const fgStyle = firstValue(skin.get(owner, "FG_STYLE"))
+  const fgStyle = ssfForegroundLayout(skin, binding, appState.layoutPath, orientation.value === "land")?.fgStyle
   blocks.push({
     path: skinPath, section: fgStyle ?? freeSectionName(skin, `FGStyle_${owner}`), title: "前景布局", expect: FG_STYLE_KEYS,
     create: [{ key: "LABEL_STYLE", value: ssfTextSections(binding, ssfQwertyBoard())[0] }],

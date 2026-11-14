@@ -196,16 +196,26 @@ for (const viewport of portraitPhones) {
     assert.ok(await page.locator('main > .source').evaluate(n => n.inert), 'properties cannot take focus')
     const main = await rect(page, 'main'), workspace = await rect(page, 'main > .workspace'), dock = await rect(page, '.mobile-workspace-tabs')
     assert.equal(workspace.y, main.y)
-    assert.equal(workspace.bottom + 16, dock.y, 'canvas clears navigation')
+    assert.equal(workspace.bottom + 8, dock.y, 'canvas clears navigation')
     assert.equal(dock.bottom, viewport.height)
     const tabs = await page.locator('.mobile-workspace-tabs > button').evaluateAll(nodes => nodes.map(n => ({text:n.textContent.trim(),width:n.offsetWidth,height:n.offsetHeight})))
     assert.deepEqual(tabs.map(t => t.text), ['画布', '属性', '文件'])
     assert.ok(tabs.every(t => t.width >= 44 && t.height >= 44), 'navigation has touch targets')
-    assert.equal(dock.height, 64, 'navigation stays compact')
+    assert.equal(dock.height, 56, 'navigation stays compact')
     assert.ok(tabs.every(t => Math.abs(t.height - (dock.height - 10)) <= 1), 'tab backgrounds fill the navigation height inside its padding and border')
     const zoomIcon = await rect(page, '#preview-zoom-fit svg')
-    assert.equal(zoomIcon.width, 20, 'zoom icons keep the design-system size inside the touch target')
-    assert.equal(zoomIcon.height, 20)
+    assert.equal(zoomIcon.width, 16, 'zoom icons keep the design-system size inside the touch target')
+    assert.equal(zoomIcon.height, 16)
+    const navIcon = await rect(page, '.mobile-workspace-tabs .ui-icon')
+    assert.equal(navIcon.width, 16)
+    assert.equal(navIcon.height, 16)
+    for (const selector of ['#preview-zoom-out', '#preview-zoom-fit', '#preview-zoom-in', '#layout-overview-toggle']) {
+      const target = await rect(page, selector)
+      assert.equal(target.width, 44, 'canvas buttons keep their touch width')
+      assert.equal(target.height, 44, 'canvas buttons keep their touch height')
+    }
+    assert.equal((await rect(page, '.preview-zoom-control')).height, 50, 'zoom toolbar trims its outer padding')
+    assert.equal((await rect(page, '.preview-overview-control')).height, 50, 'overview uses the same compact toolbar')
     assert.ok((await rect(page, '.canvas-wrap')).height > workspace.height * 0.75, 'canvas owns the page')
     await assertPreviewToggles(page)
     await assertPreviewSecondaryMenu(page)
@@ -220,7 +230,8 @@ for (const viewport of portraitPhones) {
     await tab(page, 'inspector').click()
     assert.equal((await rect(page, 'main > .source')).visible, true)
     assert.equal((await rect(page, 'main > aside')).visible, false)
-    await page.getByRole('button', {name:'完成',exact:true}).click()
+    assert.equal(await page.getByRole('button', {name:'完成',exact:true}).count(), 0, 'return uses the existing navigation')
+    await tab(page, 'canvas').click()
     assert.equal((await rect(page, 'main > .workspace')).visible, true)
     await tab(page, 'canvas').focus()
     await page.keyboard.press('ArrowRight')
@@ -256,6 +267,40 @@ for (const viewport of portraitPhones) {
       assert.deepEqual(overflow, [], 'settings content stays inside the sheet')
     }
     assert.ok((await rect(page, '#settings-save')).bottom <= viewport.height)
+  }))
+}
+
+for (const viewport of [{width:320,height:568}, {width:390,height:844}]) {
+  await check(`${viewport.width}×${viewport.height} inspector canvas refits after resizing`, () => withPage(viewport, async page => {
+    await openTemplate(page)
+    await tab(page, 'inspector').click()
+    const handle = page.locator('#mobile-inspector-resize')
+    for (const key of ['End', 'Home', 'End']) {
+      await handle.focus()
+      await page.keyboard.press(key)
+      await page.waitForTimeout(250)
+      const workspace = await rect(page, 'main > .workspace')
+      const canvas = await rect(page, '.canvas-wrap')
+      const keyboard = await rect(page, '.device-shell')
+      assert.ok(Math.abs(canvas.height - workspace.height) <= 1, 'canvas fills the inspector preview area')
+      assert.ok(keyboard.x >= canvas.x && keyboard.right <= canvas.right + 1, 'keyboard fits the canvas width')
+      assert.ok(keyboard.y >= canvas.y && keyboard.bottom <= canvas.bottom + 1, 'keyboard fits the canvas height')
+      assert.ok(canvas.width - keyboard.width <= 18 || canvas.height - keyboard.height <= 18, 'auto fit uses the available width or height')
+      assert.ok(Math.abs(keyboard.y + keyboard.height / 2 - canvas.y - canvas.height / 2) <= 1, 'keyboard stays vertically centered')
+      const surface = await page.locator('#preview').evaluate(element => ({
+        width: element.getBoundingClientRect().width,
+        height: element.getBoundingClientRect().height,
+        logicalWidth: Number(element.dataset.logicalWidth),
+        logicalHeight: Number(element.dataset.logicalHeight),
+      }))
+      assert.ok(Math.abs(surface.width / surface.height - surface.logicalWidth / surface.logicalHeight) < 0.01, 'keyboard keeps its aspect ratio')
+    }
+    await handle.dblclick()
+    assert.equal(await handle.getAttribute('aria-valuenow'), '22', 'double click restores the Pen default')
+    await tab(page, 'canvas').click()
+    await page.waitForTimeout(250)
+    const workspace = await rect(page, 'main > .workspace')
+    assert.ok((await rect(page, '.canvas-wrap')).height > workspace.height * 0.75, 'returning to canvas restores the full preview')
   }))
 }
 
@@ -301,6 +346,49 @@ await check('editing, real key preview, undo and selection survive navigation', 
   assert.notEqual(await page.locator('#selected-key').textContent(), selected, 'object menu delegates deletion')
 }))
 
+for (const width of [320, 393]) {
+  await check(`${width}px dense inspector expands without losing edits or selection`, () => withPage({width,height:width === 320 ? 568 : 852}, async page => {
+    await openTemplate(page, 'official-android-bds')
+    await setEditMode(page)
+    await selectKey(page)
+    const selected = await page.locator('#selected-key').textContent()
+    const toggle = page.locator('#mobile-preview-toggle')
+    const area = await rect(page, '#quick-inspector')
+    assert.ok(area.height >= (width === 320 ? 240 : 430), 'default preview leaves useful property space')
+    assert.equal(await page.locator('#mobile-inspector-resize').getAttribute('aria-valuenow'), '22')
+    const name = await rect(page, '#selected-key')
+    assert.ok(name.width >= 38, 'selected key name has room beside the view controls')
+    const cards = await page.locator('#quick-inspector .ui-style-ref:visible').evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().height))
+    assert.ok(cards.length > 0 && cards.every(height => height === 64), 'mobile references use the compact Pen card')
+    await toggle.focus()
+    await page.keyboard.press('Enter')
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false')
+    assert.equal((await rect(page, 'main > .workspace')).visible, false)
+    assert.equal((await rect(page, '#mobile-inspector-resize')).visible, false)
+    const expanded = await rect(page, '#quick-inspector')
+    assert.ok(expanded.height >= area.height + 100, 'collapse gives the preview space to properties')
+    await page.locator('.key-layout-fields .mobile-group-disclosure').click()
+    const field = page.locator('#quick-inspector [data-key-field="x"]')
+    const before = await field.inputValue()
+    await field.fill(String(Number(before) + 1))
+    await field.dispatchEvent('input')
+    const scroll = await page.locator('#quick-inspector').evaluate(n => n.scrollTop)
+    await toggle.click()
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true')
+    assert.equal(await field.inputValue(), String(Number(before) + 1), 'collapse does not rebuild the input')
+    assert.equal(await page.locator('#selected-key').textContent(), selected)
+    assert.equal(await page.locator('#quick-inspector').evaluate(n => n.scrollTop), scroll)
+    await page.locator('#mobile-undo').click()
+    assert.equal(await field.inputValue(), before, 'edits made with the preview collapsed are undoable')
+    await page.locator('#inspector-actions-more > summary').click()
+    await page.locator('#inspector-actions-more [data-key-mode="move"]').click()
+    assert.equal(await page.locator('[data-key-mode="move"][aria-pressed="true"]').count(), 2, 'desktop and menu mode states agree')
+    await page.locator('#inspector-actions-more > summary').click()
+    await page.locator('#inspector-actions-more [data-key-mode="select"]').click()
+    await assertNoPageOverflow(page, 'dense inspector')
+  }))
+}
+
 for (const colorScheme of ['light','dark']) {
   await check(`safe areas, theme and orientation (${colorScheme})`, () => withPage({width:393,height:852}, async page => {
     const session = await page.context().newCDPSession(page)
@@ -311,7 +399,7 @@ for (const colorScheme of ['light','dark']) {
     assert.equal(bar.height, 111, 'header reserves top inset once')
     assert.equal(canvas.y, bar.bottom)
     assert.equal(dock.bottom, 818, 'navigation clears home indicator once')
-    assert.equal(canvas.bottom + 16, dock.y)
+    assert.equal(canvas.bottom + 8, dock.y)
     const colors = await page.evaluate(() => ({root:getComputedStyle(document.documentElement).backgroundColor,bar:getComputedStyle(document.querySelector('.titlebar')).backgroundColor,accent:getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()}))
     assert.equal(colors.root, colors.bar)
     assert.equal(colors.accent.toLowerCase(), colorScheme === 'dark' ? '#4c8dff' : '#2563eb')

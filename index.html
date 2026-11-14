@@ -206,6 +206,7 @@
           </div>
         </div>
         <div class="canvas-wrap empty">
+          <button id="mobile-key-preview" class="ui-button" type="button" aria-label="按住预览按下态" hidden><span id="mobile-key-size"></span><canvas id="mobile-key-canvas" aria-label="所选按键预览"></canvas><small>按住对比按下态</small></button>
           <div class="empty-state">
             <div class="welcome-main">
 
@@ -402,7 +403,7 @@
       </section>
 
       <div class="inspector-resize-handle" id="inspector-resize-handle" aria-hidden="true"></div>
-      <button id="mobile-inspector-resize" class="ui-button" type="button" role="slider" aria-label="调整画布与属性高度" aria-orientation="vertical" aria-valuemin="24" aria-valuemax="62" aria-valuenow="38"><span aria-hidden="true"></span></button>
+      <button id="mobile-inspector-resize" class="ui-button" type="button" role="slider" aria-label="调整画布与属性高度" aria-orientation="vertical" aria-valuemin="14" aria-valuemax="62" aria-valuenow="22"><span aria-hidden="true"></span></button>
       <section class="source">
         <div class="pane-heading source-heading">
           <div class="inspector-context">
@@ -413,13 +414,12 @@
           <div class="ai-design-heading"><strong>AI 设计</strong><span>描述想法，一起完善皮肤</span></div>
           <div class="inspector-view-controls">
             <div class="inspector-tabs ui-segmented" data-fill role="tablist" aria-label="检查器视图">
-              <button type="button" role="tab" data-inspector-tab="properties" aria-selected="true">属性</button>
-              <button type="button" role="tab" data-inspector-tab="source" aria-selected="false">源代码</button>
-              <button type="button" role="tab" data-inspector-tab="ai" aria-selected="false">AI 设计</button>
+              <button type="button" role="tab" data-inspector-tab="properties" aria-label="属性" aria-selected="true"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>属性</span></button>
+              <button type="button" role="tab" data-inspector-tab="source" aria-label="源代码" aria-selected="false"><span data-icon="code-xml" aria-hidden="true"></span><span>源代码</span></button>
+              <button type="button" role="tab" data-inspector-tab="ai" aria-label="AI 设计" aria-selected="false"><span data-icon="sparkles" aria-hidden="true"></span><span>AI 设计</span></button>
             </div>
             <div class="inspector-title key-inspector-title">
               <span id="selected-key-preview" class="key-inspector-preview" aria-hidden="true" hidden></span>
-              <button id="mobile-key-preview" class="ui-button" type="button" aria-label="按住预览按下态" hidden><span id="mobile-key-size"></span><canvas id="mobile-key-canvas" aria-label="所选按键预览"></canvas><small>按住对比按下态</small></button>
               <div class="key-inspector-copy">
                 <strong id="selected-key">选择画布中的按键</strong>
                 <span id="selected-key-context"></span>
@@ -433,14 +433,16 @@
                 <details id="inspector-actions-more" class="toolbar-more inspector-actions-more">
                   <summary class="ui-icon-button" data-variant="filled" title="更多对象操作" aria-label="更多对象操作" aria-haspopup="menu"><span class="system-symbol" data-icon="ellipsis" aria-hidden="true"></span></summary>
                   <div class="ui-menu" role="menu" aria-label="更多对象操作">
+                    <button class="ui-list-item" type="button" role="menuitem" data-key-mode="select" aria-pressed="true"><span class="system-symbol" data-icon="mouse-pointer-2" aria-hidden="true"></span><span>选择按键</span></button>
+                    <button class="ui-list-item" type="button" role="menuitem" data-key-mode="move" aria-pressed="false"><span class="system-symbol" data-icon="move" aria-hidden="true"></span><span>拖动按键</span></button>
                     <button class="ui-list-item" type="button" role="menuitem" data-key-action-ref="copy"><span class="system-symbol" data-icon="copy" aria-hidden="true"></span><span>复制按键</span></button>
                     <button class="ui-list-item" type="button" role="menuitem" data-key-action-ref="swap"><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span><span>交换位置</span></button>
                     <button class="ui-list-item" type="button" role="menuitem" data-key-action-ref="delete"><span class="system-symbol" data-icon="trash-2" aria-hidden="true"></span><span>删除按键</span></button>
                   </div>
                 </details>
-                <button class="ui-button mobile-inspector-done" type="button" data-mobile-pane="canvas">完成</button>
               </div>
             </div>
+            <button id="mobile-preview-toggle" class="ui-icon-button" type="button" aria-label="收起画布" title="收起画布" aria-expanded="true"><span data-icon="panel-top" aria-hidden="true"></span></button>
             <nav id="mobile-property-tabs" class="ui-segmented" data-fill aria-label="按键属性分类" hidden><button type="button" data-mobile-category="appearance" aria-pressed="true">外观</button><button type="button" data-mobile-category="text" aria-pressed="false">文字</button><button type="button" data-mobile-category="actions" aria-pressed="false">动作</button><button type="button" data-mobile-category="all" aria-pressed="false" aria-label="全部属性">全部</button></nav>
           </div>
         </div>
@@ -758,6 +760,7 @@
             <ul id="ai-draft-files" class="ai-draft-files"></ul>
             <footer class="ai-draft-actions">
               <p class="ai-draft-note">应用后可撤销</p>
+              <button id="ai-draft-compare" type="button" aria-pressed="false">查看原稿</button>
               <button id="ai-draft-cancel" type="button" class="ai-draft-cancel">丢弃</button>
               <button id="ai-draft-apply" type="button" class="ai-draft-apply">应用到皮肤</button>
             </footer>

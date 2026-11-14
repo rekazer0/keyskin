@@ -272,6 +272,7 @@ export function populateKeyInspector(): void {
   // through the document fields; the Baidu groups stay hidden for them.
   const ssfSelected = appState.archive?.format === "ssf"
   const sxiSelected = appState.archive?.format === "sxi"
+  preview.measurementEditable = !bdaSelected && !ssfSelected
   const nativeSelected = ssfSelected || sxiSelected
   const candidateSelected = Boolean(bdaSelected && appState.selectedCandidate && appState.selectedPath === appState.layoutPath)
   skinFieldsGroup.hidden = !skinSelected || bdaSelected || sxiSelected

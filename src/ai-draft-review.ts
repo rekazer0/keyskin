@@ -26,12 +26,22 @@ export function draftExcerpt(before: string, after: string, limit = 24): { text:
 }
 
 /** All model-provided paths and text are rendered literally, not as HTML. */
-export function createDraftReview(change: AiSkinDraftChange): HTMLLIElement {
+export function createDraftReview(change: AiSkinDraftChange, selection?: { checked: boolean; indeterminate?: boolean; toggle(checked: boolean): void; edits?: { label: string; checked: boolean; toggle(checked: boolean): void }[] }): HTMLLIElement {
   const item = document.createElement("li")
   const details = document.createElement("details")
   details.open = true
   const head = document.createElement("summary")
   head.className = "ai-draft-file-head"
+  if (selection) {
+    const checkbox = document.createElement("input")
+    checkbox.type = "checkbox"
+    checkbox.checked = selection.checked
+    checkbox.indeterminate = Boolean(selection.indeterminate)
+    checkbox.setAttribute("aria-label", `应用 ${change.path} 的修改`)
+    checkbox.addEventListener("click", event => event.stopPropagation())
+    checkbox.addEventListener("change", () => selection.toggle(checkbox.checked))
+    head.append(checkbox)
+  }
   const name = document.createElement("span")
   name.textContent = change.path
   name.title = change.path
@@ -83,7 +93,25 @@ export function createDraftReview(change: AiSkinDraftChange): HTMLLIElement {
       full.append(label, code)
     }
   })
-  details.append(head, diff, full)
+  const edits = document.createElement("div")
+  edits.className = "ui-section"
+  for (const edit of selection?.edits ?? []) {
+    const label = document.createElement("label")
+    label.className = "ui-list-item"
+    const checkbox = document.createElement("input")
+    checkbox.type = "checkbox"
+    checkbox.checked = edit.checked
+    checkbox.setAttribute("aria-label", `应用 ${change.path} · ${edit.label} 的修改`)
+    checkbox.addEventListener("change", () => edit.toggle(checkbox.checked))
+    const text = document.createElement("span")
+    text.className = "ui-list-item-text"
+    text.textContent = edit.label
+    label.append(checkbox, text)
+    edits.append(label)
+  }
+  details.append(head)
+  if (edits.childElementCount) details.append(edits)
+  details.append(diff, full)
   item.append(details)
   return item
 }

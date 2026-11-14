@@ -138,7 +138,7 @@ export function wireEditingControls(): void {
   for (const button of keyModeButtons) {
     button.addEventListener("click", () => {
       appState.keyMode = button.dataset.keyMode === "move" ? "move" : "select"
-      keyModeButtons.forEach((item) => item.setAttribute("aria-pressed", String(item === button)))
+      keyModeButtons.forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.keyMode === appState.keyMode)))
       preview.setEditTool(appState.keyMode)
     })
   }

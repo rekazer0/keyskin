@@ -6,6 +6,7 @@
 import { IniDocument } from "../ini.ts"
 import { iniPreviewClip } from "../animation-preview-model.ts"
 import { animationPlayer } from "../animation-player.ts"
+import { ANIMATION_PRESETS } from "../animation-presets.ts"
 import {
   animationModeTitle, animationWarning, comboList, renderAnimationResource,
   type AnimationListItem,
@@ -40,7 +41,8 @@ import {
 } from "../legacy-animation.ts"
 import { visualResolver } from "./bda-documents"
 import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./config-context"
-import { commitText, isEditing, updateDirty } from "./edit-history"
+import { commitText, commitTextChanges, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
+import { addStyle } from "./style-picker"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
@@ -206,6 +208,7 @@ function comboRows(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Leg
   const basics = [...byIndex.values()].filter((child) => child.kind === "basic" && child.index !== undefined && child.section !== entry.section)
   return [fieldRow(entry, "BUILD_METHOD"), comboList({
     editable: isEditing(),
+
     empty: "没有子动画",
     children: ids.map((id) => {
       const child = byIndex.get(String(Number(id)))
@@ -341,6 +344,33 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
     thumbnail: id => ({ clip: iniPreviewClip(appState.selectedDocument!, id, { fillBefore: true }), key: `${appState.selectedPath}|${id}`, resolver: visualResolver(), readFile: readSkinFile }),
     styleFilter,
     editable: isEditing(),
+    presets: {
+      items: ANIMATION_PRESETS.filter(preset => shownInAnimationView(preset.category === "particle")),
+      label: appState.animationKeys.length ? `应用到 ${appState.animationKeys.length} 个按键` : "应用",
+      apply: preset => {
+        const keys = [...appState.animationKeys]
+        const previous = appState.undoStack.at(-1)
+        let index: number | undefined
+        edit(current => {
+          const next = appendLegacyAnimation(current, preset.category === "particle" ? "particle" : "basic")
+          rememberAnimation(next.section)
+          index = Number(next.section.slice(4))
+          return writeLegacyAnimationFields(next.text, next.section, { ...preset.fields, INFO: preset.label })
+        })
+        if (keys.length && index !== undefined) {
+          const style = addStyle(index)
+          const document = appState.layoutDocument
+          if (style && document) {
+            const before = document.toString()
+            for (const key of keys) if (document.sections().includes(key)) document.set(key, "ANIM_STYLE", style)
+            commitTextChanges([{ path: appState.layoutPath, before, after: document.toString() }])
+          }
+        }
+        const changes = appState.undoStack.splice(previous ? appState.undoStack.indexOf(previous) + 1 : 0)
+        if (changes.length) appState.undoStack.push(changes.length === 1 ? changes[0] : { kind: "batch", changes })
+        updateHistoryButtons()
+      },
+    },
     onSelect: selectAnimation,
     create: {
       options: LEGACY_ANIMATION_KINDS.filter(({ kind }) => shownInAnimationView(kind === "particle"))

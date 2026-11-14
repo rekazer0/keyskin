@@ -175,7 +175,7 @@ export function styleCard(options: {
   card.tabIndex = 0
   card.setAttribute("role", "option")
   card.setAttribute("aria-selected", "false")
-  if (options.info) card.title = [options.label, options.info].join(" · ")
+  card.title = [options.label, options.info].filter(Boolean).join(" · ")
   card.dataset.styleKind = options.kind
   card.dataset.styleId = options.id
   const heading = element("span", "ui-style-card-heading")
@@ -226,11 +226,19 @@ export function styleCard(options: {
   }
   const caption = element("span", "ui-style-card-caption")
   caption.append(heading)
-  card.append(caption, previews)
+  const sample = options.sound?.()
+  if (options.kind === "sound" && sample) {
+    sample.dataset.variant = "card"
+    heading.querySelector(".ui-style-card-kind")?.remove()
+    sample.querySelector(".ui-style-sound-info")?.prepend(caption)
+    card.append(sample)
+  } else {
+    card.append(caption, previews)
+    if (sample) heading.append(sample)
+  }
   const meta = cardMeta(options.uses, options.note)
-  if (meta) card.append(meta)
+  if (meta) (options.kind === "sound" && sample ? heading : card).append(meta)
   if (remove) card.append(remove)
-  if (options.sound) (options.kind === "sound" ? previews : heading).append(options.sound())
   return card
 }
 
@@ -323,7 +331,15 @@ export function styleReferenceCard(options: {
   }
   if (options.states.length === 1) states.dataset.variant = "single"
   if (canvases.length) lazyDraw(card, states, canvases, (canvas, index) => draws[index](canvas))
-  card.append(meta, states)
+  const soundInfo = options.states.length === 1 && states.querySelector(".ui-style-sound-info")
+  if (soundInfo) {
+    card.dataset.variant = "sound"
+    states.querySelector<HTMLElement>(".ui-style-sound")!.dataset.variant = "card"
+    // 名称仍可直接编辑，点击输入区不打开资源选择器。
+    meta.addEventListener("click", event => event.stopPropagation())
+    soundInfo.prepend(meta)
+    card.append(states)
+  } else card.append(meta, states)
   if (options.remove && !options.disabled) {
     card.append(removeStrip(options.remove.label, options.remove.run))
   }

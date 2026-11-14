@@ -97,19 +97,26 @@ export function ssfLabelStyle(skin: IniDocument, binding: SsfKeyBinding): { fgSt
     const fgStyle = firstValue(skin.get(owner, "FG_STYLE"))
     if (fgStyle) return { fgStyle, owner, style: firstValue(skin.get(fgStyle, "LABEL_STYLE")) }
   }
+  if (binding.foreground) return { fgStyle: binding.foreground, owner: ownSection(skin, binding), style: firstValue(skin.get(binding.foreground, "LABEL_STYLE")) }
 }
 
 /** The explicit foreground style, or the style used by Sogou's built-in key definition. */
 export function ssfForegroundLayout(skin: IniDocument, binding: SsfKeyBinding, layout: string, landscape: boolean): { fgStyle: string; label?: string; minor?: string } | undefined {
   const own = ssfLabelStyle(skin, binding)
-  if (own) return { fgStyle: own.fgStyle }
+  const inherited = own && !binding.sections.some((section) => firstValue(skin.get(section, "FG_STYLE")))
+  if (own && !inherited) return { fgStyle: own.fgStyle }
   const suffix = landscape ? "_Land" : ""
-  if (binding.keyClass === "char") return { fgStyle: `${ssfQwerty(layout) ? "FGStyle_Qwerty" : "FGStyle_Phone"}${suffix}` }
+  if (binding.keyClass === "char") return { fgStyle: own?.fgStyle ?? `${ssfQwerty(layout) ? "FGStyle_Qwerty" : "FGStyle_Phone"}${suffix}` }
   const board = ssfBoard(layout)
-  if (board !== "py9" && board !== "en9") return
-  if (binding.sections.includes("Key_SymbolTable")) return { fgStyle: `FGStyle_SymbolTable_${board === "py9" ? "Py9" : "En9"}${suffix}` }
-  if (binding.sections.includes("Key_SwitchToEN")) return { fgStyle: `FGStyle_Switch_Py9${suffix}`, label: "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
-  if (binding.sections.includes("Key_EnSwitchToCH")) return { fgStyle: `FGStyle_SwitchToCh_En9${suffix}`, label: "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
+  // Skins can override the built-in enter layout without repeating the key's FG_STYLE binding.
+  if (binding.sections.includes("Key_Enter_Qwerty")) return { fgStyle: own?.fgStyle ?? `FGStyle_Enter_Py26${suffix}` }
+  if (binding.sections.includes("Key_Enter")) return { fgStyle: own?.fgStyle ?? `FGStyle_Enter_Py9${suffix}` }
+  if (board === "py9" || board === "en9") {
+    if (binding.sections.includes("Key_SymbolTable")) return { fgStyle: own?.fgStyle ?? `FGStyle_SymbolTable_${board === "py9" ? "Py9" : "En9"}${suffix}` }
+    if (binding.sections.includes("Key_SwitchToEN")) return { fgStyle: own?.fgStyle ?? `FGStyle_Switch_Py9${suffix}`, label: own?.style ?? "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
+    if (binding.sections.includes("Key_EnSwitchToCH")) return { fgStyle: own?.fgStyle ?? `FGStyle_SwitchToCh_En9${suffix}`, label: own?.style ?? "TextStyle_Switch", minor: "TextStyle_MinorLabel_Switch" }
+  }
+  if (own) return { fgStyle: own.fgStyle }
 }
 
 /**

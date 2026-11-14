@@ -269,8 +269,8 @@ export class SsfLook {
     }
   }
 
-  key(layout: string, action: string, landscape: boolean, size?: [number, number], sourceSection?: string, sourceBackground?: string): KeyLook {
-    const binding = ssfKeyBinding(layout, action, landscape, sourceSection, sourceBackground)
+  key(layout: string, action: string, landscape: boolean, size?: [number, number], sourceSection?: string, sourceBackground?: string, sourceForeground?: string): KeyLook {
+    const binding = ssfKeyBinding(layout, action, landscape, sourceSection, sourceBackground, sourceForeground)
     const sogouBack = this.background(binding)
     // Sogou's pinyin layouts mark letter keys S_FLAG=1 (English ones add KEY_FLAG_VALUE): they start upper case.
     const on = /^[a-z]$/.test(action) && ["py9", "py26"].includes(ssfBoard(layout))
@@ -364,6 +364,8 @@ export class SsfLook {
     const bytes = ref && this.file(ref.file)
     const size = bytes && pngSize(bytes)
     if (!ref || !bytes || !size) return
+    // 非整屏宽的透明占位图不定义栏高，否则 10×10 会被放大成 1080×1080。
+    if (size[0] < this.sogouWidth && !this.decode(ref.file, bytes)?.data.some((value, index) => index % 4 === 3 && value > 0)) return
     const width = Math.round(this.sogouWidth * (this.scale ?? 1))
     const image = this.resized({ id: `${ref.file}|`, bytes }, width, Math.max(1, Math.round(size[1] * width / size[0])))
     const color = this.color("VPA_Bar", "BG_COLOR") ?? this.color("ComposingView", "BG_COLOR")

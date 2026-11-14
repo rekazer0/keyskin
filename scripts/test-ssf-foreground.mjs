@@ -21,6 +21,20 @@ LABEL_VISIBLE=1
 [Key_Space_Land]
 ICON=transparent.png
 ICON_PRESSED=delf_26.png
+[Key_Enter]
+ICON=delf_26.png
+ICON_PRESSED=26q_x.png
+[Key_Enter_Qwerty]
+ICON=delf_26.png
+ICON_PRESSED=26q_x.png
+[FGStyle_Enter_Py9]
+ICON_RECT=0.1,0.1,0.3,0.3
+[FGStyle_Enter_Py26]
+ICON_RECT=0.1,0.1,0.3,0.3
+[FGStyle_Enter_Py9_Land]
+ICON_RECT=0.1,0.1,0.3,0.3
+[FGStyle_Enter_Py26_Land]
+ICON_RECT=0.1,0.1,0.3,0.3
 `)
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41863, strictPort: false, hmr: false } })
 await server.listen()
@@ -65,6 +79,15 @@ try {
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible()) await close.click()
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  for (const orientation of ['port', 'land']) for (const board of ['py_9', 'py_26']) {
+    if (await page.locator('#orientation').inputValue() !== orientation) await page.locator('[data-mobile-choice="orientation"]').click()
+    await page.locator(`.sidebar-overview button[data-path="light/skin/${orientation}/${board}.ini"]`).click()
+    fits(await foreground('F39'))
+    fits(await foreground('F39', true))
+    await select('F39')
+    assert.deepEqual(await row('ICON_RECT').locator('input').evaluateAll((inputs) => inputs.map((input) => input.value)), ['0.1', '0.1', '0.3', '0.3'], 'inspector shows the inherited enter layout')
+  }
+  if (await page.locator('#orientation').inputValue() !== 'port') await page.locator('[data-mobile-choice="orientation"]').click()
   await page.locator('.sidebar-overview button[data-path="light/skin/port/py_26.ini"]').click()
   fits(await foreground('w'))
   fits(await foreground('w', true))
@@ -82,8 +105,7 @@ try {
   await select('e')
   const label = await foreground('e')
   assert.ok(label.layers.some((layer) => layer.kind === 'text'))
-  await row('LABEL_VISIBLE').locator('input').fill('0')
-  await row('LABEL_VISIBLE').locator('input').press('Enter')
+  await row('LABEL_VISIBLE').locator('input').uncheck()
   assert.deepEqual((await foreground('e')).layers, [])
   await history('undo')
   assert.deepEqual(await foreground('e'), label)

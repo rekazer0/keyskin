@@ -206,6 +206,23 @@ export function styleUsages(id: string): string[] {
   return [id, ...fallback].flatMap((other) => index.get(other) ?? [])
 }
 
+/** 与删除保护共用引用索引，避免把其他主题或覆盖表的样式误报为缺失。 */
+export function missingStyleReferences(): Array<{ id: string; locations: string[] }> {
+  const archive = appState.archive
+  if (!archive || !["bdi", "bds", "sxi"].includes(archive.format)) return []
+  const ids = new Set(availableStyleIDs())
+  const skin = archive.format === "sxi" ? openPalmSkin() : undefined
+  return [...styleUsageIndex()].flatMap(([key, locations]) => {
+    const [direction, value] = archive.format === "sxi" ? key.split(":") : ["", key]
+    const id = value ?? key
+    if (!id || id === "0") return []
+    const exists = archive.format === "sxi"
+      ? skin && palmStyleLocation(skin, palmTheme(), direction as "port" | "land", id)
+      : ids.has(id) || ids.has(String(Math.floor(Number(id) / 100)))
+    return exists ? [] : [{ id, locations }]
+  })
+}
+
 export function styleWriteTarget(
   source: "BACK_STYLE" | "FORE_STYLE",
   property: "NM_IMG" | "HL_IMG",

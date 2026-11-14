@@ -33,6 +33,16 @@ import { ssfSoundLibraryPayload } from "./ssf-media-fields"
 import { ssfPackage, ssfTheme, SSF_SOUNDS_PATH } from "./ssf-documents"
 import { editSsfAnimation, ssfAnimationLibraryPayload } from "./ssf-animation-picker"
 
+const recentStyleScope = () => `${theme.value}|${orientation.value}|${styleConfigPath()}`
+function rememberStyle(id: string): void {
+  const archive = appState.archive
+  if (!archive) return
+  const scopes = appState.recentStyles.get(archive) ?? new Map<string, string[]>()
+  const scope = recentStyleScope()
+  scopes.set(scope, [id, ...scopes.get(scope) ?? []].filter((value, index, ids) => ids.indexOf(value) === index).slice(0, 12))
+  appState.recentStyles.set(archive, scopes)
+}
+
 export function stylePickerLabel(styleID: string): string {
   return appState.archive?.format === "bda" ? String(bdaStyleRef(styleID)?.key ?? styleID) : styleID
 }
@@ -139,12 +149,24 @@ export function duplicateStyle(styleID: string): string | undefined {
 
 /** 删除没有被引用的样式；可撤销，不弹确认。被引用（含文字回退）的样式不能删。 */
 export function removeStyle(styleID: string): boolean {
-  if (!canAddStyle() || !isEditing() || styleUsages(styleID).length) return false
-  if (appState.selectedStyleID === styleID) appState.selectedStyleID = ""
-  if (appState.selectedResourceGalleryPath === `STYLE${styleID}`) appState.selectedResourceGalleryPath = ""
-  if (appState.archive?.format !== "sxi") return editStyleConfig((styles) => { styles.removeSections([`STYLE${styleID}`]) })
-  editSxi((skin) => { removePalmStyle(skin, palmTheme(), palmOrientation(), styleID) })
-  return true
+  return removeStyleIDs([styleID]) > 0
+}
+
+/** 当前样式表中未被任何适用布局引用的样式，一次撤销恢复全部。 */
+export function removeUnusedStyles(): number {
+  return removeStyleIDs(availableStyleIDs())
+}
+
+function removeStyleIDs(candidates: string[]): number {
+  if (!canAddStyle() || !isEditing()) return 0
+  const available = new Set(availableStyleIDs())
+  const ids = [...new Set(candidates)].filter(id => available.has(id) && !styleUsages(id).length)
+  if (!ids.length) return 0
+  if (ids.includes(appState.selectedStyleID)) appState.selectedStyleID = ""
+  if (ids.some(id => appState.selectedResourceGalleryPath === `STYLE${id}`)) appState.selectedResourceGalleryPath = ""
+  if (appState.archive?.format === "sxi") editSxi(skin => { for (const id of ids) removePalmStyle(skin, palmTheme(), palmOrientation(), id) })
+  else if (!editStyleConfig(styles => { styles.removeSections(ids.map(id => `STYLE${id}`)) })) return 0
+  return ids.length
 }
 
 /** 由引用字段推断应优先展示的样式类型，打开样式库时据此预选筛选。 */
@@ -195,6 +217,7 @@ export function applyStyleLibrarySelection(toStyle = false): void {
   if (selected.styleID) {
     const ref = bdaStyleRef(selected.styleID)
     if (target.dataset.bdaStyleType && ref?.type !== target.dataset.bdaStyleType) return
+    rememberStyle(selected.styleID)
     target.value = selected.styleID
     target.dispatchEvent(new Event("input", { bubbles: true }))
     target.dispatchEvent(new Event("change", { bubbles: true }))
@@ -254,6 +277,7 @@ function createImageStyleReference(target: HTMLInputElement, currentID: string, 
     styles.set(`STYLE${id}`, property, value)
   })
   if (!id) return
+  rememberStyle(id)
   target.value = id
   target.dispatchEvent(new Event("input", { bubbles: true }))
   target.dispatchEvent(new Event("change", { bubbles: true }))
@@ -375,6 +399,7 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
   }
   const payload: StyleLibraryPayload = {
     session, sliceBack, imageSelection,
+    recentStyles: (appState.recentStyles.get(source)?.get(recentStyleScope()) ?? []).filter(id => ids.includes(id)),
     editable: isEditing() && !target?.disabled,
     canAdd, soundOnly: key === "SOUND_STYLE",
     foreground: styleReferenceForeground(key), bda: source.format === "bda",

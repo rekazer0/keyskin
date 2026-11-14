@@ -9,11 +9,50 @@ import { SsfLook } from '../src/ssf/ssf-look.ts'
 import { SsfPackage } from '../src/ssf/ssf-package.ts'
 import { ssfToBaiduFiles } from '../src/ssf/ssf-to-baidu.ts'
 import { convertSsfToBda } from '../src/ssf/ssf-to-bda.ts'
-import { decodePng } from '../src/ssf/ssf-png.ts'
-import { ssfFixture } from './helpers/ssf-fixture.mjs'
+import { decodePng, encodePng } from '../src/ssf/ssf-png.ts'
+import { solid, ssfFixture } from './helpers/ssf-fixture.mjs'
 
 const template = SkinArchive.open(new Uint8Array(readFileSync(new URL('../public/sogou-template.bds', import.meta.url))))
 const read = (files, path) => IniDocument.parse(strFromU8(files.get(path)))
+
+test('SSF implicit enter ICON_RECT survives Baidu export in both themes, orientations and resolutions', () => {
+  const files = new Map(Object.entries(unzipSync(ssfFixture())))
+  for (const theme of ['status1', 'status2']) {
+    const path = `1080/${theme}/phoneSkin.ini`
+    const styles = ['FGStyle_Enter_Py9', 'FGStyle_Enter_Py26'].flatMap((name) => [name, `${name}_Land`])
+    files.set(path, strToU8(strFromU8(files.get(path)) + `
+[Key_Enter]
+ICON=send.png
+ICON_PRESSED=send_p.png
+[Key_Enter_Qwerty]
+ICON=send.png
+ICON_PRESSED=send_p.png
+${styles.map((name) => `[${name}]\nICON_RECT=0.6,0.05,1,0.35`).join('\n')}
+`))
+    files.set(`1080/${theme}/send.png`, encodePng(solid(64, 39, [11, 22, 33])))
+    files.set(`1080/${theme}/send_p.png`, encodePng(solid(64, 39, [44, 55, 66])))
+  }
+  const pkg = SsfPackage.fromFiles(files)
+  for (const width of [480, 1080]) {
+    const { files: output } = ssfToBaiduFiles(pkg, template, width)
+    for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) for (const board of ['py_9', 'py_26']) {
+      const layout = read(output, `${theme}/skin/${orientation}/${board}.ini`)
+      const key = layout.sections().find((section) => layout.get(section, 'CENTER') === 'F39')
+      const [, , w, h] = layout.get(key, 'VIEW_RECT').split(',').map(Number)
+      const css = read(output, `${theme}/skin/res/default.css`)
+      const style = `STYLE${layout.get(key, 'FORE_STYLE')}`
+      assert.equal(layout.get(key, 'FORE_OFFSET'), undefined)
+      assert.equal(layout.get(key, 'POS_TYPE'), undefined)
+      for (const [state, rgb] of [['NM_IMG', [11, 22, 33]], ['HL_IMG', [44, 55, 66]]]) {
+        const image = decodePng(output.get(`${theme}/skin/res/${css.get(style, state).split(',')[0]}.png`))
+        assert.deepEqual([image.width, image.height], [w, h])
+        const pixel = (x, y) => [...image.data.slice((Math.floor(y) * w + Math.floor(x)) * 4, (Math.floor(y) * w + Math.floor(x)) * 4 + 4)]
+        assert.equal(pixel(w / 2, h / 2)[3], 0, 'send icon must leave the key centre transparent')
+        assert.deepEqual(pixel(w * 0.8, h * 0.2), [...rgb, 255], `${theme}/${orientation}/${board} ${state}: send icon sits in the top-right bubble`)
+      }
+    }
+  }
+})
 
 test('official SSF skeleton keeps composite default labels and space icon groups in both orientations', () => {
   const css = IniDocument.parse(template.getText('light/skin/res/default.css'))

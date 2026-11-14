@@ -228,6 +228,7 @@ for (const orientation of ['port', 'land']) {
           { key: 'CENTER', value: action(section, doc) }, { key: 'SSF_SECTION', value: section },
           // The background class the app names for this key, which a skin may restyle on its own.
           ...(doc.get(real, 'BG_IMAGES') ? [{ key: 'SSF_BG', value: doc.get(real, 'BG_IMAGES').split(',')[0] }] : []),
+          ...(fgStyle ? [{ key: 'SSF_FG', value: fgStyle }] : []),
           { key: 'VIEW_RECT', value: rect.join(',') },
           ...(back ? [{ key: 'BACK_STYLE', value: back }] : []), ...(fore ? [{ key: 'FORE_STYLE', value: fore }] : []),
           ...(positions ? [{ key: 'POS_TYPE', value: positions.join(',') }] : []),

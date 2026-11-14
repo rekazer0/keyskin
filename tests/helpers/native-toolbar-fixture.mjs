@@ -30,3 +30,16 @@ export function nativeToolbarFixture(format = 'bdi') {
   return SkinArchive.open(zipSync(Object.fromEntries(Object.entries(files).map(([path, value]) =>
     [path, typeof value === 'string' ? strToU8(value) : value]))), format)
 }
+
+export function legacyToolbarFixture() {
+  const archive = nativeToolbarFixture()
+  for (const theme of ['light', 'dark']) {
+    const root = `${theme}/skin/`
+    archive.delete(`${root}res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`)
+    for (const orientation of ['port', 'land']) {
+      archive.setText(`${root}${orientation}/gen.ini`, '[PANEL]\nSIZE=360,258\nBACK_STYLE=1\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,360,50\n')
+      archive.setText(`${root}${orientation}/cand1.cnd`, '[CAND]\nBACK_STYLE=1\n[ICON1]\nSIZE=45,47\nANCHOR_TYPE=4\nPOS=1,-22\nKEY=F31\n[ICON2]\nSIZE=250,34\nANCHOR_TYPE=5\nPOS=-125,-17\nKEY=F14\n[ICON3]\nSIZE=45,44\nANCHOR_TYPE=6\nPOS=-44,-23\nKEY=F8\n')
+    }
+  }
+  return archive
+}

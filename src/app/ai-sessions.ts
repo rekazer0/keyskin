@@ -1,6 +1,7 @@
 import type { AiChatSnapshot } from "../ai-chat"
 import type { AiDesignConversation } from "../ai-design"
-import { bindListboxKeys } from "../dom-element"
+import { bindListboxKeys, element, emptyState } from "../dom-element"
+import { ask } from "./ask"
 import { aiNewSession, aiSessionCreate, aiSessionList, aiSessions, aiSessionsClose, aiDesignPanel, aiDesignStatus } from "./dom"
 import { appState } from "./state"
 import { ensureAiChat, syncAiDesignControls } from "./ai-panel"
@@ -12,6 +13,8 @@ export type AiSession = {
   chat?: AiChatSnapshot
   status: string
   state: string
+  createdAt: number
+  appliedFiles: number
 }
 
 function saveSession(): void {
@@ -29,31 +32,44 @@ function saveSession(): void {
 }
 
 function addSession(): void {
-  const session: AiSession = { id: crypto.randomUUID(), title: "新会话", conversation: [], status: "", state: "idle" }
+  const session: AiSession = { id: crypto.randomUUID(), title: "新会话", conversation: [], status: "", state: "idle", createdAt: Date.now(), appliedFiles: 0 }
   appState.aiSessions.unshift(session)
   appState.aiSessionId = session.id
 }
 
 function renderSessions(): void {
-  aiSessionList.replaceChildren(...appState.aiSessions.map((session) => {
+  const appliedOnly = aiSessions.querySelector('[data-session-filter="applied"]')?.getAttribute("aria-pressed") === "true"
+  aiSessionList.replaceChildren(...appState.aiSessions.filter(session => !appliedOnly || session.appliedFiles > 0).map((session) => {
     const item = document.createElement("button")
     item.type = "button"
     item.className = "ui-list-item"
     item.dataset.session = session.id
     item.setAttribute("role", "option")
+    item.setAttribute("aria-label", session.title)
     item.setAttribute("aria-selected", String(session.id === appState.aiSessionId))
     item.tabIndex = session.id === appState.aiSessionId ? 0 : -1
     const title = document.createElement("span")
     title.className = "ui-list-item-text"
     const text = document.createElement("strong")
     text.textContent = session.title
-    title.append(text)
+    const meta = element("small")
+    meta.textContent = `${new Date(session.createdAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${session.appliedFiles ? `已应用 ${session.appliedFiles} 个文件` : "未应用"}`
+    title.append(text, meta)
     item.append(title)
     item.title = session.title
     item.addEventListener("click", () => selectSession(session.id))
     return item
   }))
+  if (!aiSessionList.childElementCount) aiSessionList.append(emptyState("history"))
+  if (!aiSessionList.querySelector('[tabindex="0"]')) aiSessionList.querySelector<HTMLElement>('[role="option"]')?.setAttribute("tabindex", "0")
   syncAiSessionControls()
+}
+
+export function recordAiApplication(files: number): void {
+  if (!appState.aiSessionId) addSession()
+  const session = appState.aiSessions.find(session => session.id === appState.aiSessionId)
+  if (session) session.appliedFiles += files
+  saveSession()
 }
 
 function selectSession(id: string): void {
@@ -81,10 +97,39 @@ function closeSessions(): void {
 export function syncAiSessionControls(): void {
   const disabled = appState.aiDesignBusy || Boolean(appState.aiDesignDraft)
   aiSessionCreate.disabled = disabled
+  const clear = aiSessions.querySelector<HTMLButtonElement>("[data-session-clear]")
+  if (clear) clear.disabled = disabled
   aiSessionList.querySelectorAll<HTMLButtonElement>("button").forEach((item) => { item.disabled = disabled })
 }
 
 export function wireAiSessions(): void {
+  const filters = element("div", "ui-segmented")
+  filters.dataset.fill = ""
+  filters.setAttribute("aria-label", "历史筛选")
+  for (const [value, label] of [["all", "全部"], ["applied", "已应用"]]) {
+    const button = Object.assign(element("button"), { type: "button", textContent: label })
+    button.dataset.sessionFilter = value
+    button.setAttribute("aria-pressed", String(value === "all"))
+    button.addEventListener("click", () => {
+      for (const item of filters.children) item.setAttribute("aria-pressed", String(item === button))
+      renderSessions()
+    })
+    filters.append(button)
+  }
+  aiSessionList.before(filters)
+  const clear = Object.assign(element("button", "ui-button"), { type: "button", textContent: "清理记录" })
+  clear.dataset.sessionClear = ""
+  clear.addEventListener("click", () => {
+    if (appState.aiDesignBusy || appState.aiDesignDraft) return
+    void ask({ title: "清理 AI 历史？", detail: "保留当前会话，其余记录将从本次会话中移除，此操作无法撤销", actions: [
+      { value: "cancel", label: "取消" }, { value: "clear", label: "清理记录", variant: "danger" },
+    ] }).then(choice => {
+      if (choice !== "clear" || appState.aiDesignBusy || appState.aiDesignDraft) return
+      appState.aiSessions = appState.aiSessions.filter(session => session.id === appState.aiSessionId)
+      renderSessions()
+    })
+  })
+  aiSessionList.after(clear)
   aiNewSession.addEventListener("click", () => {
     if (!aiSessions.hidden) { closeSessions(); return }
     void ensureAiChat().then(() => {

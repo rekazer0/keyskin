@@ -7,6 +7,7 @@ import { IniDocument } from "../ini.ts"
 import { scaleIniDocument } from "../panel-tools.ts"
 import type { SkinArchive } from "../skin.ts"
 import type { SsfTheme } from "./ssf-package.ts"
+import { ssfKeyActions } from "./ssf-keymap.ts"
 
 function size(value: string | undefined): number[] {
   return value?.split(",").map((part) => Number(part.trim())) ?? []
@@ -38,7 +39,17 @@ export function copySsfSkeleton(base: SkinArchive, theme: SsfTheme, output: Map<
     let bytes = base.getBytes(path)!
     const orientation = name.match(/^(port|land)\/.*\.(?:ini|cnd)$/i)?.[1] as "port" | "land" | undefined
     const [xScale, yScale] = orientation ? scales[orientation] : [1, 1]
-    if (xScale !== 1 || yScale !== 1) bytes = strToU8(scaleIniDocument(IniDocument.parse(new TextDecoder().decode(bytes)), xScale, yScale).toString())
+    if (orientation) {
+      const document = scaleIniDocument(IniDocument.parse(new TextDecoder().decode(bytes)), xScale, yScale)
+      for (const section of document.sections().filter((section) => /^KEY\d+$/.test(section))) {
+        const action = document.get(section, "CENTER")
+        if (!action) continue
+        for (const [field, value] of Object.entries(ssfKeyActions(name.split("/").pop()!, action, document.get(section, "SSF_SECTION")))) {
+          if (document.get(section, field) === undefined) document.set(section, field, value)
+        }
+      }
+      bytes = strToU8(document.toString())
+    }
     output.set(`${theme}/skin/${name}`, bytes)
   }
 }

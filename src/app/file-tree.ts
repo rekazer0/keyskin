@@ -23,6 +23,7 @@ import { runFileOperation } from "./file-operations"
 import { askToCreateAnimationConfig, canCreateAnimationConfig } from "./animation-resource"
 import { decorateLayoutGroup } from "./sidebar-layouts"
 import { releaseOnRemove } from "../dom-lifecycle"
+import { openResourceInventory } from "./resource-inventory"
 
 const layoutGroups = ["键盘布局", "数字与符号", "手写与语音", "手写与选择"]
 const resourceTileLabels: Record<string, string> = { 图片: "图片资源", 样式: "按键样式", 音效: "音效资源" }
@@ -474,6 +475,14 @@ export function renderFiles(): void {
     if (!grouped.length && !card) continue
     const body = section(group)
     if (card) body.append(card)
+    if (group === "资源配置") {
+      const inventory = Object.assign(document.createElement("button"), { type: "button", className: "ui-list-item", textContent: "资源清单" })
+      inventory.dataset.layout = "tile"
+      inventory.dataset.variant = "resource"
+      inventory.prepend(symbolSpan("list"))
+      inventory.addEventListener("click", openResourceInventory)
+      body.append(inventory)
+    }
     for (const entry of grouped) {
       const label = group === "资源配置" ? resourceTileLabels[entry.label] ?? entry.label.replace(/ · .+$/, "") : entry.label
       const button = addNavButton(body, label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)

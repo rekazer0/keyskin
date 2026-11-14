@@ -4,7 +4,7 @@ import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { strToU8, unzipSync, zipSync } from 'fflate'
 import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
-import { nativeToolbarFixture } from '../tests/helpers/native-toolbar-fixture.mjs'
+import { legacyToolbarFixture, nativeToolbarFixture } from '../tests/helpers/native-toolbar-fixture.mjs'
 import { buildSxiZip } from '../src/palm/palm-export.ts'
 import { encodePng } from '../src/ssf/ssf-png.ts'
 
@@ -16,6 +16,11 @@ ssf['1080/status1/ime_function_multimedia.png'] = original
 ssf['1080/status1/ime_function_multimedia_p.png'] = original
 ssf['1080/status1/replacement.png'] = replacement
 const fixtures = [{ format: 'ssf', bytes: zipSync(ssf), label: '菜单', target: '1080/status1/ime_function_multimedia.png', source: '1080/status1/replacement.png', count: 9 }]
+const legacy = legacyToolbarFixture()
+legacy.setBytes('light/skin/res/replacement.png', replacement)
+fixtures.push({ format: 'bdi', bytes: legacy.toBytes(), label: '键盘类型',
+  target: 'light/skin/res/logo/1.0/toolbarMenuItem_KBSwitch_Normal_iphone@3x.png',
+  source: 'light/skin/res/replacement.png', count: 29, legacy: true, builtIn: true })
 for (const format of ['bdi', 'bds']) {
   const archive = await nativeToolbarFixture(format)
   archive.setBytes('light/skin/res/replacement.png', replacement)
@@ -52,6 +57,10 @@ try {
     if (await close.isVisible()) await close.click()
     await page.getByRole('button', { name: '编辑模式', exact: true }).click()
     const selectToolbar = async () => {
+      if (fixture.legacy) {
+        await page.locator('#candidate-area').click()
+        return
+      }
       const point = await page.evaluate(async () => {
         const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
         await toolbarPreview.whenDrawn()
@@ -67,15 +76,24 @@ try {
     const card = page.getByRole('button', { name: `更换${fixture.label}图标`, exact: true })
     await card.waitFor()
     assert.equal(await page.locator('.ui-toolbar-icon').count(), fixture.count)
+    if (fixture.legacy) assert.deepEqual(await page.locator('#mobile-inspector-groups .inspector-group-label').allTextContents(),
+      ['图标', '按钮', '按钮动画', '工具栏'], 'toolbar inspector uses concise group names without repeating the selected button number')
     assert.deepEqual(await page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
       return appState.selectedToolbarSections
-    }), [], 'the whole toolbar is selected instead of an individual button')
+    }), fixture.legacy ? ['ICON2'] : [], 'the toolbar selection matches the native format')
     const snapshot = () => page.evaluate(async path => {
       const { appState } = await import('/src/app/state.ts')
-      return { bytes: Array.from(appState.archive.getBytes(path) ?? []), undo: appState.undoStack.length, json: appState.archive.isText('skin.json') ? appState.archive.getText('skin.json') : undefined }
+      const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
+      return { bytes: Array.from(appState.archive.getBytes(path) ?? []), undo: appState.undoStack.length, json: appState.archive.isText('skin.json') ? appState.archive.getText('skin.json') : undefined,
+        height: toolbarPreview.panelHeight,
+        functions: appState.archive.format === 'bdi' ? (await toolbarPreview.sceneForState()).keys.find(key => key.section === 'ICON2')?.layers(false).fore.length : undefined }
     }, fixture.target)
     const before = await snapshot()
+    if (fixture.legacy) {
+      assert.equal(before.height, 50)
+      assert.equal(before.functions, 4, 'unconfigured functions appear as default artwork')
+    }
     await card.click()
     await page.locator('#picker-dialog').waitFor({ state: 'visible' })
     await page.evaluate(async source => {
@@ -89,6 +107,8 @@ try {
     await page.frameLocator('#picker-frame').locator('#picker-close').click()
     await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
     const after = await snapshot()
+    assert.equal(after.height, before.height, 'replacing artwork never changes the candidate bar height')
+    assert.equal(after.functions, before.functions, 'replacing one icon keeps the other function slots visible')
     if (fixture.builtIn) assert.equal(await page.evaluate(async path => {
       const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
       const scene = await toolbarPreview.sceneForState()
@@ -108,7 +128,7 @@ try {
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
     await card.waitFor()
     assert.deepEqual(await snapshot(), before, 'undo restores the exact native resource and toolbar scope')
-    assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), 'true')
+    if (!fixture.legacy) assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), 'true')
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).redo())
     assert.deepEqual(await snapshot(), after)
     if (fixture.format === 'ssf') {

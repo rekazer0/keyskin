@@ -13,7 +13,7 @@ import { compositeImage, cropImage, decodePng, encodePng, placeImage, pngSize, r
 import { convertSsfToBaidu } from '../src/ssf/ssf-to-baidu.ts'
 import { convertSsfToBda } from '../src/ssf/ssf-to-bda.ts'
 import { convertBaiduToSsf } from '../src/ssf/baidu-to-ssf.ts'
-import { convertSsfDocument, exportSsf, ssfDocumentBytes } from '../src/ssf/ssf-convert.ts'
+import { convertSsfDocument, exportSsf, ssfDocumentBytes, ssfSkeleton } from '../src/ssf/ssf-convert.ts'
 import { COLORS, SIZES, TEXT, skinContainer, solid, ssfFixture, wav } from './helpers/ssf-fixture.mjs'
 
 const read = (path) => new Uint8Array(readFileSync(new URL(path, import.meta.url)))
@@ -324,7 +324,7 @@ test('ssf -> BDS: all keyboard layouts keep their template gesture actions', asy
   const { archive } = convertSsfToBaidu(await SsfPackage.open(ssfFixture()), bdsTemplate)
   const expected = {
     py_26: ['q', { UP: '1', LEFT: '1', RIGHT: '1' }],
-    en_26: ['a', { UP: '!', LEFT: '!', RIGHT: '!' }],
+    en_26: ['a', { UP: '~', LEFT: '~', RIGHT: '~' }],
     en_26s: ['i', { UP: '8' }],
     py_9: ['q', { UP: '7', DOWN: 's', LEFT: 'p', RIGHT: 'r' }],
     en_9: ['q', { UP: '7', DOWN: 's', LEFT: 'p', RIGHT: 'r' }],
@@ -339,7 +339,25 @@ test('ssf -> BDS: all keyboard layouts keep their template gesture actions', asy
   }
   const pinyin = IniDocument.parse(archive.getText('light/skin/port/py_26.ini'))
   const h = pinyin.sections().find((section) => pinyin.get(section, 'CENTER') === 'h')
-  assert.deepEqual(Object.fromEntries(['UP', 'LEFT', 'RIGHT'].map((field) => [field, pinyin.get(h, field)])), { UP: '&', LEFT: '&', RIGHT: '&' })
+  assert.deepEqual(Object.fromEntries(['UP', 'LEFT', 'RIGHT'].map((field) => [field, pinyin.get(h, field)])), { UP: '“', LEFT: '“', RIGHT: '“' })
+})
+
+test('SSF preview and export use the official Chinese and English swipe symbols for every letter', async () => {
+  const pkg = await SsfPackage.open(ssfFixture())
+  const preview = ssfSkeleton(pkg, templates.sogou)
+  const { archive } = convertSsfToBaidu(pkg, templates.sogou, 1080)
+  // F_KEYS → TEXT in the official 1080/layout/template.ini, including PY/EN punctuation variants.
+  const symbols = {
+    py_26: ['1234567890', '~！@#%“”*？', '()-_:;/'],
+    en_26: ['1234567890', "~!@#%'&*?", '()-_:;/'],
+  }
+  for (const source of [preview, archive]) for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) for (const [board, rows] of Object.entries(symbols)) {
+    const document = IniDocument.parse(source.getText(`${theme}/skin/${orientation}/${board}.ini`))
+    for (const [index, letters] of ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'].entries()) for (const [at, letter] of [...letters].entries()) {
+      const section = document.sections().find((section) => document.get(section, 'CENTER') === letter)
+      for (const field of ['UP', 'LEFT', 'RIGHT']) assert.equal(document.get(section, field), rows[index][at], `${theme}/${orientation}/${board} ${letter} ${field}`)
+    }
+  }
 })
 
 test('ssf -> BDS: nine-key swipe actions are preserved in the exported layout', async () => {

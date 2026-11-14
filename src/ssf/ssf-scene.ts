@@ -317,7 +317,7 @@ export async function ssfBoardScene(
     const action = layout.get(section, "CENTER")?.trim()
     const rect = parseRect(layout.get(section, "VIEW_RECT"))
     if (!action || !rect) return []
-    const binding = ssfKeyBinding(layoutName, action, landscape, layout.get(section, "SSF_SECTION"), layout.get(section, "SSF_BG"))
+    const binding = ssfKeyBinding(layoutName, action, landscape, layout.get(section, "SSF_SECTION"), layout.get(section, "SSF_BG"), layout.get(section, "SSF_FG"))
     const on = /^[a-z]$/.test(action) && ["py9", "py26"].includes(ssfBoard(layoutName))
     const background = ssfBackground(styles.skin, binding, (ref) => Boolean(styles.pkg.file(styles.theme, ref.file)))
     return [sceneKey(section, rect, async (pressed) => {

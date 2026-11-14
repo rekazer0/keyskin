@@ -377,7 +377,8 @@ export function populateDocumentInspector(): void {
     const sectionEntries = entries.filter((item) => item.section === sectionName)
     const title = /\.pop$/i.test(appState.selectedPath) && /^ICON\d+$/i.test(sectionName)
       ? `气泡图案 ${sectionName.slice(4)}`
-      : sectionName ? translatedSectionLabel(sectionName).replace(/\s*[（(][^）)]*[）)]\s*$/, "") : "基本信息"
+      : toolbarSections.size === 1 && /^ICON\d+$/i.test(sectionName) ? "按钮"
+        : sectionName ? translatedSectionLabel(sectionName).replace(/\s*[（(][^）)]*[）)]\s*$/, "") : "基本信息"
     documentFields.append(section(title, sectionEntries.filter((entry) => !layoutAnimationFields.has(entry.key)).flatMap(renderEntry), {
       code: sectionName && title !== sectionName ? sectionName : undefined,
     }))
@@ -487,6 +488,11 @@ export function populateBdaConfigInspector(): void {
     editable: isEditing(),
     onDesignWidth: (value) => update(updateBdaDesignWidth(bytes, value)),
     onAnimationEffect: (effectID, property, value) => update(updateBdaAnimationEffect(bytes, effectID, property, value)),
+    onAnimationPreset: (effectID, fields) => {
+      let after = bytes
+      for (const [property, value] of Object.entries(fields)) after = updateBdaAnimationEffect(after, effectID, property, value)
+      update(after)
+    },
     onAnimationFrame: (sequence, frame, property, value) => update(
       updateBdaAnimationFrame(bytes, sequence, frame, property, value),
     ),

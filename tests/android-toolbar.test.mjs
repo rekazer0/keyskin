@@ -93,7 +93,7 @@ test('the toolbar preview follows the format: BDS reads the Android atlas, BDI t
     const ios = await new AtlasResolver(bdi, 'light', 'port').resolveToolbarImages()
     assert.ok(ios.every((visual) => visual.imagePath.endsWith('_iphone@3x.png')))
     assert.ok(ios.length > 0)
-    assert.deepEqual(ios.map((visual) => visual.label), ['表情', '键盘类型', 'AI搜索'])
+    assert.deepEqual(ios.map((visual) => visual.label), ['表情', '键盘类型', 'AI搜索', '移动光标'])
   } finally {
     globalThis.createImageBitmap = original
   }

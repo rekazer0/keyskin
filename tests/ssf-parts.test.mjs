@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { IniDocument } from '../src/ini.ts'
 import { SsfPackage } from '../src/ssf/ssf-package.ts'
 import { ssfKeyBinding } from '../src/ssf/ssf-keymap.ts'
-import { ssfBackground, ssfForeground, ssfLabelStyle, ssfSoundSection, ssfTextSections } from '../src/ssf/ssf-parts.ts'
+import { ssfBackground, ssfForeground, ssfForegroundLayout, ssfLabelStyle, ssfSoundSection, ssfTextSections } from '../src/ssf/ssf-parts.ts'
 import { ssfSectionLabel } from '../src/ssf/ssf-labels.ts'
 import { unzipSync } from 'fflate'
 import { ssfFixture } from './helpers/ssf-fixture.mjs'
@@ -51,4 +51,39 @@ test('ssf labels: sections read as key names', () => {
   assert.equal(ssfSectionLabel('KeyBg_Default_Latin'), '全键默认背景')
   assert.equal(ssfSectionLabel('status2'), '外观 2')
   assert.equal(ssfSectionLabel('Mystery'), 'Mystery')
+})
+
+test('SSF enter icons inherit the board foreground layout without an explicit FG_STYLE', () => {
+  const skin = IniDocument.parse('[Key_Enter]\nICON=send.png\n')
+  for (const landscape of [false, true]) {
+    const suffix = landscape ? '_Land' : ''
+    for (const board of ['py_9', 'def_9', 'cantonese_9', 'big_9']) {
+      assert.deepEqual(ssfForegroundLayout(skin, ssfKeyBinding(board, 'F39', landscape), board, landscape), { fgStyle: `FGStyle_Enter_Py9${suffix}` })
+    }
+    assert.deepEqual(ssfForegroundLayout(skin, ssfKeyBinding('py_26', 'F39', landscape), 'py_26', landscape), { fgStyle: `FGStyle_Enter_Py26${suffix}` })
+    assert.deepEqual(ssfForegroundLayout(skin, ssfKeyBinding('py_9_big_enter', 'F39', landscape), 'py_9_big_enter', landscape), { fgStyle: `FGStyle_Enter_Py9${suffix}` })
+  }
+  skin.set('Key_Enter', 'FG_STYLE', 'CustomEnter')
+  assert.deepEqual(ssfForegroundLayout(skin, ssfKeyBinding('py_9', 'F39', true), 'py_9', true), { fgStyle: 'CustomEnter' })
+})
+
+test('SSF foreground and label styles inherit the exact official board binding, with explicit overrides first', () => {
+  const skin = IniDocument.parse('[FGStyle_Clear_Py9]\nLABEL_STYLE=CustomClearText\nICON_RECT=0.6,0,1,0.3\n')
+  const binding = ssfKeyBinding('big_9', 'F40', false, 'Key_Clear_Input', undefined, 'FGStyle_Clear_Py9')
+  assert.deepEqual(ssfForegroundLayout(skin, binding, 'big_9', false), { fgStyle: 'FGStyle_Clear_Py9' })
+  assert.deepEqual(ssfTextSections(binding, false, skin), ['CustomClearText', 'TextStyle_FuncKey_T9', 'TextStyle'])
+  skin.appendSection('Key_Clear_Input', [{ key: 'FG_STYLE', value: 'OwnClear' }])
+  assert.deepEqual(ssfForegroundLayout(skin, binding, 'big_9', false), { fgStyle: 'OwnClear' })
+})
+
+test('SSF inherited switch foregrounds keep their built-in label styles when the skin only changes geometry', () => {
+  const skin = IniDocument.parse('[FGStyle_Switch_Py9]\nLABEL_POSITION=0,0,1,1\n')
+  const binding = ssfKeyBinding('py_9', 'F16', false, 'Key_SwitchToEN', undefined, 'FGStyle_Switch_Py9')
+  assert.deepEqual(ssfForegroundLayout(skin, binding, 'py_9', false), {
+    fgStyle: 'FGStyle_Switch_Py9', label: 'TextStyle_Switch', minor: 'TextStyle_MinorLabel_Switch',
+  })
+  skin.set('FGStyle_Switch_Py9', 'LABEL_STYLE', 'CustomSwitch')
+  assert.equal(ssfForegroundLayout(skin, binding, 'py_9', false).label, 'CustomSwitch')
+  skin.appendSection('Key_SwitchToEN', [{ key: 'FG_STYLE', value: 'ExplicitSwitch' }])
+  assert.deepEqual(ssfForegroundLayout(skin, binding, 'py_9', false), { fgStyle: 'ExplicitSwitch' })
 })

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { mkdirSync } from 'node:fs'
 
 const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0 } })
 await server.listen()
@@ -12,7 +13,13 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.route('**/src/ai-design.ts', route => route.fulfill({
     contentType: 'application/javascript',
-    body: `export async function runAiSkinDesign(config, project, prompt) {
+    body: `export async function runAiSkinDesign(config, project, prompt, options) {
+      if (window.sessionMode) {
+        await options.onStatus('reading', '读取测试文件');
+        await options.onThinking('测试思考');
+        await options.onTextDelta('回答 ' + prompt);
+        return { response: '回答 ' + prompt, conversation: [], changes: [] };
+      }
       window.designStarted = true;
       if (window.delayDesign) await new Promise(resolve => { window.finishDesign = resolve });
       const file = project.files.find(file => file.syntax === 'ini');
@@ -106,19 +113,9 @@ try {
   // Exercise real deep-chat messages, timeline nodes, attachments and typed input across switches.
   await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
-    const { connectAiChat } = await import('/src/ai-chat.ts')
-    const old = document.querySelector('#ai-design-chat')
-    const chat = document.createElement('deep-chat')
-    chat.id = old.id
-    chat.innerHTML = old.innerHTML
-    appState.aiChatController = await connectAiChat(chat, async (prompt, hooks) => {
-      await hooks.onStatus('读取测试文件', 'reading')
-      await hooks.onThinking('测试思考')
-      await hooks.onTextDelta(`回答 ${prompt}`)
-      return { fallback: '' }
-    })
-    appState.aiChatInitialization = Promise.resolve(appState.aiChatController)
-    old.replaceWith(chat)
+    appState.aiChatController.clear()
+    window.sessionMode = true
+    document.querySelector('#mode').value = 'edit'
   })
   const chat = page.locator('#ai-design-chat')
   await chat.locator('.ai-resize').waitFor()
@@ -137,7 +134,7 @@ try {
   await page.getByRole('button', { name: '会话', exact: true }).click()
   await page.locator('#ai-sessions').waitFor()
   assert.equal(await page.locator('#ai-session-list [role="option"]').count(), 1)
-  assert.equal(await page.locator('#ai-session-list [role="option"]').innerText(), '第一个会话')
+  assert.equal(await page.locator('#ai-session-list [role="option"] strong').innerText(), '第一个会话')
   assert.equal(await page.locator('#ai-new-session [data-icon="message-square"]').count(), 1)
   await page.locator('#ai-design-panel').click({ position: { x: 8, y: 8 } })
   assert.equal(await page.locator('#ai-sessions').isVisible(), false)
@@ -173,6 +170,101 @@ try {
     syncAiDesignControls()
   })
   assert.equal(await page.getByRole('button', { name: '会话', exact: true }).isDisabled(), true)
+
+  // Select files independently: preview, deselection, partial apply and undo share the real archive.
+  await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    const panel = await import('/src/app/ai-panel.ts')
+    appState.aiDesignBusy = false
+    document.querySelector('#mode').value = 'edit'
+    const { IniDocument } = await import('/src/ini.ts')
+    const drafts = panel.aiEditableProjectFiles(appState.archive).filter(file => file.syntax === 'ini').slice(0, 2)
+      .map((file, index) => {
+        const document = IniDocument.parse(file.text)
+        if (index === 0) {
+          window.reviewSection = document.sections()[0]
+          document.set(window.reviewSection, 'MOBILE_REVIEW_ROUND', '14')
+          document.set(window.reviewSection, 'MOBILE_REVIEW_SIZE', '18')
+        }
+        return { path: file.path, syntax: file.syntax, before: file.text, after: index === 0 ? document.toString() : file.text + '\n; selected AI review\n' }
+      })
+    window.reviewDrafts = drafts
+    window.reviewUndoLength = appState.undoStack.length
+    panel.setAiDesignDraft({ target: appState.archive, drafts, changes: panel.validatedAiChanges(appState.archive, drafts), sections: [], conversation: [], response: '移动端审阅' })
+  })
+  const boxes = page.locator('#ai-draft-files > li > details > summary input[type="checkbox"]')
+  assert.equal(await boxes.count(), 2)
+  await boxes.nth(1).uncheck()
+  assert.deepEqual(await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return window.reviewDrafts.map(file => appState.archive.getText(file.path) === file.after)
+  }), [true, false])
+  const field = page.getByRole('checkbox', { name: /MOBILE_REVIEW_SIZE 的修改$/ })
+  await field.uncheck()
+  assert.deepEqual(await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    const { IniDocument } = await import('/src/ini.ts')
+    const document = IniDocument.parse(appState.archive.getText(window.reviewDrafts[0].path))
+    return [document.get(window.reviewSection, 'MOBILE_REVIEW_ROUND'), document.get(window.reviewSection, 'MOBILE_REVIEW_SIZE')]
+  }), ['14', undefined], 'field selection restores only the excluded property')
+  await field.check()
+  await boxes.nth(0).uncheck()
+  assert.equal(await page.locator('#ai-draft-apply').isDisabled(), true)
+  await boxes.nth(0).check()
+  await page.locator('#ai-draft-compare').click()
+  assert.equal(await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return window.reviewDrafts.every(file => appState.archive.getText(file.path) === file.before)
+  }), true)
+  await page.locator('#ai-draft-compare').click()
+  assert.deepEqual(await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return window.reviewDrafts.map(file => appState.archive.getText(file.path) === file.after)
+  }), [true, false])
+  mkdirSync('.ui-current/mobile-visual', { recursive: true })
+  for (const width of [320, 393, 430]) for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : width === 430 ? 932 : 852 })
+    await page.emulateMedia({ colorScheme: theme })
+    await page.evaluate(async () => { (await import('/src/app/mobile-layout.ts')).setMobilePane('inspector') })
+    await page.waitForFunction(theme => document.documentElement.dataset.appTheme === theme, theme)
+    await page.waitForFunction(() => {
+      const keyboard = document.querySelector('#device-shell').getBoundingClientRect()
+      const canvas = document.querySelector('.canvas-wrap').getBoundingClientRect()
+      return keyboard.width > 0 && keyboard.left >= canvas.left - 1 && keyboard.right <= canvas.right + 1
+        && keyboard.top >= canvas.top - 1 && keyboard.bottom <= canvas.bottom + 1
+    })
+    await page.evaluate(async () => {
+      await (await import('/src/app/canvas-interaction.ts')).preview.whenDrawn()
+    })
+    await page.locator('#ai-draft-files > li details').first().evaluate(node => { node.open = true })
+    for (const selector of ['#ai-draft-apply', '#ai-draft-cancel', '#ai-draft-compare']) {
+      const box = await page.locator(selector).boundingBox()
+      assert.ok(box && box.y >= 0 && box.y + box.height <= (width === 320 ? 568 : width === 430 ? 932 : 852), `${width}-${theme}: draft action clipped`)
+    }
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}-${theme}: AI overflow`)
+    await page.screenshot({ path: `.ui-current/mobile-visual/${width}-${theme}-ai-review.png` })
+    const reviewSpace = await page.locator('#ai-draft-files').evaluate(node => node.clientHeight)
+    assert.ok(reviewSpace >= 44, `${width}-${theme}: review leaves only ${reviewSpace}px for a field`)
+    await field.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: `.ui-current/mobile-visual/${width}-${theme}-ai-fields.png` })
+  }
+  await page.locator('#ai-draft-apply').click()
+  assert.equal(await page.evaluate(async () => (await import('/src/app/state.ts')).appState.undoStack.length === window.reviewUndoLength + 1), true)
+  await page.evaluate(async () => { (await import('/src/app/edit-history.ts')).undo() })
+  assert.equal(await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return window.reviewDrafts.every(file => appState.archive.getText(file.path) === file.before)
+  }), true)
+  await page.getByRole('button', { name: '会话', exact: true }).click()
+  await page.locator('[data-session-filter="applied"]').click()
+  assert.equal(await page.locator('#ai-session-list [role="option"]').count(), 1)
+  assert.match(await page.locator('#ai-session-list').innerText(), /已应用 1 个文件/)
+  await page.screenshot({ path: '.ui-current/mobile-visual/430-dark-ai-history.png' })
+  await page.getByRole('button', { name: '清理记录', exact: true }).click()
+  await page.getByRole('dialog', { name: '清理 AI 历史？' }).getByRole('button', { name: '清理记录', exact: true }).click()
+  await page.waitForFunction(async () => (await import('/src/app/state.ts')).appState.aiSessions.length === 1)
+  if (await page.locator('#ai-sessions').isVisible()) await page.locator('#ai-sessions-close').click()
+  await page.setViewportSize({ width: 1440, height: 1000 })
 
   // A desktop settings instance uses API results for subscriptions as well as API-key providers.
   await page.evaluate(async () => {

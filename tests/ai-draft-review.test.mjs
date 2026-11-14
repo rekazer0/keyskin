@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { appSource, declarations, run } from './helpers/app-source.mjs'
+import { selectedDraftChanges } from '../src/ai-draft-selection.ts'
 
 const reviewSource = readFileSync(new URL('../src/ai-draft-review.ts', import.meta.url), 'utf8')
 const review = vm.createContext({ exports: {} })
@@ -40,6 +41,7 @@ function setup(editing = true, stale = false) {
   const target = { format: 'bdi', getBytes: () => undefined, getText: path => files.get(path), setText: (path, text) => files.set(path, text) }
   const draft = { target, changes: [{}], drafts: [{ path: 'keys.ini', syntax: 'ini', before: 'old', after: 'new' }], conversation: ['accepted'] }
   let commits = 0
+  let applications = 0
   const context = run(functions, {
     archive: target, aiDesignDraft: undefined, aiDraftPreview: undefined, aiDesignBusy: false, aiDesignConversation: [],
     aiDesignStatus: { textContent: '' }, aiDesignPanel: { dataset: {} },
@@ -48,11 +50,13 @@ function setup(editing = true, stale = false) {
     aiEditableProjectImages: () => [{ path: 'keys.png' }],
     commitBatch: () => { commits++ },
     aiDesignErrorMessage: error => error.message,
+    selectedDraftChanges,
+    recordAiApplication: () => { applications++ },
     refreshAfterAiDraft() {},
   })
   vm.runInContext('function setAiDesignDraft(value) { revertAiDraftPreview(); aiDesignDraft = value; if (value) previewAiDraft(value) }', context)
   context.setAiDesignDraft(draft)
-  return { context, draft, text: () => files.get('keys.ini'), commits: () => commits }
+  return { context, draft, text: () => files.get('keys.ini'), commits: () => commits, applications: () => applications }
 }
 test('draft is previewed on the canvas before it is applied', () => {
   const s = setup()
@@ -85,6 +89,7 @@ test('accepted draft commits once and advances the conversation', () => {
   s.context.applyAiDesignDraft()
   s.context.applyAiDesignDraft()
   assert.equal(s.commits(), 1)
+  assert.equal(s.applications(), 1)
   assert.equal(s.text(), 'new')
   assert.equal(s.context.aiDesignDraft, undefined)
   assert.equal(s.context.aiDesignConversation[0], 'accepted')

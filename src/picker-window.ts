@@ -42,6 +42,7 @@ export type SsfLibraryAnimation = {
   images: Record<string, StyleLibraryVisual>
 }
 export type StyleLibraryPayload = {
+  recentStyles?: string[]
   ssfAnimation?: SsfLibraryAnimation
   session?: string
   sliceBack: boolean
@@ -359,6 +360,8 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   libraryPreviewImage.replaceChildren()
   const style = library.styles.find((item) => item.styleID === selected.styleID)
   const sound = library.sounds.find((item) => item.styleID === selected.styleID)
+  libraryPreview.dataset.variant = !selected.imagePath && (sound || style?.kind === "sound") ? "sound" : ""
+  libraryPreviewImage.classList.toggle("ui-checker", libraryPreview.dataset.variant !== "sound")
   if (selected.imagePath) {
     const image = new Image()
     image.alt = selected.imagePath.split("/").pop() ?? selected.imagePath
@@ -381,7 +384,7 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
     }
   }
   $("#style-library-preview-title").textContent = selected.imagePath?.split("/").pop() ?? (sound?.label ?? `样式 ${style?.label ?? selected.styleID}`)
-  $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? "")
+  $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? style?.sound ?? "")
   const compatible = selected.imagePath ? library.imagesCompatible : library.imageSelection ? style?.kind === "image" : Boolean(style?.compatible ?? sound)
   libraryApply.disabled = !compatible || !library.editable
   libraryApplyToStyle.hidden = !selected.imagePath || !library.applyToStyle || Boolean(library.imageSelection)
@@ -481,7 +484,7 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
       return card
     } }))
   }
-  return payload.styles.filter(style => styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
+  return payload.styles.filter(style => (libraryFilter !== "recent" || payload.recentStyles?.includes(style.styleID)) && styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter === "recent" ? "all" : libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
     const card = styleCard({
       id: style.styleID, label: payload.ssfAnimation ? style.label : `STYLE${style.label}`, info: style.info, kind: style.kind,
       draw: (canvas, highlighted) => style.kind === "text"
@@ -511,9 +514,10 @@ function renderLibrary(): void {
     button.setAttribute("aria-pressed", String(button.dataset.libraryMode === libraryMode))
     button.disabled = (sound || Boolean(payload?.ssfAnimation)) && button.dataset.libraryMode === "images"
   }
-  libraryModes.hidden = chooser
+  libraryModes.hidden = chooser || sound
   libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => { libraryKind = value; renderLibrary() }))
-  libraryFilters.replaceChildren(styleFilterButtons(styleUsageOptions, "libraryFilter", libraryFilter, value => { libraryFilter = value; renderLibrary() }))
+  const usageOptions = [...styleUsageOptions, ...(payload?.recentStyles?.length && !images ? [["recent", "最近使用"] as const] : [])]
+  libraryFilters.replaceChildren(styleFilterButtons(usageOptions, "libraryFilter", libraryFilter, value => { libraryFilter = value; renderLibrary() }))
   libraryKinds.hidden = images || sound
   libraryFilters.hidden = sound
   const query = search.value.trim().toLowerCase().replace(/^#/, "")

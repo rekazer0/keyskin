@@ -7,6 +7,7 @@ import { AtlasResolver, type TextVisual } from "../atlas.ts"
 import { candidateWordsForeground, inputBarMetrics } from "../candidate-style.ts"
 import { IniDocument } from "../ini.ts"
 import { iosCandidateBackground, iosDefaultToolbarScene, iosToolbarImageScene } from "../ios-preview.ts"
+import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
 import { previewItems } from "../preview-items.ts"
 import type { NativeScene, SceneLayer } from "../native-scene.ts"
 import { PalmBoard, type PalmOrientation, type PalmTheme } from "../palm/palm-board.ts"
@@ -219,13 +220,12 @@ export function refreshNativeScenes(draft?: SsfPackage): void {
   const height = toolbarPreview.panelHeight
   const inputHeight = appState.candidateInputBar?.metrics.height ?? 0
   preview.setPanelTopInset(height + inputHeight)
-  const logoRoot = path.replace(/\/(port|land)\/[^/]+$/, "/res/logo/")
   const nativeFunctions = candidate.sections().some((section) => candidate.get(section, "KEY")?.trim() === "F14")
   const items = [...new Map([
     ...previewItems(candidate, width, height, general),
     ...previewItems(candidate, width, height, general, true),
   ].map((item) => [item.section, item])).values()]
-  if (nativeFunctions && !general?.get("LOGO", "LAYOUT_NAME") && !archive.isText(`${logoRoot}com.baidu.inputmethod.toolbarMenuItems.plist`)) {
+  if (nativeFunctions && !hasIosToolbarGeometry(general, candidate)) {
     toolbarPreview.setScene(() => iosDefaultToolbarScene(general, candidate, resolver, items, width, height))
   } else {
     toolbarPreview.setScene(() => iosToolbarImageScene(
