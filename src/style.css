@@ -1547,7 +1547,7 @@ body:has(.canvas-wrap.empty) .workspace {
 #source .cm-editor {
   height: 100%;
   color: var(--text);
-  background: var(--window);
+  background: var(--source-background);
 }
 
 #source .cm-editor.cm-focused {
@@ -1576,7 +1576,7 @@ body:has(.canvas-wrap.empty) .workspace {
 
 #source .cm-gutters {
   color: var(--tertiary);
-  background: var(--window);
+  background: var(--source-gutter-background);
   border-right: 1px solid var(--line-soft);
 }
 

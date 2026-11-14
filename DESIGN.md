@@ -22,6 +22,7 @@
 | 文字：主 / 次 / 弱 | `--text` / `--secondary` / `--tertiary` |
 | 分隔线：弱 / 常规 / 强 | `--line-soft` / `--line` / `--line-strong` |
 | 表面：窗口 / 工具栏 / 侧栏 / 检查器 / 面板 / 菜单 / 内容区 / 控件 | `--window` / `--toolbar` / `--sidebar` / `--inspector` / `--panel` / `--menu` / `--content` / `--control` |
+| 代码区 / 行号栏背景（浅色配套 GitHub Primer 高亮） | `--source-background` / `--source-gutter-background` |
 | 强调（跟随用户设置） | `--accent`、`--accent-soft`、文字 `--on-accent` |
 | 画布上的选中（按键、切片） | `--selection`、`--selection-soft` |
 | 状态 | `--state-ok` / `--state-warn` / `--state-danger` |

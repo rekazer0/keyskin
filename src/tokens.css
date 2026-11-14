@@ -144,6 +144,8 @@
   --guide-layout: #ef3e52;     /* 布局辅助线 */
   --guide-selected: #087ff5;   /* 选中按键的辅助线 */
   /* 代码高亮：GitHub Primer（prettylights）配色 */
+  --source-background: #ffffff;
+  --source-gutter-background: #f6f8fa;
   --syntax-comment: #6e7781;
   --syntax-section: #6639ba;
   --syntax-key: #116329;
@@ -227,6 +229,8 @@
   --canvas-surface: #0c0d10;
   --backdrop: rgb(0 0 0 / 45%);
   --syntax-comment: #8b949e;
+  --source-background: var(--window);
+  --source-gutter-background: var(--window);
   --syntax-section: #d2a8ff;
   --syntax-key: #7ee787;
   --syntax-string: #a5d6ff;
