@@ -8,7 +8,7 @@ import { requestEditMode, setMobilePane } from "../mobile-layout"
 import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
-import { sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelection, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
+import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelections, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
 import { type Change } from "../../history.ts"
 import { preview, source, scheduleSelectionInspectorSync, isTauri, exportButtons, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
 import { startNewDocument, newDocument } from "../new-document"
@@ -43,6 +43,7 @@ export function wireFilesAndSettings(): void {
   wirePinnedToolbar()
   wireAdbShare()
   wireSourceFileMenu()
+  wireSourceFileSearch()
   for (const button of [sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton]) {
     button.addEventListener("click", (event) => {
       if (isEditing()) return
@@ -53,8 +54,8 @@ export function wireFilesAndSettings(): void {
   sourcePasteButton.addEventListener("click", () => {
     if (!appState.archive || !isEditing() || !appState.sourceTransfer?.files.length) return
     const folder = sourceTargetFolder()
-    if (appState.sourceTransfer.mode === "move" && appState.sourceTransfer.folder &&
-      (folder === appState.sourceTransfer.sourcePath || folder.startsWith(`${appState.sourceTransfer.sourcePath}/`))) {
+    if (appState.sourceTransfer.mode === "move" && appState.sourceTransfer.roots.some(root =>
+      root.folder && (folder === root.sourcePath || folder.startsWith(`${root.sourcePath}/`)))) {
       showError(new Error("不能将文件夹移动到自身内部"), "移动")
       return
     }
@@ -66,17 +67,14 @@ export function wireFilesAndSettings(): void {
     if (appState.sourceTransfer.mode === "move" && copies.every(({ path, source }) => path === source)) return
     // 复制后粘贴回原位置：按访达习惯另存为「名称 副本」，而不是询问是否用自己替换自己。
     if (appState.sourceTransfer.mode === "copy") {
-      const names = appState.archive.names()
-      if (appState.sourceTransfer.folder) {
-        const top = `${folder ? `${folder}/` : ""}${appState.sourceTransfer.sourcePath.split("/").pop()}`
-        if (top === appState.sourceTransfer.sourcePath) {
-          const renamed = sourceCopyPath(top, (candidate) => names.some((name) => name.startsWith(`${candidate}/`)))
-          copies = copies.map((copy) => ({ ...copy, path: renamed + copy.path.slice(top.length) }))
-        }
-      } else {
-        copies = copies.map((copy) => copy.path === copy.source
-          ? { ...copy, path: sourceCopyPath(copy.path, (candidate) => names.includes(candidate)) }
-          : copy)
+      const names = [...appState.archive.names(), ...copies.map(copy => copy.path)]
+      for (const root of appState.sourceTransfer.roots) {
+        const top = `${folder ? `${folder}/` : ""}${root.path}`
+        if (top !== root.sourcePath) continue
+        const renamed = sourceCopyPath(top, candidate => names.some(name => name === candidate || name.startsWith(`${candidate}/`)))
+        copies = copies.map(copy => copy.path === top || root.folder && copy.path.startsWith(`${top}/`)
+          ? { ...copy, path: renamed + copy.path.slice(top.length) } : copy)
+        names.push(renamed)
       }
     }
     // 覆盖同名文件和删除一样进撤销栈，不再弹确认框（DESIGN.md §7）。
@@ -103,9 +101,9 @@ export function wireFilesAndSettings(): void {
   })
   bindListActionKeys(files, sourceDeleteButton.parentElement!)
   sourceDeleteButton.addEventListener("click", () => {
-    const selection = sourceSelection()
-    if (!appState.archive || !selection || !isEditing()) return
-    const paths = sourcePaths(selection)
+    const selected = sourceSelections()
+    if (!appState.archive || !selected.length || !isEditing()) return
+    const paths = [...new Set(selected.flatMap(sourcePaths))]
     if (!paths.length) return
     commitBatch(paths.map((path) => ({
       kind: "bytes",
@@ -113,7 +111,7 @@ export function wireFilesAndSettings(): void {
       before: appState.archive!.getBytes(path)?.slice(),
     })))
     refreshAfterSourceMutation()
-    showStatus(`已删除${selection.folder ? "文件夹" : "文件"} ${selection.path}，可撤销`)
+    showStatus(`已删除 ${selected.length} 项，可撤销`)
   })
   for (const menu of toolbarMenus) {
     bindMenuKeys(menu)

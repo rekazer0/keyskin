@@ -57,8 +57,7 @@ export type NativeResourcePickerPayload = { path: string; dataURL: string }[]
 
 export type SourceTransfer = {
   mode: "copy" | "move"
-  sourcePath: string
-  folder: boolean
+  roots: { sourcePath: string; folder: boolean; path: string }[]
   files: { path: string; source: string; bytes: Uint8Array }[]
 }
 

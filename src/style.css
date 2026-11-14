@@ -349,10 +349,6 @@ h2 {
 aside:has(.sidebar-overview:not([hidden])) { display: grid; grid-template-rows: auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) #files { height: 100%; }
-@media (max-width: 760px) and (orientation: portrait) {
-  aside:has(.sidebar-overview:not([hidden])) #mobile-file-search-box { display: none; }
-  aside:has(.raw-files:not([hidden])) { grid-template-rows: auto auto auto minmax(0, 1fr); }
-}
 
 /* 旧的源文件树样式已移至 source-files-redesign.css */
 
@@ -2369,7 +2365,10 @@ main {
   border-bottom: 0;
 }
 
-#source-file-toolbar { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+#source-file-toolbar { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+#source-file-toolbar:has(#source-file-search-toggle[aria-expanded="true"]) > button { display: none; }
+#source-file-search-box { grid-column: 1 / -1; justify-self: stretch; }
+#source-file-search-box[hidden] { display: none; }
 
 .resource-actions:has(#resource-rename:not([hidden])) {
   grid-template-columns: none;
@@ -3434,7 +3433,7 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 }
 
 /* 手机：属性与画布同屏，文件独占工作区；底部导航负责一次安全区留白。 */
-.mobile-app-more, .mobile-welcome-hero, .mobile-local-note, #mobile-welcome-open, #mobile-preview-summary, .mobile-export-entry, #mobile-inspector-resize, #mobile-file-search-box { display: none; }
+.mobile-app-more, .mobile-welcome-hero, .mobile-local-note, #mobile-welcome-open, #mobile-preview-summary, .mobile-export-entry, #mobile-inspector-resize { display: none; }
 .mobile-export-formats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
 .mobile-export-formats .ui-list-item { min-height: var(--control-height-lg); border: 1px solid var(--line); background: var(--control); }
 .mobile-export-formats .ui-list-item > span:first-of-type { flex: 1; display: grid; gap: var(--space-xs); font-family: var(--font-mono); }
@@ -3537,12 +3536,11 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   .welcome-recent #welcome-recent-open { display: none; }
   .mobile-local-note { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); margin-top: auto; color: var(--tertiary); font-size: var(--font-size-xs); }
   .welcome-note, .welcome-formats { display: none; }
-  #mobile-file-search-box { display: flex; flex: none; margin: var(--space-md) var(--space-lg); }
   #mobile-inspector-resize { position: absolute; z-index: 5; top: calc(var(--mobile-inspector-split) - var(--space-lg)); left: 50%; transform: translateX(-50%); width: calc(var(--control-height-lg) * 2); height: var(--space-xl); min-height: 0; padding: 0; border: 0; background: transparent; touch-action: none; cursor: ns-resize; }
   :root[data-mobile-pane="inspector"] #mobile-inspector-resize { display: grid; place-items: center; }
   #mobile-inspector-resize > span { width: var(--space-2xl); height: var(--space-xs); border-radius: var(--radius-full); background: var(--line-strong); }
   :root[data-mobile-pane="inspector"] .preview-zoom-control { display: none; }
-  .preview-zoom-control { right: var(--space-lg); bottom: var(--space-lg); gap: 0; padding: var(--space-xs); border-radius: var(--radius-full); background: var(--panel); box-shadow: var(--shadow-sm); }
+  .preview-zoom-control { right: var(--space-lg); bottom: var(--space-lg); gap: 0; padding: var(--space-2xs); border-radius: var(--radius-full); background: var(--panel); box-shadow: var(--shadow-sm); }
   .preview-overview-control { right: auto; left: var(--space-lg); }
   .preview-zoom-control > button { display: grid; place-items: center; width: var(--control-height-lg); height: var(--control-height-lg); min-width: var(--control-height-lg); min-height: var(--control-height-lg); padding: var(--space-md); border-radius: var(--radius-full); }
   .preview-zoom-control > button[aria-pressed="true"] { background: var(--accent-soft); box-shadow: none; }

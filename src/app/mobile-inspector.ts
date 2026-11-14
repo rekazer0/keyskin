@@ -1,8 +1,8 @@
-import { element, searchField } from "../dom-element"
+import { element } from "../dom-element"
 import { createIcon } from "../icons"
 import { mobilePortraitQuery } from "./canvas-interaction"
 import { appState } from "./state"
-import { mobileInspectorResize, mobilePropertyTabs, mobileFileSearch, quickInspector, inspectorPane, files } from "./dom"
+import { mobileInspectorResize, mobilePropertyTabs, quickInspector, inspectorPane } from "./dom"
 
 /** 手机分类复用原属性行和提交逻辑；布局等低频参数收起后仍可展开。 */
 export function syncMobilePropertyGroups(groups: HTMLElement[]): void {
@@ -76,26 +76,4 @@ export function wireMobileInspector(): void {
       : Number(mobileInspectorResize.getAttribute("aria-valuenow")) + (event.key === "ArrowUp" ? -2 : 2))
   })
   mobileInspectorResize.addEventListener("dblclick", () => resize(38))
-  const expandedFolders = new Set<string>()
-  let searching = false
-  const filterFiles = () => {
-    const query = mobileFileSearch.value.trim().toLocaleLowerCase()
-    const folders = [...files.querySelectorAll<HTMLDetailsElement>(".raw-folder")]
-    if (query && !searching) {
-      expandedFolders.clear()
-      for (const folder of folders) if (folder.open) expandedFolders.add(folder.dataset.folderPath ?? "")
-    }
-    for (const row of files.querySelectorAll<HTMLElement>(".nav-item, .source-file-row")) {
-      row.hidden = Boolean(query) && !`${row.textContent} ${row.dataset.path ?? ""}`.toLocaleLowerCase().includes(query)
-    }
-    for (const folder of folders) {
-      const matches = Boolean(folder.querySelector(".source-file-row:not([hidden])"))
-      folder.hidden = Boolean(query) && !matches
-      if (query) folder.open = matches
-      else if (searching) folder.open = expandedFolders.has(folder.dataset.folderPath ?? "")
-    }
-    searching = Boolean(query)
-  }
-  searchField({ input: mobileFileSearch, label: "搜索文件与布局", onInput: filterFiles })
-  new MutationObserver(filterFiles).observe(files, { childList: true, subtree: true })
 }

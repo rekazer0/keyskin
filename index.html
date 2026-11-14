@@ -140,6 +140,8 @@
           </div>
         </div>
         <div id="source-file-toolbar" class="source-file-toolbar" aria-label="源文件操作" hidden>
+          <button id="source-file-search-toggle" class="ui-icon-button" type="button" title="搜索文件" aria-label="搜索文件" aria-expanded="false" aria-controls="source-file-search-box"><span class="icon system-symbol" data-icon="search" aria-hidden="true"></span></button>
+          <label id="source-file-search-box" class="ui-input ui-search" hidden><input id="source-file-search" type="text" role="searchbox" placeholder="搜索" aria-label="搜索文件" enterkeyhint="search" autocomplete="off" spellcheck="false"></label>
           <button id="source-upload" class="ui-icon-button" type="button" title="上传文件" aria-label="上传文件"><span class="icon system-symbol" data-icon="upload" aria-hidden="true"></span></button>
           <button id="source-download" class="ui-icon-button" type="button" title="下载选中文件" aria-label="下载选中文件" disabled><span class="icon system-symbol" data-icon="download" aria-hidden="true"></span></button>
           <button id="source-copy" class="ui-icon-button" type="button" title="复制" aria-label="复制" disabled><span class="icon system-symbol" data-icon="copy" aria-hidden="true"></span></button>
@@ -149,7 +151,6 @@
           <button id="source-delete" class="ui-icon-button" type="button" data-list-action="remove" title="删除" aria-label="删除" disabled><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
           <input id="source-upload-input" type="file" multiple hidden>
         </div>
-        <label id="mobile-file-search-box" class="ui-input ui-search"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="mobile-file-search" type="search" placeholder="搜索" aria-label="搜索文件与布局" autocomplete="off"></label>
         <div id="files"></div>
         <div class="inspector-resize-handle sidebar-resize-handle" id="sidebar-resize-handle" aria-hidden="true"></div>
       </aside>

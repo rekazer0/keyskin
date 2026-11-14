@@ -212,6 +212,10 @@ export const files = $("#files")
 
 export const sourceFileToolbar = $("#source-file-toolbar")
 
+export const sourceFileSearchToggle = $("#source-file-search-toggle") as HTMLButtonElement
+
+export const sourceFileSearch = $("#source-file-search") as HTMLInputElement
+
 export const sourceUploadButton = $("#source-upload") as HTMLButtonElement
 
 export const sourceDownloadButton = $("#source-download") as HTMLButtonElement
@@ -616,5 +620,4 @@ export const welcomeScroller = document.querySelector<HTMLElement>(".welcome-mai
 
 export const mobileInspectorResize = $("#mobile-inspector-resize") as HTMLButtonElement
 export const mobilePropertyTabs = $("#mobile-property-tabs")
-export const mobileFileSearch = $("#mobile-file-search") as HTMLInputElement
 export const mobileSkinThemeLabel = $("#mobile-skin-theme-label")

@@ -4,7 +4,7 @@ import { source } from "./canvas-interaction"
 import { files, sourceFileToolbar, sourceRenameButton } from "./dom"
 import { commitBatch, isEditing } from "./edit-history"
 import { requestEditMode } from "./mobile-layout"
-import { refreshAfterSourceMutation, sourcePaths, sourceSelection } from "./source-files"
+import { selectSourceRow, refreshAfterSourceMutation, sourcePaths, sourceSelection } from "./source-files"
 import { appState } from "./state"
 
 function renameSourceFile(): void {
@@ -45,7 +45,7 @@ export function wireSourceFileMenu(): void {
     const items = element("div")
     items.setAttribute("role", "menu")
     items.setAttribute("aria-label", "源文件操作")
-    for (const action of sourceFileToolbar.querySelectorAll<HTMLButtonElement>("button")) {
+    for (const action of sourceFileToolbar.querySelectorAll<HTMLButtonElement>(":scope > button:not(#source-file-search-toggle)")) {
       const item = element("button", "ui-list-item")
       item.type = "button"
       item.setAttribute("role", "menuitem")
@@ -78,6 +78,8 @@ export function wireSourceFileMenu(): void {
     const row = (event.target as Element).closest<HTMLElement>(".raw-files .source-tree-row")
     if (!row) return
     event.preventDefault()
+    // macOS 会把 Ctrl 单击派发为 contextmenu，仍按多选处理。
+    if (event.ctrlKey) { selectSourceRow(row, event); return }
     openMenu(row, event.clientX, event.clientY)
   })
   files.addEventListener("keydown", event => {

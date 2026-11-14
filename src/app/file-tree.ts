@@ -15,7 +15,7 @@ import { bdaAppearancePath, bdaConfigPaths } from "../bda.ts"
 import { decodeBdaAppearance } from "../bda-decode.ts"
 import { toolbarConfigPath, styleConfigPath, legacyAnimationConfigPath } from "./config-context"
 import { firstExistingPath } from "../resources.ts"
-import { updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView, setRowSelected } from "./source-files"
+import { selectSourceRow, visibleSourceRows, filterSourceFiles, updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView, setRowSelected } from "./source-files"
 import { isSoundPath, soundMimeType } from "../sounds.ts"
 import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
@@ -489,6 +489,7 @@ export function renderFiles(): void {
   const sourceFiles = document.createElement("div")
   sourceFiles.className = "raw-files"
   sourceFiles.setAttribute("role", "tree")
+  sourceFiles.setAttribute("aria-multiselectable", "true")
   sourceFiles.setAttribute("aria-label", "源文件")
   const sourceNameCompare = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare
   type SourceNode = { folders: Map<string, SourceNode>; paths: string[] }
@@ -526,16 +527,6 @@ export function renderFiles(): void {
   releaseOnRemove(sourceFiles, () => thumbnailObserver.disconnect())
   const sourceFileCount = (node: SourceNode): number =>
     node.paths.length + [...node.folders.values()].reduce((total, child) => total + sourceFileCount(child), 0)
-  const selectSourceRow = (row: HTMLElement) => {
-    setRowSelected(appState.selectedFileButton, false)
-    appState.selectedFileButton = row
-    setRowSelected(row, true)
-    for (const item of sourceFiles.querySelectorAll<HTMLElement>(".source-tree-row")) {
-      item.tabIndex = item === row ? 0 : -1
-    }
-    row.focus()
-    updateSourceFileActions()
-  }
   const appendNode = (parent: HTMLElement, node: SourceNode, parentPath = "", depth = 0) => {
     for (const [name, child] of [...node.folders].sort(([a], [b]) => sourceNameCompare(a, b))) {
       const names = [name]
@@ -584,7 +575,7 @@ export function renderFiles(): void {
       })
       folderSummary.addEventListener("click", (event) => {
         event.preventDefault()
-        selectSourceRow(folderSummary)
+        selectSourceRow(folderSummary, event)
       })
       folderSummary.addEventListener("dblclick", (event) => {
         if (disclosure.contains(event.target as Node)) return
@@ -594,6 +585,7 @@ export function renderFiles(): void {
       folder.addEventListener("toggle", () => {
         if (folder.open) populate()
         folderSummary.setAttribute("aria-expanded", String(folder.open))
+        updateSourceFileActions()
       })
       parent.append(folder)
     }
@@ -620,7 +612,8 @@ export function renderFiles(): void {
       button.title = path
       button.dataset.path = path
       button.draggable = true
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey) { selectSourceRow(button, event); return }
         if (appState.archive?.isText(path) || appState.archive?.isImage(path) || appState.archive?.isBdaConfig(path)) {
           appState.animationDesignMode = "all"
           selectFile(path, "source")
@@ -677,7 +670,7 @@ export function renderFiles(): void {
   })
   rootSummary.addEventListener("click", (event) => {
     event.preventDefault()
-    selectSourceRow(rootSummary)
+    selectSourceRow(rootSummary, event)
   })
   rootSummary.addEventListener("dblclick", (event) => {
     if (rootDisclosure.contains(event.target as Node)) return
@@ -686,6 +679,7 @@ export function renderFiles(): void {
   })
   rootFolder.addEventListener("toggle", () => {
     rootSummary.setAttribute("aria-expanded", String(rootFolder.open))
+    updateSourceFileActions()
   })
   sourceFiles.append(rootFolder)
   appendNode(rootChildren, root)
@@ -716,11 +710,16 @@ export function renderFiles(): void {
   sourceFiles.addEventListener("keydown", (event) => {
     const current = (event.target as Element | null)?.closest<HTMLElement>(".source-tree-row")
     if (!current) return
-    const rows = Array.from(sourceFiles.querySelectorAll<HTMLElement>(".source-tree-row"))
-      .filter((row) => row.getClientRects().length > 0)
+    const rows = visibleSourceRows()
     const index = rows.indexOf(current)
     let next: HTMLElement | undefined
     switch (event.key) {
+      case "Home":
+        next = rows[0]
+        break
+      case "End":
+        next = rows.at(-1)
+        break
       case "ArrowDown":
         next = rows[index + 1]
         break
@@ -745,15 +744,17 @@ export function renderFiles(): void {
       }
       case "Enter":
       case " ":
+        if (event.ctrlKey || event.metaKey || event.shiftKey) { selectSourceRow(current, event); break }
         current.dispatchEvent(new MouseEvent(current.matches("summary") ? "dblclick" : "click", { bubbles: true }))
         break
       default:
         return
     }
     event.preventDefault()
-    if (next) selectSourceRow(next)
+    if (next) selectSourceRow(next, event)
   })
   files.append(sourceFiles)
   for (const folder of openFolders) ensureSourcePathRendered(`${folder}/`)
+  filterSourceFiles()
   setSidebarView(appState.sidebarView)
 }
