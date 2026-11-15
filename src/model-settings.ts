@@ -612,11 +612,21 @@ export function initializeModelSettings(section: HTMLElement, options: {
     const { models: _models, ...service } = group
     setBusy(true)
     setStatus(pending, "busy")
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const invocation = invoke<T>(command, { configuration: { ...service, model } })
+    // Keep a handler so a late IPC rejection after the UI deadline is not unhandled.
+    void invocation.catch(() => {})
     try {
-      return await invoke<T>(command, { configuration: { ...service, model } })
+      // Native requests have a 15s deadline; also bound the wait for the IPC reply.
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("模型服务连接超时，请检查网络后重试")), 20_000)
+      })
+      const result = await Promise.race([invocation, timeout])
+      if (current() === group) return result
     } catch (error) {
-      setStatus(`${failure}：${String(error)}`, "error")
+      if (current() === group) setStatus(`${failure}：${String(error)}`, "error")
     } finally {
+      clearTimeout(timer)
       setBusy(false)
     }
   }

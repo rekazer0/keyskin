@@ -1228,19 +1228,38 @@ fn parse_model_list(protocol: &str, bytes: &[u8]) -> Result<Vec<String>, String>
     Ok(models)
 }
 
-async fn request_model_list(configuration: &ModelConfiguration) -> Result<Vec<String>, String> {
+fn model_connection_error(error: reqwest::Error) -> String {
+    if error.is_timeout() {
+        "模型服务连接超时，请检查网络后重试".into()
+    } else {
+        format!("连接模型服务失败：{}", error.without_url())
+    }
+}
+
+async fn request_model_api(
+    configuration: &ModelConfiguration,
+    url: reqwest::Url,
+    body: Option<serde_json::Value>,
+) -> Result<Vec<u8>, String> {
     validate_model_configuration(configuration)?;
     if configuration.api_key.trim().is_empty() {
         return Err("请先填写 API 密钥".into());
     }
     let client = reqwest::Client::builder()
         .user_agent("KeySkin model connection test")
+        .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| error.to_string())?;
-    let url = model_list_url(configuration)?;
-    let mut request = client.get(url);
+    let mut request = if let Some(body) = body {
+        client
+            .post(url)
+            .header("content-type", "application/json")
+            .body(body.to_string())
+    } else {
+        client.get(url)
+    };
     request = match configuration.protocol.as_str() {
         "anthropic" => request
             .header("x-api-key", configuration.api_key.trim())
@@ -1248,14 +1267,11 @@ async fn request_model_list(configuration: &ModelConfiguration) -> Result<Vec<St
         "google" => request,
         _ => request.bearer_auth(configuration.api_key.trim()),
     };
-    let response = request
-        .send()
-        .await
-        .map_err(|error| format!("连接模型服务失败：{}", error.without_url()))?;
+    let response = request.send().await.map_err(model_connection_error)?;
     let status = response.status();
-    let bytes = response.bytes().await.map_err(|error| error.to_string())?;
+    let bytes = response.bytes().await.map_err(model_connection_error)?;
     if bytes.len() > MAX_MODEL_RESPONSE_BYTES {
-        return Err("模型列表响应过大".into());
+        return Err("模型服务响应过大".into());
     }
     if !status.is_success() {
         let detail = String::from_utf8_lossy(&bytes);
@@ -1266,6 +1282,11 @@ async fn request_model_list(configuration: &ModelConfiguration) -> Result<Vec<St
             format!("模型服务返回 HTTP {status}：{detail}")
         });
     }
+    Ok(bytes.to_vec())
+}
+
+async fn request_model_list(configuration: &ModelConfiguration) -> Result<Vec<String>, String> {
+    let bytes = request_model_api(configuration, model_list_url(configuration)?, None).await?;
     parse_model_list(&configuration.protocol, &bytes)
 }
 
@@ -1300,10 +1321,67 @@ async fn fetch_model_thinking_levels(
         .await
 }
 
+fn zhipu_connection_probe_body(model: &str) -> serde_json::Value {
+    // GLM-5.3 and its Flash variants always think; disabling thinking is rejected.
+    let always_thinks = {
+        let id = model.to_ascii_lowercase();
+        id == "glm-5.3" || id.starts_with("glm-5.3-")
+    };
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": [{ "role": "user", "content": "Reply OK" }],
+        "stream": false,
+        "max_tokens": 16,
+        "thinking": { "type": if always_thinks { "enabled" } else { "disabled" } },
+    });
+    if always_thinks {
+        body["reasoning_effort"] = serde_json::json!("low");
+    }
+    body
+}
+
 #[tauri::command]
 async fn test_model_connection(
     configuration: ModelConfiguration,
 ) -> Result<ModelConnectionResult, String> {
+    if configuration.protocol == "openai-chat"
+        && matches!(
+            configuration.provider.as_str(),
+            "zhipu-ai" | "zhipu-coding-plan" | "zhipu-coding-plan-team"
+        )
+    {
+        if configuration.model.trim().is_empty() {
+            return Err("请先选择一个模型".into());
+        }
+        // Test the chosen model without depending on an optional /models endpoint.
+        let url = reqwest::Url::parse(&format!(
+            "{}/chat/completions",
+            configuration.api_url.trim().trim_end_matches('/')
+        ))
+        .map_err(|_| "API 地址无效".to_string())?;
+        let bytes = request_model_api(
+            &configuration,
+            url,
+            Some(zhipu_connection_probe_body(configuration.model.trim())),
+        )
+        .await?;
+        let response: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|_| "模型测试响应不是有效 JSON".to_string())?;
+        if response
+            .get("choices")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|choices| choices.first())
+            .and_then(|choice| choice.get("message"))
+            .and_then(serde_json::Value::as_object)
+            .is_none()
+        {
+            return Err("模型服务未返回有效的聊天响应".into());
+        }
+        return Ok(ModelConnectionResult {
+            message: format!("连接成功，模型 {} 可用", configuration.model.trim()),
+            model_count: 1,
+        });
+    }
     let models = request_model_list(&configuration).await?;
     let model_count = models.len();
     Ok(ModelConnectionResult {
@@ -1501,6 +1579,166 @@ mod tests {
             parse_model_list("google", google).unwrap(),
             vec!["gemini-pro"]
         );
+    }
+
+    fn model_connection_exchange(
+        provider: &str,
+        base_path: &str,
+        status: &str,
+        body: &str,
+        model: &str,
+    ) -> (Result<super::ModelConnectionResult, String>, String) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let server = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().expect("accept");
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("read timeout");
+            let mut reader = BufReader::new(&mut socket);
+            let mut request = String::new();
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                assert!(reader.read_line(&mut line).expect("read headers") > 0);
+                request.push_str(&line);
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse::<usize>().expect("content length");
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).expect("read body");
+            request.push_str(&String::from_utf8(body).expect("UTF-8 body"));
+            socket.write_all(response.as_bytes()).expect("write response");
+            request
+        });
+        let mut configuration = test_model_configuration("openai-chat");
+        configuration.provider = provider.into();
+        configuration.api_url = format!("http://{address}{base_path}/");
+        configuration.model = model.into();
+        configuration.api_key = " secret ".into();
+        let result = tauri::async_runtime::block_on(super::test_model_connection(configuration));
+        (result, server.join().expect("server"))
+    }
+
+    #[test]
+    fn zhipu_connection_tests_probe_selected_model_without_listing_models() {
+        for (provider, base_path) in [
+            ("zhipu-ai", "/api/paas/v4"),
+            ("zhipu-coding-plan", "/api/coding/paas/v4"),
+            ("zhipu-coding-plan-team", "/api/coding/paas/v4"),
+        ] {
+            let (result, request) = model_connection_exchange(
+                provider,
+                base_path,
+                "200 OK",
+                r#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#,
+                "chosen-model",
+            );
+            let result = result.expect("connection success");
+            assert_eq!(result.message, "连接成功，模型 chosen-model 可用");
+            assert!(request.starts_with(&format!(
+                "POST {base_path}/chat/completions HTTP/1.1\r\n"
+            )));
+            let headers = request
+                .split("\r\n\r\n")
+                .next()
+                .unwrap()
+                .to_ascii_lowercase();
+            assert!(headers
+                .lines()
+                .any(|line| line == "authorization: bearer secret"));
+            assert!(headers
+                .lines()
+                .any(|line| line == "content-type: application/json"));
+            let body: serde_json::Value =
+                serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            assert_eq!(body["model"], "chosen-model");
+            assert_eq!(body["messages"][0]["role"], "user");
+            assert_eq!(body["stream"], false);
+            assert_eq!(body["thinking"]["type"], "disabled");
+            assert_eq!(body["max_tokens"], 16);
+        }
+    }
+
+    #[test]
+    fn zhipu_connection_keeps_thinking_enabled_for_glm_5_3() {
+        let (result, request) = model_connection_exchange(
+            "zhipu-coding-plan",
+            "/api/coding/paas/v4",
+            "200 OK",
+            r#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#,
+            "GLM-5.3-Flash",
+        );
+        result.expect("connection success");
+        let body: serde_json::Value =
+            serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(body["model"], "GLM-5.3-Flash");
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert_eq!(body["reasoning_effort"], "low");
+    }
+
+    #[test]
+    fn zhipu_connection_reports_http_and_invalid_response_errors() {
+        for (status, body, expected) in [
+            (
+                "401 Unauthorized",
+                r#"{"error":{"message":"invalid key"}}"#,
+                "HTTP 401",
+            ),
+            ("404 Not Found", "unsupported endpoint", "HTTP 404"),
+            ("429 Too Many Requests", "quota exceeded", "quota exceeded"),
+            ("200 OK", "not JSON", "不是有效 JSON"),
+            ("200 OK", r#"{"choices":[]}"#, "未返回有效的聊天响应"),
+            (
+                "200 OK",
+                r#"{"error":{"message":"unavailable model"}}"#,
+                "未返回有效的聊天响应",
+            ),
+        ] {
+            let (result, _) = model_connection_exchange(
+                "zhipu-coding-plan",
+                "/api/coding/paas/v4",
+                status,
+                body,
+                "glm-4.7",
+            );
+            let error = result.err().expect("must fail");
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn zhipu_connection_rejects_missing_key_or_model_before_sending() {
+        for (key, model, expected) in [("", "glm-4.7", "密钥"), ("secret", " ", "选择一个模型")] {
+            let mut configuration = test_model_configuration("openai-chat");
+            configuration.provider = "zhipu-ai".into();
+            configuration.api_key = key.into();
+            configuration.model = model.into();
+            let result = tauri::async_runtime::block_on(super::test_model_connection(configuration));
+            assert!(result.err().expect("must fail").contains(expected));
+        }
+    }
+
+    #[test]
+    fn other_providers_keep_model_list_connection_tests() {
+        let (result, request) = model_connection_exchange(
+            "openai",
+            "/v1",
+            "200 OK",
+            r#"{"data":[{"id":"model-a"},{"id":"model-b"}]}"#,
+            "model-a",
+        );
+        assert_eq!(result.expect("list success").model_count, 2);
+        assert!(request.starts_with("GET /v1/models HTTP/1.1\r\n"));
     }
 
     #[test]
