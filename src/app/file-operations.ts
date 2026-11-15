@@ -163,9 +163,18 @@ export function showFileOperationProgress(): void {
   if (!fileOperationDialog.open) fileOperationDialog.showModal()
 }
 
+export function showFileOperationCompatibility(title: string, warnings: string[]): void {
+  fileOperationTitle.textContent = "兼容性确认"
+  fileOperationResult.replaceChildren(...warnings.map(text => Object.assign(document.createElement("p"), { textContent: text })))
+  fileOperationResult.hidden = false
+  fileOperationDetail.textContent = `有 ${warnings.length} 项内容需要确认 · ${title}。原始皮肤保持不变`
+}
+
 export function showFileOperationResult(detail: string): void {
   fileOperationResult.textContent = detail
   fileOperationResult.hidden = false
+  const filename = /^文件：([^\n]+)/.exec(detail)?.[1]
+  if (filename) fileOperationDialog.dataset.resultFile = filename
 }
 
 export async function readBrowserSkinFile(file: File): Promise<Uint8Array> {
@@ -297,8 +306,10 @@ export async function runFileOperation(
   setFileOperationBusy(true)
   appState.fileOperationProgressVisible = false
   showStatus(`正在${action}…`, "progress")
+  delete fileOperationDialog.dataset.stage
+  delete fileOperationDialog.dataset.resultFile
   fileOperationDialog.dataset.outcome = "progress"
-  fileOperationIcon.replaceChildren(createIcon("keyboard", 20))
+  fileOperationIcon.replaceChildren(createIcon(action === "导出" ? "upload" : "save", 20))
   fileOperationTitle.textContent = `正在${action}`
   fileOperationResult.hidden = true
   fileOperationResult.textContent = ""
@@ -321,7 +332,7 @@ export async function runFileOperation(
   fileOperationCancel.disabled = false
   fileOperationCancel.hidden = !cancelOperation
   if (cancelOperation) fileOperationCancel.addEventListener("click", requestCancel)
-  updateFileOperationProgress(2, "正在准备…")
+  updateFileOperationProgress(0, "正在准备…")
   const started = performance.now()
   clientLog.info("operation.start", { action })
   try {
@@ -342,9 +353,11 @@ export async function runFileOperation(
     showStatus(completed ? `${action}完成` : `${action}已取消`)
     if (completed && (action === "保存" || action === "导出")) {
       showFileOperationProgress()
-      fileOperationTitle.textContent = `${action}完成`
+      fileOperationDialog.dataset.outcome = "success"
+      fileOperationClose.textContent = "继续编辑"
+      fileOperationTitle.textContent = action === "保存" ? "皮肤已保存" : "皮肤已导出"
       fileOperationIcon.replaceChildren(createIcon("check", 20))
-      updateFileOperationProgress(100, `${action}完成`)
+      updateFileOperationProgress(100, fileOperationDialog.dataset.resultFile ?? `${action}完成`)
     } else if (appState.fileOperationProgressVisible) {
       if (completed) updateFileOperationProgress(100, `${action}完成`)
       closeDialog(fileOperationDialog)
@@ -360,7 +373,7 @@ export async function runFileOperation(
     if (appState.fileOperationProgressVisible) {
       fileOperationDialog.dataset.outcome = "error"
       fileOperationIcon.replaceChildren(createIcon("circle-alert", 20))
-      fileOperationTitle.textContent = `${action}失败`
+      fileOperationTitle.textContent = `${action}未完成`
       fileOperationDetail.textContent = "处理已停止"
       fileOperationResult.textContent = operationErrorDetail(error)
       fileOperationResult.hidden = false

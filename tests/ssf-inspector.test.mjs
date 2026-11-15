@@ -3,6 +3,14 @@ import test from 'node:test'
 import { IniDocument } from '../src/ini.ts'
 import { declarations, run } from './helpers/app-source.mjs'
 
+test('SSF resolved gesture fields never write the derived Baidu skeleton', () => {
+  const context = run(declarations('updateSelectedKey'), {
+    archive: { format: 'ssf' }, layoutDocument: IniDocument.parse('[KEY1]\nUP=1\n'), selectedKeySections: ['KEY1'],
+  })
+  context.updateSelectedKey({ dataset: { keyField: 'UP' }, value: '9' })
+  assert.equal(context.layoutDocument.get('KEY1', 'UP'), '1')
+})
+
 test('SSF input selection shows composing view and text without candidate properties', () => {
   const context = run(declarations('boardGroups'), {
     selectedCandidate: 'input', selectedKeySections: [], orientation: { value: 'port' },

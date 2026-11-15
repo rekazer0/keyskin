@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
@@ -19,13 +20,15 @@ files['1080/status1/phoneSkin.ini'] = strToU8(strFromU8(files['1080/status1/phon
 for (const name of Object.keys(files)) if (name.startsWith('1080/status1/')) files[name.replace('1080/', '720/')] = files[name]
 const fixture = zipSync(files)
 
-const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { port: 41796, strictPort: false, host: '127.0.0.1' } })
+const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { port: 41796, strictPort: false, host: '127.0.0.1', hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 const fields = page.locator('#document-fields')
+const gestures = page.locator('.key-gesture-fields')
+const gesture = name => gestures.locator(`[data-key-field="${name}"]`)
 const row = (key) => fields.locator(`[data-document-key="${key}"]`)
 const read = (path, section, key) => page.evaluate(async ({ path, section, key }) => {
   const { ssfDocument } = await import('/src/app/ssf-documents.ts')
@@ -55,6 +58,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   await page.locator('#browser-open').setInputFiles({ name: '属性测试.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(fixture) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
+  await page.waitForFunction(() => !document.querySelector('#file-operation-dialog').open || !document.querySelector('#file-operation-close').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible()) await close.click()
   // Preview fields use the common edit-mode request dialog.
@@ -79,6 +83,40 @@ try {
   assert.equal(await page.locator('#inspector-filter').inputValue(), 'TEXT_COLOR_PRESSED')
   await page.locator('#inspector-filter').press('Escape')
   await page.locator('#inspector-filter').press('Escape')
+  assert.equal(await gestures.isVisible(), true)
+  assert.deepEqual(await gestures.locator('input').evaluateAll(inputs => inputs.map(input => [input.dataset.keyField, input.value, input.readOnly])), [
+    ['CENTER', 'q', true], ['HOLD', '', true], ['UP', '1', true], ['DOWN', '', true], ['LEFT', '1', true], ['RIGHT', '1', true],
+  ])
+  assert.equal(await gestures.locator('.inspector-gesture-count').textContent(), '4 / 6')
+  assert.equal(await page.locator('#ssf-gesture-note').isVisible(), true)
+  assert.equal(await gestures.locator('.mobile-action-library').isHidden(), true)
+  assert.equal(await gestures.locator('.mobile-action-library').isDisabled(), true)
+  const beforeViewing = await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return { revision: appState.archive.revision, undo: appState.undoStack.length }
+  })
+  await gesture('UP').focus()
+  await page.keyboard.type('x')
+  assert.equal(await gesture('UP').inputValue(), '1', 'resolved SSF gestures cannot be edited as Baidu fields')
+  assert.deepEqual(await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    return { revision: appState.archive.revision, undo: appState.undoStack.length }
+  }), beforeViewing, 'viewing resolved actions does not write source files or history')
+  // Long-press references refresh the preview immediately and follow undo/redo.
+  const holdAction = () => page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).preview.keys.find(key => key.center === 'q').hold)
+  const previousHold = await holdAction()
+  await change(row('L_KEY').locator('input'), 'Key_2')
+  assert.equal(await holdAction(), '2')
+  assert.equal(await gesture('HOLD').inputValue(), '2')
+  assert.equal(await read(skin, 'Key_Q', 'L_KEY'), 'Key_2')
+  await page.locator('#desktop-undo').click()
+  assert.equal(await holdAction(), previousHold)
+  assert.equal(await gesture('HOLD').inputValue(), previousHold ?? '')
+  await page.locator('#desktop-redo').click()
+  assert.equal(await holdAction(), '2')
+  assert.equal(await gesture('HOLD').inputValue(), '2')
+  await page.locator('#desktop-undo').click()
+  assert.equal(await holdAction(), previousHold)
   // A composite edit preserves its other coordinates; reset survives inspector reconstruction.
   const coord = () => row('FG_RECT').locator('input')
   // A section reference has one editable name and normal / pressed previews that edit its images.
@@ -223,6 +261,9 @@ try {
   // Shared background + per-key background display mixed previews and retain each stretch band.
   await selectKey('w', true)
   assert.match(await page.locator('#selected-key-context').textContent(), /共同属性/)
+  assert.equal(await gesture('UP').inputValue(), '')
+  assert.equal(await gesture('UP').getAttribute('placeholder'), '混合')
+  assert.equal(await gestures.locator('[data-action-meaning="UP"]').textContent(), '混合操作')
   assert.equal(await row('FG_RECT').count(), 0)
   const background = fields.locator('[data-inspector-group-label="背景"]')
   assert.equal(await background.locator('.ui-style-state').first().textContent(), '混合')
@@ -318,6 +359,43 @@ try {
   await space.locator('[data-document-key="TEXT_COLOR"] .ui-swatch').click()
   await change(space.locator('[data-document-key="TEXT_COLOR"] .ui-color-popover input[type=text]'), '#336699')
   assert.equal(await read(skin, 'TextStyle_Space_Label', 'TEXT_COLOR'), '0xFF336699')
+  await page.locator('#selected-key').click()
+  await page.keyboard.press('Escape')
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) for (const board of ['py_26', 'en_26']) {
+    await page.locator('#theme').selectOption(theme, { force: true })
+    await page.locator('#orientation').selectOption(orientation, { force: true })
+    await page.evaluate(async path => (await import('/src/app/navigation.ts')).selectFile(path), `${theme}/skin/${orientation}/${board}.ini`)
+    assert.equal(await gestures.isHidden(), true, 'a board selection has no key gestures')
+    await selectKey('j')
+    assert.equal(await gesture('UP').inputValue(), board === 'py_26' ? '”' : '&')
+    assert.equal(await gesture('UP').getAttribute('readonly'), '')
+    assert.equal(await gesture('CENTER').inputValue(), 'j')
+  }
+  await page.locator('#theme').selectOption('light', { force: true })
+  await page.locator('#orientation').selectOption('port', { force: true })
+  await page.evaluate(async () => (await import('/src/app/navigation.ts')).selectFile('light/skin/port/py_26.ini'))
+  await selectKey('q')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.locator('#mobile-property-tabs [data-mobile-category="actions"]').click()
+  assert.equal(await gestures.isVisible(), true)
+  assert.equal(await gestures.locator('.mobile-action-library').isDisabled(), true)
+  await page.screenshot({ path: '/tmp/bdi-ssf-gestures-mobile.png' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.screenshot({ path: '/tmp/bdi-ssf-gestures-desktop.png' })
+  // Leaving SSF restores editable Baidu actions and its action library.
+  await page.locator('#browser-open').setInputFiles({ name: '手势回归.bds', mimeType: 'application/octet-stream', buffer: readFileSync(new URL('../public/sogou-template.bds', import.meta.url)) })
+  await page.getByRole('dialog', { name: '未保存的皮肤', exact: true }).getByRole('button', { name: '不保存', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('#document-name')?.textContent.includes('手势回归'))
+  await page.waitForFunction(() => !document.querySelector('#open').disabled && (!document.querySelector('#file-operation-dialog').open || !document.querySelector('#file-operation-close').disabled))
+  if (await close.isVisible()) await close.click()
+  await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  await page.evaluate(async () => (await import('/src/app/navigation.ts')).selectFile('light/skin/port/py_26.ini'))
+  await selectKey('q')
+  assert.equal(await gesture('UP').evaluate(input => input.readOnly || input.disabled), false)
+  assert.equal(await page.locator('#ssf-gesture-note').isHidden(), true)
+  assert.equal(await gestures.locator('.mobile-action-library').isEnabled(), true)
+  await gesture('UP').fill('9')
+  assert.equal(await page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).preview.keys.find(key => key.center === 'q').up), '9')
   assert.deepEqual(errors, [])
   await page.screenshot({ path: '/tmp/bdi-ssf-inspector.png' })
   console.log('SSF inspector: shared structure, readonly prompt, persistent filter, paired values, gesture undo, mixed multi-selection, image edits and exact reset passed')

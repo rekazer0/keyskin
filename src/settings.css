@@ -235,3 +235,55 @@
 :root[data-interface-density="compact"] .inspector-grid input, :root[data-interface-density="compact"] .inspector-grid select { height: 26px; min-height: 26px; }
 
 :root[data-safe-area-guides="true"] .keyboard-dock > .keyboard-accessories { outline: 1px dashed var(--selection); outline-offset: -1px; }
+
+.mobile-settings-back, .mobile-model-notice, .mobile-model-link, .mobile-model-unavailable, .mobile-about-logo { display: none; }
+@media (max-width: 760px) and (orientation: portrait) {
+  #settings-dialog { height: var(--viewport-height); }
+  #settings-dialog > form { gap: 0; }
+  #settings-dialog .settings-header { padding: 0; }
+  #settings-dialog .settings-header h2 { flex: 1; font-size: var(--font-size-lg); }
+  #settings-dialog .mobile-settings-back { display: grid; }
+  #settings-dialog .settings-layout { display: flex; flex: 1; flex-direction: column; }
+  #settings-dialog .settings-sidebar { flex: 1; flex-direction: column; align-items: stretch; gap: var(--space-md); padding: var(--space-xl) 0; overflow-y: auto; border: 0; background: transparent; }
+  #settings-dialog .settings-sidebar::before { content: "按你的习惯来"; margin-block: var(--space-md); font-size: var(--font-size-page); font-weight: 600; }
+  #settings-dialog .settings-nav-item, #settings-dialog .mobile-model-link { display: flex; min-height: 72px; padding: var(--space-lg); border: 0; border-radius: var(--radius-md); background: var(--panel); color: var(--text); }
+  #settings-dialog .settings-nav-item[hidden] { display: none; }
+  #settings-dialog .settings-nav-item > :first-child { display: none; }
+  #settings-dialog .settings-nav-item::after { content: "›"; margin-left: auto; color: var(--secondary); }
+  #settings-dialog .settings-content { flex: 1; padding: var(--space-xl) 0; }
+  #settings-dialog[data-mobile-settings="index"] .settings-content, #settings-dialog[data-mobile-settings="index"] .mobile-settings-back,
+  #settings-dialog[data-mobile-settings="detail"] .settings-sidebar { display: none; }
+  #settings-dialog .settings-group { gap: var(--space-sm); margin-bottom: var(--space-xl); }
+  #settings-dialog .settings-group + .settings-group { padding-top: var(--space-lg); border: 0; }
+  #settings-dialog .settings-row { min-height: 64px; padding: var(--space-md); border: 0; border-radius: var(--radius-md); background: var(--panel); }
+  #settings-dialog .settings-row > .ui-segmented { width: 100%; background: var(--line-soft); }
+  #settings-dialog .settings-row > :is(.ui-select, input:not([type="checkbox"])) { flex-basis: auto; width: min(60%, 240px); }
+  #settings-dialog .settings-footer { padding-inline: 0; background: var(--window); }
+  #settings-dialog .mobile-model-notice { display: grid; gap: var(--space-sm); padding: var(--space-lg); margin-bottom: var(--space-xl); border-radius: var(--radius-lg); background: var(--accent-soft); }
+  #settings-dialog .mobile-model-notice h3 { margin: 0; color: var(--accent); font-size: var(--font-size-md); }
+  #settings-dialog [data-mobile-unavailable="true"] > :not(.mobile-model-notice, .mobile-model-unavailable) { display: none; }
+}
+.mobile-accent-presets { display: none; }
+@media (max-width: 760px) and (orientation: portrait) {
+  #settings-dialog .mobile-accent-presets { display: flex; width: 100%; justify-content: space-between; gap: var(--space-sm); }
+  #settings-dialog .mobile-accent-presets > button { width: 44px; height: 44px; padding: var(--space-sm); border: 6px solid var(--panel); border-radius: var(--radius-full); }
+  #settings-dialog [data-accent="blue"] { background: var(--accent-preset-blue); }
+  #settings-dialog [data-accent="green"] { background: var(--accent-preset-green); }
+  #settings-dialog [data-accent="purple"] { background: var(--accent-preset-purple); }
+  #settings-dialog [data-accent="coral"] { background: var(--accent-preset-coral); }
+  #settings-dialog [data-accent="slate"] { background: var(--accent-preset-slate); }
+  #settings-dialog .settings-row:has(.mobile-accent-presets) > .settings-color { display: none; }
+  #settings-dialog [data-settings-panel="appearance"] > :has(#settings-material-title), #settings-dialog [data-settings-panel="appearance"] > :has(#settings-chrome-title) { display: none; }
+  #settings-dialog [data-setting-choice="app-theme"] > .system-symbol { display: none; }
+  #settings-dialog [data-setting-choice="app-theme"]::after { content: attr(aria-label); }
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  #settings-dialog [data-mobile-unavailable="true"] .mobile-model-unavailable { display: grid; gap: var(--space-md); }
+  .mobile-model-unavailable h3 { margin: var(--space-lg) 0 var(--space-xs); font-size: var(--font-size-lg); }
+  .mobile-model-unavailable > div { min-height: 64px; padding: var(--space-lg); border-radius: var(--radius-md); background: var(--panel); font-size: var(--font-size-sm); }
+  #settings-dialog .settings-about > .settings-group:first-child { align-items: center; text-align: center; padding: var(--space-2xl) var(--space-lg); }
+  #settings-dialog .mobile-about-logo { display: grid; place-items: center; width: 72px; height: 72px; margin-bottom: var(--space-xl); border-radius: var(--radius-xl); background: var(--accent-soft); color: var(--accent); font-size: var(--font-size-page); font-weight: 600; }
+  #settings-dialog .settings-about-title { flex-direction: column; gap: var(--space-md); font-size: var(--font-size-page); }
+  #settings-dialog .settings-about .settings-group-note { max-width: 280px; margin-top: var(--space-xl); line-height: 1.8; }
+}

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { mkdirSync } from 'node:fs'
+import { openEditorTemplate } from '../tests/helpers/open-editor-template.mjs'
 
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41851, strictPort: false, hmr: false } })
 await server.listen()
@@ -18,11 +19,11 @@ try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme })
     page.on('pageerror', error => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-    await page.locator('.template-grid .template-card[data-template="official-android-bds"]').click()
+    await openEditorTemplate(page, 'official-android-bds')
     await page.waitForFunction(() => !document.querySelector('#open').disabled)
     const close = page.locator('#file-operation-dialog[open] #file-operation-close')
     if (await close.isVisible()) await close.click()
-    await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+    if (await page.locator('#mode').inputValue() !== 'edit') await page.getByRole('button', { name: '编辑模式', exact: true }).click()
     // Key sound is a separate inspector category, not part of visual styles.
     await page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
@@ -36,9 +37,11 @@ try {
     const soundNav = page.locator('#mobile-inspector-groups button[title="音效"]')
     await soundNav.click()
     assert.equal(await soundGroup.isVisible(), true)
-    // 隐藏的引用输入框 + 一张音效引用卡（卡片编号是它的克隆）
+    // 未绑定的音效保留引用输入框与添加入口，不显示空引用卡。
     assert.equal(await soundGroup.locator('input[data-key-field="SOUND_STYLE"]:not(.ui-style-ref-number)').count(), 1)
-    assert.equal(await soundGroup.locator('.ui-style-ref').count(), 1)
+    assert.equal(await soundGroup.locator('input[data-key-field="SOUND_STYLE"]').inputValue(), '')
+    assert.equal(await soundGroup.locator('.ui-style-ref').count(), 0)
+    assert.equal(await soundGroup.locator('.ui-style-ref-append').count(), 1)
     assert.equal(await page.locator('.key-appearance-fields [data-key-field="SOUND_STYLE"]').count(), 0)
     assert.equal(await soundGroup.locator('h3').getAttribute('title'), 'SOUND_STYLE')
     await page.keyboard.press('ControlOrMeta+f')
@@ -75,6 +78,8 @@ try {
     await page.locator('[data-sound-id="file:light/skin/res/a_click.wav"]').click()
     assert.equal(await page.evaluate(async () => (await import('/src/app/state.ts')).appState.keySoundPath), '')
     const selected = page.locator('.ui-sound-preview')
+    await selected.getByRole('img', { name: /a_click.wav 波形，时长 1.00 秒/ }).waitFor()
+    assert.ok(await selected.locator('canvas').evaluate(canvas => canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0)), 'waveform is drawn from the real PCM data')
     await selected.getByRole('button', { name: '试听音效', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('.ui-sound-row[data-playing="true"]'))
     await selected.getByRole('button', { name: '停止试听', exact: true }).click()

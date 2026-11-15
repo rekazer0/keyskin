@@ -7,7 +7,7 @@ import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
-import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, mobilePaneButtons, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode } from "../dom"
+import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode, saveButton } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
@@ -30,7 +30,7 @@ import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 import { syncMobileKeyPreview } from "../mobile-key-preview"
 import { wireMobileInspector } from "../mobile-inspector"
-import { mobileKeyPreview, mobileWorkspaceTabs, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel } from "../dom"
+import { mobileKeyPreview, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel, mobileSaveButton, mobileProjectFiles, mobileFilesClose, mobileQuickActions } from "../dom"
 
 /** 启动环境、全局指针、画布预览、检查器与缩放。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireCanvasAndInspector(): void {
@@ -209,23 +209,20 @@ export function wireCanvasAndInspector(): void {
   mobileKeyPreview.addEventListener("keyup", () => syncMobileKeyPreview())
   mobileKeyPreview.addEventListener("blur", () => syncMobileKeyPreview())
   syncMobileInspectorHeader()
-  for (const button of mobilePaneButtons) {
-    button.addEventListener("click", () => {
-      const pane = button.dataset.mobilePane
-      setMobilePane(pane === "inspector" || pane === "layout" ? pane : "canvas")
-    })
+  mobileSaveButton.addEventListener("click", () => saveButton.click())
+  const syncSave = () => { mobileSaveButton.disabled = saveButton.disabled }
+  new MutationObserver(syncSave).observe(saveButton, { attributes: true, attributeFilter: ["disabled"] })
+  syncSave()
+  mobileProjectFiles.addEventListener("click", () => setMobilePane("layout"))
+  mobileFilesClose.addEventListener("click", () => setMobilePane("inspector"))
+  const historyHome = mobileQuickActions.parentElement!
+  const placeHistory = () => {
+    if (mobilePortraitQuery.matches) document.querySelector("#mobile-canvas-history")!.append(mobileQuickActions)
+    else historyHome.prepend(mobileQuickActions)
   }
-  mobileWorkspaceTabs.addEventListener("keydown", (event) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
-    const buttons = Array.from(mobileWorkspaceTabs.querySelectorAll<HTMLButtonElement>("button"))
-    const index = buttons.indexOf(event.target as HTMLButtonElement)
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-      : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length
-    event.preventDefault()
-    buttons[next].focus()
-    buttons[next].click()
-  })
+  placeHistory()
   mobilePortraitQuery.addEventListener("change", () => {
+    placeHistory()
     const pane = document.documentElement.dataset.mobilePane
     setMobilePane(pane === "inspector" || pane === "layout" ? pane : "canvas")
     syncMobileInspectorHeader()
@@ -255,6 +252,7 @@ export function wireCanvasAndInspector(): void {
     } else {
       const target = document.getElementById(button.dataset.mobileAction!)
       if (button.dataset.mobileAction === "layout-overview-toggle") setMobilePane("canvas")
+      if (button.dataset.mobileAction === "mobile-source-view" || button.dataset.mobileAction === "mobile-ai-view") setMobilePane("inspector")
       target?.click()
     }
   })

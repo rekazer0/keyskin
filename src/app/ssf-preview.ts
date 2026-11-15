@@ -34,14 +34,15 @@ export async function ssfTemplates(): Promise<SsfTemplates> {
 
 /**
  * Lays out the official skeleton for the looks and resolution the open SSF document has; the skeleton
- * does not change with the skin's styles, so it is rebuilt only when those do. Returns the package's
+ * follows the skin's long-press references, so it is rebuilt when those change. Returns the package's
  * warnings (looks it cannot show).
  */
 export function rebuildSsfPreview(): string[] {
   const archive = appState.archive
   if (archive?.format !== "ssf" || !appState.ssfTemplates) return []
   const pkg = ssfDocumentPackage(archive)
-  const key = `${pkg.resolution}|${[...pkg.themes.keys()].join(",")}`
+  const actions = [...pkg.themes.keys()].map((theme) => pkg.skin(theme).entries().filter(({ key }) => key === "L_KEY" || key === "TEXT"))
+  const key = `${pkg.resolution}|${[...pkg.themes.keys()].join(",")}|${JSON.stringify(actions)}`
   if (appState.ssfSkeleton?.archive !== archive || appState.ssfSkeleton.key !== key) {
     appState.ssfSkeleton = { archive, key, boards: ssfSkeleton(pkg, appState.ssfTemplates.sogou) }
     const board = ssfBoardDocument(appState.layoutPath)

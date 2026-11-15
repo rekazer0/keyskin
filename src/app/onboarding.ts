@@ -24,7 +24,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
   ]
   if (welcome) steps.push(
     {
-      target: ["#welcome-recent-open"],
+      target: compact ? ["#mobile-welcome-open"] : ["#welcome-recent-open"],
       title: "打开已有皮肤",
       body: compact
         ? "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi）时点这里导入；也可以在其他应用里把皮肤文件分享给键设。"
@@ -32,10 +32,10 @@ function onboardingSteps(compact: boolean): TourStep[] {
       when: () => !hasSkin(),
     },
     {
-      target: ['.template-card[data-template="default-android"]'],
+      target: compact ? ["#mobile-welcome-new"] : ['.template-card[data-template="default-android"]'],
       title: "从模板新建皮肤",
       body: "第一次使用建议从模板开始：模板保留了官方的基础布局和资源，改起来不容易出错。",
-      action: { hint: compact ? "轻点高亮的「百度 BDA 默认」模板" : "点击高亮的「百度 BDA 默认」模板", done: hasSkin },
+      action: { hint: compact ? "轻点「从模板新建」，选择模板后点「新建」" : "点击高亮的「百度 BDA 默认」模板", done: hasSkin },
     },
   )
   steps.push(
@@ -43,7 +43,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       target: [".canvas-wrap"],
       title: "画布：实时预览",
       body: compact
-        ? "下半屏是键盘的实际效果。「交互预览」模式下轻点按键会模拟打字，双指可以缩放画布。"
+        ? "上半屏是键盘的实际效果。「交互预览」模式下轻点按键会模拟打字，双指可以缩放画布。"
         : "这里显示键盘的实际效果。「交互预览」模式下点击按键会模拟打字；滚轮或右下角的按钮可以缩放画布。",
       when: hasSkin,
     },
@@ -56,9 +56,9 @@ function onboardingSteps(compact: boolean): TourStep[] {
       when: hasSkin,
     },
     {
-      target: compact ? ['[data-mobile-choice="mode"]'] : ['[data-mode-choice="edit"]'],
+      target: compact ? ['#mobile-canvas-mode [data-mode-choice="edit"]'] : ['[data-mode-choice="edit"]'],
       title: "切换到编辑模式",
-      body: "打开皮肤后默认处于「交互预览」，配置只读。切换到「编辑模式」后才能选中、拖动和修改按键。",
+      body: compact ? "打开皮肤后可以直接编辑。点「试用」模拟输入，再点「返回编辑」继续修改。" : "打开皮肤后默认处于「交互预览」，配置只读。切换到「编辑模式」后才能选中、拖动和修改按键。",
       action: { hint: compact ? "轻点右上角的「交互预览」按钮，切换到编辑模式" : "点击右上角的「编辑模式」", done: () => mode.value === "edit" },
       when: hasSkin,
     },
@@ -66,7 +66,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       target: [".canvas-wrap"],
       title: "选中一个按键",
       body: compact
-        ? "编辑模式下轻点按键即可选中，选中后上半屏会自动切到「属性检查器」。"
+        ? "编辑模式下轻点按键即可选中，选中后在下半屏显示对应属性。"
         : `编辑模式下单击按键即可选中，拖动可以移动位置；${shortcutLabel("单击")}可以多选。`,
       action: { hint: compact ? "轻点画布上任意一个按键" : "点击画布上任意一个按键", done: () => appState.selectedKeySections.length > 0 },
       when: () => hasSkin() && mode.value === "edit",
@@ -75,15 +75,15 @@ function onboardingSteps(compact: boolean): TourStep[] {
       target: ["section.source"],
       title: "属性检查器",
       body: compact
-        ? "在这里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点顶部的撤销按钮可以撤回。右侧分类栏可快速跳到对应分组。"
+        ? "在这里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点画布工具栏的撤销按钮可以撤回。分类栏切换样式、文字和动作；布局、音效、动效在功能细节中。"
         : `在这里修改选中对象的位置、尺寸、样式、文字和手势，改动立即显示在画布上，可随时撤销（${shortcutLabel("Z")}）。右侧分类栏点击即可跳到对应分组，放大镜可以筛选属性。`,
       when: hasSkin,
     },
     compact
       ? {
-          target: [".mobile-workspace-tabs"],
-          title: "切换编辑区域",
-          body: "上半屏可以在「文件与布局」和「属性检查器」之间切换，也可以左右滑动。「文件与布局」里可以换到 9 键、26 键、符号等面板；拖动右侧的手柄可以调整画布与编辑区的比例。",
+          target: ["#mobile-navigation"],
+          title: "项目文件与布局",
+          body: "底部「项目」可以切换布局和源文件，「资源」管理样式、图片与音效。画布和属性始终同屏；点击或拖动分隔手柄调整画布比例。",
           when: hasSkin,
         }
       : {
@@ -93,14 +93,14 @@ function onboardingSteps(compact: boolean): TourStep[] {
           when: hasSkin,
         },
     {
-      target: [".titlebar-preferences"],
+      target: compact ? ["#mobile-app-more"] : [".titlebar-preferences"],
       title: "设置",
       body: "外观主题、强调色、默认预览设备、画布背景等偏好都在这里调整。",
     },
     {
-      target: [`${menuSelector} > summary`],
+      target: compact ? ["#mobile-app-more > summary"] : [`${menuSelector} > summary`],
       title: "保存与导出",
-      body: "新建、打开、保存和导出皮肤都在左上角的菜单里。",
+      body: compact ? "顶部保存按钮保存当前皮肤；更多菜单选择导出与分享。" : "新建、打开、保存和导出皮肤都在左上角的菜单里。",
       action: { hint: compact ? "轻点左上角的菜单按钮" : "点击左上角的菜单按钮", done: () => Boolean(menu?.open) },
     },
     {

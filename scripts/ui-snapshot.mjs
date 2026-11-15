@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 // UI regression snapshots for the design-system refactor.
 //   node scripts/ui-snapshot.mjs save      记录基线（.ui-baseline/）
 //   node scripts/ui-snapshot.mjs compare   与基线比对，打印每个界面里变化的元素与属性
@@ -74,8 +75,8 @@ async function withPage(run, { viewport = { width: 1440, height: 900 }, colorSch
 }
 
 async function openTemplate(page, template) {
-  await page.waitForSelector(".template-card")
-  await page.locator(`.template-grid .template-card[data-template="${template}"]`).click()
+  await page.waitForSelector(".template-card", { state: "attached" })
+  await openEditorTemplate(page, template)
   await page.waitForSelector(".canvas-wrap:not(.empty)")
   await page.waitForFunction(() => document.querySelector("#preview")?.getBoundingClientRect().height > 60)
   await page.waitForFunction(() => {
@@ -87,7 +88,7 @@ async function openTemplate(page, template) {
 }
 
 async function editAndSelectKey(page) {
-  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  if (await page.locator("#mode").inputValue() !== "edit") await page.getByRole("button", { name: "编辑模式", exact: true }).click()
   await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
   const box = await page.locator("#preview").boundingBox()
   await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.45)
@@ -103,7 +104,7 @@ async function openSkinFile(page, name, bytes, path) {
   }, null, { timeout: 60000 })
   const close = page.locator("#file-operation-dialog[open] #file-operation-close")
   if (await close.isVisible().catch(() => false)) await close.click()
-  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  if (await page.locator("#mode").inputValue() !== "edit") await page.getByRole("button", { name: "编辑模式", exact: true }).click()
   await page.evaluate(async (path) => {
     const { selectFile } = await import("/src/app/navigation.ts")
     selectFile(path)
@@ -125,7 +126,7 @@ for (const [name, colorScheme, viewport] of [
   ["file-operation-dark", "dark", { width: 1440, height: 900 }],
   ["file-operation-mobile", "light", { width: 390, height: 844 }],
 ]) await withPage(async (page) => {
-  await page.waitForSelector(".template-card")
+  await page.waitForSelector(".template-card", { state: "attached" })
   // 成功不弹模态框（DESIGN.md §7），只拍失败态。
   await page.evaluate(async () => {
     const { runFileOperation, showFileOperationProgress } = await import("/src/app/file-operations.ts")
@@ -134,7 +135,7 @@ for (const [name, colorScheme, viewport] of [
   await capture(page, `${name}-error`)
 }, { colorScheme, viewport })
 await withPage(async (page) => {
-  await page.waitForSelector(".template-card")
+  await page.waitForSelector(".template-card", { state: "attached" })
   await capture(page, "welcome")
   await openTemplate(page, "official-android-bds")
   await capture(page, "bds-preview")
@@ -194,7 +195,7 @@ for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
 }, { colorScheme })
 await withPage(async (page) => {
   await openTemplate(page, "palm-harmony")
-  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  if (await page.locator("#mode").inputValue() !== "edit") await page.getByRole("button", { name: "编辑模式", exact: true }).click()
   await capture(page, "palm-board")
   await editAndSelectKey(page)
   await capture(page, "palm-key")
@@ -205,7 +206,7 @@ for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await page.waitForFunction(() => !document.querySelector("#open")?.disabled)
   const close = page.locator("#file-operation-dialog[open] #file-operation-close")
   if (await close.isVisible()) await close.click()
-  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  if (await page.locator("#mode").inputValue() !== "edit") await page.getByRole("button", { name: "编辑模式", exact: true }).click()
   await page.locator('.sidebar-overview button[data-path="light/skin/port/py_26.ini"]').click()
   await capture(page, `${colorScheme}-ssf-board`)
   const box = await page.locator("#preview").boundingBox()
@@ -230,19 +231,19 @@ await withPage(async (page) => {
 }, { colorScheme: "dark" })
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   const suffix = colorScheme === "dark" ? "-dark" : ""
-  await page.waitForSelector(".template-card")
+  await page.waitForSelector(".template-card", { state: "attached" })
   await capture(page, `mobile-welcome${suffix}`)
   await openTemplate(page, "official-android-bds")
   await capture(page, `mobile-bds${suffix}`)
-  await page.locator("#mobile-app-more > summary").click()
-  await page.locator('#mobile-app-more [data-mobile-action="mode"]').click()
+  await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
   const box = await page.locator("#preview").boundingBox()
   await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.45)
-  await page.waitForSelector("#mobile-key-preview:not([hidden])")
+  await page.waitForSelector("#mobile-property-tabs:not([hidden])")
   await page.waitForFunction(() => document.querySelector("#mobile-key-canvas").width > 1)
   await capture(page, `mobile-properties${suffix}`)
-  await page.locator('.mobile-workspace-tabs [data-mobile-pane="layout"]').click()
+  await page.locator("#mobile-navigation [data-mobile-page=project]").click()
   await capture(page, `mobile-files${suffix}`)
+  await page.locator("#mobile-navigation [data-mobile-page=edit]").click()
   await page.locator("#mobile-app-more > summary").click()
   await capture(page, `mobile-more${suffix}`)
   await page.locator('#mobile-app-more [data-mobile-action="mobile-export-open"]').click()

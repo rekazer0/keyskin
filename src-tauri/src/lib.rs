@@ -857,7 +857,7 @@ async fn write_binary_file(request: tauri::ipc::Request<'_>) -> Result<(), Strin
         path: String,
     }
     let args: Arguments = binary_ipc::arguments(request.headers())?;
-    let data = binary_ipc::bytes(request.body())?.to_vec();
+    let data = binary_ipc::bytes(request.body())?.into_owned();
     write_file(args.path, data).await
 }
 

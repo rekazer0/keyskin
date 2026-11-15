@@ -29,7 +29,7 @@ export function ssfSkeletonScale(base: SkinArchive, panelWidth?: number): { port
 }
 
 /** Copies the skeleton's `light/skin` tree to `theme`'s, layouts scaled to `panelWidth`. */
-export function copySsfSkeleton(base: SkinArchive, theme: SsfTheme, output: Map<string, Uint8Array>, panelWidth?: number): void {
+export function copySsfSkeleton(base: SkinArchive, theme: SsfTheme, output: Map<string, Uint8Array>, panelWidth?: number, skin?: IniDocument): void {
   const scales = ssfSkeletonScale(base, panelWidth)
   const prefix = "light/skin/"
   for (const path of base.names()) {
@@ -44,8 +44,8 @@ export function copySsfSkeleton(base: SkinArchive, theme: SsfTheme, output: Map<
       for (const section of document.sections().filter((section) => /^KEY\d+$/.test(section))) {
         const action = document.get(section, "CENTER")
         if (!action) continue
-        for (const [field, value] of Object.entries(ssfKeyActions(name.split("/").pop()!, action, document.get(section, "SSF_SECTION")))) {
-          if (document.get(section, field) === undefined) document.set(section, field, value)
+        for (const [field, value] of Object.entries(ssfKeyActions(name.split("/").pop()!, action, document.get(section, "SSF_SECTION"), skin, orientation === "land"))) {
+          document.set(section, field, value)
         }
       }
       bytes = strToU8(document.toString())

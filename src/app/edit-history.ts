@@ -1,10 +1,10 @@
-import { mode, dirty, undoButton, redoButton, sourceName } from "./dom"
+import { mode, dirty, undoButton, redoButton, sourceName, documentName, mobileDocumentStatus } from "./dom"
 import { appState } from "./state"
 import { ask } from "./ask"
 import { flushNumberInputWheel, numberInputGesture } from "../number-input-wheel.ts"
 import { flushSourceAutosave, scheduleSourceAutosave } from "./source-workspace"
 import { showError } from "./file-operations"
-import { recordChange } from "./canvas-interaction"
+import { recordChange, mobilePortraitQuery } from "./canvas-interaction"
 import { saveArchive, currentExportFormat } from "./archive-io"
 import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
@@ -50,9 +50,10 @@ export async function prepareDocumentReplacement(): Promise<boolean> {
   }
   if (!hasUnsavedChanges()) return true
   const decision = await ask({
-    title: "未保存的皮肤",
-    detail: "当前皮肤尚未保存。是否先保存修改？",
-    actions: [{ value: "cancel", label: "取消" }, { value: "discard", label: "不保存" }, { value: "save", label: "保存", variant: "primary" }],
+    title: mobilePortraitQuery.matches ? "未保存保护" : "未保存的皮肤",
+    prompt: mobilePortraitQuery.matches ? "离开前，保存一下？" : undefined,
+    detail: `${documentName.textContent || "当前皮肤"} 有未保存的修改。\n离开后，这些修改将不会保留。`,
+    actions: [{ value: "cancel", label: mobilePortraitQuery.matches ? "取消，继续编辑" : "取消" }, { value: "discard", label: mobilePortraitQuery.matches ? "暂不保存，离开" : "不保存" }, { value: "save", label: mobilePortraitQuery.matches ? "保存后再离开" : "保存", variant: "primary" }],
   })
   if (decision === "cancel") return false
   if (decision === "discard") return true
@@ -62,6 +63,8 @@ export async function prepareDocumentReplacement(): Promise<boolean> {
 
 export function updateDirty(): void {
   dirty.hidden = !appState.unsavedNew && !appState.archive?.changed.size
+  mobileDocumentStatus.textContent = !appState.archive ? "本地编辑 · 文件仅在本机处理"
+    : !dirty.hidden ? `${appState.archive.format.toUpperCase()} · 有未保存的修改` : `${appState.archive.format.toUpperCase()} · 已保存在本机`
 }
 
 export function updateHistoryButtons(): void {
@@ -110,11 +113,13 @@ export function commitBatch(changes: Change[]): void {
  * Commits text edits of several INI files as one undo step, then shows them: the source panel if it
  * holds one of the files, the layout document, the canvas and the inspector.
  */
-export function commitTextChanges(changes: ReadonlyArray<{ path: string; before: string; after: string }>): void {
+export function commitTextChanges(changes: ReadonlyArray<{ path: string; before?: string; after: string }>): void {
   const edited = changes.filter((change) => change.before !== change.after)
   if (!appState.archive || !edited.length) return
-  if (edited.length === 1) commitText(edited[0].path, edited[0].before, edited[0].after)
-  else commitBatch(edited.map((change) => ({ kind: "text" as const, ...change })))
+  if (edited.length === 1 && edited[0].before !== undefined) commitText(edited[0].path, edited[0].before, edited[0].after)
+  else commitBatch(edited.map(change => change.before === undefined
+    ? { kind: "bytes" as const, path: change.path, before: undefined, after: new TextEncoder().encode(change.after) }
+    : { kind: "text" as const, ...change, before: change.before }))
   const selected = edited.find((change) => change.path === appState.selectedPath)
   if (selected && appState.archive.getText(selected.path) === selected.after) {
     appState.selectedDocument = IniDocument.parse(selected.after)

@@ -3,7 +3,7 @@ import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { mkdirSync } from 'node:fs'
 
-const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0 } })
+const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41766, strictPort: false, hmr: false } })
 await server.listen()
 let browser
 try {

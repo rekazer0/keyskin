@@ -11,6 +11,7 @@ import "./project-chooser.css"
 import { wireCanvasAndInspector } from "./app/wiring/canvas-and-inspector"
 import { wireFilesAndSettings } from "./app/wiring/files-and-settings"
 import { wireEditingControls } from "./app/wiring/editing-controls"
+import { wireMobileStudio } from "./app/mobile-studio"
 import { wireResourcesAndStartup } from "./app/wiring/resources-and-startup"
 
 // 启动：顺序即原 main.ts 顶层语句的执行顺序，不要调换。
@@ -18,3 +19,5 @@ wireCanvasAndInspector()
 wireFilesAndSettings()
 wireEditingControls()
 wireResourcesAndStartup()
+
+wireMobileStudio()

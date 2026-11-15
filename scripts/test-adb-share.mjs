@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 
-const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 41841, strictPort: false } })
+const config = JSON.parse(await readFile(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'))
+const server = await createServer({ logLevel: 'error', server: {
+  host: '127.0.0.1', port: 41841, strictPort: false,
+  headers: { 'Content-Security-Policy': config.app.security.csp },
+} })
 await server.listen()
 let browser
 try {
@@ -15,7 +20,7 @@ try {
     ['Macintosh', true, 0, true], ['Macintosh', true, 5, false],
     ['Android', true, 5, false], ['iPhone', true, 5, false], ['Linux', true, 0, false],
   ]) {
-    const context = await browser.newContext({ bypassCSP: true, userAgent })
+    const context = await browser.newContext({ userAgent })
     const page = await context.newPage()
     await page.addInitScript((touch) => Object.defineProperty(navigator, 'maxTouchPoints', { value: touch }), touch)
     await page.goto(url)
@@ -52,6 +57,23 @@ try {
     assert.equal(await page.locator('#settings-adb-nav').evaluate(el => !el.hidden), visible)
     assert.equal(await page.locator('#adb-share').evaluate(el => !el.hidden), visible)
     if (visible && userAgent === 'Macintosh') {
+      // 同时执行 HTML 与桌面配置的 CSP，确保 IPC 不会被迫退回 JSON 传输。
+      await page.route('http://ipc.localhost/binary-test', route => route.fulfill({
+        contentType: 'application/octet-stream',
+        headers: {
+          'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*',
+          'Access-Control-Allow-Methods': 'POST',
+        },
+        body: route.request().postDataBuffer() ?? '',
+      }))
+      const echoed = await page.evaluate(async () => {
+        const response = await fetch('http://ipc.localhost/binary-test', {
+          method: 'POST', headers: { 'Content-Type': 'application/octet-stream' },
+          body: new Uint8Array([99, 0, 127, 255, 98]).subarray(1, 4),
+        })
+        return [...new Uint8Array(await response.arrayBuffer())]
+      })
+      assert.deepEqual(echoed, [0, 127, 255], 'CSP allows native binary IPC without changing the byte view')
       await page.locator('[data-app-dialog="settings"]').first().evaluate(el => el.click())
       await page.locator('#settings-adb-nav').click()
       await page.locator('#adb-serial').fill('unsaved-device')

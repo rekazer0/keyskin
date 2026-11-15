@@ -8,7 +8,7 @@ import { sourceName, workspaceImage, atlasCanvas, tilePreviewWrap, tilePreview, 
 import { styleConfigPath, setSourceValue } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { isEditing, commitBytes, updateDirty, commitText, commitBatch } from "./edit-history"
-import { source } from "./canvas-interaction"
+import { mobilePortraitQuery, source } from "./canvas-interaction"
 import { updateSourceHighlight } from "./source-panel"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
@@ -160,6 +160,15 @@ export function drawAtlas(): void {
   syncAtlasWorkspace()
   if (!workspaceImage.complete || !workspaceImage.naturalWidth) return
   const { naturalWidth, naturalHeight } = workspaceImage
+  const figure = atlasCanvas.parentElement!
+  if (mobilePortraitQuery.matches && figure.closest("#image-resource-detail") && figure.clientHeight) {
+    const style = getComputedStyle(figure)
+    const width = figure.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    const height = figure.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+    const scale = Math.max(0.01, Math.min(width / naturalWidth, height / naturalHeight))
+    atlasCanvas.style.width = `${naturalWidth * scale}px`
+    atlasCanvas.style.height = `${naturalHeight * scale}px`
+  }
   // 桌面工作区按显示尺寸 × DPR 绘制，避免 CSS 放大导致切片线条和标签模糊；像素上限防止大图超出画布限制
   const cssWidth = parseFloat(atlasCanvas.style.width)
   const pixelScale = cssWidth

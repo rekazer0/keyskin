@@ -27,7 +27,7 @@ export function animateProgress(progress: HTMLProgressElement, target: number, u
   }
   motion.target = target
   motion.updated = updated
-  if (target >= progress.max) {
+  if (target >= progress.max || target === 0) {
     if (motion.frame) cancelAnimationFrame(motion.frame)
     motion.frame = 0
     progress.value = target
@@ -80,23 +80,29 @@ export function playRotation(element: Element, fromDegrees: number): void {
  * 关闭 .ui-dialog：先淡出（入场由 components.css 的 ui-dialog-in 播放），再 close(value)。
  * 时长为 0 时直接关；淡出途中再次调用不重复播放。
  */
-const closing = new WeakSet<HTMLDialogElement>()
+const closing = new WeakMap<HTMLDialogElement, Promise<void>>()
 
-export function closeDialog(dialog: HTMLDialogElement, value?: string): void {
-  if (!dialog.open || closing.has(dialog)) return
+export function closeDialog(dialog: HTMLDialogElement, value?: string): Promise<void> {
+  const pending = closing.get(dialog)
+  if (pending) return pending
+  if (!dialog.open) return Promise.resolve()
   const options = timing("base", "standard")
-  if (!options) return dialog.close(value)
-  closing.add(dialog)
+  if (!options) { dialog.close(value); return Promise.resolve() }
   const fade = { ...options, fill: "forwards" as const }
   const animations = [
     dialog.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(0.98)" }], fade),
     dialog.animate([{ opacity: 1 }, { opacity: 0 }], { ...fade, pseudoElement: "::backdrop" }),
   ]
-  animations[0]!.addEventListener("finish", () => {
-    closing.delete(dialog)
-    dialog.close(value)
-    for (const animation of animations) animation.cancel()
+  const finished = new Promise<void>(resolve => {
+    animations[0]!.addEventListener("finish", () => {
+      closing.delete(dialog)
+      dialog.close(value)
+      for (const animation of animations) animation.cancel()
+      resolve()
+    }, { once: true })
   })
+  closing.set(dialog, finished)
+  return finished
 }
 
 // —— 分段控件：选中项切换时，滑块从旧选项滑到新选项 ——

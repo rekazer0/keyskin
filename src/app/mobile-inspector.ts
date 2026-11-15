@@ -5,55 +5,51 @@ import { bindDialog } from "./ask"
 import { requestEditMode, setMobilePane } from "./mobile-layout"
 import { mobilePortraitQuery, preview } from "./canvas-interaction"
 import { appState } from "./state"
-import { mobileInspectorResize, mobilePropertyTabs, mobilePreviewToggle, quickInspector, inspectorPane } from "./dom"
+import { mobileInspectorResize, mobilePropertyTabs, quickInspector, inspectorPane } from "./dom"
+import { syncMobilePanelSummary } from "./mobile-panel-summary"
+import { syncMobileAppearance } from "./mobile-appearance"
+import { syncMobileKeyAnimation } from "./mobile-key-animation"
 
-/** 手机分类复用原属性行和提交逻辑；布局等低频参数收起后仍可展开。 */
+/** 手机分类复用原属性行和提交逻辑。 */
 export function syncMobilePropertyGroups(groups: HTMLElement[]): void {
   const selected = appState.selectedKeySections.length > 0
   inspectorPane.dataset.mobileKey = String(selected)
-  mobilePropertyTabs.hidden = !selected
+  mobilePropertyTabs.hidden = appState.selectedKeySections.length > 1 || !appState.archive || appState.selectedPath !== appState.layoutPath
+  const actionLibrary = quickInspector.querySelector<HTMLButtonElement>(".mobile-action-library")
+  if (actionLibrary) actionLibrary.disabled = appState.archive?.format === "ssf"
   const context = JSON.stringify([appState.selectedPath, appState.selectedKeySections])
   if (context !== appState.mobileInspectorContext) {
     appState.mobileInspectorContext = context
-    appState.mobileInspectorCategory = "appearance"
-    appState.mobileInspectorExpanded.clear()
+    appState.mobileInspectorCategory = appState.selectedKeySections.length > 1 ? "geometry" : "appearance"
+    appState.mobileAppearanceExpanded = false
+    appState.mobileAppearancePressed = false
+    preview.setAppearanceState()
   }
   for (const group of groups) {
     const label = group.dataset.inspectorGroupLabel ?? group.querySelector("h3")?.textContent ?? ""
     group.dataset.inspectorGroupLabel = label
-    group.dataset.mobileCategory = /文字|字体/.test(label) ? "text" : /手势|动作|音效|动画/.test(label) ? "actions" : "appearance"
-    const secondary = /^(布局|排列)$/.test(label)
-    group.dataset.mobileCollapsed = String(secondary && !appState.mobileInspectorExpanded.has(label))
-    const heading = group.querySelector("h3")
-    if (secondary && heading && !heading.querySelector(".mobile-group-disclosure")) {
-      const button = element("button", "ui-button mobile-group-disclosure")
-      button.type = "button"
-      button.append(label, createIcon("chevron-down"))
-      button.addEventListener("click", () => {
-        const open = group.dataset.mobileCollapsed === "true"
-        if (open) appState.mobileInspectorExpanded.add(label)
-        else appState.mobileInspectorExpanded.delete(label)
-        group.dataset.mobileCollapsed = String(!open)
-        button.setAttribute("aria-expanded", String(open))
-      })
-      heading.append(button)
-      heading.setAttribute("aria-label", label)
-    }
-    heading?.querySelector(".mobile-group-disclosure")?.setAttribute("aria-expanded", String(group.dataset.mobileCollapsed !== "true"))
+    group.dataset.mobileCategory = /布局|排列|几何/.test(label) ? "geometry" : /音效|声音/.test(label) ? "sound"
+      : /动画|动效|粒子/.test(label) ? "animation" : /手势|动作/.test(label) ? "actions" : /文字|字体|提示/.test(label) ? "typography" : "appearance"
+
   }
+  syncMobileAppearance()
+  syncMobilePanelSummary()
   syncCategory()
 }
 
 function syncCategory(): void {
+  preview.setAppearanceState(mobilePortraitQuery.matches && appState.mobileInspectorCategory === "appearance" && appState.mobileAppearancePressed
+    ? appState.selectedKeySections[0] : undefined)
   quickInspector.dataset.mobileCategory = appState.mobileInspectorCategory
   for (const button of mobilePropertyTabs.querySelectorAll<HTMLButtonElement>("button")) {
     button.setAttribute("aria-pressed", String(button.dataset.mobileCategory === appState.mobileInspectorCategory))
   }
+  syncMobileKeyAnimation()
 }
 
 function openActionLibrary(): void {
   const inputs = Array.from(quickInspector.querySelectorAll<HTMLInputElement>(".inspector-gesture > input"))
-    .filter(input => !input.disabled)
+    .filter(input => !input.disabled && !input.readOnly)
   if (!inputs.length) { requestEditMode(); return }
   const dialog = element("dialog", "ui-dialog")
   dialog.dataset.size = "sm"
@@ -142,10 +138,8 @@ export function wireMobileInspector(): void {
       : quickInspector.querySelector<HTMLInputElement>(`[data-key-field="${dimension}"]`)
     if (!input) return
     if (input.disabled) { requestEditMode(); return }
-    appState.mobileInspectorCategory = "appearance"
+    appState.mobileInspectorCategory = "geometry"
     syncCategory()
-    const group = input.closest<HTMLElement>("[data-mobile-collapsed]")
-    if (group?.dataset.mobileCollapsed === "true") group.querySelector<HTMLButtonElement>(".mobile-group-disclosure")?.click()
     input.scrollIntoView({ block: "nearest" })
     input.focus()
     input.select()
@@ -160,34 +154,61 @@ export function wireMobileInspector(): void {
     syncCategory()
     quickInspector.scrollTop = 0
   })
-  const resize = (value: number) => {
-    const split = Math.max(14, Math.min(62, value))
-    document.documentElement.style.setProperty("--mobile-inspector-split", `${split}%`)
-    mobileInspectorResize.setAttribute("aria-valuenow", String(Math.round(split)))
-    mobileInspectorResize.setAttribute("aria-valuetext", `画布占 ${Math.round(split)}%`)
+  const advanced = element("nav", "mobile-property-details")
+  advanced.setAttribute("aria-label", "功能细节")
+  for (const [category, label] of [["geometry", "布局与排列"], ["sound", "按键音效"], ["animation", "按键动效"]]) {
+    const button = element("button", "ui-button")
+    button.type = "button"
+    button.textContent = label
+    button.dataset.mobileCategory = category
+    button.addEventListener("click", () => {
+      appState.mobileInspectorCategory = category
+      syncCategory()
+      quickInspector.scrollTop = 0
+    })
+    advanced.append(button)
   }
-  mobilePreviewToggle.addEventListener("click", () => {
-    const collapsed = document.documentElement.dataset.mobilePreview !== "collapsed"
-    document.documentElement.dataset.mobilePreview = collapsed ? "collapsed" : "expanded"
-    mobilePreviewToggle.setAttribute("aria-expanded", String(!collapsed))
-    const label = collapsed ? "展开画布" : "收起画布"
-    mobilePreviewToggle.setAttribute("aria-label", label)
-    mobilePreviewToggle.title = label
+  quickInspector.append(advanced)
+  const typographyMore = element("button", "ui-button mobile-typography-more")
+  typographyMore.type = "button"
+  typographyMore.textContent = "更多文字设置"
+  typographyMore.setAttribute("aria-expanded", "false")
+  typographyMore.addEventListener("click", () => {
+    const expanded = quickInspector.dataset.mobileTypographyExpanded !== "true"
+    quickInspector.dataset.mobileTypographyExpanded = String(expanded)
+    typographyMore.setAttribute("aria-expanded", String(expanded))
   })
+  quickInspector.querySelector(".key-typography-fields")!.append(typographyMore)
+  const resize = (value: number) => {
+    const split = Math.max(32, Math.min(90, value))
+    document.documentElement.style.setProperty("--mobile-inspector-split", `${split}%`)
+    document.documentElement.dataset.mobilePanel = split >= 80 ? "collapsed" : split <= 36 ? "expanded" : "normal"
+    mobileInspectorResize.setAttribute("aria-valuenow", String(Math.round(split)))
+    mobileInspectorResize.setAttribute("aria-valuetext", split >= 80 ? "展开属性" : `画布占 ${Math.round(split)}%`)
+  }
   mobileInspectorResize.addEventListener("pointerdown", event => {
     mobileInspectorResize.setPointerCapture(event.pointerId)
+    mobileInspectorResize.dataset.dragged = "false"
     event.preventDefault()
   })
   mobileInspectorResize.addEventListener("pointermove", event => {
-    if (!mobileInspectorResize.hasPointerCapture(event.pointerId) || !mobilePortraitQuery.matches) return
+    if (!mobileInspectorResize.hasPointerCapture(event.pointerId) || !mobilePortraitQuery.matches || !event.movementY) return
+    mobileInspectorResize.dataset.dragged = "true"
     const main = mobileInspectorResize.parentElement!.getBoundingClientRect()
     resize((event.clientY - main.top) / main.height * 100)
   })
   mobileInspectorResize.addEventListener("keydown", event => {
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
     event.preventDefault()
-    resize(event.key === "Home" ? 14 : event.key === "End" ? 62
-      : Number(mobileInspectorResize.getAttribute("aria-valuenow")) + (event.key === "ArrowUp" ? -2 : 2))
+    resize(event.key === "Home" ? 32 : event.key === "End" ? 90
+      : Number(mobileInspectorResize.getAttribute("aria-valuenow")) + (event.key === "ArrowUp" ? -4 : 4))
   })
-  mobileInspectorResize.addEventListener("dblclick", () => resize(22))
+  let clickTimer = 0
+  mobileInspectorResize.addEventListener("click", () => {
+    if (mobileInspectorResize.dataset.dragged === "true") return
+    clearTimeout(clickTimer)
+    clickTimer = window.setTimeout(() => resize(document.documentElement.dataset.mobilePanel === "collapsed" ? 50 : 90),
+      Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--double-click-delay")))
+  })
+  mobileInspectorResize.addEventListener("dblclick", () => { clearTimeout(clickTimer); resize(32) })
 }

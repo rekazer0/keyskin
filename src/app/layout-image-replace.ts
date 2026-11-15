@@ -1,4 +1,4 @@
-import { theme, layout, layoutImageSize, layoutImagePreview, layoutImageFileLabel, layoutImageFile, layoutImageApply, canvasWrap, orientation, layoutImageLayout, layoutImageScope, layoutImageError, layoutImageTargetInputs, layoutImageDialog, layoutImageConfigButtons, layoutImageConfigFieldset } from "./dom"
+import { theme, layout, layoutImageSize, layoutImagePreview, layoutImageFileLabel, layoutImageFile, layoutImageApply, canvasWrap, orientation, layoutImageLayout, layoutImageScope, layoutImageError, layoutImageTargetInputs, layoutImageDialog, layoutImageConfigButtons, layoutImageConfigFieldset, mobileLayoutImageTarget, mobileLayoutImageConfig } from "./dom"
 import { closeDialog } from "../motion.ts"
 import { IniDocument, normalizeKeySections } from "../ini.ts"
 import { appState } from "./state"
@@ -50,6 +50,7 @@ export function nextResourceBase(root = resourceRootPath()): string {
 }
 
 export function updateLayoutImageForm(): void {
+  mobileLayoutImageTarget.value = appState.layoutImageTarget ?? "panel"
   const hasImage = appState.layoutImageWidth > 0 && appState.layoutImageHeight > 0
   layoutImageSize.textContent = hasImage
     ? `${appState.layoutImageWidth} × ${appState.layoutImageHeight}`
@@ -329,4 +330,7 @@ export function syncLayoutImageConfig(): void {
     button.title = layoutImageConfigDescriptions[button.dataset.layoutImageConfig as LayoutImageConfig]
   }
   layoutImageConfigFieldset.disabled = appState.layoutImageTarget === "panel" || appState.layoutImageTarget === "candidate"
+  mobileLayoutImageConfig.value = appState.layoutImageConfig
+  mobileLayoutImageConfig.disabled = layoutImageConfigFieldset.disabled
+  for (const option of mobileLayoutImageConfig.options) option.disabled = fixedLayout && option.value === "layout-follows-image"
 }

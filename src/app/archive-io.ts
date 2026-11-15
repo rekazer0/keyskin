@@ -1,6 +1,6 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
@@ -41,7 +41,6 @@ import { isSsfBoardPath } from "./ssf-documents"
 import { isSxiBoardAddress, palmThemes, preferredPalmBoard, sxiPointer } from "./sxi-documents"
 import { boardFileName } from "../palm/sxi-layout.ts"
 import { layoutSource } from "./config-context"
-
 export async function loadArchive(
   bytes: Uint8Array | SkinArchive,
   path: string,
@@ -219,7 +218,6 @@ export async function loadArchive(
     durationMs: Math.round(performance.now() - started),
   })
 }
-
 export async function openNative(): Promise<boolean> {
   if (!(await prepareDocumentReplacement())) return false
   const path = isAndroidTauri() ? await pickAndroidSkinFile() : await open({
@@ -489,9 +487,10 @@ function reportExportWarnings(sounds: string[], adjustments: string[] = []): voi
 async function acceptDowngrade(title: string, warnings: string[]): Promise<boolean> {
   if (!warnings.length) return true
   clientLog.info("export.downgrade", { count: warnings.length, detail: warnings.join("；") })
-  showFileOperationResult(warnings.join("\n"))
-  fileOperationResult.scrollTop = 0
-  const accepted = await waitForTap(title, "继续导出")
+  showFileOperationCompatibility(title, warnings)
+  fileOperationDialog.dataset.stage = "compatibility"
+  const accepted = await waitForTap(fileOperationDetail.textContent ?? title, "确认并继续")
+  delete fileOperationDialog.dataset.stage
   fileOperationResult.hidden = true
   fileOperationResult.textContent = ""
   return accepted

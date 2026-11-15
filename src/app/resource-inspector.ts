@@ -254,6 +254,11 @@ export function selectResourceImage(path: string): void {
   tileModeButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.tileMode === appState.tileMode)))
   showImage(path)
   loadTiles(path)
+  if (matchMedia("(max-width: 760px) and (orientation: portrait)").matches && appState.slices.length === 1) {
+    appState.selectedTileIndex = appState.slices[0].index
+    populateTileInspector()
+    drawAtlas()
+  }
   syncAtlasWorkspace()
   selectGalleryItem(path, resourceGallery)
 }

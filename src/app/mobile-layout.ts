@@ -1,4 +1,4 @@
-import { modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, mobilePaneButtons, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
@@ -15,6 +15,7 @@ import { syncMobileKeyPreview } from "./mobile-key-preview"
 import { workspacePane } from "./dom"
 import { syncMobilePropertyGroups } from "./mobile-inspector"
 import { playEnter, playRotation } from "../motion"
+import { layoutConversionButton } from "./dom"
 
 export function syncSegmentedControls(): void {
   for (const button of modeChoiceButtons) {
@@ -279,10 +280,8 @@ function railButton(): HTMLButtonElement {
 
 export function setMobilePane(pane: "canvas" | "layout" | "inspector"): void {
   source.commit()
+  if (mobilePortraitQuery.matches && appState.archive && pane === "canvas" && !appState.layoutOverview) pane = "inspector"
   document.documentElement.dataset.mobilePane = pane
-  for (const button of mobilePaneButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.mobilePane === pane))
-  }
   const mobile = mobilePortraitQuery.matches
   sidebarPane.inert = mobile && pane !== "layout"
   inspectorPane.inert = mobile && pane !== "inspector"
@@ -296,6 +295,8 @@ export function updatePanelToolButtons(): void {
   panelScaleButton.disabled = !editing || appState.fileOperationRunning || !appState.archive
   replaceLayoutImageButton.disabled = !editing || appState.fileOperationRunning || !appState.archive
   adaptIos26Button.disabled = !editing || appState.fileOperationRunning || !appState.archive
+  layoutConversionButton.hidden = !appState.archive || !["bds", "bdi", "sxi"].includes(appState.archive.format)
+  layoutConversionButton.disabled = layoutConversionButton.hidden || !editing || appState.fileOperationRunning || !appState.layoutPath
 }
 
 export function applyModeState(): void {

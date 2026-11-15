@@ -184,7 +184,9 @@ export function createAtlasWorkspace(actions: {
   const endPan = () => { candidate = undefined; pan = undefined; wrap.classList.remove("atlas-panning") }
   wrap.addEventListener("pointerup", endPan)
   wrap.addEventListener("pointercancel", endPan)
-  new ResizeObserver(() => { resize(); actions.redraw() }).observe(wrap)
+  const observer = new ResizeObserver(() => { resize(); actions.redraw() })
+  observer.observe(wrap)
+  observer.observe(canvas.parentElement!)
   const media = matchMedia("(min-width: 1000px)")
   const update = (next: AtlasState) => {
     state = next

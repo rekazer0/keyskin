@@ -32,6 +32,8 @@ import { openPanelCopyDialog, updatePanelCopyForm, copyPanel } from "../panel-co
 import { openLayoutImageDialog, acceptLayoutImageFile, syncLayoutImageConfig, updateLayoutImageForm, applyLayoutImage, layoutImageScopeText } from "../layout-image-replace"
 import { type LayoutImageTarget } from "../../layout-image.ts"
 import { type LayoutImageConfig } from "../types"
+import { layoutConversionButton, mobileLayoutImageTarget, mobileLayoutImageConfig, mobilePanelScaleMode } from "../dom"
+import { openLayoutConversionDialog } from "../layout-conversion"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
@@ -384,6 +386,7 @@ export function wireEditingControls(): void {
     activateSkinState(state)
   })
   panelScaleButton.addEventListener("click", openPanelCopyDialog)
+  layoutConversionButton.addEventListener("click", openLayoutConversionDialog)
   // 适配走撤销栈，不再确认（DESIGN.md §7）。
   adaptIos26Button.addEventListener("click", () => void runFileOperation("适配 iOS 26", adaptArchiveForIos26))
   replaceLayoutImageButton.addEventListener("click", openLayoutImageDialog)
@@ -441,6 +444,14 @@ export function wireEditingControls(): void {
       syncLayoutImageConfig()
     })
   }
+  mobileLayoutImageTarget.addEventListener("change", () => {
+    const input = layoutImageTargetInputs.find(input => input.value === mobileLayoutImageTarget.value)!
+    input.checked = true
+    input.dispatchEvent(new Event("change"))
+  })
+  mobileLayoutImageConfig.addEventListener("change", () => {
+    layoutImageConfigButtons.find(button => button.dataset.layoutImageConfig === mobileLayoutImageConfig.value)?.click()
+  })
   layoutImageForm.addEventListener("submit", (event) => {
     const submitter = event.submitter as HTMLButtonElement | null
     if (submitter?.value !== "apply") return
@@ -454,6 +465,10 @@ export function wireEditingControls(): void {
   })
   panelCopyTarget.addEventListener("input", updatePanelCopyForm)
   panelScaleEnabled.addEventListener("change", updatePanelCopyForm)
+  mobilePanelScaleMode.addEventListener("change", () => {
+    panelScaleEnabled.checked = mobilePanelScaleMode.value === "scale"
+    updatePanelCopyForm()
+  })
   panelScaleForm.addEventListener("submit", (event) => {
     if ((event.submitter as HTMLButtonElement | null)?.value !== "copy") return
     event.preventDefault()

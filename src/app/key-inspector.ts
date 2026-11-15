@@ -15,7 +15,7 @@ import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
 import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes } from "./canvas-interaction"
 import { shouldSuggestActionCodes, actionDescription } from "../actions.ts"
-import { keyFields, styleFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, textStyleLabels, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
+import { keyFields, styleFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, textStyleLabels, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { effectivePanelSection } from "../panel-tools.ts"
 import { createIcon } from "../icons"
@@ -197,7 +197,7 @@ export function updateSelectedBdaPanelProperty(
 
 export function syncActionCodeSuggestions(field: HTMLInputElement): void {
   if (!actionFieldNames.has(field.dataset.keyField ?? "")) return
-  if (shouldSuggestActionCodes(field.value)) field.setAttribute("list", "baidu-action-codes")
+  if (!field.readOnly && shouldSuggestActionCodes(field.value)) field.setAttribute("list", "baidu-action-codes")
   else field.removeAttribute("list")
 }
 
@@ -268,8 +268,7 @@ export function populateKeyInspector(): void {
     : toolbarSection
   const bdaConfigSelected = Boolean(appState.archive?.isBdaConfig(appState.selectedPath))
   const bdaSelected = appState.archive?.format === "bda"
-  // Sogou and Palm skins have inspectors of their own (ssf-inspector.ts, sxi-inspector.ts), shown
-  // through the document fields; the Baidu groups stay hidden for them.
+  // Native properties have their own inspectors; SSF also shows the skeleton's resolved gestures.
   const ssfSelected = appState.archive?.format === "ssf"
   const sxiSelected = appState.archive?.format === "sxi"
   preview.measurementEditable = !bdaSelected && !ssfSelected
@@ -280,8 +279,10 @@ export function populateKeyInspector(): void {
   keyboardFieldsGroup.hidden = bdaSelected || nativeSelected || skinSelected || toolbarSelected || bdaConfigSelected || candidateSelected || appState.selectedPath !== appState.layoutPath || hasSelection
   for (const group of keyOnlyGroups) {
     const availableForBda = group === keyTypographyFieldsGroup
-    group.hidden = skinSelected || bdaConfigSelected || !hasSelection || nativeSelected || (bdaSelected || listSelected) && !availableForBda
+    const nativeHidden = nativeSelected && !(ssfSelected && group === keyGestureFieldsGroup)
+    group.hidden = skinSelected || bdaConfigSelected || !hasSelection || nativeHidden || (bdaSelected || listSelected) && !availableForBda
   }
+  ssfGestureNote.hidden = !ssfSelected
   selectedKeyName.textContent = hasSelection
     ? listSelected ? "符号列表" : sections.length > 1 ? `已选 ${sections.length} 个按键` : `按键 ${sections[0]?.match(/\d+$/)?.[0] ?? ""}`.trim()
     : skinSelected
@@ -369,6 +370,7 @@ export function populateKeyInspector(): void {
     const name = field.dataset.keyField ?? ""
     // BDA 样式引用由源码结构控件编辑，旧格式按键字段只负责非 BDA 皮肤。
     field.disabled = !hasSelection || appState.archive?.format === "bda"
+    field.readOnly = ssfSelected && actionFieldNames.has(name)
     // 手势格子没配置时显示「+」（十字布局，DESIGN.md §10）；其余空字段与文字分组一样写「未设置」。
     field.placeholder = name === "HOLD" ? "未设置" : actionFieldNames.has(name) ? "+" : hasSelection ? "未设置" : ""
     // A Palm key's fields are skin.json's own (sxi-inspector.ts); these Baidu fields stay empty.
@@ -705,7 +707,7 @@ export function updateToolbar(field: HTMLInputElement): void {
 
 export function updateSelectedKey(field: HTMLInputElement): void {
   const name = field.dataset.keyField ?? ""
-  if (appState.archive?.format === "bda") return
+  if (appState.archive?.format === "bda" || appState.archive?.format === "ssf") return
   if (!appState.archive || !appState.layoutDocument || !appState.selectedKeySections.length) return
   const rectNames = ["x", "y", "width", "height"]
   // Clearing a number (or a mixed one) or typing "-" leaves an empty value: that is no number, not 0.

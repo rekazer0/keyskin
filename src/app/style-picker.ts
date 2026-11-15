@@ -11,9 +11,10 @@ import { addBdaStyle, updateBdaStyle } from "../bda-encode"
 import { updateBdaRefs } from "./key-inspector"
 import { bdaImageResourceID } from "./tile-editing"
 import { theme, orientation } from "./dom"
-import { openImageSlicePicker, imageDataURL, showPickerWindow, closePickerWindow, emitToPicker, clearImageSlicePicker } from "./image-pickers"
+import { openImageSlicePicker, applyImageSliceSelection, imageDataURL, showPickerWindow, closePickerWindow, emitToPicker, clearImageSlicePicker } from "./image-pickers"
 import { type Visual, type VisualResolver } from "../atlas.ts"
-import { afterNextPaint } from "./canvas-interaction"
+import { afterNextPaint, mobilePortraitQuery } from "./canvas-interaction"
+import { WHOLE_IMAGE_INDEX } from "../slice-picker-canvas"
 import { selectFile } from "./navigation"
 import { renderResourceInspector } from "./resource-inspector"
 import { resourceImagePaths } from "../resources.ts"
@@ -236,6 +237,9 @@ export function applyStyleLibrarySelection(toStyle = false): void {
           property: appState.styleLibraryHighlighted ? "HL_IMG" : "NM_IMG",
           selectReference: value => { if (appState.archive === source) createImageStyleReference(target, styleID, value, highlighted) },
         })
+        if (mobilePortraitQuery.matches && appState.pickerSlices.length <= 1) {
+          void applyImageSliceSelection(appState.pickerSlices[0]?.index ?? WHOLE_IMAGE_INDEX)
+        }
       }
       return
     }

@@ -54,7 +54,8 @@ export function selectFile(
     button.title = guideLabel
     button.setAttribute("aria-label", guideLabel)
   }
-  if (appState.resourceInspectorMode === "image" && appState.resourceConfigActive) setGuidesVisible(true)
+  if (appState.resourceConfigActive) setGuidesVisible(appState.resourceInspectorMode === "image")
+  else if (resourceMode === "motion" || resourceMode === "particle") setGuidesVisible(false)
   if (!appState.resourceConfigActive) {
     appState.selectedResourcePath = ""
     appState.drawingTile = false

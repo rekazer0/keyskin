@@ -6,6 +6,8 @@
 // Sogou sections: the most specific one first, then the shared defaults (`KeyBg_Default_Latin`, …) a
 // Sogou app falls back to. Both conversion directions use this one table.
 
+import type { IniDocument } from "../ini.ts"
+
 type SsfBoard = "py26" | "en26" | "num26" | "py9" | "en9" | "bh" | "num9" | "other"
 type SsfKeyClass = "char" | "space" | "function"
 export type SsfKeyBinding = {
@@ -45,7 +47,7 @@ export function ssfQwerty(layout: string): boolean {
 }
 
 /** Default actions carried by Baidu layouts but supplied by Sogou at runtime. */
-export function ssfKeyActions(layout: string, action: string, sourceSection?: string): Record<string, string> {
+function defaultKeyActions(layout: string, action: string, sourceSection?: string): Record<string, string> {
   const board = ssfBoard(layout)
   const name = layout.replace(/\.ini$/i, "").split("/").pop()!.toLowerCase()
   const handwritingFull = name === "hw_full" || name === "handwriting_full"
@@ -118,6 +120,20 @@ const FUNCTION_KEYS: Record<string, [qwerty: string[], nine: string[]]> = {
   F4: [["Key_Return"], ["Key_Return"]],
   F40: [["Key_Clear_Input"], ["Key_Clear_Input"]],
   F25: [["Key_Prediction"], ["Key_Prediction_En9"]],
+}
+
+/** Skin long-press references override the app's defaults; painted labels do not define input. */
+export function ssfKeyActions(layout: string, action: string, sourceSection?: string, skin?: IniDocument, landscape = false): Record<string, string> {
+  const actions = defaultKeyActions(layout, action, sourceSection)
+  const target = skin && ssfKeyBinding(layout, action, landscape, sourceSection).sections
+    .map((section) => skin.get(section, "L_KEY")?.split(",")[0].trim()).find(Boolean)
+  if (!target) return actions
+  const canonical = target.replace(/_Land(?=_|$)/g, "")
+  const character = canonical.match(/^Key_([a-z0-9])(?:_Qwerty|_PY|_EN)?$/i)?.[1]
+  const hold = skin?.get(target, "TEXT")?.trim() || skin?.get(canonical, "TEXT")?.trim()
+    || (character && (/^[A-Z]$/.test(action) ? character.toUpperCase() : character.toLowerCase()))
+    || Object.entries(FUNCTION_KEYS).find(([, variants]) => variants.flat().includes(canonical))?.[0]
+  return hold ? { ...actions, HOLD: hold } : actions
 }
 
 function primarySections(board: SsfBoard, action: string): string[] {

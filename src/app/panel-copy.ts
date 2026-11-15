@@ -5,9 +5,8 @@
 
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
-import { panelCopySource, panelSourceWidth, panelSourceHeight, panelTargetWidth, panelTargetHeight, panelScaleEnabled, panelScaleOptions, panelCopyTarget, panelScaleSummary, panelCopySourceOptions, panelCopyTargetOptions, theme, orientation, layout, panelScaleDialog } from "./dom"
+import { panelCopySource, panelSourceWidth, panelSourceHeight, panelTargetWidth, panelTargetHeight, panelScaleEnabled, panelScaleOptions, panelCopyTarget, panelScaleSummary, panelCopySourceOptions, panelCopyTargetOptions, theme, orientation, layout, panelScaleDialog, mobilePanelScaleMode, mobilePanelResolution, mobilePanelResolutionField } from "./dom"
 import { archiveCopyPaths, archivePathOptions, scaleIniDocument } from "../panel-tools.ts"
-import { scheduleSourceAutosave } from "./source-workspace"
 import { syncSegmentedControls } from "./mobile-layout"
 import { renderFiles } from "./file-tree"
 import { selectFile } from "./navigation"
@@ -96,6 +95,10 @@ export function updatePanelCopyForm(): void {
   panelSourceHeight.disabled = true
   panelTargetWidth.disabled = !panelScaleEnabled.checked
   panelTargetHeight.disabled = !panelScaleEnabled.checked
+  mobilePanelScaleMode.value = panelScaleEnabled.checked ? "scale" : "original"
+  mobilePanelScaleMode.disabled = panelScaleEnabled.disabled
+  mobilePanelResolutionField.hidden = panelScaleEnabled.checked
+  mobilePanelResolution.value = sourceSize ? `宽 ${sourceSize[0]} × 高 ${sourceSize[1]}` : "按原始配置复制"
   try {
     const copies = archiveCopyPaths(panelCopyNames(), panelCopySource.value, panelCopyTarget.value)
     panelScaleSummary.textContent = copies.length === 1
@@ -226,8 +229,7 @@ export async function copyPanel(): Promise<boolean> {
           : bytes.slice()
       staged.set(target, output)
     }
-    for (const [path, bytes] of staged) currentArchive.setBytes(path, bytes)
-    scheduleSourceAutosave([...staged.keys()])
+    commitBatch([...staged].map(([path, after]) => ({ kind: "bytes", path, before: currentArchive.getBytes(path), after })))
   }
 
   const targetPath = copies[0].target

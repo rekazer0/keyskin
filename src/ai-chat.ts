@@ -114,7 +114,6 @@ function configureAppearance(chat: DeepChat): void {
   const fast = "var(--duration-fast) var(--ease-standard)"
   const xs = "var(--font-size-xs)"
   const sm = "var(--font-size-sm)"
-  const md = "var(--font-size-md)"
   const lg = "var(--font-size-lg)"
 
   chat.chatStyle = {
@@ -143,9 +142,9 @@ function configureAppearance(chat: DeepChat): void {
     characterLimit: 8_000,
     styles: {
       text: { color: text, fontSize: sm, lineHeight: "1.6", padding: "12px 12px 0",
-        boxSizing: "border-box", minHeight: "96px", maxHeight: "60vh", overflowY: "auto" },
+        boxSizing: "border-box", minHeight: "var(--ai-chat-input-min-height)", maxHeight: "var(--ai-chat-input-max-height)", overflowY: "auto" },
       container: {
-        width: "100%", boxSizing: "border-box", margin: "0", paddingBottom: "40px",
+        width: "100%", boxSizing: "border-box", margin: "0", paddingBottom: "var(--ai-chat-input-footer)",
         height: "auto", maxHeight: "none", overflow: "hidden",
         border: `1px solid ${lineStrong}`, borderRadius: radiusLg, backgroundColor: control,
         boxShadow: "var(--shadow-sm)",
@@ -291,17 +290,14 @@ function configureAppearance(chat: DeepChat): void {
     /* Phones get half a screen at best: a two-line composer, suggestions as
        scrolling rows of chips, and no drag grip. */
     @media (max-width: 760px) {
-      #text-input { min-height: 44px !important; max-height: 30vh !important; padding-top: 12px !important; }
-      #text-input-container { padding-bottom: 36px !important; }
       .ai-resize { display: none; }
-      .ai-welcome { gap: 8px; padding: 8px 16px 12px; }
-      .ai-welcome p, .ai-welcome h3 { display: none; }
-      .ai-welcome h2 { font-size: ${md}; }
-      .ai-suggestions, .ai-suggestions[data-layout] { display: flex; flex-wrap: nowrap; gap: 6px; margin: 0 -16px; padding: 0 16px;
+      .ai-welcome { display: flex; flex-wrap: nowrap; gap: 6px; padding: 8px 16px 12px;
         overflow-x: auto; scrollbar-width: none; scroll-padding: 0 16px; }
-      .ai-suggestions::-webkit-scrollbar { display: none; }
+      .ai-welcome p, .ai-welcome h2, .ai-welcome h3 { display: none; }
+      .ai-suggestions, .ai-suggestions[data-layout] { display: contents; }
+      .ai-welcome::-webkit-scrollbar { display: none; }
       .ai-suggestions button, .ai-suggestions[data-layout] button { flex: none; width: auto; padding: 6px 12px;
-        border-radius: ${radiusFull}; white-space: nowrap; }
+        min-height: var(--control-height-lg); border-radius: ${radiusFull}; white-space: nowrap; }
       .ai-suggestions span { display: none; }
     }
 
@@ -336,7 +332,7 @@ function configureAppearance(chat: DeepChat): void {
       },
     },
   }
-  const button = { borderRadius: radiusMd, boxSizing: "border-box", width: "28px", height: "28px", bottom: "6px", right: "6px", boxShadow: "none" }
+  const button = { borderRadius: radiusMd, boxSizing: "border-box", width: "var(--ai-chat-send-size)", height: "var(--ai-chat-send-size)", bottom: "6px", right: "6px", boxShadow: "none" }
   chat.submitButtonStyles = {
     position: "inside-end",
     tooltip: { text: "发送；生成时点击可停止" },

@@ -1,4 +1,5 @@
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Deserialize};
+use std::borrow::Cow;
 use tauri::{http::HeaderMap, ipc::InvokeBody};
 
 pub fn arguments<T: DeserializeOwned>(headers: &HeaderMap) -> Result<T, String> {
@@ -10,10 +11,13 @@ pub fn arguments<T: DeserializeOwned>(headers: &HeaderMap) -> Result<T, String> 
     serde_json::from_str(metadata).map_err(|e| format!("无效的文件传输参数：{e}"))
 }
 
-pub fn bytes(body: &InvokeBody) -> Result<&[u8], String> {
+pub fn bytes(body: &InvokeBody) -> Result<Cow<'_, [u8]>, String> {
     match body {
-        InvokeBody::Raw(data) => Ok(data),
-        _ => Err("文件传输需要二进制数据".into()),
+        InvokeBody::Raw(data) => Ok(Cow::Borrowed(data)),
+        // Tauri 的 postMessage 回退通道会把 Uint8Array 序列化为 JSON 字节数组。
+        InvokeBody::Json(data) => Vec::<u8>::deserialize(data)
+            .map(Cow::Owned)
+            .map_err(|_| "文件传输需要二进制数据".into()),
     }
 }
 
@@ -24,8 +28,35 @@ mod tests {
     #[test]
     fn binary_payload_preserves_all_bytes_without_json_conversion() {
         let body = InvokeBody::Raw((0..=255).collect());
-        assert_eq!(bytes(&body).unwrap(), (0..=255).collect::<Vec<u8>>());
-        assert!(bytes(&InvokeBody::Json(serde_json::json!([1, 2]))).is_err());
+        let decoded = bytes(&body).unwrap();
+        assert!(matches!(decoded, Cow::Borrowed(_)));
+        assert_eq!(decoded.as_ref(), (0..=255).collect::<Vec<u8>>());
+    }
+
+    #[test]
+    fn post_message_fallback_preserves_all_bytes() {
+        let expected = (0..=255).collect::<Vec<u8>>();
+        let body = InvokeBody::Json(serde_json::json!(expected));
+        assert_eq!(bytes(&body).unwrap().into_owned(), expected);
+        let empty = InvokeBody::Json(serde_json::json!([]));
+        assert!(bytes(&empty).unwrap().is_empty());
+    }
+
+    #[test]
+    fn post_message_fallback_rejects_invalid_bytes() {
+        for invalid in [
+            serde_json::json!([0, -1]),
+            serde_json::json!([0, 256]),
+            serde_json::json!([0, 1.5]),
+            serde_json::json!([0, "1"]),
+            serde_json::json!([0, true]),
+            serde_json::json!([0, null]),
+            serde_json::json!({"0": 1}),
+            serde_json::json!("AA=="),
+            serde_json::json!(null),
+        ] {
+            assert!(bytes(&InvokeBody::Json(invalid)).is_err());
+        }
     }
 
     #[test]

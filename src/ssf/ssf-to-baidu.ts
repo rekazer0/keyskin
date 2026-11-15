@@ -9,7 +9,7 @@ import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
 import { SsfBaiduMotion } from "./ssf-anim-to-baidu.ts"
 import { cached, fingerprint } from "./ssf-cache.ts"
-import { ssfKeyActions, ssfQwerty } from "./ssf-keymap.ts"
+import { ssfQwerty } from "./ssf-keymap.ts"
 import { SsfLook, type LookColors, type LookImage, type LookPair, type LookText } from "./ssf-look.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
 import { copySsfSkeleton, ssfSkeletonScale } from "./ssf-skeleton.ts"
@@ -116,6 +116,7 @@ class ThemeResources {
 /** Converts one Sogou theme onto copies of the template's `light/skin` tree. */
 class ThemeConverter {
   private readonly look: SsfLook
+  private readonly skin: IniDocument
   private readonly base: SkinArchive
   private readonly theme: SsfTheme
   private readonly output: Map<string, Uint8Array>
@@ -137,6 +138,7 @@ class ThemeConverter {
     const panel = base.isText("light/skin/port/gen.ini") ? IniDocument.parse(base.getText("light/skin/port/gen.ini")).get("PANEL", "SIZE") : undefined
     const width = panelWidth || numbers(panel)[0] || 480
     this.look = new SsfLook(pkg, theme, warnings, width)
+    this.skin = pkg.skin(theme)
     this.base = base
     this.theme = theme
     this.output = output
@@ -214,9 +216,6 @@ class ThemeConverter {
     for (const section of layout.sections().filter((name) => /^KEY\d+$/.test(name))) {
       const action = layout.get(section, "CENTER")?.trim()
       if (!action) continue
-      for (const [field, value] of Object.entries(ssfKeyActions(layoutName, action, layout.get(section, "SSF_SECTION")))) {
-        layout.set(section, field, value)
-      }
       const [, , width, height] = numbers(layout.get(section, "VIEW_RECT"))
       const look = this.look.key(layoutName, action, landscape, width > 0 && height > 0 ? [width, height] : undefined, layout.get(section, "SSF_SECTION"), layout.get(section, "SSF_BG"), layout.get(section, "SSF_FG"))
       if (look.back) layout.set(section, "BACK_STYLE", this.resources.imageStyle(look.back))
@@ -394,7 +393,7 @@ class ThemeConverter {
   }
 
   convert(): void {
-    copySsfSkeleton(this.base, this.theme, this.output, this.panelWidth)
+    copySsfSkeleton(this.base, this.theme, this.output, this.panelWidth, this.skin)
     for (const orientation of ["port", "land"] as const) {
       const genPath = `${this.theme}/skin/${orientation}/gen.ini`
       const genBytes = this.output.get(genPath)

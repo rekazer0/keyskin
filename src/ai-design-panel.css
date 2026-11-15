@@ -336,10 +336,28 @@
 /* Phones: the panel shares half the screen with the canvas, so the frame gives
    every spare pixel to the conversation. */
 @media (max-width: 760px) {
-  #ai-design-panel .ai-bar { padding: 8px 16px 2px; }
+  #ai-design-panel .ai-bar { align-items: center; padding: var(--space-sm) var(--mobile-page-gutter) var(--space-2xs); }
+  #ai-design-panel .ai-context { align-items: center; }
+  #ai-design-panel .ai-scope { height: var(--control-height-lg); }
   #ai-design-panel .ai-design-composer { min-height: 0; }
-  #ai-design-panel .ai-design-toolbar { bottom: 18px; }
+  #ai-design-panel .ai-design-toolbar { bottom: calc(var(--space-lg) + var(--space-xs)); height: var(--control-height-lg); right: calc(var(--space-lg) + var(--control-height-lg) + var(--space-sm)); }
+  #ai-design-panel .ai-design-toolbar :is(select, .ai-design-settings) { height: var(--control-height-lg); }
+  #ai-design-panel .ai-draft-actions > button { min-height: var(--control-height-lg); }
   #ai-design-panel .ai-design-composer:has(#ai-design-chat[data-draft]) { display: none; }
-  #ai-design-panel .ai-draft-panel:not([hidden]) { flex: 1; max-height: none; margin: 0 var(--space-md) var(--space-md); }
+  #ai-design-panel .ai-draft-panel:not([hidden]) { flex: 1; max-height: none; margin: 0 var(--space-md) var(--space-sm); }
+  #ai-design-panel:has(#ai-draft-panel:not([hidden])) .ai-bar { display: none; }
+  #ai-design-panel .ai-draft-head { align-items: center; padding: var(--space-sm) var(--space-md) var(--space-xs); }
+  #ai-design-panel #ai-draft-summary { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #ai-design-panel .ai-draft-note { display: none; }
+}
+
+.mobile-ai-unavailable { display: none; }
+@media (max-width: 760px) and (orientation: portrait) {
+  :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) > :not(.mobile-ai-unavailable, .ai-bar, .ai-sessions) { display: none; }
+  :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) .ai-context { display: none; }
+  :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) .mobile-ai-unavailable { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; gap: var(--space-md); padding: var(--space-lg) var(--mobile-page-gutter); }
+  .mobile-ai-unavailable > h2 { margin: 0 0 var(--space-md); font-size: var(--font-size-lg); }
+  .mobile-ai-unavailable > h3 { margin: 0; font-size: var(--font-size-lg); }
+  .mobile-ai-unavailable > p { flex: 1; margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.8; }
+  .mobile-ai-unavailable > button { flex-shrink: 0; min-height: 48px; }
 }

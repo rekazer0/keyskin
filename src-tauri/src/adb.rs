@@ -761,7 +761,7 @@ pub async fn share_skin_adb(
     if data.is_empty() || data.len() > 64 * 1024 * 1024 {
         return Err("无效的 Android 皮肤包（最大 64 MB）".into());
     }
-    let data = data.to_vec();
+    let data = data.into_owned();
     let progress = args.progress.channel_on(webview);
     let cancel = std::sync::Arc::new(AtomicBool::new(false));
     if let Ok(mut active) = ACTIVE_SHARE_CANCEL.lock() {

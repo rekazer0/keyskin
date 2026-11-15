@@ -24,7 +24,8 @@ const PART_SECTIONS: Record<string, string> = {
   MORE: "more", LIST: "list", SEGMENT: "seg", SCAND: "top_cand",
 }
 const LAYOUT_FIELDS = ["rect", "hit_rect", "b.base_o"]
-const STYLE_FIELDS = ["b.base_b", "b.base_f", "b.base_s", "b.asi", "b.base_a", "b.base_ba", "b.base_fa", "b.base_pa"]
+const STYLE_FIELDS = ["b.base_b", "b.base_f"]
+const ANIMATION_FIELDS = ["b.asi", "b.base_a", "b.base_ba", "b.base_fa", "b.base_pa"]
 const TEXT_FIELDS = ["text", "f_s", "f_n", "f_w", "c_normal", "c_hl"]
 
 type Selection =
@@ -128,6 +129,8 @@ function palmKeyGroups(skin: JsonObject, models: SxiPointer[]): Array<HTMLElemen
   return [
     renderSxiGroup("布局", [{ targets: models, only: LAYOUT_FIELDS, expect: ["rect", "hit_rect"], note }]),
     renderSxiGroup("样式", [{ targets: models, only: STYLE_FIELDS, expect: ["b.base_b", "b.base_f"], keyForeground: true }]),
+    renderSxiGroup("音效", [{ targets: models, only: ["b.base_s"], expect: ["b.base_s"] }]),
+    renderSxiGroup("动画", [{ targets: models, only: ANIMATION_FIELDS, expect: ["b.asi"] }]),
     text.length
       ? renderSxiGroup("文字", text.map((block, index) => index ? block : { ...block, note: "共享：可能被多个按键共用" }))
       : renderSxiGroup("文字", [], { extra: [listToolbar({ create: {

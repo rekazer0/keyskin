@@ -251,7 +251,7 @@ async function encodeOggVorbis(sound: DecodedSound): Promise<Uint8Array> {
   return output
 }
 
-async function decodeSound(bytes: Uint8Array): Promise<DecodedSound> {
+export async function decodeSound(bytes: Uint8Array): Promise<DecodedSound> {
   const head = new TextDecoder("ascii").decode(bytes.subarray(0, 4))
   if (head === "FORM") return decodeAiffPcm(bytes)
   if (head === "OggS") return decodeOggVorbis(bytes)

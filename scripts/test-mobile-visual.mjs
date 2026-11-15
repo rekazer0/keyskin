@@ -1,4 +1,5 @@
-// Mobile Pen implementation: real screenshots plus clipping and reachability checks.
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
+// Mobile Figma implementation: real screenshots plus clipping and reachability checks.
 // Run: node scripts/test-mobile-visual.mjs (screenshots: .ui-current/mobile-visual/)
 import assert from "node:assert/strict"
 import { mkdirSync, writeFileSync } from "node:fs"
@@ -54,7 +55,9 @@ async function capture(page, name, region) {
   console.log(`PASS ${name}`)
 }
 
-const tab = (page, pane) => page.locator(`.mobile-workspace-tabs [data-mobile-pane="${pane}"]`)
+async function openFiles(page) {
+  await page.locator('#mobile-navigation [data-mobile-page=project]').click()
+}
 
 try {
   for (const width of [320, 393, 430]) for (const colorScheme of ["light", "dark"]) {
@@ -66,13 +69,13 @@ try {
     page.on("pageerror", error => errors.push(`${prefix}: ${error.message}`))
     try {
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-      await page.waitForSelector(".template-card")
+      await page.waitForSelector(".template-card", { state: "attached" })
       await capture(page, `${prefix}-welcome`, ".canvas-wrap.empty .empty-state")
       const welcome = page.locator(".canvas-wrap.empty .empty-state")
       await welcome.evaluate(node => { node.scrollTop = node.scrollHeight })
       await capture(page, `${prefix}-welcome-bottom`)
       await welcome.evaluate(node => { node.scrollTop = 0 })
-      await page.locator('.template-card[data-template="official-android-bds"]').first().click()
+      await openEditorTemplate(page, 'official-android-bds')
       await page.waitForFunction(() => !document.querySelector("#open").disabled && !document.querySelector(".canvas-wrap").classList.contains("empty"))
       await page.waitForFunction(() => document.querySelector("#preview")?.getBoundingClientRect().height > 60)
       await page.waitForFunction(() => !document.querySelector("#file-operation-dialog")?.open || !document.querySelector("#file-operation-close")?.disabled)
@@ -86,11 +89,10 @@ try {
       await capture(page, `${prefix}-export`, "#mobile-export-dialog")
       await page.locator('#mobile-export-dialog button[value="cancel"]').click()
       await page.waitForSelector("#mobile-export-dialog[open]", { state: "hidden" })
-      await page.locator("#mobile-app-more > summary").click()
-      await page.locator('#mobile-app-more [data-mobile-action="mode"]').click()
+      await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
       const keyboard = await page.locator("#preview").boundingBox()
       await page.mouse.click(keyboard.x + keyboard.width * 0.45, keyboard.y + keyboard.height * 0.45)
-      await page.waitForSelector("#mobile-key-preview:not([hidden])")
+      await page.waitForSelector("#mobile-property-tabs:not([hidden])")
       await page.waitForFunction(() => document.querySelector("#mobile-key-canvas").width > 1)
       await page.evaluate(async () => { (await import("/src/app/preview-render.ts")).setGuidesVisible(true) })
       const measurement = page.getByRole("group", { name: "尺寸标注", exact: true })
@@ -104,8 +106,8 @@ try {
       assert.equal(await widthInput.inputValue(), originalWidth, "measurement edit shares the real geometry undo")
       await capture(page, `${prefix}-measurements`)
       await page.evaluate(async () => { (await import("/src/app/preview-render.ts")).setGuidesVisible(false) })
-      for (const category of ["appearance", "text", "actions", "all"]) {
-        await page.locator(`#mobile-property-tabs [data-mobile-category="${category}"]`).click()
+      for (const category of ["appearance", "geometry", "actions", "sound", "animation"]) {
+        await page.locator(`${["geometry", "sound", "animation"].includes(category) ? ".mobile-property-details" : "#mobile-property-tabs"} [data-mobile-category="${category}"]`).click()
         await capture(page, `${prefix}-properties-${category}`, "main > .source")
         const content = page.locator("#quick-inspector")
         assert.ok(await content.evaluate(node => node.clientHeight >= 44), `${prefix}: properties leave no room for a control`)
@@ -136,19 +138,30 @@ try {
       }
       await page.locator('#mobile-property-tabs [data-mobile-category="appearance"]').click()
       await page.locator('#quick-inspector').evaluate(node => { node.scrollTop = 0 })
-      await page.locator('#mobile-preview-toggle').click()
+      await page.locator('#mobile-inspector-resize').focus()
+      await page.keyboard.press('Home')
       await capture(page, `${prefix}-properties-expanded`, 'main > .source')
-      await page.locator('#mobile-preview-toggle').click()
-      await page.locator('[data-inspector-tab="source"]').click()
+      await page.locator('#mobile-inspector-resize').dblclick()
+      await page.locator('#mobile-app-more > summary').click()
+      await page.locator('[data-mobile-action="mobile-ai-view"]').click()
+      await page.locator('#ai-design-panel').waitFor({ state: 'visible' })
+      await capture(page, `${prefix}-ai`, '#ai-design-panel')
+      const manual = page.getByRole('button', {name:'继续手动编辑', exact:true})
+      assert.ok(await manual.evaluate(node => node.getBoundingClientRect().height >= 44))
+      await manual.scrollIntoViewIfNeeded()
+      await manual.click()
+      await page.locator('#quick-inspector').waitFor({state:'visible'})
+      await page.locator('#mobile-app-more > summary').click()
+      await page.locator('[data-mobile-action="mobile-source-view"]').click()
       await capture(page, `${prefix}-source`, "#source-editor")
-      await tab(page, "layout").click()
+      await openFiles(page)
       await capture(page, `${prefix}-files`, "main > aside")
       for (const [mode, label] of [["style", "styles"], ["sound", "sounds"], ["resource", "images"]]) {
         if (mode === "sound") await page.evaluate(async bytes => {
           (await import("/src/app/state.ts")).appState.archive.setBytes("light/skin/res/mobile_preview.wav", new Uint8Array(bytes))
         }, Array.from(wav(8000)))
         await page.locator(`.sidebar-overview [data-nav-mode="${mode}"]`).first().click()
-        await page.locator('[data-inspector-tab="properties"]').click()
+        assert.equal(await page.locator('[data-inspector-tab="properties"]').getAttribute("aria-selected"), "true")
         if (mode === "resource" && await page.locator("#resource-detail").isVisible()) {
           const headingFits = await page.locator(".resource-detail-heading").evaluate(node => {
             const box = node.getBoundingClientRect(), pane = node.closest("#resource-inspector").getBoundingClientRect()
@@ -166,17 +179,18 @@ try {
             return nodes.map(n => n.getBoundingClientRect()).filter(r => r.top >= list.top && r.bottom <= list.bottom)
               .map(r => ({x:r.x, y:r.y}))
           })
-          assert.ok(visible.length >= 4, 'resource browser shows at least two complete rows')
+          assert.ok(visible.length >= (width === 320 ? 2 : 4), 'resource browser shows a complete row on 320px and two rows on larger screens')
           assert.ok(new Set(visible.map(r => r.x)).size >= 2, 'narrow phone retains two columns')
         }
         if (mode === "style") {
           await page.locator('#resource-gallery .ui-style-card').first().scrollIntoViewIfNeeded()
           await capture(page, `${prefix}-styles-detail`, "main > .source")
         }
-        await tab(page, "layout").click()
+        await openFiles(page)
       }
-      await page.locator('.pen-file-menu > summary').click()
-      await capture(page, `${prefix}-drawer`, ".pen-file-menu > .ui-menu")
+      await page.locator('#mobile-navigation [data-mobile-page=edit]').click()
+      await page.locator('#mobile-app-more > summary').click()
+      await capture(page, `${prefix}-drawer`, '#mobile-app-more > .ui-menu')
       await page.keyboard.press("Escape")
       await page.locator("#mobile-app-more > summary").click()
       await page.locator('#mobile-app-more [data-app-dialog="settings"]').click()
@@ -184,11 +198,11 @@ try {
       await capture(page, `${prefix}-settings`, "#settings-dialog")
       await page.keyboard.press("Escape")
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-      await page.waitForSelector(".template-card")
+      await page.waitForSelector(".template-card", { state: "attached" })
       await page.locator("#browser-open").setInputFiles({ name: "移动端动效.bda", mimeType: "application/octet-stream", buffer: Buffer.from(bdaAnimatedSkinBytes()) })
       await page.waitForFunction(() => !document.querySelector("#open").disabled && !document.querySelector("#file-operation-dialog").open)
       for (const mode of ["motion", "particle"]) {
-        await tab(page, "layout").click()
+        await openFiles(page)
         await page.locator(`.sidebar-overview [data-nav-mode="${mode}"]`).first().click()
         const player = page.locator('#quick-inspector .ui-animation-player:not([data-variant="thumbnail"])').first()
         await player.waitFor()

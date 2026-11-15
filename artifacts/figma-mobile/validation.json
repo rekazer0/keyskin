@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-16",
+  "results": [
+    {
+      "command": "npm run typecheck",
+      "result": "通过"
+    },
+    {
+      "command": "npm run build",
+      "result": "通过；保留既有 >1000 kB chunk 提醒"
+    },
+    {
+      "command": "node scripts/test-mobile-figma.mjs",
+      "result": "48/48 界面覆盖，0 pageerror；BDS/BDI 实际下载重开"
+    },
+    {
+      "command": "npm run test:ui",
+      "result": "通过；73 对基线截图，71 个页面存在变化，28023 项 DOM/样式记录；未重存基线"
+    },
+    {
+      "command": "node scripts/test-mobile-layout.mjs",
+      "result": "21/21"
+    },
+    {
+      "command": "node scripts/test-mobile-reconstruction.mjs",
+      "result": "320 / 393 / 430 px 全部通过"
+    },
+    {
+      "command": "node scripts/test-mobile-resources.mjs",
+      "result": "320 / 393 / 430 × 浅深色 × BDS/SXI/BDA 共 18 组通过"
+    },
+    {
+      "command": "node scripts/test-mobile-visual.mjs",
+      "result": "186 张，0 浏览器错误"
+    },
+    {
+      "command": "node scripts/test-mobile-share.mjs",
+      "result": "两种 iOS activation 路径通过"
+    },
+    {
+      "command": "node scripts/test-mobile-file-open.mjs",
+      "result": "Android / iPhone / desktop 文件打开通过"
+    },
+    {
+      "command": "node scripts/test-sound-library.mjs",
+      "result": "选择、搜索、播放、替换、下载、真实波形、明暗主题与窄屏通过"
+    },
+    {
+      "command": "node scripts/test-atlas-editing.mjs",
+      "result": "2/2 图集专项通过"
+    },
+    {
+      "command": "node scripts/test-image-resource-ui.mjs",
+      "result": "1440 / 812 图片资源 UI 通过"
+    },
+    {
+      "command": "node scripts/test-layout-conversion.mjs",
+      "result": "BDI / SXI 模板持久化、导入、删除保护、9→18 键转换、撤销重做通过"
+    },
+    {
+      "command": "node scripts/test-ssf-inspector.mjs",
+      "result": "SSF 检查器专项通过"
+    },
+    {
+      "command": "node scripts/test-ssf-popup-conversion.mjs",
+      "result": "16 个视图、96 个滑动动作通过"
+    },
+    {
+      "command": "node scripts/test-ssf-conversion.mjs",
+      "result": "32 个 BDI/BDS 视图键盘严格像素一致；平台原生工具栏参考与 BDA 重开通过"
+    },
+    {
+      "command": "node scripts/test-adb-share.mjs",
+      "result": "桌面入口、网络设置、配对、导出、取消等模拟链路通过"
+    },
+    {
+      "command": "Rust binary_ipc tests",
+      "result": "4/4"
+    },
+    {
+      "command": "node --test tests/design-system.test.mjs tests/motion-progress.test.mjs tests/layout-conversion.test.mjs tests/ssf-key-actions.test.mjs tests/ssf-inspector.test.mjs tests/picker-window.test.mjs tests/native-panel-tools.test.mjs",
+      "result": "64/64"
+    },
+    {
+      "command": "音效转换/播放定向单测",
+      "result": "26/26"
+    },
+    {
+      "command": "Tabbit 真实浏览器",
+      "result": "试用输入与清除、源码返回属性、音效选择及波形；保留结果页，finish 成功且 forcedCleanup=false"
+    },
+    {
+      "command": "node scripts/test-native-panel-tools.mjs",
+      "result": "Palm 和 Sogou 的复制、缩放、替换、撤销重做与保存重开通过"
+    }
+  ],
+  "browserScreenshot": "browser/tabbit-sound-resource.png",
+  "notVerified": [
+    "iOS/Android 真机系统分享、软键盘和系统文件选择器",
+    "桌面客户端完整打包安装与真实 USB/无线 ADB",
+    "真实 AI 模型服务调用",
+    "Figma 与生产界面逐像素一致性"
+  ],
+  "buildWarning": "既有部分 chunk 超过 1000 kB"
+}

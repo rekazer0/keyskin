@@ -40,6 +40,10 @@ export async function refreshUpdateStatus(): Promise<void> {
 }
 
 export function showSettingsPage(page: string): void {
+  if (matchMedia("(max-width: 760px)").matches) {
+    settingsDialog.dataset.mobileSettings = "detail"
+    settingsDialog.querySelector("#settings-title")!.textContent = ({ appearance: "外观设置", canvas: "预览与画布设置", source: "源代码设置", model: "AI 模型设置", about: "关于与帮助" } as Record<string, string>)[page] ?? "设置"
+  }
   const target = settingsPages.find(panel => panel.dataset.settingsPanel === page && !panel.hasAttribute("data-platform-hidden"))
     ?? settingsPages.find(panel => !panel.hasAttribute("data-platform-hidden"))
   if (!target) return

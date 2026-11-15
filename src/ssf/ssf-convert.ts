@@ -44,7 +44,7 @@ export async function ssfDocumentBytes(bytes: Uint8Array): Promise<Uint8Array> {
  */
 export function ssfSkeleton(pkg: SsfPackage, template: SkinArchive): SkinArchive {
   const files = new Map<string, Uint8Array>()
-  for (const theme of pkg.themes.keys()) copySsfSkeleton(template, theme, files, Number(pkg.resolution))
+  for (const theme of pkg.themes.keys()) copySsfSkeleton(template, theme, files, Number(pkg.resolution), pkg.skin(theme))
   // Stored the way a two-look BDS package keeps them (`light/port/…`), which reads back as `light/skin/port/…`.
   return SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
 }

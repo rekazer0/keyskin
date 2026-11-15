@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 // OS picker filtering still needs a device; verify the options and browser import flow here.
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
@@ -19,12 +20,13 @@ try {
       const errors = []
       page.on('pageerror', (error) => errors.push(error.message))
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-      await page.waitForSelector('.template-card')
+      await page.waitForSelector('.template-card', { state: 'attached' })
       const input = page.locator('#browser-open')
       assert.equal(await input.getAttribute('accept'), platform === 'desktop' ? '.bdi,.bds,.bda,.ssf,.mssf,.sxi' : null)
       if (platform === 'Android') {
         const picker = page.waitForEvent('filechooser')
         await page.locator('#mobile-welcome-open').click()
+        await page.locator('.ui-mobile-file-choice').click()
         await (await picker).setFiles({ name: '安卓搜狗.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
         await page.waitForFunction(() => document.querySelector('#document-name').textContent === '安卓搜狗.ssf' && !document.querySelector('#open').disabled)
         assert.ok(await page.locator('#preview').evaluate((canvas) => canvas.getBoundingClientRect().height > 20))
@@ -35,17 +37,19 @@ try {
       }
       if (platform === 'iPhone') {
         // iOS 只在点击里同步调用 click() 时弹选择框：有未保存修改时先选文件，再询问是否保存。
-        await page.locator('.template-grid .template-card[data-template="official-android-bds"]').click()
-        await page.locator('#dirty').waitFor({ state: 'visible' })
+        await openEditorTemplate(page, 'official-android-bds')
+        await page.waitForFunction(() => !document.querySelector('#dirty').hidden)
         await page.waitForFunction(() => !document.querySelector('#file-operation-dialog').open && !document.querySelector('#open').disabled)
         assert.equal(await page.locator('#recent-files').isHidden(), true, '网页端不显示最近打开')
-        await page.locator('.pen-file-menu summary').click()
+        await page.locator('#mobile-home').click()
+        await page.getByRole('dialog', { name: '未保存保护' }).getByRole('button', { name: '暂不保存，离开' }).click()
+        await page.locator('#mobile-welcome-open').click()
         const picker = page.waitForEvent('filechooser')
-        await page.locator('#open').click()
+        await page.locator('.ui-mobile-file-choice').click()
         const chooser = await picker
-        assert.equal(await page.getByRole('dialog', { name: '未保存的皮肤' }).count(), 0)
+        assert.equal(await page.getByRole('dialog', { name: '未保存保护' }).count(), 0)
         await chooser.setFiles({ name: '苹果搜狗.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
-        await page.getByRole('dialog', { name: '未保存的皮肤' }).getByRole('button', { name: '不保存' }).click()
+        await page.getByRole('dialog', { name: '未保存保护' }).getByRole('button', { name: '暂不保存，离开' }).click()
         await page.waitForFunction(() => document.querySelector('#document-name').textContent === '苹果搜狗.ssf' && !document.querySelector('#open').disabled)
       }
       assert.deepEqual(errors, [])

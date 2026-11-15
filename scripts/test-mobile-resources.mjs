@@ -85,9 +85,10 @@ try {
       await inventory.getByRole("button", { name: "关闭", exact: true }).last().click()
       await undo(page)
       assert.equal(await page.evaluate(async path => (await import("/src/app/state.ts")).appState.archive.getText(path), before.path), before.text)
+      await page.locator("#mobile-navigation [data-mobile-page=edit]").click()
       await page.locator("#mobile-app-more > summary").click()
       await page.locator('#mobile-app-more [data-mobile-action="mobile-export-open"]').click()
-      const exporting = page.getByRole("dialog", { name: "导出皮肤", exact: true })
+      const exporting = page.getByRole("dialog", { name: "导出格式", exact: true })
       assert.match(await exporting.innerText(), /当前样式表检查：\d+ 项缺失引用/)
       await exporting.locator('summary', { hasText: '查看缺失引用' }).click()
       assert.match(await exporting.locator('ul').innerText(), /missing_mobile_image/)
@@ -119,10 +120,14 @@ try {
       await undo(page)
       assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.getText("skin.json")), beforeGeometry)
       await page.evaluate(async () => { (await import("/src/app/preview-render.ts")).setGuidesVisible(false) })
-      await page.locator('.mobile-workspace-tabs [data-mobile-pane="layout"]').click()
+      await page.locator('#mobile-navigation [data-mobile-page=project]').click()
     }
+    await page.locator('#mobile-navigation [data-mobile-page=project]').click()
     await page.locator('.sidebar-overview [data-nav-mode="motion"]').first().click()
-    if (format === "bda") await page.locator('#bda-config-fields [data-animation-id="alpha:press"]').click()
+    if (format === "bda") {
+      await page.locator('.mobile-animation-library > summary').click()
+      await page.locator('#bda-config-fields [data-animation-id="alpha:press"]').click()
+    }
     else await page.evaluate(async () => {
       const { preview } = await import("/src/app/canvas-interaction.ts")
       const keys = preview.keys.filter(key => key.editable && /^KEY\d+$/.test(key.section)).slice(0, 2).map(key => key.section)
@@ -135,6 +140,7 @@ try {
       const path = appState.archive.format === "sxi" ? "skin.json" : appState.selectedPath
       return { path, bytes: Array.from(appState.archive.getBytes(path)), undo: appState.undoStack.length }
     })
+    if (await page.locator(".mobile-animation-library:not([open]) > summary").isVisible()) await page.locator(".mobile-animation-library > summary").click()
     await page.getByRole("button", { name: "动效预设", exact: true }).click()
     const presets = page.getByRole("dialog", { name: "动效预设", exact: true })
     await presets.getByRole("option", { name: "按下淡入", exact: true }).click()
@@ -170,9 +176,13 @@ try {
     }), true, "preset binds both selected keys through one animation style")
     await undo(page)
     assert.deepEqual(await page.evaluate(async path => Array.from((await import("/src/app/state.ts")).appState.archive.getBytes(path)), before.path), before.bytes)
-    await page.locator('.mobile-workspace-tabs [data-mobile-pane="layout"]').click()
+    await page.locator('#mobile-navigation [data-mobile-page=project]').click()
     await page.locator('.sidebar-overview [data-nav-mode="particle"]').first().click()
-    if (format === "bda") await page.locator('#bda-config-fields [data-animation-id="emitter:spark"]').click()
+    if (format === "bda") {
+      await page.locator('.mobile-animation-library > summary').click()
+      await page.locator('#bda-config-fields [data-animation-id="emitter:spark"]').click()
+    }
+    if (await page.locator(".mobile-animation-library:not([open]) > summary").isVisible()) await page.locator(".mobile-animation-library > summary").click()
     await page.getByRole("button", { name: "动效预设", exact: true }).click()
     await presets.getByRole("option", { name: "触点迸发", exact: true }).click()
     assert.ok(await presets.locator('.ui-animation-player input[type="range"]').count() > 0, "particle preset has a playable timeline")

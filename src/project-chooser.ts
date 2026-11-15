@@ -17,7 +17,7 @@ export function projectChoice(form: HTMLFormElement): ProjectChoice {
 export function initializeProjectChooser(form: HTMLFormElement): void {
   form.classList.add("project-chooser", "ui-form")
   const heading = form.querySelector("h1, h2")!
-  heading.textContent = "新建项目"
+  heading.textContent = matchMedia("(max-width: 760px)").matches ? "新建皮肤" : "新建项目"
   const header = form.querySelector("header")!
   header.className = "ui-dialog-header"
   const title = element("div")
@@ -50,6 +50,9 @@ export function initializeProjectChooser(form: HTMLFormElement): void {
   note.className = "project-license"
   note.textContent = "内置皮肤来自互联网整理，仅供技术交流，请勿商用。如有侵权，请联系作者下架。"
   body.append(note)
+  const intro = element("div", "mobile-project-intro")
+  intro.append(Object.assign(element("h1"), { textContent: "选个模板，开始创作" }), Object.assign(element("p", "ui-field-note"), { textContent: "官方模板优先，也可从已有皮肤开始" }))
+  body.prepend(intro)
   for (const section of [...form.children]) {
     if (section !== header && section.tagName !== "FOOTER") section.remove()
   }

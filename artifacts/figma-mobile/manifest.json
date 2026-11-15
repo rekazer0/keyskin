@@ -1,0 +1,722 @@
+[
+  {
+    "id": "01",
+    "name": "01 · 首页",
+    "figmaNode": "4:2",
+    "comparison": "comparisons/01.png",
+    "referenceSHA256": "c8a53fc29151c1587cde9cd5e1192938b00fa898d0311f26616b5939fe80e45c",
+    "implementationSHA256": "4195c6d4ff97d41ea3e9a64460ca056df3b196083c33c0320189cf096d96f551",
+    "comparisonSHA256": "0df9f2d8c1b79941ef5b65df9e6208991fd301fef3f4510182e4ca1392483d98",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "打开、新建入口；首页布局截图",
+    "difference": "最近项目只显示真实历史；欢迎图为设计资源。"
+  },
+  {
+    "id": "02",
+    "name": "02 · 新建皮肤",
+    "figmaNode": "4:7",
+    "comparison": "comparisons/02.png",
+    "referenceSHA256": "cbe9d267fe600e473baef3d2010654e9147eeb6de3e0a197e5efe5f6c973a5af",
+    "implementationSHA256": "ba227e2dc4b3a8a7433c318b3df7b9a3776a8517a431d8ac7e40ce4b270128d6",
+    "comparisonSHA256": "33f00e67df7168f0c3db51362ae4cb9bdc2fa182b309b5139f6dec8fb10cfeaa",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实模板选择页",
+    "difference": "模板缩略图、名称与数量取自项目资源；保留模板导入和新建确认。"
+  },
+  {
+    "id": "03",
+    "name": "03 · 打开皮肤",
+    "figmaNode": "4:12",
+    "comparison": "comparisons/03.png",
+    "referenceSHA256": "22ddcf7df3a8872d76e5a5494d2d242b0c127d3fb86dcf407de7497b20f437e3",
+    "implementationSHA256": "871c0063c60482899b438adfb767788e5bf175b3f56c26bff954750130de6fc1",
+    "comparisonSHA256": "c672f5799a55c58a0753fe3cf18e2c56f1cb3c9e3e15a674747748a3a948699e",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实文件选择入口",
+    "difference": "没有真实历史时不展示设计稿的示例最近项目。"
+  },
+  {
+    "id": "04",
+    "name": "04 · 编辑工作台",
+    "figmaNode": "4:17",
+    "comparison": "comparisons/04.png",
+    "referenceSHA256": "6cb2d4a2ac0f4e0cea53152e815d69d666675dd5e0036aaaf687a31a14a14715",
+    "implementationSHA256": "8a73c4fe7f9aad97adb3440349179b7529cd4aab53ce6b2c527275e067315ad3",
+    "comparisonSHA256": "bdcd0a894ecfb8bb09015270d31334a860925a0217e9f30537dd23604ffae940",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实键盘画布与面板属性",
+    "difference": "按实际皮肤逻辑像素、字体和候选内容绘制；不会用设计示意图替代键盘。"
+  },
+  {
+    "id": "05",
+    "name": "05 · 按键外观",
+    "figmaNode": "4:22",
+    "comparison": "comparisons/05.png",
+    "referenceSHA256": "79d067499f0da5545704e849487bc4c465a187204ea1b433e1a629084040fc03",
+    "implementationSHA256": "5d2ffada440dd1be251591e99f1cf96db78a2605397cb784a581c48fed0db025",
+    "comparisonSHA256": "9c553208ba58e769e16f44817267067b5557e97f9ce2ea39e2d6c98d36fe311c",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "正常/按下双预览、共享样式提示",
+    "difference": "资源编号和对象路径为真实数据；更多原字段通过高级样式进入。"
+  },
+  {
+    "id": "06",
+    "name": "06 · 按键文字",
+    "figmaNode": "4:27",
+    "comparison": "comparisons/06.png",
+    "referenceSHA256": "67266aacc7c0b4f7969a8a3e82090f50eaa003ea8b4cc0fba486cd735d6aaa22",
+    "implementationSHA256": "e991ea8fe8473f860fdfe01217526bb734d5ec51bc2d7b987da353c7aa8c8072",
+    "comparisonSHA256": "ffbec334c544b2300b6a5c21b40842c1d9ceb6458217544d6b486bc3caeca404",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "文字字段与即时反馈",
+    "difference": "可编辑字段按当前皮肤格式提供。"
+  },
+  {
+    "id": "07",
+    "name": "07 · 按键动作",
+    "figmaNode": "4:32",
+    "comparison": "comparisons/07.png",
+    "referenceSHA256": "762652468f099ed61db9c62d83e7fff222bac6193d4296dabf9e70f8e884e9da",
+    "implementationSHA256": "3f1e3507eae6460a020369c22259c62c882caad90db83d1a35555278999aa900",
+    "comparisonSHA256": "10df84d867886907827ebb17fede60362a4d35c80d2cd76f3456a63f18553095",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "十字手势格与动作库",
+    "difference": "未设置的动作保留真实空值；底部属性独立滚动。"
+  },
+  {
+    "id": "08",
+    "name": "08 · 多选与排列",
+    "figmaNode": "4:37",
+    "comparison": "comparisons/08.png",
+    "referenceSHA256": "d9fba3e069cddab43b8e37821460c0fb68751ce920a8b2859845e6438a8b054e",
+    "implementationSHA256": "f211d77b683bf6fa0de3d9c99452ad0112053fd78fb3d6df0db45647a556c41c",
+    "comparisonSHA256": "5caef52d7f7ea84e330f4ee168eccb9424fc805ec8585477c3047a94b32666f8",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "多选与排列",
+    "difference": "保留原排列按钮及尺寸/间距字段；控件编排与设计稿简化的分段栏有差异。"
+  },
+  {
+    "id": "09",
+    "name": "09 · 项目概览",
+    "figmaNode": "4:42",
+    "comparison": "comparisons/09.png",
+    "referenceSHA256": "c0758cdf217ad05c88c395f86d0b3138f74d96c8c41ad267fd131f0a6e043306",
+    "implementationSHA256": "52db09421812eaa5638b13ccd739cd0f5eadc32ba8a2acfb0aa8c9f4c1f61531",
+    "comparisonSHA256": "61080efb0dad70260bdeb20c09e00797b56d50f5f6abdf155e4a6cbfec391577",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "项目概览",
+    "difference": "统计、布局、格式为真实文档数据。"
+  },
+  {
+    "id": "10",
+    "name": "10 · 源文件",
+    "figmaNode": "4:47",
+    "comparison": "comparisons/10.png",
+    "referenceSHA256": "b76806258422d186999f322e622d4ca96f49211c5f93583de1651ee812d821f6",
+    "implementationSHA256": "3d29a6b803d5898d4a602ce89e0d71cdfca8477efccfaf95084890c08cf0419f",
+    "comparisonSHA256": "7a6b3a3d8f26cf542587e9a8af8c50c130584853716dc22c306f1a2cb535f647",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "源文件树",
+    "difference": "展示真实目录；搜索和多选使用原文件树行为。"
+  },
+  {
+    "id": "11",
+    "name": "11 · 源代码",
+    "figmaNode": "4:52",
+    "comparison": "comparisons/11.png",
+    "referenceSHA256": "474c24e08311434f76cf31dd862b6fed19f0b0bc139133765640121bfdbc1ab8",
+    "implementationSHA256": "581b496a79ebccb935b899d8b86f24cbc504f65633e395ac8b2bc1e32170e6a8",
+    "comparisonSHA256": "911dc59fc2b9482e8192b8918e983633ba0bebf01247c728aaf32b88d174bda8",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "源码视图、返回属性",
+    "difference": "代码和行号来自真实文件，沿用源码编辑器。"
+  },
+  {
+    "id": "12",
+    "name": "12 · 全部样式",
+    "figmaNode": "4:57",
+    "comparison": "comparisons/12.png",
+    "referenceSHA256": "0fc402c16e986e921d866dbef21573eb91916eebcac75a39287b4f14593c861e",
+    "implementationSHA256": "41743f89a1c492a65edb03747704ec37f01765f3f9a6a445b648801aec050217",
+    "comparisonSHA256": "28fd42610816c05b87fa16d619a5cb7185b11323a8efca93a292e08b0dddfa83",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "全部样式与真实缩略图",
+    "difference": "列表项目、编号和数量随皮肤变化。"
+  },
+  {
+    "id": "13",
+    "name": "13 · 全部图片",
+    "figmaNode": "4:62",
+    "comparison": "comparisons/13.png",
+    "referenceSHA256": "b889c264e5320747ab9af0f352a08d40c67b6cd8545a21f29804a3c156ade937",
+    "implementationSHA256": "a6e64e67f14e9bfbe2690bc8595fecec26c9289735a82f7b763b16c47934008f",
+    "comparisonSHA256": "2f030e58f92585d39be0589dcc61b5801fda9546334bbc27d86fe34bd013bc59",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "全部图片",
+    "difference": "图片资源数量、尺寸和缩略图来自实际档案。"
+  },
+  {
+    "id": "14",
+    "name": "14 · 图片与切片",
+    "figmaNode": "4:67",
+    "comparison": "comparisons/14.png",
+    "referenceSHA256": "b684b7bea1760e861431d8ffaef2d8a7a2e242f18ee2d69ed9afdbbb88d87e97",
+    "implementationSHA256": "3c6b8b1a98777d4157d895f1a33d33b4ec4298c4d55b017b1fa12adaa804283d",
+    "comparisonSHA256": "6ff66df7622d28f568dcb746965e4e60436fbc637ead3da2b0f4152d037d64b5",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "切片放大与原图坐标映射断言",
+    "difference": "按真实图集和切片绘制，使用适配手机可用区域的显示倍率。"
+  },
+  {
+    "id": "15",
+    "name": "15 · 音效资源",
+    "figmaNode": "4:72",
+    "comparison": "comparisons/15.png",
+    "referenceSHA256": "2bfdd988279ca2678e80a3a6eef7eb8c866dfd99ebe922d92f99797bf541b482",
+    "implementationSHA256": "51b3b04079ea351699880111aabbf2616715fb7ca94a5244b1b57b49b8eb657e",
+    "comparisonSHA256": "701a49c191c012f5f5455d5cac6f3d6979c6bf5d65f448bed922f37b27105a65",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "选择音效、真实解码波形",
+    "difference": "时长、采样率和波形取自音频数据。"
+  },
+  {
+    "id": "16",
+    "name": "16 · 动效设计",
+    "figmaNode": "4:77",
+    "comparison": "comparisons/16.png",
+    "referenceSHA256": "be6e1b770d05220bdf939c66fbb1b119e9e9c72454476016b23b98e68101f562",
+    "implementationSHA256": "0986f96b5e1cd684a53334a2cfb119f443abe4958ee3f6af2d96d44f48c82475",
+    "comparisonSHA256": "789dd0e192ecb22071027e157bff06ed1989470d388deb08e81b4dff25da5944",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "动效设计与真实键盘采样",
+    "difference": "常用参数进入手机面板；完整轨道仍可展开。"
+  },
+  {
+    "id": "17",
+    "name": "17 · 粒子设计",
+    "figmaNode": "4:82",
+    "comparison": "comparisons/17.png",
+    "referenceSHA256": "8520cb2b2b21eafb5b9b493005f2401a934f485841176a429dfcce1c97f468fe",
+    "implementationSHA256": "b69b43f36223b4fccae04fe888ae81ebb7907481b0c5ee5a940ef61c895520a3",
+    "comparisonSHA256": "3d0d16d860bbd1d4cd5f91c44dc04dd83dc395941bd286ffc69736036a9886d2",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "粒子设计与真实键盘采样",
+    "difference": "参数和资源来自真实动画配置。"
+  },
+  {
+    "id": "18",
+    "name": "18 · 交互预览",
+    "figmaNode": "4:87",
+    "comparison": "comparisons/18.png",
+    "referenceSHA256": "8035f3eb82ec0cc7531d19b21d5a3e95ba74f1056d0f0a2e6872dc1317ad435e",
+    "implementationSHA256": "817ac89a195cce11080d1900847044105810063b9ad38da6fba40b9fea04e835",
+    "comparisonSHA256": "25a98a9ecfffc5e2bb534b1c344383ecd9b5822fefa1ce93cccfbd2aacfe7efa",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "试用输入、清除与键盘可见性断言",
+    "difference": "复用真实交互预览输入区。"
+  },
+  {
+    "id": "19",
+    "name": "19 · 预览选项",
+    "figmaNode": "4:92",
+    "comparison": "comparisons/19.png",
+    "referenceSHA256": "4ba66fb220fae1291fda194eba9ed94a08979bbd859d6659d9180b0db9df3099",
+    "implementationSHA256": "2d3479f3735a8a32a8d4ae74a62a8eb01efe24d50bb109fcb2172f5c4acdd33e",
+    "comparisonSHA256": "b26e66e0dd4fe5e48f6e706581e83bf122349eaf9672337ce40415dc434ea297",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "画布选项与底层状态同步",
+    "difference": "选项按实际渲染能力提供。"
+  },
+  {
+    "id": "20",
+    "name": "20 · 更多操作",
+    "figmaNode": "4:97",
+    "comparison": "comparisons/20.png",
+    "referenceSHA256": "6eac94675904d802bb84429f6677e86c2b5ea423e4722a6d5c62af9e2a90cbfa",
+    "implementationSHA256": "57d3340c5fa4570670c99fc254f723b5b172a0e220f174a5481ea87f2845909b",
+    "comparisonSHA256": "35770c4e6e32fd81acb41f5bf2af0e986100a426714f04ee60c08b3a3a4383f9",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "更多操作入口",
+    "difference": "所有入口委托原编辑、文件和设置流程。"
+  },
+  {
+    "id": "21",
+    "name": "21 · 导出格式",
+    "figmaNode": "4:102",
+    "comparison": "comparisons/21.png",
+    "referenceSHA256": "6841c295595c4e588a892393ec485d50977f1d9fc8a6f8d9d8a54d50c39b97a8",
+    "implementationSHA256": "ea4ba8d3640daae62650854900706c3868881338f2f9dfb4c361c5be4e30be96",
+    "comparisonSHA256": "980a4f2e953568a4cd26cd4c7b99ad50e44c77afdf35ca45b174e612da17d750",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实导出格式选择",
+    "difference": "只展示可导出的格式与真实说明。"
+  },
+  {
+    "id": "22",
+    "name": "22 · 兼容性确认",
+    "figmaNode": "4:107",
+    "comparison": "comparisons/22.png",
+    "referenceSHA256": "33ef82ebd47e541da70943dcf514fbb83c24def2a8cc04722222596ea087a840",
+    "implementationSHA256": "8f9afe861c7bd8e33988dd3f7d2a271bbb954894fdf9ad4210c27e523460e46e",
+    "comparisonSHA256": "7f96793df8b756fe042c47ccebc942bcadec1b0068943498c9b0da00a80ebbe9",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "BDI→SXI 触发真实兼容警告",
+    "difference": "降级项来自转换器；需确认后继续。"
+  },
+  {
+    "id": "23",
+    "name": "23 · 导出完成",
+    "figmaNode": "4:112",
+    "comparison": "comparisons/23.png",
+    "referenceSHA256": "9a88a4aadfdea54d046665cd964441c238e3951638ed96ab02e55e2a7cf837dc",
+    "implementationSHA256": "e085abae46aec1b6028557fd7c36376d6f018f16e5a25b0b9488bd20c410a5c2",
+    "comparisonSHA256": "37a31d846fd8340789ab4a047c3f0b6327b6a9ac359dd62cdb846815b87d016b",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "实际下载 BDS 并重开校验",
+    "difference": "使用真实文件名、大小与保存位置说明；SHA-256 见 coverage.json。"
+  },
+  {
+    "id": "24",
+    "name": "24 · 保存结果",
+    "figmaNode": "4:117",
+    "comparison": "comparisons/24.png",
+    "referenceSHA256": "55188cfd9ca81e5759fb0294e81a4357ae332d66292542d5ef365d5ba7c233c2",
+    "implementationSHA256": "c6eb07d7184462c0e880d651da4428364c69081b25ec8d9dfe80010f432b790f",
+    "comparisonSHA256": "811bc2b1a01b852068004097ec5c6c76dc0f5b454509929ba0ca8627dbfb09ed",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "实际保存 BDI 并重开校验",
+    "difference": "浏览器无法读取下载目录，明确说明位置由浏览器决定。"
+  },
+  {
+    "id": "25",
+    "name": "25 · 面板复制",
+    "figmaNode": "4:122",
+    "comparison": "comparisons/25.png",
+    "referenceSHA256": "12825bc6a1bf1485c010b45954278db0a9f486b15b36393e67a08a7ff82a4cfd",
+    "implementationSHA256": "a5cc28b6c6389089f85ef1296ddfc31832b08b6d860fe8eb911c0330e72303e7",
+    "comparisonSHA256": "ce54130f90994d2e3e90b5778f3c7132dae272d3cfaafc1e120d17d9946e6f22",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实复制、一步撤销与重做；缩放模式切换断言",
+    "difference": "按设计纵向组织来源、目标、缩放方式和真实分辨率；路径与尺寸取自档案。"
+  },
+  {
+    "id": "26",
+    "name": "26 · 替换键盘样式",
+    "figmaNode": "4:127",
+    "comparison": "comparisons/26.png",
+    "referenceSHA256": "3b084622bee2f94ea8406ed1fc162e8a35e1511e67fafb66bcbf9e455040f8b4",
+    "implementationSHA256": "8a2e8a6151648c7a19c703cba0701a578414237f4612eb0df130829112a1dcf2",
+    "comparisonSHA256": "9c1fb73aad79a58a806d6ac0c15c62390723a888c4c41cc520e4242d58eec1b6",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "手机替换目标与布局跟随选择卡、禁用状态同步断言",
+    "difference": "按设计纵向组织图片、替换位置、布局跟随和范围说明；保留所有实际目标。"
+  },
+  {
+    "id": "27",
+    "name": "27 · 皮肤信息",
+    "figmaNode": "4:132",
+    "comparison": "comparisons/27.png",
+    "referenceSHA256": "3908effcded268029d3852050c166e2e437cb3758be6eabe7f6c01d6ea905968",
+    "implementationSHA256": "214a0eff44d44031d61aefbb0be038db45abe4811863d9bd9f086c5608b1127d",
+    "comparisonSHA256": "dbaf8480107f5e081f446e1510596babf91163a9edf140cae882ec1250cdc231",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实皮肤元数据",
+    "difference": "字段随格式变化，保留原格式可编辑信息。"
+  },
+  {
+    "id": "28",
+    "name": "28 · 设置",
+    "figmaNode": "4:137",
+    "comparison": "comparisons/28.png",
+    "referenceSHA256": "90411e1d518f6e6de4e6a6b28370fe0a370f839b64df1695737fac87c238694c",
+    "implementationSHA256": "786ce5de4274016a1dea52848e7253af79bbee9820eaba6646789b3155222d1c",
+    "comparisonSHA256": "a213e63b75af390a7dd399a6f7a48f275a763cb77dcdac5fac613e438047b086",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "移动端设置分类导航",
+    "difference": "网页保留可用分类及模型入口说明。"
+  },
+  {
+    "id": "29",
+    "name": "29 · 外观设置",
+    "figmaNode": "4:142",
+    "comparison": "comparisons/29.png",
+    "referenceSHA256": "9c558f4f2d56803a2b25baf10c29a28882937eebd0e819cc6411defa9196708b",
+    "implementationSHA256": "192004d7e36284d3810ff2a5399308839da2b0aac3de5d5be8a7f4ae0f072a91",
+    "comparisonSHA256": "42bad04c5b521f542b899557b9f8a9ecc024122c75dd4e9dab2003dcf1cb7848",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "主题、强调色、密度、减少动态效果",
+    "difference": "保留设置草稿保存/取消；控件分组及底部操作与设计示意不同。"
+  },
+  {
+    "id": "30",
+    "name": "30 · 预览与画布设置",
+    "figmaNode": "4:147",
+    "comparison": "comparisons/30.png",
+    "referenceSHA256": "1ba005b1e18b88e51913a6fd9024f83116367316a3b1340e2051a75d67fbd399",
+    "implementationSHA256": "c5b616a7f342688fd68be1f255d8aeb00a69e8c05881f469d8b39907e2498c7a",
+    "comparisonSHA256": "010443bc0ab6bfaa34a79acdd821e4f4d4ff28b48fd8f636068cb496c55ebcc7",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "预览与画布设置",
+    "difference": "保留实际预览设备、背景和辅助选项；长列表在正文内滚动。"
+  },
+  {
+    "id": "31",
+    "name": "31 · 源代码设置",
+    "figmaNode": "4:152",
+    "comparison": "comparisons/31.png",
+    "referenceSHA256": "ee0dfb6ea3d32999bd31e10d57ebf40c8f4649b065d3248872fef5b59a6ccbbf",
+    "implementationSHA256": "32f92c520f72f24a0a0f878b78ceca599ae1e27e26befa6c6177bff50eaedc76",
+    "comparisonSHA256": "387647e2e00e89c54456fd6656f5fd200ca7611be4f963c99e2f262126fe9d37",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "源代码设置",
+    "difference": "沿用真实编辑器选项及草稿语义。"
+  },
+  {
+    "id": "32",
+    "name": "32 · AI 模型设置",
+    "figmaNode": "4:157",
+    "comparison": "comparisons/32.png",
+    "referenceSHA256": "833ddfe7d58d885bbbcd4cd0f1147c358d7d1065a762de4194b322af7cc558b9",
+    "implementationSHA256": "b7606c9442924ac9aac7bacbb1907bd0daef0bbbf2758efa111135ded031d345",
+    "comparisonSHA256": "e827de534849b5db311c426a14335a55daf71a173adfe2c7e6c0769c283215eb",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "模型设置入口说明",
+    "difference": "网页无法管理桌面模型配置，不显示虚假的已连接模型。"
+  },
+  {
+    "id": "33",
+    "name": "33 · 关于与帮助",
+    "figmaNode": "4:162",
+    "comparison": "comparisons/33.png",
+    "referenceSHA256": "b3462fbaceaaacc4fe48e1aa3b8d57acf44454ceba243f2e76b54d0d1e2ea859",
+    "implementationSHA256": "600200289d03adb49f80dce3a94dcd0149a22b64fecb95ff83e4c4eb53bd8f3d",
+    "comparisonSHA256": "1c392ba5ac01728a7e9d7b28bedffcbf4f268c18b7c18faf90b0b8430d36fca2",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "关于与帮助",
+    "difference": "应用版本和链接使用真实产品信息。"
+  },
+  {
+    "id": "34",
+    "name": "34 · AI 设计",
+    "figmaNode": "4:167",
+    "comparison": "comparisons/34.png",
+    "referenceSHA256": "2306e43b26ed2d8be0ad997b19e9293d3b9a98629b904d0b64aad1ecce992683",
+    "implementationSHA256": "9e4aef66ede27198ddf16510942d017887ac5a3937bb73cce7ede3e68b0ba77a",
+    "comparisonSHA256": "6c508a713bc30c31d68f1d46e7a20f6a3069bdfec6e27dea7c7358119599f9e2",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "AI 设计入口说明",
+    "difference": "网页明确桌面能力限制，未验证实际模型调用。"
+  },
+  {
+    "id": "35",
+    "name": "35 · 未保存保护",
+    "figmaNode": "4:172",
+    "comparison": "comparisons/35.png",
+    "referenceSHA256": "82dd7ac2c82e6c001b70068fa9efe0d8ff0302905692ae040caa64fd1c26378c",
+    "implementationSHA256": "d2557f57f33cce0e68e64203daa41fa5fc3f13a6ea45d5123ef5f82ea811a1ca",
+    "comparisonSHA256": "1a56449cd2f4e6ba31efd6703ee56b7032e038ac323b63c2be929ecc0209d520",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "未保存保护",
+    "difference": "复用真实未保存状态与公共确认窗口。"
+  },
+  {
+    "id": "36",
+    "name": "36 · 分享皮肤",
+    "figmaNode": "4:177",
+    "comparison": "comparisons/36.png",
+    "referenceSHA256": "59cb8e44fd5413019fa62bbf20c22e7e39a443a1b1f1548441730cdc877b1775",
+    "implementationSHA256": "5794c53bea7cbe4fddeb4c748f2de633541975fa8ac6f76121c8016ffebf3989",
+    "comparisonSHA256": "d7c0427442779d55570bc11c930f7805c3999fdedeb5c2e5c54915f91b0717f8",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "分享格式与平台说明",
+    "difference": "调用可用的系统分享或下载；原生分享面板未做真机验收。"
+  },
+  {
+    "id": "37",
+    "name": "37 · 导出处理中",
+    "figmaNode": "4:182",
+    "comparison": "comparisons/37.png",
+    "referenceSHA256": "8e8aa54d96f536fe95bdf8c8d5ced90f7a5c624538b7a9b1133fd44e3a5a5cc8",
+    "implementationSHA256": "733e75562d0e151113f0c5e380465e0a3aeefddd796ad2403b72dc4457531a4a",
+    "comparisonSHA256": "6a6752c5cd6c533f87542c092471d5404a11f533167db9ede8e0855bbb1612ec",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "生产进度窗口",
+    "difference": "使用可控异步写入测试替身维持中间态；进度百分比为组件真实插值。"
+  },
+  {
+    "id": "38",
+    "name": "38 · 导出失败",
+    "figmaNode": "4:187",
+    "comparison": "comparisons/38.png",
+    "referenceSHA256": "26742003bdc184e0dc360df7c9520ae68a86b300ef66aa106629627d919649ed",
+    "implementationSHA256": "522e559b7d639996418c7499ad051761556f625718195df1f2c6b3ecd2985256",
+    "comparisonSHA256": "b84bce2587f680da50e2283f2ecd5d370b0b146ad5a7177cb992d4f579558437",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "生产错误分支与重试断言",
+    "difference": "注入不可写错误；验证重试重新打开真实导出流程，错误文案如实展示。"
+  },
+  {
+    "id": "39",
+    "name": "39 · 动效播放",
+    "figmaNode": "4:192",
+    "comparison": "comparisons/39.png",
+    "referenceSHA256": "cdce5913fbd55bccce19721f0413b3cfbf6a9686f9d7712f316e8ac8ce78dea6",
+    "implementationSHA256": "32d60cf63d6cf3a54f23fac85f6d6fac42f85bbd97141f3cf2c4a541c3c5c30b",
+    "comparisonSHA256": "a713f27cc348399ecf9d2b02acfa25ac0cb7ad41c4945e34b649bfeca59df3e9",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实动效播放器时间推进",
+    "difference": "截图取样时刻随动画播放变化。"
+  },
+  {
+    "id": "40",
+    "name": "40 · 深色编辑",
+    "figmaNode": "4:197",
+    "comparison": "comparisons/40.png",
+    "referenceSHA256": "0301159df2a053dec929b82a973388890699aa147e49cf55e7a8780893b9f2ad",
+    "implementationSHA256": "0dfc6d5ef160be2b13e7b589f7f3445eb70e10cd5b1778807642339555c1f81b",
+    "comparisonSHA256": "fae57547d3af8e7556fdf99a5acf43742b42bc971fe641882d80ddba7e6e3590",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "深色编辑界面",
+    "difference": "语义 token 切换；键盘自身颜色由真实皮肤决定。"
+  },
+  {
+    "id": "43",
+    "name": "43 · 按下态对比",
+    "figmaNode": "10:2834",
+    "comparison": "comparisons/43.png",
+    "referenceSHA256": "d2dddbb1590265fb823dc666bbbf90ba8eeb04d69a2f5023b86ae5baf41a74c2",
+    "implementationSHA256": "8dbdd0701e742f5475b233e466424e296a26b739bee2468deda19068d2137cdd",
+    "comparisonSHA256": "5b3bc91fd1652788ead557b01a1901d2b92f4ab77604886019355372c7616566",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "按下态切换",
+    "difference": "只切换预览状态，不写回皮肤文件。"
+  },
+  {
+    "id": "44",
+    "name": "44 · 字号调整反馈",
+    "figmaNode": "10:2987",
+    "comparison": "comparisons/44.png",
+    "referenceSHA256": "700622fe15d1f3a065a51dc94ee3488d0f444e42325d610326bf1547bf1a3a03",
+    "implementationSHA256": "9e341d12e5fac8aa11cedf267d42aeddb27ea5d74fd763e2bc24654768f35bd9",
+    "comparisonSHA256": "63f328ea9c7ce95f716399fe3c4c5d6632d7a96cd0a8f79b7c9bdd8f4b6db441",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "字号调整至 40 并反馈到画布",
+    "difference": "显示的像素效果按真实字体和逻辑分辨率绘制。"
+  },
+  {
+    "id": "45",
+    "name": "45 · 收起属性面板",
+    "figmaNode": "10:3136",
+    "comparison": "comparisons/45.png",
+    "referenceSHA256": "81efdd60654bad4db8b642fe5856804e2e327b7322589a91501b8996cfdd37b2",
+    "implementationSHA256": "d19db00505e24fd3265d0859fc9007dc8c6d16e96af89ed252c535861a7dc2d4",
+    "comparisonSHA256": "329c55a22128d41ee15920027e34e062fef4d922fb20763ab0615b5923f77a42",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "End 收起属性区",
+    "difference": "键盘等价操作覆盖，保留真实画布。"
+  },
+  {
+    "id": "46",
+    "name": "46 · 展开属性面板",
+    "figmaNode": "10:3292",
+    "comparison": "comparisons/46.png",
+    "referenceSHA256": "12bc4be0de5da20dec66be7c384370a2fa6a3f08d64a41b083878d365c4eb334",
+    "implementationSHA256": "d608e32fa98503692225ddc6ec0c396fbbe406935a831a3e5577dc16be27ff7e",
+    "comparisonSHA256": "7e1759eb143112ed03051e9ccc630e4c07f19c3be4a2a5119f7629db47dc692f",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "Home 展开属性区",
+    "difference": "面板分界调整至允许范围的上边界。"
+  },
+  {
+    "id": "47",
+    "name": "47 · 候选栏与工具栏",
+    "figmaNode": "10:3553",
+    "comparison": "comparisons/47.png",
+    "referenceSHA256": "b31c4f104c6a23c502262cfbd09b05052fe0c324632dc5904dbbaec3890c9d96",
+    "implementationSHA256": "0680ae950594044327744de39570edc542805e5f037c7bb6a79eea22bab899d9",
+    "comparisonSHA256": "dab8252501b5bc88fb215c96994b0199080657958959d77e5377a974102da73b",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "候选栏与工具栏真实资源",
+    "difference": "由格式自身候选和工具栏结构渲染。"
+  },
+  {
+    "id": "48",
+    "name": "48 · 中文 9 键",
+    "figmaNode": "10:3711",
+    "comparison": "comparisons/48.png",
+    "referenceSHA256": "bcda67a0ac89a21d4635be72c0a40771f63347bb314e728184b3785423fe07ad",
+    "implementationSHA256": "6762dce468cb39ba1c740f727565d6a26c9a8d873766f14aba46878c371f7d7b",
+    "comparisonSHA256": "951b2a8a57c924faed7ca0149845485f90b7e8eb0088c7e1d2aba40e7c76795c",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "中文九键布局",
+    "difference": "加载真实九键配置，不使用示意图。"
+  },
+  {
+    "id": "49",
+    "name": "49 · 粒子播放",
+    "figmaNode": "10:3883",
+    "comparison": "comparisons/49.png",
+    "referenceSHA256": "6cc55b0bdb965085e769aafb87f82ce7de2780005073941e0df0b931d7cfc392",
+    "implementationSHA256": "f3f3be85a6f0afb0eadc20d72c1faa5f90a5d1d4b254c6c2c1045ef3910668a5",
+    "comparisonSHA256": "68e401ab8ceb8e27317d48c3042392ffa6e2c276ea122977367500a6b0cb6827",
+    "viewport": {
+      "width": 390,
+      "height": 766
+    },
+    "verification": "真实粒子播放器时间推进",
+    "difference": "26 键布局中播放粒子，截图取样时刻可能变化。"
+  },
+  {
+    "id": "50",
+    "name": "50 · 手机浏览器编辑",
+    "figmaNode": "10:4036",
+    "comparison": "comparisons/50.png",
+    "referenceSHA256": "d6e4afeac1ca189b1689919e084b25ee36265a08874a117f12d9da787f6d29ad",
+    "implementationSHA256": "6717303f9007e9214463370902415789a6247354829df03835e37cbd33cbaa81",
+    "comparisonSHA256": "0d98a692bfe66cec50fb625bdbd60098ac7e906e325cec3ef3e5bda5a3a1c32a",
+    "viewport": {
+      "width": 390,
+      "height": 700
+    },
+    "verification": "390×700 可用视口编辑",
+    "difference": "通过缩小可用 viewport 表示浏览器工具栏占用；不伪造地址栏。"
+  }
+]

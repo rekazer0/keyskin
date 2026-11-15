@@ -105,6 +105,7 @@ export class Preview {
    */
   private draftSections = new Set<string>()
   private pressed?: { section: string; timeout: number }
+  private appearancePressed?: string
   mobileMultiSelect = false
   selectionAnchor?: string
   guides = false
@@ -134,7 +135,8 @@ export class Preview {
   }
   legacyAnimationTimer?: number
   /** 动效 / 粒子设计的播放器把粒子画在 key 上（没有 key 时铺满面板），时间由播放器控制。 */
-  playerParticles?: { particles: PreviewClip["particles"]; elapsed: number; key?: PreviewItem }
+  playerParticles?: { particles: PreviewClip["particles"]; elapsed: number; key?: PreviewItem; motion?: boolean }
+  draftVisual?: { section: string; foreground: boolean; layer: number; visual?: Visual; styleID?: string; pressed: boolean }
   panelAnimationStyle = ""
   legacyPanelAnimationStartedAt = 0
   legacyPanelAnimationTimer?: number
@@ -299,9 +301,23 @@ export class Preview {
   }
 
   keyPressed(key: PreviewItem): boolean {
+    if (this.appearancePressed && key.sections.includes(this.appearancePressed)) return true
     if (!this.pressed) return false
     return this.pressed.section === key.section ||
       key.sections.includes(this.pressed.section)
+  }
+
+  setAppearanceState(section?: string): void {
+    if (this.appearancePressed === section) return
+    this.appearancePressed = section
+    void this.draw()
+  }
+
+  setDraftVisual(draft?: Preview["draftVisual"]): void {
+    if (!draft && !this.draftVisual) return
+    this.draftVisual = draft
+    this.lastRenderCache = undefined
+    void this.draw()
   }
 
   setSelected(sections: readonly string[]): void {

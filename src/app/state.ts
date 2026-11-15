@@ -210,9 +210,13 @@ export const appState = {
   */
   inspectorGroupKey: "",
   singlePageInspectorContext: "",
+  mobileStudioStarted: false,
   mobileInspectorCategory: "appearance",
   mobileInspectorContext: "",
-  mobileInspectorExpanded: new Set<string>(),
+  mobileAppearancePressed: false,
+  mobileAppearanceExpanded: false,
+  mobilePickerPreviewRequest: 0,
+  mobilePickerBitmap: undefined as ImageBitmap | undefined,
   cachedVisualResolver: undefined as { key: readonly unknown[]; resolver: VisualResolver } | undefined,
   cachedSkinStates: undefined as { key: readonly unknown[]; byLayout: Map<string, number[]> } | undefined,
   // 切换布局时在点击处理中途读取尺寸会强制整页重排；改由 ResizeObserver 回调（布局已就绪）缓存。

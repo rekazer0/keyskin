@@ -6,14 +6,14 @@ import {
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
   ArrowUpDown, FoldHorizontal, FoldVertical, Layers, SquareStack, Ruler,
   Search, Plus, X, Upload, Download, ImageDown, ChevronLeft, ChevronUp,
-  SquarePlus, CopyPlus, FileText, List, Keyboard, Image, Settings, PenLine, Asterisk,
+  Save, SquarePlus, CopyPlus, FileText, List, Keyboard, Image, Settings, PenLine, Asterisk,
   AppWindow, MessageSquare, Grid3x3, PenTool, PenOff, PencilLine, Brush, CaseLower, CaseUpper,
   ALargeSmall, ArrowBigUp, ArrowBigUpDash, Phone, Mail, Globe, Link, Calculator, Binary, Hash,
   Percent, Quote, AtSign, Ampersand, MessageSquareQuote, MessageSquareMore, Signature, Rows3,
   ListOrdered, ListChecks, CircleHelp, Mic, Film, WandSparkles, ToggleRight, Sticker, AudioLines,
   Sigma, Pi, Omega, Slash, Parentheses, Braces, DollarSign, Hand, ScanLine, Spline, ListTree,
   ListFilter, Smile, Laugh, SmilePlus, LayoutTemplate, PanelBottom, SquareDashedBottom,
-  LayoutDashboard, Columns3, Table2, Box, Folder, File,
+  LayoutDashboard, Columns3, Table2, Box, Folder, FolderOpen, File,
   HardDrive, Smartphone, Crosshair, Moon, Sun, RectangleHorizontal, RectangleVertical, Scissors, ClipboardPaste,
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
@@ -25,6 +25,7 @@ import {
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
 const icons: Record<string, IconNode> = {
+  "folder-open": FolderOpen,
   "shield-check": ShieldCheck, "key-round": KeyRound, component: Component, "square-dashed": SquareDashed,
   ellipsis: Ellipsis, "layout-grid": LayoutGrid, palette: Palette, type: Type,
   zap: Zap, images: Images, "panel-top": PanelTop, clapperboard: Clapperboard,
@@ -39,7 +40,7 @@ const icons: Record<string, IconNode> = {
   "fold-horizontal": FoldHorizontal, "fold-vertical": FoldVertical, layers: Layers,
   "square-stack": SquareStack, ruler: Ruler, search: Search, "search-x": SearchX, plus: Plus, x: X,
   upload: Upload, download: Download, "image-down": ImageDown,
-  "square-plus": SquarePlus, "copy-plus": CopyPlus, "file-text": FileText, list: List,
+  save: Save, "square-plus": SquarePlus, "copy-plus": CopyPlus, "file-text": FileText, list: List,
   keyboard: Keyboard, image: Image, settings: Settings, "pen-line": PenLine, asterisk: Asterisk,
   "app-window": AppWindow, "message-square": MessageSquare,
   // 概览文件图标：每个文件一个。

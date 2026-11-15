@@ -6,7 +6,7 @@ export function acceptAskDialogs(page) {
   return page.addInitScript(() => {
     new MutationObserver(() => {
       document.querySelector('dialog[open]:not([id]) button:is([value="continue"], [value="close"])')?.click()
-      Array.from(document.querySelectorAll('#file-operation-dialog[open] button')).find(button => button.textContent === '继续导出')?.click()
+      Array.from(document.querySelectorAll('#file-operation-dialog[open] button')).find(button => ['继续导出', '确认并继续'].includes(button.textContent))?.click()
     }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] })
   })
 }

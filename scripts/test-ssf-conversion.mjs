@@ -24,7 +24,7 @@ await acceptAskDialogs(page)
 const panelSize = () => page.evaluate(() => document.querySelector("#panel-status")?.textContent ?? "")
 const keyCount = () => page.evaluate(async () => (await import("/src/app/canvas-interaction.ts")).preview.keys.length)
 const snapshot = async (name) => {
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async (reference) => {
     const { preview, toolbarPreview, candidateBackgroundPreview } = await import("/src/app/canvas-interaction.ts")
     const previews = [preview, toolbarPreview, candidateBackgroundPreview]
     await Promise.all(previews.map((item) => item.resolver?.ready?.()))
@@ -43,39 +43,46 @@ const snapshot = async (name) => {
     context.drawImage(preview.canvas, 0, toolbarPreview.canvas.height)
     // The SSF canvas draws seven fixed icons; exports move them into Baidu's native F14 container.
     const native = {}
-    if (!nativeImages.length) {
-      const { drawVisual, foregroundLayerRect } = await import("/src/preview-draw.ts")
+    if (reference) {
+      const { drawVisual } = await import("/src/preview-draw.ts")
       const icons = toolbarPreview.keys.filter((item) => /^ICON\d+$/.test(item.section))
       const side = Math.round(toolbarPreview.panelWidth / 7)
       const fixed = await Promise.all(icons.slice(1, -1).map((key) => toolbarPreview.resolveVisual(key.foreStyle, false)))
       const { appState } = await import('/src/app/state.ts')
       const menuArt = async (file) => {
-        if (appState.archive?.format !== 'ssf') return []
         const { documentPackage } = await import('/src/ssf/ssf-convert.ts')
-        const bytes = documentPackage(appState.archive).file(toolbarPreview.theme, `${file}.png`)
+        const bytes = documentPackage(window.ssfConversionSource).file(toolbarPreview.theme, `${file}.png`)
         if (!bytes) return []
         const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
         return [{ image, bytes, source: [0, 0, image.width, image.height] }]
       }
       // points: iOS draws @3x toolbar art at its point size; the canvas measures it on an iPhone 17 Pro Max (440 × 956pt).
       const compose = async (middle, points = 1, android = false) => {
+        const targetHeight = toolbarPreview.panelHeight * (android ? 1 : points)
+        const pixelHeight = Math.ceil(targetHeight) * toolbarPreview.canvas.width / toolbarPreview.panelWidth
         const nativeCanvas = document.createElement("canvas")
         nativeCanvas.width = canvas.width
-        nativeCanvas.height = canvas.height
+        nativeCanvas.height = preview.canvas.height + pixelHeight
         const nativeComposite = nativeCanvas.getContext("2d")
-        nativeComposite.drawImage(candidateBackgroundPreview.canvas, 0, 0)
+        nativeComposite.imageSmoothingQuality = "high"
+        // Preview rounds its logical surface up before applying DPR; rasterize the source once at that size.
+        nativeComposite.save()
+        nativeComposite.scale(nativeCanvas.width / toolbarPreview.panelWidth, pixelHeight / Math.ceil(targetHeight))
+        drawVisual(nativeComposite, await candidateBackgroundPreview.resolveVisual(candidateBackgroundPreview.panelStyle, false),
+          { x: 0, y: 0, width: toolbarPreview.panelWidth, height: Math.ceil(targetHeight) }, true)
+        nativeComposite.restore()
         const nativeToolbar = document.createElement("canvas")
         nativeToolbar.width = toolbarPreview.canvas.width
-        nativeToolbar.height = toolbarPreview.canvas.height
+        nativeToolbar.height = pixelHeight
         const nativeContext = nativeToolbar.getContext("2d")
         nativeContext.imageSmoothingQuality = "high"
         nativeContext.save()
-        nativeContext.scale(toolbarPreview.canvas.width / toolbarPreview.panelWidth, toolbarPreview.canvas.height / toolbarPreview.panelHeight)
+        nativeContext.scale(toolbarPreview.canvas.width / toolbarPreview.panelWidth, pixelHeight / Math.ceil(targetHeight))
         const middleWidth = (toolbarPreview.panelWidth - side * 2) / middle.length
         for (const [index, visual] of middle.entries()) {
-          const slot = { x: side + index * middleWidth, y: 0, width: middleWidth, height: toolbarPreview.panelHeight }
+          const slot = { x: side + index * middleWidth, y: 0, width: middleWidth, height: targetHeight }
           let artwork = visual
-          if (android) {
+          if (android && !visual.fallback) {
             // Export compensates Android's native shrink; build the reference from the SSF pixels.
             const { cropImage, decodePng, resizeImage, encodePng } = await import('/src/ssf/ssf-png.ts')
             const [x, y, width, height] = visual.source
@@ -93,36 +100,47 @@ const snapshot = async (name) => {
         }
         for (const key of [icons[0], icons.at(-1)]) {
           const visual = await toolbarPreview.resolveVisual(key.foreStyle, false)
-          drawVisual(nativeContext, visual, foregroundLayerRect(key.rect, visual?.source), false)
+          const width = android ? key.rect.width : Math.round(visual.source[2] / 3) * 3
+          const height = android ? key.rect.height : Math.round(visual.source[3] / 3) * 3
+          drawVisual(nativeContext, visual, { x: key.rect.x + (key.rect.width - width) / 2,
+            y: key.rect.y + (key.rect.height - height) / 2, width, height }, false)
         }
         nativeContext.restore()
         nativeComposite.drawImage(nativeToolbar, 0, 0)
-        nativeComposite.drawImage(preview.canvas, 0, toolbarPreview.canvas.height)
+        nativeComposite.drawImage(preview.canvas, 0, pixelHeight)
         return { images: middle.length, pixels: nativeCanvas.toDataURL("image/png").split(",")[1] }
       }
       const cursor = await menuArt('ime_function_textedit')
       // iOS plist toolbar entries: the five Sogou functions, then the cursor (18); the F14 container shows the first four.
       const { orientation } = await import('/src/app/dom.ts')
-      native.bdi = await compose([...fixed, ...cursor].slice(0, 4), toolbarPreview.panelWidth / 3 / (orientation.value === 'port' ? 440 : 956))
+      native.bdi = await compose([...fixed, ...cursor].slice(0, 4), toolbarPreview.panelWidth / (3 * (orientation.value === 'port' ? 440 : 956)))
       // Android pop_menu_icons: 表情 26, 输入方式 27, 语音 29, 搜索 31, 编辑 25, 剪贴板 50 (灵犀 has no Android function).
-      native.bds = await compose([...fixed.slice(0, 4), ...cursor, ...await menuArt('ime_function_clipboard')], 0.82, true)
+      const fallback = async (name) => {
+        const { defaultToolbarIcon } = await import('/src/preview-draw.ts')
+        const { candidateWordsForeground } = await import('/src/candidate-style.ts')
+        const color = toolbarPreview.resolver.resolveText(candidateWordsForeground(toolbarPreview.document, toolbarPreview.offsets), false)?.color ?? getComputedStyle(toolbarPreview.canvas).color
+        return [{ ...await defaultToolbarIcon(name, Math.min(toolbarPreview.panelWidth / 18, toolbarPreview.panelHeight * 0.45), color), fallback: true }]
+      }
+      const clipboard = await menuArt('ime_function_clipboard')
+      native.bds = await compose([...fixed.slice(0, 4), ...cursor.length ? cursor : await fallback('arrow-left-right'), ...clipboard.length ? clipboard : await fallback('clipboard-paste')], 0.82, true)
     }
     return {
       panel: [preview.panelWidth, preview.panelHeight],
-      keys: preview.keys.map(({ center, rect }) => ({ center, rect })),
+      keys: preview.keys.map(({ center, up, down, left, right, hold, rect }) => ({ center, up, down, left, right, hold, rect })),
       icons: toolbarPreview.keys.filter((item) => /^ICON\d+$/.test(item.section)).map(({ center, rect }) => ({ center, rect })),
       nativeImages: nativeImages.length,
       toolbarHeight: toolbarPreview.canvas.height,
       native,
       pixels: canvas.toDataURL("image/png").split(",")[1],
     }
-  })
+  }, name.startsWith('source-'))
   const png = Buffer.from(result.pixels, "base64")
   if (shots) writeFileSync(`${shots}/${name}.png`, png)
   const image = decodePng(png)
   const native = Object.fromEntries(Object.entries(result.native).map(([format, { images, pixels }]) => [
     format, { images, hash: createHash("sha256").update(decodePng(Buffer.from(pixels, "base64")).data).digest("hex") },
   ]))
+  if (shots) for (const [format, { pixels }] of Object.entries(result.native)) writeFileSync(`${shots}/${name}-native-${format}.png`, Buffer.from(pixels, "base64"))
   delete result.native
   delete result.pixels
   const toolbarPixels = image.data.subarray(0, image.width * result.toolbarHeight * 4)
@@ -196,6 +214,7 @@ try {
   await page.locator("#browser-open").setInputFiles({ name: sample?.split("/").pop() ?? "分辨率.ssf", mimeType: "application/octet-stream", buffer: sample ? readFileSync(sample) : Buffer.from(ssfFixture()) })
   await page.waitForFunction(() => !document.querySelector("#open").disabled)
   await closeDialog()
+  await page.evaluate(async () => { window.ssfConversionSource = (await import('/src/app/state.ts')).appState.archive })
   const source = new Map()
   // Each platform has its own font rules and candidate background (BDI includes the input row).
   // Compare against that platform's converted look, before native toolbar adaptation and packaging.
@@ -206,12 +225,31 @@ try {
       const { documentPackage } = await import("/src/ssf/ssf-convert.ts")
       const { ssfToBaiduFiles } = await import("/src/ssf/ssf-to-baidu.ts")
       const { zipSync } = await import("/node_modules/fflate/esm/browser.js")
-      const pkg = documentPackage(appState.archive)
+      const pkg = documentPackage(window.ssfConversionSource)
       const files = ssfToBaiduFiles(pkg, appState.ssfTemplates.sogou, Number(pkg.resolution), format).files
+      // SSF_* values are editor hints; target packages deliberately omit them.
+      const { IniDocument } = await import('/src/ini.ts')
+      for (const [path, bytes] of files) if (/\.(ini|cnd|css)$/i.test(path)) {
+        const document = IniDocument.parse(new TextDecoder().decode(bytes))
+        for (const { section, key } of document.entries()) if (key.startsWith('SSF_')) document.remove(section, key)
+        files.set(path, new TextEncoder().encode(document.toString()))
+      }
       const boards = format === "bdi"
         ? SkinArchive.open(zipSync(Object.fromEntries([...files].map(([path, data]) => [`skin/${path}`, data]))), "bdi")
         : SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
-      appState.ssfSkeleton = { ...appState.ssfSkeleton, boards }
+      // Android resolves direction-local styles; prepare the same platform input before its export-only baking.
+      if (format === "bds") for (const theme of pkg.themes.keys()) for (const direction of ["port", "land"]) {
+        const path = `${theme}/skin/${direction}/res/default.css`
+        if (!boards.isText(path)) boards.setBytes(path, boards.getBytes(`${theme}/skin/res/default.css`))
+      }
+      await (await import('/src/app/font-bake-export.ts')).bakeExportedFonts(boards)
+      if (format === "bds") {
+        (await import('/src/bds-backgrounds.ts')).bakeBdsBackgrounds(boards)
+        const { completeBdsPackage } = await import('/src/bds-package.ts')
+        const { composeAtlasPng } = await import('/src/app/file-operations.ts')
+        await completeBdsPackage(boards, composeAtlasPng)
+      }
+      appState.archive = boards
     }, format)
     const states = new Map()
     for (const view of views) {
@@ -224,6 +262,8 @@ try {
     source.set(format, states)
   }
   if (reported) assert.notEqual(reported.hash, source.get("bdi").get(views[0].name).hash, "reported BDI reproduces the regression")
+  await page.evaluate(async () => { (await import('/src/app/state.ts')).appState.archive = window.ssfConversionSource })
+  await reopen(sample?.split("/").pop() ?? "分辨率.ssf", sample ? readFileSync(sample) : Buffer.from(ssfFixture()))
 
   // Export every format while the SSF document is still open: a reopened BDI/BDS hides the BDA target.
   const exported = {}

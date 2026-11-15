@@ -33,6 +33,7 @@ export type KeyboardPlayback = {
   play(): void
   /** Called on every draw at the player's time: particles also go on the keyboard. */
   particles(particles: PreviewClip["particles"], elapsed: number): void
+  frame?(elapsed: number): void
 }
 
 /**
@@ -121,7 +122,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const resume = !thumbnail && session.loop && session.looping === key
   if (!thumbnail && session.looping !== key) session.looping = ""
   if (clip.duration > MAX_DURATION) notes.push("长动画只预览前 60 秒")
-  if (tracks.length && !sample) notes.push("示例按键")
+  if (tracks.length && !sample && !keyboard?.frame) notes.push("示例按键")
   // Every surface plays a clip at real speed; only a full player's 慢放 switches slows playback down.
   const rate = () => !thumbnail && session.slow ? SLOW_RATE : 1
 
@@ -237,6 +238,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   }
 
   const draw = () => {
+    if (root.checkVisibility()) keyboard?.frame?.(elapsed)
     const style = getComputedStyle(root)
     const token = (name: string) => style.getPropertyValue(name).trim()
     context.setTransform(resolution, 0, 0, resolution, 0, 0)

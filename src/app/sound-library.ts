@@ -1,6 +1,6 @@
 import { bindListboxKeys, element, emptyState, iconButton, listToolbar } from "../dom-element"
 import { createIcon } from "../icons"
-import { SOUND_ACCEPT } from "../sounds"
+import { decodeSound, SOUND_ACCEPT } from "../sounds"
 import { appState } from "./state"
 import { resourceCount, resourceGallery, resourceSearch, resourceDownloadButton } from "./dom"
 import { playSoundPath, releaseKeySound } from "./canvas-interaction"
@@ -114,7 +114,36 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     actions.append(play, replace, download)
     status.textContent = ""
     status.dataset.error = "false"
-    detail.append(heading, name, path, actions, status)
+    const waveform = element("canvas", "ui-sound-waveform")
+    waveform.width = 640
+    waveform.height = 96
+    waveform.setAttribute("role", "img")
+    waveform.setAttribute("aria-label", `${selected.filename} 波形`)
+    const duration = element("small")
+    detail.append(heading, name, path, waveform, duration, actions, status)
+    const bytes = appState.archive?.getBytes(selected.path)
+    if (bytes) void decodeSound(bytes).then(sound => {
+      if (!detail.contains(waveform) || !library.isConnected) return
+      const context = waveform.getContext("2d")!
+      context.fillStyle = getComputedStyle(waveform).color
+      const bars = 80
+      for (let bar = 0; bar < bars; bar++) {
+        const start = Math.floor(bar * sound.samplesDecoded / bars)
+        const end = Math.floor((bar + 1) * sound.samplesDecoded / bars)
+        let peak = 0
+        for (const channel of sound.channelData) for (let sample = start; sample < end; sample++) peak = Math.max(peak, Math.abs(channel[sample]))
+        const height = Math.max(2, Math.min(1, peak) * waveform.height)
+        context.fillRect(bar * waveform.width / bars, (waveform.height - height) / 2, 2, height)
+      }
+      const seconds = sound.samplesDecoded / sound.sampleRate
+      duration.textContent = `${seconds.toFixed(2)} s · ${sound.sampleRate} Hz`
+      waveform.setAttribute("aria-label", `${selected.filename} 波形，时长 ${seconds.toFixed(2)} 秒`)
+    }).catch(reason => {
+      if (!detail.contains(waveform)) return
+      const note = element("p", "ui-field-note")
+      note.textContent = `无法显示波形：${reason instanceof Error ? reason.message : String(reason)}`
+      waveform.replaceWith(note)
+    })
     updatePlaying()
   }
   for (const entry of visible) {

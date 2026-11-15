@@ -30,10 +30,13 @@ try {
     window.__popupTexts = []
   })
   let checked = 0
+  let swipes = 0
   for (const format of ['bds', 'bdi']) {
     const { bytes } = await convertSsfDocument(source, format, templates)
-    await page.locator('#browser-open').setInputFiles({ name: `气泡.${format}`, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
+    await page.locator('#browser-open').setInputFiles({ name: `气泡-${format}.${format}`, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
+    await page.waitForFunction(name => document.querySelector('#document-name')?.textContent.includes(name), `气泡-${format}`)
     await page.waitForFunction(() => !document.querySelector('#open').disabled)
+    await page.waitForFunction(() => !document.querySelector('#file-operation-dialog')?.open || !document.querySelector('#file-operation-close')?.disabled)
     const close = page.locator('#file-operation-dialog[open] #file-operation-close')
     if (await close.isVisible()) await close.click()
     for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) for (const board of ['py_9', 'py_26']) {
@@ -61,11 +64,27 @@ try {
       await page.mouse.up()
       await page.waitForFunction(() => !window.__popupPreview.active && !window.__popupPreview.hintVisible)
       assert.deepEqual(await page.evaluate(() => window.__popupTexts), [], 'release clears the bubble')
+      if (board === 'py_26') for (const [letter, symbol] of [['h', '“'], ['j', '”'], ['k', '*'], ['l', '？']]) {
+        const point = await page.evaluate(letter => {
+          const preview = window.__popupPreview
+          const key = preview.keys.find(key => key.center === letter)
+          const box = preview.canvas.getBoundingClientRect()
+          return { x: box.left + (key.rect.x + key.rect.width / 2) / preview.panelWidth * box.width, y: box.top + (key.rect.y + key.rect.height / 2) / preview.surfaceHeight * box.height, scale: box.width / preview.panelWidth }
+        }, letter)
+        for (const [direction, dx, dy] of [['UP', 0, -40], ['LEFT', -40, 0], ['RIGHT', 40, 0]]) {
+          await page.mouse.move(point.x, point.y)
+          await page.mouse.down()
+          await page.mouse.move(point.x + dx * point.scale, point.y + dy * point.scale)
+          await page.mouse.up()
+          assert.ok((await page.locator('#event-log').textContent()).endsWith(`${direction} · ${symbol}`), `${format} ${path}: ${letter} ${direction} → ${symbol}`)
+          swipes++
+        }
+      }
       checked++
     }
   }
   assert.deepEqual(errors, [])
-  console.log(`SSF popup conversion: ${checked} BDS/BDI views passed tap, hold, slide and release${sample ? ` (${sample})` : ''}`)
+  console.log(`SSF popup conversion: ${checked} BDS/BDI views passed tap, hold, slide and release; ${swipes} QWERTY swipes match the source symbols${sample ? ` (${sample})` : ''}`)
 } catch (error) {
   await page.screenshot({ path: '/tmp/bdi-ssf-popup-failure.png' }).catch(() => {})
   throw error

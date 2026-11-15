@@ -40,6 +40,7 @@ import { updateSourceHighlight, updateInspectorView } from "../source-panel"
 import { initInspectorShell } from "../../inspector-shell.ts"
 import { bindListboxKeys } from "../../dom-element.ts"
 import { startOnboarding, startOnboardingOnFirstLaunch } from "../onboarding"
+import { clearMobilePickerPreview, previewMobilePickerSelection } from "../mobile-picker-preview"
 
 /** 样式图片资源、面板缩放、模拟输入与启动时的初始状态。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireResourcesAndStartup(): void {
@@ -61,6 +62,7 @@ export function wireResourcesAndStartup(): void {
   bindDialog(pickerDialog)
   void onPickerEvent("picker-close", () => closeDialog(pickerDialog))
   pickerDialog.addEventListener("close", () => {
+    clearMobilePickerPreview()
     appState.pickerFrameReady = false
     pickerFrame.src = "about:blank"
   })
@@ -71,7 +73,9 @@ export function wireResourcesAndStartup(): void {
   void onPickerEvent("image-picker-back-styles", () => void emitStyleLibrary(true))
   void onPickerEvent<{ session: string; styleID: string }>("style-library-preview-request", request => void emitStyleLibraryPreview(request))
   void onPickerEvent<{ session: string; key: string }>("style-library-image-request", request => void emitStyleLibraryImage(request))
+  void onPickerEvent<{ session?: string; styleID?: string; imagePath?: string }>("style-library-preview-selection", selected => void previewMobilePickerSelection(selected))
   void onPickerEvent<{ styleID?: string; imagePath?: string; toStyle?: boolean }>("style-library-apply", (selected) => {
+    clearMobilePickerPreview()
     appState.styleLibrarySelected = selected
     applyStyleLibrarySelection(selected.toStyle)
   })

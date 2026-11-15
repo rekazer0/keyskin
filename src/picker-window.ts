@@ -119,6 +119,7 @@ const libraryPreviewImage = $("#style-library-preview-image")
 const libraryApply = $("#style-library-apply") as HTMLButtonElement
 const libraryApplyToStyle = $("#style-library-apply-to-style") as HTMLButtonElement
 const librarySlice = $("#style-library-slice") as HTMLButtonElement
+const mobilePicker = matchMedia("(max-width: 760px)")
 // 新建在网格末尾的虚线卡，删除在卡片上；工具条只放复制（⌘D 同）。
 const libraryToolbar = listToolbar({ duplicate: { label: "复制样式", run: () => { if (librarySelected?.styleID) emitLibrary("style-library-duplicate", librarySelected) } } })
 const libraryDuplicate = libraryToolbar.querySelector("button")!
@@ -355,6 +356,7 @@ new ResizeObserver(scheduleLibraryWindow).observe(libraryScroll)
 function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   if (!library) return
   librarySelected = selected
+  emitLibrary("style-library-preview-selection", { ...selected, session: library.session })
   libraryGrid.querySelector<HTMLElement>('[aria-selected="true"]')?.setAttribute("aria-selected", "false")
   card.setAttribute("aria-selected", "true")
   libraryPreviewImage.replaceChildren()
@@ -504,6 +506,7 @@ function renderLibrary(): void {
   const chooser = view === "resources"
   libraryPreview.hidden = true
   librarySelected = undefined
+  if (!chooser && payload) emitLibrary("style-library-preview-selection", { session: payload.session })
   libraryDuplicate.disabled = true
   libraryToolbar.hidden = chooser || !payload?.canAdd || !payload.editable
   const sound = Boolean(payload?.soundOnly)
@@ -576,7 +579,7 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
       releaseLibraryBitmaps()
     }
     library = payload
-    libraryMode = payload.imageSelection ? "images" : "styles"
+    libraryMode = payload.imageSelection || mobilePicker.matches && payload.kind === "all" && payload.imagesCompatible && !payload.soundOnly ? "images" : "styles"
     libraryKind = payload.kind
     libraryFilter = "all"
   } else if (reset) library = undefined
@@ -628,8 +631,11 @@ libraryApply.addEventListener("click", () => { if (librarySelected) emitLibrary(
 libraryApplyToStyle.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", { ...librarySelected, toStyle: true }) })
 librarySlice.addEventListener("click", () => { if (librarySelected?.styleID) emitLibrary("style-library-slice", librarySelected) })
 $("#style-library-edit").addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-edit", librarySelected) })
+$("#style-library-cancel").addEventListener("click", () => void emitMain("picker-close"))
 function closeLibraryPreview(): void {
   libraryPreview.hidden = true
+  librarySelected = undefined
+  if (library) emitLibrary("style-library-preview-selection", { session: library.session })
   libraryGrid.querySelector<HTMLElement>('[aria-selected="true"]')?.setAttribute("aria-selected", "false")
 }
 $("#style-library-preview-close").addEventListener("click", closeLibraryPreview)

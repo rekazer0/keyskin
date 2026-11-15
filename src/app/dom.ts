@@ -142,9 +142,12 @@ export const resetSourceDirectory = $("#reset-source-directory") as HTMLButtonEl
 
 export const sourceDirectoryStatus = $("#source-directory-status")
 
-export const mobilePaneButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mobile-pane]"))
-
-export const mobileWorkspaceTabs = $(".mobile-workspace-tabs")
+export const mobileSaveButton = $("#mobile-save") as HTMLButtonElement
+export const mobileDocumentStatus = $("#mobile-document-status")
+export const mobileProjectFiles = $("#mobile-project-files") as HTMLButtonElement
+export const mobileFilesClose = $("#mobile-files-close") as HTMLButtonElement
+export const mobileInspectorHistory = $("#mobile-inspector-history")
+export const mobileQuickActions = $(".mobile-quick-actions")
 export const workspacePane = $("main > .workspace")
 export const mobileAppMore = $("#mobile-app-more") as HTMLDetailsElement
 export const mobileMoreActions = Array.from(mobileAppMore.querySelectorAll<HTMLButtonElement>("[data-mobile-action]"))
@@ -282,6 +285,7 @@ export const layoutOverviewGrid = $("#layout-overview-grid")
 export const layoutOverviewToggle = $("#layout-overview-toggle") as HTMLButtonElement
 
 export const panelScaleButton = $("#panel-scale") as HTMLButtonElement
+export const layoutConversionButton = $("#layout-conversion") as HTMLButtonElement
 
 export const adaptIos26Button = $("#adapt-ios26") as HTMLButtonElement
 
@@ -370,6 +374,10 @@ export const bdaInspectorStateButtons = Array.from(document.querySelectorAll<HTM
 
 export const keyOnlyGroups = Array.from(document.querySelectorAll<HTMLElement>(".key-only"))
 
+export const keyGestureFieldsGroup = $(".key-gesture-fields")
+
+export const ssfGestureNote = $("#ssf-gesture-note")
+
 export const keyLayoutFieldsGroup = $(".key-layout-fields")
 
 export const keyTypographyFieldsGroup = $(".key-typography-fields")
@@ -389,7 +397,6 @@ export const keyActionMenuItems = Array.from(document.querySelectorAll<HTMLButto
 export const baiduActionCodes = $("#baidu-action-codes") as HTMLDataListElement
 
 export const inspectorTabs = $(".inspector-tabs")
-export const mobilePreviewToggle = $("#mobile-preview-toggle") as HTMLButtonElement
 
 
 export const aiDesignPanel = $("#ai-design-panel")
@@ -524,6 +531,11 @@ export const layoutImageDialog = $("#layout-image-dialog") as HTMLDialogElement
 export const layoutImageForm = $("#layout-image-form") as HTMLFormElement
 
 export const layoutImageFile = $("#layout-image-file") as HTMLButtonElement
+export const mobileLayoutImageTarget = $("#mobile-layout-image-target") as HTMLSelectElement
+export const mobileLayoutImageConfig = $("#mobile-layout-image-config") as HTMLSelectElement
+export const mobilePanelScaleMode = $("#mobile-panel-scale-mode") as HTMLSelectElement
+export const mobilePanelResolution = $("#mobile-panel-resolution") as HTMLOutputElement
+export const mobilePanelResolutionField = $("#mobile-panel-resolution-field") as HTMLLabelElement
 
 export const layoutImagePreview = $("#layout-image-preview") as HTMLImageElement
 

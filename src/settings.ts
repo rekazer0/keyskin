@@ -20,7 +20,9 @@ export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enable
     if (control instanceof HTMLInputElement && control.type === 'checkbox') control.checked = value === 'true'
     else control.value = value
   }
-  const preferences = [density, accent, soften, safe, guides, sectionScrollbar]
+  const reduceMotion = input('reduce-interface-motion') as HTMLInputElement
+  reduceMotion.checked = localStorage.getItem(reduceMotion.id) === 'true'
+  const preferences = [density, accent, soften, safe, guides, sectionScrollbar, reduceMotion]
   const defaultAccent = '#3a6df0'
   density.value = localStorage.getItem(density.id) === 'compact' ? 'compact' : 'standard'
   const savedAccent = localStorage.getItem(accent.id)
@@ -30,6 +32,7 @@ export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enable
   safe.checked = localStorage.getItem(safe.id) === 'true'
   guides.checked = localStorage.getItem(guides.id) === 'true'
   const apply = () => {
+    root.dataset.reducedMotion = String(reduceMotion.checked)
     root.dataset.sourceSectionScrollbar = String(sectionScrollbar.checked)
     root.dataset.interfaceDensity = density.value
     // 默认强调色交还给主题，深色模式才能用它自己的提亮蓝

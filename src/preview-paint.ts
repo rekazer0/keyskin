@@ -147,23 +147,28 @@ export async function paintPreview(self: Preview): Promise<void> {
       [panel, visuals, toolbarImages] = await Promise.all([
         self.resolver?.resolve(self.panelStyle, false).catch(() => undefined),
         Promise.all(keys.map(async (key) => {
+          const draft = self.draftVisual && key.sections.includes(self.draftVisual.section) ? self.draftVisual : undefined
+          const foreStyles = [...key.foreStyles]
+          if (draft?.foreground) foreStyles[draft.layer] = draft.styleID ?? ""
           const highlighted = self.active?.key.section === key.section ||
+            draft?.pressed ||
+            player?.motion && player.key?.section === key.section ||
             self.legacyAnimationStates.has(key.section) ||
             self.keyPressed(key)
           try {
             return {
-              back: await self.resolveVisual(
+              back: draft && !draft.foreground ? draft.visual : await self.resolveVisual(
                 highlighted ? key.highlightBackStyle ?? key.backStyle : key.backStyle,
                 highlighted,
               ).catch(() => undefined),
               fore: await Promise.all(
-                key.foreStyles.map((style) => self.resolveVisual(style, highlighted).catch(() => undefined)),
+                foreStyles.map((style, index) => draft?.foreground && draft.layer === index ? draft.visual : self.resolveVisual(style, highlighted).catch(() => undefined)),
               ),
               text: key.section.startsWith("LIST:") && self.resolver?.resolveListText
-                ? self.resolver.resolveListText(key.foreStyles.join(","), highlighted)
-                : self.resolver?.resolveText(key.foreStyles.join(","), highlighted),
+                ? self.resolver.resolveListText(foreStyles.join(","), highlighted)
+                : self.resolver?.resolveText(foreStyles.join(","), highlighted),
               // A list cell shows its own entry (NAMES); a label carried by its shared style is not the cell's text.
-              styleTexts: key.section.startsWith("LIST:") ? [] : key.foreStyles.map((style) =>
+              styleTexts: key.section.startsWith("LIST:") ? [] : foreStyles.map((style) =>
                 self.resolver?.resolveStyleText?.(style, highlighted)
               ),
             }
@@ -223,7 +228,8 @@ export async function paintPreview(self: Preview): Promise<void> {
   const sprites: SceneSprite[] = []
   for (const key of keys) {
     const keyAnimation = self.legacyAnimationStates.get(key.section)
-    const animationElapsed = keyAnimation ? Date.now() - keyAnimation.startedAt : -1
+    const animationElapsed = player?.motion && player.key?.section === key.section ? player.elapsed
+      : keyAnimation ? Date.now() - keyAnimation.startedAt : -1
     const activeBdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
     const bdaBack = bdaTransforms(self.animation, key, activeBdaElapsed, "back")
     const bdaFore = bdaTransforms(self.animation, key, activeBdaElapsed, "fore")
@@ -505,10 +511,8 @@ function beginCanvas(self: Preview): CanvasRenderingContext2D | undefined {
 
 function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: PreviewItem): void {
   if (previewSelectionVisible(self.mode, self.itemSelected(key))) {
-    // A press flash in edit mode is marked in the selection orange so it
-    // reads as "momentary feedback", not as the blue selection state.
     const flash = self.mode === "edit" && self.keyPressed(key)
-    context.strokeStyle = flash ? "#ff6b2c" : "#087ff5"
+    context.strokeStyle = getComputedStyle(self.canvas).getPropertyValue(flash ? "--selection" : "--guide-selected").trim()
     context.lineWidth = 4
     context.strokeRect(key.rect.x + 2, key.rect.y + 2, key.rect.width - 4, key.rect.height - 4)
   } else if (self.mode === "edit" && self.itemDrafted(key)) {

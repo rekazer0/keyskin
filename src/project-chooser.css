@@ -28,3 +28,18 @@
   .project-template-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .project-chooser-fields { flex-basis: 100%; }
 }
+.mobile-project-intro { display: none; }
+@media (max-width: 760px) and (orientation: portrait) {
+  #new-project-dialog { height: var(--viewport-height); }
+  .project-chooser .mobile-project-intro { display: grid; gap: var(--space-sm); margin-block: 0 var(--space-xl); }
+  .project-chooser .mobile-project-intro h1 { margin: 0; font-size: var(--font-size-page); }
+  .project-chooser .project-template-card { gap: var(--space-sm); padding: var(--space-sm); border: 0; background: var(--panel); }
+  .project-chooser .template-preview { height: 80px; }
+  .project-chooser fieldset { margin-bottom: var(--space-md); }
+  .project-chooser legend { display: none; }
+  .project-chooser .project-template-card input { top: var(--space-sm); right: var(--space-sm); opacity: 0; }
+  .project-chooser .project-template-card strong { font-size: var(--font-size-xs); }
+  .project-chooser .project-template-card small { font-size: var(--font-size-micro); }
+  .project-chooser .project-chooser-fields { display: none; }
+  .project-chooser .ui-dialog-footer > button[value="cancel"] { display: none; }
+}

@@ -423,6 +423,27 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
     if (item) container.append(...view.sections)
     return
   }
+  if (matchMedia("(max-width: 760px) and (orientation: portrait)").matches && view.mode !== "all" && item) {
+    const more = element("details", "mobile-animation-library")
+    more.append(Object.assign(element("summary"), { textContent: "更多动效与样式" }), listSection(view))
+    const styles = styleSection(view)
+    if (styles) more.append(styles)
+    const stage = previewSection(view, item)
+    stage.classList.add("mobile-animation-stage")
+    const parameters = element("div", "mobile-animation-parameters")
+    for (const key of view.mode === "particle" ? ["TOTAL_NUMBER", "INIT_ALPHA"] : ["FROM", "DURATION"]) {
+      const row = view.sections.flatMap(section => Array.from(section.querySelectorAll<HTMLElement>(`[data-document-key="${key}"]`)))[0]
+      if (row) parameters.append(row)
+    }
+    container.dataset.mobileAnimationLabel = item.info || item.title
+    if (parameters.childElementCount) more.append(...view.sections)
+    container.replaceChildren(stage)
+    if (parameters.childElementCount) container.append(parameters)
+    if (!parameters.childElementCount) container.append(...view.sections)
+    container.append(more)
+    return
+  }
+  delete container.dataset.mobileAnimationLabel
   container.replaceChildren(listSection(view))
   const styles = styleSection(view)
   if (styles) container.append(styles)
