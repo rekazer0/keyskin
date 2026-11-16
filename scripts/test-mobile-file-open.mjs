@@ -41,7 +41,7 @@ try {
         await page.waitForFunction(() => !document.querySelector('#dirty').hidden)
         await page.waitForFunction(() => !document.querySelector('#file-operation-dialog').open && !document.querySelector('#open').disabled)
         assert.equal(await page.locator('#recent-files').isHidden(), true, '网页端不显示最近打开')
-        await page.locator('#mobile-home').click()
+        await page.locator('#mobile-project-toggle').click();await page.locator('#mobile-home').click()
         await page.getByRole('dialog', { name: '未保存保护' }).getByRole('button', { name: '暂不保存，离开' }).click()
         await page.locator('#mobile-welcome-open').click()
         const picker = page.waitForEvent('filechooser')

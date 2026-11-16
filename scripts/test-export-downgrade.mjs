@@ -50,15 +50,10 @@ try {
     const startExport = async () => {
       await page.evaluate(() => { window.exportEvents = [] })
       await page.locator('.pen-file-menu > summary').click()
-      const desktopExport = page.locator('.pen-file-menu [data-export-format="sxi"]')
-      if (await desktopExport.isVisible()) {
-        await desktopExport.click()
-      } else {
-        await page.locator('#mobile-export-open').click()
-        await page.locator('#mobile-export-dialog input[value="sxi"]').check()
-        await page.evaluate(() => { window.exportEvents = [] })
-        await page.locator('#mobile-export-dialog button[value="export"]').click()
-      }
+      await page.locator('#mobile-export-open').click()
+      await page.locator('#mobile-export-dialog input[value="sxi"]').check()
+      await page.evaluate(() => { window.exportEvents = [] })
+      await page.locator('#mobile-export-dialog button[value="export"]').click()
     }
     await startExport()
     const confirmation = page.locator('#file-operation-dialog')

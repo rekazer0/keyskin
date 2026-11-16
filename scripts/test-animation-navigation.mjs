@@ -148,11 +148,11 @@ try {
     // Raw-source entry explicitly opts into the unfiltered view, including on the same path.
     const rawPath = fixture.format === "sxi" ? "skin.json" : path
     await back()
-    await page.locator('[data-sidebar-view="source"]').click()
+    await page.locator('[data-workspace-page="source"]').click()
     await page.evaluate(async (path) => (await import("/src/app/source-files.ts")).ensureSourcePathRendered(path), rawPath)
     await page.locator(`.raw-files button[data-path="${rawPath}"]`).click()
     await check(rawPath, "all", true)
-    await page.locator('[data-sidebar-view="overview"]').click()
+    await page.locator('[data-workspace-page="overview"]').click()
     await entry(path, "particle").click()
     await back()
     // A different ordinary document resets to all rather than carrying the animation filter.
@@ -164,7 +164,7 @@ try {
     await page.evaluate(async (path) => (await import("/src/app/navigation.ts")).selectFile(path, "overview"), path)
     assert.equal((await state()).mode, "all")
     // The same file under two entries remembers one animation per entry.
-    await page.locator('[data-inspector-tab="properties"]').click()
+    await page.locator('[data-inspector-tab="properties"]').dispatchEvent("click")
     await open(path, "motion")
     const motionItems = await page.locator("[data-animation-id]").evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
     await page.locator(`[data-animation-id="${motionItems[1]}"]`).click()

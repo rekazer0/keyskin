@@ -32,10 +32,10 @@ function onboardingSteps(compact: boolean): TourStep[] {
       when: () => !hasSkin(),
     },
     {
-      target: compact ? ["#mobile-welcome-new"] : ['.template-card[data-template="default-android"]'],
+      target: compact ? ["#mobile-welcome-new"] : ['#new-project-form button[value="create"]'],
       title: "从模板新建皮肤",
       body: "第一次使用建议从模板开始：模板保留了官方的基础布局和资源，改起来不容易出错。",
-      action: { hint: compact ? "轻点「从模板新建」，选择模板后点「新建」" : "点击高亮的「百度 BDA 默认」模板", done: hasSkin },
+      action: { hint: compact ? "轻点「从模板新建」，选择模板后点「新建」" : "选择模板后点击「新建」", done: hasSkin },
     },
   )
   steps.push(
@@ -81,9 +81,9 @@ function onboardingSteps(compact: boolean): TourStep[] {
     },
     compact
       ? {
-          target: ["#mobile-navigation"],
+          target: ["#mobile-project-toggle"],
           title: "项目文件与布局",
-          body: "底部「项目」可以切换布局和源文件，「资源」管理样式、图片与音效。画布和属性始终同屏；点击或拖动分隔手柄调整画布比例。",
+          body: "左上角打开项目侧栏，可以切换布局和源文件；底部「资源」管理样式、图片与音效。画布和属性始终同屏；点击或拖动分隔手柄调整画布比例。",
           when: hasSkin,
         }
       : {

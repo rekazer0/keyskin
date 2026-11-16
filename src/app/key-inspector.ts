@@ -1,5 +1,5 @@
 import { IniDocument } from "../ini.ts"
-import { resolveStylePropertyLayers, textStyleSections } from "../style-properties.ts"
+import { resolveStylePropertyLayers } from "../style-properties.ts"
 import { appState } from "./state"
 import { cachedIniDocument } from "./style-document"
 import { styleConfigPath, effectiveKeyValue, isSkinInfoPath, isToolbarPath, effectiveToolbarSections, currentSkinState, genConfigPath, keyboardContext, listGeometryDocument, effectiveKeySection, setSourceValue } from "./config-context"
@@ -14,8 +14,8 @@ import { refreshPreview } from "./preview-render"
 import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
 import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes } from "./canvas-interaction"
-import { shouldSuggestActionCodes, actionDescription } from "../actions.ts"
-import { keyFields, styleFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, textStyleLabels, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
+import { actionDescription } from "../actions.ts"
+import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { effectivePanelSection } from "../panel-tools.ts"
 import { createIcon } from "../icons"
@@ -24,20 +24,20 @@ import { setInspectorKind, syncInspectorRows } from "../inspector-shell.ts"
 import { syncMobileInspectorHeader, syncMobileInspectorGroups, revealSinglePageInspectorGroup, applyModeState } from "./mobile-layout"
 import { keyboardConfig, setKeyboardHeight } from "../keyboard.ts"
 import { soundStyleForKey } from "../sounds.ts"
-import { selectedRects } from "./key-editing"
+import { selectedRects, resizeSelectedKeys } from "./key-editing"
 import { updateStylePreviews } from "./style-picker"
 import { ssfInspectorTitle } from "./ssf-inspector"
 import { sxiInspectorTitle } from "./sxi-inspector"
 import { legacyAnimationInspectorTitle } from "./legacy-animation-inspector"
 import { populateDocumentInspector, populateBdaConfigInspector } from "./document-inspector"
-import { populateFontControls } from "./skin-fonts"
 import { renderForeLayerFields } from "./fore-layer-fields"
-import { renderKeyTextColor } from "./text-styles"
-import { populateTextStyleGroup, renderKeyTextShadow, selectedKeyTextRefs, textRefValues, writeTextRefs, type TextProperty } from "./text-styles"
-import { canCreateBdaKeyText, createBdaKeyText, renderBdaTextLayerSwitch, selectedBdaTextRefs } from "./bda-key-text"
+import { populateTextStyleGroup, renderKeyTypography } from "./text-styles"
+import { skinMetadataSections } from "./skin-metadata"
+import { canCreateBdaKeyText, renderBdaTextLayerSwitch } from "./bda-key-text"
 import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
 import { syncSkinConfigControl } from "./config-value-control"
+import { geometryPreview } from "./geometry-preview"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
 
 export function selectedBdaRefs(
@@ -195,12 +195,6 @@ export function updateSelectedBdaPanelProperty(
   return true
 }
 
-export function syncActionCodeSuggestions(field: HTMLInputElement): void {
-  if (!actionFieldNames.has(field.dataset.keyField ?? "")) return
-  if (!field.readOnly && shouldSuggestActionCodes(field.value)) field.setAttribute("list", "baidu-action-codes")
-  else field.removeAttribute("list")
-}
-
 function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): void {
   primaryCssFields.replaceChildren()
   if (!hasSelection || appState.archive?.format === "bda" || sections.length !== 1 || !appState.layoutDocument) return
@@ -233,6 +227,7 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
       const text = styles.toString()
       commitText(path, before, text)
       refreshPreview()
+      populateKeyInspector()
       updateDirty()
     })
     label.append(input)
@@ -278,11 +273,12 @@ export function populateKeyInspector(): void {
   toolbarFieldsGroup.hidden = !toolbarSelected || bdaSelected || sxiSelected || toolbarHasSelection || appState.selectedCandidate === "input"
   keyboardFieldsGroup.hidden = bdaSelected || nativeSelected || skinSelected || toolbarSelected || bdaConfigSelected || candidateSelected || appState.selectedPath !== appState.layoutPath || hasSelection
   for (const group of keyOnlyGroups) {
-    const availableForBda = group === keyTypographyFieldsGroup
-    const nativeHidden = nativeSelected && !(ssfSelected && group === keyGestureFieldsGroup)
+    const availableForBda = group === keyTypographyFieldsGroup || group === keyGestureFieldsGroup || group === keyLayoutFieldsGroup
+    const nativeHidden = nativeSelected && !(ssfSelected && (group === keyGestureFieldsGroup || group === keyLayoutFieldsGroup))
     group.hidden = skinSelected || bdaConfigSelected || !hasSelection || nativeHidden || (bdaSelected || listSelected) && !availableForBda
   }
-  ssfGestureNote.hidden = !ssfSelected
+  ssfGestureNote.hidden = !ssfSelected && !bdaSelected
+  ssfGestureNote.textContent = bdaSelected ? "动作来自布局模板，仅供查看；BDA 外观配置不保存手势动作。" : "点击与滑动显示默认动作，长按优先读取皮肤配置。动作只读；可在「按键」中修改长按按键。"
   selectedKeyName.textContent = hasSelection
     ? listSelected ? "符号列表" : sections.length > 1 ? `已选 ${sections.length} 个按键` : `按键 ${sections[0]?.match(/\d+$/)?.[0] ?? ""}`.trim()
     : skinSelected
@@ -335,6 +331,7 @@ export function populateKeyInspector(): void {
     field.disabled = !skinSelected || !isEditing()
     syncSkinConfigControl(field)
   }
+  if (!skinFieldsGroup.hidden) skinFieldsGroup.replaceChildren(...skinMetadataSections([...skinFieldsGroup.querySelectorAll<HTMLElement>(".ui-field")]))
   const general = cachedIniDocument(genConfigPath())
   const toolbarGen = toolbarSelected ? general : undefined
   for (const field of toolbarFields) {
@@ -369,12 +366,17 @@ export function populateKeyInspector(): void {
   for (const field of keyFields) {
     const name = field.dataset.keyField ?? ""
     // BDA 样式引用由源码结构控件编辑，旧格式按键字段只负责非 BDA 皮肤。
-    field.disabled = !hasSelection || appState.archive?.format === "bda"
-    field.readOnly = ssfSelected && actionFieldNames.has(name)
-    // 手势格子没配置时显示「+」（十字布局，DESIGN.md §10）；其余空字段与文字分组一样写「未设置」。
-    field.placeholder = name === "HOLD" ? "未设置" : actionFieldNames.has(name) ? "+" : hasSelection ? "未设置" : ""
+    field.disabled = !hasSelection || (bdaSelected || ssfSelected) && !actionFieldNames.has(name)
+    field.readOnly = (ssfSelected || bdaSelected) && actionFieldNames.has(name)
+    field.placeholder = actionFieldNames.has(name) ? "+" : hasSelection ? "未设置" : ""
     // A Palm key's fields are skin.json's own (sxi-inspector.ts); these Baidu fields stay empty.
-    if (!hasSelection || bdaSelected || sxiSelected) {
+    if (hasSelection && (bdaSelected || ssfSelected) && ["x", "y", "width", "height"].includes(name)) {
+      const values = sections.map(section => preview.keys.find(key => key.section === section)?.rect[name as keyof import("../preview-items.ts").Rect])
+      field.value = values.every(value => value === values[0]) ? String(values[0] ?? "") : ""
+      if (new Set(values).size > 1) field.placeholder = "混合"
+      continue
+    }
+    if (!hasSelection || bdaSelected && !actionFieldNames.has(name) || sxiSelected) {
       field.value = ""
       continue
     }
@@ -413,8 +415,18 @@ export function populateKeyInspector(): void {
     field.value = common
     if (!common && new Set(values).size > 1) field.placeholder = "混合"
   }
+  const paddingSection = quickInspector.querySelector<HTMLElement>(".inspector-padding-section")
+  if (paddingSection) keyLayoutFieldsGroup.querySelector(".geometry-fields")!.append(paddingSection)
+  keyLayoutFieldsGroup.querySelector(".ui-geometry-preview")?.remove()
+  const previewRects = preview.keys.filter(key => sections.includes(key.section)).map(key => key.rect)
+  if (hasSelection && previewRects.length) {
+    const editableRects = selectedRects()
+    const editable = isEditing() && !bdaSelected && !ssfSelected && !sections.some(isListCell) && editableRects.length === previewRects.length
+    const geometry = geometryPreview(editable ? editableRects : previewRects, editable ? rects => resizeSelectedKeys(rects.map((rect, index) => ({ ...rect, section: editableRects[index].section }))) : undefined)
+    keyLayoutFieldsGroup.querySelector("h3")!.after(geometry)
+    if (paddingSection && !bdaSelected && !ssfSelected && !sections.some(isListCell)) geometry.querySelector(".ui-geometry-box")!.append(paddingSection)
+  }
   populatePrimaryCssFields(hasSelection, sections)
-  populateFontControls()
   populateTextStyleGroup()
   // BDA 按键的外观只有前景偏移（renderForeLayerFields），其余百度字段隐藏。
   for (const field of keyFields) {
@@ -422,81 +434,17 @@ export function populateKeyInspector(): void {
     if (label) label.hidden = Boolean(bdaSelected)
   }
   renderForeLayerFields($("#fore-layer-fields"))
-  const bdaTextPropertyAvailability = new Map<string, boolean>()
-  // Decoding the appearance file is the expensive part: do it once per refresh, not per field.
-  const bdaTextInfo = bdaSelected ? currentBdaAppearance() : undefined
-  const bdaTextRefs = bdaSelected ? selectedBdaTextRefs() : []
-  // A key with only image layers gets a text layer on its first text edit.
-  const bdaTextCreatable = bdaSelected && hasSelection && !bdaTextRefs.length && canCreateBdaKeyText()
+  const bdaTextCreatable = bdaSelected && hasSelection && canCreateBdaKeyText()
   if (bdaSelected && hasSelection) renderBdaTextLayerSwitch()
   else keyTextLayerSwitch.hidden = true
-  let hasTextStyle = bdaTextRefs.length > 0
-  const keyTextRefs = hasSelection && !bdaSelected ? selectedKeyTextRefs() : []
-  const styles = keyboard?.styles
-  for (const field of styleFields) {
-    const property = field.dataset.styleField ?? ""
-    if (bdaSelected) {
-      const info = bdaTextInfo
-      const refs = bdaTextRefs
-      const values = info ? refs.map((ref) => bdaStyleValue(info.appearance, ref, property)) : []
-      // updateBdaStyle adds a missing field, so every text style can take every property.
-      const available = Boolean(info && (refs.length || bdaTextCreatable)) && property !== "FONT_WEIGHT" && property !== "FONT_CLEARTYPE"
-      bdaTextPropertyAvailability.set(property, available)
-      const common = values.length && values.every((value) => value === values[0]) ? values[0] : ""
-      field.disabled = !available
-      field.placeholder = available && !common && new Set(values).size > 1 ? "混合" : available ? "未设置" : ""
-      field.value = common
-      continue
-    }
-    // Every selected key can take text: a key without a text layer gets one on its first edit.
-    const values = textRefValues(keyTextRefs, property as TextProperty)
-    hasTextStyle ||= Boolean(styles && keyTextRefs.some((ref) => textStyleSections(styles, ref.foreground).length))
-    const common = values.every((value) => value === values[0]) ? values[0] ?? "" : ""
-    field.disabled = !hasSelection || !isEditing()
-    if (field.type === "checkbox") {
-      // 字体平滑不写时按开启：勾选状态看生效值，多个文字样式不一致时画中间态。
-      const effective = values.map((value) => value || "1")
-      field.checked = effective.every((value) => value === "1")
-      field.indeterminate = new Set(effective).size > 1
-      continue
-    }
-    field.placeholder = !hasSelection ? "" : !common && new Set(values).size > 1 ? "混合" : "未设置"
-    field.value = common
-  }
-  renderKeyTextColor($("#key-text-color"))
-  // BORDER_COLOR / BORDER_SIZE 只属于百度 CSS 的文字样式；BDA、搜狗、手心没有这组字段。
-  const keyTextShadow = $("#key-text-shadow")
-  const cssText = appState.archive?.format === "bdi" || appState.archive?.format === "bds"
-  keyTextShadow.hidden = !cssText
-  if (cssText) renderKeyTextShadow(keyTextShadow)
-  else keyTextShadow.replaceChildren()
-  for (const label of textStyleLabels) {
-    if (!hasSelection || bdaSelected && !hasTextStyle && !bdaTextCreatable) {
-      label.hidden = true
-      continue
-    }
-    if (appState.archive?.format !== "bda") {
-      // 显示文字 is a BDA text style's own text; INI keys show their style SHOW (primary CSS fields).
-      label.hidden = label.hasAttribute("data-bda-text")
-      for (const fieldLabel of Array.from(label.querySelectorAll<HTMLLabelElement>("label"))) fieldLabel.hidden = false
-      continue
-    }
-    if (label.classList.contains("color-pair-field")) {
-      label.hidden = !bdaTextPropertyAvailability.get("NM_COLOR") && !bdaTextPropertyAvailability.get("HL_COLOR")
-      continue
-    }
-    const property = label.querySelector<HTMLInputElement>("[data-style-field]")?.dataset.styleField ?? ""
-    // BDA 的文字样式只认 styleFields 里登记过的属性；CSS 专属的字体平滑等没有登记，不要漏出来。
-    label.hidden = bdaTextPropertyAvailability.get(property) !== true
-  }
+  const hasTextStyle = renderKeyTypography($("#key-typography-controls"), hasSelection)
   const textNote = $("#key-text-note")
   textNote.title = !hasSelection || hasTextStyle ? ""
     : bdaSelected && !bdaTextCreatable ? "前景没有文字样式，只能修改显示内容" : "前景没有文字层，修改文字会新建一个"
   textNote.setAttribute("aria-label", textNote.title)
   textNote.hidden = !textNote.title
-  const paddingSection = quickInspector.querySelector<HTMLElement>(".inspector-padding-section")
   // Unset padding reads as 0,0,0,0 (see the PADDING field values above); a LIST cell has none.
-  if (paddingSection) paddingSection.hidden = bdaSelected || !hasSelection || sections.some(isListCell)
+  if (paddingSection) paddingSection.hidden = bdaSelected || ssfSelected || !hasSelection || sections.some(isListCell)
   const multiLayout = $("#inspector-multi-layout")
   const multiAvailable = sections.length > 1 && !bdaSelected && !ssfSelected && !sections.some(isListCell)
   multiLayout.dataset.available = String(multiAvailable)
@@ -508,7 +456,9 @@ export function populateKeyInspector(): void {
   multiLayout.querySelector("[role=status]")!.textContent = multiLabel
   canvasMultiCount.textContent = multiLabel
   const layoutNote = keyLayoutFieldsGroup.querySelector<HTMLElement>(".inspector-heading-note")!
-  layoutNote.hidden = appState.archive?.format !== "bda"
+  layoutNote.hidden = !bdaSelected && !ssfSelected
+  layoutNote.title = "此格式的按键几何由输入法定义，仅供查看"
+  layoutNote.setAttribute("aria-label", layoutNote.title)
   const keyToolsAvailable = hasSelection && isEditing() && !bdaSelected && !ssfSelected && !listSelected
   // Sogou skins carry no key geometry, so there is nothing to move, copy or delete.
   for (const button of [...keyModeButtons, ...keyActionButtons]) button.hidden = ssfSelected
@@ -565,7 +515,6 @@ export function populateKeyInspector(): void {
         // 空值由输入框占位符提示「未设置」，这里不再重复
         : values[0] ? actionDescription(values[0]) : ""
   }
-  for (const field of keyFields) syncActionCodeSuggestions(field)
   void updateStylePreviews()
   populateDocumentInspector()
   populateBdaConfigInspector()
@@ -766,17 +715,4 @@ export function updateSelectedKey(field: HTMLInputElement): void {
   preview.setDocument(appState.layoutDocument)
   populateKeyInspector()
   updateDirty()
-}
-
-export function updateSelectedStyle(field: HTMLInputElement): void {
-  const property = field.dataset.styleField ?? ""
-  if (field.type === "number" && field.value && !field.checkValidity()) return
-  const value = field.type === "checkbox" ? (field.checked ? "1" : "0") : field.value.trim()
-  if (appState.archive?.format === "bda") {
-    const refs = selectedBdaTextRefs()
-    if (refs.length) updateBdaRefs(refs, property, value)
-    else createBdaKeyText(property, value)
-    return
-  }
-  writeTextRefs(selectedKeyTextRefs(), property as TextProperty, value)
 }

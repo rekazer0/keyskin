@@ -1,11 +1,9 @@
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { $, aboutUpdate, appBrandVersion } from "./dom"
+import { $ } from "./dom"
 
-/** macOS 自绘应用标题；Windows 自绘按钮接管最小化、最大化和关闭。 */
+/** Windows 自绘按钮接管最小化、最大化和关闭。 */
 export function wireWindowControls(): void {
-  const version = aboutUpdate.dataset.currentVersion!
-  appBrandVersion.textContent = `v${version.replace(/\.0(?=-|$)/, "").replace(/-(alpha|beta|rc)(\d+)$/, " $1 $2")}`
   if (!document.documentElement.classList.contains("windows")) return
   const appWindow = getCurrentWindow()
   // 默认的拖动区域只认直接点在元素本身；Windows 没有系统标题栏，整条顶栏除按钮外都要能拖。

@@ -1,6 +1,6 @@
 import {
   createElement, type IconNode, KeyRound, Component, SquareDashed, Ellipsis,
-  LayoutGrid, Palette, Type, Zap, Images, PanelTop, Clapperboard, Volume2,
+  LayoutGrid, Palette, Type, Zap, Images, PanelTop, PanelLeft, Clapperboard, Volume2,
   MousePointer2, Move, Copy, ArrowLeftRight, Trash2, ChevronDown, ChevronRight,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CircleDot, Music, Play, Info,
   AlignStartVertical, AlignEndVertical, AlignStartHorizontal, AlignEndHorizontal,
@@ -18,17 +18,19 @@ import {
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
-  UserRound, Plug, Gamepad2, ShieldCheck,
+  UserRound, Plug, Gamepad2, ShieldCheck, Wrench, PanelsTopLeft,
+  Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
   SkipBack, Rotate3d, ArrowUpRight, Square, ImageOff, SunMoon, SearchX, ArrowUpLeft, ArrowDownLeft, ArrowDownRight,
 } from "lucide"
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
 const icons: Record<string, IconNode> = {
-  "folder-open": FolderOpen,
+  italic: Italic, underline: Underline, strikethrough: Strikethrough, "align-left": AlignLeft, "align-center": AlignCenter, "align-right": AlignRight,
+  "folder-open": FolderOpen, wrench: Wrench, "panels-top-left": PanelsTopLeft,
   "shield-check": ShieldCheck, "key-round": KeyRound, component: Component, "square-dashed": SquareDashed,
   ellipsis: Ellipsis, "layout-grid": LayoutGrid, palette: Palette, type: Type,
-  zap: Zap, images: Images, "panel-top": PanelTop, clapperboard: Clapperboard,
+  zap: Zap, images: Images, "panel-top": PanelTop, "panel-left": PanelLeft, clapperboard: Clapperboard,
   "volume-2": Volume2, "mouse-pointer-2": MousePointer2, move: Move, copy: Copy,
   "arrow-left-right": ArrowLeftRight, "trash-2": Trash2, "chevron-down": ChevronDown,
   "chevron-right": ChevronRight, "chevron-left": ChevronLeft, "chevron-up": ChevronUp,
@@ -84,12 +86,19 @@ const icons: Record<string, IconNode> = {
   "user-round": UserRound, plug: Plug, "gamepad-2": Gamepad2,
 }
 
+// 大列表反复使用同一图标，克隆模板避免逐条创建路径和设置属性。
+const iconTemplates = new Map<string, SVGElement>()
+
 export function createIcon(name: string, size = 14): SVGElement {
+  const key = `${name}:${size}`
+  const cached = iconTemplates.get(key)
+  if (cached) return cached.cloneNode(true) as SVGElement
   const node = icons[name]
   if (!node) throw new Error(`Unknown icon: ${name}`)
   const svg = createElement(node, { width: size, height: size, "stroke-width": 1.5, "aria-hidden": "true", class: "inspector-icon ui-icon" })
   svg.dataset.penIcon = name
-  return svg
+  iconTemplates.set(key, svg)
+  return svg.cloneNode(true) as SVGElement
 }
 
 export function groupIcon(label: string): SVGElement {

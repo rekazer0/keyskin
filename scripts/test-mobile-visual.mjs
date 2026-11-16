@@ -56,7 +56,7 @@ async function capture(page, name, region) {
 }
 
 async function openFiles(page) {
-  await page.locator('#mobile-navigation [data-mobile-page=project]').click()
+  await page.locator('#mobile-project-toggle').click()
 }
 
 try {
@@ -92,7 +92,7 @@ try {
       await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
       const keyboard = await page.locator("#preview").boundingBox()
       await page.mouse.click(keyboard.x + keyboard.width * 0.45, keyboard.y + keyboard.height * 0.45)
-      await page.waitForSelector("#mobile-property-tabs:not([hidden])")
+      await page.waitForSelector(".mobile-appearance:not([hidden])")
       await page.waitForFunction(() => document.querySelector("#mobile-key-canvas").width > 1)
       await page.evaluate(async () => { (await import("/src/app/preview-render.ts")).setGuidesVisible(true) })
       const measurement = page.getByRole("group", { name: "尺寸标注", exact: true })
@@ -102,12 +102,13 @@ try {
       const originalWidth = await widthInput.inputValue()
       await widthInput.fill(String(Number(originalWidth) + 1))
       await widthInput.dispatchEvent("input")
-      await page.locator("#mobile-undo").click()
+      await page.locator("#mobile-app-more > summary").click()
+          await page.locator('#mobile-app-more [data-mobile-action="mobile-undo"]').click()
       assert.equal(await widthInput.inputValue(), originalWidth, "measurement edit shares the real geometry undo")
       await capture(page, `${prefix}-measurements`)
       await page.evaluate(async () => { (await import("/src/app/preview-render.ts")).setGuidesVisible(false) })
       for (const category of ["appearance", "geometry", "actions", "sound", "animation"]) {
-        await page.locator(`${["geometry", "sound", "animation"].includes(category) ? ".mobile-property-details" : "#mobile-property-tabs"} [data-mobile-category="${category}"]`).click()
+        await page.locator(`#mobile-property-tabs [data-mobile-category="${category}"]`).click()
         await capture(page, `${prefix}-properties-${category}`, "main > .source")
         const content = page.locator("#quick-inspector")
         assert.ok(await content.evaluate(node => node.clientHeight >= 44), `${prefix}: properties leave no room for a control`)
@@ -124,7 +125,8 @@ try {
           await library.getByRole("button", { name: "应用", exact: true }).click()
           await library.waitFor({ state: "hidden" })
           assert.equal(await page.locator('.inspector-gesture > input[data-key-field="UP"]').inputValue(), "F67", "action selection commits through the existing field")
-          await page.locator("#mobile-undo").click()
+          await page.locator("#mobile-app-more > summary").click()
+          await page.locator('#mobile-app-more [data-mobile-action="mobile-undo"]').click()
           assert.equal(await page.locator('.inspector-gesture > input[data-key-field="UP"]').inputValue(), before, "gesture binding is undoable")
           await page.locator(".mobile-action-library").click()
           await library.getByRole("searchbox", { name: "搜索动作" }).fill("no-such-action")
@@ -155,7 +157,7 @@ try {
       await page.locator('[data-mobile-action="mobile-source-view"]').click()
       await capture(page, `${prefix}-source`, "#source-editor")
       await openFiles(page)
-      await capture(page, `${prefix}-files`, "main > aside")
+      await capture(page, `${prefix}-files`, "#mobile-project-dialog")
       for (const [mode, label] of [["style", "styles"], ["sound", "sounds"], ["resource", "images"]]) {
         if (mode === "sound") await page.evaluate(async bytes => {
           (await import("/src/app/state.ts")).appState.archive.setBytes("light/skin/res/mobile_preview.wav", new Uint8Array(bytes))
@@ -188,6 +190,8 @@ try {
         }
         await openFiles(page)
       }
+      await page.locator('#mobile-files-close').click()
+      await page.locator('#mobile-project-dialog').waitFor({ state: 'hidden' })
       await page.locator('#mobile-navigation [data-mobile-page=edit]').click()
       await page.locator('#mobile-app-more > summary').click()
       await capture(page, `${prefix}-drawer`, '#mobile-app-more > .ui-menu')

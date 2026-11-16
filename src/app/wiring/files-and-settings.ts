@@ -5,21 +5,19 @@ import { wirePinnedToolbar } from "../pinned-toolbar"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
 import { requestEditMode, setMobilePane } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, sidebarViewVisible, inspectorTabsVisible, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
 import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelections, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
 import { type Change } from "../../history.ts"
-import { preview, source, scheduleSelectionInspectorSync, isTauri, exportButtons, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
-import { startNewDocument, newDocument } from "../new-document"
+import { preview, source, scheduleSelectionInspectorSync, isTauri, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
+import { startNewDocument, wireNewProjectChooser } from "../new-document"
 import { runFileOperation, readBrowserSkinFile, showImage, showStatus, showError } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
 import { recentFilesKey, recentPreviewCache, recentThumbRequest, renderRecentFiles } from "../recent-files"
 import { dismissLayoutOverview } from "../layout-overview"
-import { releaseArchivePreview, hydrateTemplateCardPreviews } from "../../template-preview"
-import { type ExportFormat } from "../../export.ts"
-import { type BdaPlatform } from "../../bda-platform.ts"
-import { refreshUpdateStatus, settingsController, showSettingsPage, nativeSettings, savedDefaultDevice, applyCanvasBackground, initialCanvasBackground, applyEditorCrosshairSetting, applyAppTheme, systemTheme, savedSourceFontSize, applySourceFontSize, saveSourceFontSize, initializeWindowMaterial, handleWindowMaterialError, applyWindowMaterialWithRetry, currentWindowMaterialOpacity, applyWindowMaterialOpacity, startWindowsWindowDrag, restoreWindowMaterialAfterDrag, applySidebarViewVisibility, applyInspectorTabsVisibility, applySourceEditorFeatures, setCanvasDropState } from "../preferences"
+import { releaseArchivePreview } from "../../template-preview"
+import { refreshUpdateStatus, settingsController, showSettingsPage, nativeSettings, savedDefaultDevice, applyCanvasBackground, initialCanvasBackground, applyEditorCrosshairSetting, applyAppTheme, systemTheme, savedSourceFontSize, applySourceFontSize, saveSourceFontSize, initializeWindowMaterial, handleWindowMaterialError, applyWindowMaterialWithRetry, currentWindowMaterialOpacity, applyWindowMaterialOpacity, startWindowsWindowDrag, restoreWindowMaterialAfterDrag, applySourceEditorFeatures, setCanvasDropState } from "../preferences"
 import { clientLogZip, clientLog } from "../../client-log.ts"
 import { applyAiDesignDraft, discardAiDesignDraft, toggleAiDraftComparison } from "../ai-panel"
 import { activateSourceWorkspace, chooseAndroidSourceDirectory, applySourceDirectory } from "../source-workspace"
@@ -174,6 +172,7 @@ export function wireFilesAndSettings(): void {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     saveButton.click()
   })
+  wireNewProjectChooser()
   newButton.addEventListener("click", () => void startNewDocument())
   openButton.addEventListener("click", () => {
     if (isTauri()) void runFileOperation("打开", openNative)
@@ -197,28 +196,12 @@ export function wireFilesAndSettings(): void {
     renderRecentFiles()
   })
   renderRecentFiles()
-  void hydrateTemplateCardPreviews(document.querySelector(".template-grid")!, { lazy: true })
-  // 欢迎页模板卡：直接以该模板新建，不再弹选择器
-  for (const card of document.querySelectorAll<HTMLButtonElement>(".template-card[data-template]")) {
-    card.addEventListener("click", () => {
-      const templateID = card.dataset.template
-      if (!templateID || appState.fileOperationRunning) return
-      void runFileOperation("新建皮肤", () => newDocument(templateID))
-    })
-  }
   saveButton.addEventListener("click", () => {
     void runFileOperation("保存", () => saveArchive(false, currentExportFormat()))
   })
   mobileShareButton.addEventListener("click", () => {
     void runFileOperation("分享皮肤", shareArchiveToMobile)
   })
-  for (const button of exportButtons) {
-    button.addEventListener("click", () => {
-      const format = button.dataset.exportFormat as ExportFormat
-      const platform = button.dataset.bdaPlatform as Exclude<BdaPlatform, "unknown"> | undefined
-      void runFileOperation("导出", () => saveArchive(true, format, platform))
-    })
-  }
   wireMobileExport()
   checkUpdateButton.addEventListener("click", () => void refreshUpdateStatus())
   aboutDiagnostics.hidden = !isTauri()
@@ -286,7 +269,6 @@ export function wireFilesAndSettings(): void {
   if (!nativeSettings) settingsStorageSection.hidden = true
   settingsModelSection.toggleAttribute("data-platform-hidden", !nativeSettings)
   // 网页端拿不到文件路径，不记录最近打开；也没有模型设置，AI 设计用不了。
-  $("#recent-files")!.hidden = !nativeSettings
   $(".welcome-recent")!.toggleAttribute("data-platform-hidden", !nativeSettings)
   $('[data-inspector-tab="ai"]')!.hidden = !nativeSettings
   showSettingsPage("appearance")
@@ -427,18 +409,6 @@ export function wireFilesAndSettings(): void {
   window.addEventListener("mouseup", () => {
     if (appState.windowDragPointerDown) void restoreWindowMaterialAfterDrag()
   }, true)
-  sidebarViewVisible.checked = localStorage.getItem("sidebar-view-visible") !== "off"
-  applySidebarViewVisibility()
-  sidebarViewVisible.addEventListener("change", () => {
-    localStorage.setItem("sidebar-view-visible", sidebarViewVisible.checked ? "on" : "off")
-    applySidebarViewVisibility()
-  })
-  inspectorTabsVisible.checked = localStorage.getItem("inspector-tabs-visible") !== "off"
-  applyInspectorTabsVisibility()
-  inspectorTabsVisible.addEventListener("change", () => {
-    localStorage.setItem("inspector-tabs-visible", inspectorTabsVisible.checked ? "on" : "off")
-    applyInspectorTabsVisibility()
-  })
   overviewMetaVisible.checked = localStorage.getItem("overview-meta-visible") === "on"
   files.toggleAttribute("data-overview-meta", overviewMetaVisible.checked)
   overviewMetaVisible.addEventListener("change", () => {

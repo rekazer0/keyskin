@@ -15,10 +15,33 @@
     <link rel="preconnect" href="https://api.github.com" crossorigin />
   </head>
   <body class="app-window">
+    <nav id="workspace-navigation" class="ui-workspace-navigation" aria-label="桌面工作区导航" data-tauri-drag-region>
+      <div class="ui-workspace-navigation-brand" data-tauri-drag-region><img src="./src-tauri/icons/128x128.png" alt="键设 KeySkin" draggable="false"></div>
+      <button class="ui-icon-button" type="button" data-workspace-page="files" aria-label="文件" title="文件" aria-current="page"><span data-icon="folder-open" aria-hidden="true"></span></button>
+      <div class="ui-workspace-navigation-pages">
+        <button class="ui-icon-button" type="button" data-workspace-page="overview" aria-label="概览" title="概览"><span data-icon="panels-top-left" aria-hidden="true"></span></button>
+        <button class="ui-icon-button" type="button" data-workspace-page="resources" aria-label="资源" title="资源" disabled><span data-icon="box" aria-hidden="true"></span></button>
+        <button class="ui-icon-button" type="button" data-workspace-page="tools" aria-label="工具" title="工具" aria-haspopup="dialog" aria-controls="workspace-tools-dialog" aria-expanded="false" disabled><span data-icon="wrench" aria-hidden="true"></span></button>
+        <button class="ui-icon-button" type="button" data-workspace-page="animation" aria-label="动画" title="动画" disabled><span data-icon="clapperboard" aria-hidden="true"></span></button>
+        <button class="ui-icon-button" type="button" data-workspace-page="source" aria-label="源代码" title="源代码" disabled><span data-icon="code-xml" aria-hidden="true"></span></button>
+      </div>
+      <div class="ui-workspace-navigation-actions">
+        <button id="workspace-export" class="ui-icon-button" type="button" aria-label="导出" title="导出…" disabled><span data-icon="share" aria-hidden="true"></span></button>
+        <button class="ui-icon-button" type="button" data-app-dialog="settings" aria-label="设置" title="设置…"><span data-icon="settings" aria-hidden="true"></span></button>
+      </div>
+    </nav>
+    <dialog id="workspace-tools-dialog" class="ui-dialog" data-size="sm" aria-labelledby="workspace-tools-title">
+      <header class="ui-dialog-header"><h2 id="workspace-tools-title">工具</h2></header>
+      <div class="ui-dialog-body" data-layout="stack">
+        <button class="ui-list-item" type="button" data-workspace-tool="panel-scale"><span data-icon="arrow-left-right" aria-hidden="true"></span><span>面板复制…</span></button>
+        <button class="ui-list-item" type="button" data-workspace-tool="replace-layout-image"><span data-icon="image-down" aria-hidden="true"></span><span>替换键盘样式…</span></button>
+        <button class="ui-list-item" type="button" data-workspace-tool="layout-conversion"><span data-icon="layout-template" aria-hidden="true"></span><span>布局转换…</span></button>
+        <button class="ui-list-item" type="button" data-workspace-tool="adapt-ios26"><span data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26 透明背景</span></button>
+      </div>
+    </dialog>
     <header class="titlebar" data-tauri-drag-region>
       <div class="titlebar-left">
-        <button id="mobile-home" class="ui-icon-button" type="button" aria-label="返回首页"><span data-icon="arrow-left" aria-hidden="true"></span></button>
-        <span class="mobile-brand"><span data-icon="keyboard" aria-hidden="true"></span><strong>键设</strong><small>KeySkin</small></span>
+        <button id="mobile-project-toggle" class="ui-icon-button" type="button" aria-label="打开项目侧栏" aria-controls="mobile-project-dialog" aria-expanded="false"><span data-icon="panel-left" aria-hidden="true"></span></button>
         <details class="toolbar-more pen-file-menu">
           <summary data-variant="filled" class="ui-icon-button" title="菜单" aria-label="菜单"><span class="system-symbol desktop-menu-icon" data-icon="menu" aria-hidden="true"></span><span class="mobile-menu-icon" data-icon="folder-open" aria-hidden="true"></span></summary>
           <div class="ui-menu" role="menu" aria-label="菜单">
@@ -26,27 +49,17 @@
             <button id="mobile-project-files" class="ui-list-item mobile-project-files" type="button" role="menuitem"><span data-icon="folder" aria-hidden="true"></span><span>项目文件</span></button>
             <button id="new" class="ui-list-item" type="button" role="menuitem" aria-label="新建皮肤"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span><span>新建皮肤…</span></button>
             <button id="open" class="ui-list-item" type="button" role="menuitem" aria-label="打开皮肤"><span class="system-symbol" data-icon="folder" aria-hidden="true"></span><span>打开皮肤…</span></button>
-            <button id="recent-files" class="ui-list-item" type="button" role="menuitem" aria-label="最近打开"><span class="system-symbol" data-icon="history" aria-hidden="true"></span><span>最近打开</span></button>
+            <button id="recent-files" class="ui-list-item" type="button" role="menuitem" aria-label="文件"><span class="system-symbol" data-icon="folder-open" aria-hidden="true"></span><span>文件</span></button>
             <button id="save" class="ui-list-item" type="button" role="menuitem" disabled aria-label="保存皮肤"><span class="system-symbol" data-icon="hard-drive" aria-hidden="true"></span><span>保存皮肤</span></button>
             <button id="adb-share" class="ui-list-item" type="button" role="menuitem" hidden disabled aria-label="分享到 ADB"><span class="system-symbol" data-icon="plug" aria-hidden="true"></span><span>分享到 ADB</span></button>
             <button id="mobile-share" class="ui-list-item" type="button" role="menuitem" disabled aria-label="分享皮肤"><span class="system-symbol" data-icon="share" aria-hidden="true"></span><span>分享皮肤</span></button>
-            <button id="mobile-export-open" class="ui-list-item mobile-export-entry" type="button" role="menuitem" disabled><span data-icon="download" aria-hidden="true"></span><span>导出皮肤…</span></button>
+            <button id="mobile-export-open" class="ui-list-item" type="button" role="menuitem" disabled><span data-icon="download" aria-hidden="true"></span><span>导出皮肤…</span></button>
             <hr class="ui-menu-separator">
 
-            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bdi" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 iOS 皮肤 (.bdi)</span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bds" disabled><span class="system-symbol" data-icon="download" aria-hidden="true"></span><span>导出 Android 皮肤 (.bds)</span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bda" data-bda-platform="ios" disabled><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 iOS 皮肤 (.bda)</span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-export-format="bda" data-bda-platform="android" disabled><span class="system-symbol" data-icon="file-down" aria-hidden="true"></span><span>导出新版 Android 皮肤 (.bda)</span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-export-format="sxi" disabled><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出手心皮肤 (.sxi)</span><span class="ui-badge" data-variant="accent">实验</span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-export-format="ssf" disabled><span class="system-symbol" data-icon="flask-conical" aria-hidden="true"></span><span>导出搜狗皮肤 (.ssf)</span><span class="ui-badge" data-variant="accent">实验</span></button>
-            <hr class="ui-menu-separator desktop-export-separator">
             <button id="panel-scale" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="arrow-left-right" aria-hidden="true"></span><span>面板复制…</span></button>
             <button id="replace-layout-image" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="image-down" aria-hidden="true"></span><span>替换键盘样式…</span></button>
             <button id="layout-conversion" class="ui-list-item" type="button" role="menuitem" hidden disabled><span class="system-symbol" data-icon="layout-template" aria-hidden="true"></span><span>布局转换…</span></button>
             <button id="adapt-ios26" class="ui-list-item" type="button" role="menuitem" disabled><span class="system-symbol" data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26 透明背景</span></button>
-            <hr class="ui-menu-separator">
-            <button id="undo" class="ui-list-item" type="button" role="menuitem" disabled aria-label="撤销"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span><span>撤销</span></button>
-            <button id="redo" class="ui-list-item" type="button" role="menuitem" disabled aria-label="重做"><span class="system-symbol" data-icon="redo-2" aria-hidden="true"></span><span>重做</span></button>
             <hr class="ui-menu-separator">
             <button class="ui-list-item" type="button" role="menuitem" data-app-dialog="settings"><span class="system-symbol" data-icon="settings" aria-hidden="true"></span><span>设置…</span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-start-tour><span class="system-symbol" data-icon="circle-help" aria-hidden="true"></span><span>使用教程</span></button>
@@ -63,7 +76,7 @@
         </div>
       </div>
       <div class="titlebar-right">
-        <button id="mobile-save" class="ui-icon-button" type="button" aria-label="保存皮肤" disabled><span data-icon="save" aria-hidden="true"></span></button>
+        <button id="mobile-save" class="ui-button" data-variant="primary" type="button" aria-label="保存皮肤" disabled>保存</button>
         <div class="desktop-quick-actions" aria-label="编辑操作">
           <button id="desktop-undo" data-variant="filled" class="ui-icon-button" type="button" title="撤销" aria-label="撤销" disabled>
             <span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span>
@@ -95,6 +108,9 @@
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="layout-overview-toggle"><span data-icon="grid-2x2" aria-hidden="true"></span><span>全局预览</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="toggle-guides" aria-pressed="false"><span data-icon="crosshair" aria-hidden="true"></span><span>辅助线与安全区</span><input class="ui-switch" type="checkbox" role="switch" tabindex="-1" aria-label="辅助线与安全区" aria-hidden="true"></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mode"><span data-icon="mouse-pointer-2" aria-hidden="true"></span><span>工作模式</span><small id="mobile-mode-label">交互预览</small></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-undo"><span data-icon="undo-2" aria-hidden="true"></span><span>撤销</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-redo"><span data-icon="redo-2" aria-hidden="true"></span><span>重做</span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-canvas-options"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>画布选项…</span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-preview-theme"><span data-icon="sun-moon" aria-hidden="true"></span><span>皮肤明暗状态</span><small id="mobile-skin-theme-label">浅色</small></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-source-view"><span data-icon="code-xml" aria-hidden="true"></span><span>源代码</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-ai-view"><span data-icon="sparkles" aria-hidden="true"></span><span>AI 设计</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
@@ -117,33 +133,42 @@
           <button id="window-close" type="button" title="关闭" aria-label="关闭"><span class="system-symbol" data-icon="x" aria-hidden="true"></span></button>
         </div>
       </div>
-      <div class="ui-app-brand" data-tauri-drag-region><strong data-tauri-drag-region>KeySkin</strong><span id="app-brand-version" data-tauri-drag-region></span></div>
     </header>
 
     <dialog id="mobile-export-dialog" class="ui-dialog" data-size="sm" data-variant="ask" aria-labelledby="mobile-export-title">
       <form method="dialog">
-        <header class="ui-dialog-header"><div><h2 id="mobile-export-title">导出格式</h2><p>KeySkin · 移动工作室</p></div></header>
-        <div class="ui-dialog-body">
-          <h1>选择导出格式</h1><p class="ui-field-note" id="mobile-export-source"></p>
-          <div class="mobile-export-formats">
-            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bdi" checked><span>BDI<small>百度 iOS</small></span></label>
-            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bds"><span>BDS<small>百度 Android</small></span></label>
-            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bda:ios"><span>BDA<small>新版 iOS</small></span></label>
-            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bda:android"><span>BDA<small>新版 Android</small></span></label>
-            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="ssf"><span>SSF<small>搜狗</small></span><span class="ui-badge" data-variant="accent">实验</span></label>
-            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="sxi"><span>SXI<small>手心</small></span><span class="ui-badge" data-variant="accent">实验</span></label>
+        <header class="ui-dialog-header"><div><h2 id="mobile-export-title">导出皮肤</h2><p id="mobile-export-source"></p></div></header>
+        <div class="ui-dialog-body" data-layout="stack">
+          <div class="mobile-export-formats ui-subsection" role="radiogroup" aria-label="导出格式">
+            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bdi" data-export-format="bdi" disabled><span data-icon="download" aria-hidden="true"></span><span class="ui-list-item-text"><span>百度 iOS</span><small>.bdi</small></span></label>
+            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bds" data-export-format="bds" disabled><span data-icon="download" aria-hidden="true"></span><span class="ui-list-item-text"><span>百度 Android</span><small>.bds</small></span></label>
+            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bda:ios" data-export-format="bda" data-bda-platform="ios" disabled><span data-icon="file-down" aria-hidden="true"></span><span class="ui-list-item-text"><span>百度新版 iOS</span><small>.bda</small></span></label>
+            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="bda:android" data-export-format="bda" data-bda-platform="android" disabled><span data-icon="file-down" aria-hidden="true"></span><span class="ui-list-item-text"><span>百度新版 Android</span><small>.bda</small></span></label>
+            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="sxi" data-export-format="sxi" disabled><span data-icon="flask-conical" aria-hidden="true"></span><span class="ui-list-item-text"><span>手心输入法</span><small>.sxi</small></span><span class="ui-badge" data-variant="accent">实验</span></label>
+            <label class="ui-list-item"><input type="radio" name="mobile-export-format" value="ssf" data-export-format="ssf" disabled><span data-icon="flask-conical" aria-hidden="true"></span><span class="ui-list-item-text"><span>搜狗输入法</span><small>.ssf</small></span><span class="ui-badge" data-variant="accent">实验</span></label>
           </div>
-          <aside class="ui-scope-note"><strong>跨格式转换会先检查兼容性</strong><p>将逐项列出需要确认的内容，确认后才会选择保存位置。原始皮肤保持不变。</p></aside>
+          <p class="ui-field-note">跨格式导出会先检查兼容性，确认后再选择保存位置。</p>
         </div>
         <footer class="ui-dialog-footer"><button class="ui-button" type="submit" value="cancel" autofocus>取消</button><button class="ui-button" data-variant="primary" type="submit" value="export">继续导出</button></footer>
       </form>
     </dialog>
-    <nav id="mobile-navigation" class="ui-mobile-navigation" aria-label="工作区导航"><button type="button" data-mobile-page="edit" aria-current="page"><span data-icon="pencil" aria-hidden="true"></span><span>编辑</span></button><button type="button" data-mobile-page="resources"><span data-icon="grid-2x2" aria-hidden="true"></span><span>资源</span></button><button type="button" data-mobile-page="project"><span data-icon="folder" aria-hidden="true"></span><span>项目</span></button></nav>
+    <nav id="mobile-navigation" class="ui-mobile-navigation" aria-label="工作区导航">
+      <button class="ui-button" type="button" data-mobile-page="edit" aria-current="page"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>编辑</span></button>
+      <button class="ui-button" type="button" data-mobile-page="resources"><span data-icon="layers" aria-hidden="true"></span><span>资源</span></button>
+      <button class="ui-button" type="button" data-mobile-page="ai"><span data-icon="sparkles" aria-hidden="true"></span><span>AI 设计</span></button>
+      <button class="ui-button" type="button" data-app-dialog="settings"><span data-icon="settings" aria-hidden="true"></span><span>设置</span></button>
+    </nav>
+    <nav id="mobile-home-navigation" class="ui-mobile-navigation" data-variant="home" aria-label="首页导航">
+      <button class="ui-button" type="button" aria-current="page" data-home-action="home"><span data-icon="grid-2x2" aria-hidden="true"></span><span>我的皮肤</span></button>
+      <button class="ui-button" type="button" data-home-action="new"><span data-icon="plus" aria-hidden="true"></span><span>新建皮肤</span></button>
+      <button class="ui-button" type="button" data-app-dialog="settings"><span data-icon="ellipsis" aria-hidden="true"></span><span>设置</span></button>
+    </nav>
+    <dialog id="mobile-project-dialog" class="ui-dialog ui-mobile-sidebar" aria-label="项目侧栏"></dialog>
     <main>
       <aside class="sidebar">
         <div class="pane-heading">
           <h2 class="mobile-page-heading">项目概览</h2>
-          <button id="mobile-files-close" class="ui-icon-button" type="button" aria-label="返回编辑"><span data-icon="arrow-left" aria-hidden="true"></span></button>
+          <button id="mobile-files-close" class="ui-icon-button" type="button" aria-label="关闭项目侧栏"><span data-icon="x" aria-hidden="true"></span></button>
           <div class="sidebar-view-control ui-segmented" data-fill aria-label="左侧视图">
             <button type="button" data-sidebar-view="overview" aria-pressed="true"><span class="system-symbol" data-icon="layout-grid" aria-hidden="true"></span><span>概览</span></button>
             <button type="button" data-sidebar-view="source" aria-pressed="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源文件</span></button>
@@ -162,6 +187,7 @@
           <input id="source-upload-input" type="file" multiple hidden>
         </div>
         <div id="files"></div>
+        <button id="mobile-home" class="ui-list-item" type="button"><span data-icon="arrow-left" aria-hidden="true"></span><span>返回首页</span></button>
         <div class="inspector-resize-handle sidebar-resize-handle" id="sidebar-resize-handle" aria-hidden="true"></div>
       </aside>
 
@@ -225,111 +251,24 @@
                 <div class="welcome-section-head">
                   <h2>最近打开</h2>
                   <span id="welcome-recent-hint"></span>
+                  <small class="mobile-local-note">全部在本机处理</small>
                   <button id="recent-clear" class="welcome-head-action welcome-head-clear" type="button" hidden>清除记录</button>
                   <button id="welcome-recent-open" class="welcome-head-action" type="button"><span class="icon system-symbol" data-icon="folder" aria-hidden="true"></span>打开皮肤…</button>
                 </div>
                 <div id="welcome-recent-grid" class="recent-grid" hidden></div>
                 <div id="welcome-recent-empty" class="ui-empty"><span class="system-symbol" data-icon="folder" data-icon-size="20" aria-hidden="true"></span><p>拖入皮肤文件即可打开</p></div>
               </section>
-              <header class="welcome-hero">
-                <h1>新建皮肤</h1>
-                <p class="welcome-formats" aria-label="支持的格式"><em>.bdi</em><em>.bds</em><em>.bda</em><em>.ssf</em><em>.sxi</em></p>
+              <section id="file-project-chooser" class="welcome-section" aria-label="新建项目"></section>
+
+              <header class="mobile-welcome-hero">
+                <div><h1>键设 KeySkin</h1><p>让每一次输入，都有你的风格</p></div>
+                <button class="ui-icon-button" type="button" data-app-dialog="settings" aria-label="更多"><span data-icon="ellipsis" aria-hidden="true"></span></button>
               </header>
-
-              <section class="welcome-section" aria-label="模板">
-                <div class="template-grid">
-                <div class="template-grid-row">
-                  <button type="button" class="template-card" data-template="default-android">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">百度 BDA 默认</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.bda</em><span>官方 · 新版格式</span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="template-card" data-template="official-android-bds">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">百度 BDS 旧版</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.bds</em><span>官方 · 经典皮肤</span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="template-card" data-template="xiaomi-unified-rounded-blur">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">小米统一圆角</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.bds</em><span>互联网整理</span></span>
-                    </span>
-                  </button>
-                </div>
-                <div class="template-grid-row">
-                  <button type="button" class="template-card" data-template="oppo-dual-color">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">OPPO 双色</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.bds</em><span>互联网整理</span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="template-card" data-template="iqoo-rounded-black">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">iQOO 圆角黑</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.bds</em><span>互联网整理</span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="template-card" data-template="huawei-swipe-symbols-1080">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">华为滑动符号</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.bds</em><span>互联网整理</span></span>
-                    </span>
-                  </button>
-                </div>
-                <div class="template-grid-row">
-                  <button type="button" class="template-card" data-template="oppo-swipe-down">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">OPPO 皮肤加下滑</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.bds</em><span>互联网整理</span></span>
-                    </span>
-                  </button>
-                  <button type="button" class="template-card" data-template="palm-harmony">
-                    <span class="template-preview" aria-hidden="true"></span>
-                    <span class="template-foot">
-                      <span class="template-name-row">
-                        <span class="template-name">手心鸿蒙内置</span>
-                        <span class="icon system-symbol template-go" data-icon="arrow-right" aria-hidden="true"></span>
-                      </span>
-                      <span class="template-meta"><em>.sxi</em><span>互联网整理</span></span>
-                    </span>
-                  </button>
-                </div>
-                </div>
-              </section>
-
-              <header class="mobile-welcome-hero"><h1>把皮肤改到<br>刚刚好。</h1><p>打开、轻点、微调。<br>在手机上，设计你的输入法皮肤。</p><img src="/mobile-welcome.png" alt="轻雾键盘示例"></header>
-              <button id="mobile-welcome-open" class="ui-list-item" type="button"><span data-icon="folder" aria-hidden="true"></span><span>打开皮肤</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
-              <button id="mobile-welcome-new" class="ui-button" type="button">从模板新建</button><p class="mobile-local-note">所有皮肤在本机处理，不上传</p>
+              <div id="mobile-welcome-resume"></div>
+              <div class="mobile-welcome-actions">
+                <button id="mobile-welcome-new" class="ui-button" data-variant="primary" type="button"><span data-icon="plus" aria-hidden="true"></span>新建皮肤</button>
+                <button id="mobile-welcome-open" class="ui-button" type="button">打开皮肤</button>
+              </div>
               <div class="welcome-note">
                 <span class="icon system-symbol" data-icon="lightbulb" aria-hidden="true"></span>
                 <p><kbd data-shortcut="单击"></kbd> 多选按键</p>
@@ -454,7 +393,14 @@
                 </details>
               </div>
             </div>
-            <nav id="mobile-property-tabs" class="ui-segmented" data-fill aria-label="按键属性分类" hidden><button type="button" data-mobile-category="appearance" aria-pressed="true">样式</button><button type="button" data-mobile-category="typography" aria-pressed="false">文字</button><button type="button" data-mobile-category="actions" aria-pressed="false">动作</button></nav>
+            <nav id="mobile-property-tabs" class="ui-category-nav" aria-label="按键属性分类" hidden>
+              <button class="ui-button" type="button" data-mobile-category="geometry" aria-pressed="true">几何</button>
+              <button class="ui-button" type="button" data-mobile-category="appearance" aria-pressed="false">外观</button>
+              <button class="ui-button" type="button" data-mobile-category="typography" aria-pressed="false">文字</button>
+              <button class="ui-button" type="button" data-mobile-category="actions" aria-pressed="false">动作</button>
+              <button class="ui-button" type="button" data-mobile-category="sound" aria-pressed="false">音效</button>
+              <button class="ui-button" type="button" data-mobile-category="animation" aria-pressed="false">动效</button>
+            </nav>
           </div>
         </div>
         <div id="quick-inspector" class="ui-form" hidden>
@@ -464,8 +410,7 @@
           </div>
           <label class="inspector-filter ui-input" data-size="sm"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="inspector-filter" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="筛选属性" autocomplete="off" spellcheck="false" /><button class="inspector-filter-close ui-icon-button" data-size="sm" type="button" title="清除筛选（Esc）" aria-label="清除筛选" data-icon="x"></button></label>
           <p class="inspector-filter-empty ui-empty" role="status" hidden></p>
-          <section class="ui-section skin-fields" hidden>
-            <h3>皮肤信息</h3>
+          <div class="skin-fields" hidden>
             <div class="inspector-grid action-fields">
               <label class="ui-field"><span>名称</span><input data-skin-field="Name" /></label>
               <label class="ui-field"><span>描述</span><input data-skin-field="Description" /></label>
@@ -480,31 +425,38 @@
               <label class="ui-field" title="Abilities"><span>功能标识</span><input data-skin-field="Abilities" placeholder="Sound,Animation" /></label>
               <label class="ui-field" title="SupportPatch"><span>动态补丁支持</span><input data-skin-field="SupportPatch" placeholder="Accessory|Sound|Anim" /></label>
             </div>
-          </section>
+          </div>
           <div class="keyboard-fields" hidden></div>
-          <section class="ui-section toolbar-fields" hidden>
-            <h3>候选栏与工具栏</h3>
-            <div class="inspector-grid action-fields">
-              <div class="ui-field" title="显示区域（VIEW_RECT）"><span>位置</span><div class="ui-field-pair">
-                <label class="ui-input"><span class="ui-input-affix">X</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="0" type="number" aria-label="显示区域 X" /></label>
-                <label class="ui-input"><span class="ui-input-affix">Y</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="1" type="number" aria-label="显示区域 Y" /></label>
-              </div></div>
-              <div class="ui-field" title="显示区域（VIEW_RECT）"><span>尺寸</span><div class="ui-field-pair">
-                <label class="ui-input"><span class="ui-input-affix">W</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="2" type="number" min="0" aria-label="显示区域 W" /></label>
-                <label class="ui-input"><span class="ui-input-affix">H</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="3" type="number" min="0" aria-label="显示区域 H" /></label>
-              </div></div>
-              <label class="ui-field"><span>背景样式</span><span class="style-field"><input data-toolbar-field="BACK_STYLE" /></span></label>
-              <label class="ui-field"><span>前景样式</span><span class="style-field"><input data-toolbar-field="FORE_STYLE" /></span></label>
-              <div class="ui-field" title="内边距（PADDING）"><span>内边距</span><div class="ui-field-pair" data-columns="4">
-                <label class="ui-input"><span class="ui-input-affix">↑</span><input data-toolbar-field="PADDING" data-toolbar-part="1" type="number" aria-label="候选栏上内边距" /></label>
-                <label class="ui-input"><span class="ui-input-affix">→</span><input data-toolbar-field="PADDING" data-toolbar-part="2" type="number" aria-label="候选栏右内边距" /></label>
-                <label class="ui-input"><span class="ui-input-affix">↓</span><input data-toolbar-field="PADDING" data-toolbar-part="3" type="number" aria-label="候选栏下内边距" /></label>
-                <label class="ui-input"><span class="ui-input-affix">←</span><input data-toolbar-field="PADDING" data-toolbar-part="0" type="number" aria-label="候选栏左内边距" /></label>
-              </div></div>
-              <label class="ui-field"><span>首个候选前景</span><span class="style-field"><input data-toolbar-field="FIRST_FORE" /></span></label>
-              <label class="ui-field"><span>首个候选背景</span><span class="style-field"><input data-toolbar-field="FIRST_BACK" /></span></label>
-            </div>
-          </section>
+          <div class="toolbar-fields" hidden>
+            <section class="ui-section" data-inspector-group-label="位置与尺寸">
+              <h3>位置与尺寸</h3>
+              <div class="inspector-grid action-fields">
+                <div class="ui-field" title="显示区域（VIEW_RECT）"><span>位置</span><div class="ui-field-pair">
+                  <label class="ui-input"><span class="ui-input-affix">X</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="0" type="number" aria-label="显示区域 X" /></label>
+                  <label class="ui-input"><span class="ui-input-affix">Y</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="1" type="number" aria-label="显示区域 Y" /></label>
+                </div></div>
+                <div class="ui-field" title="显示区域（VIEW_RECT）"><span>尺寸</span><div class="ui-field-pair">
+                  <label class="ui-input"><span class="ui-input-affix">W</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="2" type="number" min="0" aria-label="显示区域 W" /></label>
+                  <label class="ui-input"><span class="ui-input-affix">H</span><input data-toolbar-field="VIEW_RECT" data-toolbar-part="3" type="number" min="0" aria-label="显示区域 H" /></label>
+                </div></div>
+              </div>
+            </section>
+            <section class="ui-section" data-inspector-group-label="样式">
+              <h3>样式</h3>
+              <div class="inspector-grid action-fields">
+                <label class="ui-field"><span>背景样式</span><span class="style-field"><input data-toolbar-field="BACK_STYLE" /></span></label>
+                <label class="ui-field"><span>前景样式</span><span class="style-field"><input data-toolbar-field="FORE_STYLE" /></span></label>
+                <label class="ui-field"><span>首个候选前景</span><span class="style-field"><input data-toolbar-field="FIRST_FORE" /></span></label>
+                <label class="ui-field"><span>首个候选背景</span><span class="style-field"><input data-toolbar-field="FIRST_BACK" /></span></label>
+                <div class="ui-field" title="内边距（PADDING）"><span>内边距</span><div class="ui-field-pair" data-columns="4">
+                  <label class="ui-input"><span class="ui-input-affix">↑</span><input data-toolbar-field="PADDING" data-toolbar-part="1" type="number" aria-label="候选栏上内边距" /></label>
+                  <label class="ui-input"><span class="ui-input-affix">→</span><input data-toolbar-field="PADDING" data-toolbar-part="2" type="number" aria-label="候选栏右内边距" /></label>
+                  <label class="ui-input"><span class="ui-input-affix">↓</span><input data-toolbar-field="PADDING" data-toolbar-part="3" type="number" aria-label="候选栏下内边距" /></label>
+                  <label class="ui-input"><span class="ui-input-affix">←</span><input data-toolbar-field="PADDING" data-toolbar-part="0" type="number" aria-label="候选栏左内边距" /></label>
+                </div></div>
+              </div>
+            </section>
+          </div>
           <section class="ui-section text-style-fields" data-inspector-group-label="文字" hidden>
             <h3>文字<span id="text-style-targets" class="ui-segmented" data-size="sm" role="group" aria-label="文字对象"></span></h3>
             <p id="text-style-note" class="inspector-group-subtitle"></p>
@@ -549,7 +501,7 @@
             </div></div>
           </section>
           <section class="ui-section key-only key-layout-fields" data-inspector-group-label="布局">
-            <h3>布局<span class="inspector-heading-note" role="img" aria-label="仅供查看，外观和文字在对应分类中修改" title="仅供查看，外观和文字在对应分类中修改" hidden><span class="system-symbol" data-icon="lock" aria-hidden="true"></span></span></h3>
+            <h3><span class="key-geometry-title">布局</span><span class="mobile-geometry-title">几何</span><span class="inspector-heading-note" role="img" aria-label="仅供查看，外观和文字在对应分类中修改" title="仅供查看，外观和文字在对应分类中修改" hidden><span class="system-symbol" data-icon="lock" aria-hidden="true"></span></span></h3>
             <div class="inspector-grid geometry-fields">
               <div class="ui-field"><span>位置</span><div class="ui-field-pair">
                 <label class="ui-input"><span class="ui-input-affix">X</span><input data-key-field="x" type="number" aria-label="X 位置" /></label>
@@ -598,32 +550,25 @@
           <section class="ui-section key-only key-typography-fields" data-inspector-group-label="文字">
             <h3>文字<span id="key-text-note" class="inspector-heading-note" role="img" hidden><span class="system-symbol" data-icon="info" aria-hidden="true"></span></span><span id="key-text-layers" class="ui-segmented" data-size="sm" role="group" aria-label="文字层" hidden></span></h3>
             <div class="inspector-grid typography-content-fields">
-              <label class="ui-field" title="SHOW：直接点击后传给内核的键值，不是显示文字；显示文字请改样式 SHOW"><span>键值</span><input data-key-field="SHOW" /></label>
+              <h4 class="ui-typography-heading">基础</h4>
+              <label id="typography-key-value" class="ui-field" title="SHOW：直接点击后传给内核的键值，不是显示文字；显示文字请改样式 SHOW"><span>键值</span><input data-key-field="SHOW" /></label>
               <div id="primary-css-fields" class="primary-css-fields"></div>
             </div>
-            <div class="appearance-typography-fields">
-              <div id="font-file-field" class="ui-field" title="皮肤字体（GLOBAL FONT_PATH）：整份皮肤共用的内嵌字体文件；Android 真机不直接使用，导出 BDS 时用它把按键文字切成图片，iOS 用它作为按键文字的字体"><span>皮肤字体</span><span class="font-file-controls"><span class="ui-input ui-select"><select id="font-file-select" aria-label="皮肤字体文件"></select></span><button id="font-import" class="ui-icon-button" type="button" title="导入字体文件（.ttf / .otf / .ttc）" aria-label="导入字体文件" data-icon="upload"></button><button id="font-remove" class="ui-icon-button" type="button" title="移除皮肤字体" aria-label="移除皮肤字体" data-icon="trash-2" disabled></button></span></div>
-              <input id="font-import-input" type="file" accept=".ttf,.otf,.ttc" hidden>
-              <label class="ui-field" data-text-style data-bda-text title="contentText"><span>显示文字</span><input data-style-field="CONTENT_TEXT" aria-label="显示文字" /></label>
-              <label class="ui-field" data-text-style title="字体名称（FONT_NAME）：这个文字样式使用的字体，可填系统字体名（iOS，如 PingFang SC）或皮肤内字体文件名；Android 真机只认皮肤内字体文件"><span>字体名称</span><input data-style-field="FONT_NAME" aria-label="字体名称" list="skin-font-names" /></label>
-              <datalist id="skin-font-names"></datalist>
-              <label class="ui-field" data-text-style><span>字号</span><input data-style-field="FONT_SIZE" type="number" min="1" step="1" /></label>
-              <label class="ui-field" data-text-style title="FONT_WEIGHT：字重 100–900，700 为粗体；百度格式没有字重，导出 BDS 时会把按键文字切成图片"><span>字重</span><input data-style-field="FONT_WEIGHT" type="number" min="100" max="900" step="100" /></label>
-              <label class="ui-field" data-text-style title="字体平滑（FONT_CLEARTYPE）：是否开启平滑字体（0 关闭 / 1 开启），不写时按开启；写回百度 CSS，编辑器预览始终平滑"><span>字体平滑</span><input data-style-field="FONT_CLEARTYPE" type="checkbox" role="switch" aria-label="字体平滑" /></label>
-              <div id="key-text-color" class="color-pair-field" data-text-style><input type="hidden" data-style-field="NM_COLOR" /><input type="hidden" data-style-field="HL_COLOR" /></div>
-              <div id="key-text-shadow" class="inspector-grid"></div>
-            </div>
+            <h4 class="ui-typography-heading">字体</h4>
+            <div id="key-typography-controls" class="appearance-typography-fields"></div>
+            <input id="font-import-input" type="file" accept=".ttf,.otf,.ttc" hidden>
           </section>
           <section class="ui-section key-only key-gesture-fields" data-inspector-group-label="手势">
-            <h3>手势 <small class="inspector-gesture-count"></small></h3>
+            <h3><span class="key-gesture-title">手势</span><span class="mobile-gesture-title">动作</span> <small class="inspector-gesture-count"></small></h3>
             <div class="direction-editor inspector-gestures" aria-label="点击、滑动与长按动作">
-              <label class="inspector-gesture" data-gesture="CENTER"><span data-icon="pointer">点击</span><input data-key-field="CENTER" list="baidu-action-codes" placeholder="+" /><small data-action-meaning="CENTER"></small></label>
-              <label class="inspector-gesture" data-gesture="HOLD"><span data-icon="timer">长按</span><input data-key-field="HOLD" list="baidu-action-codes" placeholder="未设置" /><small data-action-meaning="HOLD"></small></label>
-              <label class="inspector-gesture" data-gesture="UP"><span data-icon="arrow-up">上滑</span><input data-key-field="UP" list="baidu-action-codes" placeholder="+" /><small data-action-meaning="UP"></small></label>
-              <label class="inspector-gesture" data-gesture="DOWN"><span data-icon="arrow-down">下滑</span><input data-key-field="DOWN" list="baidu-action-codes" placeholder="+" /><small data-action-meaning="DOWN"></small></label>
-              <label class="inspector-gesture" data-gesture="LEFT"><span data-icon="arrow-left">左滑</span><input data-key-field="LEFT" list="baidu-action-codes" placeholder="+" /><small data-action-meaning="LEFT"></small></label>
-              <label class="inspector-gesture" data-gesture="RIGHT"><span data-icon="arrow-right">右滑</span><input data-key-field="RIGHT" list="baidu-action-codes" placeholder="+" /><small data-action-meaning="RIGHT"></small></label>
+              <label class="inspector-gesture" data-gesture="CENTER"><span data-icon="pointer">点击</span><input data-key-field="CENTER" placeholder="+" /><small data-action-meaning="CENTER"></small></label>
+              <label class="inspector-gesture" data-gesture="HOLD"><span data-icon="timer">长按</span><input data-key-field="HOLD" placeholder="+" /><small data-action-meaning="HOLD"></small></label>
+              <label class="inspector-gesture" data-gesture="UP"><span data-icon="arrow-up">上滑</span><input data-key-field="UP" placeholder="+" /><small data-action-meaning="UP"></small></label>
+              <label class="inspector-gesture" data-gesture="DOWN"><span data-icon="arrow-down">下滑</span><input data-key-field="DOWN" placeholder="+" /><small data-action-meaning="DOWN"></small></label>
+              <label class="inspector-gesture" data-gesture="LEFT"><span data-icon="arrow-left">左滑</span><input data-key-field="LEFT" placeholder="+" /><small data-action-meaning="LEFT"></small></label>
+              <label class="inspector-gesture" data-gesture="RIGHT"><span data-icon="arrow-right">右滑</span><input data-key-field="RIGHT" placeholder="+" /><small data-action-meaning="RIGHT"></small></label>
             </div>
+            <p class="ui-field-note">点按任一卡片选择动作码，也可直接输入。</p>
             <p id="ssf-gesture-note" class="ui-field-note" hidden>点击与滑动显示默认动作，长按优先读取皮肤配置。动作只读；可在「按键」中修改长按按键。</p>
           </section>
         </div>
@@ -795,7 +740,6 @@
       </section>
     </main>
 
-    <datalist id="baidu-action-codes"></datalist>
 
     <dialog id="new-project-dialog" class="ui-dialog new-project-dialog" data-size="lg" aria-labelledby="new-project-title">
       <form id="new-project-form" method="dialog">
@@ -938,12 +882,11 @@
               <h3 id="settings-material-title">窗口材质</h3>
               <label class="settings-row"><span>使用窗口材质</span><input id="window-material" class="ui-switch" type="checkbox" role="switch" checked></label>
               <label id="window-material-opacity-setting" class="settings-row"><span id="window-material-opacity-label">材质不透明度</span><span class="settings-range"><input id="window-material-opacity" type="range" min="20" max="100" step="1" value="87" aria-labelledby="window-material-opacity-label window-material-opacity-value"><output id="window-material-opacity-value" for="window-material-opacity">87%</output></span></label>
+              <label id="workspace-navigation-opacity-setting" class="settings-row"><span id="workspace-navigation-opacity-label">左导航栏不透明度</span><span class="settings-range"><input id="workspace-navigation-opacity" type="range" min="20" max="100" step="1" value="56" aria-labelledby="workspace-navigation-opacity-label workspace-navigation-opacity-value"><output id="workspace-navigation-opacity-value" for="workspace-navigation-opacity">56%</output></span></label>
             </section>
             <section class="settings-group" aria-labelledby="settings-chrome-title">
               <h3 id="settings-chrome-title">界面元素</h3>
-              <label class="settings-row"><span>概览与源文件切换<small>左侧栏顶部的切换按钮</small></span><input id="sidebar-view-visible" class="ui-switch" type="checkbox" role="switch" checked></label>
               <label class="settings-row"><span>显示概览源文件<small>概览条目下方的文件名</small></span><input id="overview-meta-visible" class="ui-switch" type="checkbox" role="switch"></label>
-              <label class="settings-row"><span>属性与源代码切换<small>检查器顶部的模式切换</small></span><input id="inspector-tabs-visible" class="ui-switch" type="checkbox" role="switch" checked></label>
             </section>
           </section>
 
@@ -1052,7 +995,8 @@
 
           <section class="settings-page settings-about" data-settings-panel="about" role="tabpanel" id="settings-panel-about" aria-labelledby="settings-tab-about" hidden>
             <section class="settings-group">
-              <span class="mobile-about-logo" aria-hidden="true">键</span><h3 class="settings-about-title">键设 KeySkin<span class="ui-badge">v2.0.0-beta10</span></h3>
+              <img class="settings-about-logo" src="./src-tauri/icons/128x128.png" alt="" />
+              <h3 class="settings-about-title">键设 KeySkin<span class="ui-badge">v2.0.0-beta10</span></h3>
               <p class="settings-group-note">百度、搜狗与手心输入法皮肤可视化编辑器。支持读取、编辑和导出百度 BDI/BDS/BDA、搜狗 SSF 与手心 SXI 皮肤，并可在这些格式间转换导出。Beta 版本：功能基本完整，可能仍有问题，欢迎反馈。</p>
             </section>
             <section class="settings-group">

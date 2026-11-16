@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
@@ -9,7 +10,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, bypassCSP: true })
   await page.addInitScript(() => localStorage.setItem('onboarding-tour-v1', 'done'))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-  await page.locator('.template-grid .template-card').first().click()
+  await openEditorTemplate(page)
   await page.waitForSelector('.canvas-wrap:not(.empty)')
 
   const widthOf = (selector) => page.locator(selector).evaluate(el => el.getBoundingClientRect().width)

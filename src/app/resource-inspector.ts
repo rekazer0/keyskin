@@ -9,12 +9,12 @@ import { currentBdaAppearance, bdaAppearancePart, visualResolver, bdaAppearanceS
 import { resourceImagePaths } from "../resources.ts"
 import { theme, orientation, resourceName, resourceMeta, imageResourceDetail, styleResourceDetail, styleDetailPreviews, styleDetailFields, styleDetailNormal, styleDetailHighlighted, resourceListView, resourceDetail, resourceInspector, tileModeButtons, resourceGallery, resourceCategory, resourceSearch, resourceListTitle, resourceCount, resourceUploadButton, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceUploadInput, sourceName, atlasCanvas, assetImage, workspaceImageError, workspaceImageFigure, deviceShell, sourceEditor } from "./dom"
 import { selectFile } from "./navigation"
-import { populateTileInspector, drawAtlas, loadTiles, syncAtlasWorkspace, bdaImageUsageCounts, bdaImageResourceID, setDrawingTile } from "./tile-editing"
+import { populateTileInspector, drawAtlas, loadTiles, syncAtlasWorkspace, setDrawingTile } from "./tile-editing"
 import { styleConfigPath, setSourceValue, scrollSelectedSource } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { renderBdaStyleEditor } from "../bda-editor.ts"
 import { drawVisualPreview, retinaThumbnail, thumbnailRecycler } from "../atlas.ts"
-import { looksNumeric, translatedConfigLabel } from "./document-inspector"
+import { translatedConfigLabel } from "./document-inspector"
 import { refreshPreview } from "./preview-render"
 import { soundPathForFilename, soundResourcePaths, SOUND_ACCEPT, isSoundPath } from "../sounds.ts"
 import { addStyle, availableStyleIDs, canAddStyle, duplicateStyle, removeStyle, styleKind, styleConfigDocument, styleSoundFile, styleLibraryCategories } from "./style-picker"
@@ -32,9 +32,9 @@ import { previewStyleAnimation } from "./animation-resource"
 import { configField } from "./config-value-control"
 import { field, section as sectionNode } from "./property-rows"
 import { renderSoundLibrary } from "./sound-library"
-import { skinFontNameOptions } from "./skin-fonts"
+import { baiduTypographyRows } from "./text-styles"
 import { keySoundSample } from "./style-card-preview"
-import { imageResourceCard, styleAddCard, styleCard, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "../style-card"
+import { imageResourceCard, styleAddCard, styleCard, styleFilterButtons, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "../style-card"
 import { STYLE_ANIM_FIELDS } from "../legacy-animation.ts"
 import { bindListActionKeys, emptyState, listToolbar } from "../dom-element.ts"
 
@@ -165,11 +165,10 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
   const stylesDocument = IniDocument.parse(archive.getText(path))
   fieldsHost.replaceChildren(...animated && !embedded ? styleAnimationPlayers(styleID, stylesDocument) : [])
   const existing = stylesDocument.entries(section)
-  const common = ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "FONT_CLEARTYPE", "SHOW", "INFO", "BORDER_COLOR", "BORDER_SIZE", "PRESS_SOUND_PATH"]
+  const common = ["NM_COLOR", "HL_COLOR", "FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "FONT_CLEARTYPE", "SHOW", "INFO", "BORDER_COLOR", "BORDER_SIZE", "PRESS_SOUND_PATH"]
   const keys = [...new Set([...common, ...STYLE_ANIM_FIELDS, ...existing.map((entry) => entry.key).filter((key) => key !== "NM_IMG" && key !== "HL_IMG")])]
   const groups = [
-    ["colors", "状态颜色", (key: string) => key === "NM_COLOR" || key === "HL_COLOR"],
-    ["typography", "字体", (key: string) => key.startsWith("FONT_")],
+    ["typography", "文字", (key: string) => textKeys.includes(key)],
     ["content", "内容与说明", (key: string) => key === "SHOW" || key === "INFO"],
     ["animation", "动画", (key: string) => /ANIM|^EVENT\d+$/.test(key)],
     ["sound", "音效", (key: string) => key.endsWith("SOUND_PATH")],
@@ -177,32 +176,31 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
   ] as const
   const groupRows = new Map<string, HTMLElement[]>(groups.map(([id]) => [id, []]))
   const files = currentSoundEntries().map((entry) => entry.filename)
-  const fonts = skinFontNameOptions()
+  const textKeys = ["FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR", "BORDER_COLOR", "BORDER_SIZE"]
+  const write = (key: string, next: string) => {
+    if (!appState.archive?.isText(path) || !isEditing()) return
+    const current = IniDocument.parse(appState.archive.getText(path))
+    const before = current.toString()
+    if (current.get(section, key) === undefined && !next) return
+    if (!current.set(section, key, next)) return
+    commitText(path, before, current.toString())
+    if (!embedded) setSourceValue(current.toString())
+    refreshPreview()
+    if (embedded) embedded.refresh()
+    else void renderStyleResourceDetail()
+    updateDirty()
+  }
+  groupRows.set("typography", baiduTypographyRows(key => [stylesDocument.get(section, key) ?? ""], write, textKeys, isEditing()))
   for (const key of keys) {
+    if (textKeys.includes(key)) continue
     const label = translatedConfigLabel(key)
     const value = stylesDocument.get(section, key) ?? ""
-    const commit = (next: string) => {
-      if (!appState.archive?.isText(path) || !isEditing()) return
-      const current = IniDocument.parse(appState.archive.getText(path))
-      const before = current.toString()
-      if (current.get(section, key) === undefined && !next) return
-      if (!current.set(section, key, next)) return
-      commitText(path, before, current.toString())
-      if (!embedded) setSourceValue(current.toString())
-      refreshPreview()
-      if (embedded) embedded.refresh()
-      else void renderStyleResourceDetail()
-      updateDirty()
-    }
+    const commit = (next: string) => write(key, next)
     const options = { key, label, commit, rowKey: [path, section, key] }
     let row: HTMLElement
     if (key.endsWith("SOUND_PATH")) {
       const sample = keySoundSample(value || undefined, soundPathForFilename(archive.names(), theme.value, orientation.value, value))
       row = field({ ...options, spec: { kind: "sound", value, files, sample } })
-    } else if (key === "FONT_NAME") {
-      row = field({ ...options, spec: { kind: "choice", value, options: [["", "系统默认"], ...fonts.map((font) => [font, font] as const)], layout: "select" } })
-    } else if ((key === "FONT_SIZE" || key === "BORDER_SIZE") && (!value || looksNumeric(value))) {
-      row = field({ ...options, spec: { kind: "number", value, range: key === "FONT_SIZE" ? "fontSize" : "border" } })
     } else {
       // 百度配置值的类型化控件（颜色、开关……）。
       row = configField(section, key, label, value, isEditing(), commit) ?? field({ ...options, spec: { kind: "text", value } })
@@ -298,16 +296,14 @@ function renderStyleFilters(bdaGroup?: string): void {
     wrap.append(control)
     return wrap
   }
-  // 未筛选时下拉只显示维度名（类型 / 用途），窄侧栏里也不会被截断。
-  const unfiltered = (options: readonly (readonly [string, string])[], name: string) => options.map(([value, label]) => [value, value === "all" ? name : label] as const)
   bar.hidden = false
   bar.replaceChildren(
-    select("样式类型", bdaGroup ? styleTypeOptions.filter(([kind]) => ["image", "color", "text"].includes(kind)) : unfiltered(styleTypeOptions, "类型"), bdaGroup ?? resourceCategory.value, value => {
+    select("样式用途", styleUsageOptions.map(([value, label]) => [value, value === "all" ? "用途" : label] as const), appState.styleUsageFilter, value => { appState.styleUsageFilter = value; renderResourceInspector() }),
+    styleFilterButtons(bdaGroup ? styleTypeOptions.filter(([kind]) => ["image", "color", "text"].includes(kind)) : styleTypeOptions, "styleKind", bdaGroup ?? resourceCategory.value, value => {
       resourceCategory.value = bdaGroup ? value === "image" ? "imageStyles" : value === "text" ? "textStyles" : "colorStyles" : value
       if (bdaGroup) resourceCategory.dispatchEvent(new Event("change"))
       else renderResourceInspector()
     }),
-    select("样式用途", unfiltered(styleUsageOptions, "用途"), appState.styleUsageFilter, value => { appState.styleUsageFilter = value; renderResourceInspector() }),
   )
 }
 
@@ -342,11 +338,11 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
   resourceGallery.setAttribute("aria-label", "样式")
   const editable = canAddStyle() && isEditing()
   styleListToolbar.hidden = !editable
+  bindListActionKeys(resourceGallery, styleListToolbar)
   for (const styleID of styleIDs) {
     const kind = styleKind(styleID, stylesDocument)
     const soundFilename = styleSoundFile(styleID, stylesDocument)
     const soundPath = soundFilename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, soundFilename) : undefined
-    const uses = styleUsages(styleID).length
     const button = styleCard({
       id: styleID, label: `STYLE${styleID}`, kind,
       info: stylesDocument?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
@@ -356,10 +352,8 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
         else drawVisualPreview(canvas, [await resolver.resolve(styleID, highlighted).catch(() => undefined)], false)
       },
       animation: () => stylesDocument ? styleAnimationPlayers(styleID, stylesDocument, true) : [],
-      summary: stylesDocument ? styleAnimationSummary(styleID, stylesDocument) : undefined,
+      summary: kind === "anim" && stylesDocument ? styleAnimationSummary(styleID, stylesDocument) : undefined,
       sound: soundFilename ? () => keySoundSample(soundFilename, soundPath) : undefined,
-      uses,
-      remove: editable ? { run: () => { if (removeStyle(styleID)) renderResourceInspector() }, blocked: uses ? `被 ${uses} 处引用` : undefined } : undefined,
     })
     button.classList.add("resource-item", "style-resource-item")
     button.dataset.path = `STYLE${styleID}`
@@ -376,11 +370,16 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
   if (!appState.selectedStyleID && document.body.classList.contains("style-workspace") && styleIDs.length) selectStyleResource(styleIDs[0])
 }
 
-// 样式列表的工具条：新建在网格末尾的虚线卡，删除在卡片上，这里只放复制（⌘D 同）。
-const styleListToolbar = listToolbar({ duplicate: { label: "复制样式", run: () => {
-  const id = appState.selectedStyleID && duplicateStyle(appState.selectedStyleID)
-  if (id) showStyle(id)
-} } })
+// 新建在网格末尾；复制与删除集中在工具条，快捷键共用同一动作。
+const styleListToolbar = listToolbar({
+  duplicate: { label: "复制样式", run: () => {
+    const id = appState.selectedStyleID && duplicateStyle(appState.selectedStyleID)
+    if (id) showStyle(id)
+  } },
+  remove: { label: "删除样式", run: () => {
+    if (removeStyle(appState.selectedStyleID)) renderResourceInspector()
+  } },
+})
 styleListToolbar.hidden = true
 resourceDeleteButton.parentElement!.append(styleListToolbar)
 bindListActionKeys(resourceGallery, resourceDeleteButton.parentElement!)
@@ -504,7 +503,6 @@ export function renderResourceInspector(): void {
   const query = resourceSearch.value.trim().toLowerCase()
   const paths = pickableImagePaths()
     .filter((path) => !query || path.toLowerCase().includes(query))
-  const bdaUsageCounts = appState.archive.format === "bda" ? bdaImageUsageCounts() : new Map<string, number>()
   listHeader("图片", paths.length)
   resourceListView.hidden = Boolean(appState.selectedResourcePath) && !document.body.classList.contains("atlas-workspace")
   resourceDetail.hidden = !appState.selectedResourcePath
@@ -515,12 +513,10 @@ export function renderResourceInspector(): void {
     copy.set(bytes)
     const url = URL.createObjectURL(new Blob([copy.buffer], { type: "image/png" }))
     appState.resourceURLs.push(url)
-    const bdaUses = bdaUsageCounts.get(bdaImageResourceID(path)) ?? 0
     const button = imageResourceCard({
       path, src: url,
       til: appState.archive.isText(path.replace(/\.png$/i, ".til")),
       slices: appState.archive.format === "sxi" ? palmTileSlices(openPalmSkin(), path).length : undefined,
-      uses: appState.archive.format === "bda" ? bdaUses : undefined,
     })
     button.classList.add("resource-item")
     button.addEventListener("click", () => selectResourceImage(path))
@@ -530,6 +526,7 @@ export function renderResourceInspector(): void {
   resourceGallery.setAttribute("role", "listbox")
   resourceGallery.setAttribute("aria-label", "图片")
   if (appState.selectedResourceGalleryPath) selectGalleryItem(appState.selectedResourceGalleryPath, resourceGallery)
+  bindListActionKeys(resourceGallery, resourceDeleteButton.parentElement!)
   updateResourceActionButtons()
   syncAtlasWorkspace()
 }
@@ -589,6 +586,10 @@ export function updateResourceActionButtons(): void {
   resourceDeleteButton.disabled = !imageSelected || !isEditing()
   resourceUploadButton.disabled = !isEditing()
   styleListToolbar.querySelector("button")!.disabled = appState.resourceInspectorMode !== "style" || !appState.selectedStyleID || !isEditing()
+  const uses = appState.resourceInspectorMode === "style" && appState.selectedStyleID ? styleUsages(appState.selectedStyleID).length : 0
+  const remove = styleListToolbar.querySelector<HTMLButtonElement>('[data-list-action="remove"]')!
+  remove.disabled = styleListToolbar.querySelector("button")!.disabled || Boolean(uses)
+  remove.title = uses ? `被 ${uses} 处引用` : "删除样式"
   syncAtlasWorkspace()
 }
 
@@ -600,6 +601,23 @@ function selectGalleryItem(path: string, container: HTMLElement): void {
   selected?.setAttribute("aria-selected", "true")
   selected?.scrollIntoView({ block: "nearest" })
   updateResourceActionButtons()
+}
+
+export async function uploadResourceImage(file: File): Promise<string | undefined> {
+  const archive = appState.archive
+  if (!archive || !isEditing()) return
+  const filename = file.name.split(/[\\/]/).pop() ?? ""
+  if (!/^[^\u0000-\u001f]+\.png$/i.test(filename)) throw new Error("请选择 PNG 图片")
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  if (bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71) throw new Error("图片不是有效的 PNG 文件")
+  const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }))
+  bitmap.close()
+  if (appState.archive !== archive || !isEditing()) return
+  const base = pickableImagePaths()[0]?.split("/").slice(0, -1).join("/") ?? `${theme.value}/skin/res`
+  const path = `${base}/${filename}`
+  commitBytes(path, archive.getBytes(path)?.slice(), bytes)
+  updateDirty()
+  return path
 }
 
 export async function uploadKeySound(file: File, replacePath?: string): Promise<boolean> {

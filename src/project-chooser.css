@@ -1,10 +1,17 @@
-/* 新建项目：应用内是 .ui-dialog[data-size="lg"]（头 / 底 / 按钮都来自组件），独立窗口里是同一个表单铺满窗口 */
+/* 文件页与手机新建对话框共用同一份模板表单。 */
 #new-project-dialog { --_width: 920px; height: min(620px, calc(var(--viewport-height) - var(--space-2xl))); overflow: hidden; }
 .project-chooser { height: 100%; min-height: 0; box-sizing: border-box; grid-template-rows: auto minmax(0, 1fr) auto; }
-.new-project-window .project-chooser { display: grid; gap: var(--space-xl); padding: var(--space-xl); background: var(--floating); color: var(--text); font: var(--font-size-sm) var(--font-ui); }
+#file-project-chooser:empty { display: none; }
+#file-project-chooser .project-chooser { display: flex; flex-direction: column; gap: var(--space-xl); height: auto; }
+#file-project-chooser .ui-dialog-header { padding: 0; }
+#file-project-chooser .ui-dialog-header h2 { font-size: var(--font-size-xl); }
+#file-project-chooser .ui-dialog-header > .ui-icon-button,
+#file-project-chooser button[value="cancel"] { display: none; }
+#file-project-chooser .project-chooser-body { overflow: visible; padding: 0; }
+#file-project-chooser .ui-dialog-footer { flex-wrap: wrap; padding: var(--space-lg) 0 0; }
+#file-project-chooser .project-chooser-fields { flex-basis: var(--project-template-card-width); }
 .project-chooser-fields > .ui-field { flex: 1; min-width: 0; }
 .project-location { justify-content: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#project-error { flex-basis: 100%; margin: 0; color: var(--state-danger); font-size: var(--font-size-xs); }
 .project-chooser-body { overflow: auto; min-height: 0; }
 .project-chooser fieldset { display: block; margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
 .project-chooser legend { margin-bottom: 12px; padding: 0; font-size: var(--font-size-md); font-weight: 600; }

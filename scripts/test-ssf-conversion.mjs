@@ -1,3 +1,4 @@
+import { exportSkin } from "../tests/helpers/export-skin.mjs"
 // Export via the real menu, download and reopen. Keys retain SSF pixels; BDI/BDS use native toolbar slots.
 // BDA has its own geometry and receives a separate reopen smoke check.
 import assert from "node:assert/strict"
@@ -270,7 +271,7 @@ try {
   for (const [format, platform] of [["bdi", ""], ["bds", ""], ["bda", "android"]]) {
     const file = await download(async () => {
       await openMenu()
-      await page.locator(`.pen-file-menu [data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`).click()
+      await exportSkin(page, page.locator(`#mobile-export-dialog [data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`))
     })
     exported[format] = readFileSync(await file.path())
     if (shots) await file.saveAs(`${shots}/converted.${format}`)

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "默认桌面窗口权限",
-  "windows": ["main", "image-picker", "resource-picker", "new-project"],
+  "windows": ["main", "image-picker", "resource-picker"],
   "permissions": [
     "core:default",
     "core:window:allow-create",

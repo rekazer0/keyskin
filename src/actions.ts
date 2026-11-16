@@ -133,10 +133,6 @@ export function actionDescription(value: string): string {
   return ""
 }
 
-export function shouldSuggestActionCodes(value: string): boolean {
-  return !value.trim() || /^F\d*$/i.test(value.trim())
-}
-
 export function previewStateFromAction(code: string): number | undefined {
   const match = code.trim().match(/^S(\d+)(?:_\d+)?$/)
   if (!match) return

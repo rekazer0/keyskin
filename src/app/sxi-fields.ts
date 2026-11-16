@@ -5,7 +5,6 @@
 import { actionDescription } from "../actions.ts"
 import { element, listToolbar } from "../dom-element.ts"
 import { createIcon } from "../icons"
-import { ACTION_CODES } from "../palm/palm-ini.ts"
 import { palmFieldLabel, palmStyleReference } from "../palm/palm-labels.ts"
 import { palmInspectorCollection, palmInspectorKind, palmInspectorModel } from "../palm/palm-inspector.ts"
 import { PALM_ANIMATION_EVENTS } from "../palm/sxi-animation.ts"
@@ -13,10 +12,15 @@ import { actionText, actionValue, asObject, numberText, numberValue, type Json, 
 import { SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "../palm/sxi-json.ts"
 import { commitText, isEditing } from "./edit-history"
 import { showError } from "./file-operations"
+import { typographyRows } from "./typography"
+import { skinFontChoices } from "./skin-fonts"
 import { fieldCaption, fieldControl, numberParts, section } from "./property-rows"
 import { appState } from "./state"
 import { decorateStyleReferenceInput } from "./style-references"
 import { openPalmSkin, refreshSxiDocument } from "./sxi-documents"
+import { keySoundSample } from "./style-card-preview"
+import { soundPathForFilename, soundResourcePaths } from "../sounds.ts"
+import { theme, orientation } from "./dom"
 
 /** Where a model lives in skin.json: object keys and array indexes from the root. */
 export type SxiPointer = Array<string | number>
@@ -368,10 +372,6 @@ function gestureAction(list: Json, button: number): Json {
 export function gestureRows(block: SxiBlock, path: string[], values: Json[]): HTMLElement[] {
   const grid = element("div", "direction-editor inspector-gestures")
   grid.setAttribute("aria-label", "点击、滑动与长按动作")
-  const options = element("datalist")
-  options.id = "palm-action-names"
-  options.append(...Object.entries(ACTION_CODES).map(([code, name]) => Object.assign(element("option"), { value: name, label: actionDescription(code) })))
-  grid.append(options)
   const cell = (button: number, tag: "label", name: string, label: string, icon?: string) => {
     const node = element(tag, icon ? "inspector-gesture" : "ui-field")
     const { value, mixed } = sharedValue(values.map((list) => gestureAction(list, button)))
@@ -385,10 +385,9 @@ export function gestureRows(block: SxiBlock, path: string[], values: Json[]): HT
     trackRow(node, block, path, button, actions, (current, saved) => setGesture(current, button, saved === null || saved === undefined ? "" : String(saved)))
     const input = element("input")
     input.value = value === undefined ? "" : String(value)
-    input.placeholder = mixed ? "混合" : icon && name !== "HOLD" ? "+" : "未设置"
+    input.placeholder = mixed ? "混合" : "+"
     input.disabled = !isEditing()
     input.setAttribute("aria-label", `${label}动作`)
-    input.setAttribute("list", options.id)
     input.addEventListener("change", () => writeSxiValue(block.targets, path, (current) => setGesture(current, button, input.value.trim())))
     node.append(input)
     if (icon) {
@@ -426,7 +425,32 @@ function blockRows(block: SxiBlock, skin: JsonObject): { rows: HTMLElement[]; ne
   const models = block.targets.map((target) => asObject(sxiValue(skin, target)) ?? {})
   const rows: HTMLElement[] = []
   const nested: SxiBlock[] = []
-  for (const path of blockPaths(block, models)) {
+  const paths = blockPaths(block, models)
+  const textStyle = block.targets[0].at(-1) === "s_1" && !models.some(model => model.for_back === true)
+  const textKeys = { text: "text", font: "f_n", size: "f_s", weight: "f_w", color: "c_normal", pressed: "c_hl" } as const
+  const used = new Set<string>()
+  if (textStyle) rows.push(...typographyRows({
+    fields: Object.fromEntries(Object.entries(textKeys).filter(([, key]) => paths.some(path => path.join(".") === key)).map(([attribute, key]) => {
+      used.add(key)
+      return [attribute, { key, values: models.map(model => model[key] === undefined ? "" : ["f_s", "f_w"].includes(key) ? numberText(model[key]) ?? String(model[key]) : String(model[key])) }]
+    })), fonts: skinFontChoices(), editable: isEditing(),
+    write: (key, value, merge) => writeSxiValue(block.targets, [key], current => !value ? undefined : merge ? merge(typeof current === "string" ? current : "") : ["f_s", "f_w"].includes(key) ? numberValue(value) : value),
+    track: (row, keys) => {
+      if (keys.length === 1) trackRow(row, block, keys, "", models.map(model => model[keys[0]]))
+      else trackRow(row, block, [], keys, models.map(model => Object.fromEntries(keys.map(key => [key, model[key] ?? null]))), (current, saved) => {
+        const restored = { ...asObject(current) }
+        for (const key of keys) {
+          const value = asObject(saved)?.[key]
+          if (value === null || value === undefined) delete restored[key]
+          else restored[key] = value
+        }
+        return restored
+      })
+    },
+  }))
+  for (const path of paths) {
+    if (used.has(path.join("."))) continue
+
     const key = path[path.length - 1]
     const label = (block.targets[0].at(-1) === "s_5" ? PALM_ANIMATION_EVENTS.find(([event]) => event === key)?.[1] : undefined) ?? palmFieldLabel(key)
     const values = models.map((model) => sxiValue(model, path))
@@ -474,6 +498,15 @@ function blockRows(block: SxiBlock, skin: JsonObject): { rows: HTMLElement[]; ne
     else if (isPrimitiveList(sample) || kind === "list" || kind === "strings") rows.push(listRow(block, path, label, values))
     else if (asObject(sample) || sample === undefined && asObject(supported)) {
       nested.push({ targets: block.targets.map((target) => [...target, ...path]), title: label, code: path.join(".") })
+    } else if (/^path_[123]$/.test(key) && block.targets[0].at(-1) === "s_4") {
+      const row = palmRow("div", block, path, label, values)
+      row.classList.add("style-reference-field")
+      const value = sharedValue(values)
+      const filename = typeof value.value === "string" ? value.value : ""
+      row.append(fieldControl({ kind: "sound", value: filename, files: soundResourcePaths(appState.archive?.names() ?? [], theme.value, orientation.value).map(path => path.split("/").pop()!),
+        sample: keySoundSample(filename || undefined, soundPathForFilename(appState.archive?.names() ?? [], theme.value, orientation.value, filename)),
+      }, label, next => writeSxiValue(block.targets, path, () => next || undefined), { editable: isEditing(), mixed: value.mixed }))
+      rows.push(row)
     } else if (typeof sample === "string" || sample === undefined) rows.push(textRow(block, path, label, values))
     else if (Array.isArray(sample)) {
       const length = Math.min(...values.map((value) => Array.isArray(value) ? value.length : 0))

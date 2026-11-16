@@ -5,7 +5,7 @@ import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { syncAtlasWorkspace } from "./tile-editing"
 import { files, sourceName, quickInspector, asset, resourceInspector, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
 import { appState } from "./state"
-import { showsLayoutProperties, selectedSourceSections, styleConfigPath, sxiSourceRanges } from "./config-context"
+import { showsLayoutProperties, isSkinInfoPath, selectedSourceSections, styleConfigPath, sxiSourceRanges } from "./config-context"
 import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, visualResolver, bdaAppearanceStylePath } from "./bda-documents"
 import { inspectorTabButtons, source, mobilePortraitQuery, preview } from "./canvas-interaction"
 import { loadVisibleSourceEditor } from "./resource-inspector"
@@ -27,7 +27,7 @@ import { previewItems } from "../preview-items.ts"
 export function updateInspectorView(): void {
   syncAtlasWorkspace()
   const imageSelected = Boolean(appState.archive?.isImage(appState.selectedPath))
-  const overviewSelected = Boolean(
+  const overviewSelected = isSkinInfoPath(appState.selectedPath) || Boolean(
     files.querySelector(`.sidebar-overview button[data-path="${CSS.escape(appState.selectedPath)}"]`),
   )
   const layoutSelected = appState.selectedPath === appState.layoutPath && /\.ini$/i.test(appState.selectedPath)

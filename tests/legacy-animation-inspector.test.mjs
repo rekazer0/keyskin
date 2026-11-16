@@ -4,6 +4,8 @@ import assert from "node:assert/strict"
 import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 import { IniDocument } from "../src/ini.ts"
+import { SkinArchive } from "../src/skin.ts"
+import { strToU8 } from "fflate"
 import { declarations, run } from "./helpers/app-source.mjs"
 import {
   STYLE_ANIM_FIELDS,
@@ -42,7 +44,7 @@ BUILD_METHOD=1
 test("全部样式共用动画解析结果，编辑、撤销和切换文件后读取当前内容", () => {
   let parses = 0
   const original = "[ANIM1]\nTYPE=1\nDURATION=200\n"
-  const archive = { texts: { "anim.ini": original }, isText(path) { return path in this.texts }, getText(path) { return this.texts[path] } }
+  const archive = SkinArchive.fromFiles(new Map([["anim.ini", strToU8(original)]]), "bds")
   const context = run(declarations("documents", "cachedIniDocument", "styleAnimationEntries", "referencedAnimations", "styleAnimations"), {
     archive, IniDocument, STYLE_ANIM_FIELDS,
     legacyAnimationConfigPath: () => "anim.ini",
@@ -57,14 +59,14 @@ test("全部样式共用动画解析结果，编辑、撤销和切换文件后�
     assert.equal(entries[0].type, 1)
   }
   assert.equal(parses, 1, "样式数量不增加动画解析次数")
-  archive.texts["anim.ini"] = original.replace("TYPE=1", "TYPE=2")
+  archive.setText("anim.ini", original.replace("TYPE=1", "TYPE=2"))
   assert.equal(context.styleAnimations("1", styles)[0].type, 2)
-  archive.texts["anim.ini"] = original
+  archive.setText("anim.ini", original)
   assert.equal(context.styleAnimations("1", styles)[0].type, 1, "撤销读取旧值")
-  context.archive = { ...archive, texts: { "anim.ini": original.replace("TYPE=1", "TYPE=3") } }
+  context.archive = SkinArchive.fromFiles(new Map([["anim.ini", strToU8(original.replace("TYPE=1", "TYPE=3"))]]), "bds")
   assert.equal(context.styleAnimations("1", styles)[0].type, 3, "同路径的新文件不沿用旧结果")
   assert.equal(context.referencedAnimations("999")[0].entry, undefined, "保留缺失引用")
-  delete context.archive.texts["anim.ini"]
+  context.archive.delete("anim.ini")
   assert.equal(context.referencedAnimations("1").length, 0)
 })
 

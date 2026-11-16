@@ -155,7 +155,7 @@ export function bdaSoundResourceType(filename: string): number {
 export function updateBdaKeySound(
   bytes: Uint8Array,
   key: string,
-  sound: BdaResource,
+  sound: BdaResource | undefined,
   ios = false,
 ): Uint8Array {
   const fieldNumber = ios ? 3 : 1
@@ -163,6 +163,7 @@ export function updateBdaKeySound(
     if (field.number !== fieldNumber || !field.bytes) return false
     return rawString(rawFields(field.bytes).find((item) => item.number === 1)) === key
   })
+  if (!sound) return existing ? join([bytes.slice(0, existing.start), bytes.slice(existing.end)]) : bytes
   const encodeResource = (original: Uint8Array = new Uint8Array()) => replaceField(
     replaceField(original, 1, 0, encodeVarint(sound.type)),
     2,

@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -28,7 +29,7 @@ try {
     }`,
   }))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-  await page.locator('.template-card[data-template="official-android-bds"]').click()
+  await openEditorTemplate(page, 'official-android-bds')
   await page.waitForFunction(() => !document.querySelector('#open').disabled && !document.querySelector('#file-operation-dialog').open)
   await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
@@ -60,7 +61,7 @@ try {
     await ensureAiChat()
     document.querySelector('[data-inspector-tab="ai"]').hidden = false
   })
-  await page.locator('[data-inspector-tab="ai"]').click()
+  await page.locator('[data-inspector-tab="ai"]').dispatchEvent("click")
   await page.waitForFunction(() => !document.querySelector('#ai-design-thinking').disabled)
   const thinking = page.locator('#ai-design-thinking')
   assert.deepEqual(await thinking.locator('option').allTextContents(), ['low', 'medium', 'high', 'xhigh'])

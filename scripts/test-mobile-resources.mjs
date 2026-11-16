@@ -85,10 +85,12 @@ try {
       await inventory.getByRole("button", { name: "关闭", exact: true }).last().click()
       await undo(page)
       assert.equal(await page.evaluate(async path => (await import("/src/app/state.ts")).appState.archive.getText(path), before.path), before.text)
+      await page.locator("#mobile-files-close").click()
+      await page.locator("#mobile-project-dialog").waitFor({ state: "hidden" })
       await page.locator("#mobile-navigation [data-mobile-page=edit]").click()
       await page.locator("#mobile-app-more > summary").click()
       await page.locator('#mobile-app-more [data-mobile-action="mobile-export-open"]').click()
-      const exporting = page.getByRole("dialog", { name: "导出格式", exact: true })
+      const exporting = page.getByRole("dialog", { name: "导出皮肤", exact: true })
       assert.match(await exporting.innerText(), /当前样式表检查：\d+ 项缺失引用/)
       await exporting.locator('summary', { hasText: '查看缺失引用' }).click()
       assert.match(await exporting.locator('ul').innerText(), /missing_mobile_image/)
@@ -120,9 +122,8 @@ try {
       await undo(page)
       assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.getText("skin.json")), beforeGeometry)
       await page.evaluate(async () => { (await import("/src/app/preview-render.ts")).setGuidesVisible(false) })
-      await page.locator('#mobile-navigation [data-mobile-page=project]').click()
     }
-    await page.locator('#mobile-navigation [data-mobile-page=project]').click()
+    if (!(await page.locator('#mobile-project-dialog').evaluate(dialog => dialog.open))) await page.locator('#mobile-project-toggle').click()
     await page.locator('.sidebar-overview [data-nav-mode="motion"]').first().click()
     if (format === "bda") {
       await page.locator('.mobile-animation-library > summary').click()
@@ -176,7 +177,7 @@ try {
     }), true, "preset binds both selected keys through one animation style")
     await undo(page)
     assert.deepEqual(await page.evaluate(async path => Array.from((await import("/src/app/state.ts")).appState.archive.getBytes(path)), before.path), before.bytes)
-    await page.locator('#mobile-navigation [data-mobile-page=project]').click()
+    await page.locator('#mobile-project-toggle').click()
     await page.locator('.sidebar-overview [data-nav-mode="particle"]').first().click()
     if (format === "bda") {
       await page.locator('.mobile-animation-library > summary').click()

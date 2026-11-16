@@ -1,0 +1,266 @@
+import assert from "node:assert/strict"
+import { readFileSync, mkdirSync } from "node:fs"
+import { chromium } from "playwright"
+import { createServer } from "vite"
+import { mobilePenFixture } from "../tests/helpers/mobile-pen-fixture.mjs"
+import { ssfFixture, wav } from "../tests/helpers/ssf-fixture.mjs"
+import { SkinArchive } from "../src/skin.ts"
+import { knownFunctionCodes, knownSkinStates } from "../src/actions.ts"
+import { buildSxiZip } from "../src/palm/palm-export.ts"
+
+const output = new URL("../.ui-current/inspector-pen/", import.meta.url).pathname
+mkdirSync(output, { recursive: true })
+const bds = mobilePenFixture()
+const bdi = await SkinArchive.open(bds).platformBytesAsync("bdi")
+const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41968, strictPort: false, hmr: false } })
+await server.listen()
+const browser = await chromium.launch()
+const errors = []
+const fixture = [
+  ["bds", bds, "light/skin/port/py_26.ini"],
+  ["bdi", bdi, "light/skin/port/py_26.ini"],
+  ["bda", readFileSync(new URL("../public/default-template.bda", import.meta.url)), "light/skin/port/py_9.ini"],
+  ["ssf", ssfFixture(), "light/skin/port/py_26.ini"],
+  ["sxi", buildSxiZip(SkinArchive.open(bds)).bytes, "skin.json/default/port_layout/b/full26Pinyin"],
+]
+const undo = page => page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
+const snapshot = page => page.evaluate(async () => {
+  const { appState } = await import("/src/app/state.ts")
+  return { undo: appState.undoStack.length, files: appState.archive.names().map(path => [path, [...appState.archive.getBytes(path)]]) }
+})
+try {
+  for (const [format, bytes, path] of fixture.filter(item => !process.env.FORMAT || item[0] === process.env.FORMAT)) {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, reducedMotion: "reduce" })
+    page.on("pageerror", error => errors.push(`${format}: ${error.message}`))
+    await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await page.locator("#browser-open").setInputFiles({ name: `检查器.${format}`, mimeType: "application/octet-stream", buffer: Buffer.from(bytes) })
+    await page.waitForFunction(() => !document.querySelector("#open").disabled && (!document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled))
+    if (await page.locator("#file-operation-dialog[open]").count()) await page.locator("#file-operation-close").click()
+    if (await page.locator("#mode").inputValue() !== "edit") await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+    await page.evaluate(async ({ path, format, sound }) => {
+      const { appState } = await import("/src/app/state.ts")
+      await (await import("/src/app/navigation.ts")).selectFile(path, "overview")
+      const { preview } = await import("/src/app/canvas-interaction.ts")
+      const key = format === "ssf" ? preview.keys.find(key => key.center === "q") : preview.keys.find(key => /^KEY/.test(key.section) && (key.foreStyle || key.foreStyles.length))
+      if (!key) throw new Error(`没有测试按键 ${format}`)
+      appState.selectedKeySections = [key.section]
+      preview.setSelected([key.section])
+      for (const name of ["first.wav", "second.wav"]) appState.archive.setBytes(`light/skin/res/${name}`, Uint8Array.from(sound))
+      ;(await import("/src/app/key-inspector.ts")).populateKeyInspector()
+    }, { path, format, sound: [...wav()] })
+    const text = page.locator('#quick-inspector .ui-section:has(.ui-typography-preview)').filter({ visible: true }).first()
+    await text.waitFor()
+    const before = await snapshot(page)
+    assert.ok(await text.locator(".ui-font-control").count(), `${format} shared font control`)
+    assert.equal(await text.locator('.ui-field[data-supported="false"] input').evaluateAll(inputs => inputs.every(input => input.disabled)), true)
+    await page.waitForFunction(() => [...document.querySelectorAll('.ui-typography-preview canvas')].filter(canvas => canvas.clientWidth).every(canvas => canvas.getAttribute("aria-busy") === "false"))
+    assert.deepEqual(await snapshot(page), before, `${format}: inspecting never changes the archive`)
+    const size = text.locator('[data-typography="size"] input:not([type=range])').first()
+    const original = await size.inputValue()
+    const addSize = text.locator('[data-typography="size"] [data-config-add]')
+    if (!original) await addSize.click()
+    await size.fill(format === "ssf" ? "0.052" : "43")
+    await size.press("Enter")
+    assert.equal((await snapshot(page)).undo, before.undo + 1)
+    assert.equal(await size.inputValue(), format === "ssf" ? "0.052" : "43")
+    await undo(page)
+    assert.deepEqual(await snapshot(page), before, `${format}: text size undo restores exact bytes`)
+    const canvas = page.locator('#quick-inspector .ui-geometry-preview canvas').filter({ visible: true }).first()
+    assert.match(await canvas.getAttribute("aria-label"), /尺寸/)
+    const gesture = page.locator('#quick-inspector .inspector-gesture[data-gesture="UP"]').filter({ visible: true }).first()
+    const gestureInput = gesture.locator("input")
+    assert.equal(await page.locator(".inspector-gesture input[list]").count(), 0, `${format}: gesture inputs have no native dropdown`)
+    if (["bda", "ssf"].includes(format)) assert.equal(await gestureInput.getAttribute("readonly"), "")
+    else {
+      const originalAction = await gestureInput.inputValue()
+      const open = () => gesture.locator(':scope > [role="button"]').click()
+      await open()
+      const record = page.getByRole("dialog", { name: "选择动作码", exact: true })
+      const list = record.getByRole("listbox", { name: "全部动作码", exact: true })
+      assert.deepEqual(await list.getByRole("option").evaluateAll(rows => rows.map(row => row.dataset.actionCode)), [...new Set(["", originalAction, ...knownFunctionCodes, ...knownSkinStates.map(state => `S${state}`)])])
+      const search = record.getByRole("searchbox", { name: "搜索动作码", exact: true })
+      await page.screenshot({ path: `${output}${format}-desktop-action-picker.png` })
+      await search.fill("退格")
+      assert.equal(await list.getByRole("option").count(), 1)
+      await list.getByRole("option").click()
+      assert.equal(await record.getByRole("textbox", { name: "动作码", exact: true }).inputValue(), "F36")
+      await search.fill("不存在的动作")
+      assert.equal(await list.getByRole("option").count(), 0)
+      await search.press("Escape")
+      assert.ok(await list.getByRole("option").count() > 1)
+      await record.getByRole("textbox", { name: "动作码", exact: true }).fill("z")
+      await record.getByRole("button", { name: "取消", exact: true }).click()
+      await record.waitFor({ state: "hidden" })
+      assert.deepEqual(await snapshot(page), before, `${format}: cancelling action selection is read-only`)
+      await open()
+      await search.fill("F36")
+      await list.getByRole("option").focus()
+      await page.keyboard.press("Home")
+      await page.keyboard.press("Enter")
+      await record.waitFor({ state: "hidden" })
+      await page.waitForFunction(async expected => (await import("/src/app/state.ts")).appState.undoStack.length === expected, before.undo + 1)
+      assert.notEqual(await gestureInput.inputValue(), originalAction)
+      assert.equal((await snapshot(page)).undo, before.undo + 1)
+      await undo(page)
+      assert.deepEqual(await snapshot(page), before, `${format}: gesture undo restores exact bytes`)
+    }
+    await text.locator('.ui-typography-preview').scrollIntoViewIfNeeded()
+    await page.screenshot({ path: `${output}${format}-desktop.png` })
+    const paneWidths = () => page.evaluate(() => ["--sidebar-width", "--inspector-width"].map(name => document.documentElement.style.getPropertyValue(name)))
+    const desktopWidths = await paneWidths()
+    for (const [width, theme] of [[320, "light"], [390, "dark"]]) {
+      await page.setViewportSize({ width, height: 844 })
+      await page.evaluate(theme => document.documentElement.dataset.appTheme = theme, theme)
+      await text.locator('[data-typography="font"]').first().scrollIntoViewIfNeeded()
+      assert.equal(await text.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true, `${format}/${width}: typography fits`)
+      await gesture.scrollIntoViewIfNeeded()
+      assert.equal(await gesture.locator("..").evaluate(node => node.scrollWidth <= node.clientWidth + 1), true, `${format}/${width}: gesture cross fits`)
+      await page.screenshot({ path: `${output}${format}-${width}-gestures.png` })
+      if (!["bda", "ssf"].includes(format)) {
+        await gesture.locator(':scope > [role="button"]').click()
+        const picker = page.getByRole("dialog", { name: "选择动作码", exact: true })
+        assert.equal(await picker.evaluate(node => node.scrollWidth <= node.clientWidth + 1 && node.getBoundingClientRect().bottom <= innerHeight), true, `${format}/${width}: action picker fits`)
+        await page.screenshot({ path: `${output}${format}-${width}-action-picker.png` })
+        await picker.getByRole("button", { name: "取消", exact: true }).click()
+        await picker.waitFor({ state: "hidden" })
+      }
+    }
+    await page.setViewportSize({ width: 1440, height: 1100 })
+    await page.waitForFunction(expected => ["--sidebar-width", "--inspector-width"].every((name, index) => document.documentElement.style.getPropertyValue(name) === expected[index]), desktopWidths)
+    await page.evaluate(() => document.documentElement.dataset.appTheme = "light")
+    if (format === "bda") {
+      const sound = page.locator('#bda-config-fields [data-document-key="keySounds"]')
+      const soundBefore = await snapshot(page)
+      await sound.locator('.ui-style-state').focus()
+      await page.keyboard.press("Enter")
+      const picker = page.getByRole("dialog", { name: "选择音效", exact: true })
+      await picker.getByRole("option", { name: "second.wav", exact: true }).click()
+      await picker.getByRole("button", { name: "取消", exact: true }).click()
+      await picker.waitFor({ state: "hidden" })
+      assert.deepEqual(await snapshot(page), soundBefore)
+      await sound.locator('.ui-style-state').click({ position: { x: 100, y: 45 } })
+      await picker.getByRole("option", { name: "second.wav", exact: true }).click()
+      await picker.getByRole("button", { name: "应用", exact: true }).click()
+      await picker.waitFor({ state: "hidden" })
+      await page.waitForFunction(async expected => (await import("/src/app/state.ts")).appState.undoStack.length === expected, soundBefore.undo + 1)
+      assert.equal(await sound.locator('input').inputValue(), "second.wav")
+      assert.equal((await snapshot(page)).undo, soundBefore.undo + 1)
+      await sound.getByRole("button", { name: "移除文件", exact: true }).click()
+      assert.notEqual(await sound.locator('input').inputValue(), "second.wav")
+      await undo(page)
+      assert.equal(await sound.locator('input').inputValue(), "second.wav")
+      await undo(page)
+      assert.deepEqual(await snapshot(page), soundBefore)
+      await sound.locator('input').fill("second.wav")
+      await sound.locator('input').press("Enter")
+      await page.locator('.inspector-reset').click()
+      assert.deepEqual((await snapshot(page)).files, soundBefore.files, "BDA sound reset restores the original file, including an absent config")
+      await undo(page)
+      await undo(page)
+      assert.deepEqual(await snapshot(page), soundBefore)
+      await page.evaluate(async () => {
+        const { appState } = await import("/src/app/state.ts")
+        const { theme, orientation } = await import("/src/app/dom.ts")
+        const { bdaConfigPath } = await import("/src/bda.ts")
+        const { updateBdaKeySound, encodedField, join } = await import("/src/bda-encode.ts")
+        const { decodeBdaSoundConfig } = await import("/src/bda-decode.ts")
+        const { preview } = await import("/src/app/canvas-interaction.ts")
+        const { bdaPlatform } = await import("/src/bda-platform.ts")
+        const { populateKeyInspector } = await import("/src/app/key-inspector.ts")
+        const keys = preview.keys.filter(key => /^KEY/.test(key.section)).slice(0, 2).map(key => key.section)
+        const path = bdaConfigPath(appState.archive, theme.value, orientation.value, "sound") ?? `${theme.value}/skin/${orientation.value}/soundConfig`
+        const original = appState.archive.getBytes(path)?.slice()
+        const ios = bdaPlatform(appState.archive) === "ios"
+        let bytes = join([encodedField(88, 2, new TextEncoder().encode("unknown")), original ?? new Uint8Array()])
+        bytes = updateBdaKeySound(bytes, keys[0], { type: 0, resourceID: "first.wav" }, ios)
+        bytes = updateBdaKeySound(bytes, keys[1], { type: 0, resourceID: "second.wav" }, ios)
+        appState.archive.setBytes(path, bytes)
+        const selected = [...appState.selectedKeySections]
+        appState.selectedKeySections = keys
+        populateKeyInspector()
+        const row = document.querySelector('#bda-config-fields [data-document-key="keySounds"]')
+        const baseline = row.dataset.inspectorValue
+        const input = row.querySelector('input')
+        input.value = "second.wav"
+        input.dispatchEvent(new Event("change", { bubbles: true }))
+        const expected = updateBdaKeySound(bytes, "OTHER_KEY", { type: 0, resourceID: "first.wav" }, ios)
+        appState.archive.setBytes(path, updateBdaKeySound(appState.archive.getBytes(path), "OTHER_KEY", { type: 0, resourceID: "first.wav" }, ios))
+        document.querySelector('#bda-config-fields [data-document-key="keySounds"]').dispatchEvent(new CustomEvent("inspector-reset", { cancelable: true, detail: baseline }))
+        const actual = appState.archive.getBytes(path)
+        if (String(actual) !== String(expected)) throw new Error("BDA multi-key reset must preserve other keys and unknown fields byte for byte")
+        if (decodeBdaSoundConfig(actual)[ios ? "iosKeySounds" : "keySounds"].get(keys[0])?.resourceID !== "first.wav") throw new Error("BDA mixed reset lost the first key")
+        if (original) appState.archive.setBytes(path, original)
+        else appState.archive.delete(path)
+        appState.selectedKeySections = selected
+        populateKeyInspector()
+      })
+      await sound.scrollIntoViewIfNeeded()
+      await page.screenshot({ path: `${output}bda-sound.png` })
+    }
+    await page.getByRole("button", { name: "交互预览", exact: true }).click()
+    assert.equal(await size.isDisabled(), true)
+    await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+    await page.evaluate(async format => {
+      const { appState } = await import("/src/app/state.ts")
+      const { toolbarConfigPath } = await import("/src/app/config-context.ts")
+      const path = ["bda", "ssf"].includes(format) ? appState.layoutPath : toolbarConfigPath()
+      await (await import("/src/app/navigation.ts")).selectFile(path, "overview")
+      appState.selectedKeySections = []
+      appState.selectedToolbarSections = []
+      appState.selectedCandidate = ["bda", "ssf", "sxi"].includes(format)
+      ;(await import("/src/app/key-inspector.ts")).populateKeyInspector()
+    }, format)
+    const candidateGeometry = page.locator('#quick-inspector .ui-section[data-inspector-group-label="位置与尺寸"]').filter({ visible: true })
+    await candidateGeometry.waitFor()
+    assert.equal(await page.locator('#quick-inspector .ui-section[data-inspector-group-label="样式"]').filter({ visible: true }).count(), 1)
+    const candidateGroups = page.locator('#quick-inspector .mobile-inspector-managed').filter({ visible: true })
+    assert.deepEqual((await candidateGroups.evaluateAll(groups => groups.map(group => group.dataset.inspectorGroupLabel))).slice(0, 2), ["位置与尺寸", "样式"])
+    const candidateBefore = await snapshot(page)
+    const candidateX = candidateGeometry.locator('input').first()
+    if (["bda", "ssf"].includes(format)) assert.equal(await candidateX.isDisabled(), true)
+    else {
+      await candidateX.fill("8")
+      await candidateX.press("Enter")
+      assert.equal((await snapshot(page)).undo, candidateBefore.undo + 1)
+      assert.equal(await candidateX.inputValue(), "8")
+      await undo(page)
+    }
+    assert.deepEqual(await snapshot(page), candidateBefore, `${format}: candidate geometry grouping preserves source and exact undo`)
+    await candidateGeometry.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: `${output}${format}-candidate.png` })
+    await page.setViewportSize({ width: 320, height: 844 })
+    assert.equal(await candidateGeometry.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
+    await page.screenshot({ path: `${output}${format}-candidate-320.png` })
+    await page.setViewportSize({ width: 1440, height: 1100 })
+    await page.evaluate(async format => {
+      const { appState } = await import("/src/app/state.ts")
+      const path = format === "ssf" ? "phoneTheme.ini" : format === "sxi" ? "skin.json/info" : appState.archive.names().find(path => /(^|\/)Info\.txt$/i.test(path))
+      await (await import("/src/app/navigation.ts")).selectFile(path, "overview")
+    }, format)
+    const metadata = page.locator('#quick-inspector .ui-section[data-inspector-group-label="基本"]').filter({ visible: true })
+    await metadata.waitFor()
+    assert.equal(await page.locator('#quick-inspector .ui-section[data-inspector-group-label="兼容"]').filter({ visible: true }).count(), 1)
+    const metadataBefore = await snapshot(page)
+    const name = metadata.locator('.ui-field input:not([type=range])').first()
+    await name.fill("Pen 皮肤信息")
+    await name.press("Enter")
+    assert.equal(await name.inputValue(), "Pen 皮肤信息")
+    await undo(page)
+    assert.deepEqual(await snapshot(page), metadataBefore, `${format}: metadata grouping preserves write and exact undo`)
+    await metadata.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: `${output}${format}-metadata.png` })
+    await page.setViewportSize({ width: 320, height: 844 })
+    assert.equal(await metadata.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
+    await page.screenshot({ path: `${output}${format}-metadata-320.png` })
+    await page.close()
+    console.log(`PASS ${format}: shared typography/geometry/gestures/candidate/metadata, native write/undo, cancel, readonly, 320/390px and themes`)
+  }
+  assert.deepEqual(errors, [])
+} catch (error) {
+  const page = browser.contexts().flatMap(context => context.pages()).at(-1)
+  if (page) await page.screenshot({ path: `${output}failure.png` })
+  throw error
+} finally {
+  await browser.close()
+  await server.close()
+}

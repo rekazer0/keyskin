@@ -44,13 +44,13 @@ try {
         const styles = getComputedStyle(grid)
         const available = grid.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight)
         const cards = [...grid.children]
-        return { available, columns: styles.gridTemplateColumns.split(' ').length, widths: cards.map(card => card.getBoundingClientRect().width), overflow: grid.scrollWidth > grid.clientWidth + 1 }
+        return { available, minimum: parseFloat(styles.getPropertyValue('--style-card-width')), columns: styles.gridTemplateColumns.split(' ').length, widths: cards.map(card => card.getBoundingClientRect().width), overflow: grid.scrollWidth > grid.clientWidth + 1 }
       }))
       for (const grid of grids) {
-        // 卡片最小 160px，随容器拉伸填满每一列（--style-card-width 是最小宽度）。
+        // 网格按共享卡宽 token 自动换列；手机选择器的固定两列另由样式库专项覆盖。
         const fill = (grid.available - 8 * (grid.columns - 1)) / grid.columns
-        assert.ok(grid.widths.every(value => Math.abs(value - fill) < 1 && value >= Math.min(160, grid.available) - 1), `${theme}/${width}: cards fill their column, narrow-container fallback`)
-        assert.equal(grid.columns, Math.max(1, Math.floor((grid.available + 8) / 168)), `${theme}/${width}: responsive columns`)
+        assert.ok(grid.widths.every(value => Math.abs(value - fill) < 1 && value >= Math.min(grid.minimum, grid.available) - 1), `${theme}/${width}: cards fill their column, narrow-container fallback`)
+        assert.equal(grid.columns, Math.max(1, Math.floor((grid.available + 8) / (grid.minimum + 8))), `${theme}/${width}: responsive columns`)
         assert.equal(grid.overflow, false, `${theme}/${width}: no horizontal overflow`)
       }
       const visual = await page.locator('#visual-library .ui-style-card').first().evaluate(card => {
@@ -58,11 +58,12 @@ try {
         const heading = card.querySelector('.ui-style-card-heading')
         const icon = card.querySelector('.ui-style-card-kind > .ui-icon')
         const stage = card.querySelector('.ui-animation-stage')
-        return { subtitle: subtitle.textContent, subtitleY: subtitle.getBoundingClientRect().y, headingY: heading.getBoundingClientRect().y, ellipsis: getComputedStyle(subtitle).textOverflow, icon: icon.getBoundingClientRect().width, checker: getComputedStyle(stage).backgroundImage }
+        return { subtitle: subtitle.textContent, subtitleY: subtitle.getBoundingClientRect().y, subtitleBottom: subtitle.getBoundingClientRect().bottom, headingBottom: heading.getBoundingClientRect().bottom, captionBottom: card.querySelector('.ui-style-card-caption').getBoundingClientRect().bottom, ellipsis: getComputedStyle(subtitle).textOverflow, icon: icon.getBoundingClientRect().width, checker: getComputedStyle(stage).backgroundImage }
       })
       assert.match(visual.subtitle, /^真实 INFO/)
       assert.doesNotMatch(visual.subtitle, /1000 ms/)
-      assert.ok(Math.abs(visual.subtitleY - visual.headingY) < 8, 'INFO shares the heading row')
+      assert.ok(visual.subtitleY >= visual.headingBottom, 'INFO appears below the heading as a subtitle')
+      assert.ok(visual.subtitleBottom <= visual.captionBottom + 1, 'subtitle fits inside the caption')
       assert.equal(visual.ellipsis, 'ellipsis')
       assert.equal(visual.icon, 14)
       assert.match(visual.checker, /conic-gradient/)
@@ -88,5 +89,5 @@ try {
   await first.hover()
   assert.equal(await first.evaluate(card => getComputedStyle(card).backgroundColor), before, 'selected state survives hover')
   assert.deepEqual(errors, [])
-  console.log('animation-card visuals passed: 160px-minimum stretching cards, 1–4 responsive columns, narrow fallback, both themes, INFO on heading row, 14px icons, checkerboard, thumbnail-only zoom, selection state')
+  console.log('animation-card visuals passed: token-based stretching cards, responsive columns, narrow fallback, both themes, INFO subtitle below heading, 14px icons, checkerboard, thumbnail-only zoom, selection state')
 } finally { await browser.close(); await server.close() }

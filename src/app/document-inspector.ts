@@ -2,7 +2,7 @@ import { sourceKeyLabels } from "../config-labels.ts"
 import { baiduInspectorEntries, baiduInspectorTuple } from "../baidu-inspector-fields.ts"
 import { LEGACY_ANIMATION_FIELDS } from "../legacy-animation.ts"
 import { visualResolver, isBdaLayoutPath, currentBdaAppearance, bdaAppearancePart, refreshBdaLayout, refreshSelectedBdaSource, textDocument } from "./bda-documents"
-import { documentFields, documentFieldsGroup, skinFields, toolbarFields, bdaConfigFields, bdaConfigFieldsGroup } from "./dom"
+import { documentFields, documentFieldsGroup, skinFields, toolbarFields, bdaConfigFields, bdaConfigFieldsGroup, theme, orientation } from "./dom"
 import { appState } from "./state"
 import { preview } from "./canvas-interaction"
 import type { PreviewItem } from "../preview-items.ts"
@@ -13,7 +13,7 @@ import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { isStyleReferenceKey, openStyleReferenceEditor, openBdaStyleReferencePicker, layoutAnimationFields } from "./style-references"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
-import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect } from "../bda-encode.ts"
+import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect, updateBdaKeySound, bdaSoundResourceType } from "../bda-encode.ts"
 import { renderBdaMetadataEditor, renderBdaLayoutEditor, renderBdaConfigEditor } from "../bda-editor.ts"
 import { updateBdaRefs, updateSelectedBdaPanelProperty, updateBdaAppearanceStyleRef } from "./key-inspector"
 import { openImageResourceChooser } from "./resource-inspector"
@@ -25,6 +25,10 @@ import { bdaAnimationBindingsForKey, bdaBindingEffects } from "../preview-animat
 import { configField } from "./config-value-control"
 import { field, section, type FieldSpec } from "./property-rows"
 import { toolbarIconSection } from "./toolbar-icon-inspector"
+import { keySoundSample } from "./style-card-preview"
+import { soundResourcePaths, soundPathForFilename } from "../sounds.ts"
+import { bdaKeySoundSection } from "./bda-key-sound"
+import { nativeCandidateGeometrySection } from "./candidate-fields"
 
 export const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
@@ -35,6 +39,13 @@ export const documentFieldLabels: Record<string, string> = {
   SIZE: "尺寸",
   TYPE: "类型",
   LAYOUT_NAME: "布局",
+  Name: "名称",
+  Description: "描述",
+  Author: "作者",
+  VersionCode: "版本号",
+  MinImeCode: "最低输入法版本",
+  SupportPlatform: "支持平台",
+  SupportDarkMode: "支持深色模式",
   Style: "皮肤风格",
   SkinType: "加载主题",
   SkinFlags: "半屏手写高度",
@@ -468,6 +479,9 @@ export function populateBdaConfigInspector(): void {
         else openBdaStyleReferencePicker(paths, ref, field, owner, highlighted)
       },
     })
+    if (appState.selectedCandidate === true) bdaConfigFields.prepend(nativeCandidateGeometrySection())
+    const sound = !appState.selectedCandidate && !appState.selectedKeySections.some(isListCell) ? bdaKeySoundSection(selectedBdaKeyNames()) : undefined
+    if (sound) bdaConfigFields.append(sound)
     return
   }
   const bytes = appState.archive.isBdaConfig(appState.selectedPath) ? appState.archive.getBytes(appState.selectedPath) : undefined
@@ -487,6 +501,9 @@ export function populateBdaConfigInspector(): void {
     resolver: visualResolver(),
     editable: isEditing(),
     onDesignWidth: (value) => update(updateBdaDesignWidth(bytes, value)),
+    soundFiles: soundResourcePaths(appState.archive.names(), theme.value, orientation.value).filter(path => /\.(?:ogg|wav|aiff?)$/i.test(path)).map(path => path.split("/").pop()!),
+    soundSample: filename => keySoundSample(filename, soundPathForFilename(appState.archive!.names(), theme.value, orientation.value, filename)),
+    onSoundChange: (key, ios, filename) => update(updateBdaKeySound(bytes, key, filename ? { type: bdaSoundResourceType(filename), resourceID: filename } : undefined, ios)),
     onAnimationEffect: (effectID, property, value) => update(updateBdaAnimationEffect(bytes, effectID, property, value)),
     onAnimationPreset: (effectID, fields) => {
       let after = bytes

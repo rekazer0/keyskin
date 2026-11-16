@@ -36,3 +36,7 @@ windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"]
 [[test]]
 name = "window_material_lifetime"
 harness = false
+
+[[test]]
+name = "window_controls_size"
+harness = false

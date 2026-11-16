@@ -139,9 +139,9 @@ await withPage(async (page) => {
   await capture(page, "welcome")
   await openTemplate(page, "official-android-bds")
   await capture(page, "bds-preview")
-  await page.locator('[data-sidebar-view="source"]').click()
+  await page.locator('[data-workspace-page="source"]').click()
   await capture(page, "bds-source")
-  await page.locator('[data-sidebar-view="overview"]').click()
+  await page.locator('[data-workspace-page="overview"]').click()
   await editAndSelectKey(page)
   await capture(page, "bds-key")
   await railTabs(page, "bds-key")
@@ -238,18 +238,19 @@ for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await page.waitForFunction(() => document.querySelector("#mode").value === "edit")
   const box = await page.locator("#preview").boundingBox()
   await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.45)
-  await page.waitForSelector("#mobile-property-tabs:not([hidden])")
+  await page.waitForSelector(".mobile-appearance:not([hidden])")
   await page.waitForFunction(() => document.querySelector("#mobile-key-canvas").width > 1)
   await capture(page, `mobile-properties${suffix}`)
-  await page.locator("#mobile-navigation [data-mobile-page=project]").click()
+  await page.locator("#mobile-project-toggle").click()
   await capture(page, `mobile-files${suffix}`)
-  await page.locator("#mobile-navigation [data-mobile-page=edit]").click()
+  await page.locator("#mobile-files-close").click()
+  await page.locator("#mobile-project-dialog").waitFor({ state: "hidden" })
   await page.locator("#mobile-app-more > summary").click()
   await capture(page, `mobile-more${suffix}`)
   await page.locator('#mobile-app-more [data-mobile-action="mobile-export-open"]').click()
   await capture(page, `mobile-export${suffix}`)
 }, { viewport: { width: 390, height: 844 }, colorScheme })
-await withPage(async (page) => { await page.waitForTimeout(800); await capture(page, "new-project") }, { url: `${baseURL}new-project.html` })
+await withPage(async (page) => { await page.waitForSelector("#file-project-chooser .project-chooser"); await capture(page, "file-page") })
 await withPage(async (page) => { await page.waitForTimeout(800); await capture(page, "picker") }, { url: `${baseURL}picker.html` })
 
 await browser.close()
@@ -263,7 +264,7 @@ const inPane = (key, entry) => entry?.pane === 1 || key.startsWith("body>main>se
 
 if (mode === "compare") {
   let total = 0
-  for (const file of (await import("node:fs")).readdirSync(outDir).filter((f) => f.endsWith(".json"))) {
+  for (const file of (await import("node:fs")).readdirSync(outDir).filter((f) => f.endsWith(".json") && (!only || f.includes(only)))) {
     if (!existsSync(join(dir, file))) { console.log(`\n${file}: 基线中不存在`); continue }
     const before = JSON.parse(readFileSync(join(dir, file), "utf8"))
     const after = JSON.parse(readFileSync(join(outDir, file), "utf8"))

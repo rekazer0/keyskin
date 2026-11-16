@@ -1,3 +1,4 @@
+import { exportSkin } from "../tests/helpers/export-skin.mjs"
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -73,7 +74,7 @@ try {
   await page.locator('.pen-file-menu > summary').click()
   const pending = page.waitForEvent('download', { timeout: 120000 })
   pending.catch(() => {})
-  await page.locator('.pen-file-menu [data-export-format="sxi"]').click()
+  await exportSkin(page, page.locator('#mobile-export-dialog [data-export-format="sxi"]'))
   const tap = page.locator('#file-operation-dialog[open] button[data-variant="primary"]', { hasText: '下载' })
   const ready = tap.waitFor({ state: 'visible', timeout: 120000 }).then(() => 'tap')
   ready.catch(() => {})

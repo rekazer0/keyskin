@@ -139,6 +139,7 @@ export function installNumberInputWheel(root: NumberInputRoot = document, option
   // 按住数值的标签或单位前缀左右拖动来调整（scrubbing）；按住 Shift 每格 10。没拖动就是普通点击，聚焦输入框。
   root.addEventListener("pointerdown", (event) => {
     const pointer = event as PointerEvent
+    if ((pointer.target as Element | null)?.closest?.("button, input, select, textarea, a")) return
     const handle = pointer.button === 0 ? (pointer.target as Element | null)?.closest?.<HTMLElement>("[data-scrub]") : null
     const field = handle ? scrubbableField(handle) : undefined
     if (!handle || !field) return

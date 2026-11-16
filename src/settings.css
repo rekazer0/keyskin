@@ -163,6 +163,7 @@
 #settings-dialog #model-configuration-path { font-family: var(--font-mono); }
 
 /* —— 关于 —— */
+#settings-dialog .settings-about-logo { width: var(--about-logo-size); height: var(--about-logo-size); margin-bottom: var(--space-lg); object-fit: contain; }
 #settings-dialog .settings-about-title { display: flex; align-items: center; gap: var(--space-sm); }
 #settings-dialog .about-contact-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-md); }
 #settings-dialog a { color: var(--accent); font-size: var(--font-size-sm); text-decoration: none; }
@@ -236,7 +237,7 @@
 
 :root[data-safe-area-guides="true"] .keyboard-dock > .keyboard-accessories { outline: 1px dashed var(--selection); outline-offset: -1px; }
 
-.mobile-settings-back, .mobile-model-notice, .mobile-model-link, .mobile-model-unavailable, .mobile-about-logo { display: none; }
+.mobile-settings-back, .mobile-model-notice, .mobile-model-link, .mobile-model-unavailable { display: none; }
 @media (max-width: 760px) and (orientation: portrait) {
   #settings-dialog { height: var(--viewport-height); }
   #settings-dialog > form { gap: 0; }
@@ -283,7 +284,7 @@
   .mobile-model-unavailable h3 { margin: var(--space-lg) 0 var(--space-xs); font-size: var(--font-size-lg); }
   .mobile-model-unavailable > div { min-height: 64px; padding: var(--space-lg); border-radius: var(--radius-md); background: var(--panel); font-size: var(--font-size-sm); }
   #settings-dialog .settings-about > .settings-group:first-child { align-items: center; text-align: center; padding: var(--space-2xl) var(--space-lg); }
-  #settings-dialog .mobile-about-logo { display: grid; place-items: center; width: 72px; height: 72px; margin-bottom: var(--space-xl); border-radius: var(--radius-xl); background: var(--accent-soft); color: var(--accent); font-size: var(--font-size-page); font-weight: 600; }
+  #settings-dialog .settings-about-logo { justify-self: center; margin-bottom: var(--space-xl); }
   #settings-dialog .settings-about-title { flex-direction: column; gap: var(--space-md); font-size: var(--font-size-page); }
   #settings-dialog .settings-about .settings-group-note { max-width: 280px; margin-top: var(--space-xl); line-height: 1.8; }
 }

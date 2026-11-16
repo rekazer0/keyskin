@@ -31,6 +31,7 @@ try {
   assert.equal(await page.locator('.style-library-bar').isVisible(), false, '空工具栏不占高度')
   assert.equal(await cards.count(), sounds.length)
   assert.equal(await cards.locator('.ui-style-card-kind').count(), 0, '不重复显示音效类型图标')
+  assert.equal(await cards.locator('[data-uses], .ui-list-item-meta').count(), 0, '音效卡片不显示引用次数或空白摘要行')
   for (const theme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: theme })
     for (const width of [320, 390, 1100]) {

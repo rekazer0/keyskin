@@ -6,6 +6,7 @@ import ts from 'typescript'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { SkinArchive } from '../src/skin.ts'
 import { AtlasResolver } from '../src/atlas.ts'
+import { IniDocument } from '../src/ini.ts'
 import { bdaPlatform, convertBdaPlatform } from '../src/bda-platform.ts'
 import { decodeBdaAppearance, decodeBdaSoundConfig } from '../src/bda-decode.ts'
 import { encodedField, encodeVarint, join } from '../src/bda-encode.ts'
@@ -120,6 +121,27 @@ test('Atlas exact file lookups do not enumerate names, including empty files and
   await resolver.resolve('1', false)
   await resolver.resolve('2', false)
   assert.equal(scans, baseline)
+})
+
+test('large style tables use the section index for image and text lookups', () => {
+  const archive = SkinArchive.open(zipSync({
+    'light/res/default.css': strToU8(Array.from({ length: 6240 }, (_, id) => `[STYLE${id}]\nNM_IMG=key,0\nFONT_SIZE=24\n`).join('')),
+    'light/res/key.til': strToU8('[IMG0]\nSOURCE_RECT=0,0,2,2\n'),
+    'light/res/key.png': new Uint8Array(),
+  }), 'bds')
+  const resolver = new AtlasResolver(archive, 'light', 'port')
+  const sections = IniDocument.prototype.sections
+  let copies = 0
+  IniDocument.prototype.sections = function () { copies++; return sections.call(this) }
+  try {
+    for (let id = 0; id < 6240; id++) {
+      assert.equal(resolver.imagePath(String(id), false), 'light/skin/res/key.png')
+      assert.deepEqual(resolver.sourceSize(String(id), true), { width: 2, height: 2 })
+      assert.equal(resolver.resolveText(String(id), false).fontSize, 24)
+    }
+    assert.equal(resolver.imagePath('99999', false), undefined)
+    assert.ok(copies <= 1, 'only building the shared section index may copy section names')
+  } finally { IniDocument.prototype.sections = sections }
 })
 
 const declarations = (path, names) => ast(path).statements

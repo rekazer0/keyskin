@@ -97,11 +97,11 @@ try {
   await selectKey(1)
   const original = (await state()).skin
   const undoBaseline = (await state()).undo
-  await page.locator('[data-inspector-tab="source"]').click()
+  await page.locator('[data-inspector-tab="source"]').dispatchEvent("click")
   await selectKey(2)
   await page.waitForFunction(() => [...document.querySelectorAll('.cm-source-selected')].some((line) => /"id"\s*:\s*"2"/.test(line.textContent)))
   assert.match((await state()).source, /"keys"/)
-  await page.locator('[data-inspector-tab="properties"]').click()
+  await page.locator('[data-inspector-tab="properties"]').dispatchEvent("click")
   await selectKey(1)
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '样式', exact: true }).click()
   // The Palm inspector shows the key's skin.json model: styles, text styles, gestures and rect.

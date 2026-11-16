@@ -1,4 +1,4 @@
-import { settingsDialog, $, sidebarViewControl, device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton } from "./dom"
+import { settingsDialog, $,  device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, mobileUndoButton, undoButton, mobileRedoButton, redoButton } from "./dom"
 import { LazySourceCodeEditor } from "../lazy-source-editor.ts"
 import { effectiveDeviceValue } from "../canvas-background.ts"
 import { deviceSpec } from "../devices.ts"
@@ -36,15 +36,14 @@ export const settingsNavItems = Array.from(settingsDialog.querySelectorAll<HTMLB
 
 export const settingsPages = Array.from(settingsDialog.querySelectorAll<HTMLElement>("[data-settings-panel]"))
 
+export const mobileLayoutQuery = matchMedia("(max-width: 760px), (max-width: 950px) and (max-height: 600px)")
 export const mobilePortraitQuery = matchMedia("(max-width: 760px) and (orientation: portrait)")
 
-export const exportButtons = Array.from(
-  document.querySelectorAll<HTMLButtonElement>("[data-export-format]"),
+export const exportTargets = Array.from(
+  document.querySelectorAll<HTMLInputElement>("[data-export-format]"),
 )
 
 export const source = new LazySourceCodeEditor($("#source"))
-
-export const sidebarViewHeading = sidebarViewControl.closest<HTMLElement>(".pane-heading")!
 
 export const LARGE_SKIN_BYTES = 5 * 1024 * 1024
 
@@ -697,6 +696,4 @@ export function syncDeviceControlIcon(): void {
 export function syncUndoButtons(): void {
   mobileUndoButton.disabled = undoButton.disabled
   mobileRedoButton.disabled = redoButton.disabled
-  desktopUndoButton.disabled = undoButton.disabled
-  desktopRedoButton.disabled = redoButton.disabled
 }

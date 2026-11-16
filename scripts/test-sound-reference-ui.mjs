@@ -50,7 +50,8 @@ try {
           childrenOverflow: [...card.querySelectorAll('.ui-style-sound, .ui-style-sound-info')].some(el => el.scrollWidth > el.clientWidth + 1),
         }
       }))
-      assert.equal(new Set(layout.map(item => item.height)).size, 1, `${theme}/${width}: 引用卡等高`)
+      assert.equal(new Set(layout.slice(0, 4).map(item => item.height)).size, 1, `${theme}/${width}: 音效引用卡等高`)
+      assert.equal(Math.round(layout[0].height), 60, '音效卡采用 Pen 的 60px 高度')
       assert.equal(layout.some(item => item.overflow || item.childrenOverflow), false, `${theme}/${width}: 长名称与缺失提示无溢出`)
     }
     if (process.env.PI_SCRATCH_DIR) {

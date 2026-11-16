@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
@@ -11,7 +12,7 @@ try {
   page.on("pageerror", error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem("onboarding-tour-v1", "done"))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-  await page.locator('.template-card[data-template="official-android-bds"]').click()
+  await openEditorTemplate(page, 'official-android-bds')
   await page.waitForSelector(".canvas-wrap:not(.empty)")
   await page.waitForFunction(() => !document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled)
   const close = page.locator("#file-operation-dialog[open] #file-operation-close")

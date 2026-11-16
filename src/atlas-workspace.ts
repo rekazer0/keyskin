@@ -41,6 +41,10 @@ export function createAtlasWorkspace(actions: {
   const workspace = get(".workspace")
   const canvas = get("#atlas-canvas") as HTMLCanvasElement
   const wrap = get(".canvas-wrap")
+  // 原画布保留完整图集的命中区域，显示画布只分配视口大小的像素。
+  const viewport = Object.assign(element("canvas"), { id: "atlas-viewport", width: 1, height: 1 })
+  viewport.setAttribute("aria-hidden", "true")
+  canvas.after(viewport)
   const header = element("div", "atlas-header")
   const heading = element("div", "atlas-image-title")
   const title = element("strong")
@@ -108,9 +112,11 @@ export function createAtlasWorkspace(actions: {
   let panX = 0
   let panY = 0
   const setPan = (x: number, y: number) => {
+    if (panX === x && panY === y) return
     panX = x
     panY = y
     canvas.style.translate = `${Math.round(x)}px ${Math.round(y)}px`
+    actions.redraw()
   }
   const resize = () => {
     if (!desktopActive || !state?.width) return
@@ -211,6 +217,8 @@ export function createAtlasWorkspace(actions: {
       canvas.style.removeProperty("width")
       canvas.style.removeProperty("height")
       canvas.style.removeProperty("translate")
+      if (viewport.width !== 1) viewport.width = 1
+      if (viewport.height !== 1) viewport.height = 1
     }
     const slice = next.selected
     title.textContent = next.path.split("/").pop() || "图片"
@@ -233,8 +241,8 @@ export function createAtlasWorkspace(actions: {
     if (lastPath !== next.path) { lastPath = next.path; fitted = true }
     resize()
   }
-  media.addEventListener("change", () => { if (state) update(state) })
-  return { update }
+  media.addEventListener("change", () => { if (state) { update(state); actions.redraw() } })
+  return { update, viewportCanvas: () => desktopActive ? viewport : undefined }
 }
 
 /** 新建图片：.ui-dialog，校验错误显示在框内，通过前不关闭。 */

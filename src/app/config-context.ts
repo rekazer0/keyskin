@@ -126,7 +126,7 @@ export function styleConfigPath(): string {
     `${theme.value}/skin/${orientation.value}/res/default.css`,
     `${theme.value}/skin/res/default.css`,
   ]
-  return candidates.find((path) => layoutSource()?.names().includes(path)) ?? candidates[0]
+  return candidates.find((path) => layoutSource()?.getBytes(path)) ?? candidates[0]
 }
 
 export function legacyAnimationConfigPath(): string | undefined {

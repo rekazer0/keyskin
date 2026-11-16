@@ -24,6 +24,7 @@ import { askToCreateAnimationConfig, canCreateAnimationConfig } from "./animatio
 import { decorateLayoutGroup } from "./sidebar-layouts"
 import { releaseOnRemove } from "../dom-lifecycle"
 import { openResourceInventory } from "./resource-inventory"
+import { emptyState } from "../dom-element"
 
 const layoutGroups = ["键盘布局", "数字与符号", "手写与语音", "手写与选择"]
 const resourceTileLabels: Record<string, string> = { 图片: "图片资源", 样式: "按键样式", 音效: "音效资源" }
@@ -238,7 +239,7 @@ export function renderFiles(): void {
     entries.push(
       { group: "皮肤", label: "皮肤信息", path: "phoneTheme.ini", className: "nav-overview", icon: "info" },
       ...preview ? [{ group: "皮肤", label: "效果预览", path: preview, className: "nav-overview", icon: "image" }] : [],
-      { group: "皮肤", label: "外观切换", path: "time.ini", className: "nav-overview", icon: "sun" },
+      { group: "资源配置", label: "外观切换", path: "time.ini", className: "nav-overview", icon: "sun" },
       { group: "资源配置", label: "按键样式", path: `${folder}phoneSkin.ini`, className: "nav-style", icon: "palette" },
       { group: "资源配置", label: "按键前景", path: `${folder}keys.ini`, className: "nav-style", icon: "type" },
       { group: "资源配置", label: "按键动画", path: `${folder}anim.ini`, className: "nav-style", icon: "wand-sparkles" },
@@ -421,7 +422,7 @@ export function renderFiles(): void {
     entry.icon = [...family, ...spareIcons].find((icon) => !iconOwners.has(icon)) ?? (entry.icon || "keyboard")
     iconOwners.set(entry.icon, entry)
   }
-  // 皮肤信息与效果预览合成顶部的皮肤卡片：左边预览图，右边皮肤名与作者，点击仍各自打开原来的页面。
+  // 预览与皮肤信息保留各自的入口。
   const skinEntries = entries.filter((entry) => entry.className === "nav-overview" && ["皮肤信息", "效果预览"].includes(entry.label))
   for (const entry of skinEntries) {
     const button = addNavButton(skinCard, entry.label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
@@ -439,15 +440,20 @@ export function renderFiles(): void {
       continue
     }
     const name = appState.archive.infoField("Name") || "未命名皮肤"
-    const author = appState.archive.infoField("Author")
     button.classList.add("skin-card-info")
     button.querySelector(".nav-label")!.textContent = name
-    button.querySelector(".nav-meta")!.textContent = author ? `${author} · 皮肤` : "皮肤信息"
+    button.querySelector(".nav-meta")!.textContent = "皮肤信息"
     const format = document.createElement("span")
-    format.className = "skin-card-format"
+    format.className = "ui-badge skin-card-format"
+    format.dataset.variant = "accent"
     format.textContent = appState.archive.format.toUpperCase()
     button.append(format, symbolSpan("chevron-right"))
     button.title = `皮肤信息 · ${name}`
+  }
+  if (skinCard.childElementCount && !skinCard.querySelector(".skin-card-preview")) {
+    const preview = emptyState("image-off")
+    preview.classList.add("skin-card-preview")
+    skinCard.prepend(preview)
   }
   const groups = appState.archive.format === "bda"
     ? ["皮肤信息", "资源配置", "键盘布局", "数字与符号", "手写与选择", "键盘组件", "扩展布局", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]

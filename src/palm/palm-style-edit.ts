@@ -20,7 +20,7 @@ export function palmStyleLocation(skin: JsonObject, theme: PalmTheme, orientatio
 
 export function palmStyleIDList(skin: JsonObject, theme: PalmTheme, orientation: PalmOrientation): string[] {
   const ids = new Set([`s_${orientation}`, "s_info"].flatMap((name) => Object.keys(asObject(sxiFragment(skin, [theme, name, "ss_1"])) ?? {})))
-  return [...ids].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  return [...ids].sort(new Intl.Collator(undefined, { numeric: true }).compare)
 }
 
 /**

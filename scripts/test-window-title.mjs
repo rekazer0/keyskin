@@ -15,47 +15,49 @@ try {
   page.on("pageerror", error => errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   await page.waitForSelector(".template-card")
-  const brand = page.locator(".ui-app-brand")
-  assert.equal(await brand.isVisible(), false, "browser keeps the existing toolbar")
-  for (const [version, display] of [
-    ["2.0.0-beta9", "v2.0 beta 9"],
-    ["2.0.0-beta10", "v2.0 beta 10"],
-    ["2.0.0", "v2.0"],
-    ["2.1.3", "v2.1.3"],
-    ["2.1.3-rc2", "v2.1.3 rc 2"],
-  ]) {
-    await page.evaluate(async version => {
-      document.querySelector("#about-update").dataset.currentVersion = version
-      const { wireWindowControls } = await import("/src/app/window-controls.ts")
-      wireWindowControls()
-    }, version)
-    assert.equal(await page.locator("#app-brand-version").textContent(), display)
-  }
+  assert.equal(await page.locator(".ui-app-brand, #app-brand-version").count(), 0)
   await page.evaluate(() => document.documentElement.classList.add("macos"))
   for (const colorScheme of ["light", "dark"]) {
     await page.emulateMedia({ colorScheme })
-    const style = await brand.evaluate(node => {
-      const name = getComputedStyle(node.querySelector("strong"))
-      const version = getComputedStyle(node.querySelector("span"))
-      const bar = node.closest("header").getBoundingClientRect()
-      const box = node.getBoundingClientRect()
-      return { nameColor: name.color, versionColor: version.color, nameWeight: name.fontWeight, versionWeight: version.fontWeight,
-        font: version.fontFamily, alignment: getComputedStyle(node).alignItems, height: box.height,
-        left: box.left, bottom: box.bottom, toolbarTop: bar.bottom - bar.height + parseFloat(getComputedStyle(node.closest("header")).paddingTop) }
+    const top = await page.locator(".titlebar").evaluate(node => {
+      const style = getComputedStyle(node)
+      return parseFloat(style.paddingTop)
     })
-    assert.equal(await brand.isVisible(), true)
-    assert.notEqual(style.nameColor, style.versionColor)
-    assert.equal(style.nameWeight, "600")
-    assert.equal(style.versionWeight, "400")
-    assert.match(style.font, /JetBrains Mono/)
-    assert.equal(style.alignment, "baseline", "name and version share a text baseline")
-    assert.equal(style.height, 32, "title centers on the native window buttons at 16px")
-    assert.ok(style.left >= 80, "title leaves room for the native window buttons")
-    assert.ok(style.bottom <= style.toolbarTop, "title stays above the editor toolbar")
+    assert.equal(top, 32, "compact toolbar leaves room for the native window buttons")
+    assert.equal(await page.locator(".titlebar").evaluate(node => node.getBoundingClientRect().height), 72)
+    const surface = () => page.locator(".titlebar").evaluate(node => {
+      const style = getComputedStyle(node)
+      return { background: style.backgroundColor, blur: style.backdropFilter }
+    })
+    const glass = await surface()
+    assert.equal(glass.background, await page.locator(".welcome-main").evaluate(node => getComputedStyle(node).backgroundColor), "titlebar uses the same background as the welcome page")
+    assert.match(glass.blur, /blur\(24px\)/)
+    await page.evaluate(() => document.documentElement.dataset.windowMaterial = "off")
+    assert.doesNotMatch((await surface()).background, /rgba/, "disabling material restores an opaque titlebar")
+    assert.equal((await surface()).background, await page.locator(".welcome-main").evaluate(node => getComputedStyle(node).backgroundColor))
+    assert.equal((await surface()).blur, "none")
+    const opaqueSurfaces = await page.evaluate(() => {
+      const background = selector => getComputedStyle(document.querySelector(selector)).backgroundColor
+      return {
+        titlebar: background(".titlebar"), navigation: background("#workspace-navigation"),
+        sidebar: background(".sidebar"), toolbar: background(".preview-toolbar"),
+        control: background("#device-control"), fileActions: background("#source-file-toolbar"),
+      }
+    })
+    assert.equal(opaqueSurfaces.navigation, opaqueSurfaces.titlebar, "opaque navigation follows the titlebar")
+    assert.equal(opaqueSurfaces.sidebar, opaqueSurfaces.toolbar)
+    assert.equal(opaqueSurfaces.control, opaqueSurfaces.fileActions)
+    for (const [foreground, background] of [["control", "toolbar"]]) {
+      const channels = value => value.match(/\d+/g).map(Number)
+      const surface = channels(opaqueSurfaces[foreground])
+      const underlay = channels(opaqueSurfaces[background])
+      assert.ok(surface.every((channel, i) => Math.abs(channel - underlay[i]) >= 8), `${colorScheme}: ${foreground} remains distinct from ${background}`)
+    }
+    await page.evaluate(() => document.documentElement.dataset.windowMaterial = "on")
+    assert.equal(await page.locator(".ui-app-brand, #app-brand-version").count(), 0)
   }
-  assert.equal(await brand.locator("[data-tauri-drag-region]").count(), 2)
   assert.deepEqual(errors, [])
-  console.log("window title: version format, macOS layout, light/dark styles and browser visibility passed")
+  console.log("window title: compact height, native button space, frosted surface and light/dark material toggle passed")
 } finally {
   await browser.close()
   await server.close()

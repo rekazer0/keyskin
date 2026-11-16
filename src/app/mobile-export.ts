@@ -1,7 +1,10 @@
 import { bindDialog } from "./ask"
-import { exportButtons } from "./canvas-interaction"
+import { exportTargets } from "./canvas-interaction"
 import { mobileExportOpen, mobileExportDialog, mobileExportFormats } from "./dom"
-import { currentExportFormat } from "./archive-io"
+import { currentExportFormat, saveArchive } from "./archive-io"
+import { runFileOperation } from "./file-operations"
+import { type ExportFormat } from "../export.ts"
+import { bdaPlatform, type BdaPlatform } from "../bda-platform.ts"
 import { appState } from "./state"
 import { element } from "../dom-element.ts"
 import { openResourceInventory, resourcePreflight } from "./resource-inventory"
@@ -18,19 +21,18 @@ export function wireMobileExport(): void {
   inventory.addEventListener("click", openResourceInventory)
   report.append(summary, details, inventory)
   mobileExportDialog.querySelector(".ui-dialog-body")!.append(report)
-  const target = (value: string) => {
-    const [format, platform] = value.split(":")
-    return exportButtons.find(button => button.dataset.exportFormat === format && button.dataset.bdaPlatform === platform)
+  const sync = () => {
+    mobileExportOpen.disabled = !appState.archive || exportTargets.every(input => input.disabled)
+    for (const input of exportTargets) input.closest("label")!.hidden = input.hidden
   }
-  const sync = () => { mobileExportOpen.disabled = !appState.archive || exportButtons.every(button => button.disabled) }
   const observer = new MutationObserver(sync)
-  for (const button of exportButtons) observer.observe(button, { attributes: true, attributeFilter: ["disabled"] })
+  for (const input of exportTargets) observer.observe(input, { attributes: true, attributeFilter: ["disabled", "hidden"] })
   sync()
   mobileExportOpen.addEventListener("click", () => {
     const current = currentExportFormat()
+    const platform = appState.archive ? bdaPlatform(appState.archive) : "unknown"
     for (const input of mobileExportFormats) {
-      input.disabled = target(input.value)?.disabled ?? true
-      input.checked = input.value === current
+      input.checked = input.value === current || input.value === `${current}:${platform}`
     }
     if (!mobileExportFormats.some(input => input.checked && !input.disabled)) {
       const first = mobileExportFormats.find(input => !input.disabled)
@@ -43,11 +45,28 @@ export function wireMobileExport(): void {
     details.open = false
     missing.replaceChildren(...check.missing.map(text => Object.assign(element("li", "ui-field-note"), { textContent: text })))
     mobileExportDialog.showModal()
+    mobileExportDialog.querySelector<HTMLButtonElement>('button[value="cancel"]')!.focus({ preventScroll: true })
   })
+  const form = mobileExportDialog.querySelector("form")!
+  const submit = mobileExportDialog.querySelector<HTMLButtonElement>('button[value="export"]')!
+  for (const input of mobileExportFormats) {
+    input.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return
+      event.preventDefault()
+      form.requestSubmit(submit)
+    })
+    input.closest("label")!.addEventListener("dblclick", () => {
+      if (input.checked && !input.disabled) form.requestSubmit(submit)
+    })
+  }
   mobileExportDialog.addEventListener("close", () => {
     if (mobileExportDialog.returnValue === "export") {
       const input = mobileExportFormats.find(input => input.checked && !input.disabled)
-      if (input) target(input.value)?.click()
+      if (input) {
+        const format = input.dataset.exportFormat as ExportFormat
+        const platform = input.dataset.bdaPlatform as Exclude<BdaPlatform, "unknown"> | undefined
+        void runFileOperation("导出", () => saveArchive(true, format, platform))
+      }
     }
   })
 }

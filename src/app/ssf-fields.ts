@@ -17,11 +17,12 @@ import { openImageResourceChooser } from "./resource-inspector"
 import { sourceEditPath, ssfDocument, ssfPackage, ssfTheme } from "./ssf-documents"
 import { appState } from "./state"
 import { styleKindIcon, styleReferenceAddButton, styleReferenceCard } from "../style-card"
-import { element } from "../dom-element.ts"
-import { sanitizeFontFileName, skinFontFiles, uniqueFontFileName } from "../font-files.ts"
+import { element, iconButton } from "../dom-element.ts"
+import { sanitizeFontFileName, uniqueFontFileName } from "../font-files.ts"
 import { type Change } from "../history.ts"
 import { showError, showStatus } from "./file-operations"
-import { validateFont } from "./skin-fonts"
+import { validateFont, skinFontChoices } from "./skin-fonts"
+import { typographyRows } from "./typography"
 import { fieldCaption, fieldControl, numberParts, section } from "./property-rows"
 import { ssfMediaField } from "./ssf-media-fields"
 import { openSsfImageEditor } from "./ssf-image-editor"
@@ -43,7 +44,7 @@ const QUADS: Record<string, string[]> = {
   PADDINGS: ["←", "↑", "→", "↓"],
 }
 const COLOR_VALUE = /^(?:0x|#)?([0-9a-f]{6}|[0-9a-f]{8})$/i
-const NUMERIC_FIELDS = new Set(["TEXT_SIZE", "TYPEFACE", "TYPE", "LABEL_HORIZONTAL_OFFSET", "MINOR_LABEL_HORIZONTAL_OFFSET", "POPUP_OFFSET_VERTICAL", "LOOP_TYPE", "START", "END", "loop_count", "DECO_ANIM_NUMBER"])
+const NUMERIC_FIELDS = new Set(["TYPE", "LABEL_HORIZONTAL_OFFSET", "MINOR_LABEL_HORIZONTAL_OFFSET", "POPUP_OFFSET_VERTICAL", "LOOP_TYPE", "START", "END", "loop_count", "DECO_ANIM_NUMBER"])
 
 /**
  * Applies `change` to one Sogou file as a single undo step, then redraws the canvas from the edited
@@ -353,30 +354,26 @@ function colorField(key: string, value: string, targets: SsfLocation[]): HTMLEle
   return row
 }
 
-/** BOLD uses true / absence; SET_PRESSED uses 1 / 0. */
+/** SET_PRESSED uses 1 / 0. */
 function switchField(key: string, value: string, targets: SsfLocation[]): HTMLElement {
   const row = element("label", "ui-field")
   caption(row, key)
-  const on = key === "BOLD" ? "true" : "1"
+  const on = "1"
   row.append(fieldControl({ kind: "switch", checked: value.trim() === on }, ssfFieldLabel(key), (checked) => editTargets(targets, (document, target) => {
-    if (checked || key === "SET_PRESSED") setSsfValue(document, target.section, key, checked ? on : "0", target.create)
-    else document.remove(target.section, key)
+    setSsfValue(document, target.section, key, checked ? on : "0", target.create)
   }), { editable: isEditing() }))
   return row
 }
 
-function textField(key: string, value: string, targets: SsfLocation[], options?: string[]): HTMLElement {
+function textField(key: string, value: string, targets: SsfLocation[]): HTMLElement {
   const row = element("label", "ui-field")
   caption(row, key)
   const write = (next: string) => writeValue(targets, key, next)
-  // TEXT_SIZE up to 1 is a fraction of the screen width (0.045) and steps by 0.001; above 1 it is pixels.
-  const numeric = NUMERIC_FIELDS.has(key) && (/^-?\d+(?:\.\d+)?$/.test(value) || !value && key !== "TYPEFACE")
-  const step = key === "TEXT_SIZE" ? (Number(value || 0) <= 1 ? 0.001 : 1) : value.includes(".") ? undefined : 1
+  const numeric = NUMERIC_FIELDS.has(key) && (/^-?\d+(?:\.\d+)?$/.test(value) || !value)
+  const step = value.includes(".") ? undefined : 1
   row.append(numeric
     ? fieldControl({ kind: "number", value, step }, ssfFieldLabel(key), write, { editable: isEditing() })
-    : fieldControl({ kind: "text", value, suggestions: options }, ssfFieldLabel(key), write, { editable: isEditing() }))
-  // 字号不带单位时是屏宽比例：说明放进提示。
-  if (key === "TEXT_SIZE") row.title = "屏宽比例，如 0.045；大于 1 时是像素"
+    : fieldControl({ kind: "text", value }, ssfFieldLabel(key), write, { editable: isEditing() }))
   return row
 }
 
@@ -408,7 +405,7 @@ function ssfConfigField(key: string, value: string, targets: SsfLocation[]): HTM
 }
 
 /** One row for any Sogou value, chosen by its definition before falling back to raw text. */
-function ssfField(entry: SsfEntry, targets: SsfLocation[], options?: string[]): HTMLElement {
+function ssfField(entry: SsfEntry, targets: SsfLocation[]): HTMLElement {
   const { key, value } = entry
   const media = ssfMediaField(targets[0].path, key, value || targets.slice(1).map(target => ssfDocument(target.path).get(target.section, key)).find(Boolean) || "", next => editTargets(targets, (document, target) => {
     if (next) setSsfValue(document, target.section, key, next, target.create)
@@ -427,12 +424,12 @@ function ssfField(entry: SsfEntry, targets: SsfLocation[], options?: string[]): 
     }))
     return row
   }
-  if (key === "BOLD" || key === "SET_PRESSED") return switchField(key, value, targets)
+  if (key === "SET_PRESSED") return switchField(key, value, targets)
   const config = ssfConfigField(key, value, targets)
   if (config) return config
   if (/COLOR/i.test(key) && (COLOR_VALUE.test(value.trim()) || !value)) return colorField(key, value, targets)
   if (parseSsfImage(value) || !value && IMAGE_FIELDS.has(key)) return imageCard(ssfFieldLabel(key), [key], targets)
-  return textField(key, value, targets, options)
+  return textField(key, value, targets)
 }
 
 export type SsfBlock = {
@@ -450,7 +447,6 @@ export type SsfBlock = {
   actions?: HTMLElement[]
   /** The field naming this block's image section, editable in its card. */
   reference?: CardReference
-  options?: Record<string, string[]>
   /** Keys offered even when the section (or the key) is missing; the first write creates them. */
   expect?: string[]
   /** Entries a missing section starts with when one of its rows is first written. */
@@ -461,14 +457,9 @@ export type SsfBlock = {
   peers?: SsfLocation[]
 }
 
-/** Font files a TYPEFACE can name: Sogou installs `default/` and the theme folder into one directory. */
-export function ssfFontOptions(): string[] {
-  return [...new Set(skinFontFiles(appState.archive?.names() ?? []).map((path) => path.split("/").pop()!))]
-}
-
 /** Imports a .ttf / .otf into default/ and points every target's TYPEFACE at it, as one undo step. */
-export function ssfFontImportButton(targets: SsfLocation[]): HTMLButtonElement {
-  return ssfButton("导入字体", "upload", () => {
+function ssfFontImportButton(targets: SsfLocation[]): HTMLButtonElement {
+  const button = iconButton("upload", "导入字体文件", () => {
     const picker = element("input")
     picker.type = "file"
     picker.accept = ".ttf,.otf"
@@ -478,6 +469,8 @@ export function ssfFontImportButton(targets: SsfLocation[]): HTMLButtonElement {
     })
     picker.click()
   })
+  button.disabled = !isEditing()
+  return button
 }
 
 /**
@@ -632,18 +625,36 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
     grid.append(imageCard(label, [normal, pressed], targets))
     used.add(normal).add(pressed)
   }
+  const textKeys = { font: "TYPEFACE", size: "TEXT_SIZE", bold: "BOLD", color: "TEXT_COLOR", pressed: "TEXT_COLOR_PRESSED" } as const
+  const textFields = Object.fromEntries(Object.entries(textKeys).filter(([, key]) => keys.has(key) && !used.has(key)).map(([attribute, key]) => {
+    used.add(key)
+    const values = targets.map(target => ssfDocument(target.path).get(target.section, key) ?? "")
+    return [attribute, { key, values, ...(key === "BOLD" ? { checked: values[0] === "true" } : {}), ...(key === "TEXT_SIZE" ? { hint: "屏宽比例，如 0.045；大于 1 时为像素" } : {}) }]
+  }))
+  const size = ssfDocument(block.path).get(block.section, "TEXT_SIZE") ?? ""
+  grid.append(...typographyRows({ fields: textFields, fonts: skinFontChoices(), fontActions: Object.hasOwn(textFields, "font") ? [ssfFontImportButton(targets)] : [], editable: isEditing(), codec: "0xargb",
+    sample: appState.selectedKeySections.length === 1 ? preview.keys.find(key => key.section === appState.selectedKeySections[0])?.center : undefined,
+    size: { unit: Number(size) <= 1 ? "屏宽" : "px", step: Number(size) <= 1 ? 0.001 : 1, range: undefined },
+    track: () => {},
+    write: (key, value, merge) => editTargets(targets, (document, target) => {
+      if (!value || key === "BOLD" && value === "0") document.remove(target.section, key)
+      else setSsfValue(document, target.section, key, key === "BOLD" ? "true" : merge ? merge(document.get(target.section, key) ?? "") : value, target.create)
+    }),
+  }))
   for (const entry of entries) {
     if (used.has(entry.key)) continue
-    grid.append(ssfField(entry, targets, block.options?.[entry.key]))
+    grid.append(ssfField(entry, targets))
   }
   for (const key of block.expect ?? []) {
-    if (!used.has(key) && !entries.some((entry) => entry.key === key)) grid.append(ssfField({ key, value: "" }, targets, block.options?.[key]))
+    if (!used.has(key) && !entries.some((entry) => entry.key === key)) grid.append(ssfField({ key, value: "" }, targets))
   }
   for (const row of Array.from(grid.children) as HTMLElement[]) {
+    if (!row.classList.contains("ui-field") || row.dataset.supported === "false") continue
     const card = row.classList.contains("style-reference-field")
     const rowKeys = row.dataset.documentKey!.split(" ")
     const savedKeys = rowKeys.flatMap((key) => [key, ...LINKED_STATES[key] ?? []])
     const locations = rowTargets.get(row) ?? targets
+    row.dataset.configEmpty = String(locations.every(({ path, section }) => rowKeys.every(key => !ssfDocument(path).get(section, key)?.trim())))
     const sources = locations.map((target) => ({ target, keys: [...new Set([...savedKeys, ...target.create?.map(({ key }) => key) ?? []])] }))
     if (rowTargets.has(row)) sources.push(...targets.map((target) => ({ target, keys: IMAGE_STATES })))
     for (const target of targets) if (target.bind) sources.push({ target: { path: target.path, section: target.bind.section }, keys: [target.bind.key] })
@@ -668,7 +679,7 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
         }
       })
     })
-    if (block.peers?.length) markMixed(row, targets, rowKeys)
+    if (block.peers?.length && !row.dataset.typography) markMixed(row, targets, rowKeys)
   }
   const extended = Array.from(grid.children).filter((row) => ["DISABLED", "NORMAL_ON", "PRESSED_ON"].includes((row as HTMLElement).dataset.documentKey ?? ""))
   if (extended.length) {

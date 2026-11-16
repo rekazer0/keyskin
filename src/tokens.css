@@ -29,6 +29,16 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
 
+  --inspector-sound-height: 60px;
+  --inspector-geometry-height: 200px;
+  --geometry-box-min-width: 208px;
+  --geometry-box-min-height: 144px;
+  --geometry-padding-width: 64px;
+  --typography-preview-font-size: 28px;
+  --typography-preview-height: 60px;
+  --inspector-gesture-height: 56px;
+  --inspector-typography-label-width: 64px;
+
   /* 圆角：按层级逐级增大，内层圆角 ≤ 外层 */
   --radius-sm: 6px;      /* 角标、色块、控件内的小块 */
   --radius-md: 8px;      /* 按钮、输入框、列表行、分段控件 */
@@ -46,6 +56,8 @@
   --space-2xl: 32px;
 
   /* 版式 */
+  --workspace-navigation-width: 64px;
+  --workspace-navigation-button-size: 40px;
   --content-max-width: 1100px;  /* 欢迎页等整页内容的最大宽度 */
   --dialog-max-height: 480px;
   --style-card-width: 160px; /* 样式库与动画列表卡片的最小宽度，随容器拉伸并自动加列 */
@@ -53,7 +65,8 @@
   --style-reference-meta-width: 84px;
   --project-template-card-width: 200px;
   --toolbar-icon-card-width: 72px;
-  --skin-preview-size: 56px;
+  --skin-preview-size: 48px;
+  --about-logo-size: 72px;
   --resource-tile-size: 80px; /* 资源磁贴固定宽度，高度为宽度的 4/5，随侧栏宽度自动增减列 */
 
   --resource-tile-icon-stroke-width: 2;
@@ -110,7 +123,7 @@
   --text: #121419;
   --secondary: #5b616e;
   --muted: #5b616e;
-  --tertiary: #8b919e;
+  --tertiary: #6f7684;
   --scrollbar-thumb: rgb(18 20 25 / 30%);
   --scrollbar-thumb-hover: rgb(18 20 25 / 52%);
   --scrollbar-thumb-border: rgb(0 0 0 / 10%);
@@ -122,10 +135,10 @@
   --state-ok: #12a150;
   --state-warn: #b87a00;
   --state-danger: #e5484d;
-  --material-window: #e9ebef;
-  --material-toolbar: #ffffff;
-  --material-sidebar: #ffffff;
-  --material-inspector: #ffffff;
+  --material-window: #f5f5f6;
+  --material-toolbar: #f5f5f6;
+  --material-sidebar: #f5f5f6;
+  --material-inspector: #f5f5f6;
   --material-panel: #ffffff;
   --material-menu: #ffffff;
   --material-content: #f4f5f8;
@@ -143,6 +156,10 @@
   --glass-shadow: 0 8px 28px rgb(18 24 40 / 10%), inset 0 1px rgb(255 255 255 / 78%);
   --window: var(--material-window);
   --toolbar: var(--material-toolbar);
+  --titlebar-surface: var(--canvas);
+  --titlebar-backdrop-filter: none;
+  --workspace-navigation-opacity: 0.56;
+  --workspace-navigation-surface: var(--titlebar-surface);
   --sidebar: var(--material-sidebar);
   --inspector: var(--material-inspector);
   --panel: var(--material-panel);
@@ -173,7 +190,7 @@
   --canvas-surface: #f4f5f8;   /* 画布区底色 */
   /* 透明棋盘格：画布与各预览缩略图共用；纯中性灰不带色偏，不随深色模式变 */
   --checker-light: #f7f7f7;
-  --checker-dark: #e2e2e2;
+  --checker-dark: #e9e9ea;
   --checker-size: 24px;    /* 画布与动画舞台 */
   --checker-size-sm: 12px; /* 缩略图 */
   --checker-image: repeating-conic-gradient(var(--checker-dark) 0 25%, transparent 0 50%);
@@ -185,7 +202,7 @@
 }
 
 :root.macos {
-  --titlebar-height: calc(86px + var(--safe-area-top));
+  --titlebar-height: calc(72px + var(--safe-area-top));
 }
 
 /* Windows 顶栏上方留一条空白，高度随之加高 */
@@ -199,9 +216,9 @@
   :root, :root.macos { --titlebar-height: calc(44px + var(--safe-area-top)); }
 }
 @media (max-width: 760px) {
-  :root, :root.macos { --titlebar-height: calc(60px + var(--safe-area-top)); }
+  :root, :root.macos { --titlebar-height: calc(48px + var(--safe-area-top)); }
   /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
-  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-inspector-split: min(50%, 324px); --mobile-page-gutter: 20px; --mobile-preview-height: var(--mobile-inspector-split); --mobile-drawer-width: 320px; --style-card-width: 128px; --style-reference-height: 64px; --style-reference-meta-width: 48px; }
+  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-inspector-split: min(50%, 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --mobile-drawer-width: 320px; --style-card-width: 128px; --style-reference-height: 64px; --style-reference-meta-width: 48px; }
   :root { --ai-chat-input-min-height: var(--control-height-lg); --ai-chat-input-max-height: 30vh; --ai-chat-input-footer: calc(var(--control-height-lg) + var(--space-sm)); --ai-chat-send-size: var(--control-height-lg); }
   :root:has(#resource-inspector:not([hidden]) #resource-list-view:not([hidden])) { --mobile-preview-height: 0px; }
   :root[data-keyboard-open="true"]:has(#mobile-key-preview:not([hidden])) { --mobile-preview-height: 148px; }
@@ -217,7 +234,7 @@
   --text: #f3f5f8;
   --secondary: #a1a8b3;
   --muted: #a1a8b3;
-  --tertiary: #6c737e;
+  --tertiary: #8b93a0;
   --scrollbar-thumb: rgb(243 245 248 / 32%);
   --scrollbar-thumb-hover: rgb(243 245 248 / 56%);
   --scrollbar-thumb-border: rgb(255 255 255 / 12%);
@@ -233,11 +250,11 @@
   --material-toolbar: #15171b;
   --material-sidebar: #15171b;
   --material-inspector: #15171b;
-  --material-panel: #15171b;
-  --material-menu: #1e2126;
+  --material-panel: #1e2126;
+  --material-menu: #24272c;
   --material-content: #1a1d21;
   --canvas: #0c0d10;
-  --material-control: #1e2126;
+  --material-control: #24272c;
   --hover: rgb(255 255 255 / 8%);
   --material-glass-surface: #1e2126;
   --glass-border: #282c33;
@@ -258,10 +275,11 @@
 
 @media (min-width: 761px) {
 :root.windows[data-window-material="on"] {
-  --material-window: #e9ebef;
-  --material-toolbar: #ffffff;
-  --material-sidebar: #ffffff;
-  --material-inspector: #ffffff;
+  --workspace-navigation-surface: rgb(245 245 246 / var(--workspace-navigation-opacity));
+  --material-window: #f5f5f6;
+  --material-toolbar: #f5f5f6;
+  --material-sidebar: #f5f5f6;
+  --material-inspector: #f5f5f6;
   --material-panel: #ffffff;
   --material-menu: #ffffff;
   --material-content: #f4f5f8;
@@ -270,14 +288,15 @@
 }
 
 :root.windows[data-app-theme="dark"][data-window-material="on"] {
+  --workspace-navigation-surface: rgb(21 23 27 / var(--workspace-navigation-opacity));
   --material-window: #0c0d10;
   --material-toolbar: #15171b;
   --material-sidebar: #15171b;
   --material-inspector: #15171b;
-  --material-panel: #15171b;
-  --material-menu: #1e2126;
+  --material-panel: #1e2126;
+  --material-menu: #24272c;
   --material-content: #1a1d21;
-  --material-control: #1e2126;
+  --material-control: #24272c;
   --material-glass-surface: #1e2126;
 }
 
@@ -290,10 +309,12 @@
    控件块面和分隔线不走这套系数，它们在 pen-design-application.css 的材质段里换成固定色差，
    否则滑杆一拉低，按钮/输入框的底色就会和玻璃融成一片。 */
 :root[data-window-material-kind="glass"][data-window-material="on"] {
-  --window: rgb(233 235 239 / var(--window-material-layer));
-  --toolbar: rgb(255 255 255 / var(--window-material-layer));
-  --sidebar: rgb(255 255 255 / var(--window-material-layer));
-  --inspector: rgb(255 255 255 / var(--window-material-layer));
+  --window: rgb(245 245 246 / var(--window-material-layer));
+  --toolbar: rgb(245 245 246 / var(--window-material-layer));
+  --workspace-navigation-surface: rgb(255 255 255 / var(--workspace-navigation-opacity));
+  --titlebar-backdrop-filter: saturate(180%) blur(24px);
+  --sidebar: rgb(245 245 246 / var(--window-material-layer));
+  --inspector: rgb(245 245 246 / var(--window-material-layer));
   --panel: rgb(255 255 255 / var(--window-material-layer));
   --menu: var(--material-menu);
   --canvas: rgb(233 235 239 / var(--window-material-sunken));
@@ -318,33 +339,35 @@
 :root[data-app-theme="dark"][data-window-material-kind="glass"][data-window-material="on"] {
   --window: rgb(12 13 16 / var(--window-material-layer));
   --toolbar: rgb(21 23 27 / var(--window-material-layer));
+  --workspace-navigation-surface: rgb(21 23 27 / var(--workspace-navigation-opacity));
   --sidebar: rgb(21 23 27 / var(--window-material-layer));
   --inspector: rgb(21 23 27 / var(--window-material-layer));
-  --panel: rgb(21 23 27 / var(--window-material-layer));
+  --panel: rgb(30 33 38 / var(--window-material-layer));
   --menu: var(--material-menu);
   --canvas: rgb(12 13 16 / var(--window-material-sunken));
   --content: rgb(26 29 33 / var(--window-material-sunken));
-  --control: rgb(30 33 38 / var(--window-material-sunken));
+  --control: rgb(38 42 48 / var(--window-material-sunken));
   --glass-surface: rgb(30 33 38 / var(--window-material-layer));
   --floating: rgb(21 23 27 / max(var(--window-material-floating), 0.96));
   --material-window: transparent;
   --canvas-surface: rgb(12 13 16 / var(--window-material-sunken));
-  --material-panel: rgb(21 23 27 / var(--window-material-layer));
-  --material-control: rgb(30 33 38 / var(--window-material-floating));
+  --material-panel: rgb(30 33 38 / var(--window-material-layer));
+  --material-control: rgb(38 42 48 / var(--window-material-floating));
   --material-content: rgb(255 255 255 / 2.5%);
   --line: rgb(255 255 255 / 9.2%);
   --line-strong: rgb(255 255 255 / 17.1%);
 }
 
 :root[data-window-material="off"] {
-  background: #e9ebef;
-  --window: #e9ebef;
-  --toolbar: #ffffff;
-  --sidebar: #ffffff;
-  --inspector: #ffffff;
+  background: #f5f5f6;
+  --window: #f5f5f6;
+  --toolbar: #f5f5f6;
+  --sidebar: #f5f5f6;
+  --inspector: #f5f5f6;
   --panel: #ffffff;
   --menu: #ffffff;
-  --content: #f4f5f8;
+  --material-content: #ebebee;
+  --content: var(--material-content);
   --control: #ffffff;
   --glass-surface: #ffffff;
 }
@@ -355,10 +378,11 @@
   --toolbar: #15171b;
   --sidebar: #15171b;
   --inspector: #15171b;
-  --panel: #15171b;
-  --menu: #1e2126;
-  --content: #1a1d21;
-  --control: #1e2126;
+  --panel: #1e2126;
+  --menu: #24272c;
+  --material-content: #292d34;
+  --content: var(--material-content);
+  --control: #24272c;
   --glass-surface: #1e2126;
 }
 }
@@ -371,26 +395,28 @@
   }
 }
 
-/* Figma · KeySkin 移动端，桌面语义 token 保持原尺寸。 */
+/* 移动工作室复用默认控件字号、圆角和图标尺寸。 */
 @media (max-width: 760px) {
   :root {
     --font-ui: "Inter", "Noto Sans SC Variable", "PingFang SC", system-ui, sans-serif;
     --font-mono: "IBM Plex Mono", "Noto Sans SC Variable", ui-monospace, monospace;
-    --font-size-sm: 14px;
-    --font-size-md: 14px;
-    --font-size-lg: 16px;
-    --font-size-title: 18px;
+    --font-size-title: 16px;
+    --font-size-homebrand: 24px;
+    --font-size-homeskin: 30px;
+    --font-size-homesection: 18px;
+    --font-size-homeaction: 14px;
+    --radius-home: 20px;
+    --radius-homeaction: 14px;
+    --radius-homepreview: 10px;
+    --mobile-home-gutter: 20px;
+    --mobile-home-navigation-height: calc(var(--mobile-primary-height) + var(--space-xs) + max(var(--space-xl), var(--safe-area-bottom)));
     --font-size-hero: 38px;
     --font-size-page: 26px;
-    --font-size-xl: 24px;
-    --mobile-navigation-height: calc(56px + var(--safe-area-bottom));
-    --mobile-control-height: 48px;
+    --mobile-navigation-height: calc(var(--mobile-primary-height) + var(--space-md) * 2 + var(--safe-area-bottom));
+    --mobile-control-height: 44px;
     --mobile-primary-height: 56px;
+    --mobile-sidebar-width: 352px;
     --mobile-simulation-height: clamp(120px, 34vh, 280px);
-    --radius-md: 14px;
-    --radius-lg: 20px;
-    --icon-size-md: 20px;
-    --radius-xl: 24px;
     --state-ok: #27846D;
     --duration-fast: 120ms;
     --duration-base: 200ms;
@@ -404,9 +430,9 @@
     --tertiary: #777D90;
     --accent: #3a6df0;
     --accent-soft: #EAF0FF;
-    --material-window: #F7F9FB;
-    --material-toolbar: #F7F9FB;
-    --material-sidebar: #F7F9FB;
+    --material-window: #FFFFFF;
+    --material-toolbar: #FFFFFF;
+    --material-sidebar: #FFFFFF;
     --material-inspector: #FFFFFF;
     --material-panel: #FFFFFF;
     --material-menu: #FFFFFF;

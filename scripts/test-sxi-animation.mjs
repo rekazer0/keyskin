@@ -85,7 +85,7 @@ try {
   assert.deepEqual(await page.locator(`.sidebar-overview button[data-path="${animationPath}"] .nav-label`).allTextContents(), ["动效设计", "粒子设计"])
   assert.equal(await page.locator("#selected-key").textContent(), "动画")
   assert.match(await page.locator("#selected-key-context").textContent(), /skin\.json · s_info\.ss_2/)
-  // 行里第一行是名称，第二行是类型、引用次数两个标签和时间摘要。
+  // 标题显示名称与类型图标，底部只保留时间摘要。
   assert.deepEqual(await fields.locator("[data-animation-id] strong").allTextContents(), [
     "动画 100", "动画 101", "动画 102", "动画 103", "动画 104", "动画 105", "动画 106", "动画 107", "动画 108", "动画 109",
   ])
@@ -93,7 +93,7 @@ try {
     "缩放", "位移", "组合动画", "帧序列", "粒子发射", "路径跟踪", "碰撞物理", "液体与浮动物", "底部嘉年华", "太空兔",
   ])
   assert.equal(await fields.locator('[data-animation-id="100"] small').textContent(), "320 ms · 往返")
-  assert.equal(await fields.locator('[data-animation-id="100"] [data-uses]').textContent(), "2", "被一个样式和一个组合使用")
+  assert.equal(await fields.locator('[data-animation-id] [data-uses]').count(), 0, "卡片不显示引用次数")
   assert.deepEqual(await page.locator("#mobile-inspector-groups button").allTextContents(), ["动画", "样式", "预览", "变化", "时间与循环", "变换中心"])
 
   // 每类动画的字段都按手心自己的名字出现

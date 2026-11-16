@@ -116,6 +116,21 @@ export function selectedRects(): LayoutRect[] {
   })
 }
 
+/** 几何预览的一次缩放作为一步撤销提交。 */
+export function resizeSelectedKeys(rects: LayoutRect[]): void {
+  if (!canvasEditable() || ["bda", "ssf"].includes(appState.archive?.format ?? "")) return
+  if (palmBoard()) return writePalmKeyRects(rects)
+  if (!appState.layoutDocument) return
+  const before = appState.layoutDocument.toString()
+  for (const rect of rects) appState.layoutDocument.set(rect.section, "VIEW_RECT", [rect.x, rect.y, rect.width, rect.height].join(","))
+  const text = appState.layoutDocument.toString()
+  commitText(appState.layoutPath, before, text)
+  if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
+  preview.setDocument(appState.layoutDocument)
+  populateKeyInspector()
+  updateDirty()
+}
+
 export function applyLayoutAction(action: string): void {
   if (!canvasEditable()) return
   if (!appState.archive || !appState.layoutDocument && !palmBoard()) return

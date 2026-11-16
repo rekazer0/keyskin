@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { chromium } from "playwright"
@@ -7,6 +8,47 @@ import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
 const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41819, strictPort: false } })
 await server.listen()
 const browser = await chromium.launch()
+
+async function checkSkinCard(page, format) {
+  const card = page.locator(".skin-card")
+  assert.equal(await card.locator(".skin-card-info > .nav-meta").textContent(), "皮肤信息")
+  assert.equal(await card.locator('.ui-badge[data-variant="accent"]').textContent(), format)
+  const geometry = await card.evaluate((node) => {
+    const style = getComputedStyle(node)
+    const preview = node.querySelector(".skin-card-preview").getBoundingClientRect()
+    const info = node.querySelector(".skin-card-info").getBoundingClientRect()
+    const badge = node.querySelector(".ui-badge").getBoundingClientRect()
+    const bounds = node.getBoundingClientRect()
+    return {
+      border: style.borderTopWidth,
+      preview: [preview.width, preview.height],
+      fits: preview.left >= bounds.left && preview.right <= info.left && info.right <= bounds.right && badge.bottom <= bounds.bottom,
+    }
+  })
+  assert.equal(geometry.border, "1px")
+  assert.deepEqual(geometry.preview, [48, 48])
+  assert.ok(geometry.fits, JSON.stringify(geometry))
+  await page.mouse.move(0, 0)
+  await page.waitForTimeout(150)
+  const background = await card.evaluate((node) => getComputedStyle(node).backgroundColor)
+  for (const target of [card.locator(".skin-card-preview"), card.locator(".skin-card-info")]) {
+    await target.hover()
+    await page.waitForTimeout(150)
+    assert.notEqual(await card.evaluate((node) => getComputedStyle(node).backgroundColor), background, "hover highlights the entire card")
+  }
+  assert.equal(await card.locator(".skin-card-info").evaluate((node) => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)", "information area has no separate hover fill")
+  await card.screenshot({ path: `/tmp/keyskin-skin-card-hover-${format}-${page.viewportSize().width}.png` })
+  await page.mouse.move(0, 0)
+  const info = card.locator(".skin-card-info")
+  const path = await info.getAttribute("data-path")
+  await info.focus()
+  await page.keyboard.press("Enter")
+  assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedPath), path, "skin information keeps its keyboard action")
+  assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.changed.size), 0)
+  if (page.viewportSize().width < 760) await page.locator("#mobile-project-toggle").click()
+  await page.locator(":focus").evaluate((node) => node.blur())
+  await card.screenshot({ path: `/tmp/keyskin-skin-card-${format}-${page.viewportSize().width}.png` })
+}
 
 async function checkResourceTiles(page) {
   const geometry = await page.locator('.nav-group-body:has(> [data-layout="tile"])').evaluate((grid) => {
@@ -54,7 +96,7 @@ try {
     page.on("pageerror", (error) => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
     if (width >= 760) {
-      await page.locator('.template-card[data-template="official-android-bds"]').click()
+      await openEditorTemplate(page, 'official-android-bds')
       await page.locator(".canvas-wrap:not(.empty)").waitFor()
       await page.waitForFunction(() => !document.querySelector("#open").disabled)
       const close = page.locator("#file-operation-dialog[open] #file-operation-close")
@@ -85,13 +127,15 @@ try {
         await sidebar.screenshot({ path: `/tmp/keyskin-resource-tiles-${sidebarWidth}.png` })
         await page.locator('.nav-group-body:has(> [data-layout="tile"])').screenshot({ path: `/tmp/keyskin-resource-grid-${sidebarWidth}.png` })
       }
+      await checkSkinCard(page, "BDS")
+      assert.equal(await page.locator(".skin-card-preview.ui-empty").count(), 1, "missing preview retains a compact placeholder")
       await page.reload()
     }
     await page.locator("#browser-open").setInputFiles({ name: "分类.bda", mimeType: "application/octet-stream", buffer: readFileSync(new URL("../public/default-template.bda", import.meta.url)) })
     await page.waitForFunction(() => !document.querySelector("#open").disabled)
     const bdaClose = page.locator("#file-operation-dialog[open] #file-operation-close")
     if (await bdaClose.isVisible()) await bdaClose.click()
-    if (width < 760) await page.locator('[data-mobile-pane="layout"]').click()
+    if (width < 760) await page.locator('#mobile-project-toggle').click()
     const categories = {
       "键盘布局": ["py_9", "py_26", "en_26", "en_26s", "en_9", "en_9s", "bh", "def_26", "def_9", "net", "net_shifts"],
       "数字与符号": ["num_9", "symbol", "sym_26_cn", "sym_26_en", "sym_26_cn_h", "sym_26_en_h", "symbol_h"],
@@ -110,18 +154,27 @@ try {
     assert.equal(await page.locator('[data-overview-group="面板样式"], .sidebar-overview .ui-search, .sidebar-overview input').count(), 0, "BDA overview has categories without layout search")
     const symbols = page.locator('[data-overview-group="数字与符号"]')
     await symbols.locator('button[data-path$="/num_9.ini"]').click()
-    if (width < 760) await page.locator('[data-mobile-pane="layout"]').click()
+    if (width < 760) await page.locator('#mobile-project-toggle').click()
     assert.equal(await symbols.locator('button[data-path$="/num_9.ini"]').getAttribute("aria-current"), "true")
     assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.changed.size), 0, "BDA category navigation does not change skin files")
     await page.locator("#files").evaluate((node) => node.scrollTo({ top: 0, behavior: "instant" }))
     await page.locator(".sidebar").screenshot({ path: `/tmp/keyskin-bda-categories-${width}-${colorScheme}.png` })
     console.log(`PASS BDA categories ${width}px ${colorScheme}`)
+    await checkSkinCard(page, "BDA")
     await page.reload()
     await page.locator("#browser-open").setInputFiles({ name: "侧栏.ssf", mimeType: "application/octet-stream", buffer: Buffer.from(ssfFixture()) })
     await page.waitForFunction(() => !document.querySelector("#open").disabled)
     const close = page.locator("#file-operation-dialog[open] #file-operation-close")
     if (await close.isVisible()) await close.click()
-    if (width < 760) await page.locator('[data-mobile-pane="layout"]').click()
+    if (width < 760) await page.locator('#mobile-project-toggle').click()
+    const appearance = page.locator('[data-overview-group="资源配置"]').getByRole("button", { name: "外观切换", exact: true })
+    assert.equal(await appearance.count(), 1)
+    assert.equal(await appearance.getAttribute("data-layout"), "tile")
+    assert.equal(await page.locator('[data-overview-group="皮肤"] button[data-path="time.ini"]').count(), 0)
+    await appearance.click()
+    assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedPath), "time.ini", "appearance tile opens the original configuration")
+    if (width < 760) await page.locator('#mobile-project-toggle').click()
+    assert.equal(await appearance.getAttribute("aria-current"), "true")
     const group = page.locator('[data-overview-group="键盘布局"]')
     const rows = group.locator("button.nav-item")
     assert.equal(await rows.count(), 20)
@@ -130,7 +183,7 @@ try {
     assert.ok(await page.locator(".nav-group:not(:first-of-type) > .nav-section").evaluateAll((nodes) => nodes.every((node) => getComputedStyle(node).marginTop === "12px")), "group spacing is compact")
     assert.equal(await page.locator(".sidebar-overview .ui-search, .sidebar-overview input").count(), 0, "overview groups have no search boxes")
     await rows.last().click()
-    if (width < 760) await page.locator('[data-mobile-pane="layout"]').click()
+    if (width < 760) await page.locator('#mobile-project-toggle').click()
     assert.equal(await rows.last().getAttribute("aria-current"), "true")
     assert.equal(await rows.last().isVisible(), true)
     assert.equal(await page.locator(".mobile-overview-groups").count(), 0)
@@ -145,6 +198,10 @@ try {
     }
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no horizontal overflow")
     assert.deepEqual(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.changed.size), 0, "navigation does not change skin files")
+    await page.evaluate(async () => {
+      const { selectChoice } = await import("/src/app/mobile-layout.ts")
+      selectChoice(document.querySelector("#mode"), "preview")
+    })
     await group.getByRole("button", { name: "添加布局（面板复制）" }).click()
     await page.getByRole("button", { name: "切换至编辑模式", exact: true }).click()
     await page.getByRole("dialog", { name: "交互预览中无法编辑" }).waitFor({ state: "detached" })
@@ -163,6 +220,7 @@ try {
     await page.locator(".sidebar").screenshot({ path: `/tmp/keyskin-sidebar-${width}-${colorScheme}.png` })
     assert.ok(geometry.fits, `skin card stays inside the scroll area: ${JSON.stringify(geometry)}`)
     assert.ok(await page.locator(".sidebar, .skin-card, .sidebar-overview .nav-item, .sidebar-overview .ui-search").evaluateAll((nodes) => nodes.every((node) => getComputedStyle(node).backgroundImage === "none")), "overview uses solid backgrounds")
+    await checkSkinCard(page, "SSF")
     assert.deepEqual(errors, [])
     await page.close()
     console.log(`PASS sidebar overview ${width}px ${colorScheme}`)

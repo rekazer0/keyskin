@@ -1,0 +1,98 @@
+import assert from "node:assert/strict"
+import { mkdirSync } from "node:fs"
+import { chromium } from "playwright"
+import { createServer } from "vite"
+import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
+import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
+
+const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41907, strictPort: false, hmr: false } })
+await server.listen()
+const browser = await chromium.launch()
+mkdirSync(".ui-current", { recursive: true })
+try {
+  for (const colorScheme of ["light", "dark"]) {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme })
+    const errors = []
+    page.on("pageerror", error => errors.push(error.message))
+    await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    const nav = page.locator("#workspace-navigation")
+    const entry = name => nav.getByRole("button", { name, exact: true })
+    assert.deepEqual(await nav.locator("[data-workspace-page]").evaluateAll(nodes => nodes.map(node => node.ariaLabel)), ["概览", "资源", "工具", "动画", "源代码"])
+    assert.equal(await entry("资源").isDisabled(), true)
+    assert.equal(await entry("动画").isDisabled(), true)
+    assert.equal(await entry("导出").isDisabled(), true)
+    await page.locator("#browser-open").setInputFiles({ name: "导航.bds", mimeType: "application/octet-stream", buffer: Buffer.from(bdsFixture()) })
+    await page.waitForFunction(() => !document.querySelector("#open").disabled && !document.querySelector("#file-operation-dialog").open)
+    await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+    await nav.getByRole("button", { name: "项目菜单", exact: true }).click()
+    assert.equal(await page.locator("#workspace-project-menu [role=menu]").isVisible(), true)
+    await page.keyboard.press("Escape")
+    const initialChanges = await page.evaluate(async () => [...(await import("/src/app/state.ts")).appState.archive.changed])
+    await page.keyboard.press("Escape")
+    await entry("概览").focus()
+    await page.keyboard.press("ArrowDown")
+    assert.equal(await entry("资源").evaluate(node => node === document.activeElement), true)
+    await page.keyboard.press("End")
+    assert.equal(await entry("设置").evaluate(node => node === document.activeElement), true)
+    await entry("资源").click()
+    await page.waitForFunction(() => document.querySelector('[data-workspace-page="resources"]').getAttribute("aria-current") === "page")
+    assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.resourceConfigActive), true)
+    await entry("概览").click()
+    assert.equal(await page.locator(".sidebar-overview").isVisible(), true)
+    await entry("工具").click()
+    assert.equal(await page.locator("#workspace-tools-dialog").isVisible(), true)
+    assert.equal(await entry("工具").getAttribute("aria-expanded"), "true")
+    await page.locator('[data-workspace-tool="panel-scale"]').click()
+    await page.locator("#panel-scale-dialog").waitFor({ state: "visible" })
+    await page.keyboard.press("Escape")
+    await page.locator("#panel-scale-dialog").waitFor({ state: "hidden" })
+    await entry("源代码").click()
+    assert.equal(await page.locator(".raw-files").isVisible(), true)
+    assert.equal(await page.locator("#source-editor").isVisible(), true, JSON.stringify(await page.evaluate(async () => ({ tab: (await import("/src/app/state.ts")).appState.inspectorTab, hidden: document.querySelector("#source-editor").hidden, button: document.querySelector('[data-inspector-tab="source"]').outerHTML, body: document.body.className }))))
+    await entry("概览").click()
+    await entry("动画").click()
+    await page.waitForFunction(() => document.querySelector('[data-workspace-page="animation"]').getAttribute("aria-current") === "page")
+    assert.equal(await page.locator(".animation-library").isVisible(), true)
+    await entry("概览").click()
+    assert.equal(await page.locator(".sidebar-overview").isVisible(), true)
+    await entry("导出").click()
+    await page.locator("#mobile-export-dialog").waitFor({ state: "visible" })
+    await page.keyboard.press("Escape")
+    await page.locator("#mobile-export-dialog").waitFor({ state: "hidden" })
+    await entry("设置").click()
+    await page.locator("#settings-dialog").waitFor({ state: "visible" })
+    await page.keyboard.press("Escape")
+    await page.locator("#settings-dialog").waitFor({ state: "hidden" })
+    const geometry = await nav.evaluate(node => {
+      const main = document.querySelector("main").getBoundingClientRect()
+      const rail = node.getBoundingClientRect()
+      const actions = node.querySelector(".ui-workspace-navigation-actions").getBoundingClientRect()
+      return { width: rail.width, left: main.left, bottom: actions.bottom, height: innerHeight, overflow: document.body.scrollWidth > innerWidth }
+    })
+    assert.equal(geometry.width, 64)
+    assert.equal(geometry.left, geometry.width)
+    assert.ok(geometry.bottom <= geometry.height && !geometry.overflow, JSON.stringify(geometry))
+    await page.screenshot({ path: `.ui-current/workspace-navigation-${colorScheme}.png` })
+    assert.deepEqual(await page.evaluate(async () => [...(await import("/src/app/state.ts")).appState.archive.changed]), initialChanges, "navigation does not change skin files")
+    for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+      await page.setViewportSize(viewport)
+      assert.equal(await nav.isVisible(), false)
+      if (viewport.width === 390) await page.locator("#mobile-navigation").waitFor({ state: "visible" })
+      assert.equal(await page.locator(".titlebar").evaluate(node => node.getBoundingClientRect().left), 0)
+
+    }
+    await page.setViewportSize({ width: 1440, height: 900 })
+    assert.equal(await nav.isVisible(), true)
+    await page.locator("#browser-open").setInputFiles({ name: "导航.ssf", mimeType: "application/octet-stream", buffer: Buffer.from(ssfFixture()) })
+    await page.waitForFunction(() => !document.querySelector("#open").disabled && (!document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled))
+    const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+    if (await close.isVisible()) await close.click()
+    assert.equal(await entry("动画").isDisabled(), true, "unsupported animation is disabled")
+    assert.deepEqual(errors, [])
+    await page.close()
+    console.log(`workspace navigation ${colorScheme}: passed`)
+  }
+} finally {
+  await browser.close()
+  await server.close()
+}

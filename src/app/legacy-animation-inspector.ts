@@ -99,7 +99,7 @@ type Commit = (value: string | undefined) => void
 
 function row(entry: LegacyAnimationEntry, key: string, label: string, spec: FieldSpec, commit: Commit): HTMLElement {
   return field({
-    key, label, spec,
+    key, label, spec, empty: !fieldValue(entry, key)?.trim(),
     rowKey: [appState.selectedPath, entry.section, key],
     commit: (value: string | string[] | boolean) => commit(typeof value === "boolean" ? (value ? "1" : "0")
       : Array.isArray(value) ? (value.every((part) => !part) ? undefined : value.map((part) => part || "0").join(",")) : value || undefined),

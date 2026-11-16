@@ -167,10 +167,16 @@ export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElemen
   list.addEventListener("keydown", (event) => {
     // 嵌套的列表框（例如资源网格里的音效列表）已经处理过这次按键。
     if (event.defaultPrevented) return
+    if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
     const options = [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter((option) => !option.hidden)
     if (!options.length) return
     const index = options.findIndex((option) => option.getAttribute("aria-selected") === "true")
-    const columns = options.filter((option) => option.offsetTop === options[0]!.offsetTop).length || 1
+    let columns = 1
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const top = options[0]!.offsetTop
+      const rowEnd = options.findIndex((option) => option.offsetTop !== top)
+      columns = rowEnd < 0 ? options.length : rowEnd || 1
+    }
     const step = ({ ArrowRight: 1, ArrowLeft: -1, ArrowDown: columns, ArrowUp: -columns } as Record<string, number>)[event.key]
     const next = step !== undefined ? (index < 0 ? 0 : index + step)
       : event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : undefined

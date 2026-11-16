@@ -22,13 +22,16 @@ try {
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible()) await close.click()
-  await page.locator('[data-sidebar-view="source"]').click()
+  await page.locator('[data-workspace-page="source"]').click()
   const searchToggle = page.locator('#source-file-search-toggle')
   const search = page.locator('#source-file-search')
   const openFolders = () => page.locator('.raw-folder[open]').evaluateAll(nodes => nodes.map(node => node.dataset.folderPath ?? '').sort())
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 })
-    if (width === 390) await page.locator('[data-mobile-pane="layout"]').click()
+    if (width === 390) {
+      await page.locator('#mobile-project-toggle').click()
+      await page.locator('[data-sidebar-view="source"]').click()
+    }
     const expanded = await openFolders()
     const beforeSearch = await snapshot()
     const toolbarBox = await page.locator('#source-file-toolbar').boundingBox()
@@ -102,10 +105,11 @@ try {
     await page.keyboard.press('ArrowRight')
   }
   await page.locator('.source-file-row[data-path="phoneTheme.ini"]').click()
+  await page.locator('.titlebar [data-mode-choice="preview"]').click()
   assert.equal(await page.locator('#mode').inputValue(), 'preview')
   assert.equal(await page.locator('#source-download').isEnabled(), true)
   // Preview keeps the source read-only but still lets the user select and copy it.
-  await page.locator('[data-inspector-tab="source"]').click()
+  await page.locator('[data-inspector-tab="source"]').dispatchEvent("click")
   const sourceLine = page.locator('#source .cm-line').nth(3)
   const lineText = await sourceLine.innerText()
   await sourceLine.click()
@@ -119,7 +123,7 @@ try {
   await page.keyboard.press('Control+x')
   await page.keyboard.type('x')
   assert.equal(await sourceLine.innerText(), lineText, 'preview source stays read-only')
-  await page.locator('[data-inspector-tab="properties"]').click()
+  await page.locator('[data-inspector-tab="properties"]').dispatchEvent("click")
   assert.equal(await page.locator('#source-paste').isDisabled(), true, 'empty clipboard stays disabled')
   await page.locator('#source-copy').click()
   const before = await snapshot()

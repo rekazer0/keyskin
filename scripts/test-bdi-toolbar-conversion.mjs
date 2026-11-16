@@ -1,3 +1,4 @@
+import { exportSkin } from "../tests/helpers/export-skin.mjs"
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -6,7 +7,7 @@ import { nativeToolbarFixture } from '../tests/helpers/native-toolbar-fixture.mj
 import { acceptAskDialogs } from '../tests/helpers/ask-dialogs.mjs'
 
 const bytes = process.env.BDI_TOOLBAR_SAMPLE ? readFileSync(process.env.BDI_TOOLBAR_SAMPLE) : nativeToolbarFixture().toBytes()
-const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0 } })
+const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0, strictPort: false } })
 await server.listen()
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, acceptDownloads: true })
@@ -54,7 +55,7 @@ try {
     await page.locator('.pen-file-menu > summary').click()
     const pending = page.waitForEvent('download', { timeout: 120000 })
     pending.catch(() => {})
-    await page.locator(`.pen-file-menu [data-export-format="${format}"]`).click()
+    await exportSkin(page, page.locator(`#mobile-export-dialog [data-export-format="${format}"]`))
     const tap = page.locator('#file-operation-dialog[open] button[data-variant="primary"]', { hasText: '下载' })
     const ready = tap.waitFor({ state: 'visible', timeout: 120000 }).then(() => 'tap')
     ready.catch(() => {})

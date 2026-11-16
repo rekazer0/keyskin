@@ -15,8 +15,8 @@ const styleKinds: Record<string, { label: string; icon: string }> = {
 }
 
 export const styleTypeOptions = [
-  ["all", "全部类型"], ["image", "图片"], ["color", "颜色"], ["anim", "动画"],
-  ["text", "文字"], ["sound", "音效"], ["empty", "空"],
+  ["all", "全部"], ["image", "图片"], ["color", "颜色"], ["text", "文字"],
+  ["anim", "动画"], ["sound", "音效"], ["empty", "空"],
 ] as const
 export const styleUsageOptions = [
   ["all", "全部"], ["panel", "键盘背景"], ["key", "按键背景"], ["candidate", "候选栏"], ["foreground", "前景"],
@@ -30,9 +30,12 @@ export function styleMatches(item: { kind: string; categories: Iterable<string>;
 
 export function styleFilterButtons(options: readonly (readonly [string, string])[], attribute: string, selected: string, change: (value: string) => void): HTMLElement {
   const group = element("div", "ui-style-filters")
+  const kinds = attribute !== "libraryFilter"
+  if (kinds) group.dataset.variant = "pill"
   group.setAttribute("role", "group")
-  group.setAttribute("aria-label", attribute === "libraryKind" ? "按样式类型筛选" : "按当前布局用途筛选")
+  group.setAttribute("aria-label", kinds ? "按样式类型筛选" : "按当前布局用途筛选")
   for (const [value, label] of options) {
+    if (kinds && value === "empty") continue
     const button = element("button", "ui-button")
     button.type = "button"
     button.dataset.variant = "quiet"
@@ -122,32 +125,22 @@ export function styleKindIcon(kind: string, label = styleKinds[kind]?.label ?? k
   return badge
 }
 
-/** 卡片底部：被引用时 link 图标 + 次数，其后一行短摘要。列表给了引用数（哪怕是 0）就总留这一行，卡片才等高。 */
-function cardMeta(uses?: number, note?: string): HTMLElement | undefined {
-  if (uses === undefined && !note) return
+/** 卡片底部只在有短摘要时显示。 */
+function cardMeta(note?: string): HTMLElement | undefined {
+  if (!note) return
   const meta = element("span", "ui-list-item-meta")
-  if (uses) {
-    const badge = element("span", "ui-badge")
-    badge.dataset.uses = String(uses)
-    badge.title = `${uses} 处引用`
-    badge.append(createIcon("link", 14), String(uses))
-    meta.append(badge)
-  }
-  if (note) meta.append(Object.assign(element("small"), { textContent: note }))
+  meta.append(Object.assign(element("small"), { textContent: note }))
   return meta
 }
 
-/** 列表卡片的键盘：Space 选中，Enter 选中并执行主动作（同双击），Delete / Backspace 删除。 */
-function bindCardKeys(card: HTMLElement, remove?: HTMLButtonElement): void {
+/** 列表卡片的键盘：Space 选中，Enter 选中并执行主动作（同双击）。 */
+function bindCardKeys(card: HTMLElement): void {
   card.addEventListener("keydown", event => {
     if (event.target !== card) return
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault()
       card.click()
       if (event.key === "Enter") card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
-    } else if ((event.key === "Delete" || event.key === "Backspace") && remove && !remove.disabled) {
-      event.preventDefault()
-      remove.click()
     }
   })
 }
@@ -165,11 +158,7 @@ export function styleCard(options: {
   summary?: string
   sound?: () => HTMLElement
   canvas?: (width: number, height: number) => HTMLCanvasElement
-  /** How many places reference it; shown as a link badge, and the reason removal is blocked. */
-  uses?: number
   note?: string
-  /** A trash strip on the right edge (hover, selected or focused) and the Delete key. */
-  remove?: { run(): void; blocked?: string }
 }): HTMLElement {
   const card = element("div", "ui-style-card")
   card.tabIndex = 0
@@ -182,20 +171,8 @@ export function styleCard(options: {
   const label = element("strong")
   label.textContent = options.label
   heading.append(label)
-  if (options.info) {
-    const info = element("span", "ui-style-card-info")
-    info.textContent = options.info
-    heading.append(info)
-  }
   heading.append(styleKindIcon(options.kind, options.kindLabel, options.kindIcon))
-  let remove: HTMLButtonElement | undefined
-  if (options.remove) {
-    const { run, blocked } = options.remove
-    remove = removeStrip(`删除${options.label}`, run)
-    remove.disabled = Boolean(blocked)
-    if (blocked) remove.title = blocked
-  }
-  bindCardKeys(card, remove)
+  bindCardKeys(card)
   const previews = element("span", "ui-style-preview")
   if (options.kind === "anim" || options.animationPreview) {
     previews.dataset.variant = "animation"
@@ -212,37 +189,46 @@ export function styleCard(options: {
     previews.title = "暂无样式属性"
     previews.setAttribute("aria-label", previews.title)
   } else if (options.kind !== "sound") {
-    const canvases = [false, true].map((highlighted) => {
-      const state = element("span", "ui-style-state")
-      state.dataset.state = highlighted ? "pressed" : "normal"
-      const canvas = options.canvas?.(160, 80) ?? element("canvas")
-      canvas.setAttribute("role", "img")
-      canvas.setAttribute("aria-label", highlighted ? "按下状态" : "正常状态")
-      state.append(canvas)
-      previews.append(state)
-      return canvas
+    pendingDraws.set(previews, () => {
+      const canvases = [false, true].map((highlighted) => {
+        const state = element("span", "ui-style-state")
+        state.dataset.state = highlighted ? "pressed" : "normal"
+        const canvas = options.canvas?.(160, 80) ?? element("canvas")
+        canvas.setAttribute("role", "img")
+        canvas.setAttribute("aria-label", highlighted ? "按下状态" : "正常状态")
+        state.append(canvas)
+        previews.append(state)
+        return canvas
+      })
+      if (options.draw) lazyDraw(card, previews, canvases, (canvas, index) => options.draw?.(canvas, Boolean(index)))
     })
-    if (options.draw) lazyDraw(card, previews, canvases, (canvas, index) => options.draw?.(canvas, Boolean(index)))
+    drawObserver().observe(previews)
+    releaseOnRemove(card, () => drawObserver().unobserve(previews))
   }
   const caption = element("span", "ui-style-card-caption")
   caption.append(heading)
+  if (options.info) {
+    const info = element("span", "ui-style-card-info")
+    info.textContent = options.info
+    caption.append(info)
+  }
   const sample = options.sound?.()
   if (options.kind === "sound" && sample) {
     sample.dataset.variant = "card"
     heading.querySelector(".ui-style-card-kind")?.remove()
     sample.querySelector(".ui-style-sound-info")?.prepend(caption)
-    card.append(sample)
+    previews.setAttribute("aria-hidden", "true")
+    card.append(previews, sample)
   } else {
     card.append(caption, previews)
     if (sample) heading.append(sample)
   }
-  const meta = cardMeta(options.uses, options.note)
+  const meta = cardMeta(options.note)
   if (meta) (options.kind === "sound" && sample ? heading : card).append(meta)
-  if (remove) card.append(remove)
   return card
 }
 
-/** 样式卡、样式引用卡右侧的移除条（.ui-style-remove）：悬停卡片时半透明出现，悬停自身时加宽变红。 */
+/** 样式引用卡右侧的移除条：悬停卡片时半透明出现，悬停自身时加宽变红。 */
 function removeStrip(label: string, run: () => void): HTMLButtonElement {
   const button = iconButton("trash-2", label, event => {
     // 移除后 label 中的控件会重建，阻止默认点击转发给新的添加按钮。
@@ -341,13 +327,17 @@ export function styleReferenceCard(options: {
     card.append(states)
   } else card.append(meta, states)
   if (options.remove && !options.disabled) {
-    card.append(removeStrip(options.remove.label, options.remove.run))
+    card.append(soundInfo ? iconButton("trash-2", options.remove.label, event => {
+      event.preventDefault()
+      event.stopPropagation()
+      options.remove!.run()
+    }) : removeStrip(options.remove.label, options.remove.run))
   }
   return card
 }
 
 /** 图片资源卡片（.ui-image-card）：侧栏图片列表与「全部图片」共用。 */
-export function imageResourceCard(options: { path: string; src?: string; load?: () => Promise<string | undefined>; til?: boolean; slices?: number; uses?: number }): HTMLElement {
+export function imageResourceCard(options: { path: string; src?: string; load?: () => Promise<string | undefined>; til?: boolean; slices?: number }): HTMLElement {
   const card = element("div", "ui-image-card")
   card.tabIndex = 0
   card.setAttribute("role", "option")
@@ -385,8 +375,6 @@ export function imageResourceCard(options: { path: string; src?: string; load?: 
     caption.append(til)
   }
   card.append(preview, caption)
-  const meta = cardMeta(options.uses)
-  if (meta) card.append(meta)
   bindCardKeys(card)
   return card
 }

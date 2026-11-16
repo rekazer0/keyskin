@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 // 使用教程（新手引导）端到端测试：电脑与手机竖屏各走一遍完整流程。
 // Run: node scripts/test-onboarding.mjs
 // Starts a Vite dev server and drives Chromium through Playwright (a local or global
@@ -90,7 +91,8 @@ async function walkTour(page, compact) {
   // The page outside the highlighted card is blocked.
   await page.mouse.click(5, 300)
   assert.equal(await stepTitle(page), "从模板新建皮肤")
-  await page.locator('.template-card[data-template="default-android"]').click()
+  if (compact) await openEditorTemplate(page, 'default-android')
+  else await page.locator('#new-project-form button[value="create"]').click()
   await expectStep(page, "画布：实时预览")
   assert.equal(await page.locator(".canvas-wrap.empty").count(), 0, "template opened")
   await next(page)
@@ -143,7 +145,7 @@ await check("phone portrait: the tutorial uses the phone layout", () =>
 
 await check("Esc leaves the tutorial and the menu entry restarts it with the skin already open", () =>
   withPage({ width: 1280, height: 800 }, false, async (page) => {
-    await page.locator('.template-card[data-template="default-android"]').click()
+    await openEditorTemplate(page, 'default-android')
     await page.waitForSelector(".canvas-wrap:not(.empty)")
     await page.locator(".pen-file-menu > summary").click()
     await page.locator(".pen-file-menu [data-start-tour]").click()

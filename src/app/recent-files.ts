@@ -3,7 +3,7 @@ import { appState } from "./state"
 import { runFileOperation } from "./file-operations"
 import { prepareDocumentReplacement } from "./edit-history"
 import { loadNativePath, loadSourceWorkspace } from "./archive-io"
-import { symbolSpan } from "../icons"
+import { symbolSpan, createIcon } from "../icons"
 import { isTauri, sourceDirectoryEnabledBySettings } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { canvasWrap, welcomeScroller, $ } from "./dom"
@@ -81,10 +81,11 @@ function recentFormatLabel(path: string): string {
   return path.match(/\.(bdi|bds|bda|m?ssf|sxi)$/i)?.[0]?.toLowerCase() ?? "皮肤"
 }
 
-function recentCard(item: RecentFile): HTMLButtonElement {
+function recentCard(item: RecentFile, resume = false): HTMLButtonElement {
   const card = document.createElement("button")
   card.type = "button"
-  card.className = "template-card recent-card"
+  card.className = "template-card recent-card ui-skin-entry"
+  card.dataset.variant = resume ? "resume" : "recent"
   card.dataset.recent = item.path
   card.title = `打开 ${item.name}\n${item.path}`
   const preview = document.createElement("span")
@@ -115,7 +116,23 @@ function recentCard(item: RecentFile): HTMLButtonElement {
     meta.append(place)
   }
   foot.append(nameRow, meta)
+  const mobileMeta = document.createElement("span")
+  mobileMeta.className = "ui-skin-entry-meta"
+  const extension = recentFormatLabel(item.path).replace(/^\./, "").toUpperCase()
+  mobileMeta.textContent = resume
+    ? `${({ BDI: "百度 iOS", BDS: "百度 Android", BDA: "百度", SSF: "搜狗", MSSF: "搜狗", SXI: "手心" } as Record<string, string>)[extension] ?? "皮肤"} · ${extension}`
+    : `${formatRecentTime(item.at)} · ${extension}`
+  foot.append(mobileMeta)
+  if (resume) {
+    const label = document.createElement("span")
+    label.className = "ui-skin-entry-label"
+    label.textContent = "继续上次的灵感"
+    foot.prepend(label)
+  }
   card.append(preview, foot)
+  const chevron = createIcon("chevron-right", 20)
+  chevron.classList.add("ui-skin-entry-chevron")
+  card.append(chevron)
   card.addEventListener("click", () => openRecentFile(item))
   return card
 }
@@ -218,10 +235,15 @@ async function drainRecentPreviews(): Promise<void> {
       // data-preview：rendered 已画好，failed 已放弃，两种都不再重画。
       if (!path || !host || host.dataset.preview) continue
       try {
-        const stamp = (await invoke<number[]>("skin_file_stamp", { path })).join(":")
+        const fileStamp = await invoke<number[]>("skin_file_stamp", { path })
+        const stamp = fileStamp.join(":")
+        if (card.dataset.variant !== "resume") {
+          const meta = card.querySelector<HTMLElement>(".ui-skin-entry-meta")
+          if (meta) meta.textContent += ` · ${(fileStamp[0] / 1024 / 1024).toFixed(1)} MB`
+        }
         const cached = recentPreviewCache.get(path)
         if (cached?.stamp === stamp) {
-          host.replaceChildren(cached.image)
+          host.replaceChildren(cached.image.cloneNode(true))
           host.dataset.preview = "rendered"
           continue
         }
@@ -279,7 +301,27 @@ export function renderRecentFiles(): void {
   const grid = $("#welcome-recent-grid")
   const gridEmpty = $("#welcome-recent-empty")
   const hint = $("#welcome-recent-hint")
-  grid?.replaceChildren(...items.map(recentCard))
+  grid?.replaceChildren(...items.map((item) => recentCard(item)))
+  const resume = $("#mobile-welcome-resume")
+  if (items.length && isTauri()) resume.replaceChildren(recentCard(items[0], true))
+  else {
+    const start = document.createElement("button")
+    start.type = "button"
+    start.className = "ui-skin-entry"
+    start.dataset.variant = "resume"
+    const label = document.createElement("span")
+    label.className = "ui-skin-entry-label"
+    label.textContent = "从灵感开始"
+    const name = document.createElement("strong")
+    name.className = "template-name"
+    name.textContent = "设计你的皮肤"
+    const note = document.createElement("span")
+    note.className = "ui-skin-entry-meta"
+    note.textContent = "从模板新建，或打开已有皮肤"
+    start.append(label, name, note, createIcon("keyboard", 20))
+    start.addEventListener("click", () => $("#mobile-welcome-new").click())
+    resume.replaceChildren(start)
+  }
   grid?.toggleAttribute("hidden", items.length === 0)
   if (gridEmpty) gridEmpty.hidden = items.length > 0
   if (hint) hint.textContent = items.length ? String(items.length) : ""

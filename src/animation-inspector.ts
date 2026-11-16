@@ -117,7 +117,6 @@ function listOption(view: AnimationResourceView, item: AnimationListItem, select
       const player = view.thumbnail?.(item.id)
       return player ? [animationPlayer({ ...player, thumbnail: true, direct: undefined, keyboard: undefined })] : []
     },
-    uses: item.uses,
     note: item.detail,
   })
   delete card.dataset.styleId

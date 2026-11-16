@@ -1,6 +1,6 @@
-import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsDialog, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sidebarViewVisible, inspectorTabs, inspectorTabsVisible, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor } from "./dom"
+import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsDialog, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
 import { crossfade, playEnter } from "../motion"
-import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, sidebarViewHeading, source } from "./canvas-interaction"
+import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { checkForUpdate } from "../update.ts"
 import { initializeSourceDirectory } from "./source-workspace"
@@ -139,6 +139,11 @@ export function applyWindowMaterialOpacity(): void {
   windowMaterialOpacity.value = String(opacity)
   windowMaterialOpacityValue.value = `${opacity}%`
   windowMaterialOpacity.disabled = !windowMaterial.checked
+  const navigationOpacity = Math.max(20, Math.min(100, Number(workspaceNavigationOpacity.value) || 56))
+  workspaceNavigationOpacity.value = String(navigationOpacity)
+  workspaceNavigationOpacityValue.value = `${navigationOpacity}%`
+  workspaceNavigationOpacity.disabled = !windowMaterial.checked
+  document.documentElement.style.setProperty("--workspace-navigation-opacity", String(navigationOpacity / 100))
   document.documentElement.dataset.windowMaterialKind = appState.windowMaterialKind
   // 滑杆值就是材质填充强度：100% 时每个表面都合成到完全不透明，因此不再像旧版那样乘一个小系数
   // （那样 100% 也只有半透明）。各表面按层角色取系数：单层直接用 f，下沉层用 1-√(1-f) 让两层叠加后
@@ -181,6 +186,8 @@ export async function initializeWindowMaterial(): Promise<void> {
     ? appState.windowMaterialKind !== "acrylic"
     : savedWindowMaterial !== "off"
   windowMaterialOpacitySetting.hidden = appState.windowMaterialKind === "none"
+  workspaceNavigationOpacitySetting.hidden = appState.windowMaterialKind === "none"
+  workspaceNavigationOpacity.value = localStorage.getItem("workspace-navigation-opacity") ?? "56"
   const storageKey = appState.windowMaterialKind === "acrylic" ? "window-acrylic-opacity" : "window-glass-opacity"
   // 玻璃默认值取 50%：滑杆现在代表填充强度，100% 等同于实心窗口，默认值要留出材质本身。
   windowMaterialOpacity.value = localStorage.getItem(storageKey) ?? "87"
@@ -231,14 +238,6 @@ export async function startWindowsWindowDrag(): Promise<void> {
   } finally {
     appState.windowDragMaterialTransition = undefined
   }
-}
-
-export function applySidebarViewVisibility(): void {
-  sidebarViewHeading.toggleAttribute("hidden", !sidebarViewVisible.checked)
-}
-
-export function applyInspectorTabsVisibility(): void {
-  inspectorTabs.toggleAttribute("hidden", !inspectorTabsVisible.checked)
 }
 
 export function applySourceEditorFeatures(): void {

@@ -16,6 +16,7 @@ try {
     const styles = ['anim', 'text', 'color'].map((kind, index) => ({
       styleID: String(index + 1), label: String(index + 1), kind, kindLabel: styleKinds[kind][0], kindIcon: styleKinds[kind][1],
       categories: [index === 1 ? 'foreground' : 'key'], compatible: true, imagePaths: [], visuals: [null, null],
+      info: index === 1 ? '文字样式副标题' : undefined,
       animationSections: kind === 'anim' ? ['ANIM1'] : undefined,
       summary: kind === 'anim' ? '动画 1 · 缩放' : undefined,
       textVisuals: kind === 'text' ? [{ text: '键设 Aa', fontSize: 24 }, { text: '键设 Aa', fontSize: 24 }] : undefined,
@@ -27,6 +28,21 @@ try {
   })
   await page.locator('#style-library-grid > .ui-style-card').first().waitFor()
   assert.equal(await page.locator('#style-library-grid > .ui-style-card').count(), 3)
+  assert.deepEqual(await page.locator('[data-library-kind]').allTextContents(), ['全部', '图片', '颜色', '文字', '动画', '音效'])
+  assert.equal(await page.locator('[data-style-id="2"] .ui-style-card-caption > .ui-style-card-info').textContent(), '文字样式副标题')
+  await page.locator('#resource-search').fill('副标题')
+  assert.deepEqual(await page.locator('#style-library-grid > .ui-style-card').evaluateAll(cards => cards.map(card => card.dataset.styleId)), ['2'], '副标题参与搜索')
+  await page.locator('#resource-search').fill('')
+  for (const width of [320, 390, 694]) {
+    await page.setViewportSize({ width, height: 844 })
+    const layout = await page.locator('#style-library-grid').evaluate(grid => ({
+      columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      targets: [...document.querySelectorAll('[data-library-kind]')].every(button => button.getBoundingClientRect().height >= 44 && button.getBoundingClientRect().width >= 44),
+    }))
+    assert.deepEqual(layout, { columns: 2, overflow: false, targets: true }, `${width}px: 双列卡片、44px 胶囊触控区且页面无横向溢出`)
+  }
+  await page.setViewportSize({ width: 1100, height: 760 })
   await page.locator('[data-library-kind="text"]').click()
   await page.locator('[data-library-filter="key"]').click()
   assert.equal(await page.locator('#style-library-grid > *').count(), 0, '类型与用途筛选取交集')

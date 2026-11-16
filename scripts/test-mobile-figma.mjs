@@ -60,7 +60,7 @@ const more=async(action)=>{
   await page.locator(action==='settings' ? '#mobile-app-more [data-app-dialog="settings"]' : `#mobile-app-more [data-mobile-action="${action}"]`).click()
 }
 const resource=async(kind)=>{
-  await page.locator('#mobile-navigation [data-mobile-page="project"]').click()
+  await page.locator('#mobile-project-toggle').click()
   await page.locator(`.sidebar-overview [data-nav-mode="${kind}"]`).click()
 }
 const savedDownload=async(trigger,format)=>{
@@ -92,7 +92,7 @@ try{
   await page.locator('#mobile-property-tabs [data-mobile-category="typography"]').click();await capture('06')
   await page.locator('#mobile-property-tabs [data-mobile-category="actions"]').click();await capture('07')
   await select(['KEY11','KEY12','KEY13']);await capture('08')
-  await page.locator('#mobile-navigation [data-mobile-page="project"]').click();await capture('09')
+  await page.locator('#mobile-project-toggle').click();await capture('09')
   await page.locator('[data-sidebar-view="source"]').click();await capture('10')
   await select();await more('mobile-source-view');await page.getByRole('button',{name:'返回属性',exact:true}).waitFor();await capture('11')
   await resource('style');await capture('12')
@@ -146,7 +146,7 @@ try{
   }
   await closeDialog();await select();await more('mobile-ai-view');await capture('34')
   await select();await page.evaluate(async()=>{const {appState}=await import('/src/app/state.ts');appState.unsavedNew=true;(await import('/src/app/edit-history.ts')).updateDirty()})
-  await page.locator('#mobile-home').click();await capture('35');await closeDialog()
+  await page.locator('#mobile-project-toggle').click();await page.locator('#mobile-home').click();await capture('35');await closeDialog()
   await more('mobile-share');await capture('36');await closeDialog()
   await page.evaluate(async()=>{
     const ops=await import('/src/app/file-operations.ts')

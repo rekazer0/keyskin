@@ -1,3 +1,4 @@
+import { exportSkin } from "../tests/helpers/export-skin.mjs"
 // A Palm `.sxi` opened in the editor must export to BDI, BDS and BDA through the real menu.
 // The .sxi canvas is drawn from skin.json itself and the BDI/BDS from their exported INI, yet the
 // two previews have to match pixel for pixel; the BDA package only gets a reopen smoke check.
@@ -119,7 +120,7 @@ try {
   for (const [format, platform] of [["bdi", ""], ["bds", ""], ["bda", "android"], ["ssf", ""]]) {
     const file = await download(async () => {
       await openMenu()
-      await page.locator(`.pen-file-menu [data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`).click()
+      await exportSkin(page, page.locator(`#mobile-export-dialog [data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`))
     })
     exported[format] = readFileSync(await file.path())
     await closeDialog()

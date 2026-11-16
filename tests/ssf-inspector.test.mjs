@@ -41,8 +41,9 @@ test('SSF numeric controls keep names, versions and unknown values as text', () 
   })
   const targets = [{ path: 'phoneTheme.ini', section: 'General' }]
   for (const key of ['skin_name', 'skin_version', 'sound', 'CUSTOM']) assert.equal(context.textField(key, '001', targets).kind, 'text')
-  assert.equal(context.textField('TEXT_SIZE', '18', targets).kind, 'number')
-  assert.equal(context.textField('TEXT_SIZE', 'default', targets).kind, 'text')
+  // 字号由共享文字控件验证；这里继续覆盖原始数值字段的回退。
+  assert.equal(context.textField('LABEL_HORIZONTAL_OFFSET', '18', targets).kind, 'number')
+  assert.equal(context.textField('LABEL_HORIZONTAL_OFFSET', 'default', targets).kind, 'text')
 })
 
 test('SSF controls follow field definitions, preserve unknown values and show mixed selections', () => {

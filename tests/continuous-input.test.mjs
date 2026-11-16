@@ -199,6 +199,20 @@ test('scrub handles resolve to exactly one editable number field', () => {
   assert.equal(scrubbableField(handle(field, new Input())), undefined, 'X/Y 共用的行标签不能拖')
   assert.equal(scrubbableField(handle(Object.assign(new Input(), { disabled: true }))), undefined)
 })
+test('controls inside numeric captions keep their own pointer interaction', () => {
+  const s = wheelSetup()
+  let checks = 0
+  s.root.emit('pointerdown', {
+    button: 0,
+    target: { closest(selector) {
+      checks++
+      assert.equal(selector, 'button, input, select, textarea, a')
+      return {}
+    } },
+    preventDefault() { assert.fail('the add button must not start numeric scrubbing') },
+  })
+  assert.equal(checks, 1)
+})
 test('duplicate installation cannot double-step a field', () => {
   const s = wheelSetup(), field = new Input()
   s.api.installNumberInputWheel(s.root)

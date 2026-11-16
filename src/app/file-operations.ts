@@ -9,7 +9,7 @@ import { selectFile } from "./navigation"
 import { updateDirty, commitBatch, commitTextChanges } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { updateSourceFileActions } from "./source-files"
-import { exportButtons, isTauri, LARGE_SKIN_BYTES } from "./canvas-interaction"
+import { exportTargets, isTauri, LARGE_SKIN_BYTES } from "./canvas-interaction"
 import { canExport, type ExportFormat } from "../export.ts"
 import { operationError, operationErrorDetail } from "../operations.ts"
 import { clientLog, flushClientLogs } from "../client-log.ts"
@@ -122,7 +122,7 @@ function setFileOperationBusy(busy: boolean): void {
   adbShareButton.disabled = busy || !appState.archive
   updatePanelToolButtons()
   updateSourceFileActions()
-  for (const button of exportButtons) {
+  for (const button of exportTargets) {
     button.hidden = exportTargetHidden(button.dataset.exportFormat as ExportFormat)
     button.disabled = busy || !appState.archive || button.hidden
   }

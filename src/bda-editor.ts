@@ -6,6 +6,8 @@ import { renderBdaAnimationEditor, type BdaAnimationView } from "./bda-animation
 import type { KeyboardPlayback } from "./animation-player.ts"
 import { bdaLayoutStyleGroups, NEW_FORE_LAYER, type BdaLayoutStyleItem } from "./bda-layout-styles.ts"
 import { element, emptyState, shortcutLabel } from "./dom-element.ts"
+import { typographyRows } from "./app/typography.ts"
+import { skinMetadataSections } from "./app/skin-metadata"
 import { field, section } from "./app/property-rows.ts"
 import { configField } from "./app/config-value-control.ts"
 import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "./style-card.ts"
@@ -55,6 +57,9 @@ type ConfigEditorOptions = {
   onPickAnimationResource: (sequence: string, frame: number) => void
   keyboardPlayback?: (effectID: string) => KeyboardPlayback
   animationView: BdaAnimationView
+  soundFiles?: string[]
+  soundSample?(filename: string): HTMLElement
+  onSoundChange?(key: string, ios: boolean, filename: string): void
 }
 
 type MetadataEditorOptions = {
@@ -181,16 +186,14 @@ function numberField(label: string, value: number, disabled: boolean, onChange: 
     commit: (next) => { if (next !== "" && Number.isFinite(Number(next))) onChange(Number(next)) } })
 }
 
-function textField(label: string, value: string, disabled: boolean, onChange: (value: string) => void): HTMLElement {
-  return field({ key: label, label, editable: !disabled, spec: { kind: "text", value }, commit: onChange })
-}
+
 
 function readonlyField(label: string, value: string | number): HTMLElement {
   return field({ key: label, label, spec: { kind: "readonly", value: String(value) } })
 }
 
-function booleanField(label: string, value: boolean, disabled: boolean, onChange: (value: boolean) => void): HTMLElement {
-  return field({ key: label, label, editable: !disabled, spec: { kind: "switch", checked: value }, commit: onChange })
+function booleanField(label: string, value: boolean | undefined, disabled: boolean, onChange: (value: boolean) => void): HTMLElement {
+  return field({ key: label, label, editable: !disabled, empty: value === undefined, spec: { kind: "switch", checked: value ?? false }, commit: onChange })
 }
 
 function styleCard(
@@ -210,7 +213,7 @@ function styleCard(
   const card = element("article", "bda-style-card")
   card.append(
     heading(label, `${ref.type} · ${ref.key}`),
-    stylePreview(ref, resolver, editable, onImageAction, imageResourceNames),
+    ...ref.type === "text" ? [] : [stylePreview(ref, resolver, editable, onImageAction, imageResourceNames)],
   )
   const controls = element("div", "bda-style-controls")
   if (ref.type === "image") {
@@ -247,11 +250,14 @@ function styleCard(
   } else {
     const style = appearance.textStyles.get(ref.key)
     if (!style) return
-    controls.append(textField("字体", style.fontName ?? "", !editable, (value) => onChange(ref, "FONT_NAME", value)))
-    controls.append(numberField("字号", style.fontSize ?? 0, !editable, (value) => onChange(ref, "FONT_SIZE", String(value)), "fontSize"))
-    controls.append(colorPairField("文字颜色", [style.normalColor, style.highlightColor], !editable, (property, value) => onChange(ref, property, value)))
+    controls.append(...typographyRows({ fields: {
+      text: { key: "CONTENT_TEXT", values: [style.contentText ?? ""] },
+      font: { key: "FONT_NAME", values: [style.fontName ?? ""] },
+      size: { key: "FONT_SIZE", values: [style.fontSize === undefined ? "" : String(style.fontSize)] },
+      color: { key: "NM_COLOR", values: [style.normalColor === undefined ? "" : bdaColorHex(style.normalColor)] },
+      pressed: { key: "HL_COLOR", values: [style.highlightColor === undefined ? "" : bdaColorHex(style.highlightColor)] },
+    }, editable, write: (key, value) => onChange(ref, key, value) }))
     if (style.resource) controls.append(readonlyField("字体资源", `${style.resource.type}:${style.resource.resourceID}`))
-    controls.append(textField("显示文字", style.contentText ?? "", !editable, (value) => onChange(ref, "CONTENT_TEXT", value)))
   }
   if (controls.childElementCount) card.append(controls)
   return card
@@ -420,11 +426,11 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
   }
 
   for (const group of groups) {
-    const grid = section(group.title, [], { className: "bda-inspector-section bda-panel-property-section" })
+    const grid = section(group.key === "candidate" ? "样式" : group.title, [], { className: "bda-inspector-section bda-panel-property-section" })
     // Panel switches and the swipe trail colour are proto3 values: absent means off / transparent.
     if (scope === "panel" && !options.keys.length && group.key === "panel") {
-      grid.append(booleanField("背景模糊", panel.shouldBgBlur ?? false, !options.editable, (value) => options.onPanelPropertyChange("shouldBgBlur", value)))
-      grid.append(booleanField("按键开槽", panel.shouldKeySlotting ?? false, !options.editable, (value) => options.onPanelPropertyChange("shouldKeySlotting", value)))
+      grid.append(booleanField("背景模糊", panel.shouldBgBlur, !options.editable, (value) => options.onPanelPropertyChange("shouldBgBlur", value)))
+      grid.append(booleanField("按键开槽", panel.shouldKeySlotting, !options.editable, (value) => options.onPanelPropertyChange("shouldKeySlotting", value)))
       grid.append(colorField("滑动轨迹颜色", panel.trackColor ?? 0, !options.editable, (value) => options.onPanelPropertyChange("trackColor", value)))
     }
     appendStyleReferences(grid, group.items)
@@ -489,10 +495,11 @@ export function renderBdaConfigEditor(container: HTMLElement, options: ConfigEdi
   if (/^\d*soundConfig$/i.test(name)) {
     const sound = decodeBdaSoundConfig(options.bytes)
     const list = inspectorSection(element("div", "bda-sound-list"), "音效")
-    for (const [key, resource] of [...sound.keySounds, ...sound.iosKeySounds]) {
-      const card = element("article")
-      card.append(heading(key, resource.resourceID))
-      list.append(card)
+    for (const [sounds, ios] of [[sound.keySounds, false], [sound.iosKeySounds, true]] as const) {
+      for (const [key, resource] of sounds) list.append(field({ key: `${ios ? "iosKeySounds" : "keySounds"}.${key}`, label: key, hint: ios ? "iOS 按键音" : "Android 按键音",
+        editable: options.editable, spec: { kind: "sound", value: resource.resourceID, files: options.soundFiles ?? [], sample: options.soundSample?.(resource.resourceID) },
+        commit: options.onSoundChange ? value => options.onSoundChange!(key, ios, value) : undefined,
+      }))
     }
     container.append(list)
     return
@@ -501,14 +508,14 @@ export function renderBdaConfigEditor(container: HTMLElement, options: ConfigEdi
 }
 
 export function renderBdaMetadataEditor(container: HTMLElement, options: MetadataEditorOptions): void {
-  container.replaceChildren()
-  const card = inspectorSection(element("article", "bda-metadata-card"), "皮肤")
-  card.append(heading("皮肤信息"))
-  for (const { key, value } of options.entries) {
+  const rows: HTMLElement[] = []
+  const entries = new Map(["Name", "Description", "Author", "VersionCode", "MinImeCode", "SupportPlatform", "Style", "SupportDarkMode", "SkinType", "SkinFlags", "Abilities", "SupportPatch"].map(key => [key, ""]))
+  for (const entry of options.entries) entries.set(entry.key, entry.value)
+  for (const [key, value] of entries) {
     const label = options.label(key)
     const commit = (next: string) => options.onChange(key, next)
-    card.append(configField("", key, label, value, options.editable, commit)
+    rows.push(configField("", key, label, value, options.editable, commit)
       ?? field({ key, label, editable: options.editable, spec: { kind: "text", value }, commit }))
   }
-  container.append(card)
+  container.replaceChildren(...skinMetadataSections(rows))
 }

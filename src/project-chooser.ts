@@ -103,5 +103,5 @@ export function initializeProjectChooser(form: HTMLFormElement): void {
   })
   form.querySelector<HTMLButtonElement>("button[value=cancel]")?.setAttribute("formnovalidate", "")
   validate()
-  void hydrateTemplateCardPreviews(body)
+  void hydrateTemplateCardPreviews(body, { lazy: true })
 }

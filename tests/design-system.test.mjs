@@ -151,7 +151,7 @@ test("design system: tokens.css is the first stylesheet of every window", () => 
   assert.match(ts["src/main.ts"], /^import "\.\/tokens\.css"$/m)
   const firstImport = ts["src/main.ts"].match(/^import "\.\/[\w-]+\.css"$/m)?.[0]
   assert.equal(firstImport, 'import "./tokens.css"')
-  for (const page of ["picker.html", "new-project.html"]) {
+  for (const page of ["picker.html"]) {
     assert.match(html[page].match(/<link rel="stylesheet"[^>]*>/)?.[0] ?? "", /tokens\.css/, `${page} 必须先加载 tokens.css`)
   }
 })

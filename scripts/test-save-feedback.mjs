@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
@@ -10,7 +11,7 @@ try {
   const page = await browser.newPage({ bypassCSP: true })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   await page.waitForSelector(".template-card")
-  await page.locator('.template-card[data-template="official-android-bds"]').click()
+  await openEditorTemplate(page, 'official-android-bds')
   await page.waitForFunction(() => !document.querySelector("#open").disabled)
   const dialog = page.locator("#file-operation-dialog")
   const close = page.locator("#file-operation-close")

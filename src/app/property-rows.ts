@@ -6,8 +6,10 @@
  */
 import { drawVisualPreview, type Visual } from "../atlas.ts"
 import { element } from "../dom-element.ts"
+import { fontControl, type FontChoice } from "./font-picker"
 import { createIcon } from "../icons.ts"
-import { soundStyleSample, styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
+import { styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
+import { soundControl } from "./sound-field"
 
 /** 选项：值、文字（纯图标分段时只进悬停提示与 aria-label）、可选图标。 */
 type Choice = readonly [value: string, label: string, icon?: string]
@@ -27,6 +29,7 @@ const RANGES = {
 } satisfies Record<string, Bounds>
 
 export type FieldSpec =
+  | { kind: "font"; value: string; choices: FontChoice[]; placeholder?: string }
   /** `validate` 返回问题时就地提示（浏览器校验气泡），不写回。 */
   | { kind: "text"; value: string; placeholder?: string; suggestions?: readonly string[]; validate?(value: string): string | undefined }
   /** `expression`：允许 rand(a,b) / inf，用 text + inputmode=decimal（DESIGN.md §10）。 */
@@ -35,10 +38,10 @@ export type FieldSpec =
   | { kind: "parts"; affixes: readonly string[]; values: readonly string[]; columns?: number; expression?: boolean; step?: number; unit?: string; options?: readonly Choice[] }
   | { kind: "switch"; checked: boolean }
   /** ≤4 项分段（都有图标时纯图标），grid3 是 3×3 图标格，更多项或 select 用下拉；当前值不在选项里时总是下拉。 */
-  | { kind: "choice"; value: string; options: readonly Choice[]; layout?: "grid3" | "select" | "labeled"; unset?: boolean }
+  | { kind: "choice"; value: string; options: readonly Choice[]; layout?: "grid3" | "select" | "labeled" | "wrap"; unset?: boolean }
   | { kind: "flags"; values: readonly string[]; options: readonly Choice[]; keepOne?: string }
-  | { kind: "color"; value: string; codec: ColorCodec }
-  | { kind: "colorPair"; values: readonly [string, string]; codec: ColorCodec }
+  | { kind: "color"; value: string; codec: ColorCodec; details?: boolean }
+  | { kind: "colorPair"; values: readonly [string, string]; codec: ColorCodec; details?: boolean }
   /** 样式编号（逗号分隔）：bindFieldServices 的 decorateStyle 把输入框换成引用卡列表。 */
   | { kind: "style"; value: string; reference: string }
   | { kind: "image"; value: string; placeholder?: string; suggestions?: readonly string[]; load(): Promise<Visual | undefined> | undefined; pick?(): void }
@@ -46,7 +49,7 @@ export type FieldSpec =
   | { kind: "readonly"; value: string }
 
 type Values = {
-  text: string; number: string; choice: string; color: string; style: string; image: string; sound: string
+  font: string; text: string; number: string; choice: string; color: string; style: string; image: string; sound: string
   parts: string[]; flags: string[]; colorPair: string[]; switch: boolean; readonly: never
 }
 /** 多目标时的提示：改了哪一格（parts / colorPair），以及只换被改分量的合并函数（颜色）。 */
@@ -63,6 +66,8 @@ type FieldOptions<S extends FieldSpec> = {
   spec: S
   commit?: Commit<S>
   mixed?: boolean
+  /** 原始配置为空，但控件需要显示类型默认值（如关闭的开关）。 */
+  empty?: boolean
   /** 跨重绘不变的行标识：改动标记按它记住第一次渲染的值。 */
   rowKey?: unknown
   /** 改动标记比较、重置交回的值；默认是 spec 的值。 */
@@ -100,6 +105,7 @@ export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElemen
   const single = ["text", "number", "switch"].includes(spec.kind) || spec.kind === "choice" && control.classList.contains("ui-select")
   const row = element(single ? "label" : "div", "ui-field")
   fieldCaption(row, options.key, options.label, options.hint)
+  if (options.mixed || options.empty !== undefined) row.dataset.configEmpty = String(!options.mixed && options.empty === true)
   row.append(control)
   if (spec.kind === "style" || spec.kind === "image") {
     row.classList.add("style-reference-field")
@@ -116,6 +122,7 @@ export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElemen
     }
   }
   if (options.rowKey !== undefined) row.dataset.inspectorRowKey = JSON.stringify(options.rowKey)
+  if (spec.kind === "sound") row.classList.add("style-reference-field")
   if (options.commit && spec.kind !== "readonly") {
     row.dataset.inspectorValue = JSON.stringify(["baseline" in options ? options.baseline : specValue(spec)])
     row.addEventListener("inspector-reset", (event) => {
@@ -162,6 +169,7 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
   const disabled = !state.editable
   const placeholder = state.mixed ? "混合" : "未设置"
   switch (spec.kind) {
+    case "font": return fontControl(spec, label, value => send(value, {}), state)
     case "text": {
       const box = element("span", "ui-input")
       const input = textInput(spec.value, label, placeholder, disabled)
@@ -193,14 +201,15 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
     }
     case "choice": return choiceControl(state.mixed ? { ...spec, value: "", layout: "select" } : spec, label, disabled, (value) => send(value, {}), placeholder)
     case "flags": return flagsControl(spec, label, disabled, (values) => send(values, {}))
-    case "color": return colorControl(spec.value, spec.codec, label, disabled, Boolean(state.mixed), (value, merge) => send(value, { merge }))
+    case "color": return colorControl(spec.value, spec.codec, label, disabled, Boolean(state.mixed), (value, merge) => send(value, { merge }), undefined, spec.details)
     case "colorPair": {
       const pair = element("span", "ui-field-pair")
+      if (spec.details) pair.dataset.variant = "colors"
       spec.values.forEach((value, index) => pair.append(colorControl(value, spec.codec, `${label}${index ? "按下" : "正常"}`, disabled, Boolean(state.mixed) && !value, (next, merge) => {
         const values = [...spec.values]
         values[index] = next
         send(values, { index, merge })
-      }, index ? "按下" : "正常")))
+      }, index ? "按下" : "正常", spec.details)))
       return pair
     }
     case "style": {
@@ -213,13 +222,7 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
       return input
     }
     case "image": return imageControl(spec, label, disabled, (value) => send(value, {}))
-    case "sound": {
-      const wrap = element("span", "ui-sound-field")
-      const files = spec.files.includes(spec.value) || !spec.value ? spec.files : [spec.value, ...spec.files]
-      const select = choiceControl({ kind: "choice", value: spec.value, options: files.map((file) => [file, file]), layout: "select", unset: true }, label, disabled, (value) => send(value, {}))
-      wrap.append(spec.sample ?? soundStyleSample(spec.value || undefined), select)
-      return wrap
-    }
+    case "sound": return soundControl(spec, label, disabled, value => send(value, {}))
     case "readonly": {
       const output = element("span", "ui-field-value")
       output.textContent = spec.value
@@ -272,7 +275,7 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
   let accepted = spec.value
   input.addEventListener("change", () => {
     const text = input.value.trim()
-    if (validNumber(text, spec.expression)) commit(accepted = text)
+    if (validNumber(text, spec.expression) && (!text || spec.min === undefined || Number(text) >= spec.min)) commit(accepted = text)
     else input.value = accepted
   })
   // 手机上左右两端是 − / + 步进按钮（桌面由 .ui-step 隐藏，改用拖标签、滚轮）
@@ -286,7 +289,7 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
 }
 
 /** 数值的 − / + 按钮：一次一格，走输入框的 change，撤销与改动标记照旧。 */
-function stepButton(direction: -1 | 1, input: HTMLInputElement, step: number, min: number | undefined, label: string, disabled: boolean): HTMLButtonElement {
+export function stepButton(direction: -1 | 1, input: HTMLInputElement, step: number, min: number | undefined, label: string, disabled: boolean): HTMLButtonElement {
   const button = element("button", "ui-step")
   button.type = "button"
   button.disabled = disabled
@@ -297,9 +300,11 @@ function stepButton(direction: -1 | 1, input: HTMLInputElement, step: number, mi
   button.addEventListener("pointerdown", (event) => event.preventDefault())
   button.addEventListener("click", (event) => {
     event.preventDefault()
+    if (input.disabled || input.readOnly) return
     const current = Number(input.value.trim())
     const next = (Number.isFinite(current) ? current : 0) + direction * step
     input.value = String(Number(Math.max(min ?? next, next).toFixed(4)))
+    input.dispatchEvent(new Event("input", { bubbles: true }))
     input.dispatchEvent(new Event("change", { bubbles: true }))
   })
   return button
@@ -383,13 +388,14 @@ function choiceControl(spec: Extract<FieldSpec, { kind: "choice" }>, label: stri
   const known = spec.options.some(([value]) => value === spec.value)
   const icons = spec.options.every(([, , icon]) => icon)
   const labeled = icons && spec.layout === "labeled"
-  if (spec.layout !== "select" && (known || !spec.value) && (spec.layout === "grid3" || spec.options.length <= 4)) {
+  if (spec.layout !== "select" && (known || !spec.value) && (spec.layout === "grid3" || spec.layout === "wrap" || spec.options.length <= 4)) {
     const group = element("span", "ui-segmented")
     group.setAttribute("role", "group")
     group.setAttribute("aria-label", label)
     if (labeled) group.dataset.fill = ""
     else if (icons) group.dataset.variant = "icon"
     if (spec.layout === "grid3") group.dataset.layout = "grid3"
+    if (spec.layout === "wrap") group.dataset.layout = "wrap"
     for (const [value, text, icon] of spec.options) {
       const button = element("button")
       button.type = "button"
@@ -427,11 +433,14 @@ function flagsControl(spec: Extract<FieldSpec, { kind: "flags" }>, label: string
   group.setAttribute("role", "group")
   group.setAttribute("aria-label", label)
   const options = [...spec.options, ...spec.values.filter((value) => !spec.options.some(([option]) => option === value)).map((value): Choice => [value, `${value}（扩展）`])]
-  for (const [value, text] of options) {
+  const icons = options.every(([, , icon]) => icon)
+  if (icons) group.dataset.variant = "icon"
+  for (const [value, text, icon] of options) {
     const on = spec.values.includes(value)
     const button = element("button")
     button.type = "button"
-    button.textContent = text
+    if (icons) button.append(createIcon(icon!, 14))
+    else button.textContent = text
     button.setAttribute("aria-label", text)
     button.setAttribute("aria-pressed", String(on))
     button.title = `${label}：${value}`
@@ -465,7 +474,7 @@ function encodeColor(codec: ColorCodec, { rgb, alpha }: Rgba): string {
 
 let openPopover: { close(): void } | undefined
 
-function colorControl(value: string, codec: ColorCodec, label: string, disabled: boolean, mixed: boolean, commit: (value: string, merge: (current: string) => string) => void, state?: string): HTMLElement {
+function colorControl(value: string, codec: ColorCodec, label: string, disabled: boolean, mixed: boolean, commit: (value: string, merge: (current: string) => string) => void, state?: string, details = false): HTMLElement {
   const current = mixed ? undefined : decodeColor(value)
   const root = element("span", "ui-color-field")
   const swatch = element("button", "ui-swatch ui-checker")
@@ -488,6 +497,11 @@ function colorControl(value: string, codec: ColorCodec, label: string, disabled:
   }
   swatch.append(fill)
   root.append(swatch)
+  if (details) {
+    root.dataset.variant = "labeled"
+    if (state) root.prepend(Object.assign(element("span", "ui-color-caption"), { textContent: state }))
+    root.append(Object.assign(element("span", "ui-color-value"), { textContent: mixed ? "混合" : current ? `#${current.rgb}` : "未设置" }))
+  }
   // 只改被改的分量：色相变时保留原透明度的精确字节，多目标时各自保留另一半。
   const write = (part: Partial<Rgba>) => {
     const merge = (other: string) => encodeColor(codec, { rgb: "000000", alpha: 255, ...decodeColor(other), ...part })

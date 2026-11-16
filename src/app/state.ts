@@ -214,7 +214,6 @@ export const appState = {
   mobileInspectorCategory: "appearance",
   mobileInspectorContext: "",
   mobileAppearancePressed: false,
-  mobileAppearanceExpanded: false,
   mobilePickerPreviewRequest: 0,
   mobilePickerBitmap: undefined as ImageBitmap | undefined,
   cachedVisualResolver: undefined as { key: readonly unknown[]; resolver: VisualResolver } | undefined,
@@ -279,10 +278,6 @@ export const appState = {
   stylePreviewsPending: false,
   pickerSelectedIndex: undefined as number | undefined,
   newProjectOptions: undefined as ProjectChoice | undefined,
-  projectChooserInitialized: false,
-  nativeProjectChoice: undefined as Promise<string | undefined> | undefined,
-  resolveNativeProjectChoice: undefined as ((templateID: string | undefined) => void) | undefined,
-  nativeProjectWindowReady: false,
   recentPreviewRunning: false,
   // 使用教程进行中时的停止函数
   stopOnboarding: undefined as (() => void) | undefined,

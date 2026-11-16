@@ -92,8 +92,9 @@ export function selectFile(
     if (previewLayout && !refreshBdaLayout(path)) return
     appState.selectedDocument = previewLayout ? appState.layoutDocument : undefined
     if (previewLayout) {
-      appState.selectedKeySections = []
-      preview.setSelected([])
+      const existing = new Set(appState.layoutDocument?.sections())
+      appState.selectedKeySections = appState.selectedKeySections.filter(section => existing.has(section))
+      preview.setSelected(appState.selectedKeySections)
     }
     setSourceValue(decodedBdaAppearancePart(info.bytes, appearancePart))
     source.disabled = false
@@ -109,8 +110,9 @@ export function selectFile(
     if (previewLayout) appState.layoutPath = path
     appState.selectedDocument = previewLayout ? appState.layoutDocument : base
     if (previewLayout) {
-      appState.selectedKeySections = []
-      preview.setSelected([])
+      const existing = new Set(appState.layoutDocument?.sections())
+      appState.selectedKeySections = appState.selectedKeySections.filter(section => existing.has(section))
+      preview.setSelected(appState.selectedKeySections)
     }
     const info = currentBdaAppearance()
     setSourceValue(info ? decodedBdaSource(info.path, info.bytes, panelName) : "{}")

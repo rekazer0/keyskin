@@ -5,10 +5,12 @@
 import { isListCell } from "../layout.ts"
 import { palmBoardLabel, palmPartLabel } from "../palm/palm-labels.ts"
 import { palmInspectorCollection, palmInspectorModel } from "../palm/palm-inspector.ts"
+import { typographyRows } from "./typography"
+import { skinFontChoices } from "./skin-fonts"
 import { addPalmStyle } from "../palm/palm-style-edit.ts"
 import { asObject, type Json, type JsonObject } from "../palm/sxi-ini.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
-import { element, listToolbar } from "../dom-element.ts"
+import { element } from "../dom-element.ts"
 import { appState } from "./state"
 import { editSxi, gestureRows, renderSxiGroup, sxiValue, type SxiBlock, type SxiPointer } from "./sxi-fields"
 import { openPalmSkin, palmTheme, sxiPointer, PALM_SHARED_BOARD } from "./sxi-documents"
@@ -16,7 +18,10 @@ import { isEditing } from "./edit-history"
 import { palmStylePointer } from "./sxi-styles"
 import { populateSxiAnimationInspector, sxiAnimationInspectorTitle } from "./sxi-animation-inspector"
 
+import { resizeSelectedKeys, selectedRects } from "./key-editing"
+import { geometryPreview } from "./geometry-preview"
 import { toolbarIconSection } from "./toolbar-icon-inspector"
+import { skinMetadataSections } from "./skin-metadata"
 
 // Board parts a canvas selection can stand for, by the section the renderer gives them.
 const PART_SECTIONS: Record<string, string> = {
@@ -78,7 +83,9 @@ const isModel = (value: Json): boolean => Boolean(asObject(value)) && !["top", "
 function modelGroups(pointer: SxiPointer, model: JsonObject, label: string, omit: string[] = []): Array<HTMLElement | undefined> {
   const supported = { ...palmInspectorModel(pointer), ...Object.fromEntries(Object.entries(model).filter(([, value]) => value !== null)) }
   const parts = Object.keys(supported).filter((key) => key !== "b" && !omit.includes(key) && (palmInspectorCollection(pointer, key) || isModel(supported[key]) || isModelList(supported[key])))
-  const groups = [renderSxiGroup(label, [{ targets: [pointer], omit: [...omit, ...parts] }], { code: pointer.slice(1).join(".") || String(pointer[0]) })]
+  const candidate = pointer[2] === "c" && pointer.length === 4 || pointer.at(-1) === "cand"
+  const groups = candidate ? [renderSxiGroup("位置与尺寸", [{ targets: [pointer], only: ["rect"] }])] : []
+  groups.push(renderSxiGroup(candidate ? "样式" : label, [{ targets: [pointer], omit: [...omit, ...parts, ...candidate ? ["rect"] : []] }], { code: pointer.slice(1).join(".") || String(pointer[0]) }))
   for (const part of parts) {
     const value = supported[part]
     const name = palmPartLabel(part)
@@ -109,7 +116,7 @@ function textBlocks(skin: JsonObject, models: SxiPointer[]): SxiBlock[] {
       title: `前景样式 ${id}`,
       code: `${style.slice(1).join(".")}.s_1`,
       only: TEXT_FIELDS,
-      expect: ["text", "f_s", "c_normal", "c_hl"],
+      expect: TEXT_FIELDS,
     }] : []
   })
 }
@@ -126,26 +133,31 @@ function palmKeyGroups(skin: JsonObject, models: SxiPointer[]): Array<HTMLElemen
   const count = element("small", "inspector-gesture-count")
   const gestureGroup = renderSxiGroup("手势", [], { extra: gestureRows(gestureBlock, ["values"], gestures) })
   gestureGroup?.querySelector("h3")?.append(count)
+  const rects = selectedRects()
   return [
-    renderSxiGroup("布局", [{ targets: models, only: LAYOUT_FIELDS, expect: ["rect", "hit_rect"], note }]),
+    renderSxiGroup("布局", [{ targets: models, only: LAYOUT_FIELDS, expect: ["rect", "hit_rect"], note }], { extra: rects.length ? [geometryPreview(rects, isEditing() ? values => resizeSelectedKeys(values.map((rect, index) => ({ ...rect, section: rects[index].section }))) : undefined)] : [] }),
     renderSxiGroup("样式", [{ targets: models, only: STYLE_FIELDS, expect: ["b.base_b", "b.base_f"], keyForeground: true }]),
     renderSxiGroup("音效", [{ targets: models, only: ["b.base_s"], expect: ["b.base_s"] }]),
     renderSxiGroup("动画", [{ targets: models, only: ANIMATION_FIELDS, expect: ["b.asi"] }]),
     text.length
       ? renderSxiGroup("文字", text.map((block, index) => index ? block : { ...block, note: "共享：可能被多个按键共用" }))
-      : renderSxiGroup("文字", [], { extra: [listToolbar({ create: {
-        label: "新建文字样式", disabled: !isEditing(),
-        run: () => editSxi((skin) => {
-          const id = Number(addPalmStyle(skin, palmTheme(), { s_1: {} }))
-          for (const pointer of models) {
-            const model = asObject(sxiValue(skin, pointer))
-            if (!model) throw new Error(`skin.json 中缺少 ${pointer.join(".")}`)
-            const base = asObject(model.b) ?? {}
-            const layers = Array.isArray(base.base_f) ? base.base_f : typeof base.base_f === "number" ? [base.base_f] : []
-            model.b = { ...base, base_f: [...layers, id] }
-          }
-        }),
-      } })] }),
+      : renderSxiGroup("文字", [], { extra: typographyRows({
+        fields: Object.fromEntries(Object.entries({ text: "text", font: "f_n", size: "f_s", weight: "f_w", color: "c_normal", pressed: "c_hl" }).map(([attribute, key]) => [attribute, { key, values: [] }])),
+        editable: isEditing(), fonts: skinFontChoices(),
+        write: (key, value) => {
+          if (!value) return
+          editSxi(skin => {
+            const id = Number(addPalmStyle(skin, palmTheme(), { s_1: { [key]: ["f_s", "f_w"].includes(key) ? Number(value) : value } }))
+            for (const pointer of models) {
+              const model = asObject(sxiValue(skin, pointer))
+              if (!model) throw new Error(`skin.json 中缺少 ${pointer.join(".")}`)
+              const base = asObject(model.b) ?? {}
+              const layers = Array.isArray(base.base_f) ? base.base_f : typeof base.base_f === "number" ? [base.base_f] : []
+              model.b = { ...base, base_f: [...layers, id] }
+            }
+          })
+        },
+      }) }),
     gestureGroup,
     renderSxiGroup("状态", [{ targets: models, only: ["fix_a"] }]),
     renderSxiGroup("其他", [{ targets: models, omit: ["id", "values", "b", ...LAYOUT_FIELDS, "fix_a"] }]),
@@ -162,6 +174,12 @@ export function populateSxiInspector(container: HTMLElement): boolean {
   const skin = openPalmSkin()
   const selected = skin && palmSelection(skin)
   if (!skin || !selected) return false
+  if (selected.kind === "part" && selected.pointer.length === 1 && selected.pointer[0] === "info") {
+    const group = renderSxiGroup("皮肤信息", [{ targets: [selected.pointer] }])
+    if (group) container.append(...skinMetadataSections([...group.querySelectorAll<HTMLElement>(".ui-field")]))
+    container.dataset.path = appState.selectedPath
+    return container.childElementCount > 0
+  }
   if (appState.selectedCandidate === "input") {
     const board = sxiPointer(appState.layoutPath)
     if (!board) return false

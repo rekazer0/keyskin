@@ -4,9 +4,10 @@ import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
 import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight } from "../source-panel"
-import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, styleFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontFileSelect, fontImportButton, fontImportInput, fontRemoveButton } from "../dom"
+import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontImportInput } from "../dom"
 import { appState } from "../state"
-import { syncActionCodeSuggestions, updateSelectedKey, updateSelectedStyle, updateKeyboard, updateToolbar, updateSkinInfo, populateKeyInspector } from "../key-inspector"
+import { resizeMobileInspector } from "../mobile-inspector"
+import { updateSelectedKey, updateKeyboard, updateToolbar, updateSkinInfo, populateKeyInspector } from "../key-inspector"
 import { scrollSelectedSource } from "../config-context"
 import { applyExactGap, moveMixedCoordinate, applyLayoutAction, copySelectedKeys, deleteSelectedKeys } from "../key-editing"
 import { shouldClearMixedInput } from "../../mixed-input.ts"
@@ -19,7 +20,7 @@ import { preferredPath, createMissingVariant, bdaAvailableLayoutPaths, bdaAppear
 import { renderFiles } from "../file-tree"
 import { selectFile } from "../navigation"
 import { IniDocument } from "../../ini.ts"
-import { importFontFile, removeSelectedFont, setGlobalFont } from "../skin-fonts"
+import { importFontFile } from "../skin-fonts"
 import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, updateSelectedTile, nextSliceIndex } from "../tile-editing"
 import { isEditing } from "../edit-history"
 import { selectStyleResource, showResourceList, renderResourceInspector, renderStyleResourceDetail } from "../resource-inspector"
@@ -37,17 +38,10 @@ import { openLayoutConversionDialog } from "../layout-conversion"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
-  fontFileSelect.addEventListener("change", () => setGlobalFont(fontFileSelect.value))
-  fontImportButton.addEventListener("click", () => {
-    if (!isEditing()) return
-    fontImportInput.value = ""
-    fontImportInput.click()
-  })
   fontImportInput.addEventListener("change", () => {
     const file = fontImportInput.files?.[0]
     if (file) void importFontFile(file)
   })
-  fontRemoveButton.addEventListener("click", () => removeSelectedFont())
   source.addEventListener("valueclick", (event) => {
     const detail = (event as CustomEvent<SourceEditorValueClick>).detail
     if (!detail || detail.kind === "action") return
@@ -98,14 +92,8 @@ export function wireEditingControls(): void {
   })
   for (const field of keyFields) {
     field.addEventListener("input", () => {
-      syncActionCodeSuggestions(field)
       updateSelectedKey(field)
     })
-  }
-  // Style and skin-info text commits once per edit (Enter / leaving the field): one undo step, and no
-  // half-typed colour or font name is written.
-  for (const field of styleFields) {
-    field.addEventListener("change", () => updateSelectedStyle(field))
   }
   for (const field of keyboardFields) {
     field.addEventListener("change", () => updateKeyboard(field))
@@ -161,7 +149,10 @@ export function wireEditingControls(): void {
     button.addEventListener("click", () => {
       const tab = button.dataset.inspectorTab
       appState.inspectorTab = tab === "source" ? "source" : tab === "ai" ? "ai" : "properties"
-      if (mobilePortraitQuery.matches) setMobilePane("inspector")
+      if (mobilePortraitQuery.matches) {
+        if (appState.inspectorTab !== "properties" && document.documentElement.dataset.mobilePanel === "collapsed") resizeMobileInspector(50)
+        setMobilePane("inspector")
+      }
       updateInspectorView()
       if (!quickInspector.hidden) populateKeyInspector()
       if (!aiDesignPanel.hidden) {

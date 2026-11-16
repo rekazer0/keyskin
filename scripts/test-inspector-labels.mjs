@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
@@ -10,7 +11,7 @@ const errors = []
 page.on("pageerror", (error) => errors.push(error.message))
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-  await page.locator('.template-card[data-template="xiaomi-unified-rounded-blur"]').click()
+  await openEditorTemplate(page, 'xiaomi-unified-rounded-blur')
   await page.waitForFunction(() => !document.querySelector("#open").disabled)
   await page.waitForFunction(() => !document.querySelector("#file-operation-dialog").open)
   await page.getByRole("button", { name: "编辑模式", exact: true }).click()

@@ -8,13 +8,15 @@ import type { SsfKeyBinding } from "../ssf/ssf-keymap.ts"
 import { ssfSectionLabel } from "../ssf/ssf-labels.ts"
 import { firstValue, freeSectionName, ownSection, ssfBackground, ssfForeground, ssfForegroundLayout, ssfIconPair, ssfLabelStyle, ssfSoundSection, ssfTextSections } from "../ssf/ssf-parts.ts"
 import { orientation } from "./dom"
-import { editSsfFile, renderGroup as renderSsfGroup, setSsfValue, ssfButton, ssfEntries, ssfFontImportButton, ssfFontOptions, type SsfBlock } from "./ssf-fields"
+import { editSsfFile, renderGroup as renderSsfGroup, setSsfValue, ssfButton, ssfEntries, type SsfBlock } from "./ssf-fields"
 import { openImageResourceChooser } from "./resource-inspector"
 import { isSsfBoardPath, ssfDocument, ssfKeysPath, ssfPackage, ssfQwertyBoard, ssfSelectedBindings, ssfSkinPath, SSF_SOUNDS_PATH } from "./ssf-documents"
 import { appState } from "./state"
 import { layoutLabel } from "./file-tree"
 
 import { toolbarIconSection } from "./toolbar-icon-inspector"
+import { skinMetadataSections } from "./skin-metadata"
+import { nativeCandidateGeometrySection } from "./candidate-fields"
 
 type Group = { label: string; blocks: SsfBlock[]; code?: string; key?: string }
 
@@ -141,9 +143,7 @@ function textBlock(path: string, section: string, keys = TEXT_KEYS, extra: Parti
     path,
     section,
     expect: keys,
-    options: { TYPEFACE: ssfFontOptions() },
     ...extra,
-    actions: [...extra.actions ?? [], ssfFontImportButton([{ path, section }])],
   }
 }
 
@@ -337,7 +337,7 @@ function commonKeyGroups(selections: Group[][]): Group[] {
       if (matches.some((match) => !match || (match.title ?? "") !== (block.title ?? ""))) return []
       const entries = matches.map((match) => ssfEntries(match.path, match.section).filter((entry) => !match.omit?.includes(entry.key) && (!match.only || match.only.includes(entry.key))))
       const only = entries[0].filter((entry) => entries.every((list) => list.some((item) => item.key === entry.key))).map((entry) => entry.key)
-      return only.length || block.expect ? [{ path: block.path, section: block.section, title: block.title, only, options: block.options, expect: block.expect, create: block.create, bind: block.bind,
+      return only.length || block.expect ? [{ path: block.path, section: block.section, title: block.title, only, expect: block.expect, create: block.create, bind: block.bind,
         peers: matches.slice(1).map(({ path, section, create, bind }) => ({ path, section, create, bind })),
       }] : []
     })
@@ -367,9 +367,11 @@ export function populateSsfInspector(container: HTMLElement): boolean {
     groups = fileGroups(path)
   }
   container.append(...groups.flatMap(({ label, blocks, code, key }) => {
-    const group = renderSsfGroup(label, blocks, code, key)
+    const group = renderSsfGroup(appState.selectedCandidate === true && label === "候选栏" ? "样式" : label, blocks, code, key)
+    if (group && path === "phoneTheme.ini" && blocks.some(block => block.section === "General")) return skinMetadataSections([...group.querySelectorAll<HTMLElement>(".ui-field")])
     return group ? [group] : []
   }))
+  if (appState.selectedCandidate === true) container.prepend(nativeCandidateGeometrySection())
   if (appState.selectedCandidate !== "input" && (appState.selectedCandidate || /phoneSkin\.ini$/i.test(path))) container.append(toolbarIconSection())
   for (const details of container.querySelectorAll<HTMLDetailsElement>("details[data-ssf-states]")) {
     details.open = expanded.has(details.dataset.ssfStates)

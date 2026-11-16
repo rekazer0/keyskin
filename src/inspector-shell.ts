@@ -12,6 +12,7 @@ import { playEnter } from "./motion"
 import { createIcon } from "./icons"
 import { shortcutLabel } from "./dom-element"
 import { scrubbableField } from "./number-input-wheel"
+import { styleReferenceAddButton } from "./style-card"
 
 type InspectorInput = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
 type Row = { el: HTMLElement; inputs: InspectorInput[] }
@@ -41,6 +42,50 @@ function inspector(): HTMLElement | null {
 
 function valueOf(input: InspectorInput): string {
   return input instanceof HTMLInputElement && input.type === "checkbox" ? String(input.checked) : input.value
+}
+
+function emptyConfigValue(value: unknown): boolean {
+  if (value == null) return true
+  if (typeof value === "string") return !value.trim()
+  if (Array.isArray(value)) return value.every(emptyConfigValue)
+  return false
+}
+
+/** 空配置复用引用字段的添加入口；展开只改变界面，提交仍由原控件负责。 */
+function syncEmptyFields(fresh = false): void {
+  const root = inspector()
+  if (!root) return
+  for (const row of root.querySelectorAll<HTMLElement>(".ui-field")) {
+    if (row.classList.contains("style-reference-field") || row.dataset.supported === "false" || row.querySelector(".ui-list-toolbar")) continue
+    const caption = row.firstElementChild
+    if (!(caption instanceof HTMLElement) || caption.matches("input, select, textarea")) continue
+    const inputs = Array.from(row.querySelectorAll<InspectorInput>("input:not([type=file]), select, textarea"))
+    const values = inputs.filter(input => !input.hasAttribute("data-config-derived") && !input.matches('[type="color"], [type="range"]'))
+    if (!values.length && row.dataset.inspectorValue === undefined) continue
+    const empty = row.dataset.configEmpty !== undefined ? row.dataset.configEmpty === "true"
+      : row.dataset.inspectorValue !== undefined ? emptyConfigValue(JSON.parse(row.dataset.inspectorValue))
+        : values.every(input => !("placeholder" in input && input.placeholder.includes("混合")) && emptyConfigValue(valueOf(input)))
+    let add = caption.querySelector<HTMLButtonElement>("[data-config-add]")
+    if (fresh || !empty) row.removeAttribute("data-config-expanded")
+    const pending = empty && !row.hasAttribute("data-config-expanded")
+    row.toggleAttribute("data-config-pending", pending)
+    if (!pending) { add?.remove(); continue }
+    const controls = Array.from(row.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>("input, select, textarea, button:not([data-config-add])"))
+    if (!add) {
+      const label = caption.querySelector(".document-field-name")?.textContent ?? caption.textContent ?? "配置"
+      add = styleReferenceAddButton(`添加${label.trim()}`, () => {
+        row.setAttribute("data-config-expanded", "")
+        row.removeAttribute("data-config-pending")
+        add?.remove()
+        row.querySelector<HTMLElement>('input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)')?.focus()
+      })
+      add.dataset.configAdd = ""
+      // 部分旧行是 label，不能让添加按钮的点击再触发开关或第一个选项。
+      add.addEventListener("click", event => event.preventDefault())
+      caption.append(add)
+    }
+    add.disabled = !controls.some(control => !control.disabled && (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) || !control.readOnly))
+  }
 }
 
 function isHidden(el: Element, within: Element): boolean {
@@ -331,10 +376,19 @@ function syncGestures(): void {
     const cells = Array.from(grid.querySelectorAll<HTMLElement>("[data-gesture]"))
     for (const cell of cells) {
       const code = cell.querySelector<HTMLInputElement>("input")?.value ?? ""
-      cell.classList.toggle("configured", Boolean(code && code !== "None"))
+      cell.dataset.configured = String(Boolean(code && code !== "None"))
+      const caption = cell.querySelector<HTMLElement>(":scope > span")
+      const input = cell.querySelector<HTMLInputElement>("input")
+      if (caption && input) {
+        caption.setAttribute("role", "button")
+        caption.tabIndex = input.disabled || input.readOnly ? -1 : 0
+        caption.setAttribute("aria-disabled", String(input.disabled || input.readOnly))
+        caption.setAttribute("aria-label", `选择${caption.textContent?.trim()}动作码`)
+        caption.setAttribute("aria-haspopup", "dialog")
+      }
     }
     const count = grid.closest(SECTION_SELECTOR)?.querySelector(".inspector-gesture-count")
-    if (count) count.textContent = `${cells.filter((cell) => cell.classList.contains("configured")).length} / ${cells.length}`
+    if (count) count.textContent = `${cells.filter((cell) => cell.dataset.configured === "true").length} / ${cells.length}`
   }
 }
 
@@ -373,6 +427,7 @@ export function initInspectorShell(): void {
     scheduled = true
     requestAnimationFrame(() => {
       scheduled = false
+      syncEmptyFields()
       decorateSections()
       if (filterQuery) applyFilter()
     })
@@ -406,5 +461,6 @@ export function syncInspectorRows(context: string): void {
     else if (fresh || rowValue(row) === baselines.get(row.el)) markRow(row, false)
   }
   updateStatus()
+  syncEmptyFields(fresh)
   syncGestures()
 }

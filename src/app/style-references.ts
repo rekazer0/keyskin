@@ -142,6 +142,11 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
   const caption = list.closest(".ui-field")?.firstElementChild
   const captionHost = caption && caption !== list ? caption : list
   captionHost.querySelector(":scope > .ui-style-ref-append")?.remove()
+  captionHost.querySelector(":scope > .ui-style-ref-meta")?.remove()
+  if (key === "SOUND_STYLE" && cards.length === 1) {
+    const meta = cards[0].querySelector<HTMLElement>(".ui-style-ref-meta")
+    if (meta) { meta.dataset.variant = "inline"; captionHost.append(meta) }
+  }
   list.hidden = !cards.length && captionHost !== list
   if (!bound || multiple || key === "FORE_ANIM_STYLE") {
     const index = !bound ? Math.max(0, styleIDs.findIndex(emptySlot)) : styleIDs.length

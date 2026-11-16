@@ -8,9 +8,7 @@ const storageKey = "pinned-toolbar-actions"
 export function wirePinnedToolbar(): void {
   const state = appState.pinnedToolbar
   const sources = new Map([...fileMenu.querySelectorAll<HTMLButtonElement>(".ui-menu > button")].map(source => {
-    const key = source.id || (source.dataset.exportFormat
-      ? `export:${source.dataset.exportFormat}:${source.dataset.bdaPlatform ?? ""}`
-      : source.dataset.appDialog ? `dialog:${source.dataset.appDialog}` : "tour")
+    const key = source.id || (source.dataset.appDialog ? `dialog:${source.dataset.appDialog}` : "tour")
     source.dataset.toolbarAction = key
     source.setAttribute("aria-keyshortcuts", "Alt+Enter")
     source.title = "拖到工具栏常驻，或按 Alt + Enter 添加"

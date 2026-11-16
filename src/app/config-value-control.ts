@@ -58,6 +58,7 @@ export function configValueControl(input: HTMLInputElement, section: string, key
     if (!control) return
     // 重建会换掉被点的那个按钮：把焦点交给新控件里同名的那一个。
     const focused = wrap.contains(document.activeElement) ? document.activeElement?.getAttribute("aria-label") : undefined
+    if (control.matches("input, select")) control.setAttribute("data-config-derived", "")
     for (const derived of control.querySelectorAll("input, select")) derived.setAttribute("data-config-derived", "")
     wrap.replaceChildren(control, input)
     if (focused) control.querySelector<HTMLElement>(`[aria-label="${CSS.escape(focused)}"]`)?.focus()

@@ -1,11 +1,10 @@
-import { isAndroidTauri, isTauri } from "./canvas-interaction"
+import { isAndroidTauri, mobileLayoutQuery } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { appState } from "./state"
 import { initializeProjectChooser, projectChoice } from "../project-chooser"
 import { bindDialog } from "./ask.ts"
 import { closeDialog } from "../motion.ts"
-import { newProjectForm, newProjectDialog, openButton, documentName } from "./dom"
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
+import { newProjectForm, newProjectDialog, openButton, documentName, $ } from "./dom"
 import { prepareDocumentReplacement, updateDirty } from "./edit-history"
 import { loadArchive, writeNativePath } from "./archive-io"
 import { loadBuiltInProjectTemplate } from "../operations.ts"
@@ -14,12 +13,6 @@ import { exportName } from "../export.ts"
 
 async function chooseProjectTemplate(): Promise<string | undefined> {
   if (isAndroidTauri()) return chooseAndroidProjectTemplate()
-  if (isTauri()) {
-    const templateID = await chooseNativeProjectTemplate()
-    return templateID === EMBEDDED_PROJECT_FALLBACK
-      ? chooseEmbeddedProjectTemplate()
-      : templateID
-  }
   return chooseEmbeddedProjectTemplate()
 }
 
@@ -33,12 +26,6 @@ async function chooseAndroidProjectTemplate(): Promise<string | undefined> {
 }
 
 function chooseEmbeddedProjectTemplate(): Promise<string | undefined> {
-  if (!appState.projectChooserInitialized) {
-    initializeProjectChooser(newProjectForm)
-    bindDialog(newProjectDialog)
-    newProjectForm.addEventListener("project-import", () => closeDialog(newProjectDialog, "import"))
-    appState.projectChooserInitialized = true
-  }
   newProjectDialog.returnValue = ""
   newProjectDialog.showModal()
   return new Promise((resolve) => {
@@ -59,64 +46,32 @@ function chooseEmbeddedProjectTemplate(): Promise<string | undefined> {
   })
 }
 
-const EMBEDDED_PROJECT_FALLBACK = "__embedded-project-fallback__"
-
-export function finishNativeProjectChoice(templateID?: string): void {
-  if (!appState.resolveNativeProjectChoice) return
-  const resolve = appState.resolveNativeProjectChoice
-  appState.resolveNativeProjectChoice = undefined
-  appState.nativeProjectChoice = undefined
-  resolve(templateID)
-}
-
-async function chooseNativeProjectTemplate(): Promise<string | undefined> {
-  if (appState.nativeProjectChoice) {
-    void WebviewWindow.getByLabel("new-project").then((window) => window?.setFocus())
-    return appState.nativeProjectChoice
+export function wireNewProjectChooser(): void {
+  initializeProjectChooser(newProjectForm)
+  bindDialog(newProjectDialog)
+  const host = $("#file-project-chooser")
+  const placeForm = () => {
+    if (newProjectDialog.open) newProjectDialog.close("cancel")
+    const parent = mobileLayoutQuery.matches ? newProjectDialog : host
+    parent.append(newProjectForm)
+    newProjectForm.querySelector("h2")!.textContent = mobileLayoutQuery.matches ? "新建皮肤" : "新建项目"
+    newProjectForm.querySelector<HTMLButtonElement>('button[value="cancel"]')!.type = mobileLayoutQuery.matches ? "submit" : "button"
   }
-
-  // Remove a window left behind by a previous reload before installing the new
-  // resolver. Its close event must not be allowed to cancel the next request.
-  const existing = await WebviewWindow.getByLabel("new-project")
-  if (existing) await existing.close().catch(() => undefined)
-
-  const choice = new Promise<string | undefined>((resolve) => {
-    appState.resolveNativeProjectChoice = resolve
+  placeForm()
+  mobileLayoutQuery.addEventListener("change", placeForm)
+  newProjectForm.addEventListener("project-import", () => {
+    if (newProjectDialog.open) void closeDialog(newProjectDialog, "import")
+    else openButton.click()
   })
-  appState.nativeProjectChoice = choice
-  appState.nativeProjectWindowReady = false
-
-  try {
-    const projectWindow = new WebviewWindow("new-project", {
-      url: "new-project.html",
-      title: "新建项目",
-      width: 920,
-      height: 660,
-      minWidth: 400,
-      minHeight: 420,
-      center: true,
-      decorations: true,
-      resizable: true,
-      focus: true,
-      visible: true,
-      minimizable: false,
-      maximizable: false,
-      skipTaskbar: false,
-      preventOverflow: { width: 24, height: 24 },
-      parent: navigator.userAgent.includes("Macintosh") ? undefined : "main",
-    })
-    void projectWindow.once("tauri://destroyed", () => {
-      finishNativeProjectChoice(appState.nativeProjectWindowReady ? undefined : EMBEDDED_PROJECT_FALLBACK)
-    })
-    void projectWindow.once("tauri://error", () => finishNativeProjectChoice(EMBEDDED_PROJECT_FALLBACK))
-  } catch {
-    finishNativeProjectChoice(EMBEDDED_PROJECT_FALLBACK)
-  }
-
-  return choice
+  newProjectForm.addEventListener("submit", event => {
+    if (newProjectDialog.open) return
+    event.preventDefault()
+    const options = projectChoice(newProjectForm)
+    void createProject(options.templateID, options)
+  })
 }
 
-export async function newDocument(templateID: string): Promise<boolean> {
+async function newDocument(templateID: string): Promise<boolean> {
   if (!(await prepareDocumentReplacement())) return false
   await loadArchive(await loadBuiltInProjectTemplate(templateID), "", true)
   return true
@@ -124,6 +79,12 @@ export async function newDocument(templateID: string): Promise<boolean> {
 
 export async function startNewDocument(): Promise<void> {
   if (appState.fileOperationRunning) return
+  if (!mobileLayoutQuery.matches) {
+    $("#recent-files").click()
+    newProjectForm.scrollIntoView({ block: "start" })
+    newProjectForm.querySelector<HTMLInputElement>("input:checked")?.focus({ preventScroll: true })
+    return
+  }
   appState.newProjectOptions = undefined
   const templateID = await chooseProjectTemplate()
   if (templateID === "__import__") { openButton.click(); return }
@@ -131,9 +92,13 @@ export async function startNewDocument(): Promise<void> {
     showStatus("新建皮肤已取消")
     return
   }
+  await createProject(templateID, appState.newProjectOptions)
+}
+
+async function createProject(templateID: string, options = appState.newProjectOptions): Promise<void> {
+  if (appState.fileOperationRunning) return
   await runFileOperation("新建皮肤", async () => {
     if (!(await newDocument(templateID))) return false
-    const options = appState.newProjectOptions
     if (appState.archive && options?.name) documentName.textContent = exportName(options.name, appState.archive.format)
     if (appState.archive && options?.savePath) {
       const bytes = await appState.archive.toBytesAsync(appState.archive.format)

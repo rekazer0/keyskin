@@ -148,16 +148,16 @@ try {
   for (const key of ['b.asi', 'b.base_ba', 'b.base_fa', 'b.base_pa']) assert.equal(await row(key).locator('.ui-style-ref-append').count(), 1, `${key} exposes an animation add button`)
   for (const label of ['显示', '长按符号', '符号栏', '符号栏选中']) assert.equal(await fields.getByLabel(`${label}动作`, { exact: true }).count(), 1, `${label} is available before it is configured`)
   await checkEdit(fields.getByLabel('长按符号动作', { exact: true }), 'abc', (next) => assert.deepEqual(next.default.port_layout.b.full26Pinyin.keys[0].values, [7, 'abc']))
-  await checkChange(() => fields.getByRole('button', { name: '新建文字样式', exact: true }).click(), (next) => {
+  await checkChange(() => enter(fields.locator('[data-inspector-group-label="文字"] [data-typography="size"] input:not([type=range])'), '42'), (next) => {
     const id = next.default.port_layout.b.full26Pinyin.keys[0].b.base_f[0]
-    assert.deepEqual(next.default.s_info.ss_1[id].s_1, {}, 'a key without text can create and bind a text style')
+    assert.deepEqual(next.default.s_info.ss_1[id].s_1, { f_s: 42 }, 'the first text edit creates and binds a text style')
   })
   await enterStyle(row('b.base_f'), '7')
-  await checkChange(() => fields.getByRole('button', { name: '新建文字样式', exact: true }).click(), (next) => {
+  await checkChange(() => enter(fields.locator('[data-inspector-group-label="文字"] [data-typography="size"] input:not([type=range])'), '42'), (next) => {
     const layers = next.default.port_layout.b.full26Pinyin.keys[0].b.base_f
     assert.equal(layers[0], 7, 'creating text preserves an existing fill foreground')
     assert.equal(layers.length, 2)
-    assert.deepEqual(next.default.s_info.ss_1[layers[1]].s_1, {})
+    assert.deepEqual(next.default.s_info.ss_1[layers[1]].s_1, { f_s: 42 })
   })
   await history('undo')
   const keySelected = async () => page.evaluate(async () => {

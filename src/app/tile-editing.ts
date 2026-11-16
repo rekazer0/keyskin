@@ -39,19 +39,6 @@ function pngPixelSize(bytes: Uint8Array | undefined): readonly [number, number] 
   return [view.getUint32(16), view.getUint32(20)]
 }
 
-export function bdaImageUsageCounts(): Map<string, number> {
-  const counts = new Map<string, number>()
-  const appearance = currentBdaAppearance()?.appearance
-  if (!appearance) return counts
-  for (const style of appearance.imageStyles.values()) {
-    for (const atom of [style.normalImage, style.highlightImage]) {
-      const resourceID = atom?.resource?.resourceID.replace(/\.png$/i, "")
-      if (resourceID) counts.set(resourceID, (counts.get(resourceID) ?? 0) + 1)
-    }
-  }
-  return counts
-}
-
 function bdaImageTiles(path: string): { slices: TileSlice[]; usages: BdaTileUsage[] } {
   const info = currentBdaAppearance()
   const size = pngPixelSize(appState.archive?.getBytes(path))
@@ -169,21 +156,36 @@ export function drawAtlas(): void {
     atlasCanvas.style.width = `${naturalWidth * scale}px`
     atlasCanvas.style.height = `${naturalHeight * scale}px`
   }
-  // 桌面工作区按显示尺寸 × DPR 绘制，避免 CSS 放大导致切片线条和标签模糊；像素上限防止大图超出画布限制
+  const viewport = appState.atlasWorkspace?.viewportCanvas()
+  const canvas = viewport ?? atlasCanvas
+  const bounds = viewport?.getBoundingClientRect()
+  if (bounds && (!bounds.width || !bounds.height)) return
+  // 桌面只绘制视口，放大图集不再扩大缓冲；窄屏保留原来的适配画布。
   const cssWidth = parseFloat(atlasCanvas.style.width)
-  const pixelScale = cssWidth
+  const pixelScale = bounds
+    ? Math.min(devicePixelRatio || 1, 8192 / Math.max(bounds.width, bounds.height), Math.sqrt(16e6 / (bounds.width * bounds.height)))
+    : cssWidth
     ? Math.max(1, Math.min(cssWidth * devicePixelRatio / naturalWidth, Math.sqrt(16e6 / (naturalWidth * naturalHeight))))
     : 1
-  const backingWidth = Math.round(naturalWidth * pixelScale)
-  const backingHeight = Math.round(naturalHeight * pixelScale)
-  if (atlasCanvas.width !== backingWidth) atlasCanvas.width = backingWidth
-  if (atlasCanvas.height !== backingHeight) atlasCanvas.height = backingHeight
-  const context = atlasCanvas.getContext("2d")
+  const backingWidth = Math.max(1, Math.round((bounds?.width ?? naturalWidth) * pixelScale))
+  const backingHeight = Math.max(1, Math.round((bounds?.height ?? naturalHeight) * pixelScale))
+  if (canvas.width !== backingWidth) canvas.width = backingWidth
+  if (canvas.height !== backingHeight) canvas.height = backingHeight
+  if (viewport) {
+    if (atlasCanvas.width !== 1) atlasCanvas.width = 1
+    if (atlasCanvas.height !== 1) atlasCanvas.height = 1
+  }
+  const imageBounds = atlasCanvas.getBoundingClientRect()
+  const scaleX = bounds ? backingWidth / bounds.width * imageBounds.width / naturalWidth : backingWidth / naturalWidth
+  const scaleY = bounds ? backingHeight / bounds.height * imageBounds.height / naturalHeight : backingHeight / naturalHeight
+  const context = canvas.getContext("2d")
   if (!context) return
   context.setTransform(1, 0, 0, 1, 0, 0)
   context.clearRect(0, 0, backingWidth, backingHeight)
-  context.setTransform(backingWidth / naturalWidth, 0, 0, backingHeight / naturalHeight, 0, 0)
-  context.imageSmoothingEnabled = pixelScale <= 1
+  context.setTransform(scaleX, 0, 0, scaleY,
+    bounds ? (imageBounds.left - bounds.left) * backingWidth / bounds.width : 0,
+    bounds ? (imageBounds.top - bounds.top) * backingHeight / bounds.height : 0)
+  context.imageSmoothingEnabled = scaleX <= 1
   context.drawImage(workspaceImage, 0, 0)
   drawTilePreview()
   if (!appState.resourceConfigActive || !appState.guidesVisible) return
@@ -196,13 +198,18 @@ export function drawAtlas(): void {
   const visible = appState.archive?.format === "bda"
     ? allVisible.filter((slice) => slice.index === appState.selectedTileIndex)
     : allVisible
-  const displayScale = Math.max(0.01, atlasCanvas.getBoundingClientRect().width / Math.max(1, naturalWidth))
+  const displayScale = Math.max(0.01, imageBounds.width / Math.max(1, naturalWidth))
   const lineWidth = Math.min(6, 1.5 / displayScale)
   context.textBaseline = "top"
   const accent = getComputedStyle(atlasCanvas).getPropertyValue("--accent").trim() || "#3a6df0"
   const handle = 8 / displayScale
+  const visibleLeft = bounds ? (bounds.left - imageBounds.left) / displayScale - handle : 0
+  const visibleTop = bounds ? (bounds.top - imageBounds.top) / displayScale - handle : 0
+  const visibleRight = bounds ? visibleLeft + bounds.width / displayScale + handle * 2 : naturalWidth
+  const visibleBottom = bounds ? visibleTop + bounds.height / displayScale + handle * 2 : naturalHeight
   for (const slice of visible) {
     const [x, y, width, height] = slice.source
+    if (x + width < visibleLeft || y + height < visibleTop || x > visibleRight || y > visibleBottom) continue
     const selected = slice.index === appState.selectedTileIndex || slice.source === appState.tileDraft
     context.lineWidth = selected ? lineWidth * 2 : lineWidth
     context.strokeStyle = selected ? accent : "#8d96a7"

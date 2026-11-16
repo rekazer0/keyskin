@@ -1,4 +1,4 @@
-import { modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, documentFieldsGroup, documentFields, bdaConfigFields, bdaSelectedStyleHeading, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, styleFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { mobilePropertyTabs, modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, bdaConfigFields, documentFieldsGroup, documentFields, textStyleGroup, bdaSelectedStyleHeading, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
@@ -12,9 +12,10 @@ import { updateSourceFileActions } from "./source-files"
 import { updateSourceSearchStatus } from "./source-panel"
 import { syncAiDesignContext } from "./ai-panel"
 import { syncMobileKeyPreview } from "./mobile-key-preview"
-import { workspacePane } from "./dom"
+import { workspacePane, mobileProjectDialog, mobileProjectToggle } from "./dom"
 import { syncMobilePropertyGroups } from "./mobile-inspector"
-import { playEnter, playRotation } from "../motion"
+import { syncMobileKeyAnimation } from "./mobile-key-animation"
+import { closeDialog, playEnter, playRotation } from "../motion"
 import { layoutConversionButton } from "./dom"
 
 export function syncSegmentedControls(): void {
@@ -97,6 +98,14 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
   const current = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .find((group) => group.dataset.mobileInspectorGroup === id)
   appState.inspectorGroupKey = current ? mobileInspectorGroupKey(current) : ""
+  if (mobilePortraitQuery.matches && current?.dataset.mobileCategory) {
+    const changed = appState.mobileInspectorCategory !== current.dataset.mobileCategory
+    appState.mobileInspectorCategory = current.dataset.mobileCategory
+    if (changed) syncMobileKeyAnimation()
+    for (const button of mobilePropertyTabs.querySelectorAll<HTMLButtonElement>("button")) {
+      button.setAttribute("aria-pressed", String(button.dataset.mobileCategory === current.dataset.mobileCategory))
+    }
+  }
   // 分类栏只定位同一列内的分组，不切换或隐藏属性。
   revealActiveRailButton()
   if (scroll) {
@@ -136,6 +145,7 @@ function revealActiveRailButton(): void {
 function scrollToSinglePageInspectorGroup(): void {
   const groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .filter((group) => group.getClientRects().length > 0)
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
   const current = groups.find((group) => group.dataset.mobileInspectorGroup === quickInspector.dataset.mobileInspectorGroup)
   quickInspector.scrollTop = 0
   if (current && current !== groups[0]) quickInspector.scrollTop = current.getBoundingClientRect().top - quickInspector.getBoundingClientRect().top
@@ -155,6 +165,7 @@ export function revealSinglePageInspectorGroup(context: string): void {
 export function syncSinglePageInspectorGroup(): void {
   const groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .filter((group) => group.getClientRects().length > 0)
+    .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
   // 刚点选分类栏：落点没变就保留点选的分区，用户自己滚动后才重新按位置点亮。
   if (pinnedScrollTop !== null) {
     if (Math.abs(quickInspector.scrollTop - pinnedScrollTop) <= 1) return
@@ -172,17 +183,22 @@ export function syncSinglePageInspectorGroup(): void {
 }
 
 export function syncMobileInspectorGroups(): void {
+  const candidateFields = appState.selectedCandidate === true ? appState.archive?.format === "bda" ? bdaConfigFields : documentFields : undefined
+  const candidateStyles = !textStyleGroup.hidden && candidateFields?.querySelector('.ui-section[data-inspector-group-label="样式"]')
+  if (candidateStyles) candidateStyles.after(textStyleGroup)
+  else if (textStyleGroup.parentElement !== quickInspector) quickInspector.insertBefore(textStyleGroup, documentFieldsGroup)
   const combinedBda = appState.archive?.format === "bda" && appState.selectedKeySections.length > 0 && !appState.selectedCandidate
   if (combinedBda && keyTypographyFieldsGroup.parentElement !== bdaConfigFieldsGroup) bdaConfigFieldsGroup.append(keyTypographyFieldsGroup)
   else if (!combinedBda && keyTypographyFieldsGroup.parentElement !== quickInspector) quickInspector.insertBefore(keyTypographyFieldsGroup, quickInspector.querySelector(".key-gesture-fields"))
-  let groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(":scope > :is(.ui-section, .document-fields, .bda-config-fields)"))
+  let groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(":scope > :is(.ui-section, .skin-fields, .toolbar-fields, .document-fields, .bda-config-fields)"))
     .filter((group) => !group.hidden)
     .flatMap((group) => {
+      if (group.matches(".skin-fields, .toolbar-fields")) return [...group.querySelectorAll<HTMLElement>(":scope > .ui-section")]
       if (group === documentFieldsGroup) {
         return Array.from(documentFields.querySelectorAll<HTMLElement>(":scope > .ui-section"))
       }
       if (group === bdaConfigFieldsGroup) {
-        return Array.from(bdaConfigFields.querySelectorAll<HTMLElement>(":scope > .bda-inspector-section"))
+        return Array.from(bdaConfigFieldsGroup.querySelectorAll<HTMLElement>(":scope > #bda-config-fields > .ui-section, :scope > .key-typography-fields")).filter(group => !group.hidden)
       }
       return [group]
     })
@@ -199,10 +215,6 @@ export function syncMobileInspectorGroups(): void {
   bdaSelectedStyleHeading.hidden = !selectedBdaKey
   if (selectedBdaKey) {
     bdaConfigFieldsGroup.dataset.inspectorGroupLabel = "样式"
-    // 导航列出样式里的每个分区（已选按键、文字……），没有分区时退回整组。
-    const sections = bdaConfigFieldsGroup.hidden ? [] : Array.from(bdaConfigFieldsGroup.querySelectorAll<HTMLElement>(":scope > #bda-config-fields > .bda-inspector-section, :scope > .key-typography-fields"))
-      .filter((section) => !section.hidden)
-    groups = sections.length ? sections : [bdaConfigFieldsGroup].filter((group) => !group.hidden)
   } else {
     delete bdaConfigFieldsGroup.dataset.inspectorGroupLabel
   }
@@ -280,9 +292,19 @@ function railButton(): HTMLButtonElement {
 
 export function setMobilePane(pane: "canvas" | "layout" | "inspector"): void {
   source.commit()
+  const mobile = mobilePortraitQuery.matches
+  if (mobile && appState.archive && pane === "layout") {
+    sidebarPane.inert = false
+    if (!mobileProjectDialog.open) {
+      mobileProjectDialog.append(sidebarPane)
+      mobileProjectDialog.showModal()
+      mobileProjectToggle.setAttribute("aria-expanded", "true")
+    }
+    return
+  }
+  if (mobileProjectDialog.open) void closeDialog(mobileProjectDialog)
   if (mobilePortraitQuery.matches && appState.archive && pane === "canvas" && !appState.layoutOverview) pane = "inspector"
   document.documentElement.dataset.mobilePane = pane
-  const mobile = mobilePortraitQuery.matches
   sidebarPane.inert = mobile && pane !== "layout"
   inspectorPane.inert = mobile && pane !== "inspector"
   workspacePane.inert = mobile && pane === "layout" && Boolean(appState.archive)
@@ -311,7 +333,7 @@ export function applyModeState(): void {
   replaceAssetButton.disabled = !editing
   for (const view of [quickInspector, resourceInspector]) view.dataset.readonly = editing ? "false" : "true"
   if (!editing) {
-    for (const field of [...keyFields, ...styleFields, ...keyboardFields, ...toolbarFields, ...skinFields, ...gapFields]) {
+    for (const field of [...keyFields, ...keyboardFields, ...toolbarFields, ...skinFields, ...gapFields]) {
       field.disabled = true
     }
     for (const button of layoutActionButtons) button.disabled = true
@@ -346,9 +368,10 @@ export function selectChoice(select: HTMLSelectElement, value: string): void {
 
 // 左栏与检查器共用的拖动调宽：direction 为 1 时向右拖变宽，-1 时向左拖变宽。
 export function bindPaneResize(handle: HTMLElement, cssVar: string, storageKey: string, minW: number, defaultW: number, direction: 1 | -1): void {
-  const clampWidth = (width: number) => Math.min(window.innerWidth * 0.7, Math.max(minW, width))
+  const clampWidth = (width: number) => mobilePortraitQuery.matches ? width : Math.min(window.innerWidth * 0.7, Math.max(minW, width))
   const stored = Number(localStorage.getItem(storageKey) || defaultW)
-  const initialW = clampWidth(Number.isFinite(stored) ? stored : defaultW)
+  let preferredW = Math.max(minW, Number.isFinite(stored) ? stored : defaultW)
+  const initialW = clampWidth(preferredW)
   document.documentElement.style.setProperty(cssVar, `${initialW}px`)
   const currentW = () => parseInt(getComputedStyle(document.documentElement).getPropertyValue(cssVar) || String(defaultW), 10)
 
@@ -380,11 +403,12 @@ export function bindPaneResize(handle: HTMLElement, cssVar: string, storageKey: 
     if (!dragging) return
     dragging = false
     handle.classList.remove("dragging")
-    localStorage.setItem(storageKey, String(pendingW ?? currentW()))
+    preferredW = pendingW ?? currentW()
+    localStorage.setItem(storageKey, String(preferredW))
   })
 
   window.addEventListener("resize", () => {
     if (pendingW !== undefined) pendingW = clampWidth(pendingW)
-    document.documentElement.style.setProperty(cssVar, `${clampWidth(currentW())}px`)
+    document.documentElement.style.setProperty(cssVar, `${clampWidth(preferredW)}px`)
   })
 }

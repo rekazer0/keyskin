@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { chromium, webkit } from 'playwright'
 import { createServer } from 'vite'
@@ -46,7 +47,7 @@ try {
         })
         try {
           await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-          await page.locator('.template-card[data-template="xiaomi-unified-rounded-blur"]').click()
+          await openEditorTemplate(page, 'xiaomi-unified-rounded-blur')
           await page.waitForSelector('.canvas-wrap:not(.empty)')
           await page.waitForFunction(() => document.querySelector('#preview')?.getBoundingClientRect().height > 60)
           await page.waitForFunction(() => !document.querySelector('#open').disabled && !document.querySelector('#file-operation-dialog').open)

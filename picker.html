@@ -18,9 +18,12 @@
       <span id="picker-count" class="ui-badge" data-variant="pill" hidden></span>
       <div class="ui-pane-header-actions">
         <label class="ui-input ui-search" hidden><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="resource-search" type="text" aria-label="搜索" /></label>
+        <button id="style-library-import" class="ui-button" type="button" title="导入 PNG 图片到当前皮肤" hidden><span data-icon="upload" aria-hidden="true"></span>导入</button>
+        <button id="style-library-new" class="ui-button" data-variant="primary" type="button" hidden><span data-icon="plus" aria-hidden="true"></span>新建</button>
         <button id="picker-close" class="ui-icon-button" type="button" title="关闭" aria-label="关闭" hidden><span data-icon="x" aria-hidden="true"></span></button>
       </div>
     </header>
+    <input id="style-library-import-input" type="file" accept=".png,image/png" hidden>
     <main>
       <section id="image-picker-view" class="image-picker-view" hidden>
         <div class="picker-canvas-stage"><canvas id="picker-canvas" class="ui-checker" width="720" height="420" aria-label="原始图片切片选择器"></canvas></div>

@@ -21,7 +21,10 @@ type InventoryItem = { id: string; title: string; detail: string; status: "used"
 function resourceInventoryItems(): InventoryItem[] {
   const archive = appState.archive
   if (!archive) return []
-  const items: InventoryItem[] = archive.names().filter(path => archive.isImage(path) || isSoundPath(path)).map(path => {
+  const names = archive.names()
+  const ids = availableStyleIDs()
+  const styles = styleConfigDocument()
+  const items: InventoryItem[] = names.filter(path => archive.isImage(path) || isSoundPath(path)).map(path => {
     const bytes = archive.getBytes(path)!
     const size = pngSize(bytes)
     return { id: path, title: path, status: "file", icon: archive.isImage(path) ? "image" : "volume-2",
@@ -30,34 +33,33 @@ function resourceInventoryItems(): InventoryItem[] {
     }
   })
   // BDA 的二进制样式引用不使用 legacy 索引，不把其样式误标为未使用。
-  if (["bdi", "bds", "sxi"].includes(archive.format)) for (const id of availableStyleIDs()) {
+  if (["bdi", "bds", "sxi"].includes(archive.format)) for (const id of ids) {
     const usages = styleUsages(id)
-    items.push({ id: `style:${id}`, title: `样式 ${id}`, detail: `${styleTypeOptions.find(([value]) => value === styleKind(id))?.[1] ?? "样式"} · ${usages.length ? `${usages.length} 处引用` : "未使用"}`,
+    items.push({ id: `style:${id}`, title: `样式 ${id}`, detail: `${styleTypeOptions.find(([value]) => value === styleKind(id, styles))?.[1] ?? "样式"} · ${usages.length ? `${usages.length} 处引用` : "未使用"}`,
       status: usages.length ? "used" : "unused", icon: "palette", open: () => openStyleReferenceEditor(id) })
   }
   for (const { id, locations } of missingStyleReferences()) items.push({ id: `missing:${id}`, title: `缺失样式 ${id}`, detail: locations.join("；"), status: "missing", icon: "circle-alert" })
   const resolver = visualResolver()
-  const styles = styleConfigDocument()
-  const uses = new Map<string, string[]>()
-  const addUse = (path: string, label: string) => uses.set(path, [...uses.get(path) ?? [], label])
-  for (const id of availableStyleIDs()) {
+  const uses = new Map<string, number>()
+  const addUse = (path: string) => uses.set(path, (uses.get(path) ?? 0) + 1)
+  for (const id of ids) {
     for (const pressed of [false, true]) {
       const path = resolver?.imagePath?.(id, pressed)
       const label = `样式 ${id} · ${pressed ? "按下" : "正常"}`
-      if (path && (!resolver?.sourceSize || resolver.sourceSize(id, pressed))) { addUse(path, label); continue }
+      if (path && (!resolver?.sourceSize || resolver.sourceSize(id, pressed))) { addUse(path); continue }
       const reference = archive.format === "sxi" ? palmStyleImage(id, pressed) : ["bdi", "bds"].includes(archive.format)
         ? (pressed ? styles?.get(`STYLE${id}`, "HL_IMG") : undefined) ?? styles?.get(`STYLE${id}`, "NM_IMG") : undefined
       if (reference?.trim()) items.push({ id: `missing-image:${id}:${pressed}`, title: `图片或切片缺失 · ${reference}`, detail: label, status: "missing", icon: "image-off", open: () => openStyleReferenceEditor(id) })
     }
     const sound = styleSoundFile(id, styles)
     if (!sound) continue
-    const path = soundPathForFilename(archive.names(), theme.value, orientation.value, sound)
-    if (path) addUse(path, `样式 ${id} · 音效`)
+    const path = soundPathForFilename(names, theme.value, orientation.value, sound)
+    if (path) addUse(path)
     else items.push({ id: `missing-sound:${id}`, title: `音效缺失 · ${sound}`, detail: `样式 ${id}`, status: "missing", icon: "volume-x", open: () => openStyleReferenceEditor(id) })
   }
   for (const item of items) if (uses.has(item.id)) {
     item.status = "used"
-    item.detail += ` · 当前样式表 ${uses.get(item.id)!.length} 处引用`
+    item.detail += ` · 当前样式表 ${uses.get(item.id)} 处引用`
   }
   return items
 }
@@ -102,25 +104,46 @@ export function openResourceInventory(): void {
   let items: InventoryItem[] = []
   const durations = new Map<string, string>()
   const audioLoads: (() => void)[] = []
-  const choose = (row: HTMLElement) => {
-    selected = row.dataset.inventoryId ?? ""
-    for (const item of list.querySelectorAll<HTMLElement>('[role="option"]')) {
-      item.setAttribute("aria-selected", String(item === row))
-      item.tabIndex = item === row ? 0 : -1
+  const deferredRows = new WeakMap<Element, InventoryItem>()
+  const fillRow = (row: Element, item: InventoryItem) => {
+    const text = element("span", "ui-list-item-text")
+    text.append(Object.assign(element("strong"), { textContent: item.title }), Object.assign(element("small"), { textContent: item.detail }))
+    row.append(createIcon(item.icon, 14), text)
+  }
+  const rowObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue
+      rowObserver.unobserve(entry.target)
+      const item = deferredRows.get(entry.target)
+      deferredRows.delete(entry.target)
+      if (item && entry.target.isConnected) fillRow(entry.target, item)
     }
+  }, { root: list, rootMargin: "200px" })
+  const choose = (row: HTMLElement) => {
+    const previous = list.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (previous === row) return
+    if (previous) {
+      previous.setAttribute("aria-selected", "false")
+      previous.tabIndex = -1
+    }
+    selected = row.dataset.inventoryId ?? ""
+    row.setAttribute("aria-selected", "true")
+    row.tabIndex = 0
+    row.focus()
   }
   const render = () => {
     const shown = items.filter(item => (filter === "all" || item.status === filter) && `${item.title} ${item.detail}`.toLowerCase().includes(query))
     if (!shown.some(item => item.id === selected)) selected = shown[0]?.id ?? ""
-    list.replaceChildren(...shown.map(item => {
+    rowObserver.disconnect()
+    list.replaceChildren(...shown.map((item, index) => {
       const row = Object.assign(element("button", "ui-list-item"), { type: "button", title: `${item.title}\n${item.detail}` })
       row.dataset.inventoryId = item.id
       row.setAttribute("role", "option")
+      row.setAttribute("aria-label", `${item.title} ${item.detail}`)
       row.setAttribute("aria-selected", String(selected === item.id))
       row.tabIndex = selected === item.id ? 0 : -1
-      const text = element("span", "ui-list-item-text")
-      text.append(Object.assign(element("strong"), { textContent: item.title }), Object.assign(element("small"), { textContent: item.detail }))
-      row.append(createIcon(item.icon, 14), text)
+      if (index < 32) fillRow(row, item)
+      else { deferredRows.set(row, item); rowObserver.observe(row) }
       row.addEventListener("click", () => choose(row))
       const open = () => {
         if (!item.open || appState.archive !== archive) return
@@ -150,7 +173,7 @@ export function openResourceInventory(): void {
     button.addEventListener("click", () => {
       filter = value
       for (const item of filters.children) item.setAttribute("aria-pressed", String(item === button))
-      refresh()
+      render()
     })
     filters.append(button)
   }
@@ -166,7 +189,7 @@ export function openResourceInventory(): void {
   form.append(header, body, footer)
   dialog.append(form)
   bindDialog(dialog)
-  dialog.addEventListener("close", () => dialog.remove(), { once: true })
+  dialog.addEventListener("close", () => { rowObserver.disconnect(); dialog.remove() }, { once: true })
   document.body.append(dialog)
   refresh()
   dialog.showModal()
@@ -178,11 +201,31 @@ export function openResourceInventory(): void {
     const release = () => { audio.removeAttribute("src"); audio.load(); URL.revokeObjectURL(url) }
     audioLoads.push(release)
     audio.addEventListener("loadedmetadata", () => {
-      if (Number.isFinite(audio.duration)) durations.set(item.id, `${audio.duration.toFixed(2)} s`)
-      if (dialog.open) refresh()
+      if (dialog.open && Number.isFinite(audio.duration)) {
+        const duration = `${audio.duration.toFixed(2)} s`
+        durations.set(item.id, duration)
+        const current = items.find(current => current.id === item.id)
+        if (current) {
+          const matched = `${current.title} ${current.detail}`.toLowerCase().includes(query)
+          current.detail += ` · ${duration}`
+          const row = list.querySelector<HTMLElement>(`[data-inventory-id="${CSS.escape(item.id)}"]`)
+          if (row) {
+            row.title = `${current.title}\n${current.detail}`
+            row.setAttribute("aria-label", `${current.title} ${current.detail}`)
+            const detail = row.querySelector("small")
+            if (detail) detail.textContent = current.detail
+            else {
+              rowObserver.unobserve(row)
+              deferredRows.delete(row)
+              fillRow(row, current)
+            }
+          }
+          if (!matched && `${current.title} ${current.detail}`.toLowerCase().includes(query)) render()
+        }
+      }
       release()
     }, { once: true })
-    audio.addEventListener("error", () => { URL.revokeObjectURL(url) }, { once: true })
+    audio.addEventListener("error", release, { once: true })
     audio.src = url
   }
   dialog.addEventListener("close", () => audioLoads.forEach(release => release()), { once: true })

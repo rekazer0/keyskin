@@ -3,25 +3,22 @@ import { ssfPackage, ssfTheme } from "../ssf-documents"
 import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
 import { bindDialog } from "../ask.ts"
 import { closeDialog } from "../../motion.ts"
-import { applyImageSliceSelection, resourcePickerPayload, selectImageResource, pickableImagePaths, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
+import { applyImageSliceSelection, resourcePickerPayload, selectImageResource, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
 import { appState } from "../state"
 import { isTauri, isAndroidTauri, playSoundPath, syncDeviceControlIcon, clearSimulatedOutput } from "../canvas-interaction"
 import { listen } from "@tauri-apps/api/event"
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
-import { type ProjectChoice } from "../../project-chooser"
-import { finishNativeProjectChoice } from "../new-document"
 import { emitStyleLibrary, emitStyleLibraryPreview, emitStyleLibraryImage, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle, sliceStyleLibrarySelection } from "../style-picker"
 import { canvasEditable, isEditing, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
 import { soundPathForFilename } from "../../sounds.ts"
 import { bindPaneResize, applyModeState } from "../mobile-layout"
 import { currentConfigPath } from "../config-context"
 import { refreshPreview, setGuidesVisible, updateDevicePreview, refreshSimulationPreview, fitCanvasPreview } from "../preview-render"
-import { showStyle, renderResourceInspector, selectResourceImage, uploadKeySound, currentSoundEntries, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
+import { showStyle, renderResourceInspector, selectResourceImage, uploadKeySound, uploadResourceImage, currentSoundEntries, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
 import { createAtlasWorkspace } from "../../atlas-workspace"
 import { createAnimationWorkspace } from "../../animation-workspace"
 import { selectFile } from "../navigation"
 import { populateKeyInspector } from "../key-inspector"
-import { autoSliceSelectedImage, drawAtlas, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector, nextSliceIndex } from "../tile-editing"
+import { autoSliceSelectedImage, drawAtlas, scheduleAtlasDraw, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector, nextSliceIndex } from "../tile-editing"
 import { type TileRect, duplicateTileSlice } from "../../tiles.ts"
 import { type Change } from "../../history.ts"
 import { showStatus, runFileOperation, showError } from "../file-operations"
@@ -44,17 +41,6 @@ import { clearMobilePickerPreview, previewMobilePickerSelection } from "../mobil
 
 /** 样式图片资源、面板缩放、模拟输入与启动时的初始状态。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireResourcesAndStartup(): void {
-  if (isTauri()) {
-    void listen("new-project-ready", () => {
-      appState.nativeProjectWindowReady = true
-      void WebviewWindow.getByLabel("new-project").then((window) => window?.setFocus())
-    })
-    void listen<ProjectChoice>("new-project-select", (event) => {
-      appState.newProjectOptions = event.payload
-      finishNativeProjectChoice(event.payload.templateID)
-    })
-    void listen("new-project-cancel", () => finishNativeProjectChoice())
-  }
   void onPickerEvent("picker-window-ready", () => {
     appState.pickerFrameReady = true
     void emitPickerView(appState.pickerRequestedView)
@@ -84,6 +70,16 @@ export function wireResourcesAndStartup(): void {
     editStyleLibrarySelection()
   })
   void onPickerEvent("style-library-add", addStyleFromLibrary)
+  void onPickerEvent<{ session: string; name: string; bytes: number[] }>("style-library-import", payload => {
+    if (!isEditing() || payload.session !== appState.styleLibrarySession?.session || !Array.isArray(payload.bytes)) return
+    void runFileOperation("导入图片", async () => {
+      const path = await uploadResourceImage(new File([Uint8Array.from(payload.bytes)], payload.name))
+      if (!path) return false
+      await emitStyleLibrary()
+      await emitToPicker("style-library-imported", { path })
+      return true
+    })
+  })
   void onPickerEvent<{ styleID: string }>("style-library-duplicate", ({ styleID }) => { if (duplicateStyle(styleID)) void emitStyleLibrary() })
   void onPickerEvent<{ styleID: string }>("style-library-slice", ({ styleID }) => sliceStyleLibrarySelection(styleID))
   void onPickerEvent<{ filename: string }>("style-library-play", ({ filename }) => {
@@ -120,7 +116,7 @@ export function wireResourcesAndStartup(): void {
     back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),
     autoSlice: () => { void autoSliceSelectedImage() },
     guides: () => setGuidesVisible(!appState.guidesVisible),
-    redraw: () => drawAtlas(),
+    redraw: scheduleAtlasDraw,
     stretch: enabled => {
       const slice = appState.slices.find(item => item.index === appState.selectedTileIndex)
       if (!slice || !isEditing() || appState.archive?.format === "bda") return
@@ -209,17 +205,9 @@ export function wireResourcesAndStartup(): void {
       void runFileOperation("上传按键音效", () => uploadKeySound(file))
       return
     }
-    const targetArchive = appState.archive
     void runFileOperation("上传图片", async () => {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }))
-      bitmap.close()
-      if (appState.archive !== targetArchive || !isEditing()) return false
-      const paths = pickableImagePaths()
-      const base = paths[0]?.split("/").slice(0, -1).join("/") ?? `${theme.value}/skin/${orientation.value}/res`
-      const targetPath = `${base}/${file.name}`
-      const before = appState.archive.getBytes(targetPath)
-      commitBatch([{ kind: "bytes", path: targetPath, before: before?.slice(), after: bytes }])
+      const targetPath = await uploadResourceImage(file)
+      if (!targetPath) return false
       renderResourceInspector()
       updateDirty()
       selectResourceImage(targetPath)

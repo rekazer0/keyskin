@@ -216,10 +216,10 @@ export function retinaThumbnail(canvas: HTMLCanvasElement, cssWidth: number, css
   return canvas
 }
 
-/** 重建列表前先收走容器里的旧画布，按顺序复用；必须在清空容器之前调用。 */
+/** 重建前收走旧画布按顺序复用；这里只取节点，位图留到可见时由 lazyDraw 分配。 */
 export function thumbnailRecycler(container: Element): (cssWidth: number, cssHeight: number) => HTMLCanvasElement {
   const spare = Array.from(container.querySelectorAll("canvas")).reverse()
-  return (cssWidth, cssHeight) => retinaThumbnail(spare.pop() ?? document.createElement("canvas"), cssWidth, cssHeight)
+  return (width, height) => spare.pop() ?? Object.assign(document.createElement("canvas"), { width, height })
 }
 
 export function drawVisualPreview(canvas: HTMLCanvasElement, visuals: Array<Visual | undefined>, foreground: boolean): void {
@@ -244,7 +244,6 @@ function resolveTextVisual(
   highlighted: boolean,
   defaultFontName?: string,
 ): TextVisual | undefined {
-  const sections = styles.sections()
   const result: TextVisual = {}
   const visited = new Set<string>()
   for (const token of foreground.split(",").map((value) => value.trim()).filter(Boolean)) {
@@ -252,7 +251,7 @@ function resolveTextVisual(
     const candidates = [`STYLE${token}`]
     if (Number.isFinite(value)) candidates.push(`STYLE${Math.floor(value / 100)}`)
     for (const section of candidates) {
-      if (!sections.includes(section) || visited.has(section)) continue
+      if (!styles.hasSection(section) || visited.has(section)) continue
       visited.add(section)
       const fontSize = Number(styles.get(section, "FONT_SIZE"))
       const fontName = styles.get(section, "FONT_NAME")?.trim()
@@ -296,7 +295,7 @@ function resolveVisualSpec(
   const id = styleID.trim()
   if (!/^\d+$/.test(id)) return
   const section = `STYLE${id}`
-  if (!styles.sections().includes(section)) return
+  if (!styles.hasSection(section)) return
   const imageValue =
     (highlighted ? styles.get(section, "HL_IMG") : undefined) ?? styles.get(section, "NM_IMG")
   const [imageName, tileValue] = imageValue?.split(",").map((part) => part.trim()) ?? []

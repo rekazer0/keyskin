@@ -74,11 +74,9 @@ export type StyleLibraryPayload = {
     textVisuals?: Array<TextVisual | undefined>
     sound?: string
     soundPlayable?: boolean
-    /** Places that reference it; a referenced style cannot be removed. */
-    uses?: number
   }[]
-  images: { path: string; categories: string[]; uses: number }[]
-  sounds: { styleID: string; label?: string; filename: string; playable: boolean; uses?: number }[]
+  images: { path: string; categories: string[] }[]
+  sounds: { styleID: string; label?: string; filename: string; playable: boolean }[]
 }
 
 export type StyleLibraryPreview = {
@@ -119,8 +117,11 @@ const libraryPreviewImage = $("#style-library-preview-image")
 const libraryApply = $("#style-library-apply") as HTMLButtonElement
 const libraryApplyToStyle = $("#style-library-apply-to-style") as HTMLButtonElement
 const librarySlice = $("#style-library-slice") as HTMLButtonElement
+const libraryImport = $("#style-library-import") as HTMLButtonElement
+const libraryNew = $("#style-library-new") as HTMLButtonElement
+const libraryImportInput = $("#style-library-import-input") as HTMLInputElement
 const mobilePicker = matchMedia("(max-width: 760px)")
-// 新建在网格末尾的虚线卡，删除在卡片上；工具条只放复制（⌘D 同）。
+// 新建在网格末尾的虚线卡；工具条只放复制（⌘D 同）。
 const libraryToolbar = listToolbar({ duplicate: { label: "复制样式", run: () => { if (librarySelected?.styleID) emitLibrary("style-library-duplicate", librarySelected) } } })
 const libraryDuplicate = libraryToolbar.querySelector("button")!
 $(".style-library-bar").append(libraryToolbar)
@@ -473,20 +474,20 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
   } }))
   if (!payload) return []
   if (payload.soundOnly) {
-    return payload.sounds.filter(({ styleID, filename }) => !query || styleID.toLowerCase().includes(query) || filename.toLowerCase().includes(query)).map(({ styleID, label, filename, playable, uses }) => ({ key: styleID, build: () => {
-      const card = styleCard({ id: styleID, label: label ?? `STYLE${styleID}`, kind: "sound", sound: () => librarySound(filename, playable), uses })
+    return payload.sounds.filter(({ styleID, filename }) => !query || styleID.toLowerCase().includes(query) || filename.toLowerCase().includes(query)).map(({ styleID, label, filename, playable }) => ({ key: styleID, build: () => {
+      const card = styleCard({ id: styleID, label: label ?? `STYLE${styleID}`, kind: "sound", sound: () => librarySound(filename, playable) })
       bindLibraryCard(card, { styleID }, false)
       return card
     } }))
   }
   if (images) {
-    return payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter))).map(({ path, uses }) => ({ key: path, build: () => {
-      const card = imageResourceCard({ path, load: () => libraryImageURL(path), uses })
+    return payload.images.filter(({ path, categories }) => path.toLowerCase().includes(query) && (libraryFilter === "all" || categories.includes(libraryFilter))).map(({ path }) => ({ key: path, build: () => {
+      const card = imageResourceCard({ path, load: () => libraryImageURL(path) })
       bindLibraryCard(card, { imagePath: path }, false)
       return card
     } }))
   }
-  return payload.styles.filter(style => (libraryFilter !== "recent" || payload.recentStyles?.includes(style.styleID)) && styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter === "recent" ? "all" : libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
+  return payload.styles.filter(style => (libraryFilter !== "recent" || payload.recentStyles?.includes(style.styleID)) && styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, style.info, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter === "recent" ? "all" : libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
     const card = styleCard({
       id: style.styleID, label: payload.ssfAnimation ? style.label : `STYLE${style.label}`, info: style.info, kind: style.kind,
       draw: (canvas, highlighted) => style.kind === "text"
@@ -494,7 +495,6 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
         : loadLibraryStyle(style).then(() => drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(payload.foreground))),
       animation: () => libraryAnimationPlayers(style), summary: style.summary,
       sound: style.sound ? () => librarySound(style.sound!, Boolean(style.soundPlayable)) : undefined,
-      uses: style.uses,
     })
     bindLibraryCard(card, { styleID: style.styleID }, false)
     return card
@@ -510,6 +510,10 @@ function renderLibrary(): void {
   libraryDuplicate.disabled = true
   libraryToolbar.hidden = chooser || !payload?.canAdd || !payload.editable
   const sound = Boolean(payload?.soundOnly)
+  libraryImport.hidden = chooser || !payload || sound || Boolean(payload.ssfAnimation)
+  libraryImport.disabled = !payload?.editable || !payload.imagesCompatible
+  libraryNew.hidden = chooser || !payload || Boolean(payload.imageSelection) || sound || Boolean(payload.ssfAnimation)
+  libraryNew.disabled = !payload?.canAdd || !payload.editable
   const images = chooser || libraryMode === "images" && !sound
   title.textContent = images ? "全部图片" : "全部样式"
   setWindowTitle(title.textContent)
@@ -628,6 +632,14 @@ for (const button of libraryButtons("[data-library-mode]")) {
   })
 }
 libraryApply.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", librarySelected) })
+libraryNew.addEventListener("click", () => emitLibrary("style-library-add"))
+libraryImport.addEventListener("click", () => { libraryImportInput.value = ""; libraryImportInput.click() })
+libraryImportInput.addEventListener("change", async () => {
+  const file = libraryImportInput.files?.[0]
+  if (!file || libraryImport.disabled || !library?.editable) return
+  const session = library.session
+  void emitMain("style-library-import", { session, name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] })
+})
 libraryApplyToStyle.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", { ...librarySelected, toStyle: true }) })
 librarySlice.addEventListener("click", () => { if (librarySelected?.styleID) emitLibrary("style-library-slice", librarySelected) })
 $("#style-library-edit").addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-edit", librarySelected) })
@@ -681,6 +693,17 @@ canvas.addEventListener("click", (event) => {
 await onMain<ImagePayload>("image-picker-data", (payload) => showImage(payload))
 await onMain("image-picker-show-list", () => showResourceList())
 await onMain<StyleLibraryPayload>("style-library-data", (payload) => showStyleLibrary(payload))
+await onMain<{ path: string }>("style-library-imported", ({ path }) => {
+  libraryMode = "images"
+  libraryFilter = "all"
+  clearSearch()
+  renderLibrary()
+  const index = libraryItems.findIndex(card => card.key === path)
+  if (index < 0) return
+  libraryScroll.scrollTop = Math.floor(index / libraryColumns) * libraryPitch
+  renderLibraryWindow()
+  libraryCardAt(index)?.click()
+})
 await onMain<StyleLibraryPreview>("style-library-preview-data", payload => {
   if (library?.session !== payload.session) return
   const style = library.styles.find(style => style.styleID === payload.styleID)

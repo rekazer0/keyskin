@@ -62,7 +62,7 @@ export function availableStyleIDs(): string[] {
   if (appState.archive.format === "sxi") return palmStyleIDs()
   return (styleConfigDocument()?.sections() ?? [])
     .flatMap((section) => section.match(/^STYLE(\d+)$/)?.[1] ?? [])
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .sort(new Intl.Collator(undefined, { numeric: true }).compare)
 }
 
 /** 按样式内容判定类型：有图即图片样式，其次动画、颜色、声音，只剩文字属性的归为文字样式；INFO 只是备注，不算属性。 */
@@ -415,8 +415,7 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
   if (payload.soundOnly) {
     payload.sounds = cache.sounds ??= ids.flatMap(styleID => {
       const filename = styleSoundFile(styleID, styles)
-      return filename ? [{ styleID, filename, playable: Boolean(soundPathForFilename(names, theme.value, orientation.value, filename)),
-        uses: canAdd ? styleUsages(styleID).length : undefined }] : []
+      return filename ? [{ styleID, filename, playable: Boolean(soundPathForFilename(names, theme.value, orientation.value, filename)) }] : []
     })
     return payload
   }
@@ -428,13 +427,11 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     return payload
   }
   const imageCategories = new Map<string, Set<string>>()
-  const imageUses = new Map<string, number>()
   const categories = styleLibraryCategories()
   payload.styles = ids.map(styleID => {
     const uses = categories.get(styleID) ?? new Set<string>()
     const imagePaths = [false, true].flatMap(pressed => resolver?.imagePath?.(styleID, pressed) ?? [])
     for (const path of imagePaths) {
-      imageUses.set(path, (imageUses.get(path) ?? 0) + 1)
       const merged = imageCategories.get(path) ?? new Set<string>()
       for (const category of uses) merged.add(category)
       imageCategories.set(path, merged)
@@ -445,7 +442,6 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
       styleID, label: stylePickerLabel(styleID), kind, categories: [...uses], imagePaths, visuals: [],
       info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
       compatible: compatible(styleID, kind),
-      uses: canAdd ? styleUsages(styleID).length : undefined,
       summary: kind === "anim" && styles ? styleAnimationSummary(styleID, styles) : undefined,
       textVisuals: kind === "text" ? [false, true].map(pressed => resolver?.resolveStyleText?.(styleID, pressed) ?? resolver?.resolveText(styleID, pressed)) : undefined,
       sound, soundPlayable: Boolean(sound && soundPathForFilename(names, theme.value, orientation.value, sound)),
@@ -453,7 +449,7 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
   })
   payload.images = resourceImagePaths(names, theme.value, orientation.value).map(path => {
     if (!images.has(path)) images.set(path, memo(() => imageDataURL(source.getBytes(path)!)))
-    return { path, categories: [...imageCategories.get(path) ?? []], uses: imageUses.get(path) ?? 0 }
+    return { path, categories: [...imageCategories.get(path) ?? []] }
   })
   cache.styles = payload.styles
   cache.imageList = payload.images

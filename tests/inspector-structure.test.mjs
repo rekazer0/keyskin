@@ -77,9 +77,11 @@ test("style references are one shared card: number and kind on the left, normal 
 })
 
 test("the text group imports skin fonts and writes GLOBAL FONT_PATH to every CSS", () => {
-  assert.match(pane, /<select id="font-file-select"/)
-  assert.match(pane, /id="font-import"/)
-  assert.match(pane, /id="font-remove"/)
+  assert.match(pane, /id="key-typography-controls"/)
+  assert.match(read("src/app/skin-fonts.ts"), /row.id = "font-file-field"/)
+  assert.match(read("src/app/skin-fonts.ts"), /upload.id = "font-import"/)
+  assert.match(read("src/app/skin-fonts.ts"), /remove.id = "font-remove"/)
+  for (const file of ["src/app/text-styles.ts", "src/app/ssf-fields.ts", "src/app/sxi-fields.ts", "src/bda-editor.ts"]) assert.match(read(file), /typographyRows\(/, file)
   assert.match(read("src/app/skin-fonts.ts"), /withGlobalFontPath/)
   assert.match(read("src/app/skin-fonts.ts"), /skinStylePaths/)
 })

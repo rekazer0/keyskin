@@ -51,9 +51,9 @@ export const adbTestButton = $("#adb-test") as HTMLButtonElement
 
 export const adbTestStatus = $("#adb-test-status")
 
-export const undoButton = $("#undo") as HTMLButtonElement
+export const undoButton = $("#desktop-undo") as HTMLButtonElement
 
-export const redoButton = $("#redo") as HTMLButtonElement
+export const redoButton = $("#desktop-redo") as HTMLButtonElement
 
 export const toolbarMenus = Array.from(document.querySelectorAll<HTMLDetailsElement>(".toolbar-more"))
 
@@ -64,10 +64,6 @@ export const pinnedToolbar = $("#pinned-toolbar")
 export const mobileUndoButton = $("#mobile-undo") as HTMLButtonElement
 
 export const mobileRedoButton = $("#mobile-redo") as HTMLButtonElement
-
-export const desktopUndoButton = $("#desktop-undo") as HTMLButtonElement
-
-export const desktopRedoButton = $("#desktop-redo") as HTMLButtonElement
 
 export const appDialogButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-app-dialog]"))
 
@@ -108,10 +104,9 @@ export const windowMaterialOpacitySetting = $("#window-material-opacity-setting"
 export const windowMaterialOpacity = $("#window-material-opacity") as HTMLInputElement
 
 export const windowMaterialOpacityValue = $("#window-material-opacity-value") as HTMLOutputElement
-
-export const sidebarViewVisible = $("#sidebar-view-visible") as HTMLInputElement
-
-export const inspectorTabsVisible = $("#inspector-tabs-visible") as HTMLInputElement
+export const workspaceNavigationOpacity = $("#workspace-navigation-opacity") as HTMLInputElement
+export const workspaceNavigationOpacityValue = $("#workspace-navigation-opacity-value") as HTMLOutputElement
+export const workspaceNavigationOpacitySetting = $("#workspace-navigation-opacity-setting")
 
 export const overviewMetaVisible = $("#overview-meta-visible") as HTMLInputElement
 
@@ -145,6 +140,8 @@ export const sourceDirectoryStatus = $("#source-directory-status")
 export const mobileSaveButton = $("#mobile-save") as HTMLButtonElement
 export const mobileDocumentStatus = $("#mobile-document-status")
 export const mobileProjectFiles = $("#mobile-project-files") as HTMLButtonElement
+export const mobileProjectToggle = $("#mobile-project-toggle") as HTMLButtonElement
+export const mobileProjectDialog = $("#mobile-project-dialog") as HTMLDialogElement
 export const mobileFilesClose = $("#mobile-files-close") as HTMLButtonElement
 export const mobileInspectorHistory = $("#mobile-inspector-history")
 export const mobileQuickActions = $(".mobile-quick-actions")
@@ -237,10 +234,11 @@ export const sourceUploadInput = $("#source-upload-input") as HTMLInputElement
 
 export const sidebarViewButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-sidebar-view]"))
 
-export const sidebarViewControl = $(".sidebar-view-control")
+export const workspaceNavigation = $("#workspace-navigation")
+export const workspaceExport = $("#workspace-export") as HTMLButtonElement
+export const workspaceToolsDialog = $("#workspace-tools-dialog") as HTMLDialogElement
 
 export const documentName = $("#document-name")
-export const appBrandVersion = $("#app-brand-version")
 
 export const sidebarProjectName = $("#sidebar-project-name")
 
@@ -330,17 +328,9 @@ export const selectedKeyContext = $("#selected-key-context")
 
 export const keyFields = Array.from(document.querySelectorAll<HTMLInputElement>("[data-key-field]"))
 
-export const styleFields = Array.from(document.querySelectorAll<HTMLInputElement>("[data-style-field]"))
-
 export const primaryCssFields = $("#primary-css-fields")
 
-export const fontFileField = $("#font-file-field")
-export const fontFileSelect = $("#font-file-select") as HTMLSelectElement
-export const fontImportButton = $("#font-import") as HTMLButtonElement
 export const fontImportInput = $("#font-import-input") as HTMLInputElement
-export const fontRemoveButton = $("#font-remove") as HTMLButtonElement
-export const fontNameInput = $('[data-style-field="FONT_NAME"]') as HTMLInputElement
-export const skinFontNames = $("#skin-font-names") as HTMLDataListElement
 
 export const skinFields = Array.from(document.querySelectorAll<HTMLInputElement>("[data-skin-field]"))
 
@@ -394,7 +384,6 @@ export const keyActionButtons = Array.from(document.querySelectorAll<HTMLButtonE
 /** 手机「更多」菜单里的对象操作：只把点击转给同一个按钮，可用状态仍由 keyActionButtons 决定。 */
 export const keyActionMenuItems = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-key-action-ref]"))
 
-export const baiduActionCodes = $("#baidu-action-codes") as HTMLDataListElement
 
 export const inspectorTabs = $(".inspector-tabs")
 
@@ -590,7 +579,6 @@ export const tileSourceFields = Array.from(document.querySelectorAll<HTMLInputEl
 
 export const tileInnerFields = Array.from(document.querySelectorAll<HTMLInputElement>("[data-tile-inner]"))
 
-export const textStyleLabels = Array.from(document.querySelectorAll<HTMLElement>("[data-text-style]"))
 export const keyTextLayerSwitch = $("#key-text-layers")
 
 export const simulatedOutput = $("#simulated-output") as HTMLTextAreaElement

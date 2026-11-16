@@ -42,7 +42,7 @@ export function palmInspectorModel(pointer: readonly (string | number)[]): JsonO
     top_cand: () => asObject(helpCandModel({}))!, switch: () => asObject(candidateSwitchModel({}))!,
     t_icon: () => ({ b: baseModel({}), i_text: undefined }),
     p_icon: () => ({ b: baseModel({}), i_text: undefined }),
-    s_1: () => ({ text: undefined, f_s: undefined, f_n: undefined, c_type: undefined, c_normal: undefined, c_hl: undefined, file: undefined, for_back: undefined }),
+    s_1: () => ({ text: undefined, f_s: undefined, f_n: undefined, f_w: undefined, c_type: undefined, c_normal: undefined, c_hl: undefined, file: undefined, for_back: undefined }),
     s_2: () => ({ normal: undefined, hl: undefined }),
     s_3: () => ({ size: undefined, color: undefined }),
     s_4: () => ({ path_1: undefined, path_2: undefined, path_3: undefined }),

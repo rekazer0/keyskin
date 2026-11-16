@@ -22,6 +22,7 @@ export function syncMobileKeyPreview(pressed = false): void {
   mobileKeyPreview.hidden = !mobilePortraitQuery.matches || document.documentElement.dataset.mobilePane !== "inspector"
     || !key || appState.selectedPath !== appState.layoutPath
   if (mobileKeyPreview.hidden || !key) return
+  selectedKeyContext.textContent = `${mobilePreviewSummary.textContent} · ${section}`
   const label = key.show || key.center
   if (/^[\p{L}\p{N}]$/u.test(label)) selectedKeyName.textContent = `按键 ${label}`
   if (pressed) preview.flashPress(key)

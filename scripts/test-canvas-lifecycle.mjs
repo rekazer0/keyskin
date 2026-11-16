@@ -1,3 +1,4 @@
+import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 // Repeated canvas selection must not retain detached inspector bitmaps or observed SSF thumbnails.
 // BROWSER=webkit node scripts/test-canvas-lifecycle.mjs also checks the macOS WebView engine.
 import assert from 'node:assert/strict'
@@ -31,7 +32,7 @@ try {
       if (format === 'ssf') {
         await page.locator('#browser-open').setInputFiles({ name: 'canvas-lifecycle.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
       } else {
-        await page.locator(`.template-card[data-template="${format === 'bds' ? 'official-android-bds' : 'default-android'}"]`).first().click()
+        await openEditorTemplate(page, format === 'bds' ? 'official-android-bds' : 'default-android')
       }
       await page.locator('.canvas-wrap:not(.empty)').waitFor()
       await page.waitForFunction(() => !document.querySelector('#open').disabled)

@@ -4,7 +4,7 @@
 import { appState } from "./state"
 import { cachedIniDocument } from "./style-document"
 import { IniDocument } from "../ini.ts"
-import { textStyleValue, writeTextStyleProperty, type TextStyleRef } from "../style-properties.ts"
+import { textStyleValue, textStyleSections, writeTextStyleProperty, resolveStylePropertyLayers, type TextStyleRef } from "../style-properties.ts"
 import { candidateFirstForeground, candidateInputForegroundStyle, candidateInputSizeForeground, candidateWordsForeground } from "../candidate-style.ts"
 import { type BdaStyleRef } from "../bda.ts"
 import { element } from "../dom-element.ts"
@@ -13,12 +13,14 @@ import { styleConfigPath, genConfigPath, isToolbarPath, effectiveToolbarSections
 import { commitTextChanges, isEditing } from "./edit-history"
 import { currentBdaAppearance, bdaAppearancePart } from "./bda-documents"
 import { bdaStyleValue, createBdaPanelTextStyle, updateBdaRefs } from "./key-inspector"
-import { field } from "./property-rows"
-import { textStyleGroup, textStyleNote, textStyleRows, textStyleTargetSwitch } from "./dom"
+import { typographyRows } from "./typography"
+import { skinFontField, styleFontChoices } from "./skin-fonts"
+import { selectedBdaTextRefs, canCreateBdaKeyText, createBdaKeyText } from "./bda-key-text"
+import { textStyleGroup, textStyleNote, textStyleRows, textStyleTargetSwitch, primaryCssFields } from "./dom"
 import { palmTextTargets, palmTextValues, writePalmText, type PalmText } from "./sxi-text"
 import { createIcon } from "../icons"
 
-export type TextProperty = "FONT_NAME" | "FONT_SIZE" | "FONT_WEIGHT" | "FONT_CLEARTYPE" | "NM_COLOR" | "HL_COLOR" | "BORDER_COLOR" | "BORDER_SIZE"
+type TextProperty = "FONT_NAME" | "FONT_SIZE" | "FONT_WEIGHT" | "FONT_CLEARTYPE" | "NM_COLOR" | "HL_COLOR" | "BORDER_COLOR" | "BORDER_SIZE"
 
 type TextTarget = {
   id: string
@@ -34,7 +36,6 @@ type TextTarget = {
 
 type PalmProperty = Exclude<TextProperty, "FONT_WEIGHT" | "FONT_CLEARTYPE" | "BORDER_COLOR" | "BORDER_SIZE">
 
-const LABELS: Record<TextProperty, string> = { FONT_NAME: "字体名称", FONT_SIZE: "字号", FONT_WEIGHT: "字重", FONT_CLEARTYPE: "字体平滑", NM_COLOR: "颜色", HL_COLOR: "按下颜色", BORDER_COLOR: "阴影颜色", BORDER_SIZE: "阴影大小" }
 /** 悬停说明：写清格式支持与生效条件，标签本身不再带括号说明。 */
 const HINTS: Partial<Record<TextProperty, string>> = {
   FONT_NAME: "字体名称（FONT_NAME）：这个文字样式使用的字体，可填系统字体名（iOS，如 PingFang SC）或皮肤内字体文件名；Android 真机只认皮肤内字体文件",
@@ -53,7 +54,7 @@ function iniDocument(path: string): IniDocument | undefined {
 }
 
 /** The selected keys' texts: each key's FORE_STYLE, given a new text layer on first edit when it has none. */
-export function selectedKeyTextRefs(): TextStyleRef[] {
+function selectedKeyTextRefs(): TextStyleRef[] {
   const layout = appState.layoutDocument
   if (!layout) return []
   return appState.selectedKeySections.map((section) => isListCell(section)
@@ -62,7 +63,7 @@ export function selectedKeyTextRefs(): TextStyleRef[] {
 }
 
 /** What `refs` show for `property` in the current default.css, read like the preview. */
-export function textRefValues(refs: readonly TextStyleRef[], property: TextProperty): string[] {
+function textRefValues(refs: readonly TextStyleRef[], property: TextProperty): string[] {
   const styles = cachedIniDocument(styleConfigPath())
   return styles ? refs.map((ref) => textStyleValue(styles, ref, property)) : []
 }
@@ -71,7 +72,7 @@ export function textRefValues(refs: readonly TextStyleRef[], property: TextPrope
  * Writes one text property for `refs` into the current default.css, creating a text style (and the
  * reference to it) for texts that have none, as one undo step across every file it touches.
  */
-export function writeTextRefs(refs: readonly TextStyleRef[], property: TextProperty, value: string): void {
+function writeTextRefs(refs: readonly TextStyleRef[], property: TextProperty, value: string): void {
   const archive = appState.archive
   const stylePath = styleConfigPath()
   const styles = iniDocument(stylePath)
@@ -188,71 +189,72 @@ function writable(target: TextTarget): boolean {
   return target.bda ? target.bda.length > 0 || Boolean(target.bdaCreate) : (target.css ?? []).some((ref) => ref.owner || ref.foreground)
 }
 
-function commonValue(values: string[]): string {
-  return values.every((value) => value === values[0]) ? values[0] ?? "" : ""
-}
-
-function valueRow(target: TextTarget, property: TextProperty, values: string[]): HTMLElement {
-  const common = commonValue(values)
-  const mixed = new Set(values).size > 1
-  const editable = isEditing() && writable(target)
-  const options = { key: property, label: LABELS[property], hint: HINTS[property], name: `${target.label}${LABELS[property]}`, mixed, editable }
-  return field({ ...options, spec: { kind: "number", value: common, unit: "px", min: property === "BORDER_SIZE" ? 0 : 1, step: 1, range: property === "BORDER_SIZE" ? "border" : "fontSize" },
-    commit: (value) => writeTarget(target, property, value) })
-}
-
-/** 单色阴影字段（BORDER_COLOR）：有值时带不透明度，点色块取色。 */
-function borderColorRow(target: TextTarget, values: string[]): HTMLElement {
-  return field({
-    key: "BORDER_COLOR",
-    label: LABELS.BORDER_COLOR,
-    hint: HINTS.BORDER_COLOR,
-    name: `${target.label}阴影颜色`,
-    spec: { kind: "color", value: commonValue(values), codec: "argb" },
-    mixed: new Set(values).size > 1,
-    editable: isEditing() && writable(target),
-    commit: (value) => writeTarget(target, "BORDER_COLOR", value),
+/** 按键、候选栏、样式详情使用同一套文字字段。 */
+export function baiduTypographyRows(values: (key: string) => string[], write: (key: string, value: string) => void, properties: string[], editable: boolean, name = ""): HTMLElement[] {
+  const mapping = { text: "CONTENT_TEXT", font: "FONT_NAME", size: "FONT_SIZE", weight: "FONT_WEIGHT", smooth: "FONT_CLEARTYPE", color: "NM_COLOR", pressed: "HL_COLOR", shadowColor: "BORDER_COLOR", shadowSize: "BORDER_SIZE" } as const
+  return typographyRows({
+    fields: Object.fromEntries(Object.entries(mapping).filter(([, key]) => properties.includes(key)).map(([attribute, key]) => {
+      const list = values(key)
+      return [attribute, { key, values: list, ...(key === "FONT_CLEARTYPE" ? { checked: list[0] !== "0" } : {}), hint: HINTS[key as TextProperty] }]
+    })),
+    size: { min: 1 }, fonts: properties.includes("FONT_NAME") ? styleFontChoices() : [], fontPlaceholder: appState.archive?.format === "bda" ? "系统默认" : "继承皮肤字体", editable, name, write,
+    sample: appState.selectedKeySections.length === 1 ? previewKeyText() : undefined,
   })
 }
 
-/** 正常 | 按下两个色块一行；改色相时保留原透明度的精确字节。 */
-function colorRow(target: TextTarget, values: Record<"NM_COLOR" | "HL_COLOR", string[]>): HTMLElement {
-  const common = (list: string[]) => list.every((value) => value === list[0]) ? list[0] ?? "" : ""
-  return field({
-    key: "NM_COLOR HL_COLOR",
-    label: "文字颜色",
-    hint: "左边是正常状态的颜色，右边是按下状态的颜色（NM_COLOR / HL_COLOR）",
-    name: `${target.label}颜色`,
-    spec: { kind: "colorPair", values: [common(values.NM_COLOR), common(values.HL_COLOR)], codec: "argb" },
-    mixed: new Set(values.NM_COLOR).size > 1 || new Set(values.HL_COLOR).size > 1,
-    editable: isEditing() && writable(target),
-    commit: (next, { index = 0 }) => writeTarget(target, index ? "HL_COLOR" : "NM_COLOR", next[index]),
-  })
+export function renderKeyTypography(container: HTMLElement, hasSelection: boolean): boolean {
+  const format = appState.archive?.format
+  if (format !== "bdi" && format !== "bds" && format !== "bda") {
+    container.replaceChildren()
+    return false
+  }
+  const bda = appState.archive?.format === "bda"
+  const info = bda ? currentBdaAppearance() : undefined
+  const refs = bda ? selectedBdaTextRefs() : []
+  const cssRefs = !bda && hasSelection ? selectedKeyTextRefs() : []
+  const styles = cachedIniDocument(styleConfigPath())
+  const hasStyle = bda ? refs.length > 0 : cssRefs.some(ref => styles && textStyleSections(styles, ref.foreground).length > 0)
+  const available = hasSelection && (!bda || Boolean(info && (refs.length || canCreateBdaKeyText())))
+  const properties = bda ? ["CONTENT_TEXT", "FONT_NAME", "FONT_SIZE", "NM_COLOR", "HL_COLOR"]
+    : ["FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR", "BORDER_COLOR", "BORDER_SIZE"]
+  const rows = available ? baiduTypographyRows(key => bda ? refs.map(ref => bdaStyleValue(info!.appearance, ref, key)) : textRefValues(cssRefs, key as TextProperty), (key, value) => {
+    if (bda) {
+      if (refs.length) updateBdaRefs(refs, key, value)
+      else createBdaKeyText(key, value)
+    } else writeTextRefs(cssRefs, key as TextProperty, value)
+  }, properties, isEditing()) : []
+  for (const row of rows) {
+    if (!row.classList.contains("ui-field") || row.dataset.supported === "false") continue
+    const key = row.dataset.documentKey!
+    const input = row.querySelector<HTMLInputElement>("input:not([type=range])")
+    if (input && !key.includes(" ")) input.dataset.styleField = key
+    if (key === "FONT_NAME") {
+      row.title = HINTS.FONT_NAME!
+      row.querySelector("button")!.id = "font-name-picker"
+    }
+    if (key === "FONT_WEIGHT") row.id = "typography-font-weight"
+    if (key === "FONT_CLEARTYPE") row.id = "typography-cleartype"
+    if (key === "NM_COLOR HL_COLOR") row.id = "key-text-color"
+  }
+  const shadows = element("div", "inspector-grid")
+  shadows.id = "key-text-shadow"
+  shadows.hidden = bda
+  shadows.append(...rows.filter(row => row.dataset.typography?.startsWith("shadow")))
+  const global = hasSelection ? skinFontField() : undefined
+  const content = bda ? rows.find(row => row.dataset.typography === "text") : undefined
+  if (content) primaryCssFields.append(content)
+  container.replaceChildren(...rows.filter(row => row !== content && !(bda && row.tagName === "H4") && !row.dataset.typography?.startsWith("shadow")), shadows, ...global ? [global] : [])
+  return hasStyle
 }
 
-/** 选中按键的文字阴影两行（BORDER_COLOR / BORDER_SIZE）。 */
-export function renderKeyTextShadow(container: HTMLElement): void {
-  container.replaceChildren()
-  const refs = selectedKeyTextRefs()
-  const target: TextTarget = { id: "key-shadow", label: "按键文字", properties: ["BORDER_COLOR", "BORDER_SIZE"], css: refs }
-  if (!refs.length) return
-  container.append(borderColorRow(target, textRefValues(refs, "BORDER_COLOR")), valueRow(target, "BORDER_SIZE", textRefValues(refs, "BORDER_SIZE")))
-}
-
-/** 按键文字覆盖的「正常 | 按下」一行两个色块：改隐藏的原输入框，写回沿用 updateSelectedStyle。 */
-export function renderKeyTextColor(container: HTMLElement): void {
-  const [normal, pressed] = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=hidden]"))
-  container.querySelector(".ui-field")?.remove()
-  container.prepend(field({
-    key: "NM_COLOR HL_COLOR", label: "颜色", name: "文字颜色",
-    spec: { kind: "colorPair", values: [normal.value, pressed.value], codec: "argb" },
-    mixed: normal.placeholder === "混合" || pressed.placeholder === "混合", editable: !normal.disabled,
-    commit: (next, { index = 0 }) => {
-      const input = index ? pressed : normal
-      input.value = next[index]
-      input.dispatchEvent(new Event("change", { bubbles: true }))
-    },
-  }))
+function previewKeyText(): string | undefined {
+  const styles = cachedIniDocument(styleConfigPath())
+  const foreground = selectedKeyTextRefs()[0]?.foreground
+  if (styles && foreground) {
+    const text = resolveStylePropertyLayers(styles, foreground, "SHOW").map(layer => layer.value).join("")
+    if (text) return text
+  }
+  return appState.layoutDocument?.get(appState.selectedKeySections[0], "SHOW")
 }
 
 export function populateTextStyleGroup(): void {
@@ -280,10 +282,5 @@ export function populateTextStyleGroup(): void {
     })
     textStyleTargetSwitch.append(button)
   }
-  textStyleRows.append(...target.properties.flatMap((property): HTMLElement[] => {
-    if (property === "HL_COLOR") return []
-    if (property === "NM_COLOR") return [colorRow(target, { NM_COLOR: targetValues(target, "NM_COLOR"), HL_COLOR: targetValues(target, "HL_COLOR") })]
-    if (property === "BORDER_COLOR") return [borderColorRow(target, targetValues(target, "BORDER_COLOR"))]
-    return [valueRow(target, property, targetValues(target, property))]
-  }))
+  textStyleRows.append(...baiduTypographyRows(key => targetValues(target, key as TextProperty), (key, value) => writeTarget(target, key as TextProperty, value), target.properties, isEditing() && writable(target), target.label))
 }

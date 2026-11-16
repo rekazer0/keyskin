@@ -1,3 +1,4 @@
+import { exportSkin } from "../tests/helpers/export-skin.mjs"
 // End-to-end user simulation: drives every editor feature the way a person would.
 // Run: node scripts/test-user-flows.mjs
 // Starts a Vite dev server (or uses BASE_URL) and drives Chromium through Playwright
@@ -81,7 +82,8 @@ let check = async function check(name, run) {
 }
 
 async function openTemplate(page, template = "official-android-bds") {
-  await page.locator(`.template-grid .template-card[data-template="${template}"]`).click()
+  await page.locator(`#new-project-form input[value="${template}"]`).check()
+  await page.locator('#new-project-form button[value="create"]').click()
   await page.waitForSelector(".canvas-wrap:not(.empty)")
   await page.waitForFunction(() => document.querySelector("#preview")?.getBoundingClientRect().height > 60)
   await closeOperationDialog(page)
@@ -188,8 +190,8 @@ check = async (name, run) => (!only || only.test(name) ? runCheck(name, run) : u
 
 await check("welcome: one recent section, templates, no document controls", () => withPage(async (page) => {
   assert.equal(await page.locator(".welcome-aside").count(), 0, "duplicate recent column removed")
-  assert.equal(await page.locator(".template-grid .template-card").count(), 8)
-  await page.waitForFunction(() => document.querySelectorAll(".template-grid .template-preview img, .template-grid .template-preview canvas").length >= 3, null, { timeout: 30000 })
+  assert.equal(await page.locator(".project-chooser-body .template-card").count(), 8)
+  await page.waitForFunction(() => document.querySelectorAll(".project-chooser-body .template-preview img, .project-chooser-body .template-preview canvas").length >= 3, null, { timeout: 30000 })
   for (const selector of ["#desktop-undo", ".mode-control", "#recent-clear"]) {
     assert.equal(await page.locator(selector).isVisible(), false, `${selector} hidden without a skin`)
   }
@@ -217,25 +219,22 @@ for (const template of ["default-android", "official-android-bds", "xiaomi-unifi
 }
 
 /* ------------------------------------------------------------------------------------------------
- * 3 · New skin dialog
+ * 3 · File page creation
  * ---------------------------------------------------------------------------------------------- */
-await check("new skin dialog: validation, cancel and create", () => withPage(async (page) => {
+await check("file page: validation and create", () => withPage(async (page) => {
   await openFileMenu(page)
   await page.locator("#new").click()
-  const dialog = page.locator("#new-project-dialog")
-  await dialog.waitFor({ state: "visible" })
-  const names = await dialog.locator("strong").allTextContents()
-  for (const name of ["百度 BDA 默认", "百度 BDS 旧版", "OPPO 双色", "iQOO 圆角黑"]) assert.ok(names.some((text) => text.includes(name)), `dialog names match welcome cards: ${name}`)
-  await dialog.locator("[name=project-name]").fill("../bad")
-  await dialog.getByRole("button", { name: "新建", exact: true }).click()
-  assert.equal(await dialog.isVisible(), true, "invalid name keeps the dialog open")
-  await dialog.getByRole("button", { name: "取消", exact: true }).click()
-  await dialog.waitFor({ state: "hidden" })
-  await openFileMenu(page)
-  await page.locator("#new").click()
-  await dialog.locator("[name=project-name]").fill("用户流程测试")
-  await dialog.locator("input[value=oppo-dual-color]").check()
-  await dialog.getByRole("button", { name: "新建", exact: true }).click()
+  const form = page.locator("#file-project-chooser #new-project-form")
+  await form.waitFor({ state: "visible" })
+  assert.equal(await page.locator("#new-project-dialog").isVisible(), false)
+  const names = await form.locator("strong").allTextContents()
+  for (const name of ["百度 BDA 默认", "百度 BDS 旧版", "OPPO 双色", "iQOO 圆角黑"]) assert.ok(names.some((text) => text.includes(name)), `file page template: ${name}`)
+  await form.locator("[name=project-name]").fill("../bad")
+  await form.getByRole("button", { name: "新建", exact: true }).click()
+  assert.equal(await page.locator(".canvas-wrap.empty").count(), 1, "invalid name keeps the file page open")
+  await form.locator("[name=project-name]").fill("用户流程测试")
+  await form.locator("input[value=oppo-dual-color]").check()
+  await form.getByRole("button", { name: "新建", exact: true }).click()
   await page.waitForFunction(() => document.querySelector("#document-name")?.textContent?.includes("用户流程测试"), null, { timeout: 30000 })
 }))
 
@@ -329,12 +328,15 @@ await check("edit keys: geometry, keyboard nudge, undo/redo, multi-select, layou
   const show = page.locator("[data-key-field=SHOW]")
   await show.fill("测")
   await show.press("Enter")
-  await page.locator('[data-inspector-tab="source"]').click()
+  await page.locator('[data-inspector-tab="source"]').dispatchEvent("click")
   await page.waitForFunction(() => /SHOW=测/.test(document.querySelector("#source .cm-content")?.innerText ?? ""))
-  await page.locator('[data-inspector-tab="properties"]').click()
+  await page.locator('[data-inspector-tab="properties"]').dispatchEvent("click")
   await page.locator(".key-typography-fields #font-file-field").waitFor({ state: "visible" })
   // The font is picked from the skin's own font files; the system font is always offered.
-  assert.equal(await page.locator("#font-file-select option").first().textContent(), "系统默认")
+  await page.locator("#font-file-picker").click()
+  assert.equal(await page.getByRole("dialog", { name: "选择皮肤字体", exact: true }).getByRole("option").first().locator("strong").textContent(), "系统默认")
+  await page.getByRole("dialog", { name: "选择皮肤字体", exact: true }).getByRole("button", { name: "取消", exact: true }).click()
+  await page.getByRole("dialog", { name: "选择皮肤字体", exact: true }).waitFor({ state: "hidden" })
   // Import is available in edit mode; removing the system default is not possible.
   assert.equal(await page.locator("#font-import").isVisible(), true)
   assert.equal(await page.locator("#font-remove").isDisabled(), true)
@@ -400,8 +402,8 @@ await check("text: candidate bar and selected keys edit their text styles", () =
   await selectKey(page)
   await railTab(page, "文字")
   const text = page.locator(".key-typography-fields")
-  await text.getByRole("button", { name: "文字颜色正常", exact: true }).click()
-  const color = text.locator("input[aria-label='文字颜色正常色值']")
+  await text.getByRole("button", { name: "颜色正常", exact: true }).click()
+  const color = text.locator("input[aria-label='颜色正常色值']")
   await color.fill("FF123456")
   await color.press("Enter")
   assert.match(await styleText(), /NM_COLOR\s*=\s*FF123456/)
@@ -437,7 +439,7 @@ await check("styles: library filters, search, preview, apply, new and delete sty
   await library.locator("#style-library-preview").waitFor({ state: "visible" })
   await library.locator("#style-library-apply").click()
   await pickerDialog.waitFor({ state: "hidden" })
-  // 侧栏样式列表：末尾的虚线卡直接新建（编号自动取下一个）并选中；没被引用的样式在卡片上删除，可撤销。
+  // 侧栏样式列表：末尾虚线卡新建并选中；工具条删除未引用样式，可撤销。
   await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("按键样式", { exact: true }) }).first().click()
   const gallery = page.locator("#resource-gallery")
   const ids = await gallery.locator(".ui-style-card[data-style-id]").evaluateAll((cards) => cards.map((card) => Number(card.dataset.styleId)))
@@ -446,8 +448,7 @@ await check("styles: library filters, search, preview, apply, new and delete sty
   const created = gallery.locator(`.ui-style-card[data-style-id="${next}"]`)
   await created.and(page.locator('[aria-selected="true"]')).waitFor()
   await page.waitForFunction((id) => new RegExp(`STYLE ?${id}`).test(document.querySelector("#resource-name")?.textContent ?? ""), next)
-  await created.hover()
-  await created.getByRole("button", { name: `删除STYLE${next}` }).click()
+  await page.getByRole("button", { name: "删除样式", exact: true }).click()
   await created.waitFor({ state: "detached" })
   await page.locator("#desktop-undo").click()
   await created.waitFor()
@@ -535,7 +536,7 @@ await check("overview: every sidebar item, image slices, sounds and info", () =>
 await check("source files: tree, editor, search, upload, copy/paste, delete and undo", () => withPage(async (page) => {
   await openTemplate(page)
   await editMode(page)
-  await page.locator('[data-sidebar-view="source"]').click()
+  await page.locator('[data-workspace-page="source"]').click()
   await page.locator("#source-file-toolbar").waitFor({ state: "visible" })
   // 文件夹按需展开：逐层点开，直到出现 .ini 文件。
   // 访达式树：单击选中文件夹，点三角（或双击）展开。
@@ -549,7 +550,7 @@ await check("source files: tree, editor, search, upload, copy/paste, delete and 
   const file = page.locator('.source-file-row[data-path$=".ini"]:visible').first()
   await file.waitFor({ state: "visible" })
   await file.click()
-  await page.locator('[data-inspector-tab="source"]').click()
+  await page.locator('[data-inspector-tab="source"]').dispatchEvent("click")
   await page.waitForFunction(() => (document.querySelector("#source .cm-content")?.innerText ?? "").includes("["))
   await page.locator("#source-find-toggle").click()
   await page.locator("#source-search").fill("STYLE")
@@ -572,7 +573,7 @@ await check("source files: tree, editor, search, upload, copy/paste, delete and 
   assert.equal(await uploaded.isVisible(), true, "the tree stays open after deleting")
   await page.locator("#desktop-undo").click()
   await page.waitForFunction(() => document.querySelectorAll('.source-file-row[data-path*="flow-test"]').length === 2)
-  await page.locator('[data-sidebar-view="overview"]').click()
+  await page.locator('[data-workspace-page="overview"]').click()
 }))
 
 /* ------------------------------------------------------------------------------------------------
@@ -596,10 +597,10 @@ await check("tools: panel copy, replace keyboard style and iOS 26 adaptation", (
   await page.locator("#panel-scale-enabled").uncheck()
   await copy.getByRole("button", { name: "复制", exact: true }).click()
   await copy.waitFor({ state: "hidden" })
-  await page.locator('[data-sidebar-view="source"]').click()
+  await page.locator('[data-workspace-page="source"]').click()
   assert.match(await page.locator("#event-log").textContent(), /复制面板完成/)
   assert.ok(await page.evaluate((path) => [...document.querySelectorAll("[data-path]")].some((row) => row.dataset.path === path), target), "copied layout listed")
-  await page.locator('[data-sidebar-view="overview"]').click()
+  await page.locator('[data-workspace-page="overview"]').click()
   // Replace keyboard style with an uploaded PNG, then undo it.
   await openFileMenu(page)
   await page.locator("#replace-layout-image").click()
@@ -687,15 +688,15 @@ await check("file: rename, save, export every format and unsaved prompt", () => 
     return result
   }
   // BDS 皮肤只能导出旧格式，BDA 导出项隐藏而不是置灰。
-  assert.equal(await page.locator('.pen-file-menu [data-export-format="bda"]:not([hidden])').count(), 0, "BDA export hidden for BDS")
+  assert.equal(await page.locator('#mobile-export-dialog [data-export-format="bda"]:not([hidden])').count(), 0, "BDA export hidden for BDS")
   const exportAll = async () => {
     const names = []
-    const formats = await page.locator(".pen-file-menu [data-export-format]:not([hidden])").evaluateAll((items) => items.map((item) => [item.dataset.exportFormat, item.dataset.bdaPlatform ?? ""]))
+    const formats = await page.locator("#mobile-export-dialog [data-export-format]:not([hidden])").evaluateAll((items) => items.map((item) => [item.dataset.exportFormat, item.dataset.bdaPlatform ?? ""]))
     for (const [format, platform] of formats) {
-      const item = page.locator(`.pen-file-menu [data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`)
+      const item = page.locator(`#mobile-export-dialog [data-export-format="${format}"]${platform ? `[data-bda-platform="${platform}"]` : ""}`)
       const file = await download(async () => {
         await openFileMenu(page)
-        await item.click()
+        await exportSkin(page, item)
       })
       names.push(file.suggestedFilename().split(".").pop())
       await expectSaveResult(page, "导出完成")
@@ -722,7 +723,7 @@ await check("file: rename, save, export every format and unsaved prompt", () => 
   // 先选模板，替换当前皮肤前才提示未保存。
   await openFileMenu(page)
   await page.locator("#new").click()
-  await page.locator("#new-project-dialog").getByRole("button", { name: "新建", exact: true }).click()
+  await page.locator("#file-project-chooser").getByRole("button", { name: "新建", exact: true }).click()
   const unsaved = page.getByRole("dialog", { name: "未保存的皮肤" })
   await unsaved.waitFor({ state: "visible" })
   await unsaved.getByRole("button", { name: "取消", exact: true }).click()
@@ -733,11 +734,11 @@ await check("file: rename, save, export every format and unsaved prompt", () => 
 await check("file: a BDA skin exports to every format", () => withPage(async (page) => {
   await openTemplate(page, "default-android")
   const formats = []
-  for (const item of await page.locator(".pen-file-menu [data-export-format]:not([hidden])").all()) {
+  for (const item of await page.locator("#mobile-export-dialog [data-export-format]:not([hidden])").all()) {
     const pending = page.waitForEvent("download", { timeout: 60000 })
     pending.catch(() => {})
     await openFileMenu(page)
-    await item.click()
+    await exportSkin(page, item)
     const tap = page.locator('#file-operation-dialog[open] button[data-variant="primary"]', { hasText: "下载" })
     const tapped = tap.waitFor({ state: "visible", timeout: 60000 }).then(() => "tap")
     tapped.catch(() => {})
@@ -758,8 +759,8 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   // The source tree lists the Sogou files only; the converted Baidu tree behind the preview stays hidden.
   assert.equal(await page.locator('.raw-files [data-path^="light/"]').count(), 0)
   // Overview entries are SSF files, plus Sogou's keyboards drawn from the official skeleton.
-  assert.equal(await page.locator('[data-sidebar-view="overview"]').isDisabled(), false)
-  await page.locator('[data-sidebar-view="overview"]').click()
+  assert.equal(await page.locator('[data-workspace-page="overview"]').isDisabled(), false)
+  await page.locator('[data-workspace-page="overview"]').click()
   const { unzipSync: unzipSsf } = await import("fflate")
   const ownPaths = new Set(Object.keys(unzipSsf(ssfFixture())))
   const overviewPaths = await page.locator('.sidebar-overview button[data-path]:not(.nav-layout)').evaluateAll((items) => items.map((item) => item.dataset.path))
@@ -823,10 +824,10 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   await page.waitForFunction(() => document.querySelector("#candidate-words")?.style.color === "rgb(255, 0, 0)", null, { timeout: 15000 })
   assert.equal(await page.locator("#dirty").isVisible(), true)
   // The board's source is its phoneSkin.ini, edited in place.
-  await page.locator('[data-inspector-tab="source"]').click()
+  await page.locator('[data-inspector-tab="source"]').dispatchEvent("click")
   await page.waitForFunction(() => (document.querySelector("#source .cm-content")?.innerText ?? "").includes("TextStyle_Candidate"))
   assert.equal(await page.locator("#source-name").textContent(), "1080/status1/phoneSkin.ini")
-  await page.locator('[data-inspector-tab="properties"]').click()
+  await page.locator('[data-inspector-tab="properties"]').dispatchEvent("click")
   // Clicking a key selects it and shows the Sogou classes it is drawn from; it cannot be moved or deleted.
   await page.locator('.sidebar-overview button[data-path="light/skin/port/py_26.ini"]').click()
   await clickCanvas(page, 0.5, 0.4)
@@ -851,7 +852,7 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   assert.match(strFromU8(savedFiles["1080/status1/phoneSkin.ini"]), /TEXT_COLOR=0xFFFF0000/)
   assert.equal(Object.keys(savedFiles).length, Object.keys(unzipSync(ssfFixture())).length)
   assert.equal(await page.locator("#dirty").isVisible(), false)
-  const visibleFormats = await page.locator(".pen-file-menu [data-export-format]:not([hidden])").evaluateAll((items) => items.map((item) => item.dataset.exportFormat))
+  const visibleFormats = await page.locator("#mobile-export-dialog [data-export-format]:not([hidden])").evaluateAll((items) => items.map((item) => item.dataset.exportFormat))
   assert.deepEqual(visibleFormats, ["bdi", "bds", "bda", "bda", "sxi", "ssf"])
   // A skin with one look has no night preview to switch to, and switching never adds Baidu files to it.
   await page.locator("#browser-open").setInputFiles({ name: "单外观.ssf", mimeType: "application/octet-stream", buffer: Buffer.from(ssfFixture({ single: true })) })
@@ -876,7 +877,7 @@ await check("web: recent files and AI design are hidden; AI composer keeps keys 
   await page.locator('[data-inspector-tab="ai"]').evaluate((tab) => { tab.hidden = false })
   await editMode(page)
   await selectKey(page)
-  await page.locator('[data-inspector-tab="ai"]').click()
+  await page.locator('[data-inspector-tab="ai"]').dispatchEvent("click")
   await page.locator("#ai-design-panel").waitFor({ state: "visible" })
   assert.match(await page.locator("#ai-context-key").textContent(), /KEY|按键/)
   // Keys typed into the composer (inside deep-chat's shadow root) edit the prompt, never the canvas selection.
@@ -894,7 +895,7 @@ await check("web: recent files and AI design are hidden; AI composer keeps keys 
   await page.locator("#ai-design-scope").click()
   assert.equal(await page.locator("#ai-design-scope").getAttribute("aria-pressed"), "true")
   assert.equal(await page.locator("#ai-design-scope").textContent(), "整个皮肤")
-  await page.locator('[data-inspector-tab="properties"]').click()
+  await page.locator('[data-inspector-tab="properties"]').dispatchEvent("click")
 }))
 
 /* ------------------------------------------------------------------------------------------------

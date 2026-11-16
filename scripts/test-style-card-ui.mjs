@@ -32,6 +32,7 @@ try {
     for (const [i, [kind, label, icon]] of [['color', '颜色', 'palette'], ['anim', '动画', 'clapperboard'], ['sound', '音效', 'volume-2'], ['image', '图片', 'image'], ['text', '文字', 'type'], ['empty', '空', 'square-dashed']].entries()) {
       const card = styleCard({
         id: String(i), label: `STYLE${1000 + i}`, kind, kindLabel: label, kindIcon: icon,
+        info: kind === 'text' ? 'INFO 副标题：很长的说明保持单行省略' : undefined,
         summary: '动画 1 · 缩放',
         animation: () => [0, 1].map(n => animationPlayer({ key: `card-test-${n}`, thumbnail: true, clip: iniPreviewClip(doc, 'ANIM1') })),
         sound: kind === 'sound' || kind === 'text' ? sound : undefined,
@@ -48,6 +49,7 @@ try {
     document.body.replaceChildren(grid)
   })
   await page.waitForSelector('.ui-animation-player[data-playing="true"]')
+  assert.equal(await page.locator('.ui-style-card .ui-style-remove').count(), 0, '样式卡片没有删除控件')
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => { document.documentElement.dataset.appTheme = theme }, theme)
     for (const width of [320, 390, 694]) {
@@ -60,6 +62,13 @@ try {
       assert.equal(new Set(boxes.map(box => box.height)).size, 1, `${theme}/${width}: 等高`)
       assert.equal(boxes.some(box => box.overflow || box.horizontal), false, `${theme}/${width}: 无溢出`)
       assert.equal(await page.locator('.ui-style-caption').count(), 0)
+      const subtitle = await page.locator('.ui-style-card-info').evaluate(info => {
+        const heading = info.previousElementSibling.getBoundingClientRect()
+        const box = info.getBoundingClientRect()
+        const caption = info.parentElement.getBoundingClientRect()
+        return { below: box.top >= heading.bottom, inside: box.bottom <= caption.bottom + 1, ellipsis: getComputedStyle(info).textOverflow }
+      })
+      assert.deepEqual(subtitle, { below: true, inside: true, ellipsis: 'ellipsis' }, `${theme}/${width}: INFO 副标题位于标题下方且不撑高卡片`)
       const kindColors = await page.locator('.ui-style-card-kind').evaluateAll(items => items.map(el => getComputedStyle(el).color))
       assert.equal(new Set(kindColors).size, 1, '类型标识统一弱化，不使用强调色')
     }

@@ -16,12 +16,11 @@ export function syncMobileAppearance(): void {
   let root = quickInspector.querySelector<HTMLElement>(".mobile-appearance")
   if (!root) {
     root = element("section", "mobile-appearance")
-    quickInspector.prepend(root)
+    quickInspector.querySelector(".key-appearance-fields > h3")!.after(root)
   }
   root.replaceChildren()
-  const selected = appState.selectedKeySections.length > 0
+  const selected = appState.selectedKeySections.length === 1
   root.hidden = !selected || !mobilePortraitQuery.matches || !["bdi", "bds"].includes(appState.archive?.format ?? "")
-  quickInspector.dataset.mobileAppearanceExpanded = String(appState.mobileAppearanceExpanded)
   if (root.hidden) { preview.setAppearanceState(); return }
   const background = keyFields.find(input => input.dataset.keyField === "BACK_STYLE")
   const foreground = keyFields.find(input => input.dataset.keyField === "FORE_STYLE")
@@ -56,7 +55,6 @@ export function syncMobileAppearance(): void {
     if (!input || input.closest<HTMLElement>(".ui-section")?.hidden) return
     const row = element("button", "ui-property-link")
     row.type = "button"
-    row.dataset.mobileAdvanced = ""
     row.setAttribute("aria-label", `更换${label}`)
     row.disabled = input.disabled
     const thumbnail = element("span", "ui-property-link-thumbnail")
@@ -72,7 +70,9 @@ export function syncMobileAppearance(): void {
       thumbnail.replaceChildren(canvas)
       value.textContent = visual.imagePath?.split("/").pop() ?? `样式 ${id}`
     }).catch(() => {})
-    row.append(thumbnail, Object.assign(element("span"), { textContent: label }), value, createIcon("chevron-right"))
+    const copy = element("span", "ui-property-link-copy")
+    copy.append(Object.assign(element("strong"), { textContent: `${label}样式` }), value)
+    row.append(thumbnail, copy, createIcon("chevron-right"))
     row.addEventListener("click", () => {
       const list = input.closest(".ui-style-ref-list")
       const state = list?.querySelector<HTMLElement>(`.ui-style-ref .ui-style-state[data-state="${appState.mobileAppearancePressed ? "pressed" : "normal"}"]`)
@@ -83,28 +83,25 @@ export function syncMobileAppearance(): void {
     root!.append(row)
   }
   const heading = element("h3", "mobile-appearance-heading")
-  heading.append("背景样式")
-  const choose = element("button", "ui-button")
-  choose.type = "button"
-  choose.textContent = "查看全部 ›"
-  choose.setAttribute("aria-label", "更换背景")
-  choose.addEventListener("click", () => {
+  heading.append("外观")
+  const chooseBackground = () => {
     const list = background?.closest(".ui-style-ref-list")
     ;(list?.querySelector<HTMLElement>(`.ui-style-state[data-state="${appState.mobileAppearancePressed ? "pressed" : "normal"}"]`)
       ?? background?.closest(".ui-field")?.querySelector<HTMLElement>(".ui-style-ref-append"))?.click()
-  })
-  heading.append(choose)
+  }
   const states = element("div", "mobile-background-states")
   states.setAttribute("aria-label", "外观状态")
   for (const [pressed, label] of [[false, "正常"], [true, "按下"]] as const) {
-    const button = element("button")
+    const button = element("button", "ui-button")
     button.type = "button"
     button.dataset.appearanceState = pressed ? "pressed" : "normal"
     button.setAttribute("aria-pressed", String(appState.mobileAppearancePressed === pressed))
     button.setAttribute("aria-label", `${label}背景预览，双击更换`)
     const canvas = element("canvas")
-    canvas.width = 72; canvas.height = 96
-    button.append(canvas, Object.assign(element("span"), { textContent: label }), Object.assign(element("small"), { textContent: backgroundID ? `STYLE${backgroundID}` : "未设置" }))
+    canvas.width = 240; canvas.height = 80
+    const caption = Object.assign(element("span"), { textContent: label })
+    caption.append(Object.assign(element("small"), { textContent: backgroundID ? `STYLE${backgroundID}` : "未设置" }))
+    button.append(canvas, caption)
     const foregroundID = foreground?.value.split(",")[0]?.trim() ?? ""
     const foregroundText = resolver?.resolveStyleText?.(foregroundID, pressed)
     if (backgroundID && resolver) void Promise.all([resolver.resolve(backgroundID, pressed), foregroundText ? { text: foregroundText } : resolver.resolve(foregroundID, pressed)]).then(visuals => {
@@ -116,36 +113,10 @@ export function syncMobileAppearance(): void {
       syncMobileKeyPreview(pressed)
       syncMobileAppearance()
     })
-    button.addEventListener("dblclick", () => choose.click())
+    button.addEventListener("dblclick", chooseBackground)
     states.append(button)
   }
   root.append(heading, states)
+  reference(background, "背景", "image")
   reference(foreground, "前景", "layers")
-  const text = element("button", "ui-property-link")
-  text.type = "button"
-  const textIcon = element("span", "ui-property-link-thumbnail")
-  textIcon.append(createIcon("type"))
-  text.append(textIcon, "文字颜色", Object.assign(element("small"), { textContent: "字体与颜色" }), createIcon("chevron-right"))
-  if (resolver && foreground?.value) void resolver.resolve(foreground.value, appState.mobileAppearancePressed).then(visual => {
-    if (visual?.color) {
-      const rgb = visual.color.match(/[\d.]+/g)?.slice(0, 3).map(Number)
-      text.querySelector("small")!.textContent = rgb?.length === 3 ? `#${rgb.map(value => value.toString(16).padStart(2, "0")).join("").toUpperCase()}` : visual.color
-    }
-  }).catch(() => {})
-  const expand = () => {
-    appState.mobileAppearanceExpanded = !appState.mobileAppearanceExpanded
-    quickInspector.dataset.mobileAppearanceExpanded = String(appState.mobileAppearanceExpanded)
-    more.setAttribute("aria-expanded", String(appState.mobileAppearanceExpanded))
-  }
-  text.addEventListener("click", () => {
-    document.querySelector<HTMLButtonElement>('#mobile-property-tabs [data-mobile-category="typography"]')?.click()
-  })
-  const more = element("button", "ui-button")
-  more.type = "button"
-  more.dataset.variant = "quiet"
-  more.textContent = "高级样式"
-  more.setAttribute("aria-expanded", String(appState.mobileAppearanceExpanded))
-  more.append(createIcon("sliders-horizontal"))
-  more.addEventListener("click", expand)
-  root.append(text, more)
 }

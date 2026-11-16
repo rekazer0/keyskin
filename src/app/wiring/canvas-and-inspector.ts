@@ -7,7 +7,7 @@ import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
-import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, desktopUndoButton, desktopRedoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, baiduActionCodes, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode, saveButton } from "../dom"
+import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode, saveButton } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
@@ -20,7 +20,6 @@ import { replacedSourceStyle } from "../../source-value-ranges.ts"
 import { decorateStyleReferenceInput } from "../style-references"
 import { bindFieldServices } from "../property-rows"
 import { pickAnimationKeys } from "../animation-resource"
-import { knownFunctionCodes, actionDescription } from "../../actions.ts"
 import { renameDocumentTitle } from "../key-inspector"
 import { runFileOperation } from "../file-operations"
 import { sourceTargetFolder, commitSourceUploads, sourceSelection, setSourceTransfer } from "../source-files"
@@ -167,7 +166,7 @@ export function wireCanvasAndInspector(): void {
   hydrateShortcuts()
   new MutationObserver(syncUndoButtons).observe(undoButton.parentElement!, { subtree: true, attributes: true, attributeFilter: ["disabled"] })
   syncUndoButtons()
-  for (const [button, target] of [[mobileUndoButton, undoButton], [mobileRedoButton, redoButton], [desktopUndoButton, undoButton], [desktopRedoButton, redoButton]] as const) {
+  for (const [button, target] of [[mobileUndoButton, undoButton], [mobileRedoButton, redoButton]] as const) {
     button.addEventListener("click", () => {
       if (!target.disabled) target.click()
     })
@@ -486,9 +485,6 @@ export function wireCanvasAndInspector(): void {
     source.commit()
   })
   for (const input of [...keyboardFields, ...toolbarFields, ...keyFields]) decorateStyleReferenceInput(input)
-  baiduActionCodes.replaceChildren(...knownFunctionCodes.map((value) => {
-    return new Option(actionDescription(value), value)
-  }))
   documentName.parentElement?.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).id === "document-name") renameDocumentTitle()
   })

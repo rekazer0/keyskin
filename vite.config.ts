@@ -9,7 +9,7 @@ export default defineConfig({
   build: {
     manifest: true,
     rollupOptions: {
-      input: ["index.html", "picker.html", "new-project.html"],
+      input: ["index.html", "picker.html"],
       output: {
         manualChunks: {
           // 核心编辑器
@@ -52,7 +52,7 @@ export default defineConfig({
   // 优化依赖预构建
   optimizeDeps: {
     // 启动时扫描全部源码，避免运行中发现新依赖触发重新预构建、旧 chunk 失效导致白屏
-    entries: ["index.html", "picker.html", "new-project.html", "src/**/*.ts"],
+    entries: ["index.html", "picker.html", "src/**/*.ts"],
     include: [
       "@codemirror/commands",
       "@codemirror/lang-json",

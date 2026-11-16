@@ -7,7 +7,12 @@ import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
 import { showError, showStatus } from "./file-operations"
 import { styleConfigPath } from "./config-context"
-import { fontFileField, fontFileSelect, fontImportButton, fontNameInput, fontRemoveButton, skinFontNames } from "./dom"
+import { fontImportInput } from "./dom"
+import { embeddedFontPath, loadEmbeddedFont } from "../atlas.ts"
+import { element, iconButton } from "../dom-element.ts"
+import { SYSTEM_FONTS, type FontChoice } from "./font-picker"
+import { field } from "./property-rows"
+import { ssfPackage, ssfTheme } from "./ssf-documents"
 import { type Change } from "../history.ts"
 import {
   fontSearchDirectories,
@@ -43,61 +48,44 @@ function replaceText(changes: Change[], path: string, text: string, after: strin
   if (after !== undefined) changes.push({ kind: "text", path, before: text, after })
 }
 
-/** 下拉里一行显示文件名；完整归档路径放在 title 上，便于区分同名文件。 */
-function fontOption(path: string): HTMLOptionElement {
-  const option = new Option(path.split("/").pop() ?? path, path)
-  option.title = path
-  return option
-}
-
-function populateFontSelect(styles: string[]): void {
+/** 字体候选与画布使用同一个文件解析器；系统字体仍可直接输入。 */
+export function skinFontChoices(inherited = "", sourcePath = styleConfigPath()): FontChoice[] {
   const archive = appState.archive
-  if (!archive) return
+  const make = (value: string, label = value): FontChoice => {
+    const reference = value || inherited
+    const path = archive && (archive.format === "ssf" ? ssfPackage()?.path(ssfTheme(), reference)
+      : isFontFile(reference) && archive.getBytes(reference) ? reference : embeddedFontPath(archive.names(), sourcePath, reference, true))
+    return { value, label, detail: path, ...(path && archive ? loadEmbeddedFont(archive, path) : { family: reference || undefined }),
+      missing: Boolean(reference && !path && isFontFile(reference)) }
+  }
+  if (archive?.format === "sxi" || archive?.format === "bda") return SYSTEM_FONTS.map(choice => make(choice.value, choice.label))
+  const names = [...new Set(skinFontFiles(archive?.names() ?? []).map(path => path.split("/").pop()!))]
+  return [make("", inherited ? "继承皮肤字体" : "系统默认"), ...names.map(name => make(name))]
+}
+
+export function styleFontChoices(): FontChoice[] {
+  return skinFontChoices(styleFontReference())
+}
+
+/** 皮肤默认字体与当前文字使用同一个紧凑字段，导入/移除仍影响整份皮肤。 */
+export function skinFontField(): HTMLElement | undefined {
+  if (!fontStylePaths().length) return
   const reference = styleFontReference()
-  const current = resolveStyleFont(reference)
-  const fonts = skinFontFiles(archive.names())
-  const nodes: Array<HTMLOptionElement | HTMLOptGroupElement> = [new Option("系统默认", "")]
-  for (const theme of [...new Set(styles.map(themeOfPath))]) {
-    const options = fonts.filter((path) => themeOfPath(path) === theme).map(fontOption)
-    if (!options.length) continue
-    const group = document.createElement("optgroup")
-    group.label = theme === "dark" ? "深色主题字体" : "浅色主题字体"
-    group.append(...options)
-    nodes.push(group)
-  }
-  if (reference && !current) nodes.push(new Option(`${reference}（缺失）`, `missing:${reference}`))
-  fontFileSelect.replaceChildren(...nodes)
-  fontFileSelect.value = current ?? (reference ? `missing:${reference}` : "")
-  fontFileSelect.disabled = !isEditing()
-}
-
-/** FONT_NAME 的候选项：皮肤内字体文件名（带 / 不带扩展名），仍允许手输系统字体名。 */
-export function skinFontNameOptions(): string[] {
-  const names = (skinFontFiles(appState.archive?.names() ?? [])).flatMap((path) => {
-    const name = path.split("/").pop() ?? path
-    return [name, name.replace(/\.(?:ttf|otf|ttc)$/i, "")]
-  })
-  return [...new Set(names)]
-}
-
-function populateFontNameOptions(available: boolean): void {
-  skinFontNames.replaceChildren()
-  if (!available) {
-    fontNameInput.removeAttribute("list")
-    return
-  }
-  fontNameInput.setAttribute("list", "skin-font-names")
-  skinFontNames.append(new Option("系统默认", ""), ...skinFontNameOptions().map((name) => new Option(name, name)))
-}
-
-export function populateFontControls(): void {
-  const styles = fontStylePaths()
-  const available = styles.length > 0
-  fontFileField.hidden = !available
-  fontImportButton.disabled = !available || !isEditing()
-  fontRemoveButton.disabled = !available || !isEditing() || !styleFontReference()
-  if (available) populateFontSelect(styles)
-  populateFontNameOptions(available)
+  const choices = skinFontChoices()
+  const row = field({ key: "FONT_PATH", rowKey: ["typography", "FONT_PATH"], label: "皮肤字体", hint: "皮肤字体（GLOBAL FONT_PATH）：整份皮肤共用的默认字体；当前文字可单独指定字体", spec: { kind: "font", value: reference.split("/").pop() ?? "", choices }, editable: isEditing(), commit: setGlobalFont })
+  row.id = "font-file-field"
+  row.title = "皮肤字体（GLOBAL FONT_PATH）：整份皮肤共用的默认字体"
+  const actions = element("span", "ui-field-actions")
+  const upload = iconButton("upload", "导入字体文件", () => { fontImportInput.value = ""; fontImportInput.click() })
+  upload.id = "font-import"
+  upload.disabled = !isEditing()
+  const remove = iconButton("trash-2", "移除皮肤字体", removeSelectedFont)
+  remove.id = "font-remove"
+  remove.disabled = !isEditing() || !reference
+  actions.append(upload, remove)
+  row.append(actions)
+  row.querySelector("button.ui-font-picker")!.id = "font-file-picker"
+  return row
 }
 
 /** 确保选中字体在每个主题都有副本；优先复用主题根 res，避免每个方向各存一份。 */
@@ -113,8 +101,8 @@ function ensureThemeFont(theme: string, fontPath: string, changes: Change[]): st
 }
 
 /** 把选中的字体应用为每份 CSS 的 GLOBAL FONT_PATH；空值表示恢复系统默认。 */
-export function setGlobalFont(value: string): void {
-  if (!isEditing() || value.startsWith("missing:")) return
+function setGlobalFont(value: string): void {
+  if (!isEditing()) return
   const archive = appState.archive
   const styles = fontStylePaths()
   if (!archive || !styles.length) return
@@ -141,7 +129,7 @@ export function setGlobalFont(value: string): void {
 }
 
 /** 移除当前 GLOBAL 字体：删掉各主题下的字体文件，并清掉所有 CSS 里的引用（可撤销）。 */
-export function removeSelectedFont(): void {
+function removeSelectedFont(): void {
   if (!isEditing()) return
   const archive = appState.archive
   const styles = fontStylePaths()
