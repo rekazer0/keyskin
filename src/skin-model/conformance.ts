@@ -22,13 +22,19 @@ export type ModelCounts = {
   errors: number
 }
 
+/** 样式是否有可写内容。 */
+function hasLayers(style: { normal: readonly unknown[]; pressed?: readonly unknown[]; disabled?: readonly unknown[] }): boolean {
+  return style.normal.length > 0 || (style.pressed?.length ?? 0) > 0 || (style.disabled?.length ?? 0) > 0
+}
+
 export function countsOf(model: SkinModel): ModelCounts {
   const main = model.boards.find((board) => board.kind === "main") ?? model.boards[0]
   return {
     boards: model.boards.length,
     keys: model.boards.reduce((total, board) => total + board.keys.length, 0),
     mainKeys: main?.keys.length ?? 0,
-    styles: model.styles.size,
+    // 只数有内容的样式：空样式没有图层可写，导出后本就不存在，不算丢失。
+    styles: [...model.styles.values()].filter((style) => hasLayers(style)).length,
     images: model.images.size,
     motions: model.motions.size,
     sounds: model.sounds.size,

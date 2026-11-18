@@ -287,7 +287,8 @@ export const sxiFormat = {
       const built = skinStylesOf(model.styles)
       port.ss_1 = { ...asObject(port.ss_1), ...built.table }
       root.light = { ...struct, s_port: port }
-      const keyOf = (name: string | undefined) => (name === undefined ? undefined : sxiStyleKey(name) ?? name)
+      // 按键引用走同一张名表，否则会指向不存在的样式编号。
+      const keyOf = (name: string | undefined) => (name === undefined ? undefined : built.names.get(name) ?? sxiStyleKey(name) ?? name)
       keyboard.keys = board.keys.map((key) => ({
         id: Number(key.id.replace(/^KEY/i, "")) || 0,
         rect: [[key.rect.position.x, key.rect.position.y], [key.rect.size.width, key.rect.size.height]],

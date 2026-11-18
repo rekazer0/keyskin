@@ -101,12 +101,30 @@ export function stylesOfSkin(
 }
 
 /** IR 样式表 → `ss_1` 条目；只写能表达的部分。 */
-export function skinStylesOf(styles: SkinStyles): { table: JsonObject; warnings: string[] } {
+/**
+ * 样式表与名表。
+ * 手心样式键是它自己的编号；其它格式转来的样式名（如 `bda:image:10039`）不能直接当键，
+ * 先分配一个合法键再写出，按键引用与样式表用同一张名表。
+ */
+export function skinStylesOf(styles: SkinStyles): { table: JsonObject; names: Map<string, string>; warnings: string[] } {
   const table: JsonObject = {}
+  const names = new Map<string, string>()
   const warnings: string[] = []
+  // 手心样式键是数字，先收住已有的编号，再从空位补，避免撞号。
+  const used = new Set<number>()
+  for (const name of styles.keys()) {
+    const existing = sxiStyleKey(name)
+    if (existing && /^\d+$/.test(existing)) used.add(Number(existing))
+  }
+  let next = 1
+  const allocate = (): string => {
+    while (used.has(next)) next += 1
+    used.add(next)
+    return String(next)
+  }
   for (const [name, style] of styles) {
-    const key = sxiStyleKey(name)
-    if (!key) continue
+    const key = sxiStyleKey(name) ?? allocate()
+    names.set(name, key)
     const image = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
     const pressed = (style.pressed ?? []).find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
     const text = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
@@ -136,7 +154,7 @@ export function skinStylesOf(styles: SkinStyles): { table: JsonObject; warnings:
         : {}),
     }
   }
-  return { table, warnings }
+  return { table, names, warnings }
 }
 
 function basename(path: string): string {
