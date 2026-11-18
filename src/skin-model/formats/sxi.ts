@@ -10,6 +10,8 @@ import type { SkinModel } from "@/skin-model/model.ts"
 import { emptyModel } from "@/skin-model/model.ts"
 import type { SkinAction, KeyEvent } from "@/skin-model/types.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "@/palm/sxi-ini.ts"
+import { encodePng } from "@/raster.ts"
+import { imageFileName, STYLE_PREFIX } from "@/skin-model/formats/sxi-style.ts"
 import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
 import { motionsOfSkin, skinAnimationsOf, skinSoundsOf, soundsOfSkin } from "@/skin-model/formats/sxi-motion.ts"
 import { skinStylesOf, stylesOfSkin, sxiStyleKey, sxiStyleName } from "@/skin-model/formats/sxi-style.ts"
@@ -255,6 +257,11 @@ export const sxiFormat = {
     const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
     if (!board) throw new Error("模型里没有板")
     const files = new Map(source?.files ?? [])
+    // 图片按样式引用写出；手心包内按文件名引用，不带命名空间前缀。
+    for (const [id, image] of model.images) {
+      if (id.startsWith(STYLE_PREFIX)) continue
+      files.set(imageFileName(id), encodePng(image))
+    }
     const skin = parseSkinJson(textOf(files, SXI_SKIN_PATH) ?? "{}")
     const root = asObject(skin.default) ?? {}
     const keyboard = keyboardOf(skin) ?? {}

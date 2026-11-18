@@ -9,7 +9,7 @@ import type { SkinImage } from "@/skin-model/image.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
 
 /** 手心样式名：`sxi:<编号>`，与 `ss_1` 的键一一对应。 */
-const STYLE_PREFIX = "sxi:"
+export const STYLE_PREFIX = "sxi:"
 
 export function sxiStyleName(key: string): string {
   return `${STYLE_PREFIX}${key}`
@@ -157,6 +157,17 @@ export function skinStylesOf(styles: SkinStyles): { table: JsonObject; names: Ma
   return { table, names, warnings }
 }
 
+/**
+ * 样式里的图片文件名。
+ * 其它格式的图片资源名带命名空间前缀（`bda:10039`），手心按包内文件名引用，
+ * 这里去掉前缀并补上扩展名。
+ */
+export function imageFileName(id: string): string {
+  const leaf = id.split("/").pop() ?? id
+  const name = leaf.replace(/^[a-z]+:/i, "")
+  return /\.\w+$/.test(name) ? name : `${name}.png`
+}
+
 function basename(path: string): string {
-  return path.split("/").pop() ?? path
+  return imageFileName(path)
 }
