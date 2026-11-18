@@ -17,7 +17,7 @@ import type { SkinBoard } from "@/skin-model/board.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
-import { panelFiles, panelsOf } from "@/skin-model/formats/bds-panels.ts"
+import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds-panels.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
@@ -543,6 +543,69 @@ function atlasName(page: number): string {
   return page === 0 ? "atlas" : `atlas${page}`
 }
 
+export type LayoutBoards = {
+  boards: SkinBoard[]
+  /** 面板文件的原路径，导出时沿用。 */
+  paths: PanelPaths
+}
+
+/**
+ * 只读布局：把主题方向下的布局文件解析成板与按键几何，不碰样式。
+ * BDS 的样式在 `default.css`，BDA 的样式在外观配置里，两者共用这份布局解析。
+ */
+export async function layoutBoards(
+  archive: SkinArchive,
+  theme: Appearance,
+  orientation: Orientation,
+  primaryLayout: string,
+  primaryKind: BoardKind,
+  options?: ImportOptions,
+): Promise<LayoutBoards> {
+  const document = IniDocument.parse(archive.getText(primaryLayout))
+  const size = parsePanelSize(document)
+  const deriveOptions = {
+    ...bdsFormat.derive,
+    ...options?.derive,
+    weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
+  }
+  const keys = keysOf(document, size)
+  const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size, deriveOptions)
+  const directory = `${theme}/skin/${orientation}/`
+  const genPath = archive.names().find((name) => name === `${directory}gen.ini`)
+  const parsedPanels = genPath
+    ? panelsOf(archive, directory, IniDocument.parse(archive.getText(genPath)), actionOf)
+    : { panels: {}, paths: {} }
+  const boards: SkinBoard[] = [{
+    ...parsedPanels.panels,
+    id: primaryLayout,
+    kind: primaryKind,
+    geometry: "document",
+    orientation,
+    size,
+    layout: derived.layout,
+    keys,
+  }]
+  // 同一主题方向下其余布局文件也是板：九宫格、符号、候选等，一并读进来。
+  for (const layoutPath of layoutFiles(archive, theme, orientation)) {
+    if (layoutPath === primaryLayout) continue
+    const other = IniDocument.parse(archive.getText(layoutPath))
+    const boardSize = parsePanelSize(other)
+    const boardKeys = keysOf(other, boardSize)
+    if (!boardKeys.length) continue
+    const boardDerived = await deriveBoard("board", boardKeys.map((key) => ({ id: key.id, ...key.rect })), boardSize, deriveOptions)
+    boards.push({
+      id: layoutPath,
+      kind: boardKindOf(layoutPath),
+      geometry: "document",
+      orientation,
+      size: boardSize,
+      layout: boardDerived.layout,
+      keys: boardKeys,
+    })
+  }
+  return { boards, paths: parsedPanels.paths }
+}
+
 export const bdsFormat: SkinFormat<BdsSource> = {
   name: "bds",
   capabilities: new Map<Capability, CapabilityLevel>([
@@ -581,49 +644,8 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       orientation: source.orientation,
       resolution: size,
     }, "bds")
-    const keys = keysOf(layout, size)
-    const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size, {
-      ...bdsFormat.derive,
-      ...options?.derive,
-      weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
-    })
-    const directory = `${source.theme}/skin/${source.orientation}/`
-    const genPath = source.archive.names().find((name) => name === `${directory}gen.ini`)
-    const parsedPanels = genPath
-      ? panelsOf(source.archive, directory, IniDocument.parse(source.archive.getText(genPath)), actionOf)
-      : { panels: {}, paths: {} }
-    model.boards.push({
-      ...parsedPanels.panels,
-      id: source.layout,
-      kind: source.kind,
-      geometry: "document",
-      orientation: source.orientation,
-      size,
-      layout: derived.layout,
-      keys,
-    })
-    // 同一主题方向下其余布局文件也是板：九宫格、符号、候选等，一并读进来。
-    for (const layoutPath of layoutFiles(source.archive, source.theme, source.orientation)) {
-      if (layoutPath === source.layout) continue
-      const document = IniDocument.parse(source.archive.getText(layoutPath))
-      const boardSize = parsePanelSize(document)
-      const boardKeys = keysOf(document, boardSize)
-      if (!boardKeys.length) continue
-      const boardDerived = await deriveBoard("board", boardKeys.map((key) => ({ id: key.id, ...key.rect })), boardSize, {
-        ...bdsFormat.derive,
-        ...options?.derive,
-        weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
-      })
-      model.boards.push({
-        id: layoutPath,
-        kind: boardKindOf(layoutPath),
-        geometry: "document",
-        orientation: source.orientation,
-        size: boardSize,
-        layout: boardDerived.layout,
-        keys: boardKeys,
-      })
-    }
+    const layouts = await layoutBoards(source.archive, source.theme, source.orientation, source.layout, source.kind, options)
+    model.boards.push(...layouts.boards)
     const parsed = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
     model.styles = parsed.styles
     model.images = parsed.images
@@ -650,8 +672,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       if (unique.length) board.transitions = unique
     }
     if (source.animation) model.motions = motionsOf(source.archive.getText(source.animation))
-    const provenance = new Map(keys.map((key) => [key.id, { path: source.layout }]))
-    for (const [kind, path] of Object.entries(parsedPanels.paths)) provenance.set(`panel:${kind}`, { path })
+    const provenance = new Map(model.boards.flatMap((board) => board.keys.map((key) => [key.id, { path: board.id }] as const)))
     model.provenance = { format: "bds", nodes: provenance }
     return model
   },
@@ -700,10 +721,11 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       ...(model.provenance.nodes.get("panel:more") ? { more: model.provenance.nodes.get("panel:more")!.path } : {}),
     }
     files.push(...panelFiles(board, `${root}/${orientation}/`, board.size, actionValue, panelPaths))
-    // 每块板各自一份布局文件，路径沿用导入时的位置。
+    // 每块板各自一份布局文件；板 id 已带目录时沿用，其它格式转来的板放到方向目录下。
     for (const each of model.boards) {
       const boardRenders = each === board ? renders : await buildBoard(model, each)
-      files.push({ path: each.id, data: text(layoutText(each, boardRenders)) })
+      const path = each.id.includes("/") ? each.id : `${root}/${orientation}/${each.id}`
+      files.push({ path, data: text(layoutText(each, boardRenders)) })
     }
     files.push({ path: `${root}/res/default.css`, data: text(stylesText(model.styles, imageRef)) })
     pages.forEach((page, pageIndex) => {
