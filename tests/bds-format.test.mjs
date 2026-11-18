@@ -22,6 +22,7 @@ test("BDS 转换器读出完整模型", async () => {
   assert.equal(key.style.back, "2")
   assert.deepEqual(key.style.fore, ["3", "4"])
   assert.ok(model.styles.size > 0)
+  assert.equal(model.resources.get("click.wav")?.kind, "audio")
   assert.equal(model.motions.get("ANIM1").root.kind, "track")
 })
 

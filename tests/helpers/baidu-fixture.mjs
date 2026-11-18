@@ -26,7 +26,7 @@ function fixtureFiles() {
     "light/port/sel_ch.ini": strToU8("[PANEL]\nSIZE=1080,600\n[KEY1]\nBACK_STYLE=2\nVIEW_RECT=0,0,100,100\nCENTER=F36\n"),
     "light/res/default.css": strToU8([
       "[STYLE1]", "NM_COLOR=FF000000",
-      "[STYLE2]", "NM_IMG=btn,0", "HL_IMG=btn,1",
+      "[STYLE2]", "NM_IMG=btn,0", "HL_IMG=btn,1", "PRESS_SOUND_PATH=click.wav",
       "[STYLE3]", "SHOW=中", "FONT_SIZE=40", "NM_COLOR=FF000000",
       "[STYLE4]", "NM_COLOR=FF000000",
       "[STYLE6]", "NM_IMG=bg,0",

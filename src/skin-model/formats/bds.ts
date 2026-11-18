@@ -562,6 +562,13 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     const parsed = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
     model.styles = parsed.styles
     model.images = parsed.images
+    const resources = new Map(model.resources)
+    for (const style of parsed.styles.values()) {
+      for (const layer of [...style.normal, ...(style.pressed ?? [])]) {
+        if (layer.kind === "sound") resources.set(layer.file, { kind: "audio", path: layer.file })
+      }
+    }
+    model.resources = resources
     if (source.animation) model.motions = motionsOf(source.archive.getText(source.animation))
     model.provenance = { format: "bds", nodes: new Map(keys.map((key) => [key.id, { path: source.layout }])) }
     return model

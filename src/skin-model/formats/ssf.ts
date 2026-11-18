@@ -275,7 +275,8 @@ export const ssfFormat: SkinFormat<SsfSource> = {
       const pressed = (style.pressed ?? []).find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
       const color = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "color" }> => layer.kind === "color")
       const label = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
-      const isForeground = section.startsWith("Foground") || section.startsWith("SMA_") === false && section === ""
+      // 搜狗把前景段放在 keys.ini，段名沿用官方拼写 `Foground…`。
+      const isForeground = /^(foground|foreground|fg)/i.test(section)
       const lines = [`[${section}]`]
       if (image) lines.push(`NORMAL=${name(image.image)}`)
       if (pressed) lines.push(`PRESSED=${name(pressed.image)}`)
