@@ -2,7 +2,7 @@
 //
 // BDA 的动画配置按效果编号组织：effects 存效果参数，targetBindings 存「目标 → 绑定」，
 // sequences 存帧序列。IR 把它们拆成独立的动效，每个动效一棵节点树加一份时间轴。
-import type { BdaAnimation, BdaAnimationBinding, BdaAnimationEffect, BdaAnimationSequence, BdaEmitterAnimation, BdaNumberRange, BdaResource, BdaSoundConfig, BdaTransformAnimation } from "@/bda.ts"
+import type { BdaAnimation, BdaAnimationBinding, BdaAnimationEffect, BdaAnimationFrame, BdaAnimationSequence, BdaEmitterAnimation, BdaNumberRange, BdaResource, BdaSoundConfig, BdaTransformAnimation } from "@/bda.ts"
 import type { Point } from "taffy-layout"
 import type { Easing, MotionBinding, MotionEmitter, MotionFrame, MotionNode, MotionProperty, MotionRange, MotionTimeline, MotionTrack, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
 import type { SkinSound, SkinSounds } from "@/skin-model/sound.ts"
@@ -107,14 +107,19 @@ function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationS
     }
   }
   if (effect.kind === "image") {
-    // 帧内容没有对应概念，但编号与播放设置要留住，否则写回时整条效果会消失。
+    // 帧序列没有对应概念，但编号、播放设置与帧清单都要留住，否则写回时整条效果会消失或变成空动画。
     const values = new Map<string, number | string | boolean>([
       ["key", effect.key],
       ["repeatCount", effect.repeatCount],
       ["repeatMode", effect.repeatMode],
       ["removeOnFinish", effect.removeOnFinish],
       ["loopForever", effect.loopForever],
+      ["startRepeatFrame", effect.startRepeatFrame],
     ])
+    effect.sequence.frames.forEach((frame, index) => {
+      if (frame.resourceID !== undefined) values.set(`frame.${index}.id`, frame.resourceID)
+      if (frame.duration !== undefined) values.set(`frame.${index}.duration`, frame.duration)
+    })
     return { kind: "custom", family: "bda.image", values }
   }
   const transform = effect as BdaTransformAnimation
@@ -207,11 +212,21 @@ export function motionsOfAnimation(animation: BdaAnimation): SkinMotions {
 function effectOf(motion: SkinMotion): BdaAnimationEffect | undefined {
   const { root, timeline } = motion
   if (root.kind === "custom" && root.family === "bda.image") {
-    // 图片序列的帧内容没有建模，编号与播放设置照原样写回，避免整条效果被丢掉。
+    // 图片序列：编号、播放设置与帧清单照原样写回，避免整条效果被丢掉。
     const key = root.values.get("key")
     const number = (name: string): number => {
       const value = root.values.get(name)
       return typeof value === "number" ? value : 0
+    }
+    const frames: BdaAnimationFrame[] = []
+    for (let index = 0; ; index += 1) {
+      const resourceID = root.values.get(`frame.${index}.id`)
+      if (resourceID === undefined) break
+      const duration = root.values.get(`frame.${index}.duration`)
+      frames.push({
+        resourceID: String(resourceID),
+        ...(typeof duration === "number" ? { duration } : {}),
+      })
     }
     return {
       kind: "image",
@@ -220,8 +235,8 @@ function effectOf(motion: SkinMotion): BdaAnimationEffect | undefined {
       repeatMode: number("repeatMode"),
       removeOnFinish: root.values.get("removeOnFinish") === true,
       loopForever: root.values.get("loopForever") === true,
-      startRepeatFrame: 0,
-      sequence: { name: typeof key === "string" ? key : motion.id, frames: [] },
+      startRepeatFrame: number("startRepeatFrame"),
+      sequence: { name: typeof key === "string" ? key : motion.id, frames },
     }
   }
   if (root.kind === "frames") {
@@ -320,6 +335,12 @@ function eventOf(slot: MotionSlot): number {
 }
 
 /** IR 动效表 → BDA 动画配置；无法表达的类型进 warnings。 */
+/** 效果裸键：解码给键拼过 `<类型>:`，写回时剥掉，保证往返后 id 不变。 */
+function bareKeyOf(id: string, kind: string): string {
+  const prefix = `${kind}:`
+  return id.startsWith(prefix) ? id.slice(prefix.length) : id
+}
+
 export function animationOfMotions(motions: SkinMotions, designWidth?: number): { animation: BdaAnimation; warnings: string[] } {
   const effects = new Map<string, BdaAnimationEffect>()
   const targetBindings = new Map<string, BdaAnimationBinding[]>()
@@ -330,12 +351,15 @@ export function animationOfMotions(motions: SkinMotions, designWidth?: number): 
       warnings.push(`${id}：动效类型 ${motion.root.kind} 无法写成 BDA 效果`)
       continue
     }
-    effects.set(id, effect)
+    // 解码时效果键会被拼成 `<类型>:<裸键>`；写回要还原成裸键，否则每往返一次多一层前缀。
+    const key = bareKeyOf(id, effect.kind)
+    const written = { ...effect, key } as BdaAnimationEffect
+    effects.set(key, written)
     for (const binding of motion.bindings) {
       const entries = targetBindings.get(binding.target) ?? []
       entries.push({
-        kind: effect.kind,
-        key: id,
+        kind: written.kind,
+        key,
         scope: 0,
         event: eventOf(binding.slot),
         isolated: binding.isolated === true,

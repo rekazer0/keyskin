@@ -2,7 +2,7 @@
 //
 // 字段号与 `bda-decode.ts` 一一对应：解码读第 N 号字段，这里就写第 N 号。
 // 数值用 varint，浮点用 fixed32（小端 IEEE754），嵌套消息与字符串用长度前缀。
-import { type BdaAnimation, type BdaAnimationBinding, type BdaAppearance, type BdaBar, type BdaCand, type BdaColorPalette, type BdaColorStyle, type BdaEmitterAnimation, type BdaGamePanel, type BdaGrid, type BdaGroupAnimation, type BdaHint, type BdaImageAtom, type BdaImageStyle, type BdaInputTile, type BdaKey, type BdaList, type BdaNumberRange, type BdaPanel, type BdaRect, type BdaResource, type BdaResourceAnimation, type BdaScaledOffset, type BdaSoundConfig, type BdaStyleRef, type BdaTab, type BdaTextStyle, type BdaTransformAnimation, type BdaVectorRange, type ProtoField } from "@/bda.ts"
+import { type BdaAnimation, type BdaAnimationBinding, type BdaAppearance, type BdaBar, type BdaCand, type BdaColorPalette, type BdaColorStyle, type BdaEmitterAnimation, type BdaGamePanel, type BdaGrid, type BdaGroupAnimation, type BdaHint, type BdaImageAnimation, type BdaImageAtom, type BdaImageStyle, type BdaInputTile, type BdaKey, type BdaList, type BdaNumberRange, type BdaPanel, type BdaRect, type BdaResource, type BdaResourceAnimation, type BdaScaledOffset, type BdaSoundConfig, type BdaStyleRef, type BdaTab, type BdaTextStyle, type BdaTransformAnimation, type BdaVectorRange, type ProtoField } from "@/bda.ts"
 import { encodeVarint, encodedField, join } from "@/bda-encode.ts"
 
 /* —— 基础编码 —— */
@@ -447,6 +447,21 @@ function encodeResourceEffect(effect: BdaResourceAnimation): ProtoField[] {
   ]
 }
 
+/** 图片序列：1 重复次数、2 重复模式、4 播完移除、5 帧清单、6 循环、7 起始帧。 */
+function encodeImageEffect(effect: BdaImageAnimation): ProtoField[] {
+  return [
+    ...varintField(1, effect.repeatCount),
+    ...varintField(2, effect.repeatMode),
+    ...varintField(4, effect.removeOnFinish ? 1 : 0),
+    ...messageField(5, effect.sequence.frames.map((frame) => [
+      ...(frame.resourceID !== undefined ? messageField(1, encodeResource({ type: 0, resourceID: frame.resourceID })) : []),
+      ...(frame.duration !== undefined ? varintField(2, frame.duration) : []),
+    ]).flat()),
+    ...varintField(6, effect.loopForever ? 1 : 0),
+    ...varintField(7, effect.startRepeatFrame),
+  ]
+}
+
 /** 动画配置：1 号是目标绑定，3–13 号是各类效果，12 号是设计宽度。 */
 export function encodeAnimation(animation: BdaAnimation): Uint8Array {
   const effectFields: ProtoField[] = []
@@ -458,6 +473,7 @@ export function encodeAnimation(animation: BdaAnimation): Uint8Array {
       push({ alpha: 4, scale: 5, shift: 6, rotate: 7 }[effect.kind], encodeTransform(effect))
     }
     else if (effect.kind === "frame") push(8, encodeResourceEffect(effect))
+    else if (effect.kind === "image") push(9, encodeImageEffect(effect))
     else if (effect.kind === "emitter") push(10, encodeEmitter(effect))
     else if (effect.kind === "lottie") push(11, encodeResourceEffect(effect))
     else if (effect.kind === "video") push(13, encodeResourceEffect(effect))
