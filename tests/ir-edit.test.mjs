@@ -72,3 +72,11 @@ test("替换样式", async () => {
   assert.deepEqual(after.styles.get("900").normal, [{ kind: "color", value: "#fff" }])
   assert.equal(before.styles.has("900"), false)
 })
+
+test("内边距可以打补丁，也可以清掉", async () => {
+  const before = await model()
+  const padded = patchKey(before, BOARD, "KEY1", { padding: { left: 1, top: 2, right: 3, bottom: 4 } })
+  assert.deepEqual(findKey(padded, BOARD, "KEY1").key.padding, { left: 1, top: 2, right: 3, bottom: 4 })
+  const cleared = patchKey(padded, BOARD, "KEY1", { padding: null })
+  assert.equal(findKey(cleared, BOARD, "KEY1").key.padding, undefined)
+})

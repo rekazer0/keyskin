@@ -7,6 +7,7 @@ import type { SkinKey, KeyStyleRefs } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
 import type { KeyEvent, SkinAction } from "./types.ts"
+import type { Rect } from "taffy-layout"
 import { setNodeRect, type LayoutBox } from "./layout.ts"
 
 /** 找不到目标时返回原模型，调用方据此判断是否真的有改动。 */
@@ -40,6 +41,8 @@ export function findKey(model: SkinModel, boardId: string, keyId: string): { boa
 export type KeyPatch = {
   rect?: LayoutBox
   touchRect?: LayoutBox | null
+  /** 内边距；传 null 表示清掉。 */
+  padding?: Rect<number> | null
   style?: Partial<KeyStyleRefs>
   actions?: Partial<Record<KeyEvent, SkinAction | null>>
 }
@@ -67,6 +70,7 @@ export function patchKey(model: SkinModel, boardId: string, keyId: string, patch
     ...key,
     ...(patch.rect ? { rect: patch.rect } : {}),
     ...(patch.touchRect === null ? { touchRect: undefined } : patch.touchRect ? { touchRect: patch.touchRect } : {}),
+    ...(patch.padding === null ? { padding: undefined } : patch.padding ? { padding: patch.padding } : {}),
     actions,
     style,
   }

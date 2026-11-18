@@ -42,6 +42,7 @@ import { skinModel } from "./skin-model-state"
 import { boardTraits } from "./board-traits"
 import { validateModel } from "@/skin-model/validate.ts"
 import { applyFieldChange } from "@/skin-model/edit-binding.ts"
+import { patchKey } from "@/skin-model/edit.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { element } from "../dom-element"
 import { releaseOnRemove } from "../dom-lifecycle"
@@ -745,10 +746,26 @@ const MODEL_FIELDS: Readonly<Record<string, string>> = {
  * 只处理能一一对应的字段；其余（文字、内边距、状态样式）返回 undefined，让提交入口作废重建。
  */
 function modelAfterFieldEdit(sections: readonly string[], name: string, value: string): SkinModel | undefined {
-  const field = MODEL_FIELDS[name]
   const current = skinModel.model
-  if (!current || field === undefined) return
+  if (!current) return
   let next = current
+  if (name.startsWith("PADDING.")) {
+    // 内边距按分量写：左、上、右、下，缺省补零。
+    const index = Number(name.split(".")[1])
+    const number = Number(value)
+    if (!Number.isFinite(number) || index < 0 || index > 3) return
+    for (const section of sections) {
+      const key = current.boards.find((board) => board.id === appState.layoutPath)?.keys.find((item) => item.id === section)
+      const parts: [number, number, number, number] = [
+        key?.padding?.left ?? 0, key?.padding?.top ?? 0, key?.padding?.right ?? 0, key?.padding?.bottom ?? 0,
+      ]
+      parts[index] = number
+      next = patchKey(next, appState.layoutPath, section, { padding: { left: parts[0], top: parts[1], right: parts[2], bottom: parts[3] } })
+    }
+    return next === current ? undefined : next
+  }
+  const field = MODEL_FIELDS[name]
+  if (field === undefined) return
   for (const section of sections) {
     next = applyFieldChange(next, { boardId: appState.layoutPath, keyId: section, field, value })
   }
