@@ -70,6 +70,36 @@ function breakCentralMethods(bytes) {
   }
 }
 
+test('百度单外观新增深色后，保存和重开保留两套独立资源', async () => {
+  for (const [format, prefix, file, platform] of [
+    ['bdi', 'skin/', 'port/py_26.ini', 'I'],
+    ['bds', '', 'port/py_26.ini', 'A'],
+    ['bda', '', 'port/appearanceConfig', 'A'],
+    ['bda', 'skin_light/', 'port/appearanceConfig', 'I'],
+  ]) {
+    const archive = SkinArchive.open(zipSync({
+      [`${prefix}${file}`]: strToU8('light'),
+      [`${format === 'bdi' ? 'skin/' : ''}Info.txt`]: strToU8(`SupportPlatform=${platform}\n`),
+    }), format)
+    const light = `light/skin/${file}`
+    const dark = `dark/skin/${file}`
+    archive.setBytes(dark, strToU8('dark'))
+    assert.equal(archive.canonicalSourcePath(archive.sourcePath(dark)), dark)
+    assert.deepEqual(archive.getBytes(light), strToU8('light'))
+    for (const bytes of [archive.toBytes(format), await archive.toBytesAsync(format)]) {
+      const reopened = SkinArchive.open(bytes, format)
+      assert.deepEqual(reopened.getBytes(light), strToU8('light'))
+      assert.deepEqual(reopened.getBytes(dark), strToU8('dark'))
+      assert.match(reopened.getText('Info.txt'), /SupportDarkMode=1/)
+    }
+    archive.markSaved(await archive.toBytesAsync(format), format)
+    archive.delete(dark)
+    const undone = SkinArchive.open(await archive.toBytesAsync(format), format)
+    assert.deepEqual(undone.getBytes(light), strToU8('light'))
+    assert.equal(undone.getBytes(dark), undefined)
+  }
+})
+
 test('opens a well formed archive', async () => {
   const archive = await SkinArchive.openAsync(sampleArchive())
   assert.deepEqual(archive.names(), [

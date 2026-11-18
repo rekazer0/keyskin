@@ -51,6 +51,8 @@ function setInfoAtomSkinNames(text: string, names: [string, string]): string {
 
 export function convertBdaPlatform(source: SkinArchive, platform: Exclude<BdaPlatform, "unknown">): SkinArchive {
   if (source.format !== "bda") throw new Error("只能转换 BDA 皮肤")
+  const promoted = source.promotedBdaFiles()
+  if (promoted) source = SkinArchive.fromFiles(new Map(Object.entries(promoted)), "bda")
   const converted = new Map<string, Uint8Array>()
   const deleted = new Set<string>()
   const names = source.names()

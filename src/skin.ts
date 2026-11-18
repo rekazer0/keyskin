@@ -52,6 +52,10 @@ function bdaThemeRoots(files: Map<string, Uint8Array>): Map<BdaTheme, string> | 
     if (!result.has(theme) && declaredRoots[index] !== undefined) result.set(theme, declaredRoots[index])
   }
 
+  for (const theme of ["light", "dark"] as const) {
+    const root = `skin_${theme}`
+    if (!result.has(theme) && candidates.includes(root) && ![...result.values()].includes(root)) result.set(theme, root)
+  }
   const used = new Set(result.values())
   // undeclared theme semantics use stable path order; add a theme picker if such packages appear.
   const remaining = candidates.filter((root) => !used.has(root)).sort()
@@ -137,7 +141,7 @@ function rawPath(path: string, layout: PackageLayout, bdaRoots?: Map<BdaTheme, s
   if (layout === "bda-dual" || layout === "bda-single") {
     const themed = path.match(/^(light|dark)\/skin\/(.*)$/)
     if (!themed) return path
-    const root = bdaRoots?.get(themed[1] as BdaTheme) ?? ""
+    const root = bdaRoots?.get(themed[1] as BdaTheme) ?? themed[1]
     return root ? `${root}/${themed[2]}` : themed[2]
   }
   if (layout === "bds-dual" || layout === "sxi") {
@@ -346,6 +350,9 @@ export class SkinArchive {
   }
 
   canonicalSourcePath(path: string): string {
+    if (this.canonicalToRaw.get(path) === path) return path
+    const addedTheme = path.replace(/^(light|dark)\//, "$1/skin/")
+    if (this.canonicalToRaw.get(addedTheme) === path) return addedTheme
     return canonicalPath(path, this.layout, this.bdaRoots)
   }
 
@@ -477,7 +484,8 @@ export class SkinArchive {
       } else {
         this.originals = new Map(this.files)
         this.sourceBytes = bytes.slice()
-        this.sourceZip = parseZip(bytes)
+        // Keep the source workspace's original paths; its ZIP paths differ after theme promotion.
+        this.sourceZip = this.needsThemeRepack() ? undefined : parseZip(bytes)
       }
       this.changedRaw.clear()
       this.changed.clear()
@@ -488,9 +496,34 @@ export class SkinArchive {
     this.changed.clear()
   }
 
+  private needsThemeRepack(): boolean {
+    return this.layout.endsWith("-single") && ["light", "dark"].every(theme =>
+      this.names().some(path => path.startsWith(`${theme}/skin/`) && !path.endsWith("/")))
+  }
+
+  /** A single-root BDA with a newly created appearance must be emitted with two sibling roots. */
+  promotedBdaFiles(): Record<string, Uint8Array> | undefined {
+    if (this.layout !== "bda-single" || !this.needsThemeRepack()) return
+    const ios = [...this.bdaRoots!.values()].some(root => /^skin_(light|dark)$/.test(root)) ||
+      (this.isText("Info.txt") && /^SupportPlatform=I\s*$/mi.test(this.getText("Info.txt")))
+    const prefix = ios ? "skin_" : ""
+    const files = new Map<string, Uint8Array>()
+    for (const path of this.names()) {
+      const destination = path.replace(/^(light|dark)\/skin\//, `${prefix}$1/`)
+      let bytes = this.getBytes(path)!
+      if (/(^|\/)Info\.txt$/.test(path)) {
+        bytes = setInfoField(setInfoField(bytes, "SupportDarkMode", "1"), "AtomSkinName", `${prefix}light,${prefix}dark`)
+      }
+      if (files.has(destination)) throw new Error(`外观目录与已有文件路径重复：${destination}`)
+      files.set(destination, bytes)
+    }
+    return Object.fromEntries(files)
+  }
+
   private packagedFiles(format: ExportFormat): Record<string, Uint8Array> {
     const output = new Map<string, Uint8Array>()
-    const single = this.layout.endsWith("single")
+    const promoted = this.needsThemeRepack()
+    const single = this.layout.endsWith("single") && !promoted
     const add = (name: string, data: Uint8Array) => addZipEntry(output, name, data)
 
     for (const path of this.names()) {
@@ -510,6 +543,7 @@ export class SkinArchive {
         if (changed) data = strToU8(document.toString())
       }
       if (path === "Info.txt" || /\/(?:Info\.txt)$/.test(path)) {
+        if (promoted) data = setInfoField(data, "SupportDarkMode", "1")
         data = setInfoField(data, "SupportPlatform", format === "bdi" ? "I" : "A")
         if (format === "bds" && path === "Info.txt") data = setInfoField(data, "Style", "default")
         if (format === "bdi") data = removeInfoField(data, "Style")
@@ -546,7 +580,10 @@ export class SkinArchive {
     if ((format === "bdi" || format === "bds") && (format !== this.format || this.layout === "legacy-ios")) {
       return this.platformBytesAsync(format, warnings, format === "bdi" && this.layout.startsWith("bds"), notes)
     }
-    if (!this.sourceZip && this.format !== "bdi") return zipArchiveAsync(Object.fromEntries(this.files))
+    if (this.format !== "bdi") {
+      if (this.needsThemeRepack()) return zipArchiveAsync(this.promotedBdaFiles() ?? this.packagedFiles(this.format))
+      if (!this.sourceZip) return zipArchiveAsync(Object.fromEntries(this.files))
+    }
     return this.toBytes(format)
   }
 
@@ -574,6 +611,7 @@ export class SkinArchive {
       return this.packagedBytes(format)
     }
     if (this.sourceBytes.length && this.changed.size === 0) return this.sourceBytes.slice()
+    if (this.needsThemeRepack()) return zipSync(this.promotedBdaFiles() ?? this.packagedFiles(this.format), { level: 6 })
     if (!this.sourceZip) {
       return zipSync(Object.fromEntries(this.files), { level: 6 })
     }
