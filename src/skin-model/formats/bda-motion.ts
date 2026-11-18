@@ -79,14 +79,14 @@ function bindingOf(target: string, binding: BdaAnimationBinding): MotionBinding 
 function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationSequence>): MotionNode {
   void sequences
   if (effect.kind === "group") {
-    // 组合的子项是别的效果编号；IR 里用引用节点保住编号，写回时按它还原。
+    // 组合的子项是别的效果编号；IR 里用引用节点保住编号与类型，写回时按它还原。
     return {
       kind: "sequence",
       method: effect.buildMode === 1 ? "sequential" : "parallel",
       children: effect.items.map((item) => ({
         kind: "custom" as const,
         family: "bda.ref",
-        values: new Map<string, number | string | boolean>([["id", item.key]]),
+        values: new Map<string, number | string | boolean>([["id", item.key], ["kind", item.kind]]),
       })),
       delay: effect.delay / 1000,
       duration: 0,
@@ -239,11 +239,15 @@ function effectOf(motion: SkinMotion): BdaAnimationEffect | undefined {
     }
   }
   if (root.kind === "sequence") {
-    // 引用节点还原成组合的子项；不是引用节点就写不出来。
+    // 引用节点还原成组合的子项；类型跟着节点一起回来，不是引用节点就写不出来。
     const items = root.children.flatMap((child) => {
       if (child.kind !== "custom" || child.family !== "bda.ref") return []
       const key = child.values.get("id")
-      return typeof key === "string" ? [{ kind: "alpha" as const, key }] : []
+      const kind = child.values.get("kind")
+      if (typeof key !== "string") return []
+      const types = ["group", "alpha", "scale", "shift", "rotate", "frame", "image", "emitter", "lottie", "video"] as const
+      const resolved = types.find((type) => type === kind) ?? "alpha"
+      return [{ kind: resolved, key }]
     })
     return {
       kind: "group",

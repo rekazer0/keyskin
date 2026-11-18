@@ -263,7 +263,12 @@ export const ssfFormat: SkinFormat<SsfSource> = {
   async write(model, source) {
     const resolution = String(model.meta.resolution?.width || 1080)
     const text = (value: string) => new TextEncoder().encode(value)
+    // 未建模的文件（音效、字体、菜单、其它配置）原样带上；旧图片丢弃，下面会按资源表重写。
     const files = new Map<string, Uint8Array>()
+    for (const [path, data] of source?.files ?? []) {
+      if (/\.(?:png|webp|gif|jpe?g)$/i.test(path)) continue
+      files.set(path, data)
+    }
     const name = (image: string) => image.split("/").pop() ?? image
     const themeLines = ["[General]", "skin_type=1", `skin_name=${model.meta.name ?? "皮肤"}`, `skin_author=${model.meta.author ?? ""}`, `skin_version=${model.meta.version ?? ""}`, ""]
     files.set("phoneTheme.ini", text(themeLines.join("\n")))
