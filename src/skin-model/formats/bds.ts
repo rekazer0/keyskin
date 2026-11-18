@@ -424,7 +424,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     ["panel.list", "partial"],
     ["panel.toolbar", "partial"],
   ]),
-  read(source) {
+  async read(source) {
     const layout = IniDocument.parse(source.archive.getText(source.layout))
     const styleDocument = IniDocument.parse(source.archive.getText(source.styles))
     const size = parsePanelSize(layout)
@@ -469,7 +469,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       geometry: "document",
       orientation: source.orientation,
       size,
-      layout: deriveBoardLayout("board", keys.map((key) => ({ id: key.id, ...key.rect })), size),
+      layout: await deriveBoardLayout("board", keys.map((key) => ({ id: key.id, ...key.rect })), size),
       keys,
     })
     model.styles = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
