@@ -87,6 +87,18 @@ export class SkinModelState {
     return this.status
   }
 
+  /**
+   * 需要模型时就重建，不等结果。
+   * 编辑会让模型失效，而界面是同步读取的；下一次读取前先把重建排上，
+   * 这样连续编辑期间读到的始终是最新一份（或退回文档），不会长久停在「没有模型」。
+   */
+  ensure(archive: SkinArchive, hints: SkinHints = {}): void {
+    if (this.fresh(archive) || this.pending) return
+    void this.load(archive, hints).catch(() => {
+      // 构建失败只会让界面继续走原路径，不打扰用户。
+    })
+  }
+
   private async build(archive: SkinArchive, hints: SkinHints): Promise<void> {
     const opened = await openSession(archive, hints)
     if (!opened.ok) {

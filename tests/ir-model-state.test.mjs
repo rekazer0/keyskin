@@ -67,3 +67,26 @@ test("读到的模型带自检报告", async () => {
   assert.equal(status.report.errors, 0)
   assert.equal(state.report?.errors, 0)
 })
+
+test("编辑让模型失效后，读取会触发重建", async () => {
+  const state = new SkinModelState()
+  const source = archive()
+  await state.load(source)
+  assert.ok(state.model)
+  state.invalidate()
+  assert.equal(state.model, undefined)
+  // ensure 不等待结果，但会把重建排上；随后 await load 应当拿到同一份。
+  state.ensure(source)
+  const status = await state.load(source)
+  assert.equal(status.state, "ready")
+  assert.ok(state.model)
+})
+
+test("已有模型时不重复构建", async () => {
+  const state = new SkinModelState()
+  const source = archive()
+  const first = await state.load(source)
+  state.ensure(source)
+  const second = await state.load(source)
+  assert.equal(second, first, "ensure 不该让已有模型重建")
+})
