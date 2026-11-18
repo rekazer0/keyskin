@@ -12,9 +12,9 @@ import type { SkinKey } from "../key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "../style.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "../motion.ts"
 import { emptyModel } from "../model.ts"
-import { deriveBoardLayout } from "../derive/layout.ts"
+import { deriveBoard } from "../derive/layout.ts"
 import { buildBoard } from "../build.ts"
-import type { SkinFormat } from "../format.ts"
+import type { ImportOptions, SkinFormat } from "../format.ts"
 
 export type BdsSource = {
   archive: SkinArchive
@@ -424,7 +424,8 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     ["panel.list", "partial"],
     ["panel.toolbar", "partial"],
   ]),
-  async read(source) {
+  derive: { tolerance: 1 },
+  async read(source, options?: ImportOptions) {
     const layout = IniDocument.parse(source.archive.getText(source.layout))
     const styleDocument = IniDocument.parse(source.archive.getText(source.styles))
     const size = parsePanelSize(layout)
@@ -463,13 +464,18 @@ export const bdsFormat: SkinFormat<BdsSource> = {
         },
       }]
     })
+    const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size, {
+      ...bdsFormat.derive,
+      ...options?.derive,
+      weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
+    })
     model.boards.push({
       id: source.layout,
       kind: source.kind,
       geometry: "document",
       orientation: source.orientation,
       size,
-      layout: await deriveBoardLayout("board", keys.map((key) => ({ id: key.id, ...key.rect })), size),
+      layout: derived.layout,
       keys,
     })
     model.styles = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
