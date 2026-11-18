@@ -19,25 +19,19 @@
   background-image: var(--checker-image);
   background-position: 0 0, calc(var(--checker-size) / 2) calc(var(--checker-size) / 2);
   background-size: var(--checker-size) var(--checker-size);
-  --_canvas-text: #202124;
   --_canvas-secondary: #5f6368;
-  --_canvas-tertiary: #74747b;
 }
 
 /* 仅面板：外围纯色，透明格只铺在键盘面板范围内，像 Figma 的画板 */
 .canvas-wrap[data-background="checkerboard-panel"] {
   background: #f4f5f8;
-  --_canvas-text: #202124;
   --_canvas-secondary: #5f6368;
-  --_canvas-tertiary: #74747b;
 }
 
 .canvas-wrap[data-background="checkerboard-soft"] {
   background: var(--checker-soft-image), var(--checker-soft-light);
   background-size: var(--checker-soft-size) var(--checker-soft-size);
-  --_canvas-text: #202124;
   --_canvas-secondary: #5f6368;
-  --_canvas-tertiary: #74747b;
 }
 
 .canvas-wrap[data-background="checkerboard-panel"] .device-shell.canvas-only {
@@ -47,30 +41,22 @@
 
 .canvas-wrap[data-background="light-gray"] {
   background: #e6e7ea;
-  --_canvas-text: #202124;
   --_canvas-secondary: #5f6368;
-  --_canvas-tertiary: #74747b;
 }
 
 .canvas-wrap[data-background="white"] {
   background: #fff;
-  --_canvas-text: #202124;
   --_canvas-secondary: #5f6368;
-  --_canvas-tertiary: #74747b;
 }
 
 .canvas-wrap[data-background="gray"] {
   background: #808080;
-  --_canvas-text: #202124;
   --_canvas-secondary: #303236;
-  --_canvas-tertiary: #45484d;
 }
 
 .canvas-wrap[data-background="dark"] {
   background: #242529;
-  --_canvas-text: #f2f3f4;
   --_canvas-secondary: #a6a9ae;
-  --_canvas-tertiary: #858991;
 }
 
 .device-shell {
@@ -89,7 +75,6 @@
     rgb(203 206 212 / 72%);
   --_phone-keyboard-border: rgb(255 255 255 / 68%);
   --_phone-keyboard-shadow: inset 0 1px rgb(255 255 255 / 48%), 0 -10px 28px rgb(82 103 135 / 10%);
-  transition: aspect-ratio 180ms ease;
 }
 
 .canvas-wrap[data-background="white"] .preview-coordinate-label,
@@ -712,18 +697,6 @@
 /* 设置「深色画布降低对比」 */
 :root[data-app-theme="dark"][data-dark-canvas-soften="true"] .canvas-wrap[data-background="dark"] { background-color: #303238; }
 
-/* 模板卡片预览：每个模板自己的底色与按键色 */
-.template-card[data-template="default-android"] { --_tone-bg: #1B1E23; --_tone-key: #2E333C; --_tone-cand: #2E333C; }
-.template-card[data-template="official-android-bds"] { --_tone-bg: #EDEFF3; --_tone-key: #FFFFFF; --_tone-cand: #FFFFFF; }
-.template-card[data-template="xiaomi-unified-rounded-blur"] { --_tone-bg: #F3F4F7; --_tone-key: #FFFFFF; --_tone-cand: #FFFFFF; }
-.template-card[data-template="oppo-dual-color"] { --_tone-bg: #E9EFFE; --_tone-key: #3A6DF0; --_tone-cand: #3A6DF0; }
-.template-card[data-template="iqoo-rounded-black"] { --_tone-bg: #14161A; --_tone-key: #26292F; --_tone-cand: #26292F; }
-.template-card[data-template="huawei-swipe-symbols-1080"] { --_tone-bg: #F0F1F4; --_tone-key: #FFFFFF; --_tone-cand: #FFFFFF; }
-.template-card[data-template="oppo-swipe-down"] { --_tone-bg: #F3F4F7; --_tone-key: #FFFFFF; --_tone-cand: #FFFFFF; }
-.template-card[data-template="palm-harmony"] { --_tone-bg: #D0D3D9; --_tone-key: #FFFFFF; --_tone-cand: #FFFFFF; }
-/*
- 从 style.css 归并过来的同名规则（含响应式变体）
- */
 .device-shell {
   transition:
     background-color var(--duration-base) var(--ease-standard),

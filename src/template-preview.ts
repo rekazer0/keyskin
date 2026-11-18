@@ -27,10 +27,6 @@ function yieldPreviewTask(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, 0))
 }
 
-function previewCards(root: ParentNode): HTMLButtonElement[] {
-  return [...root.querySelectorAll<HTMLButtonElement>(".template-card[data-template]")]
-}
-
 /**
  * 只抽 demo 图：先按本地文件头就地取（不解整包），大小写在数据描述符里的包
  * 才退回整包解压。
@@ -84,10 +80,6 @@ export async function archiveDemoImage(bytes: Uint8Array): Promise<Blob> {
   return new Blob([demo.slice() as BlobPart], { type: demoImageType(demo) })
 }
 
-async function renderArchivePreview(bytes: Uint8Array, host: HTMLElement): Promise<HTMLImageElement> {
-  return renderBlobPreview(await archiveDemoImage(bytes), host)
-}
-
 export function renderBlobPreview(blob: Blob, host: HTMLElement): Promise<HTMLImageElement> {
   const objectURL = URL.createObjectURL(blob)
   return showPreviewImage(host, previewImageElement(objectURL, objectURL))
@@ -101,32 +93,11 @@ export function releaseArchivePreview(image: HTMLImageElement): void {
   delete image.dataset.objectUrl
 }
 
-/** 内置模板包内没有 demo 图时的兜底：随应用发布的静态预览图。 */
-async function renderStaticTemplatePreview(id: string, host: HTMLElement): Promise<void> {
-  const url = builtInProjectTemplatePreviewURL(id)
-  if (!url) throw new MissingPreviewImageError("该模板没有静态预览图")
-  await showPreviewImage(host, previewImageElement(url))
-}
-
-async function renderTemplatePreview(id: string, host: HTMLElement): Promise<void> {
-  // Static previews are already shipped with the app; do not unzip the matching template first.
-  const staticURL = builtInProjectTemplatePreviewURL(id)
-  if (staticURL) {
-    await showPreviewImage(host, previewImageElement(staticURL))
-    return
-  }
-  try {
-    await renderArchivePreview(await loadBuiltInProjectTemplate(id), host)
-  } catch {
-    await renderStaticTemplatePreview(id, host)
-  }
-}
-
 export async function hydrateTemplateCardPreviews(
   root: ParentNode = document,
   options: { lazy?: boolean } = {},
 ): Promise<void> {
-  const cards = previewCards(root)
+  const cards = root.querySelectorAll<HTMLButtonElement>(".template-card[data-template]")
   if (options.lazy && cards.length && "IntersectionObserver" in window) {
     const scrollRoot = root instanceof Element ? root.closest<HTMLElement>(".welcome-main") : null
     const pending = new Set(cards)
@@ -151,19 +122,19 @@ async function hydrateTemplateCard(card: HTMLButtonElement): Promise<void> {
   const id = card.dataset.template
   const host = card.querySelector<HTMLElement>(".template-preview")
   if (!id || !host || host.dataset.preview === "rendered") return
-  await yieldPreviewTask()
-  try {
-    await renderTemplatePreview(id, host)
-  } catch (error) {
-    if (error instanceof MissingPreviewImageError) {
-      showMissingPreview(host)
-      return
-    }
+  const staticURL = builtInProjectTemplatePreviewURL(id)
+  for (let attempt = 0; attempt < 2; attempt++) {
     await yieldPreviewTask()
     try {
-      await renderTemplatePreview(id, host)
+      if (staticURL) await showPreviewImage(host, previewImageElement(staticURL))
+      else {
+        const bytes = await loadBuiltInProjectTemplate(id)
+        await renderBlobPreview(await archiveDemoImage(bytes), host)
+      }
+      return
     } catch {
-      showMissingPreview(host)
+      if (!staticURL) break
     }
   }
+  showMissingPreview(host)
 }

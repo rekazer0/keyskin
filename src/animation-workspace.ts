@@ -17,7 +17,7 @@ const CANVAS_MIN_HEIGHT = 120
 /** 工具栏 48 + 底部状态栏 30，都是动画工作区里固定高度的行。 */
 const FIXED_ROWS_HEIGHT = 78
 
-export type AnimationWorkspaceHosts = {
+type AnimationWorkspaceHosts = {
   /** The sidebar library body: actions and the animation list. */
   library: HTMLElement
   /** The second list: the styles (BDA targets) that play the animations here. */
@@ -36,7 +36,7 @@ export type AnimationWorkspaceHosts = {
   filter(): void
 }
 
-export type AnimationList = "animations" | "styles"
+type AnimationList = "animations" | "styles"
 
 const shared: { hosts?: AnimationWorkspaceHosts } = {}
 

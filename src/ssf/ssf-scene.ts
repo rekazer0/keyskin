@@ -20,7 +20,7 @@ import { parseSsfImage, ssfColor, type SsfPackage, type SsfTheme } from "./ssf-p
 import { firstValue, ssfBackground, ssfForeground, ssfForegroundLayout, ssfIconPair, ssfSpaceIconColor, ssfTextSections } from "./ssf-parts.ts"
 
 /** The nine-key letter groups' digits, the minor label Sogou shows when the skin turns it on. */
-export const NINE_KEY_DIGITS: Record<string, string> = {
+const NINE_KEY_DIGITS: Record<string, string> = {
   Key_ABC: "2", Key_DEF: "3", Key_GHI: "4", Key_JKL: "5", Key_MNO: "6", Key_PQRS: "7", Key_TUV: "8", Key_WXYZ: "9",
 }
 
@@ -151,7 +151,7 @@ export function box(rect: Rect, fractions: number[] | undefined): Rect | undefin
 let measure: OffscreenCanvasRenderingContext2D | null | undefined
 
 /** The largest size at which `text` fits `area` (Sogou sizes a label without TEXT_SIZE to its box). */
-export function fitText(text: string, area: Rect, font: string | undefined, weight: number): number {
+function fitText(text: string, area: Rect, font: string | undefined, weight: number): number {
   measure ??= typeof OffscreenCanvas === "undefined" ? null : new OffscreenCanvas(1, 1).getContext("2d")
   if (!measure) return area.height
   measure.font = `${weight} ${area.height}px ${canvasFontFamily(font)}`

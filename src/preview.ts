@@ -538,6 +538,7 @@ export class Preview {
 
   /** Lists the canvas keys from the skin's own data instead of the layout document. */
   setNativeItems(items?: (state: number | undefined, persistentOnly: boolean) => PreviewItem[]): void {
+    if (!items && !this.nativeItems) return
     this.nativeItems = items
     this.setDocument(this.document, this.documentIdentity)
   }
@@ -587,7 +588,7 @@ export class Preview {
       // Measure every layout key, not only the persistent subset, so the canvas
       // keeps the same aspect as the viewport the editor sizes around it.
       this.surfaceHeightValue = previewSurfaceHeight(
-        this.document || this.nativeItems ? this.layoutItems(false) : this.keys,
+        this.persistentOnly ? this.layoutItems(false) : this.keys,
         this.panelHeight,
       )
     }

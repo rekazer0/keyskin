@@ -143,7 +143,7 @@ async function goLive(state: Overview, index: number): Promise<void> {
   frame.dataset.live = "ready"
 }
 
-export function selectLayoutCell(index: number): void {
+function selectLayoutCell(index: number): void {
   const state = appState.layoutOverview
   if (state && current(state) && index !== state.index && cells()[index]) void goLive(state, index)
 }

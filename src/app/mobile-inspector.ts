@@ -138,7 +138,7 @@ function openActionLibrary(): void {
 
 export function resizeMobileInspector(value: number): void {
   const split = Math.max(32, Math.min(90, value))
-  document.documentElement.style.setProperty("--mobile-inspector-split", `${split}%`)
+  document.documentElement.style.setProperty("--mobile-inspector-split", `calc(var(--mobile-workspace-height) * ${split / 100})`)
   document.documentElement.dataset.mobilePanel = split >= 80 ? "collapsed" : split <= 36 ? "expanded" : "normal"
   mobileInspectorResize.setAttribute("aria-valuenow", String(Math.round(split)))
   mobileInspectorResize.setAttribute("aria-valuetext", split >= 80 ? "展开属性" : `画布占 ${Math.round(split)}%`)

@@ -188,24 +188,26 @@ export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElemen
   })
 }
 
-/** `<details>` 菜单的键盘：方向键 / Home / End 在可用项之间移动，Esc 收起并把焦点还给 summary。 */
-export function bindMenuKeys(menu: HTMLDetailsElement): void {
-  const summary = menu.querySelector("summary")!
+/** 菜单用方向键移动；Esc 留在触发处，Tab 从触发处继续原生焦点顺序。 */
+export function bindMenuKeys(menu: HTMLDetailsElement, trigger: HTMLElement = menu.querySelector("summary")!): void {
   menu.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && menu.open) {
+    if (event.defaultPrevented || event.isComposing) return
+    if (menu.open && (event.key === "Escape" || event.key === "Tab" && (event.target !== trigger || event.shiftKey))) {
+      if (event.key === "Escape") event.preventDefault() // 不让原生 dialog 同时响应 cancel。
       event.stopPropagation()
-      menu.open = false
-      summary.focus()
+      if (menu.popover) menu.hidePopover()
+      else menu.open = false
+      trigger.focus()
       return
     }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
     menu.open = true
     const items = [...menu.querySelectorAll<HTMLButtonElement>(":scope > :not(summary) button:not(:disabled)")]
       .filter(item => item.getClientRects().length > 0)
+    if (!items.length) return
     const index = items.indexOf(document.activeElement as HTMLButtonElement)
-    const next = event.key === "ArrowDown" ? index + 1 : event.key === "ArrowUp" ? (index < 0 ? items.length - 1 : index - 1)
-      : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : undefined
-    if (next === undefined || !items.length) return
+    const next = event.key === "Home" ? 0 : event.key === "End" || event.key === "ArrowUp" && index < 0 ? items.length - 1
+      : index + (event.key === "ArrowDown" ? 1 : -1)
     event.preventDefault()
     items[(next + items.length) % items.length]!.focus()
   })

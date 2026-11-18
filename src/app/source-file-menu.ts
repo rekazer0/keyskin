@@ -34,7 +34,7 @@ function renameSourceFile(): void {
 export function wireSourceFileMenu(): void {
   sourceRenameButton.addEventListener("click", renameSourceFile)
   const openMenu = (row: HTMLElement, x: number, y: number) => {
-    document.querySelector<HTMLDetailsElement>('.ui-menu[data-variant="context"]')?.hidePopover()
+    document.querySelector<HTMLDetailsElement>('.ui-menu[data-variant="context"]:popover-open')?.hidePopover()
     if (row.getAttribute("aria-selected") !== "true") row.click()
     const menu = element("details", "ui-menu")
     menu.dataset.variant = "context"
@@ -53,20 +53,17 @@ export function wireSourceFileMenu(): void {
       const icon = action.querySelector(".ui-icon")?.cloneNode(true)
       if (icon) item.append(icon)
       item.append(action.title || action.getAttribute("aria-label") || "")
-      item.addEventListener("click", () => { menu.hidePopover(); action.click() })
+      item.addEventListener("click", () => { menu.hidePopover(); row.focus(); action.click() })
       items.append(item)
     }
     menu.append(summary, items)
-    bindMenuKeys(menu)
-    menu.addEventListener("keydown", event => {
-      if (event.key === "Escape") { menu.hidePopover(); row.focus() }
-    })
+    bindMenuKeys(menu, row)
     const listeners = new AbortController()
     document.addEventListener("pointerdown", event => {
       if (!menu.contains(event.target as Node)) menu.hidePopover()
     }, { capture: true, signal: listeners.signal })
-    menu.addEventListener("toggle", event => {
-      if (event.target === menu && !menu.matches(":popover-open")) { listeners.abort(); menu.remove() }
+    menu.addEventListener("toggle", () => {
+      if (!menu.matches(":popover-open")) { listeners.abort(); menu.remove() }
     })
     document.body.append(menu)
     menu.showPopover()

@@ -36,6 +36,7 @@ export function wireMobileStudio(): void {
   const root = document.documentElement
   const nav = $("#mobile-navigation")
   const resourceTabs = $("#mobile-resource-tabs")
+  const resourceButtons = resourceTabs.querySelectorAll<HTMLButtonElement>("[data-mobile-resource]")
   const tabsHome = document.createComment("mobile resource tabs")
   resourceTabs.before(tabsHome)
   const createResource = $("#resource-create-style")
@@ -75,19 +76,19 @@ export function wireMobileStudio(): void {
   sourceReturn.textContent = "返回属性"
   sourceReturn.addEventListener("click", () => inspectorTabs.querySelector<HTMLButtonElement>('[data-inspector-tab="properties"]')!.click())
   $(".inspector-view-controls").append(sourceReturn)
-  const setPage = (page: string) => {
-    root.dataset.mobilePage = page
-    for (const button of nav.querySelectorAll<HTMLElement>("button")) {
-      if (button.dataset.mobilePage === page) button.setAttribute("aria-current", "page")
-      else button.removeAttribute("aria-current")
+  const syncNavigation = () => {
+    if (!mobilePortraitQuery.matches) return
+    const page = settingsDialog.open ? "settings" : root.dataset.mobilePage
+    for (const button of nav.querySelectorAll<HTMLButtonElement>("button")) {
+      const current = (button.dataset.mobilePage ?? button.dataset.appDialog) === page ? "page" : null
+      if (button.ariaCurrent !== current) button.ariaCurrent = current
     }
   }
+  new MutationObserver(syncNavigation).observe(settingsDialog, { attributes: true, attributeFilter: ["open"] })
   const openResource = (kind: string) => {
     openResources(kind === "resource" ? "image" : kind as "style" | "sound")
     inspectorTabs.querySelector<HTMLButtonElement>('[data-inspector-tab="properties"]')?.click()
     setMobilePane("inspector")
-    setPage("resources")
-    for (const button of document.querySelectorAll<HTMLElement>("[data-mobile-resource]")) button.setAttribute("aria-pressed", String(button.dataset.mobileResource === kind))
   }
   for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) button.addEventListener("click", () => {
     const page = button.dataset.mobilePage!
@@ -104,10 +105,9 @@ export function wireMobileStudio(): void {
       if (appState.layoutPath && appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath)
       inspectorTabs.querySelector<HTMLButtonElement>(`[data-inspector-tab="${page === "ai" ? "ai" : "properties"}"]`)?.click()
       setMobilePane("inspector")
-      setPage(page)
     }
   })
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-mobile-resource]")) button.addEventListener("click", () => openResource(button.dataset.mobileResource!))
+  for (const button of resourceButtons) button.addEventListener("click", () => openResource(button.dataset.mobileResource!))
   $("#mobile-home").addEventListener("click", () => void closeDialog(mobileProjectDialog).then(() => $("#recent-files").click()))
   $("#mobile-welcome-blank").addEventListener("click", () => newButton.click())
   $("#mobile-welcome-new").addEventListener("click", () => newButton.click())
@@ -201,18 +201,18 @@ export function wireMobileStudio(): void {
   previewReturn.textContent = "返回编辑"
   previewReturn.addEventListener("click", () => selectChoice(mode, "edit"))
   canvasWrap.append(previewReturn)
-  const settingsBack = iconButton("arrow-left", "返回设置", () => { settingsDialog.dataset.mobileSettings = "index" })
-  settingsBack.classList.add("mobile-settings-back")
-  settingsDialog.querySelector(".settings-header")!.prepend(settingsBack)
-  for (const button of settingsDialog.querySelectorAll<HTMLButtonElement>("[data-settings-page]")) button.addEventListener("click", () => {
-    settingsDialog.dataset.mobileSettings = "detail"
-    $("#settings-title").textContent = button.querySelector("span:nth-child(2)")?.textContent ?? "设置"
-  })
-  new MutationObserver(() => {
-    if (!settingsDialog.open || !mobilePortraitQuery.matches) return
+  const settingsIndex = () => {
     settingsDialog.dataset.mobileSettings = "index"
     $("#settings-title").textContent = "设置"
-  }).observe(settingsDialog, { attributes: true, attributeFilter: ["open"] })
+  }
+  const settingsBack = iconButton("arrow-left", "返回设置", settingsIndex)
+  settingsBack.classList.add("mobile-settings-back")
+  settingsDialog.querySelector(".settings-header")!.prepend(settingsBack)
+  // showModal 后入口仍可同步选择详情（如 AI 模型）；不要在微任务里覆盖它。
+  settingsDialog.addEventListener("beforetoggle", event => {
+    if (mobilePortraitQuery.matches && event.newState === "open") settingsIndex()
+  })
+  mobilePortraitQuery.addEventListener("change", settingsIndex)
   const accentInput = $("#interface-accent") as HTMLInputElement
   const accents = element("div", "mobile-accent-presets")
   for (const [name, label] of [["blue", "蓝色"], ["green", "雾绿"], ["purple", "紫色"], ["coral", "珊瑚"], ["slate", "石墨"]]) {
@@ -233,11 +233,7 @@ export function wireMobileStudio(): void {
   const modelLink = element("button", "ui-list-item mobile-model-link")
   modelLink.type = "button"
   modelLink.append(createIcon("sparkles"), "AI 模型", createIcon("chevron-right"))
-  modelLink.addEventListener("click", () => {
-    showSettingsPage("model")
-    settingsDialog.dataset.mobileSettings = "detail"
-    $("#settings-title").textContent = "AI 模型设置"
-  })
+  modelLink.addEventListener("click", () => showSettingsPage("model"))
   settingsDialog.querySelector(".settings-sidebar")!.insertBefore(modelLink, $("#settings-tab-about"))
   modelLink.hidden = !$("#settings-model-nav").hidden
   const unavailableModel = element("section", "mobile-model-unavailable")
@@ -273,7 +269,10 @@ export function wireMobileStudio(): void {
     $("#document-name").dataset.mobileName = $("#document-name").textContent?.replace(/\.(?:bdi|bds|bda|ssf|mssf|sxi)$/i, "")
     const empty = canvasWrap.classList.contains("empty")
     nav.hidden = false
-    for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) button.disabled = appState.fileOperationRunning || button.dataset.mobilePage !== "home" && !appState.archive
+    for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) {
+      const disabled = appState.fileOperationRunning || button.dataset.mobilePage !== "home" && !appState.archive
+      if (button.disabled !== disabled) button.disabled = disabled
+    }
     root.dataset.mobileWelcome = String(empty)
     root.dataset.mobileMode = mode.value
     aiContext.textContent = `键设 Chat · ${$("#document-name").dataset.mobileName || "当前皮肤"} · ${appState.archive?.format.toUpperCase() ?? ""}`
@@ -283,17 +282,19 @@ export function wireMobileStudio(): void {
     root.dataset.mobileLibrary = String(library)
     root.dataset.mobileResourceList = String(library && !$("#resource-list-view").hidden)
     const resourceKind = appState.resourceInspectorMode === "style" ? "style" : appState.resourceInspectorMode === "sound" ? "sound" : "resource"
-    for (const button of document.querySelectorAll<HTMLElement>("[data-mobile-resource]")) button.setAttribute("aria-pressed", String(button.dataset.mobileResource === resourceKind))
+    for (const button of resourceButtons) {
+      const pressed = String(button.dataset.mobileResource === resourceKind)
+      if (button.ariaPressed !== pressed) button.ariaPressed = pressed
+    }
     const detail = library && !$("#resource-detail").hidden && appState.resourceInspectorMode === "image"
     if (detail) {
       if (workspaceImageFigure.parentElement !== $("#image-resource-detail")) $("#image-resource-detail").prepend(workspaceImageFigure)
     } else if (workspaceImageFigure.parentElement !== figureHome && !workspaceImageFigure.closest("#atlas-editor-dialog")) figureHome.append(workspaceImageFigure)
     routeTitle.textContent = metadata ? "皮肤信息" : appState.resourceInspectorMode === "style" ? "全部样式" : appState.resourceInspectorMode === "sound" ? "音效资源" : detail ? "图片与切片" : "全部图片"
     root.dataset.mobileAnimation = String(appState.animationDesignMode !== "all")
-    if (empty) setPage("home")
-    else if (appState.inspectorTab === "ai") setPage("ai")
-    else if (appState.resourceConfigActive || appState.animationDesignMode !== "all") setPage("resources")
-    else setPage("edit")
+    const page = empty ? "home" : appState.inspectorTab === "ai" ? "ai" : appState.resourceConfigActive || appState.animationDesignMode !== "all" ? "resources" : "edit"
+    if (root.dataset.mobilePage !== page) root.dataset.mobilePage = page
+    syncNavigation()
     $(".mobile-page-heading").textContent = appState.sidebarView === "source" ? "源文件" : "项目概览"
     if (!empty && mode.value === "preview") root.dataset.mobilePreview = "true"
     else delete root.dataset.mobilePreview
@@ -302,15 +303,16 @@ export function wireMobileStudio(): void {
       selectChoice(mode, "edit")
     }
   }
-  new MutationObserver(sync).observe(newButton, { attributes: true, attributeFilter: ["disabled"] })
-  new MutationObserver(sync).observe(canvasWrap, { attributes: true, attributeFilter: ["class"] })
-  new MutationObserver(sync).observe($("#resource-list-view"), { attributes: true, attributeFilter: ["hidden"] })
-  new MutationObserver(sync).observe($("#resource-detail"), { attributes: true, attributeFilter: ["hidden"] })
-  new MutationObserver(sync).observe(skinFieldsGroup, { attributes: true, attributeFilter: ["hidden"] })
-  new MutationObserver(sync).observe(resourceInspector, { attributes: true, attributeFilter: ["hidden"] })
-  new MutationObserver(sync).observe(inspectorTabs, { attributes: true, subtree: true, attributeFilter: ["aria-selected"] })
-  new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ["data-mobile-pane"] })
-  new MutationObserver(sync).observe($("#document-name"), { childList: true, characterData: true, subtree: true })
+  const observer = new MutationObserver(sync)
+  observer.observe(newButton, { attributes: true, attributeFilter: ["disabled"] })
+  observer.observe(canvasWrap, { attributes: true, attributeFilter: ["class"] })
+  observer.observe($("#resource-list-view"), { attributes: true, attributeFilter: ["hidden"] })
+  observer.observe($("#resource-detail"), { attributes: true, attributeFilter: ["hidden"] })
+  observer.observe(skinFieldsGroup, { attributes: true, attributeFilter: ["hidden"] })
+  observer.observe(resourceInspector, { attributes: true, attributeFilter: ["hidden"] })
+  observer.observe(inspectorTabs, { attributes: true, subtree: true, attributeFilter: ["aria-selected"] })
+  observer.observe(root, { attributes: true, attributeFilter: ["data-mobile-pane"] })
+  observer.observe($("#document-name"), { childList: true, characterData: true, subtree: true })
   mode.addEventListener("change", sync)
   files.addEventListener("click", event => {
     if (!mobilePortraitQuery.matches) return

@@ -122,10 +122,12 @@ export async function paintPreview(self: Preview): Promise<void> {
   const hintIcon = hintIconID ? hintConfig?.icons.get(hintIconID) : undefined
   const hintCellStyle = hintIcon?.cellStyle ?? hintConfig?.cellStyle
   const hintCellSize = hintIcon?.cellSize ?? hintConfig?.cellSize
-  const keys = previewDrawOrder(visiblePreviewItems(self.keys, self.skinState)
-    .map((key) =>
-      self.stateDocument ? effectivePreviewItem(self.stateDocument, key, self.skinState ?? 0) : key,
-    ), self.panelWidth, self.panelHeight, self.legacyAnimationState?.key.section)
+  const visible = visiblePreviewItems(self.keys, self.skinState)
+  const stateDocument = self.stateDocument
+  const keys = previewDrawOrder(
+    stateDocument ? visible.map((key) => effectivePreviewItem(stateDocument, key, self.skinState ?? 0)) : visible,
+    self.panelWidth, self.panelHeight, self.legacyAnimationState?.key.section,
+  )
 
   // 拖拽时优先使用缓存的视觉数据，避免重复异步解析
   let panel: Visual | undefined
@@ -473,10 +475,10 @@ export async function paintPreview(self: Preview): Promise<void> {
     drawVisual(context, self.animationVisual.visual, self.animationVisual.key.rect, false)
   }
 
-  const toolbarRect = self.document
+  const toolbarRect = toolbarImages.length && self.document
     ? dynamicToolbarRect(self.document, self.panelWidth, self.panelHeight)
     : undefined
-  if (toolbarRect && toolbarImages.length && (!scene || scene.partial && !keys.some((key) => key.center.trim() === "F14" && sceneKeys.has(key.section)))) {
+  if (toolbarRect && (!scene || scene.partial && !keys.some((key) => key.center.trim() === "F14" && sceneKeys.has(key.section)))) {
     const slotWidth = toolbarRect.width / toolbarImages.length
     toolbarImages.forEach((visual, index) => {
       const destination = toolbarImageRect(visual, {
@@ -489,7 +491,7 @@ export async function paintPreview(self: Preview): Promise<void> {
     })
   }
 
-  drawGuides(self, visiblePreviewItems(self.keys, self.skinState))
+  drawGuides(self, visible)
   self.lastDrawnID = drawID
 }
 
@@ -546,21 +548,33 @@ function drawGuides(self: Preview, keys: readonly PreviewItem[]): void {
     self.guidesOverlay = overlay
   }
   overlay.toggleAttribute("hidden", false)
-  overlay.setAttribute("viewBox", `0 0 ${self.panelWidth} ${self.surfaceHeight}`)
-  overlay.style.setProperty("--preview-guide-font-size", `${15 * self.panelWidth / DEFAULT_PANEL_WIDTH}px`)
-  overlay.replaceChildren(...keys.map((key) => {
-    const group = document.createElementNS("http://www.w3.org/2000/svg", "g")
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect")
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text")
+  const viewBox = `0 0 ${self.panelWidth} ${self.surfaceHeight}`
+  if (overlay.getAttribute("viewBox") !== viewBox) {
+    overlay.setAttribute("viewBox", viewBox)
+    overlay.style.setProperty("--preview-guide-font-size", `${15 * self.panelWidth / DEFAULT_PANEL_WIDTH}px`)
+  }
+  // Reuse the SVG slots across canvas frames, including drag and selection changes.
+  while (overlay.childElementCount > keys.length) overlay.lastElementChild!.remove()
+  keys.forEach((key, index) => {
+    let group = overlay.children[index]
+    if (!group) {
+      group = document.createElementNS("http://www.w3.org/2000/svg", "g")
+      group.append(document.createElementNS("http://www.w3.org/2000/svg", "rect"), document.createElementNS("http://www.w3.org/2000/svg", "text"))
+      overlay.append(group)
+    }
+    const rect = group.firstElementChild!, text = group.lastElementChild!
     group.classList.toggle("selected", self.itemSelected(key))
-    rect.setAttribute("x", String(key.rect.x))
-    rect.setAttribute("y", String(key.rect.y))
-    rect.setAttribute("width", String(key.rect.width))
-    rect.setAttribute("height", String(key.rect.height))
-    text.setAttribute("x", String(key.rect.x + 4))
-    text.setAttribute("y", String(key.rect.y + 4))
-    text.textContent = key.section
-    group.append(rect, text)
-    return group
-  }))
+    guideCoordinate(rect, "x", key.rect.x)
+    guideCoordinate(rect, "y", key.rect.y)
+    guideCoordinate(rect, "width", key.rect.width)
+    guideCoordinate(rect, "height", key.rect.height)
+    guideCoordinate(text, "x", key.rect.x + 4)
+    guideCoordinate(text, "y", key.rect.y + 4)
+    if (text.textContent !== key.section) text.textContent = key.section
+  })
+}
+
+function guideCoordinate(node: Element, name: string, value: number): void {
+  const coordinate = String(value)
+  if (node.getAttribute(name) !== coordinate) node.setAttribute(name, coordinate)
 }

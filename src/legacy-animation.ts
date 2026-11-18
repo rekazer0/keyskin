@@ -523,7 +523,7 @@ export function legacyAnimationReferences(
 }
 
 /** 样式里动效指针字段对应的时机。 */
-export const STYLE_ANIM_FIELD_LABELS: Record<string, string> = {
+const STYLE_ANIM_FIELD_LABELS: Record<string, string> = {
   PRESS_ANIM: EVENT_LABELS.press,
   RELEASE_ANIM: EVENT_LABELS.release,
   SHOW_ANIM: EVENT_LABELS.show,
@@ -531,7 +531,7 @@ export const STYLE_ANIM_FIELD_LABELS: Record<string, string> = {
   FIRST_PRESS_PANEL_ANIM: EVENT_LABELS.firstPress,
 }
 
-export type LegacyAnimationStyle = {
+type LegacyAnimationStyle = {
   /** STYLE 编号，如 `12`。 */
   id: string
   /** 有动效指针的时机，按字段顺序去重。 */

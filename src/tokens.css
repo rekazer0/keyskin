@@ -17,7 +17,6 @@
   /* 字体 */
   --font-ui: "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-display: Inter, "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-home-heading: inherit;
 
   /* 字号：正文 12；9 仅用于图片尺寸角标，10 用于概览注脚与列表摘要，其余最小 11 */
@@ -101,6 +100,7 @@
 
   /* 动效：3 档时长，进入、展开与平滑往复曲线 */
   --duration-fast: 120ms;   /* hover、按下、颜色变化 */
+  --motion-repeat: infinite; /* 减少动态效果时不启动循环 */
   --double-click-delay: 400ms; /* 位移控件等待双击，不受减少动态效果影响 */
   --duration-base: 200ms;   /* 展开收起、浮层出现 */
   --duration-slow: 320ms;   /* 对话框、sheet、页面切换 */
@@ -134,7 +134,6 @@
   --line-strong: #cdd2db;
   --text: #121419;
   --secondary: #5b616e;
-  --muted: #5b616e;
   --tertiary: #6f7684;
   --scrollbar-thumb: rgb(18 20 25 / 30%);
   --scrollbar-thumb-hover: rgb(18 20 25 / 52%);
@@ -165,7 +164,6 @@
   --window-material-sunken: 1;
   --window-material-floating: 1;
   --glass-border: #e3e6eb;
-  --glass-highlight: rgb(255 255 255 / 70%);
   --glass-shadow: 0 8px 28px rgb(18 24 40 / 10%), inset 0 1px rgb(255 255 255 / 78%);
   --window: var(--material-window);
   --toolbar: var(--material-toolbar);
@@ -238,7 +236,7 @@
 @media (max-width: 760px) {
   :root, :root.macos { --titlebar-height: calc(48px + var(--safe-area-top)); }
   /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
-  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-inspector-split: min(50%, 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --mobile-drawer-width: 320px; --style-card-width: 128px; --style-reference-height: 64px; --style-reference-meta-width: 48px; }
+  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-workspace-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-navigation-height)); --mobile-inspector-split: min(calc(var(--mobile-workspace-height) / 2), 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --style-card-width: 128px; --style-reference-height: 64px; --style-reference-meta-width: 48px; }
   :root { --ai-chat-input-min-height: var(--control-height-lg); --ai-chat-input-max-height: 30vh; --ai-chat-input-footer: calc(var(--control-height-lg) + var(--space-sm)); --ai-chat-send-size: var(--control-height-lg); }
   :root:has(#resource-inspector:not([hidden]) #resource-list-view:not([hidden])) { --mobile-preview-height: 0px; }
   :root[data-keyboard-open="true"]:has(#mobile-key-preview:not([hidden])) { --mobile-preview-height: 148px; }
@@ -253,7 +251,6 @@
   --line-strong: #3a3f48;
   --text: #f3f5f8;
   --secondary: #a1a8b3;
-  --muted: #a1a8b3;
   --tertiary: #8b93a0;
   --scrollbar-thumb: rgb(243 245 248 / 32%);
   --scrollbar-thumb-hover: rgb(243 245 248 / 56%);
@@ -278,7 +275,6 @@
   --hover: rgb(255 255 255 / 8%);
   --material-glass-surface: #1e2126;
   --glass-border: #282c33;
-  --glass-highlight: rgb(255 255 255 / 10%);
   --glass-shadow: 0 10px 32px rgb(0 0 0 / 32%), inset 0 1px rgb(255 255 255 / 8%);
   --canvas-surface: #0c0d10;
   --backdrop: rgb(0 0 0 / 45%);
@@ -407,14 +403,6 @@
 }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --duration-fast: 0ms;
-    --duration-base: 0ms;
-    --duration-slow: 0ms;
-  }
-}
-
 /* 移动工作室复用默认控件字号、圆角和图标尺寸。 */
 @media (max-width: 760px) {
   :root {
@@ -426,10 +414,8 @@
     --font-size-homesection: 15px;
     --font-size-homeaction: 14px;
     --radius-home: 20px;
-    --radius-homeaction: 14px;
     --radius-homepreview: 10px;
     --mobile-home-gutter: 20px;
-    --font-size-hero: 38px;
     --font-size-page: 24px;
     --mobile-page-padding: 20px;
     --mobile-home-preview-height: 108px;
@@ -442,16 +428,11 @@
     --mobile-sidebar-width: 352px;
     --mobile-simulation-height: clamp(120px, 34vh, 280px);
     --state-ok: #27846D;
-    --duration-fast: 120ms;
-    --duration-base: 200ms;
-    --duration-slow: 320ms;
-    --ease-emphasized: cubic-bezier(.16,1,.3,1);
     --line: #E4E9F1;
     --line-soft: #E4E9F1;
     --line-strong: #D3DCE9;
     --text: #1C2331;
     --secondary: #667182;
-    --muted: #667182;
     --tertiary: #777D90;
     --accent: #3a6df0;
     --accent-soft: #EAF0FF;
@@ -472,7 +453,6 @@
     --line-soft: #1E232A;
     --text: #F4F6F8;
     --secondary: #9AA3AF;
-    --muted: #9AA3AF;
     --tertiary: #7C8590;
     --accent: #7a9bff;
     --accent-soft: #1d2740;
@@ -494,7 +474,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }
+  :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; --motion-repeat: 0; }
 }
 
 :root {
@@ -504,13 +484,12 @@
   --accent-preset-coral: #C7674E;
   --accent-preset-slate: #263246;
 }
-:root[data-reduced-motion="true"] { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }
+:root[data-reduced-motion="true"] { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; --motion-repeat: 0; }
 @media (max-width: 760px) and (orientation: portrait) { :root { --guide-selected: #E88734; } }
 /* Pen 视觉主题：只替换表面与控件 token，保留所有布局尺寸。 */
 :root[data-interface-theme][data-app-theme]:not([data-interface-theme="default"]) {
   color: var(--text);
   background: var(--material-window);
-  --muted: var(--secondary);
   --window: var(--material-window);
   --toolbar: var(--material-toolbar);
   --sidebar: var(--material-sidebar);
@@ -523,7 +502,6 @@
   --floating: var(--material-menu);
   --material-glass-surface: var(--material-panel);
   --glass-border: var(--line);
-  --glass-highlight: transparent;
   --glass-shadow: none;
   --canvas-surface: var(--canvas);
   --home-background: var(--material-window);
@@ -677,7 +655,6 @@
   --shadow-md: 0 6px 18px #65528C1A;
   --shadow-lg: 0 16px 40px #65528C26;
   --glass-border: #FFFFFFCC;
-  --glass-highlight: #FFFFFFCC;
 }
 
 :root[data-interface-theme="terminal"][data-app-theme]:not([data-interface-theme="default"]) {

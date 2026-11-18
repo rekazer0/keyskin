@@ -3,9 +3,9 @@
 import { IniDocument } from "./ini.ts"
 import { effectivePanelSection, stateTipSection } from "./panel-tools.ts"
 
-export type LayoutAnimationField = "ANIM_STYLE" | "BACK_ANIM_STYLE" | "FORE_ANIM_STYLE"
-export type AnimationBindingTarget = { section: string; field: LayoutAnimationField; index?: number; state?: number }
-export type AnimationBinding = {
+type LayoutAnimationField = "ANIM_STYLE" | "BACK_ANIM_STYLE" | "FORE_ANIM_STYLE"
+type AnimationBindingTarget = { section: string; field: LayoutAnimationField; index?: number; state?: number }
+type AnimationBinding = {
   section: string
   sourceSection: string
   field: LayoutAnimationField

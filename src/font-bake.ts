@@ -15,7 +15,7 @@ const BAKED_PREFIX = "BAKED_"
 const TILE_GAP = 2
 const ATLAS_WIDTH = 1024
 
-export type BakeStyle = {
+type BakeStyle = {
   id: string
   /** 烘焙前的文字字段（SHOW、FONT_SIZE、NM_COLOR……）。 */
   fields: Record<string, string>

@@ -50,7 +50,7 @@ export function ssfSkeleton(pkg: SsfPackage, template: SkinArchive): SkinArchive
 }
 
 /** 转换分几步：每步之间让出一帧，重活开始前先让进度框出现在屏幕上。 */
-export type ConversionReport = (fraction: number, detail: string) => Promise<void>
+type ConversionReport = (fraction: number, detail: string) => Promise<void>
 
 /** Converts an SSF document into a Baidu package of `format`. */
 export async function convertSsfDocument(

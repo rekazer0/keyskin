@@ -59,33 +59,27 @@ export function animateProgress(progress: HTMLProgressElement, target: number, u
   motion.frame = requestAnimationFrame(tick)
 }
 
-/** 内容换了一批（换选择对象、换设置页）时淡入；连续触发时只保留最后一次。 */
-export function playEnter(element: Element | null | undefined): void {
-  if (!element) return
-  const options = timing("base", "standard")
-  if (!options) return
+/** 同一表面只保留最后一次反馈；减少动态效果时也取消旧动画。 */
+function animateChange(element: Element, frames: Keyframe[]): void {
   entering.get(element)?.cancel()
-  entering.set(element, element.animate([{ opacity: 0 }, { opacity: 1 }], options))
+  const options = timing("base", "standard")
+  if (options) entering.set(element, element.animate(frames, options))
 }
 
-/** 横向翻页时，新一页从对应的一侧进入。 */
+export function playEnter(element: Element | null | undefined): void {
+  if (element) animateChange(element, [{ opacity: 0 }, { opacity: 1 }])
+}
+
 export function playPageSlide(element: Element, direction: -1 | 1): void {
-  entering.get(element)?.cancel()
-  const options = timing("base", "standard")
-  if (!options) return
   const offset = direction === 1 ? "var(--space-xl)" : "calc(-1 * var(--space-xl))"
-  entering.set(element, element.animate([
+  animateChange(element, [
     { opacity: 0, transform: `translateX(${offset})` },
     { opacity: 1, transform: "translateX(0)" },
-  ], options))
+  ])
 }
 
-/** 方向图标从上一个方向旋转到当前方向。 */
 export function playRotation(element: Element, fromDegrees: number): void {
-  entering.get(element)?.cancel()
-  const options = timing("base", "standard")
-  if (!options) return
-  entering.set(element, element.animate([{ transform: `rotate(${fromDegrees}deg)` }, { transform: "rotate(0deg)" }], options))
+  animateChange(element, [{ transform: `rotate(${fromDegrees}deg)` }, { transform: "rotate(0deg)" }])
 }
 
 /**
@@ -102,16 +96,19 @@ export function closeDialog(dialog: HTMLDialogElement, value?: string): Promise<
   if (!options) { dialog.close(value); return Promise.resolve() }
   const fade = { ...options, fill: "forwards" as const }
   const animations = [
-    dialog.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(0.98)" }], fade),
-    dialog.animate([{ opacity: 1 }, { opacity: 0 }], { ...fade, pseudoElement: "::backdrop" }),
+    dialog.animate([{ offset: 1, opacity: 0, transform: "var(--_dialog-travel, none)" }], fade),
+    dialog.animate([{ offset: 1, opacity: 0 }], { ...fade, pseudoElement: "::backdrop" }),
   ]
   const finished = new Promise<void>(resolve => {
-    animations[0]!.addEventListener("finish", () => {
-      closing.delete(dialog)
-      dialog.close(value)
+    // 窗口隐藏、节点被移除或外部取消动画，也必须结束关闭流程。
+    const finish = () => {
+      if (!closing.delete(dialog)) return
+      if (dialog.open) dialog.close(value)
       for (const animation of animations) animation.cancel()
       resolve()
-    }, { once: true })
+    }
+    animations[0]!.addEventListener("finish", finish, { once: true })
+    animations[0]!.addEventListener("cancel", finish, { once: true })
   })
   closing.set(dialog, finished)
   return finished
@@ -123,8 +120,7 @@ export function closeDialog(dialog: HTMLDialogElement, value?: string): Promise<
 const SEGMENTED = ".ui-segmented:not([data-multiple])"
 const ON = "true"
 
-function boxIn(container: Element, element: Element): DOMRect {
-  const outer = container.getBoundingClientRect()
+function boxIn(container: Element, outer: DOMRect, element: Element): DOMRect {
   const inner = element.getBoundingClientRect()
   return new DOMRect(
     inner.left - outer.left - container.clientLeft + container.scrollLeft,
@@ -134,10 +130,8 @@ function boxIn(container: Element, element: Element): DOMRect {
   )
 }
 
-function slide(container: HTMLElement, from: DOMRect, target: HTMLElement): void {
-  const options = timing("base", "emphasized")
-  const to = boxIn(container, target)
-  if (!options || !from.width || !to.width || (from.x === to.x && from.y === to.y)) return
+function slide(container: HTMLElement, from: DOMRect, to: DOMRect, options: KeyframeAnimationOptions): void {
+  if (!from.width || !to.width || (from.x === to.x && from.y === to.y)) return
   container.querySelector(":scope > .ui-segment-thumb")?.remove()
   const thumb = document.createElement("div")
   thumb.className = "ui-segment-thumb"
@@ -160,24 +154,32 @@ function slide(container: HTMLElement, from: DOMRect, target: HTMLElement): void
 
 export function initSegmentSlide(): void {
   const observer = new MutationObserver((records) => {
-    const previous = new Map<Element, DOMRect>()
+    const previous = new Map<HTMLElement, HTMLElement>()
     const targets = new Map<HTMLElement, HTMLElement>()
     for (const record of records) {
       const button = record.target as HTMLElement
       const container = button.parentElement
       if (!container?.matches(SEGMENTED)) continue
       if (record.oldValue === ON && button.getAttribute(record.attributeName!) !== ON && !previous.has(container)) {
-        // 上一次滑动还没结束：从滑块当前的位置接着滑
-        const thumb = container.querySelector(":scope > .ui-segment-thumb")
-        previous.set(container, boxIn(container, thumb ?? button))
+        previous.set(container, button)
       } else if (record.oldValue !== ON && button.getAttribute(record.attributeName!) === ON) {
         targets.set(container, button)
       }
     }
+    if (!previous.size || !targets.size) return
+    const options = timing("base", "emphasized")
+    if (!options) return
+    // 先读完各组的几何，再统一写入滑块，避免组间交替布局。
+    const slides: [HTMLElement, DOMRect, DOMRect][] = []
     for (const [container, target] of targets) {
-      const from = previous.get(container)
-      if (from && target.isConnected) slide(container, from, target)
+      const source = previous.get(container)
+      if (!source || !target.isConnected) continue
+      const outer = container.getBoundingClientRect()
+      if (!outer.width) continue
+      const thumb = container.querySelector(":scope > .ui-segment-thumb")
+      slides.push([container, boxIn(container, outer, thumb ?? source), boxIn(container, outer, target)])
     }
+    for (const [container, from, to] of slides) slide(container, from, to, options)
   })
   observer.observe(document.body, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["aria-pressed", "aria-selected"] })
 }

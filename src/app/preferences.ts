@@ -1,6 +1,6 @@
 import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsDialog, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, interfaceTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
 import { crossfade, playEnter } from "../motion"
-import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, source, mobilePortraitQuery } from "./canvas-interaction"
+import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { checkForUpdate } from "../update.ts"
 import { initializeSourceDirectory } from "./source-workspace"
@@ -78,7 +78,7 @@ export const initialCanvasBackground = savedCanvasBackground === "default"
   ? "glass"
   : canvasBackgroundValues.includes(savedCanvasBackground as CanvasBackground)
     ? savedCanvasBackground as CanvasBackground
-    : mobilePortraitQuery.matches ? "glass" : "checkerboard"
+    : "checkerboard"
 
 export function applyEditorCrosshairSetting(): void {
   const state = editorCrosshair.checked ? "on" : "off"

@@ -11,7 +11,7 @@ import { iniConversionText } from "./layout-conversion-text.ts"
 
 type Pair = [number, number]
 export type LayoutRect = [number, number, number, number]
-export type ConversionKey = { section: string; actions: Record<string, string>; rect: LayoutRect; touch?: LayoutRect; letters?: string }
+type ConversionKey = { section: string; actions: Record<string, string>; rect: LayoutRect; touch?: LayoutRect; letters?: string }
 export type ConversionMatch = { layout: ConversionLayout; key: ConversionKey; letters?: ConversionMatch[]; glyph?: number; fallback?: ConversionKey }
 type ConversionList = { pos: Pair; size: Pair; count: number; horizontal: boolean; rect: LayoutRect; titles: string[]; values: string[] }
 export type ConversionLayout = {

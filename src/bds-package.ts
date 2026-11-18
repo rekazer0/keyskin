@@ -13,9 +13,9 @@ const ATLAS_NAME = "keyskin_atlas"
 /** 每个面板都要有的空段（沿用 gen.ini）；缺 [CAND] 时这个面板不显示候选栏和工具栏。 */
 const INHERITED_SECTIONS = ["INPUT", "CAND", "MORE"]
 
-export type AtlasPart = { png: Uint8Array; x: number; y: number }
+type AtlasPart = { png: Uint8Array; x: number; y: number }
 /** 把若干 PNG 画到一张 width×height 的透明图上；应用里用画布实现，测试里可以替换。 */
-export type ComposeAtlas = (width: number, height: number, parts: AtlasPart[]) => Promise<Uint8Array>
+type ComposeAtlas = (width: number, height: number, parts: AtlasPart[]) => Promise<Uint8Array>
 
 const rectOf = (value: string | undefined): TileRect | undefined => {
   const parts = value?.split(",").map((part) => Number(part.trim()))

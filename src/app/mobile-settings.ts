@@ -79,13 +79,6 @@ export function wireMobileSettings(): void {
     }
     if (mobile && nav.parentElement !== settingsDialog.querySelector("form")) settingsDialog.querySelector("form")!.append(nav)
     else if (!mobile && nav.previousSibling !== navHome) navHome.after(nav)
-    if (mobile) {
-      for (const button of nav.querySelectorAll("button")) button.removeAttribute("aria-current")
-      settingsButton.setAttribute("aria-current", "page")
-    } else {
-      settingsButton.removeAttribute("aria-current")
-      nav.querySelector(`[data-mobile-page="${document.documentElement.dataset.mobilePage ?? "home"}"]`)?.setAttribute("aria-current", "page")
-    }
   }
   nav.addEventListener("click", event => {
     if (!settingsDialog.open) return

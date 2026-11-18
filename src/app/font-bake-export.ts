@@ -114,7 +114,7 @@ export async function bakeExportedFonts(archive: SkinArchive): Promise<void> {
 }
 
 /** 皮肤里是否有导出时切过的字体图片。 */
-export function hasBakedFonts(archive: SkinArchive): boolean {
+function hasBakedFonts(archive: SkinArchive): boolean {
   return skinStylePaths(archive.names()).some((path) => /^BAKED_SHOW\s*=/m.test(archive.getText(path)))
 }
 

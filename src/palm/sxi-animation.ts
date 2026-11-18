@@ -551,7 +551,7 @@ export function animationReferences(skin: JsonObject, tablePointer: ReadonlyArra
   return { styles, combos: [...combos], ...contexts.length ? { contexts } : {} }
 }
 
-export type PalmAnimationStyle = { id: string; events: string[]; animations: string[] }
+type PalmAnimationStyle = { id: string; events: string[]; animations: string[] }
 
 /**
  * 引用了动效的样式：`ss_1.*.s_5` 的事件绑定（当前这张表的样式，横竖屏覆盖 s_info），按样式编号列出它的时机与动效。

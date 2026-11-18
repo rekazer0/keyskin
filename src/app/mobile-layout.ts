@@ -113,11 +113,7 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
     scrollToSinglePageInspectorGroup()
     // 程序滚动的落点：随后的 scroll 事件按位置反推分组时不改掉这次点选。
     pinnedScrollTop = quickInspector.scrollTop
-    current?.getAnimations().forEach((animation) => animation.cancel())
-    current?.animate(
-      [{ opacity: 0.5, transform: "translateY(var(--space-xs))" }, { opacity: 1, transform: "translateY(0)" }],
-      { duration: Number.parseFloat(getComputedStyle(quickInspector).getPropertyValue("--duration-base")), easing: getComputedStyle(quickInspector).getPropertyValue("--ease-standard").trim() },
-    )
+    playEnter(current)
   }
 }
 

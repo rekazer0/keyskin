@@ -8,6 +8,23 @@ import { setSidebarView } from "./source-files"
 import { openResources, resourceNavigationPath } from "./resource-navigation"
 import { $, canvasWrap, files, inspectorTabs, mobileExportOpen, workspaceExport, workspaceNavigation, workspaceToolsDialog, workspaceToolsContext, workspaceNavigationOpacity, sharePage, resourcePageTabs, mode, layout } from "./dom"
 
+function bindNavigationKeys(container: HTMLElement, selector: string, selectOnMove = false): void {
+  const keys = ["ArrowUp", "ArrowDown", "Home", "End"]
+  if (selectOnMove) keys.push("ArrowLeft", "ArrowRight")
+  container.addEventListener("keydown", event => {
+    const key = event.key
+    if (event.defaultPrevented || event.isComposing || !keys.includes(key)) return
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>(selector)].filter(button => !button.disabled && button.getClientRects().length)
+    const index = buttons.indexOf(event.target as HTMLButtonElement)
+    if (index < 0) return
+    const next = key === "Home" ? 0 : key === "End" ? buttons.length - 1
+      : (index + (["ArrowDown", "ArrowRight"].includes(key) ? 1 : -1) + buttons.length) % buttons.length
+    event.preventDefault()
+    if (selectOnMove) buttons[next].click()
+    buttons[next].focus()
+  })
+}
+
 /** 桌面导航复用原视图和操作，禁用状态随原入口同步。 */
 export function wireWorkspaceNavigation(): void {
   wireResourcePage()
@@ -88,6 +105,7 @@ export function wireWorkspaceNavigation(): void {
       inspectorTab(source ? "source" : page === "ai" ? "ai" : "properties")
     }
     sync()
+    if (page === "tools") tools.find(tool => !tool.disabled && tool.getClientRects().length)?.focus()
   })
   for (const button of resourcePages) {
     button.addEventListener("click", () => {
@@ -96,43 +114,15 @@ export function wireWorkspaceNavigation(): void {
       sync()
     })
   }
-  resourcePageTabs.addEventListener("keydown", event => {
-    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
-    const buttons = [...resourcePageTabs.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")]
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    if (index < 0) return
-    event.preventDefault()
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-      : (index + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + buttons.length) % buttons.length
-    buttons[next]?.click()
-    buttons[next]?.focus()
-  })
+  bindNavigationKeys(resourcePageTabs, "button", true)
   for (const button of tools) button.addEventListener("click", async () => {
     await closeDialog(workspaceToolsDialog)
     originalAction(button).click()
   })
-  workspaceToolsDialog.addEventListener("keydown", event => {
-    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
-    const buttons = tools.filter(button => !button.disabled && !button.hidden)
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    if (index < 0) return
-    event.preventDefault()
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-      : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length
-    buttons[next]?.focus()
-  })
+  bindNavigationKeys(workspaceToolsDialog, "[data-workspace-tool]")
   workspaceExport.addEventListener("click", () => mobileExportOpen.click())
   workspaceToolsDialog.addEventListener("close", sync)
-  workspaceNavigation.addEventListener("keydown", event => {
-    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
-    const buttons = [...workspaceNavigation.querySelectorAll<HTMLElement>('button.ui-icon-button:not(:disabled)')]
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    if (index < 0) return
-    event.preventDefault()
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-      : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length
-    buttons[next]?.focus()
-  })
+  bindNavigationKeys(workspaceNavigation, "button.ui-icon-button")
   const observer = new MutationObserver(sync)
   observer.observe(files, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-current", "aria-selected", "hidden"] })
   observer.observe(inspectorTabs, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] })

@@ -142,7 +142,6 @@ export const mobileDocumentStatus = $("#mobile-document-status")
 export const mobileProjectToggle = $("#mobile-project-toggle") as HTMLButtonElement
 export const mobileProjectDialog = $("#mobile-project-dialog") as HTMLDialogElement
 export const mobileFilesClose = $("#mobile-files-close") as HTMLButtonElement
-export const mobileInspectorHistory = $("#mobile-inspector-history")
 export const workspacePane = $("main > .workspace")
 export const mobileAppMore = $("#mobile-app-more") as HTMLDetailsElement
 export const mobileMoreActions = Array.from(mobileAppMore.querySelectorAll<HTMLButtonElement>("[data-mobile-action]"))

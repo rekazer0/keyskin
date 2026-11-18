@@ -63,7 +63,8 @@ export function createAtlasWorkspace(actions: {
   const body = element("div", "ui-dialog-body")
   const stage = element("div", "ui-image-editor-preview")
   const controls = element("div", "ui-image-editor-controls")
-  const wrap = element("div", "canvas-wrap")
+  const wrap = element("div", "atlas-surface ui-checker")
+  wrap.dataset.size = "lg"
   stage.append(wrap)
   body.append(stage, controls)
   const footer = element("footer", "ui-dialog-footer")
@@ -92,8 +93,6 @@ export function createAtlasWorkspace(actions: {
   const meta = element("small")
   heading.append(title, meta)
   dialogTitle.append(heading)
-  wrap.classList.add("ui-checker")
-  wrap.dataset.size = "lg"
   const button = (id: string, label: string, icon: string, action: () => void) => Object.assign(iconButton(icon, label, action), { id })
   const copy = button("atlas-copy-image", "复制图片及切片", "copy", actions.copy)
   const createDialog = atlasCreateDialog(actions.create)
