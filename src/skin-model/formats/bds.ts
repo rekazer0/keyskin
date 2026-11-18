@@ -236,9 +236,35 @@ function stylesOf(
 }
 
 /** 样式表文本；图片引用交给调用方换算成「图集名,切片号」。 */
-function stylesText(styles: SkinStyles, imageRef: (id: string) => string | undefined): string {
+/**
+ * 百度皮肤的段名映射。
+ * 百度样式段只用数字编号（`[STYLE12]`），其它格式转来的样式名（如 `bda:image:10039`）不能直接当段名，
+ * 否则写出的段读不回来。这里给每个样式分配一个合法段名，按键引用与样式表用同一张表。
+ */
+function styleNames(styles: SkinStyles): Map<string, string> {
+  const names = new Map<string, string>()
+  const used = new Set<string>()
+  let next = 1
+  for (const id of styles.keys()) {
+    // 已经是纯数字的沿用原编号，避免改变原生皮肤的样式名。
+    if (/^\d+$/.test(id) && !used.has(id)) {
+      names.set(id, id)
+      used.add(id)
+      continue
+    }
+    while (used.has(String(next))) next += 1
+    names.set(id, String(next))
+    used.add(String(next))
+    next += 1
+  }
+  return names
+}
+
+function stylesText(styles: SkinStyles, imageRef: (id: string) => string | undefined, names: ReadonlyMap<string, string>): string {
   const lines: string[] = []
   for (const [id, style] of styles) {
+    const name = names.get(id)
+    if (!name) continue
     const image = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
     const pressedImage = (style.pressed ?? []).find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
     const text = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
@@ -247,8 +273,10 @@ function stylesText(styles: SkinStyles, imageRef: (id: string) => string | undef
     const normalRef = image && imageRef(image.image)
     const pressedRef = pressedImage && imageRef(pressedImage.image)
     const textColor = text?.style.color ?? color?.value
-    if (!normalRef && !pressedRef && !textColor && !sound) continue
-    lines.push(`[STYLE${id}]`)
+    // 只有文字没有颜色的样式也要写，否则按键引用会指向不存在的段。
+    const hasText = text?.text !== undefined || text?.style.fontSize !== undefined
+    if (!normalRef && !pressedRef && !textColor && !sound && !hasText) continue
+    lines.push(`[STYLE${name}]`)
     if (normalRef) lines.push(`NM_IMG=${normalRef}`)
     if (pressedRef) lines.push(`HL_IMG=${pressedRef}`)
     if (textColor) lines.push(`NM_COLOR=${textColor}`)
@@ -270,7 +298,7 @@ function infoText(model: SkinModel): string {
 }
 
 /** 布局文件文本；`VIEW_RECT` 用构建后的矩形，其余字段从按键模型原样写回。 */
-export function layoutText(board: SkinBoard, renders: readonly KeyRender[]): string {
+export function layoutText(board: SkinBoard, renders: readonly KeyRender[], names?: ReadonlyMap<string, string>): string {
   const lines = ["[PANEL]", `SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keys.length}`, ""]
   const tipBlocks: string[] = []
   for (const key of board.keys) {
@@ -293,9 +321,11 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[]): str
       const value = actionValue(key.actions[event])
       if (value !== undefined) lines.push(`${name}=${value}`)
     }
-    if (key.style.back) lines.push(`BACK_STYLE=${key.style.back}`)
-    if (key.style.pressedBack) lines.push(`HL_BACK_STYLE=${key.style.pressedBack}`)
-    if (key.style.fore.length) lines.push(`FORE_STYLE=${key.style.fore.join(",")}`)
+    // 样式引用要经过同一张名表，否则键会指向不存在的段。
+    const styleName = (id: string): string => names?.get(id) ?? id
+    if (key.style.back) lines.push(`BACK_STYLE=${styleName(key.style.back)}`)
+    if (key.style.pressedBack) lines.push(`HL_BACK_STYLE=${styleName(key.style.pressedBack)}`)
+    if (key.style.fore.length) lines.push(`FORE_STYLE=${key.style.fore.map(styleName).join(",")}`)
     if (key.sound) lines.push(`SOUND_STYLE=${key.sound}`)
     // 按键自身的动效引用：一张表里按键 id → 动效 id。
     const motions = Object.entries(key.motions ?? {}).flatMap(([slot, id]) => (id ? [`${slot.toUpperCase()}_ANIM=${id}`] : []))
@@ -745,6 +775,8 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     }
     const text = (value: string) => new TextEncoder().encode(value)
     const files: Array<{ path: string; data: Uint8Array }> = []
+    // 样式段名对所有板共用一份，按键引用与样式表必须用同一张表。
+    const names = styleNames(model.styles)
     files.push({ path: "Info.txt", data: text(infoText(model)) })
     // 面板文件与 gen.ini 属于主键盘所在的方向目录。
     const panelPaths = {
@@ -757,9 +789,9 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     for (const each of model.boards) {
       const boardRenders = each === board ? renders : await buildBoard(model, each)
       const path = each.id.includes("/") ? each.id : `${root}/${orientation}/${each.id}`
-      files.push({ path, data: text(layoutText(each, boardRenders)) })
+      files.push({ path, data: text(layoutText(each, boardRenders, names)) })
     }
-    files.push({ path: `${root}/res/default.css`, data: text(stylesText(model.styles, imageRef)) })
+    files.push({ path: `${root}/res/default.css`, data: text(stylesText(model.styles, imageRef, names)) })
     pages.forEach((page, pageIndex) => {
       const name = atlasName(pageIndex)
       files.push({ path: `${root}/res/${name}.til`, data: text(tileDocument(page, inner)) })
