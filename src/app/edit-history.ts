@@ -6,6 +6,7 @@ import { flushSourceAutosave, scheduleSourceAutosave } from "./source-workspace"
 import { showError } from "./file-operations"
 import { recordChange, mobilePortraitQuery } from "./canvas-interaction"
 import { skinModel } from "./skin-model-state"
+import type { SkinModel } from "@/skin-model/model.ts"
 import { saveArchive, currentExportFormat } from "./archive-io"
 import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
@@ -76,6 +77,15 @@ export async function prepareDocumentReplacement(intent: "open" | "leave" = "lea
   return saved && !hasUnsavedChanges()
 }
 
+/**
+ * 提交后让模型跟上。
+ * 调用方已经算出改后的模型时直接换掉；没算出来就作废，等下一次读取重建。
+ */
+function syncModel(model: SkinModel | undefined): void {
+  if (model) skinModel.update(model)
+  else skinModel.invalidate()
+}
+
 export function updateDirty(): void {
   dirty.hidden = !appState.unsavedNew && !appState.archive?.changed.size
   const model = skinModel.model
@@ -90,30 +100,30 @@ export function updateHistoryButtons(): void {
   redoButton.disabled = appState.redoStack.length === 0
 }
 
-export function commitText(path: string, before: string, after: string, coalesce = false): void {
+export function commitText(path: string, before: string, after: string, coalesce = false, model?: SkinModel): void {
   if (!appState.archive || before === after) return
   acceptAiDraftPreview()
   appState.sourceHistoryHighlight = undefined
   appState.archive.setText(path, after)
   recordChange(appState.undoStack, { kind: "text", path, before, after }, numberInputGesture(), coalesce)
-  skinModel.invalidate()
+  syncModel(model)
   appState.redoStack = []
   scheduleSourceAutosave([path])
   updateHistoryButtons()
 }
 
-export function commitBytes(path: string, before: Uint8Array | undefined, after: Uint8Array): void {
+export function commitBytes(path: string, before: Uint8Array | undefined, after: Uint8Array, model?: SkinModel): void {
   if (!appState.archive || before && before.length === after.length && before.every((byte, index) => byte === after[index])) return
   acceptAiDraftPreview()
   appState.archive.setBytes(path, after)
   recordChange(appState.undoStack, { kind: "bytes", path, before, after }, numberInputGesture())
-  skinModel.invalidate()
+  syncModel(model)
   appState.redoStack = []
   scheduleSourceAutosave([path])
   updateHistoryButtons()
 }
 
-export function commitBatch(changes: Change[]): void {
+export function commitBatch(changes: Change[], model?: SkinModel): void {
   if (!appState.archive || !changes.length) return
   acceptAiDraftPreview()
   for (const change of changes) {
@@ -124,7 +134,7 @@ export function commitBatch(changes: Change[]): void {
     }
   }
   recordChange(appState.undoStack, { kind: "batch", changes }, numberInputGesture())
-  skinModel.invalidate()
+  syncModel(model)
   appState.redoStack = []
   scheduleSourceAutosave(changes.flatMap((change) => change.kind === "batch" ? [] : [change.path]))
   updateHistoryButtons()

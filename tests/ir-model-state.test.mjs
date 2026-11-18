@@ -90,3 +90,26 @@ test("已有模型时不重复构建", async () => {
   const second = await state.load(source)
   assert.equal(second, first, "ensure 不该让已有模型重建")
 })
+
+test("同步新模型：快照被替换，不必作废重建", async () => {
+  const state = new SkinModelState()
+  const source = archive()
+  const ready = await state.load(source)
+  assert.equal(ready.state, "ready")
+  const before = state.model
+  const edited = { ...before, meta: { ...before.meta, name: "改过的名字" } }
+  state.update(edited)
+  assert.equal(state.model, edited, "同步后应当直接拿到新模型")
+  const again = await state.load(source)
+  assert.equal(again.state, "ready")
+  assert.equal(state.model, edited, "同步过的模型不该被重建覆盖")
+})
+
+test("没有快照时同步被忽略", async () => {
+  const state = new SkinModelState()
+  const source = archive()
+  const model = (await state.load(source)).model
+  state.reset()
+  state.update(model)
+  assert.equal(state.model, undefined, "没有快照时不该凭空造出一份")
+})

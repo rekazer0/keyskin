@@ -60,6 +60,22 @@ export class SkinModelState {
     this.status = { state: "empty" }
   }
 
+  /**
+   * 用新的模型替换快照。
+   * 编辑同时改了文档与模型时走这里：不必作废重建，模型与文档保持同步。
+   * 没有快照时忽略——那说明模型本来就没建好，等下一次读取重建。
+   */
+  update(model: SkinModel): void {
+    if (!this.snapshot) return
+    this.snapshot = { ...this.snapshot, model }
+    this.status = {
+      state: "ready",
+      model,
+      format: this.snapshot.format,
+      report: validateModel(model),
+    }
+  }
+
   /** 快照是否仍然对应当前归档与修订。 */
   private fresh(archive: SkinArchive): boolean {
     return this.snapshot !== undefined
