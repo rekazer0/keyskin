@@ -2,14 +2,15 @@
 //
 // BDA 包只描述外观：样式表按数字编号索引图片、颜色与文字，形状与位置在布局文件里。
 // 因此读取分两步：先从布局骨架拿到板与按键几何，再用外观覆盖样式与图片。
-import { bdaAppearancePath, bdaPanelKeyName, bdaStyleRef, type BdaAppearance, type BdaColorStyle, type BdaImageAtom, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle } from "@/bda.ts"
-import { decodeBdaAppearance } from "@/bda-decode.ts"
+import { bdaAppearancePath, bdaConfigPath, bdaPanelKeyName, bdaStyleRef, type BdaAppearance, type BdaColorStyle, type BdaImageAtom, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle } from "@/bda.ts"
+import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "@/bda-decode.ts"
 import { colorValue } from "@/bda-encode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { actionValue, layoutBoards } from "@/skin-model/formats/bds.ts"
-import { encodeAppearance } from "@/skin-model/formats/bda-appearance.ts"
+import { encodeAnimation, encodeAppearance, encodeSoundConfig } from "@/skin-model/formats/bda-appearance.ts"
+import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig } from "@/skin-model/formats/bda-motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
 import type { SkinKey } from "@/skin-model/key.ts"
@@ -325,6 +326,25 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     }
     model.styles = parsed.styles
     model.images = images
+    // 动画与音效各有一份配置，读出来放进模型；读不到就留空，不编造默认值。
+    const animationPath = bdaConfigPath(source.archive, source.theme, source.orientation, "animation")
+    const animationBytes = animationPath ? source.archive.getBytes(animationPath) : undefined
+    if (animationBytes) {
+      try {
+        model.motions = motionsOfAnimation(decodeBdaAnimation(animationBytes))
+      } catch {
+        // 动画配置损坏时不影响皮肤本身的读取，留给调用方判断。
+      }
+    }
+    const soundPath = bdaConfigPath(source.archive, source.theme, source.orientation, "sound")
+    const soundBytes = soundPath ? source.archive.getBytes(soundPath) : undefined
+    if (soundBytes) {
+      try {
+        model.sounds = soundsOfConfig(decodeBdaSoundConfig(soundBytes))
+      } catch {
+        // 音效配置损坏同理。
+      }
+    }
     model.provenance = {
       format: "bda",
       nodes: new Map(model.boards.flatMap((board: SkinBoard) => board.keys.map((key: SkinKey) => [key.id, { path: appearancePath }] as const))),
@@ -384,7 +404,22 @@ export const bdaFormat: SkinFormat<BdaSource> = {
         return data ? [{ path, data }] : []
       }).filter((file) => file.path !== appearancePath)
       : []
+    // 动画配置单独一份文件；模型里有动效时从 IR 重建，否则保留原配置。
+    if (model.motions.size) {
+      const rebuilt = animationOfMotions(model.motions, model.meta.resolution?.width)
+      files.push({
+        path: `${theme}/skin/${orientation}/animationConfig`,
+        data: encodeAnimation(rebuilt.animation),
+      })
+    }
     files.push({ path: appearancePath, data: encodeAppearance(next) })
+    // 音效配置单独一份文件；模型里有音效才写，避免产出空配置。
+    if (model.sounds.size) {
+      files.push({
+        path: `${theme}/skin/${orientation}/soundConfig`,
+        data: encodeSoundConfig(soundConfigOf(model.sounds)),
+      })
+    }
     // 图片按资源名写成 PNG，与外观里的 resourceID 对应。
     for (const [id, image] of images) {
       if (!id.startsWith("bda:")) continue

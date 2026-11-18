@@ -2,7 +2,7 @@
 //
 // 字段号与 `bda-decode.ts` 一一对应：解码读第 N 号字段，这里就写第 N 号。
 // 数值用 varint，浮点用 fixed32（小端 IEEE754），嵌套消息与字符串用长度前缀。
-import { type BdaAppearance, type BdaBar, type BdaCand, type BdaColorPalette, type BdaColorStyle, type BdaGamePanel, type BdaGrid, type BdaHint, type BdaImageAtom, type BdaImageStyle, type BdaInputTile, type BdaKey, type BdaList, type BdaPanel, type BdaRect, type BdaResource, type BdaScaledOffset, type BdaStyleRef, type BdaTab, type BdaTextStyle, type ProtoField } from "@/bda.ts"
+import { type BdaAnimation, type BdaAnimationBinding, type BdaAppearance, type BdaBar, type BdaCand, type BdaColorPalette, type BdaColorStyle, type BdaEmitterAnimation, type BdaGamePanel, type BdaGrid, type BdaGroupAnimation, type BdaHint, type BdaImageAtom, type BdaImageStyle, type BdaInputTile, type BdaKey, type BdaList, type BdaNumberRange, type BdaPanel, type BdaRect, type BdaResource, type BdaResourceAnimation, type BdaScaledOffset, type BdaSoundConfig, type BdaStyleRef, type BdaTab, type BdaTextStyle, type BdaTransformAnimation, type BdaVectorRange, type ProtoField } from "@/bda.ts"
 import { encodeVarint, encodedField, join } from "@/bda-encode.ts"
 
 /* —— 基础编码 —— */
@@ -307,5 +307,171 @@ export function encodeAppearance(appearance: BdaAppearance): Uint8Array {
     ...varintField(6, appearance.designWidth),
     ...messageField(7, encodeGamePanel(appearance.gamePanel)),
     ...messageField(8, encodeBar(appearance.dragBar)),
+  ])
+}
+
+/** 音效配置：1 号是按键音，3 号是 iOS 按键音，键名到资源的映射。 */
+export function encodeSoundConfig(config: BdaSoundConfig): Uint8Array {
+  const resourceMap = (number: number, values: ReadonlyMap<string, BdaResource>): ProtoField[] =>
+    [...values].flatMap(([key, resource]) => messageField(number, [
+      ...stringField(1, key),
+      ...messageField(2, encodeResource(resource)),
+    ]))
+  return encodeFields([
+    ...resourceMap(1, config.keySounds),
+    ...resourceMap(3, config.iosKeySounds),
+  ])
+}
+
+/* —— 动画配置 —— */
+
+/** 区间写成 `{ location, delta }`：解码时用 location 与 location + delta 还原。 */
+function encodeRange(number: number, value: BdaNumberRange | undefined): ProtoField[] {
+  if (!value) return []
+  return messageField(number, [
+    ...fixed32Field(1, value[0]),
+    ...fixed32Field(2, value[1] - value[0]),
+  ])
+}
+
+function encodeVectorRange(number: number, value: BdaVectorRange | undefined): ProtoField[] {
+  if (!value) return []
+  return messageField(number, [
+    ...encodeRange(1, value[0]),
+    ...encodeRange(2, value[1]),
+  ])
+}
+
+/** 整数对（轴向或像素中心）。 */
+function encodeIntPair(number: number, value: [number, number] | undefined): ProtoField[] {
+  if (!value) return []
+  return messageField(number, [...varintField(1, value[0]), ...varintField(2, value[1])])
+}
+
+function encodeBinding(item: BdaAnimationBinding): ProtoField[] {
+  const simple = ["group", "alpha", "scale", "shift", "rotate"] as const
+  const complex = ["frame", "image", "emitter", "lottie", "video"] as const
+  if (item.kind === "image") {
+    // 帧类绑定写在第二个子消息里，带位置与是否随交互移除。
+    return [...varintField(1, item.location ?? 0), ...varintField(2, complex.indexOf(item.kind)), ...varintField(3, 0), ...stringField(4, item.key), ...varintField(5, item.event), ...varintField(6, item.removeOnInteraction ? 1 : 0)]
+  }
+  const isSimple = (simple as readonly string[]).includes(item.kind)
+  return [
+    ...varintField(1, item.scope),
+    ...(isSimple ? varintField(2, simple.indexOf(item.kind as typeof simple[number])) : varintField(3, complex.indexOf(item.kind as typeof complex[number]))),
+    ...stringField(4, item.key),
+    ...varintField(5, item.event),
+    ...stringField(6, item.condition),
+  ]
+}
+
+function encodeTransform(effect: BdaTransformAnimation): ProtoField[] {
+  return [
+    ...varintField(1, effect.repeatCount),
+    ...varintField(2, effect.repeatMode),
+    ...varintField(3, effect.delay),
+    ...varintField(4, effect.removeOnFinish ? 1 : 0),
+    ...encodeVectorRange(5, effect.from),
+    ...encodeVectorRange(6, effect.to),
+    ...varintField(7, effect.duration),
+    ...varintField(8, effect.interpolation),
+    ...encodeIntPair(9, effect.pivotPx),
+    ...encodeIntPair(10, effect.pivot),
+    ...(effect.interpolationXY
+      ? messageField(11, [...varintField(1, effect.interpolationXY[0]), ...varintField(2, effect.interpolationXY[1])])
+      : []),
+  ]
+}
+
+function encodeGroup(effect: BdaGroupAnimation): ProtoField[] {
+  const simple = ["group", "alpha", "scale", "shift", "rotate"] as const
+  return [
+    ...varintField(1, effect.buildMode),
+    ...varintField(2, effect.repeatCount),
+    ...varintField(3, effect.repeatMode),
+    ...varintField(4, effect.removeOnFinish ? 1 : 0),
+    ...varintField(5, effect.delay),
+    ...effect.items.flatMap((item) => messageField(6, [
+      ...varintField(1, Math.max(0, (simple as readonly string[]).indexOf(item.kind))),
+      ...stringField(2, item.key),
+    ])),
+  ]
+}
+
+function encodeEmitter(effect: BdaEmitterAnimation): ProtoField[] {
+  return [
+    ...varintField(3, effect.repeatCount),
+    ...varintField(4, effect.repeatMode),
+    ...varintField(5, effect.removeOnFinish ? 1 : 0),
+    ...fixed32Field(6, effect.duration),
+    ...varintField(7, effect.birthRate),
+    ...varintField(8, effect.totalNumber),
+    ...varintField(9, effect.finishAfterPractices),
+    ...varintField(10, effect.keepParticlesOnRemove),
+    ...varintField(11, effect.mirrorUp),
+    ...messageField(12, [
+      ...fixed32Field(1, effect.emitRegion[1]),
+      ...fixed32Field(2, effect.emitRegion[0]),
+      ...fixed32Field(3, effect.emitRegion[3]),
+      ...fixed32Field(4, effect.emitRegion[2]),
+    ]),
+    ...effect.resources.flatMap((resource) => messageField(13, encodeResource(resource))),
+    ...encodeRange(14, effect.life),
+    ...encodeRange(15, effect.rotation),
+    ...encodeRange(16, effect.spin),
+    ...encodeRange(17, effect.scale),
+    ...encodeRange(18, effect.scaleSpeed),
+    ...encodeRange(19, effect.alpha),
+    ...encodeRange(20, effect.alphaSpeed),
+    ...encodeRange(21, effect.velocity),
+    ...encodeRange(22, effect.velocityDirection),
+    ...encodeRange(23, effect.acceleration),
+    ...encodeRange(24, effect.accelerationDirection),
+    ...effect.paths.flatMap((path) => messageField(25, path.elements.flatMap((element) => messageField(1, [
+      ...varintField(1, element.type),
+      ...encodeIntPair(2, element.point1 ? [element.point1[0], element.point1[1]] : undefined),
+      ...encodeIntPair(3, element.point2 ? [element.point2[0], element.point2[1]] : undefined),
+      ...encodeIntPair(4, element.point3 ? [element.point3[0], element.point3[1]] : undefined),
+    ])))),
+    ...varintField(26, effect.emitterType),
+  ]
+}
+
+function encodeResourceEffect(effect: BdaResourceAnimation): ProtoField[] {
+  return [
+    ...varintField(1, effect.repeatCount),
+    ...varintField(2, effect.removeOnFinish ? 1 : 0),
+    ...messageField(3, encodeResource(effect.resource)),
+    ...varintField(4, effect.startRepeatFrame),
+    ...messageField(5, encodeResource(effect.placeholder)),
+  ]
+}
+
+/** 动画配置：1 号是目标绑定，3–13 号是各类效果，12 号是设计宽度。 */
+export function encodeAnimation(animation: BdaAnimation): Uint8Array {
+  const effectFields: ProtoField[] = []
+  for (const [id, effect] of animation.effects) {
+    const key = effect.key || id.split(":").slice(1).join(":")
+    const push = (number: number, fields: ProtoField[]) => effectFields.push(...messageField(number, [...stringField(1, key), ...messageField(2, fields)]))
+    if (effect.kind === "group") push(3, encodeGroup(effect))
+    else if (effect.kind === "alpha" || effect.kind === "scale" || effect.kind === "shift" || effect.kind === "rotate") {
+      push({ alpha: 4, scale: 5, shift: 6, rotate: 7 }[effect.kind], encodeTransform(effect))
+    }
+    else if (effect.kind === "frame") push(8, encodeResourceEffect(effect))
+    else if (effect.kind === "emitter") push(10, encodeEmitter(effect))
+    else if (effect.kind === "lottie") push(11, encodeResourceEffect(effect))
+    else if (effect.kind === "video") push(13, encodeResourceEffect(effect))
+  }
+  const targets: ProtoField[] = []
+  for (const [target, bindings] of animation.targetBindings) {
+    targets.push(...messageField(1, [
+      ...stringField(1, target),
+      ...messageField(2, bindings.flatMap((item) => messageField(1, encodeBinding(item)))),
+    ]))
+  }
+  return encodeFields([
+    ...targets,
+    ...effectFields,
+    ...varintField(12, animation.designWidth),
   ])
 }

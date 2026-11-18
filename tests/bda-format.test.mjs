@@ -7,6 +7,7 @@ import { decodeBdaAppearance } from "../src/bda-decode.ts"
 import { bdaFormat, bdaSource } from "../src/skin-model/formats/bda.ts"
 import { encodeAppearance } from "../src/skin-model/formats/bda-appearance.ts"
 import { detectFormat, openSkin } from "../src/skin-model/formats/index.ts"
+import { bdaAnimatedSkinBytes } from "./helpers/bda-animation-fixture.mjs"
 
 function archives() {
   const bda = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/default-template.bda", import.meta.url))), "bda")
@@ -96,4 +97,28 @@ test("没有原包时也能重建整套外观与图片", async () => {
   assert.equal(again.boards.length, model.boards.length)
   assert.equal(again.styles.size, model.styles.size)
   assert.equal(again.images.size, model.images.size)
+})
+
+test("带动画配置的包能读出动效", async () => {
+  const animated = SkinArchive.open(new Uint8Array(bdaAnimatedSkinBytes()), "bda")
+  const base = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/bda-base.bds", import.meta.url))))
+  const model = await bdaFormat.read(bdaSource(animated, base))
+  assert.ok(model.motions.size > 0, "动画配置没读成动效")
+  const kinds = new Set([...model.motions.values()].map((motion) => motion.root.kind))
+  assert.ok(kinds.has("track"), "位移类动效应读成轨道")
+  const track = [...model.motions.values()].find((motion) => motion.root.kind === "track")
+  assert.ok(track.timeline.duration >= 0)
+  assert.equal(track.root.kind, "track")
+})
+
+test("动效写回后能再读出来，类型不变", async () => {
+  const animated = SkinArchive.open(new Uint8Array(bdaAnimatedSkinBytes()), "bda")
+  const base = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/bda-base.bds", import.meta.url))))
+  const source = bdaSource(animated, base)
+  const model = await bdaFormat.read(source)
+  const again = await bdaFormat.read(bdaFormat.write(model, source))
+  assert.equal(again.motions.size, model.motions.size)
+  for (const [id, motion] of model.motions) {
+    assert.equal(again.motions.get(id)?.root.kind, motion.root.kind, `${id} 的动效类型变了`)
+  }
 })
