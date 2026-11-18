@@ -41,6 +41,8 @@ import { geometryPreview } from "./geometry-preview"
 import { skinModel } from "./skin-model-state"
 import { boardTraits } from "./board-traits"
 import { validateModel } from "@/skin-model/validate.ts"
+import { applyFieldChange } from "@/skin-model/edit-binding.ts"
+import type { SkinModel } from "@/skin-model/model.ts"
 import { element } from "../dom-element"
 import { releaseOnRemove } from "../dom-lifecycle"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
@@ -726,6 +728,33 @@ export function updateToolbar(field: HTMLInputElement): void {
   updateDirty()
 }
 
+/** 文档字段名到模型字段名的对照：只有这些字段能从文本改动推出模型改动。 */
+const MODEL_FIELDS: Readonly<Record<string, string>> = {
+  CENTER: "action.press",
+  HOLD: "action.long-press",
+  UP: "action.swipe-up",
+  DOWN: "action.swipe-down",
+  LEFT: "action.swipe-left",
+  RIGHT: "action.swipe-right",
+  BACK_STYLE: "style.back",
+  HL_BACK_STYLE: "style.pressedBack",
+}
+
+/**
+ * 字段改动后的模型。
+ * 只处理能一一对应的字段；其余（文字、内边距、状态样式）返回 undefined，让提交入口作废重建。
+ */
+function modelAfterFieldEdit(sections: readonly string[], name: string, value: string): SkinModel | undefined {
+  const field = MODEL_FIELDS[name]
+  const current = skinModel.model
+  if (!current || field === undefined) return
+  let next = current
+  for (const section of sections) {
+    next = applyFieldChange(next, { boardId: appState.layoutPath, keyId: section, field, value })
+  }
+  return next === current ? undefined : next
+}
+
 export function updateSelectedKey(field: HTMLInputElement): void {
   const name = field.dataset.keyField ?? ""
   if (appState.archive?.format === "bda" || appState.archive?.format === "ssf") return
@@ -782,7 +811,7 @@ export function updateSelectedKey(field: HTMLInputElement): void {
     }
   }
   const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
+  commitText(appState.layoutPath, before, text, false, modelAfterFieldEdit(appState.selectedKeySections, name, field.value))
   if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
   preview.setDocument(appState.layoutDocument)
   populateKeyInspector()
