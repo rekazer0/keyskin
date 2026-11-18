@@ -198,9 +198,11 @@ function capabilities(): ReadonlyMap<Capability, CapabilityLevel> {
     ["panel.hint", "none"],
     ["panel.list", "none"],
     ["panel.toolbar", "partial"],
-    ["motion.track", "partial"],
-    ["motion.sequence", "partial"],
-    ["motion.binding", "partial"],
+    // 搜狗的动画结构在 `skin.json` 的 `ss_2` 里，写出还没实现这一层；
+    // 标成 none 是为了让导出时的损失报告如实列出，而不是静默丢掉。
+    ["motion.track", "none"],
+    ["motion.sequence", "none"],
+    ["motion.binding", "none"],
     ["sound", "full"],
     ["font", "partial"],
   ])

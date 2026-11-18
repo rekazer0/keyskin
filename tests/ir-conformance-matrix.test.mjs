@@ -95,3 +95,11 @@ test("搜狗皮肤自转不丢自己的样式，骨架样式不写进皮肤包",
     assert.equal(report.ok, true, `${report.to}：${report.problems.join("；")}`)
   }
 })
+
+test("搜狗格式的动效能力标为不支持", async () => {
+  const { ssfFormat } = await import("../src/skin-model/formats/ssf.ts")
+  // 写出还没实现 `ss_2` 这一层，能力表必须如实标成 none，导出时才不会静默丢掉动效。
+  for (const capability of ["motion.track", "motion.sequence", "motion.binding"]) {
+    assert.equal(ssfFormat.capabilities.get(capability), "none", `${capability} 没有如实标注`)
+  }
+})
