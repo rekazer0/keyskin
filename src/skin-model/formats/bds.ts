@@ -26,7 +26,8 @@ import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 export type BdsSource = {
   archive: SkinArchive
   layout: string
-  styles: string
+  /** 样式文件；官方基础布局没有样式，此时为空。 */
+  styles?: string
   animation?: string
   theme: Appearance
   orientation: Orientation
@@ -42,12 +43,24 @@ export function bdsSource(
   const orientation = options.orientation ?? "port"
   const kind = options.kind ?? "main"
   const prefix = `${theme}/skin/${orientation}/`
-  const layout = options.layout ?? archive.names().find((name) => name.startsWith(prefix) && name.endsWith("/py_26.ini"))
+  const candidates = archive.names().filter((name) => name.startsWith(prefix) && name.endsWith(".ini") && !/gen\.ini$/i.test(name))
+  const layout = options.layout
+    ?? candidates.find((name) => /\/py_26\.ini$/.test(name))
+    ?? candidates.find((name) => /_26\.ini$/.test(name))
+    ?? candidates[0]
   if (!layout) return
+  // 基础布局只提供几何，没有样式表；样式可以缺失，读取时按空样式处理。
   const styles = archive.names().find((name) => name.startsWith(`${theme}/`) && name.endsWith("/res/default.css"))
-  if (!styles) return
   const animation = archive.names().find((name) => name.startsWith(`${theme}/`) && name.endsWith("/res/anim.ini"))
-  return { archive, layout, styles, theme, orientation, kind, ...(animation ? { animation } : {}) }
+  return {
+    archive,
+    layout,
+    ...(styles ? { styles } : {}),
+    theme,
+    orientation,
+    kind,
+    ...(animation ? { animation } : {}),
+  }
 }
 
 /* —— 动作 —— */
@@ -255,7 +268,7 @@ function infoText(model: SkinModel): string {
 }
 
 /** 布局文件文本；`VIEW_RECT` 用构建后的矩形，其余字段从按键模型原样写回。 */
-function layoutText(board: SkinBoard, renders: readonly KeyRender[]): string {
+export function layoutText(board: SkinBoard, renders: readonly KeyRender[]): string {
   const lines = ["[PANEL]", `SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keys.length}`, ""]
   for (const key of board.keys) {
     const rect: LayoutBox = renders.find((render) => render.key.id === key.id)?.rect ?? key.rect
@@ -637,7 +650,8 @@ export const bdsFormat: SkinFormat<BdsSource> = {
   derive: { tolerance: 1 },
   async read(source, options?: ImportOptions) {
     const layout = IniDocument.parse(source.archive.getText(source.layout))
-    const styleDocument = IniDocument.parse(source.archive.getText(source.styles))
+    // 没有样式表的布局（官方基础布局）按空样式读，样式由后续的外观覆盖。
+    const styleDocument = source.styles ? IniDocument.parse(source.archive.getText(source.styles)) : IniDocument.parse("")
     const size = parsePanelSize(layout)
     const model = emptyModel({
       ...infoOf(source.archive),

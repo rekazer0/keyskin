@@ -9,7 +9,8 @@ import { SsfPackage, parseSsfImage, ssfColor, type SsfImageRef, type SsfTheme } 
 import { ssfSkeleton } from "@/ssf/ssf-convert.ts"
 import type { SkinArchive } from "@/skin.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
-import { bdsFormat, bdsSource } from "@/skin-model/formats/bds.ts"
+import { bdsFormat, bdsSource, layoutText } from "@/skin-model/formats/bds.ts"
+import { buildBoard } from "@/skin-model/build.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
@@ -259,7 +260,7 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     model.images = images
     return model
   },
-  write(model, source) {
+  async write(model, source) {
     const resolution = String(model.meta.resolution?.width || 1080)
     const text = (value: string) => new TextEncoder().encode(value)
     const files = new Map<string, Uint8Array>()
@@ -290,6 +291,11 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     files.set(`${resolution}/phoneSkin.ini`, text(skinLines.join("\n")))
     files.set(`${resolution}/keys.ini`, text(keyLines.join("\n")))
     for (const [id, image] of model.images) files.set(`${resolution}/${name(id)}`, encodePng(image))
+    // 搜狗包必须自带键盘布局：输入法按布局画键，缺了就是一片空白。
+    for (const board of model.boards) {
+      const renders = await buildBoard(model, board)
+      files.set(`${resolution}/${boardName(board.id)}.ini`, text(layoutText(board, renders)))
+    }
     // 搜狗包里的旧散图不再保留：要么已被上面重写，要么属于骨架而不属于这套皮肤。
     const kept = [...files].map(([path, data]) => ({ path, data }))
     return {

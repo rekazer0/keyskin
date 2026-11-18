@@ -40,7 +40,7 @@ test("搜狗按键动作来自骨架的 CENTER", async () => {
 test("搜狗写回产出的包可重新读出按键与图片", async () => {
   const { source, model: skin } = await model()
   assert.ok(skin.images.size > 0, "导入时没有切出图片资源")
-  const back = ssfFormat.write(skin, source)
+  const back = await ssfFormat.write(skin, source)
   assert.ok(back.files.has("phoneTheme.ini"))
   const pngs = [...back.files.keys()].filter((name) => name.endsWith(".png"))
   assert.ok(pngs.length > 0, "重建没有写出图片")

@@ -39,8 +39,16 @@ export type ConversionResult = {
 }
 
 function bytesOf(source: NativeSkin): Uint8Array {
-  if ("archive" in source) return source.archive.toBytes(ARCHIVE_OF.bds)
+  // BDA、SSF、SXI 各有自己的容器，不能按百度格式重新打包；直接按现有文件压缩。
+  if ("archive" in source) return zipFiles([...source.archive.names()].flatMap((path) => {
+    const data = source.archive.getBytes(path)
+    return data ? [[path, data] as const] : []
+  }))
   return zipSync(Object.fromEntries(source.files), { level: 0 })
+}
+
+function zipFiles(files: ReadonlyArray<readonly [string, Uint8Array]>): Uint8Array {
+  return zipSync(Object.fromEntries(files), { level: 0 })
 }
 
 /**
