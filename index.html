@@ -15,8 +15,8 @@
     <link rel="preconnect" href="https://api.github.com" crossorigin />
   </head>
   <body class="app-window">
-    <nav id="workspace-navigation" class="ui-workspace-navigation" aria-label="桌面工作区导航" data-tauri-drag-region>
-      <div class="ui-workspace-navigation-brand" data-tauri-drag-region><img src="./src-tauri/icons/128x128.png" alt="键设 KeySkin" draggable="false"></div>
+    <nav id="workspace-navigation" class="ui-workspace-navigation" aria-label="桌面工作区导航" data-tauri-drag-region="deep">
+      <div class="ui-workspace-navigation-brand"><img src="./src-tauri/icons/128x128.png" alt="键设 KeySkin" draggable="false"></div>
       <button class="ui-icon-button" type="button" data-workspace-page="files" aria-label="文件" title="文件" aria-current="page"><span data-icon="folder-open" aria-hidden="true"></span></button>
       <div class="ui-workspace-navigation-pages">
         <button class="ui-icon-button" type="button" data-workspace-page="overview" aria-label="概览" title="概览"><span data-icon="panels-top-left" aria-hidden="true"></span></button>
@@ -39,12 +39,12 @@
         <button class="ui-list-item" type="button" data-workspace-tool="adapt-ios26"><span data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26 透明背景</span></button>
       </div>
     </dialog>
-    <header class="titlebar" data-tauri-drag-region>
+    <header class="titlebar" data-tauri-drag-region="deep">
       <div class="titlebar-left">
         <button id="mobile-project-toggle" class="ui-icon-button" type="button" aria-label="打开项目侧栏" aria-controls="mobile-project-dialog" aria-expanded="false"><span data-icon="panel-left" aria-hidden="true"></span></button>
         <details class="toolbar-more pen-file-menu">
           <summary data-variant="filled" class="ui-icon-button" title="菜单" aria-label="菜单"><span class="system-symbol desktop-menu-icon" data-icon="menu" aria-hidden="true"></span><span class="mobile-menu-icon" data-icon="folder-open" aria-hidden="true"></span></summary>
-          <div class="ui-menu" role="menu" aria-label="菜单">
+          <div class="ui-menu" role="menu" aria-label="菜单" data-tauri-drag-region="false">
             <div class="ui-pane-header mobile-file-header"><h2>键设</h2><button class="ui-icon-button" type="button" role="menuitem" aria-label="关闭侧边栏"><span data-icon="x" aria-hidden="true"></span></button></div>
             <button id="mobile-project-files" class="ui-list-item mobile-project-files" type="button" role="menuitem"><span data-icon="folder" aria-hidden="true"></span><span>项目文件</span></button>
             <button id="new" class="ui-list-item" type="button" role="menuitem" aria-label="新建皮肤"><span class="system-symbol" data-icon="plus" aria-hidden="true"></span><span>新建皮肤…</span></button>
@@ -68,7 +68,7 @@
         <div id="pinned-toolbar" class="ui-pinned-toolbar" role="group" aria-label="常驻工具栏" title="从菜单拖入图标；长按 2 秒或按 F2 编辑，Esc 退出"></div>
       </div>
       <div class="titlebar-center">
-        <div class="document-title" data-tauri-drag-region>
+        <div class="document-title">
           <span class="icon system-symbol document-icon" data-icon="keyboard" aria-hidden="true"></span>
           <strong id="document-name" role="button" tabindex="0" title="点击修改皮肤名称">未打开皮肤</strong>
           <span id="dirty" class="ui-badge" data-variant="pill" hidden>未保存</span>
@@ -103,7 +103,7 @@
         </button>
         <details id="mobile-app-more" class="toolbar-more mobile-app-more">
           <summary class="ui-icon-button" aria-label="更多" title="更多"><span data-icon="ellipsis" aria-hidden="true"></span></summary>
-          <div class="ui-menu" role="menu" aria-label="更多">
+          <div class="ui-menu" role="menu" aria-label="更多" data-tauri-drag-region="false">
             <div class="ui-pane-header"><h2>更多操作</h2><button class="ui-icon-button" type="button" role="menuitem" data-mobile-menu-close aria-label="关闭更多"><span data-icon="x" aria-hidden="true"></span></button></div>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="layout-overview-toggle"><span data-icon="grid-2x2" aria-hidden="true"></span><span>全局预览</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="toggle-guides" aria-pressed="false"><span data-icon="crosshair" aria-hidden="true"></span><span>辅助线与安全区</span><input class="ui-switch" type="checkbox" role="switch" tabindex="-1" aria-label="辅助线与安全区" aria-hidden="true"></button>

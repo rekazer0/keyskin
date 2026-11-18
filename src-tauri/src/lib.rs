@@ -957,6 +957,33 @@ fn acrylic_alpha(opacity: u8) -> u8 {
     ((u16::from(opacity.min(100)) * 255 + 50) / 100) as u8
 }
 
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn move_macos_window(window: tauri::WebviewWindow, dx: i32, dy: i32) -> Result<(), String> {
+    use objc2_app_kit::{NSWindow, NSWindowStyleMask};
+
+    if window.label() != "main" {
+        return Ok(());
+    }
+    let target = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let Ok(pointer) = target.ns_window() else {
+                return;
+            };
+            // SAFETY: Tauri owns this NSWindow, accessed on the AppKit main thread.
+            let window = unsafe { &*pointer.cast::<NSWindow>() };
+            if !window.isMovable() || window.styleMask().contains(NSWindowStyleMask::FullScreen) {
+                return;
+            }
+            let mut origin = window.frame().origin;
+            origin.x += f64::from(dx);
+            origin.y -= f64::from(dy); // AppKit's screen coordinates increase upwards.
+            window.setFrameOrigin(origin);
+        })
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 async fn set_window_material(
     window: tauri::WebviewWindow,
@@ -1992,6 +2019,7 @@ pub fn run() {
         .manage(OpenedFiles(Mutex::new(Vec::new())));
     #[cfg(target_os = "macos")]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        move_macos_window,
         read_file,
         skin_file_size,
         skin_file_stamp,

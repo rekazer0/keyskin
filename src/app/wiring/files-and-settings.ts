@@ -21,6 +21,7 @@ import { refreshUpdateStatus, settingsController, showSettingsPage, nativeSettin
 import { clientLogZip, clientLog } from "../../client-log.ts"
 import { applyAiDesignDraft, discardAiDesignDraft, toggleAiDraftComparison } from "../ai-panel"
 import { activateSourceWorkspace, chooseAndroidSourceDirectory, applySourceDirectory } from "../source-workspace"
+import { invoke } from "@tauri-apps/api/core"
 import { open } from "@tauri-apps/plugin-dialog"
 import { canvasDeviceValue, type CanvasBackground } from "../../canvas-background.ts"
 import { updateDevicePreview, refreshPreview } from "../preview-render"
@@ -392,19 +393,44 @@ export function wireFilesAndSettings(): void {
   windowMaterialOpacity.addEventListener("change", () => {
     void applyWindowMaterialWithRetry().catch((error) => handleWindowMaterialError(error, "切换窗口材质"))
   })
+  const isWindowDragTarget = (target: EventTarget | null): target is Element =>
+    target instanceof Element && Boolean(target.closest("[data-tauri-drag-region='deep']")) &&
+    !target.closest("[data-tauri-drag-region='false'], button, input, select, textarea, a, label, summary, [contenteditable]:not([contenteditable='false']), [tabindex]:not([tabindex='-1']), [role='button'], [role='link'], [role='menuitem'], [role='tab'], [role='checkbox'], [role='radio'], [role='switch'], [role='option']")
+  const isMacWindow = () => document.documentElement.classList.contains("macos") && isTauri()
+  document.addEventListener("pointerdown", (event) => {
+    if (!isMacWindow() || event.button !== 0 || event.pointerType !== "mouse" || !isWindowDragTarget(event.target)) return
+    // WKWebView can deliver IPC after AppKit's mouse-down has expired. Track
+    // the captured pointer instead of asking AppKit to replay that event.
+    const target = event.target
+    const { pointerId } = event
+    let { screenX, screenY } = event
+    const drag = new AbortController()
+    const move = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return
+      const dx = event.screenX - screenX
+      const dy = event.screenY - screenY
+      screenX = event.screenX
+      screenY = event.screenY
+      if (dx || dy) void invoke("move_macos_window", { dx, dy }).catch(error => {
+        drag.abort()
+        showError(error, "拖动窗口")
+      })
+    }
+    target.setPointerCapture(pointerId)
+    document.addEventListener("pointermove", move, { capture: true, signal: drag.signal })
+    document.addEventListener("pointerup", move, { capture: true, signal: drag.signal })
+    document.addEventListener("lostpointercapture", (event) => {
+      if (event.pointerId === pointerId) drag.abort()
+    }, { capture: true, signal: drag.signal })
+  })
   document.addEventListener("mousedown", (event) => {
-    if (
-      !document.documentElement.classList.contains("windows") ||
-      !windowMaterial.checked ||
-      event.button !== 0 ||
-      event.detail !== 1 ||
-      !(event.target instanceof Element) ||
-      !event.target.closest("[data-tauri-drag-region]") ||
-      event.target.closest("button, input, select, textarea, a, summary, .ui-pinned-toolbar, [contenteditable='true'], [role='button'], [role='link']")
-    ) return
+    if (event.button !== 0 || event.detail !== 1 || !isWindowDragTarget(event.target)) return
+    const windowsMaterial = document.documentElement.classList.contains("windows") &&
+      windowMaterial.checked && !event.target.closest(".ui-pinned-toolbar")
+    if (!isMacWindow() && !windowsMaterial) return
     event.preventDefault()
     event.stopImmediatePropagation()
-    void startWindowsWindowDrag()
+    if (windowsMaterial) void startWindowsWindowDrag()
   }, true)
   window.addEventListener("mouseup", () => {
     if (appState.windowDragPointerDown) void restoreWindowMaterialAfterDrag()
