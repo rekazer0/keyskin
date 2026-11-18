@@ -9,7 +9,6 @@ import { SkinArchive } from "../skin.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { exportViaIr, isCrossFormatExport } from "./ir-export"
 import { planImport, prepareImport } from "./import-plan"
-import { skinModel } from "./skin-model-state"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
@@ -115,7 +114,6 @@ export async function loadArchive(
   appState.sourceWorkspacePendingArchive = undefined
   appState.assetURL = releaseImagePreviewURL(appState.assetURL)
   clearImageSlicePicker()
-  skinModel.reset()
   appState.archive = nextArchive
   appState.resourceStyleType = "all"
   appState.resourceUsageFilter = "all"
