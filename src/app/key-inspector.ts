@@ -40,6 +40,7 @@ import { syncSkinConfigControl } from "./config-value-control"
 import { geometryPreview } from "./geometry-preview"
 import { skinModel } from "./skin-model-state"
 import { boardTraits } from "./board-traits"
+import { validateModel } from "@/skin-model/validate.ts"
 import { element } from "../dom-element"
 import { releaseOnRemove } from "../dom-lifecycle"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
@@ -240,6 +241,23 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
 }
 
 
+
+/** 每个按键的自检问题，按模型缓存；模型换了一份就重算。 */
+const issueCache = new WeakMap<object, Map<string, string>>()
+function keyIssue(keyId: string | undefined): string | undefined {
+  const model = skinModel.model
+  if (!model || keyId === undefined) return
+  let map = issueCache.get(model)
+  if (!map) {
+    map = new Map()
+    for (const issue of validateModel(model).issues) {
+      if (!map.has(issue.subject)) map.set(issue.subject, issue.message)
+    }
+    issueCache.set(model, map)
+  }
+  return map.get(keyId)
+}
+
 /** 当前板的可编辑能力；模型没建好时按格式保守判断。 */
 function currentTraits() {
   return boardTraits(appState.layoutPath, undefined, appState.archive?.format)
@@ -320,8 +338,9 @@ export function populateKeyInspector(): void {
   selectedKeyPreview.replaceChildren(createIcon(hasSelection ? bdaSelected ? "component" : sections.length > 1 ? "layers" : "key-round"
     : animationView ? appState.animationDesignMode === "particle" ? "wand-sparkles" : "film" : "layout-panel-top", 16))
   selectedKeyPreview.hidden = false
+  const issue = hasSelection && sections.length === 1 ? keyIssue(sections[0]) : undefined
   selectedKeyContext.textContent = hasSelection
-    ? `${appState.selectedPath.split("/").pop()} · ${sections.length > 1 ? "keys.*" : sections[0]}`
+    ? `${appState.selectedPath.split("/").pop()} · ${sections.length > 1 ? "keys.*" : sections[0]}${issue ? ` · ${issue}` : ""}`
     : appState.selectedPath || "选择文件以查看属性"
   selectedKeyContext.title = appState.selectedPath
   const nativeTitle = ssfSelected
