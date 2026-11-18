@@ -238,14 +238,13 @@ try {
       const boards = format === "bdi"
         ? SkinArchive.open(zipSync(Object.fromEntries([...files].map(([path, data]) => [`skin/${path}`, data]))), "bdi")
         : SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
-      // Android resolves direction-local styles; prepare the same platform input before its export-only baking.
+      // Android resolves direction-local styles; prepare the same platform input before packaging.
       if (format === "bds") for (const theme of pkg.themes.keys()) for (const direction of ["port", "land"]) {
         const path = `${theme}/skin/${direction}/res/default.css`
         if (!boards.isText(path)) boards.setBytes(path, boards.getBytes(`${theme}/skin/res/default.css`))
       }
       await (await import('/src/app/font-bake-export.ts')).bakeExportedFonts(boards)
       if (format === "bds") {
-        (await import('/src/bds-backgrounds.ts')).bakeBdsBackgrounds(boards)
         const { completeBdsPackage } = await import('/src/bds-package.ts')
         const { composeAtlasPng } = await import('/src/app/file-operations.ts')
         await completeBdsPackage(boards, composeAtlasPng)

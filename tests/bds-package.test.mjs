@@ -3,9 +3,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { IniDocument } from '../src/ini.ts'
-import { decodePng, encodePng } from '../src/ssf/ssf-png.ts'
+import { encodePng } from '../src/ssf/ssf-png.ts'
 import { globalFirst, MAX_IMAGE_FILES, symbolLayoutFrom, withInheritedSections, withMoreDefaults } from '../src/bds-package.ts'
-import { bakeBdsBytes, completeBdsBytes } from './helpers/bds-export.mjs'
+import { completeBdsBytes } from './helpers/bds-export.mjs'
 
 const py9 = [
   '[PANEL]', 'SIZE=1080,642', 'KEY_NUM=4', 'BACK_STYLE=1',
@@ -79,29 +79,6 @@ test('整包修复：CRLF Info、补 symbol.ini，图片超过上限时合成图
   const til = IniDocument.parse(text(`light/res/${image}.til`))
   const [x] = til.get(`IMG${tile}`, 'SOURCE_RECT').split(',').map(Number)
   assert.equal(til.get(`IMG${tile}`, 'INNER_RECT'), `${x + 1},${til.get(`IMG${tile}`, 'SOURCE_RECT').split(',')[1]},2,2`)
-})
-
-test('BDS 按键背景按布局尺寸烘焙 INNER_RECT，避免百度亮色路径整图拉伸', () => {
-  const data = new Uint8Array(4 * 4 * 4)
-  for (let i = 0; i < data.length; i += 4) data.set([i / 4, 80, 120, 255], i)
-  const files = {
-    'Info.txt': strToU8('Name=t\nSupportPlatform=A\n'),
-    'light/port/gen.ini': strToU8('[PANEL]\nSIZE=8,6\n'),
-    'light/port/py_9.ini': strToU8('[KEY1]\nBACK_STYLE=1\nVIEW_RECT=0,0,8,6\n'),
-    'light/res/default.css': strToU8('[GLOBAL]\nSTYLE_NUM=2\n[STYLE1]\nNM_IMG=key,1\n'),
-    'light/res/key.png': encodePng({ width: 4, height: 4, data }),
-    'light/res/key.til': strToU8('[IMG1]\nSOURCE_RECT=0,0,4,4\nINNER_RECT=1,1,2,2\n'),
-  }
-  const out = unzipSync(bakeBdsBytes(zipSync(files)))
-  const css = IniDocument.parse(strFromU8(out['light/res/default.css']))
-  const style = css.get('STYLE2', 'NM_IMG')
-  assert.ok(style)
-  assert.equal(css.get('STYLE1', 'NM_IMG'), 'key,1')
-  assert.deepEqual([...decodePng(out[`light/res/${style.split(',')[0]}.png`]).data.slice(0, 8)], [0, 80, 120, 255, 1, 80, 120, 255])
-  const til = IniDocument.parse(strFromU8(out[`light/res/${style.split(',')[0]}.til`]))
-  assert.equal(til.get('IMG1', 'SOURCE_RECT'), '0,0,8,6')
-  assert.equal(til.get('IMG1', 'INNER_RECT'), undefined)
-  assert.equal(IniDocument.parse(strFromU8(out['light/port/py_9.ini'])).get('KEY1', 'BACK_STYLE'), '2')
 })
 
 test('部分合图为字体图片预留数量，并保留已有图集，避免再次导出覆盖资源', async () => {

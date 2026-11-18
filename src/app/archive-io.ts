@@ -18,7 +18,6 @@ import { applyModeState, syncSegmentedControls, setMobilePane } from "./mobile-l
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
 import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
-import { bakeBdsBackgrounds } from "../bds-backgrounds.ts"
 import { invokeBinary } from "../native-binary.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
 import { recordRecentFile } from "./recent-files"
@@ -353,7 +352,7 @@ function exportTargetLabel(format: ExportFormat): string {
 
 /**
  * `bytes` is the file to write. `document` is the same package before the steps that only the written
- * file gets (labels cut into images, backgrounds, atlases): what the open document corresponds to.
+ * file gets (labels cut into images, atlases): what the open document corresponds to.
  */
 type ExportResult = { bytes: Uint8Array; document: Uint8Array; converted: boolean; warnings: string[] }
 type PackagedResult = Omit<ExportResult, "document">
@@ -373,8 +372,6 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   if (format === "bds") {
     updateFileOperationProgress(88, "正在适配并打包 BDS 图片…")
     await waitForInterfacePaint()
-    // Bake before the image-count pass so generated variants are packed together with the source images.
-    bakeBdsBackgrounds(archive)
     await completeBdsPackage(archive, composeAtlasPng)
   }
   return { ...result, bytes: await archive.toBytesAsync(format) }
