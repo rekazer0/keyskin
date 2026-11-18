@@ -11,7 +11,8 @@ import { emptyModel } from "@/skin-model/model.ts"
 import type { SkinAction, KeyEvent } from "@/skin-model/types.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "@/palm/sxi-ini.ts"
 import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
-import { motionsOfSkin, skinAnimationsOf } from "@/skin-model/formats/sxi-motion.ts"
+import { motionsOfSkin, skinAnimationsOf, skinSoundsOf, soundsOfSkin } from "@/skin-model/formats/sxi-motion.ts"
+import { skinStylesOf, stylesOfSkin, sxiStyleKey, sxiStyleName } from "@/skin-model/formats/sxi-style.ts"
 
 export type SxiSource = {
   /** 皮肤包内的全部文件。 */
@@ -230,8 +231,20 @@ export const sxiFormat = {
       layout: derived.layout,
       keys,
     })
-    // 动画在 `ss_2`，样式绑定在 `ss_1` 的 `s_5`；没有动画配置时留空。
+    // 动画在 `ss_2`，样式绑定在 `ss_1` 的 `s_5`；音效在样式的 `s_4`。
     model.motions = motionsOfSkin(skin, "light", "port")
+    model.sounds = soundsOfSkin(skin, "light", "port")
+    // 样式表在 `ss_1`，图片同时切进资源表；按键的样式引用换成 `sxi:编号`。
+    const styles = stylesOfSkin(skin, source.files, "light", "port")
+    model.styles = styles.styles
+    model.images = styles.images
+    for (const key of keys) {
+      key.style = {
+        ...(key.style.back !== undefined ? { back: sxiStyleName(key.style.back) } : {}),
+        ...(key.style.pressedBack !== undefined ? { pressedBack: sxiStyleName(key.style.pressedBack) } : {}),
+        fore: key.style.fore.map((name) => sxiStyleName(name)),
+      }
+    }
     model.provenance = { format: "sxi", nodes: new Map(keys.map((key) => [key.id, { path: SXI_SKIN_PATH }])) }
     return model
   },
@@ -260,6 +273,36 @@ export const sxiFormat = {
       const styles = asObject(port.ss_1) ?? {}
       for (const [styleId, events] of built.bindings) {
         styles[styleId] = { ...asObject(styles[styleId]), s_5: { ...asObject(asObject(styles[styleId])?.s_5), ...events } }
+      }
+      port.ss_1 = styles
+      root.light = { ...struct, s_port: port }
+    }
+    // 样式表写回 `ss_1`；按键样式引用去掉 `sxi:` 前缀回到编号。
+    if (model.styles.size) {
+      const struct = asObject(root.light) ?? {}
+      const port = asObject(struct.s_port) ?? {}
+      const built = skinStylesOf(model.styles)
+      port.ss_1 = { ...asObject(port.ss_1), ...built.table }
+      root.light = { ...struct, s_port: port }
+      const keyOf = (name: string | undefined) => (name === undefined ? undefined : sxiStyleKey(name) ?? name)
+      keyboard.keys = board.keys.map((key) => ({
+        id: Number(key.id.replace(/^KEY/i, "")) || 0,
+        rect: [[key.rect.position.x, key.rect.position.y], [key.rect.size.width, key.rect.size.height]],
+        ...(key.touchRect ? { hit_rect: [[key.touchRect.position.x, key.touchRect.position.y], [key.touchRect.size.width, key.touchRect.size.height]] } : {}),
+        ...(valuesOf(key).length ? { values: valuesOf(key) } : {}),
+        ...(keyOf(key.style.back) !== undefined ? { i_b: Number(keyOf(key.style.back)) } : {}),
+        ...(keyOf(key.style.pressedBack) !== undefined ? { i_hb: Number(keyOf(key.style.pressedBack)) } : {}),
+        ...(key.style.fore.length ? { i_f: Number(keyOf(key.style.fore[0])) } : {}),
+      }))
+    }
+    // 音效写回样式的 `s_4`。
+    if (model.sounds.size) {
+      const struct = asObject(root.light) ?? {}
+      const port = asObject(struct.s_port) ?? {}
+      const built = skinSoundsOf(model.sounds)
+      const styles = asObject(port.ss_1) ?? {}
+      for (const [styleId, fields] of built.styles) {
+        styles[styleId] = { ...asObject(styles[styleId]), s_4: { ...asObject(asObject(styles[styleId])?.s_4), ...fields } }
       }
       port.ss_1 = styles
       root.light = { ...struct, s_port: port }

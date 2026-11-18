@@ -22,7 +22,7 @@ test("手心皮肤读出按键、动作与面板", async () => {
   assert.deepEqual(board.keys[0].actions.press, { kind: "text", value: "q" })
   assert.deepEqual(board.keys[0].actions["swipe-up"], { kind: "text", value: "1" })
   assert.deepEqual(board.keys[1].actions.press, { kind: "system", code: "F31" })
-  assert.equal(board.keys[0].style.back, "10")
+  assert.equal(board.keys[0].style.back, "sxi:10")
   assert.equal(board.backdrop?.style, "3")
   assert.equal(board.candidate?.style, "20")
   assert.equal(board.hint?.style, "30")

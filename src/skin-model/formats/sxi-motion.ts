@@ -7,6 +7,7 @@ import { asObject } from "@/palm/sxi-ini.ts"
 import { a1IsScale, a1Variant, animationModel } from "@/palm/sxi-animation.ts"
 import type { Point } from "taffy-layout"
 import type { Easing, MotionBinding, MotionEmitter, MotionFrame, MotionNode, MotionProperty, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
+import type { SkinSound, SkinSounds } from "@/skin-model/sound.ts"
 import type { MotionSlot } from "@/skin-model/types.ts"
 
 /** 手心的时机编号：1 按下、2 抬起、3 显示、4 隐藏。 */
@@ -271,4 +272,47 @@ export function skinAnimationsOf(motions: SkinMotions): { animations: JsonObject
     }
   }
   return { animations, bindings, warnings }
+}
+
+/* —— 音效 —— */
+
+/** 手心的音效放在样式的 `s_4` 里：`path_1` 按下、`path_2` 抬起、`path_3` 长按。 */
+const SOUND_FIELDS: Record<MotionSlot, string> = { press: "path_1", release: "path_2", show: "path_3", hide: "path_3", hold: "path_3" }
+
+/** 样式表 → IR 音效表；键是样式编号加时机的组合。 */
+export function soundsOfSkin(skin: JsonObject, theme: string, orientation: string): SkinSounds {
+  const { styles } = mergedStruct(skin, theme, orientation)
+  const sounds = new Map<string, SkinSound>()
+  for (const [styleId, style] of Object.entries(styles)) {
+    const entry = asObject(asObject(style)?.s_4)
+    if (!entry) continue
+    for (const [slot, field] of Object.entries(SOUND_FIELDS) as Array<[MotionSlot, string]>) {
+      const file = entry[field]
+      if (typeof file !== "string" || !file.trim()) continue
+      sounds.set(`${styleId}:${slot}`, { slot: slot === "press" ? "key" : slot === "release" ? "key" : "other", resource: file.trim() })
+    }
+  }
+  return sounds
+}
+
+/** IR 音效表 → 手心的 `s_4`；键形如 `7:press`。 */
+export function skinSoundsOf(sounds: SkinSounds): { styles: Map<string, Record<string, string>>; warnings: string[] } {
+  const styles = new Map<string, Record<string, string>>()
+  const warnings: string[] = []
+  for (const [key, sound] of sounds) {
+    const separator = key.lastIndexOf(":")
+    if (separator < 0) {
+      warnings.push(`${key}：音效键缺少时机，写不进手心样式`)
+      continue
+    }
+    const styleId = key.slice(0, separator)
+    const slot = key.slice(separator + 1) as MotionSlot
+    const field = SOUND_FIELDS[slot]
+    if (!field) {
+      warnings.push(`${key}：手心没有对应时机的音效字段`)
+      continue
+    }
+    styles.set(styleId, { ...styles.get(styleId), [field]: sound.resource })
+  }
+  return { styles, warnings }
 }

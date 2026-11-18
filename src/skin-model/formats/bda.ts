@@ -2,7 +2,7 @@
 //
 // BDA 包只描述外观：样式表按数字编号索引图片、颜色与文字，形状与位置在布局文件里。
 // 因此读取分两步：先从布局骨架拿到板与按键几何，再用外观覆盖样式与图片。
-import { bdaAppearancePath, bdaConfigPath, bdaPanelKeyName, bdaStyleRef, type BdaAppearance, type BdaColorStyle, type BdaImageAtom, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle } from "@/bda.ts"
+import { bdaAppearancePath, bdaConfigPath, bdaPanelKeyName, type BdaAppearance, type BdaColorStyle, type BdaImageAtom, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle } from "@/bda.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "@/bda-decode.ts"
 import { colorValue } from "@/bda-encode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
@@ -31,22 +31,17 @@ export type BdaSource = {
 /** 样式引用写成 `bda:图片:12` 这种形式，与数字编号一一对应，便于回读。 */
 const STYLE_PREFIX = "bda:"
 
-/** 骨架里的样式编号（如 `10012`）换成外观样式名；不是编号就原样返回。 */
-function styleNameOf(styleID: string): string | undefined {
-  const ref = bdaStyleRef(styleID)
-  return ref ? `${STYLE_PREFIX}${ref.type}:${ref.key}` : undefined
-}
-
 export function bdaStyleName(ref: BdaStyleRef | undefined): string | undefined {
   return ref ? `${STYLE_PREFIX}${ref.type}:${ref.key}` : undefined
 }
 
-/** 图片资源在包里的文件名；资源 ID 不带扩展名。 */
+/** 图片资源在包里的文件名；资源 ID 不带扩展名，帧序列会在后面加 `_N`。 */
 function imagePathOf(archive: SkinArchive, resourceID: string): string | undefined {
   const leaf = resourceID.replace(/\.png$/i, "")
+  const candidates = new Set([leaf, leaf.replace(/_\d+$/, "")])
   return archive.names().find((name) => {
     if (!/\.png$/i.test(name)) return
-    return (name.split("/").pop() ?? "").replace(/\.png$/i, "") === leaf
+    return candidates.has((name.split("/").pop() ?? "").replace(/\.png$/i, ""))
   })
 }
 
@@ -312,16 +307,24 @@ export const bdaFormat: SkinFormat<BdaSource> = {
       if (!layers.length) continue
       parsed.styles.set(name, { ...parsed.styles.get(name), normal: layers })
     }
-    // 骨架里的按键按样式编号指向外观；IR 里换成外观样式的名字。
+    // 骨架布局里的样式编号是百度 INI 的那一套，BDA 的样式在外观里按面板逐个声明。
+    // 所以按键样式要按「板名 + 按键动作名」到外观的面板定义里取，取不到才退回骨架编号。
     for (const board of model.boards) {
+      const panel = appearance.panels.get(panelNameOf(board.id))
       for (const key of board.keys) {
-        const back = key.style.back !== undefined ? styleNameOf(key.style.back) : undefined
-        const pressed = key.style.pressedBack !== undefined ? styleNameOf(key.style.pressedBack) : undefined
-        key.style = {
-          ...(back ? { back } : {}),
-          ...(pressed ? { pressedBack: pressed } : {}),
-          fore: key.style.fore.map((name: string) => styleNameOf(name) ?? name),
-        }
+        const action = actionValue(key.actions.press)
+        const entry = action && panel ? panel.keys.get(bdaPanelKeyName(action)) : undefined
+        // 外观里没有这个按键时清空样式：骨架的 INI 编号在 BDA 里不指向任何外观样式。
+        key.style = entry
+          ? {
+            ...(entry.backStyle ? { back: bdaStyleName(entry.backStyle) } : {}),
+            ...(entry.backStyleState ? { pressedBack: bdaStyleName(entry.backStyleState) } : {}),
+            fore: entry.foreStyles.flatMap((ref) => {
+              const name = bdaStyleName(ref)
+              return name ? [name] : []
+            }),
+          }
+          : { fore: [] }
       }
     }
     model.styles = parsed.styles
