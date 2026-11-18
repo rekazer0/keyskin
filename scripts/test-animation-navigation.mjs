@@ -27,7 +27,7 @@ const baseURL = `http://127.0.0.1:${server.httpServer.address().port}/`
 const entry = (path, mode) => page.locator(`.sidebar-overview button[data-path="${path}"][data-nav-mode="${mode}"]`)
 // 桌面从左导航的动画进入，分类在工作区内直接切换。
 const back = async () => {
-  if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library .ui-pane-header button[aria-label="返回"]').click()
+  if (await page.locator("body.animation-workspace").count()) await page.locator('[data-workspace-page="overview"]').click()
 }
 const open = async (path, mode) => {
   if (!await page.locator("body.animation-workspace").count()) await page.locator('[data-workspace-page="animation"]').click()
@@ -93,16 +93,18 @@ try {
         assert.equal(await page.locator('#animation-library .ui-pane-header h2').textContent(), "动画")
         assert.equal(await page.locator("body.animation-workspace #animation-library .ui-listbox:has([data-animation-id])").count(), 1, "动画列表在左侧栏")
         assert.equal(await page.locator('body.animation-workspace #animation-library .ui-listbox[data-size="fill"]').count(), 2, "动画与样式两份列表都在左侧栏")
-        assert.equal(await page.locator("body.animation-workspace #animation-library .animation-library-tabs > button").count(), 2, "左侧栏用分段开关切换动画与样式")
+        assert.equal(await page.locator("#animation-library .ui-pane-header button:visible").count(), 0, "动画主列表不显示返回按钮")
         assert.equal(await page.locator("#animation-stage .ui-animation-player").count(), 1, "播放器在画布上")
         // 播放条默认停在内容高度，拖动上边缘改高，双击恢复。
         const stageHeight = () => page.locator("#animation-stage").evaluate((node) => Math.round(node.getBoundingClientRect().height))
         const autoHeight = await stageHeight()
         const sizing = await page.locator("#animation-stage").evaluate((node) => {
           const stage = node.querySelector(".ui-animation-stage").getBoundingClientRect()
-          return { width: stage.width, height: stage.height, overflow: node.scrollHeight - node.clientHeight }
+          const player = node.querySelector(".ui-animation-player")
+          const available = player.clientWidth - parseFloat(getComputedStyle(player).columnGap)
+          return { width: stage.width, height: stage.height, available, overflow: node.scrollHeight - node.clientHeight }
         })
-        assert.ok(sizing.width <= 320 && sizing.height <= 160, "横排舞台保持紧凑尺寸，不随工作区宽度放大")
+        assert.ok(Math.abs(sizing.width - Math.min(320, sizing.available / 3)) <= 1, "舞台占可用宽度的三分之一，最多 320px")
         assert.ok(Math.abs(sizing.width / sizing.height - 2) < 0.01, "舞台与直操手柄保持 2:1 坐标比例")
         assert.ok(sizing.overflow <= 1, "默认高度完整容纳播放条内容")
         const resize = page.locator(".animation-stage-resize-handle")
@@ -180,13 +182,12 @@ try {
     assert.equal(await page.locator("#selected-key").textContent(), "动效设计")
     const search = page.locator('#animation-library input[role="searchbox"]')
     await search.fill("不存在的动画")
-    await page.locator('.animation-library-tabs button').nth(1).click()
     const motionTab = page.locator('[data-animation-mode="motion"]')
     await motionTab.focus()
     await page.keyboard.press("End")
     await check(path, "particle")
     assert.equal(await search.inputValue(), "", "切换分类清除搜索，避免新分类看似为空")
-    assert.equal(await page.locator('.animation-library-tabs button').first().getAttribute("aria-pressed"), "true")
+    assert.equal(await page.locator("#animation-library .ui-pane-header h2").textContent(), "动画")
     await page.locator('[data-workspace-page="overview"]').click()
     await page.locator('[data-workspace-page="animation"]').click()
     await check(path, "particle")

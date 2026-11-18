@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 import assert from "node:assert/strict"
 import { mkdirSync, readFileSync } from "node:fs"
 import { chromium, webkit } from "playwright"
@@ -12,6 +13,8 @@ for (const mode of ["light", "dark"]) {
   files[`${mode}/res/default.css`] = strToU8("[GLOBAL]\nFONT_PATH=Shared.ttf\n[STYLE1]\nFONT_NAME=Shared\nFONT_SIZE=40\n")
   files[`${mode}/res/Shared.ttf`] = mode === "light" ? lightFont : darkFont
 }
+files["dark/res/dark-only.png"] = files["light/res/bg.png"]
+files["dark/land/py_26.ini"] = files["light/port/py_26.ini"]
 const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41924, strictPort: false, hmr: false } })
 await server.listen()
 mkdirSync(".ui-current", { recursive: true })
@@ -45,28 +48,47 @@ try {
       await page.locator('[data-resource-catalog="font"]').click()
       const cards = page.locator('#resource-catalog [role="option"]')
       const selected = page.locator('#resource-catalog [aria-selected="true"]')
+      const lightCard = cards.filter({ hasText: "浅色 · light/" })
+      const darkCard = cards.filter({ hasText: "深色 · dark/" })
+      const switchSkinMode = async mode => {
+        const button = page.locator(`[data-resource-theme="${mode}"]`)
+        await button.click()
+        assert.equal(await button.getAttribute("aria-pressed"), "true")
+        assert.equal(await page.locator("#theme").inputValue(), mode)
+      }
+      assert.equal(await page.locator("#resource-theme").isVisible(), true)
       assert.equal(await cards.count(), 1)
-      assert.match(await cards.first().textContent(), /浅色/)
+      assert.equal(await lightCard.count(), 1)
+      assert.equal(await darkCard.count(), 0)
       assert.equal(await page.locator("#resource-upload").isVisible(), true)
       assert.equal(await page.locator("#resource-upload").isDisabled(), true)
-      await cards.first().click()
+      await lightCard.click()
       assert.equal(await page.locator("#resource-download").isDisabled(), false)
       assert.equal(await page.locator("#resource-delete").isDisabled(), true)
       await page.getByRole("button", { name: "编辑模式", exact: true }).click()
-      assert.equal(await cards.count(), 1, "changing mode preserves the font catalog")
-      await cards.first().click()
+      assert.equal(await cards.count(), 1, "changing edit mode preserves the font catalog")
+      await lightCard.click()
       await page.waitForFunction(() => document.querySelector('#style-detail-fields canvas[data-size="lg"]')?.dataset.fontFamily)
       const preview = await page.locator('#style-detail-fields canvas[data-size="lg"]').evaluate(canvas => canvas.toDataURL())
       const before = await snapshot()
-      await page.locator('[data-font-theme="dark"]').click()
-      assert.equal(await page.locator("#resource-download").isDisabled(), true)
-      assert.equal(await page.locator("#resource-detail").isVisible(), false)
-      await cards.first().click()
+      await page.locator('[data-resource-page="image"]').click()
+      const images = page.locator('#resource-gallery [role="option"]')
+      assert.equal(await images.count(), 3)
+      await page.locator("#resource-search").fill("dark-only")
+      await page.locator('[data-resource-theme="light"]').press("ArrowRight")
+      assert.equal(await page.locator('[data-resource-theme="dark"]').getAttribute("aria-pressed"), "true")
+      assert.equal(await page.locator("#orientation").inputValue(), "land", "switches to an existing layout rather than copying one")
+      assert.equal(await page.locator("#resource-search").inputValue(), "dark-only")
+      assert.equal(await images.count(), 1)
+      assert.equal(await page.locator('[data-resource-count="image"]').textContent(), "1")
+      await page.locator('[data-resource-catalog="font"]').click()
+      assert.equal(await lightCard.count(), 0)
+      await darkCard.click()
       assert.match(await selected.textContent(), /深色/)
       assert.match(await page.locator("#resource-meta").textContent(), /^dark\//)
       await page.waitForFunction(() => document.querySelector('#style-detail-fields canvas[data-size="lg"]')?.dataset.fontFamily)
       assert.notEqual(await page.locator('#style-detail-fields canvas[data-size="lg"]').evaluate(canvas => canvas.toDataURL()), preview, "mode previews use their own actual font bytes")
-      assert.deepEqual(await snapshot(), before, "browsing mode does not write the archive")
+      assert.deepEqual(await snapshot(), before, "browsing fonts does not write the archive")
       await page.evaluate(() => { window.showSaveFilePicker = undefined })
       const downloadEvent = page.waitForEvent("download")
       await page.locator("#resource-download").click()
@@ -77,6 +99,7 @@ try {
 
       // The same filename in another mode is a different resource.
       await page.locator("#resource-delete").click()
+      await confirmDeletion(page)
       let state = await snapshot()
       assert.deepEqual(state.fonts, ["light/skin/res/Shared.ttf"])
       assert.equal(state.light, before.light)
@@ -86,6 +109,7 @@ try {
       assert.deepEqual(await snapshot(), before)
       assert.equal(await cards.count(), 1)
 
+      await switchSkinMode("dark")
       await page.locator("#resource-upload-input").setInputFiles({ name: "Added.ttf", mimeType: "font/ttf", buffer: lightFont })
       await finish()
       state = await snapshot()
@@ -96,7 +120,7 @@ try {
       await undo()
       assert.deepEqual(await snapshot(), before)
 
-      await page.locator('[data-font-theme="light"]').click()
+      await switchSkinMode("light")
       await page.locator("#resource-list-view").evaluate((host, data) => {
         const transfer = new DataTransfer()
         transfer.items.add(new File([Uint8Array.from(data)], "Dropped.otf", { type: "font/otf" }))
@@ -124,9 +148,9 @@ try {
       assert.equal(rejected, true)
       assert.deepEqual(await snapshot(), before, "a broken font never commits")
 
-      // The inspector import and default picker use the catalog's mode too.
-      await page.locator('[data-font-theme="dark"]').click()
-      await cards.first().click()
+      // Inspector edits remain isolated to the selected look.
+      await switchSkinMode("dark")
+      await darkCard.click()
       await page.locator("#font-file-picker").click()
       const picker = page.getByRole("dialog", { name: "选择皮肤字体", exact: true })
       await picker.locator('[data-font-value=""]').click()
@@ -134,7 +158,7 @@ try {
       assert.equal((await snapshot()).light, before.light)
       assert.doesNotMatch((await snapshot()).dark, /FONT_PATH/)
       await undo()
-      await cards.first().click()
+      await darkCard.click()
       await page.locator("#font-import").click({ noWaitAfter: true })
       await page.locator("#font-import-input").setInputFiles({ name: "Inspector.ttf", mimeType: "font/ttf", buffer: lightFont })
       await page.waitForFunction(async () => (await import("/src/app/state.ts")).appState.archive.names().includes("dark/skin/res/Inspector.ttf"))

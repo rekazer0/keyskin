@@ -1,5 +1,5 @@
 import { type AnimationStyleItem, type AnimationStyleList } from "../animation-inspector.ts"
-import { section } from "./property-rows"
+import { section, wireNumberSlider } from "./property-rows"
 import { PALM_ANIMATION_EVENTS } from "../palm/sxi-animation.ts"
 import { element } from "../dom-element.ts"
 import { styleCard } from "../style-card.ts"
@@ -31,7 +31,7 @@ export function animationStyleCard(item: AnimationStyleItem): HTMLElement {
     id: item.id, label: item.title, kind,
     animationPreview: true,
     summary: styles ? styleAnimationSummary(item.id, styles) : item.detail,
-    animation: () => appState.archive?.format === "sxi" ? palmStyleAnimationStates(item.id, () => {}).map(state => state.content) : styles ? styleAnimationPlayers(item.id, styles, true) : [],
+    animation: () => appState.archive?.format === "sxi" ? palmStyleAnimationStates(item.id).map(state => state.content) : styles ? styleAnimationPlayers(item.id, styles, true) : [],
     note,
   })
   card.title = `${item.title} · ${note}`
@@ -59,7 +59,7 @@ export function populateAnimationStyleInspector(): void {
   if (!id) return
   const container = documentFields
   const fields = element("div")
-  void renderStyleResourceDetail({ container: fields, id, refresh: populateAnimationStyleInspector })
+  if (appState.archive?.format !== "sxi") void renderStyleResourceDetail({ container: fields, id, refresh: populateAnimationStyleInspector })
   const lists = Array.from(container.children).filter(node => node.querySelector(".ui-listbox"))
   container.replaceChildren(...lists, ...Array.from(fields.children))
   const bindings = section("触发动画")
@@ -85,6 +85,7 @@ export function populateAnimationStyleInspector(): void {
         writeSxiValue([target], ["s_5", event], input.value === "" ? undefined : Number(input.value))
       })
       control.append(input)
+      wireNumberSlider(input)
       if (animation !== undefined) {
         const button = element("button", "ui-button")
         button.type = "button"

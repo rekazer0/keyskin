@@ -491,6 +491,16 @@ export async function paintPreview(self: Preview): Promise<void> {
     })
   }
 
+  if (self.marquee?.rect) {
+    const { x, y, width, height } = self.marquee.rect
+    context.save()
+    context.strokeStyle = context.fillStyle = getComputedStyle(self.canvas).getPropertyValue("--selection").trim()
+    context.globalAlpha = 0.15
+    context.fillRect(x, y, width, height)
+    context.globalAlpha = 1
+    context.strokeRect(x, y, width, height)
+    context.restore()
+  }
   drawGuides(self, visible)
   self.lastDrawnID = drawID
 }
@@ -512,9 +522,9 @@ function beginCanvas(self: Preview): CanvasRenderingContext2D | undefined {
 }
 
 function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: PreviewItem): void {
-  if (previewSelectionVisible(self.mode, self.itemSelected(key))) {
+  if (previewSelectionVisible(self.mode, !self.joinedSelection && self.itemSelected(key))) {
     const flash = self.mode === "edit" && self.keyPressed(key)
-    context.strokeStyle = getComputedStyle(self.canvas).getPropertyValue(flash ? "--selection" : "--guide-selected").trim()
+    context.strokeStyle = getComputedStyle(self.canvas).getPropertyValue(flash || self.toolbarSlots ? "--selection" : "--guide-selected").trim()
     context.lineWidth = 4
     context.strokeRect(key.rect.x + 2, key.rect.y + 2, key.rect.width - 4, key.rect.height - 4)
   } else if (self.mode === "edit" && self.itemDrafted(key)) {
@@ -563,7 +573,7 @@ function drawGuides(self: Preview, keys: readonly PreviewItem[]): void {
       overlay.append(group)
     }
     const rect = group.firstElementChild!, text = group.lastElementChild!
-    group.classList.toggle("selected", self.itemSelected(key))
+    group.classList.toggle("selected", !self.joinedSelection && self.itemSelected(key))
     guideCoordinate(rect, "x", key.rect.x)
     guideCoordinate(rect, "y", key.rect.y)
     guideCoordinate(rect, "width", key.rect.width)

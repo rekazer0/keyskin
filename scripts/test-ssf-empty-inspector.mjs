@@ -141,7 +141,7 @@ try {
   })
   assert.equal(await row('候选栏', 'STRETCH').count(), 0, 'reference cards have no duplicate stretch inputs')
   await checkChange(async () => {
-    await ref.locator('.ui-style-state').first().click()
+    await ref.locator('.ui-style-state').first().click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
     const editor = page.getByRole('dialog', { name: '编辑图片', exact: true })
     await page.waitForFunction(() => document.querySelector('.ui-image-editor input[type=number]')?.disabled === false)
     await editor.locator('input[type=number]').nth(1).fill('5')

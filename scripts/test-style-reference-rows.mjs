@@ -28,7 +28,7 @@ class Element {
 }
 const drawn = []
 const edited = []
-let picker
+let picker, imagePicker
 const context = withAppState(vm.createContext({
   visualResolver: () => ({ resolve: async (id, highlighted) => ({ id, highlighted }) }),
   drawVisualPreview: (canvas, layers) => drawn.push(layers.map(visual => visual.id).join()),
@@ -41,6 +41,7 @@ const context = withAppState(vm.createContext({
   styleAnimationReferenceStates: (styleID, styles, choose) => [{ label: `动画 ${styleID}`, onClick: choose }],
   openStyleReferenceEditor: id => edited.push(id),
   openStylePicker: (target, highlighted) => { picker = { target, highlighted } },
+  openStyleReferenceStateImage: (target, key, highlighted, ids) => { imagePicker = { target, key, highlighted, ids: [...ids] } },
   Event,
 }))
 vm.runInContext(ts.transpile(code, { target: ts.ScriptTarget.ES2022 }), context)
@@ -60,17 +61,20 @@ const choose = (value) => {
   picker.target.dispatchEvent(new Event('change'))
 }
 
-// 前景：重复编号各占一张；正常、按下两格；单击按状态打开样式库，只改这一张。
+// 前景：重复编号各占一张；正常、按下两格；右侧按状态换图，左侧打开样式库，只改这一张。
 const fore = field('FORE_STYLE', '11, 22,11')
 assert.deepEqual(fore.cards().map(card => card.name.value), ['11', '22', '11'])
 await Promise.all(fore.cards().flatMap(card => card.states.map(state => state.draw({}))))
 assert.deepEqual(drawn, ['11', '11', '22', '22', '11', '11'])
 fore.cards()[1].states[1].onClick(false)
-assert.equal(picker.highlighted, true)
+assert.deepEqual(imagePicker, { target: fore.input, key: 'FORE_STYLE', highlighted: true, ids: ['22'] })
+assert.equal(picker, undefined, '右侧图片不打开样式引用选择器')
+fore.cards()[1].reference.run(false)
+assert.equal(picker.highlighted, false)
 assert.equal(picker.target.value, '22')
 choose('33')
 assert.equal(fore.input.value, '11,33,11')
-fore.cards()[1].states[0].onClick(true)
+fore.cards()[1].reference.run(true)
 assert.deepEqual(edited, ['33'], '⌘ 单击编辑这张卡的样式')
 // 编号可直接输入
 const number = fore.cards()[0].name
@@ -119,4 +123,4 @@ for (const key of ['ANIM_STYLE', 'BACK_ANIM_STYLE', 'PRESS_STYLE', 'SOUND_STYLE'
   assert.equal(row.cards().length, 0, key)
   assert.ok(row.add(), key)
 }
-console.log('Style reference rows: per-slot cards, state click opens the picker, ⌘ click edits, typed numbers, remove / append and animation slots passed')
+console.log('Style reference rows: per-slot cards, separate image and reference pickers, ⌘ click edits, typed numbers, remove / append and animation slots passed')

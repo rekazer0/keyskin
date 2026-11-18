@@ -22,7 +22,7 @@ export type AnimationPlayerOptions = {
   readFile?: (path: string) => Uint8Array | undefined
   keyboard?: KeyboardPlayback
   /** A card-sized player: no transport, loops while visible, one frame every 30 ms. */ thumbnail?: boolean | "slow"
-  dockedTime?: HTMLOutputElement
+  docked?: boolean
   direct?: AnimationDirectEdit
   sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
   native?: () => Promise<{ key: SceneKey; effects: SceneEffects } | undefined>
@@ -35,7 +35,6 @@ export type KeyboardPlayback = {
   /** Called on every draw at the player's time: particles also go on the keyboard. */
   particles(particles: PreviewClip["particles"], elapsed: number): void
   frame?(elapsed: number): void
-  targetLabel?(): string | undefined
 }
 
 /**
@@ -61,9 +60,10 @@ function stageTracks(tracks: readonly Track[]): Track[] {
 }
 
 /** Local playback state belongs to the generated component, never to the skin document. */
-export function animationPlayer({ clip, key, resolver, resourceParticles, readFile, keyboard, thumbnail = false, direct, sample, native, dockedTime }: AnimationPlayerOptions): HTMLElement {
+export function animationPlayer({ clip, key, resolver, resourceParticles, readFile, keyboard, thumbnail = false, direct, sample, native, docked }: AnimationPlayerOptions): HTMLElement {
   const root = element("div", "ui-animation-player")
   if (thumbnail) root.dataset.variant = "thumbnail"
+  if (docked) root.dataset.layout = "dock"
   const stage = element("div", "ui-animation-stage")
   const canvas = element("canvas")
   const resolution = thumbnail ? 1 : RESOLUTION
@@ -81,7 +81,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   scrub.step = "1"
   scrub.value = "0"
   scrub.setAttribute("aria-label", "预览时间")
-  const ruler = dockedTime && element("div", "ui-animation-ruler")
+  const ruler = docked && element("div", "ui-animation-ruler")
   if (ruler) {
     ruler.setAttribute("aria-hidden", "true")
     timeline.append(ruler)
@@ -95,13 +95,12 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   const loop = iconButton("repeat", "循环预览")
   const slow = iconButton("snail", "慢放 ¼×")
   transport.append(play, replay, time, loop, slow)
-  if (dockedTime) {
+  if (docked) {
     play.dataset.variant = "primary"
     slow.className = "ui-button"
     slow.dataset.variant = "quiet"
   }
   const note = element("p", "ui-animation-note")
-  // 时间轴、走带与说明作为一组，横排时整组在舞台旁边纵向居中
   const panel = element("div", "ui-animation-controls")
   panel.append(timeline, transport, note)
   root.append(stage, panel)
@@ -174,40 +173,6 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     scrub.value = String(Math.round(elapsed))
     playhead.style.left = `${duration > 0 ? Math.min(1, elapsed / (direct ? timelineExtent : duration)) * 100 : 0}%`
     time.value = `${Math.round(elapsed)} / ${Math.round(duration)} ms`
-    if (dockedTime) dockedTime.value = time.value
-  }
-  // Graph the selected clip's actual values. Emitter ranges are shown as the two alpha bounds, not as a made-up easing.
-  const track = clip.tracks[0]
-  const emitter = clip.particles[0]?.emitter
-  const graph = dockedTime && (emitter || track && !direct) ? element("canvas", "ui-animation-curve") : undefined
-
-  const drawGraph = () => {
-    if (!graph) return
-    const emitter = clip.particles[0]?.emitter
-    const plot = graph.getContext("2d")!
-    const samples = [0, 1].map(axis => Array.from({ length: 65 }, (_, index) => {
-      const progress = index / 64
-      if (!emitter) return track.value(progress)[axis]
-      const time = Math.max(...emitter.life) * progress / 1000
-      return Math.max(0, Math.min(255, emitter.initialAlpha[axis] + emitter.alphaSpeed[axis] * time))
-    }))
-    const values = samples.flat()
-    const min = emitter ? 0 : Math.min(...values)
-    const max = emitter ? 255 : Math.max(...values)
-    const style = getComputedStyle(graph)
-    plot.clearRect(0, 0, 320, 120)
-    plot.lineWidth = 1
-    plot.strokeStyle = style.getPropertyValue("--line").trim()
-    plot.strokeRect(4, 4, 312, 112)
-    plot.beginPath(); plot.moveTo(160, 4); plot.lineTo(160, 116); plot.moveTo(4, 60); plot.lineTo(316, 60); plot.stroke()
-    samples.forEach((series, axis) => {
-      if (axis && series.every((value, index) => value === samples[0][index])) return
-      plot.strokeStyle = style.getPropertyValue(axis ? "--secondary" : "--accent").trim()
-      plot.lineWidth = 2
-      plot.beginPath()
-      series.forEach((value, index) => plot.lineTo(4 + index / 64 * 312, 116 - (max > min ? (value - min) / (max - min) : 0.5) * 112))
-      plot.stroke()
-    })
   }
   let previousNote: string | undefined
   const update = () => {
@@ -227,7 +192,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     }
     loop.setAttribute("aria-pressed", String(session.loop))
     slow.setAttribute("aria-pressed", String(session.slow))
-    if (dockedTime) slow.textContent = session.slow ? "¼×" : "1×"
+    if (docked) slow.textContent = session.slow ? "¼×" : "1×"
     play.disabled = replay.disabled = scrub.disabled = loading || !hasContent || duration <= 0
     scrub.max = String(Math.max(1, Math.ceil(duration)))
     updateTime()
@@ -509,7 +474,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     for (const bitmap of root.querySelectorAll("canvas")) bitmap.width = bitmap.height = 0
   })
   if (direct && !thumbnail) controls = animationDirectControls(direct, {
-    stage, timeline, lanes, key: keyRect, fit: () => fit, duration: () => duration, stop: () => stop(true),
+    stage, timeline, lanes, docked, key: keyRect, fit: () => fit, duration: () => duration, stop: () => stop(true),
     preview(text, at) {
       clip = iniPreviewClip(IniDocument.parse(text), direct.section, { fillBefore: true })
       tracks = stageTracks(clip.tracks)
@@ -517,18 +482,9 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       elapsed = Math.max(0, Math.min(duration, at))
       const originalFit = fit
       measure(); fit = originalFit
-      renderLanes(); drawGraph(); draw(); update()
+      renderLanes(); draw(); update()
     },
   })
-  if (graph) {
-    graph.width = 320
-    graph.height = 120
-    graph.setAttribute("aria-label", emitter ? "粒子透明度范围" : "动效曲线")
-    const card = timeline.querySelector(".ui-animation-direct-fields") ?? timeline.appendChild(element("div", "ui-animation-direct-fields"))
-    const label = element("span", "ui-animation-curve-label")
-    label.textContent = emitter ? "粒子透明度" : clip.lanes[0]?.label ?? "动效曲线"
-    card.prepend(label, graph)
-  }
   renderLanes()
   update()
   queueMicrotask(() => { if (root.isConnected) draw() })
@@ -583,7 +539,6 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     loading = false
     if (!root.isConnected) return
     renderLanes()
-    drawGraph()
     draw()
     update()
     controls?.sync()

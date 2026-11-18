@@ -53,14 +53,57 @@ async function snapshot(page, format) {
       image: format === 'sxi' ? palmStyle(id)?.s_2 : { normal: styles.get(`STYLE${id}`, 'NM_IMG'), hl: styles.get(`STYLE${id}`, 'HL_IMG') } }
   }, format)
 }
+async function checkMediaReferences(page, format) {
+  const row = key => page.locator(`.ui-style-ref-list:visible`).filter({ has: page.locator(`:scope > input[data-document-style-key="${key}"]`) })
+  const animation = row('ANIM_STYLE')
+  const sound = row('SOUND_STYLE')
+  const current = () => page.evaluate(async format => {
+    const { appState } = await import('/src/app/state.ts')
+    const { styleConfigDocument, styleSoundFile } = await import('/src/app/style-picker.ts')
+    const { palmStyle } = await import('/src/app/sxi-styles.ts')
+    return {
+      animation: format === 'sxi' ? String(Object.values(palmStyle('7').s_5)[0]) : styleConfigDocument().get('STYLE7', 'PRESS_ANIM'),
+      sound: styleSoundFile('8'), undo: appState.undoStack.length,
+    }
+  }, format)
+  const before = await current()
+  await animation.locator('.ui-style-ref-action').click()
+  await picker(page).locator('.ui-style-card[data-style-id="7"][aria-selected="true"]').waitFor()
+  await picker(page).locator('#picker-close').click()
+  await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+  await animation.locator('.ui-style-state').click()
+  const animationPicker = page.getByRole('dialog', { name: '选择动画', exact: true })
+  await animationPicker.locator('[data-value="2"]').click()
+  await animationPicker.getByRole('button', { name: '应用', exact: true }).click()
+  await animationPicker.waitFor({ state: 'hidden' })
+  assert.equal(await animation.locator(':scope > input').inputValue(), '7')
+  await sound.locator('.ui-style-state').click({ position: { x: 4, y: 4 } })
+  const soundPicker = page.getByRole('dialog', { name: '选择音效', exact: true })
+  await soundPicker.getByRole('option', { name: 'b.wav', exact: true }).click()
+  await soundPicker.getByRole('button', { name: '应用', exact: true }).click()
+  await soundPicker.waitFor({ state: 'hidden' })
+  assert.equal(await sound.locator(':scope > input').inputValue(), '8')
+  assert.deepEqual(await current(), { animation: '2', sound: 'b.wav', undo: before.undo + 2 })
+  for (let index = 0; index < 2; index++) await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+  assert.deepEqual(await current(), before)
+  console.log(`${format}: animation style selector, independent animation/sound replacement and undo passed`)
+}
 try {
   for (const format of ['bdi', 'bds', 'sxi']) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
     page.on('pageerror', error => errors.push(error.message))
-    const bytes = format === 'sxi' ? buildSxiZip(SkinArchive.open(bdsFixture())).bytes
-      : format === 'bdi' ? SkinArchive.open(bdsFixture()).toBytes('bdi') : bdsFixture()
+    const files = unzipSync(bdsFixture())
+    const add = (path, text) => { files[path] = strToU8(strFromU8(files[path]) + text) }
+    files['light/port/py_26.ini'] = strToU8(strFromU8(files['light/port/py_26.ini']).replace('[KEY1]', '[KEY1]\nANIM_STYLE=7\nSOUND_STYLE=8'))
+    add('light/res/default.css', '\n[STYLE7]\nPRESS_ANIM=1\n[STYLE8]\nPRESS_SOUND_PATH=a.wav\n')
+    add('light/res/anim.ini', '\n[ANIM2]\nCATEGORY=0\nTYPE=1\nDURATION=300\nFROM=0\nTO=1\n')
+    for (const name of ['a.wav', 'b.wav']) files[`light/res/${name}`] = new Uint8Array(44)
+    const bds = zipSync(files)
+    const bytes = format === 'sxi' ? buildSxiZip(SkinArchive.open(bds)).bytes
+      : format === 'bdi' ? SkinArchive.open(bds).toBytes('bdi') : bds
     await open(page, `picker.${format}`, bytes)
     await selectKey(page, format)
+    await checkMediaReferences(page, format)
     const before = await snapshot(page, format)
     const background = page.locator(referenceInput(format)).locator('..')
     await background.locator('.ui-style-remove').click()
@@ -69,15 +112,22 @@ try {
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
     assert.equal((await snapshot(page, format)).id, before.id, '移除可以撤销')
     const pressed = () => page.locator(referenceInput(format)).locator('..').locator('.ui-style-state[data-state="pressed"]')
-    await pressed().click()
+    const changeStyle = background.locator('.ui-style-ref-action')
+    await changeStyle.hover({ position: { x: 4, y: 4 } })
+    assert.equal(await changeStyle.evaluate(button => button.matches(':hover')), true, '左侧悬停命中更换样式区')
+    await pressed().hover()
+    assert.equal(await pressed().evaluate(state => getComputedStyle(state).cursor), 'pointer')
+    assert.equal(await changeStyle.evaluate(button => button.matches(':hover')), false, '预览悬停不高亮引用')
+    await changeStyle.press('Enter')
+    await picker(page).locator(`.ui-style-card[data-style-id="${before.id}"][aria-selected="true"]`).waitFor()
     await chooseImage(page, false)
     await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
     const after = await snapshot(page, format)
     assert.notEqual(after.id, before.id, '应用新建样式并替换当前引用')
     assert.equal(after.undo, before.undo + 1, '新建和替换引用只记一步撤销')
-    assert.equal(after.image.normal, before.image.normal, '保留正常图')
-    assert.equal(after.image.hl, 'bg,0', '只替换进入时点击的按下图')
-    await pressed().click()
+    assert.equal(after.image.normal, 'bg,0', '样式选择器默认编辑正常图')
+    assert.equal(after.image.hl, before.image.hl, '保留按下图')
+    await changeStyle.click()
     await picker(page).getByRole('button', { name: '最近使用', exact: true }).click()
     assert.equal(await picker(page).locator(`.ui-style-card[data-style-id="${after.id}"]`).count(), 1, '最近使用保留刚应用的样式')
     await picker(page).locator('#picker-close').click()
@@ -86,7 +136,10 @@ try {
     assert.equal((await snapshot(page, format)).text, before.text, '撤销同时删除新样式')
     assert.equal((await snapshot(page, format)).id, before.id)
     await pressed().click()
-    await chooseImage(page, true)
+    await picker(page).locator('#picker-title').getByText('全部图片', { exact: true }).waitFor()
+    await picker(page).locator('.ui-image-card[data-path$="/bg.png"]').click()
+    await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
+    await picker(page).locator('#picker-apply').click()
     const edited = await snapshot(page, format)
     assert.equal(edited.id, before.id, '应用至样式保留引用')
     assert.equal(edited.image.normal, before.image.normal)
@@ -101,7 +154,7 @@ try {
     })
     const beforeLayers = await foreground()
     const field = page.locator('.ui-style-ref-list').filter({ has: page.locator(':scope > input[data-key-field="FORE_STYLE"]') })
-    await field.locator(':scope > .ui-style-ref').nth(1).locator('.ui-style-state[data-state="pressed"]').click()
+    await field.locator(':scope > .ui-style-ref').nth(1).locator('.ui-style-ref-action').click()
     await chooseImage(page, false)
     await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
     const afterLayers = await foreground()
@@ -123,7 +176,7 @@ try {
         ? palmTileSlices(openPalmSkin(), 'light/skin/res/unsliced.png')
         : text === null ? [] : tileSlices(IniDocument.parse(text)) }
     })
-    for (const state of ['normal', 'pressed']) for (const toStyle of [false, true]) {
+    for (const [state, toStyle] of [['normal', false], ['normal', true], ['pressed', true]]) {
       await page.evaluate(({ format, toStyle }) => {
         return import('/src/app/state.ts').then(({ appState }) => {
           appState.archive.setBytes('light/skin/res/unsliced.png', appState.archive.getBytes('light/skin/res/bg.png').slice())
@@ -136,9 +189,7 @@ try {
       const stateImage = () => page.locator(referenceInput(format)).locator('..').locator(`.ui-style-state[data-state="${state}"]`)
       // 只查看和取消不写入切片。
       await stateImage().click()
-      await picker(page).locator('[data-library-mode="images"]').click()
       await picker(page).locator('.ui-image-card[data-path$="/unsliced.png"]').click()
-      await picker(page).locator('#style-library-apply').click()
       await picker(page).locator('#picker-canvas').waitFor({ state: 'visible' })
       assert.equal(await picker(page).locator('#picker-apply').isDisabled(), true)
       await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
@@ -148,8 +199,15 @@ try {
       await picker(page).locator('#picker-close').click()
       await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
       assert.deepEqual(await snapshot(page, format), before)
-      await stateImage().click()
-      await chooseImage(page, toStyle, 'unsliced')
+      if (toStyle) {
+        await stateImage().click()
+        await picker(page).locator('.ui-image-card[data-path$="/unsliced.png"]').click()
+        await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
+        await picker(page).locator('#picker-apply').click()
+      } else {
+        await changeStyle.click()
+        await chooseImage(page, false, 'unsliced')
+      }
       await page.waitForFunction(async () => {
         const { appState } = await import('/src/app/state.ts')
         return appState.pickerSelectedIndex === 1 || !appState.pickerTarget
@@ -209,24 +267,25 @@ try {
       return { ref, style: info.appearance.imageStyles.get(ref.key), undo: appState.undoStack.length,
         count: info.appearance.imageStyles.size, bytes: Array.from(info.bytes) }
     })
-    for (const state of ['normal', 'pressed']) for (const toStyle of [false, true]) {
+    for (const [state, toStyle] of [['normal', false], ['normal', true], ['pressed', true]]) {
       await selectBdaKey()
       const before = await bdaSnapshot()
-      await page.locator(`[data-bda-style-path="keys.KEY_Q.backStyle"] .ui-style-state[data-state="${state}"]`).click()
+      const field = page.locator('[data-bda-style-path="keys.KEY_Q.backStyle"]')
+      await field.locator(toStyle ? `.ui-style-state[data-state="${state}"]` : '.ui-style-ref-action').click()
       const library = picker(page)
-      await library.locator('[data-library-mode="images"]').click()
+      if (!toStyle) await library.locator('[data-library-mode="images"]').click()
       const image = library.locator('.ui-image-card').first()
       const path = await image.getAttribute('data-path')
       await image.click()
-      await library.locator(toStyle ? '#style-library-apply-to-style' : '#style-library-apply').click()
+      if (!toStyle) await library.locator('#style-library-apply').click()
       await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
       const after = await bdaSnapshot()
       assert.equal(after.undo, before.undo + 1)
       assert.equal(after.count, before.count + (toStyle ? 0 : 1))
       if (toStyle) assert.deepEqual(after.ref, before.ref)
       else assert.notDeepEqual(after.ref, before.ref)
-      const changed = state === 'pressed' ? 'highlightImage' : 'normalImage'
-      const preserved = state === 'pressed' ? 'normalImage' : 'highlightImage'
+      const changed = toStyle && state === 'pressed' ? 'highlightImage' : 'normalImage'
+      const preserved = changed === 'highlightImage' ? 'normalImage' : 'highlightImage'
       assert.equal(after.style[changed].resource.resourceID, path.split('/').pop().replace(/\.png$/i, ''))
       assert.deepEqual(after.style[preserved], before.style[preserved])
       await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())

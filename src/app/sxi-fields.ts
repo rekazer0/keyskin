@@ -1,3 +1,4 @@
+import { confirmDeletion } from "./ask"
 // Property rows for a Palm skin. Every row shows one value of a skin.json model the way skin.json keeps
 // it (rects, points, insets, style indexes, ARGB colours, gesture lists) and writes it straight back into
 // skin.json as one undo step; the canvas and the source view are then rebuilt from the edited skin.
@@ -214,15 +215,14 @@ function listRow(block: SxiBlock, path: string[], label: string, values: Json[])
 function partsRow(block: SxiBlock, path: string[], label: string, affixes: string[], values: Json[], parts: Array<number | undefined>, mixedParts: boolean[], update: (index: number, value: number, current: Json, model: number) => Json, tracking?: Tracking): HTMLElement {
   const row = palmRow("div", block, path, label, values, tracking)
   if (affixes.length === 4) row.dataset.stack = ""
-  let edited = -1
-  numberParts(row, label, affixes, parts.map((part, index) => mixedParts[index] || part === undefined ? "" : String(part)), (values) => {
-    const index = edited
-    edited = -1
-    if (index >= 0 && values[index] !== "") writeSxiValue(block.targets, path, (current, model) => update(index, Number(values[index]), current, model))
+  numberParts(row, label, affixes, parts.map((part, index) => mixedParts[index] || part === undefined ? "" : String(part)), (values, index) => {
+    writeSxiValue(block.targets, path, (current, model) => update(index, Number(values[index]), current, model))
   }, affixes.length === 4 ? 4 : undefined)
-  Array.from(row.querySelectorAll("input")).forEach((input, index) => {
-    if (mixedParts[index]) input.placeholder = "混合"
-    input.addEventListener("input", () => { edited = index })
+  row.querySelectorAll<HTMLInputElement>('input:not([type="range"])').forEach((input, index) => {
+    if (mixedParts[index]) {
+      input.placeholder = "混合"
+      input.dispatchEvent(new Event("inspector-slider-sync"))
+    }
   })
   return row
 }
@@ -266,7 +266,11 @@ function rectRows(block: SxiBlock, path: string[], labels: [string, string], val
     }, tracking)
     row.dataset.documentKey = `${path.join(".")}.${half ? "size" : "origin"}`
     if (!values.some((value) => isRect(value)) && fallback) {
-      for (const input of Array.from(row.querySelectorAll("input"))) { input.value = ""; input.placeholder = "同按键" }
+      for (const input of row.querySelectorAll<HTMLInputElement>('input:not([type="range"])')) {
+        input.value = ""
+        input.placeholder = "同按键"
+        input.dispatchEvent(new Event("inspector-slider-sync"))
+      }
     }
     return row
   })
@@ -312,7 +316,9 @@ function borderRangeRows(block: SxiBlock, path: string[], label: string, values:
     } })
     row.append(listToolbar({ remove: {
       label: `删除${label} ${index + 1}`, disabled: !isEditing(),
-      run: () => writeSxiValue(block.targets, path, (current) => Array.isArray(current) ? current.filter((_, at) => at !== index) : current),
+      run: async () => {
+        if (await confirmDeletion(`删除${label} ${index + 1}？`) && row.isConnected) writeSxiValue(block.targets, path, (current) => Array.isArray(current) ? current.filter((_, at) => at !== index) : current)
+      },
     } }))
     rows.push(row)
   }
@@ -546,7 +552,7 @@ export function renderSxiGroup(label: string, blocks: SxiBlock[], options: { cod
     if (!rows.length && !block.note) continue
     const subsection = element("div", "ui-subsection")
     if (block.title && (many || nested.length || !blocks.includes(block) || block.title !== label)) subsection.append(palmBlockHeading(block.title, block.code))
-    if (block.remove) subsection.append(listToolbar({ remove: { label: `删除${block.title}`, run: block.remove, disabled: !isEditing() } }))
+    if (block.remove) subsection.append(listToolbar({ remove: { label: `删除${block.title}`, run: async () => { if (await confirmDeletion(`删除${block.title}？`) && subsection.isConnected) block.remove?.() }, disabled: !isEditing() } }))
     if (block.note) {
       const note = element("p", "inspector-group-subtitle")
       note.textContent = block.note

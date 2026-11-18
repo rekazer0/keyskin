@@ -8,8 +8,29 @@ await server.listen()
 const browser = await chromium.launch()
 try {
   const page = await browser.newPage({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' })
-  await page.addInitScript(() => localStorage.setItem('onboarding-tour-v1', 'done'))
+  await page.addInitScript(() => {
+    localStorage.setItem('onboarding-tour-v1', 'done')
+    localStorage.setItem('source-directory-enabled', 'false')
+    window.__TAURI_INTERNALS__ = {
+      metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
+      transformCallback: () => 1,
+      invoke: async command => {
+        if (command === 'take_opened_files' || command === 'model_oauth_accounts') return []
+        if (command === 'load_model_configuration') return { path: 'test.json', configurations: JSON.parse(sessionStorage.getItem('test-models') ?? '[]') }
+        if (command === 'plugin:window|scale_factor') return 1
+        return null
+      },
+    }
+  })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  const aiEntry = page.locator('#mobile-navigation [data-mobile-page="ai"]')
+  const model = { provider: 'openai', protocol: 'openai-chat', apiUrl: 'https://api.example.test/v1', apiKey: 'test', model: 'test-model' }
+  for (const [configurations, visible] of [[[], false], [[{ ...model, kind: 'image' }], false], [[model], true]]) {
+    await page.evaluate(models => sessionStorage.setItem('test-models', JSON.stringify(models)), configurations)
+    await page.reload()
+    await page.waitForFunction(() => document.querySelector('#model-configuration-path')?.title === 'test.json')
+    assert.equal(await aiEntry.isVisible(), visible)
+  }
   await openEditorTemplate(page, 'official-android-bds')
   for (const reducedMotion of ['no-preference', 'reduce']) {
     await page.emulateMedia({ reducedMotion })
@@ -27,11 +48,15 @@ try {
   }
   const nav = page.locator('#mobile-navigation')
   const current = () => nav.locator('[aria-current=page]').allTextContents()
-  const dialog = page.locator('#settings-dialog')
+  const dialog = page.locator('#settings-workspace')
   const title = dialog.locator('#settings-title')
   await nav.getByRole('button', { name: 'AI 设计' }).click()
-  await page.locator('#mobile-ai-privacy').click()
-  assert.equal(await dialog.locator('[data-settings-panel=model]').isVisible(), true, 'the direct link opens model details, not settings home')
+  await page.getByRole('heading', { name: 'AI 设计', exact: true }).waitFor()
+  assert.equal(await page.locator('main > .workspace').isVisible(), false, 'AI conversation has no keyboard preview')
+  assert.equal(await page.locator('#mobile-inspector-resize').isVisible(), false, 'AI conversation has no preview divider')
+  await nav.getByRole('button', { name: '设置' }).click()
+  await dialog.getByRole('button', { name: 'AI 模型', exact: true }).click()
+  assert.equal(await dialog.locator('[data-settings-panel=model]').isVisible(), true, 'model settings opens from settings home')
   assert.equal(await title.textContent(), 'AI 模型设置')
   assert.deepEqual(await current(), ['设置'])
   await dialog.getByRole('button', { name: '返回设置' }).click()
@@ -59,13 +84,13 @@ try {
   assert.equal(await dialog.locator('.mobile-settings-overview').isVisible(), true, 'ordinary entry starts at settings home')
   await nav.getByRole('button', { name: '资源' }).click()
   await dialog.waitFor({ state: 'hidden' })
-  const tabs = page.locator('#mobile-resource-tabs')
-  await tabs.waitFor()
+  const category = page.getByRole('combobox', { name: '资源分类' })
+  await category.waitFor()
   assert.deepEqual(await current(), ['资源'])
-  await tabs.getByRole('button', { name: /图片/ }).click()
-  assert.equal(await tabs.locator('[aria-pressed=true]').getAttribute('data-mobile-resource'), 'resource')
+  await category.selectOption('image')
+  assert.equal(await category.inputValue(), 'image')
   assert.equal(await page.locator('html').getAttribute('aria-pressed'), null, 'only resource buttons expose pressed state')
-  console.log('PASS inspector motion, mobile settings deep link, back, navigation ownership and resource tabs')
+  console.log('PASS inspector motion, mobile model settings, back, navigation ownership and resource tabs')
 } finally {
   await browser.close()
   await server.close()

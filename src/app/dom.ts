@@ -64,9 +64,9 @@ export const mobileUndoButton = $("#mobile-undo") as HTMLButtonElement
 
 export const mobileRedoButton = $("#mobile-redo") as HTMLButtonElement
 
-export const appDialogButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-app-dialog]"))
+export const settingsEntryButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-settings-entry]"))
 
-export const settingsDialog = $("#settings-dialog") as HTMLDialogElement
+export const settingsWorkspace = $("#settings-workspace")
 
 export const settingsModelNav = $("#settings-model-nav") as HTMLButtonElement
 
@@ -137,7 +137,6 @@ export const resetSourceDirectory = $("#reset-source-directory") as HTMLButtonEl
 
 export const sourceDirectoryStatus = $("#source-directory-status")
 
-export const mobileSaveButton = $("#mobile-save") as HTMLButtonElement
 export const mobileDocumentStatus = $("#mobile-document-status")
 export const mobileProjectToggle = $("#mobile-project-toggle") as HTMLButtonElement
 export const mobileProjectDialog = $("#mobile-project-dialog") as HTMLDialogElement
@@ -147,10 +146,8 @@ export const mobileAppMore = $("#mobile-app-more") as HTMLDetailsElement
 export const mobileMoreActions = Array.from(mobileAppMore.querySelectorAll<HTMLButtonElement>("[data-mobile-action]"))
 export const mobileModeLabel = $("#mobile-mode-label")
 export const mobileExportOpen = $("#mobile-export-open") as HTMLButtonElement
-export const sharePage = $("#share-page")
-export const shareContent = $(".ui-share-content")
+export const shareDialog = $("#share-dialog") as HTMLDialogElement
 export const shareTitle = $("#share-title")
-export const shareBack = $("#share-back") as HTMLButtonElement
 export const shareDocumentName = $("#share-document-name")
 export const shareDocumentStatus = $("#share-document-status")
 export const shareDocumentFormat = $("#share-document-format")
@@ -160,7 +157,7 @@ export const shareExport = $("#share-export") as HTMLButtonElement
 export const shareExportName = $("#share-export-name")
 export const shareResourceCheck = $("#share-resource-check")
 export const shareOperation = $("#share-operation")
-export const mobileExportFormats = Array.from(sharePage.querySelectorAll<HTMLInputElement>('input[name="mobile-export-format"]'))
+export const mobileExportFormats = Array.from(shareDialog.querySelectorAll<HTMLInputElement>('input[name="mobile-export-format"]'))
 
 
 export const sourceColorPicker = $("#source-color-picker") as HTMLInputElement
@@ -273,6 +270,8 @@ export const fileOperationProgress = $("#file-operation-progress") as HTMLProgre
 
 export const fileOperationPercent = $("#file-operation-percent")
 
+export const fileOperationLog = $<HTMLDetailsElement>("#file-operation-log")
+export const fileOperationLogLines = $("#file-operation-log-lines")
 export const fileOperationResult = $("#file-operation-result")
 
 export const fileOperationClose = $("#file-operation-close") as HTMLButtonElement
@@ -330,6 +329,8 @@ export const panelTargetHeight = $("#panel-target-height") as HTMLInputElement
 export const panelScaleSummary = $("#panel-scale-summary")
 
 export const quickInspector = $("#quick-inspector")
+export const inspectorSourceToggle = $<HTMLButtonElement>("#inspector-source-toggle")
+export const animationObjectHeading = $("#animation-object-heading")
 
 export const mobileInspectorGroups = $("#mobile-inspector-groups")
 
@@ -513,9 +514,11 @@ export const resourceSourceToggle = $("#resource-source-toggle") as HTMLButtonEl
 export const resourceCount = $("#resource-count")
 
 export const resourceSearch = $("#resource-search") as HTMLInputElement
+export const resourceUsage = $<HTMLSelectElement>("#resource-usage-filter")
 
 export const resourceCategory = $("#resource-category") as HTMLSelectElement
 
+export const resourceTheme = $("#resource-theme")
 export const resourcePageTabs = $("#resource-page-tabs")
 export const resourceGallery = $("#resource-gallery")
 

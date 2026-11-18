@@ -1,7 +1,8 @@
+import { confirmDeletion } from "./ask"
 import { showImageBrowser, clearImageBrowser } from "./resource-image-preview"
 import { type StyleImagePickerTarget, type SoundEntry } from "./types"
 import { appState } from "./state"
-import { source, keySoundBuffers, releaseKeySound } from "./canvas-interaction"
+import { source, mobilePortraitQuery, keySoundBuffers, releaseKeySound } from "./canvas-interaction"
 import { openImagePickerList, openImageSlicePicker, pickableImagePaths } from "./image-pickers"
 import { type BdaStyleRef, bdaStyleID } from "../bda.ts"
 import { updateBdaRefs } from "./key-inspector"
@@ -14,7 +15,8 @@ import { populateTileInspector, drawAtlas, loadTiles, syncAtlasWorkspace, setDra
 import { styleConfigPath, setSourceValue, scrollSelectedSource } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { renderBdaStyleEditor } from "../bda-editor.ts"
-import { drawVisualPreview, retinaThumbnail, thumbnailRecycler } from "../atlas.ts"
+import { drawVisualPreview, parseColor, retinaThumbnail, thumbnailRecycler, type VisualResolver } from "../atlas.ts"
+import { argbColor } from "../native-scene.ts"
 import { translatedConfigLabel } from "./document-inspector"
 import { refreshPreview } from "./preview-render"
 import { soundPathForFilename, soundResourcePaths, SOUND_ACCEPT, isSoundPath } from "../sounds.ts"
@@ -22,6 +24,7 @@ import { addStyle, availableStyleIDs, canAddStyle, duplicateStyle, removeStyleID
 import { styleUsages } from "./style-references"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { asObject } from "../palm/sxi-ini.ts"
+import { PALM_ANIMATION_EVENTS } from "../palm/sxi-animation.ts"
 import { renderSxiGroup } from "./sxi-fields"
 import { palmStyle, palmStyleImage, palmStylePointer } from "./sxi-styles"
 import { palmTileSlices } from "../palm/palm-style-edit.ts"
@@ -39,6 +42,7 @@ import { imageResourceCard, styleAddCard, styleCard, styleMatches, textStyleSamp
 import { STYLE_ANIM_FIELDS } from "../legacy-animation.ts"
 import { bindListActionKeys, emptyState, listToolbar } from "../dom-element.ts"
 import { releaseOnRemove } from "../dom-lifecycle.ts"
+import { appendResourceCards, clearResourceWindow } from "./resource-grid-window"
 import { bindResourceCard, selectGalleryItem, syncResourceSelection } from "./resource-gallery"
 import type { Change } from "../history"
 import { renderResourceCatalogSearch, renderStyleFilters, resourceStyleMatchesUsage, sortResources, updateResourcePage } from "./resource-page"
@@ -55,18 +59,15 @@ export function openImageResourceChooser(onSelect: (resourceID: string) => void)
   openImagePickerList()
 }
 
-function openBdaStyleImageResourceChooser(ref: BdaStyleRef, highlighted: boolean): void {
-  appState.pickerTarget = undefined
-  appState.resourcePickerSelect = (resourceID) => {
-    const property = highlighted ? "HL_IMG" : "NM_IMG"
-    if (updateBdaRefs([ref], property, resourceID)) void renderStyleResourceDetail()
-  }
-  openImagePickerList()
-}
-
-function replaceBdaStyleImage(ref: BdaStyleRef, highlighted: boolean): void {
+export function replaceBdaStyleImage(ref: BdaStyleRef, highlighted: boolean): void {
   if (ref.type !== "image" || !isEditing()) return
-  openBdaStyleImageResourceChooser(ref, highlighted)
+  const archive = appState.archive
+  const path = currentBdaAppearance()?.path
+  openImageResourceChooser(resourceID => {
+    if (appState.archive !== archive || currentBdaAppearance()?.path !== path || !isEditing()) return
+    const property = highlighted ? "HL_IMG" : "NM_IMG"
+    if (updateBdaRefs([ref], property, resourceID) && appState.resourceConfigActive) void renderStyleResourceDetail()
+  })
 }
 
 function editBdaStyleImageSlice(ref: BdaStyleRef, highlighted: boolean): void {
@@ -78,9 +79,9 @@ function editBdaStyleImageSlice(ref: BdaStyleRef, highlighted: boolean): void {
   const path = resourceImagePaths(appState.archive?.names() ?? [], theme.value, orientation.value)
     .find((candidate) => candidate.split("/").pop()?.replace(/\.png$/i, "") === resourceID)
   if (!path) return
-  const returnState = { path: appState.selectedPath, styleID: appState.selectedStyleID }
+  const { selectedPath, selectedStyleID, styleReturnPath, styleReturnCandidate } = appState
   selectFile(info.path, "overview", "image")
-  appState.bdaSliceReturn = returnState
+  appState.bdaSliceReturn = { path: selectedPath, styleID: selectedStyleID, styleReturnPath, styleReturnCandidate }
   selectResourceImage(path)
   appState.selectedTileIndex = appState.bdaTileUsages.find((usage) =>
     usage.ref.type === ref.type && usage.ref.key === ref.key && usage.highlighted === highlighted)?.index
@@ -90,6 +91,7 @@ function editBdaStyleImageSlice(ref: BdaStyleRef, highlighted: boolean): void {
 }
 
 export function chooseStyleImageSlice(property: "NM_IMG" | "HL_IMG"): void {
+  if (styleDetailPreviews.hidden) return
   const target = styleSectionTarget(appState.selectedStyleID, property)
   const image = appState.archive?.format === "sxi"
     ? palmStyleImage(appState.selectedStyleID, property === "HL_IMG")
@@ -116,6 +118,8 @@ function styleSectionTarget(styleID: string, property: "NM_IMG" | "HL_IMG"): Sty
   }
 }
 
+
+const isStyleAnimationField = (key: string) => STYLE_ANIM_FIELDS.some(field => field === key) || /^(?:HOLD_ANIM|EVENT\d+)$/.test(key)
 
 /** The same style fields are used in the style library and the animation workspace. */
 export async function renderStyleResourceDetail(embedded?: { container: HTMLElement; id: string; refresh(): void }): Promise<void> {
@@ -147,9 +151,19 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
   }
   const path = styleConfigPath()
   const palm = appState.archive?.format === "sxi" ? palmStylePointer(styleID) : undefined
-  if (!appState.archive?.isText(path) && !palm || !styleID) return
+  const stylesDocument = palm ? undefined : styleConfigDocument()
+  if (!styleID || !stylesDocument && !palm) return
   const section = `STYLE${styleID}`
-  const animated = !palm && styleKind(styleID) === "anim"
+  const existing = stylesDocument?.entries(section) ?? []
+  const model = palm ? palmStyle(styleID) : undefined
+  const palmEvents = asObject(model?.s_5)
+  const hasOtherFields = palm
+    ? Object.keys(model ?? {}).some(key => key !== "id" && key !== "f" && key !== "s_5")
+    : existing.some(({ key, value }) => key !== "INFO" && !isStyleAnimationField(key) && value.trim())
+  // 旧皮肤即使同时带图或颜色，也只在属性检查器中编辑动画；原字段不动。
+  const animated = Boolean(embedded) || (palm
+    ? Boolean(palmEvents && (!hasOtherFields || Object.keys(palmEvents).length))
+    : existing.some(({ key, value }) => isStyleAnimationField(key) && (!hasOtherFields || value.trim())))
   if (!embedded) {
     resourceName.textContent = section
     resourceMeta.textContent = palm ? `${SXI_SKIN_PATH} · ${palm.join(".")}` : path
@@ -167,28 +181,33 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
     }
   }
   if (palm) {
-    const group = renderSxiGroup("样式", [{ targets: [palm] }], { code: palm.slice(1).join(".") })
+    const target = animated ? [...palm, "s_5"] : palm
+    const group = renderSxiGroup(animated ? "动画" : "样式", [{
+      targets: [target],
+      only: animated ? PALM_ANIMATION_EVENTS.map(([key]) => key) : undefined,
+      omit: !animated && hasOtherFields ? ["s_5"] : undefined,
+    }], { code: target.slice(1).join(".") })
     fieldsHost.replaceChildren(...group ? [group] : [])
     return
   }
+  if (!stylesDocument) return
   const archive = appState.archive!
-  const stylesDocument = IniDocument.parse(archive.getText(path))
   fieldsHost.replaceChildren(...animated && !embedded ? styleAnimationPlayers(styleID, stylesDocument) : [])
-  const existing = stylesDocument.entries(section)
   const fontKeys = ["FONT_NAME", "FONT_SIZE", "FONT_WEIGHT", "FONT_CLEARTYPE"]
   const colorKeys = ["NM_COLOR", "HL_COLOR", "BORDER_COLOR", "BORDER_SIZE"]
   const common = ["SHOW", "INFO", "PRESS_SOUND_PATH"]
-  const keys = [...new Set([...common, ...STYLE_ANIM_FIELDS, ...existing.map((entry) => entry.key).filter((key) => key !== "NM_IMG" && key !== "HL_IMG")])]
+  const keys = [...new Set([...common, ...STYLE_ANIM_FIELDS, ...existing.map(({ key }) => key)])]
+    .filter(key => animated ? isStyleAnimationField(key) : key !== "NM_IMG" && key !== "HL_IMG" && (!hasOtherFields || !isStyleAnimationField(key)))
   const groups = [
     ["typography", "文字"],
     ["color", "颜色"],
     ["content", "内容与说明", (key: string) => key === "SHOW" || key === "INFO"],
-    ["animation", "动画", (key: string) => /ANIM|^EVENT\d+$/.test(key)],
+    ["animation", "动画", isStyleAnimationField],
     ["sound", "音效", (key: string) => key.endsWith("SOUND_PATH")],
     ["advanced", "边框与扩展", () => true],
   ] as const
   const groupRows = new Map<string, HTMLElement[]>(groups.map(([id]) => [id, []]))
-  const files = currentSoundEntries().map((entry) => entry.filename)
+  const files = animated ? [] : currentSoundEntries().map((entry) => entry.filename)
   const textKeys = [...fontKeys, ...colorKeys]
   const write = (key: string, next: string) => {
     if (!appState.archive?.isText(path) || !isEditing()) return
@@ -203,9 +222,11 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
     else void renderStyleResourceDetail()
     updateDirty()
   }
-  for (const row of baiduTypographyRows(key => [stylesDocument.get(section, key) ?? ""], write, textKeys, isEditing())) {
-    const key = row.dataset.documentKey?.split(" ")[0] ?? ""
-    groupRows.get(colorKeys.includes(key) ? "color" : "typography")!.push(row)
+  if (!animated) {
+    for (const row of baiduTypographyRows(key => [stylesDocument.get(section, key) ?? ""], write, textKeys, isEditing())) {
+      const key = row.dataset.documentKey?.split(" ")[0] ?? ""
+      groupRows.get(colorKeys.includes(key) ? "color" : "typography")!.push(row)
+    }
   }
   for (const key of keys) {
     if (textKeys.includes(key)) continue
@@ -246,7 +267,7 @@ export function selectStyleResource(styleID: string): void {
         ? appearance.textStyles
         : appearance.colorStyles
     if (!styles.has(Number(styleID))) return
-    if (browsingResources()) galleryID = `STYLE${bdaStyleID({ type: part.group === "imageStyles" ? "image" : part.group === "textStyles" ? "text" : "color", key: Number(styleID) })}`
+    if (usesResourceStyleCategories()) galleryID = `STYLE${bdaStyleID({ type: part.group === "imageStyles" ? "image" : part.group === "textStyles" ? "text" : "color", key: Number(styleID) })}`
   } else if (!availableStyleIDs().includes(styleID)) return
   appState.selectedStyleID = styleID
   resourceListView.hidden = !document.body.classList.contains("style-workspace")
@@ -304,6 +325,30 @@ function browsingResources(): boolean {
   return document.body.classList.contains("resource-workspace")
 }
 
+function usesResourceStyleCategories(): boolean {
+  return browsingResources() || mobilePortraitQuery.matches
+}
+
+function sameTextPreview(resolver: VisualResolver, id: string): boolean {
+  return JSON.stringify(resolver.resolveText(id, false)) === JSON.stringify(resolver.resolveText(id, true))
+}
+
+function sameStylePreview(id: string, styles: IniDocument | undefined): boolean {
+  const imageRef = (value: unknown) => typeof value === "string" ? value.trim().replace(/\s*,\s*/g, ",") : undefined
+  if (styles) {
+    const section = `STYLE${id}`
+    const normal = styles.get(section, "NM_IMG")
+    const color = styles.get(section, "NM_COLOR")
+    return imageRef(normal) === imageRef(styles.get(section, "HL_IMG") ?? normal)
+      && parseColor(color)?.toLowerCase() === parseColor(styles.get(section, "HL_COLOR") ?? color)?.toLowerCase()
+  }
+  const style = palmStyle(id)
+  const image = asObject(style?.s_2)
+  const fill = asObject(style?.s_1)
+  return imageRef(image?.normal) === imageRef(image?.hl ?? image?.normal)
+    && (fill?.for_back !== true || argbColor(fill.c_normal)?.toLowerCase() === argbColor(fill.c_hl ?? fill.c_normal)?.toLowerCase())
+}
+
 async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumbnailRecycler>): Promise<void> {
   if (appState.archive?.format === "bda") {
     await renderBdaStyleResourceGallery(galleryCanvas)
@@ -313,15 +358,15 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
   if (!appState.archive || !stylesDocument && appState.archive.format !== "sxi") return
   renderStyleFilters()
   const query = resourceSearch.value.trim().toLowerCase()
-  const category = browsingResources() ? appState.resourceStyleType : resourceCategory.value
+  const category = usesResourceStyleCategories() ? appState.resourceStyleType : resourceCategory.value
   // What a style says about itself: INFO / SHOW in default.css, a Palm style's text (`s_1.text`).
   const notes = (styleID: string) => stylesDocument
     ? stylesDocument.entries(`STYLE${styleID}`).filter((entry) => entry.key === "INFO" || entry.key === "SHOW").map((entry) => entry.value)
     : [String(asObject(palmStyle(styleID)?.s_1)?.text ?? "")]
-  const categories = styleLibraryCategories()
+  const categories = appState.styleUsageFilter !== "all" ? styleLibraryCategories() : undefined
   const styleIDs = sortResources(availableStyleIDs().filter((styleID) => {
-    return resourceStyleMatchesUsage(styleID) && styleMatches({ kind: styleKind(styleID, stylesDocument), sound: Boolean(styleSoundFile(styleID, stylesDocument)),
-      categories: categories.get(styleID) ?? [], search: [styleID, ...notes(styleID)].join(" ") }, category, appState.styleUsageFilter, query)
+    return resourceStyleMatchesUsage(styleID) && styleMatches({ kind: category === "all" ? "all" : styleKind(styleID, stylesDocument), sound: category === "sound" && Boolean(styleSoundFile(styleID, stylesDocument)),
+      categories: categories?.get(styleID) ?? [], search: query ? [styleID, ...notes(styleID)].join(" ") : "" }, category, appState.styleUsageFilter, query)
   }))
   listHeader("样式", styleIDs.length)
   resourceUploadButton.hidden = true
@@ -336,14 +381,15 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
   resourceGallery.setAttribute("aria-label", "样式")
   const editable = canAddStyle() && isEditing()
   styleListToolbar.hidden = !editable
-  bindListActionKeys(resourceGallery, styleListToolbar)
-  const cards = document.createDocumentFragment()
-  for (const styleID of styleIDs) {
+  const names = appState.archive.names()
+  appendResourceCards(styleIDs.map(id => `STYLE${id}`), index => {
+    const styleID = styleIDs[index]
     const kind = styleKind(styleID, stylesDocument)
     const soundFilename = styleSoundFile(styleID, stylesDocument)
-    const soundPath = soundFilename ? soundPathForFilename(appState.archive.names(), theme.value, orientation.value, soundFilename) : undefined
+    const soundPath = soundFilename ? soundPathForFilename(names, theme.value, orientation.value, soundFilename) : undefined
     const button = styleCard({
       id: styleID, label: `STYLE${styleID}`, kind,
+      stateLayout: (kind === "text" ? sameTextPreview(resolver, styleID) : sameStylePreview(styleID, stylesDocument)) ? "single" : "joined",
       info: stylesDocument?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
       canvas: galleryCanvas,
       draw: async (canvas, highlighted) => {
@@ -360,14 +406,12 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
     bindResourceCard(button, `STYLE${styleID}`, () => selectStyleResource(styleID), () => {
       if (document.body.classList.contains("style-workspace")) selectStyleResource(styleID)
     })
-    cards.append(button)
-  }
-  resourceGallery.append(cards)
-  if (!styleIDs.length) resourceGallery.append(emptyState(query ? "search-x" : "layers"))
-  if (editable) resourceGallery.append(styleAddCard(() => {
+    return button
+  }, editable ? styleAddCard(() => {
     const id = addStyle()
     if (id) showStyle(id)
-  }))
+  }) : undefined)
+  if (!styleIDs.length) resourceGallery.prepend(emptyState(query ? "search-x" : "layers"))
   syncResourceSelection()
   if (!appState.selectedStyleID && document.body.classList.contains("style-workspace") && styleIDs.length) selectStyleResource(styleIDs[0])
 }
@@ -378,13 +422,17 @@ const styleListToolbar = listToolbar({
     const id = appState.selectedStyleID && duplicateStyle(appState.selectedStyleID)
     if (id) showStyle(id)
   } },
-  remove: { label: "删除样式", run: () => {
-    if (removeStyleIDs(appState.selectedResourceGalleryPaths.map(path => path.replace(/^STYLE/, "")))) renderResourceInspector()
+  remove: { label: "删除样式", run: async () => {
+    const archive = appState.archive
+    const revision = archive?.revision
+    const ids = appState.selectedResourceGalleryPaths.map(path => path.replace(/^STYLE/, ""))
+    if (!ids.length || !await confirmDeletion(`删除 ${ids.length} 个样式？`) || appState.archive !== archive || archive?.revision !== revision) return
+    if (removeStyleIDs(ids)) renderResourceInspector()
   } },
 })
 styleListToolbar.hidden = true
-resourceDeleteButton.parentElement!.append(styleListToolbar)
-bindListActionKeys(resourceGallery, resourceDeleteButton.parentElement!)
+resourceSelectionActions.append(styleListToolbar)
+bindListActionKeys(resourceGallery, resourceSelectionActions)
 
 /** 新建或复制出的样式：重画列表并选中它。 */
 export function showStyle(styleID: string): void {
@@ -404,15 +452,15 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
     colorStyles: { type: "color", styles: info.appearance.colorStyles },
   } as const
   const definition = definitions[part.group]
-  const desktop = browsingResources()
+  const sharedCategories = usesResourceStyleCategories()
   renderStyleFilters(definition.type)
   resourceCategory.dataset.styleCategories = "bda"
   resourceCategory.replaceChildren(...bdaAppearanceStyleGroups.map(([value, label]) => new Option(label, value)))
   resourceCategory.value = part.group
   const query = resourceSearch.value.trim().toLowerCase()
-  const categories = styleLibraryCategories()
-  const entries = sortResources((desktop ? Object.values(definitions) : [definition]).flatMap(({ type, styles }) =>
-    [...styles.keys()].map(key => ({ type, key }))).filter(ref => styleMatches({ kind: ref.type, categories: categories.get(bdaStyleID(ref)) ?? [], search: String(ref.key) }, desktop ? appState.resourceStyleType : "all", appState.styleUsageFilter, query)), ref => String(ref.key))
+  const categories = appState.styleUsageFilter !== "all" ? styleLibraryCategories() : undefined
+  const entries = sortResources((sharedCategories ? Object.values(definitions) : [definition]).flatMap(({ type, styles }) =>
+    [...styles.keys()].map(key => ({ type, key }))).filter(ref => styleMatches({ kind: ref.type, categories: categories?.get(bdaStyleID(ref)) ?? [], search: String(ref.key) }, sharedCategories ? appState.resourceStyleType : "all", appState.styleUsageFilter, query)), ref => String(ref.key))
   listHeader("样式", entries.length)
   resourceUploadButton.hidden = true
   resourceGallery.setAttribute("role", "listbox")
@@ -423,7 +471,6 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
   resourceListView.hidden = Boolean(appState.selectedStyleID) && !document.body.classList.contains("style-workspace")
   resourceDetail.hidden = !appState.selectedStyleID
   const resolver = visualResolver()
-  const cards = document.createDocumentFragment()
   const choose = (ref: BdaStyleRef) => {
     const group = ref.type === "image" ? "imageStyles" : ref.type === "text" ? "textStyles" : "colorStyles"
     if (group !== part.group) {
@@ -432,22 +479,29 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
     }
     selectStyleResource(String(ref.key))
   }
-  for (const ref of entries) {
+  appendResourceCards(entries.map(ref => `STYLE${sharedCategories ? bdaStyleID(ref) : ref.key}`), index => {
+    const ref = entries[index]
+    const image = info.appearance.imageStyles.get(ref.key)
+    const color = info.appearance.colorStyles.get(ref.key)
+    const id = bdaStyleID(ref)
+    const merged = ref.type === "text" ? resolver && sameTextPreview(resolver, id)
+      : ref.type === "image" ? JSON.stringify(image?.normalImage) === JSON.stringify(image?.highlightImage ?? image?.normalImage)
+      : (color?.normalColor ?? 0) === (color?.highlightColor ?? color?.normalColor ?? 0)
     const button = styleCard({
-      id: bdaStyleID(ref), label: `STYLE ${ref.key}`, kind: ref.type,
+      id, label: `STYLE ${ref.key}`, kind: ref.type,
+      stateLayout: merged ? "single" : "joined",
       canvas: galleryCanvas,
       draw: async (canvas, highlighted) => {
-        if (ref.type === "text" && resolver) await textStyleSample(canvas, resolver, bdaStyleID(ref), highlighted)
-        else drawVisualPreview(canvas, [await resolver?.resolve(bdaStyleID(ref), highlighted).catch(() => undefined)], false)
+        if (ref.type === "text" && resolver) await textStyleSample(canvas, resolver, id, highlighted)
+        else drawVisualPreview(canvas, [await resolver?.resolve(id, highlighted).catch(() => undefined)], false)
       },
     })
     button.classList.add("resource-item", "style-resource-item")
-    bindResourceCard(button, `STYLE${desktop ? bdaStyleID(ref) : ref.key}`, () => choose(ref), () => {
+    bindResourceCard(button, `STYLE${sharedCategories ? bdaStyleID(ref) : ref.key}`, () => choose(ref), () => {
       if (document.body.classList.contains("style-workspace")) choose(ref)
     })
-    cards.append(button)
-  }
-  resourceGallery.append(cards)
+    return button
+  })
   if (!entries.length) resourceGallery.append(emptyState(query ? "search-x" : "layers"))
   syncResourceSelection()
   if (!appState.selectedStyleID && document.body.classList.contains("style-workspace") && entries.length) choose(entries[0])
@@ -495,6 +549,7 @@ function renderSoundResourceGallery(): void {
 
 export function renderResourceInspector(): void {
   if (!appState.archive) return
+  clearResourceWindow()
   if (renderResourceCatalogSearch()) return
   syncAtlasWorkspace()
   const galleryCanvas = thumbnailRecycler(resourceGallery)
@@ -531,8 +586,8 @@ export function renderResourceInspector(): void {
   resourceListView.hidden = Boolean(appState.selectedResourcePath) && !browsing
   resourceDetail.hidden = !appState.selectedResourcePath && !browsing
   const archive = appState.archive
-  const cards = document.createDocumentFragment()
-  for (const path of paths) {
+  appendResourceCards(paths, index => {
+    const path = paths[index]
     let url: string | undefined
     const button = imageResourceCard({
       path,
@@ -546,9 +601,8 @@ export function renderResourceInspector(): void {
     })
     releaseOnRemove(button.querySelector("img")!, () => { if (url) URL.revokeObjectURL(url) })
     bindResourceCard(button, path, () => selectResourceImage(path))
-    cards.append(button)
-  }
-  resourceGallery.append(cards)
+    return button
+  })
   if (!paths.length) resourceGallery.append(emptyState(query ? "search-x" : "image-off"))
   resourceGallery.setAttribute("role", "listbox")
   resourceGallery.setAttribute("aria-label", "图片")
@@ -558,7 +612,6 @@ export function renderResourceInspector(): void {
     appState.resourceSelectionAnchor = paths[0]
   }
   syncResourceSelection()
-  bindListActionKeys(resourceGallery, resourceSelectionActions)
   updateResourceActionButtons()
   syncAtlasWorkspace()
   if (browsingResources()) {

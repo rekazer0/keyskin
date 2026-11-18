@@ -51,6 +51,19 @@ try {
         assert.equal(await page.locator("#source-editor").isVisible(), true)
         assert.equal(await entry("源代码").getAttribute("aria-current"), "page")
       }
+      if (canvasName === "preview") {
+        const start = await page.evaluate(async () => {
+          const { preview } = await import("/src/app/canvas-interaction.ts")
+          const bounds = preview.canvas.getBoundingClientRect()
+          const size = preview.logicalSize()
+          return { x: bounds.x + 260 / size.width * bounds.width, y: bounds.y + 160 / size.height * bounds.height }
+        })
+        await page.mouse.move(start.x, start.y)
+        await page.mouse.down()
+        await page.mouse.move(target.x, target.y, { steps: 5 })
+        await page.mouse.up()
+        assert.deepEqual(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedKeySections), ["KEY1", "KEY2"], "reverse drag from empty space selects both keys instead of panning")
+      }
     }
     assert.deepEqual(await page.evaluate(async () => [...(await import("/src/app/state.ts")).appState.archive.changed]), before, "canvas selection does not edit files")
     assert.deepEqual(errors, [])

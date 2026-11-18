@@ -12,7 +12,11 @@ const server = await createServer({ logLevel: "error", server: { host: "127.0.0.
 await server.listen()
 const browser = await chromium.launch()
 mkdirSync(".ui-current", { recursive: true })
-const fixtures = { bds: bdsFixture(), bdi: SkinArchive.open(bdsFixture()).toBytes("bdi"), bda: bdaAnimatedSkinBytes(), sxi: sxiAnimationFixture(), ssf: ssfFixture() }
+const baidu = SkinArchive.open(bdsFixture())
+const stylesPath = "light/res/default.css"
+baidu.setText(stylesPath, `${baidu.getText(stylesPath)}\n[STYLE7]\nNM_IMG=btn,0\nHL_IMG=btn, 0\n`)
+const fixtures = { bds: baidu.toBytes("bds"), bdi: baidu.toBytes("bdi"), bda: bdaAnimatedSkinBytes(), sxi: sxiAnimationFixture(), ssf: ssfFixture() }
+const optionCount = cards => cards.evaluateAll(options => Number(options[0]?.getAttribute("aria-setsize") ?? options.length))
 try {
   for (const colorScheme of ["light", "dark"]) for (const [format, bytes] of Object.entries(fixtures)) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme })
@@ -33,11 +37,29 @@ try {
     assert.equal(await page.locator('[data-resource-page="style"]').isDisabled(), format === "ssf")
     if (format !== "ssf") {
       await page.locator('#resource-gallery [role="option"]').first().waitFor()
-      assert.equal(await page.locator('#resource-gallery [role="option"]').count(), Number(await page.locator('[data-resource-count="style"]').textContent()), "全部样式展示所有类型")
+      assert.equal(await optionCount(page.locator('#resource-gallery [role="option"]')), Number(await page.locator('[data-resource-count="style"]').textContent()), "全部样式展示所有类型")
       for (const type of ["image", "text", "color"]) {
         await page.locator(`[data-resource-style-type="${type}"]`).click()
         const cards = page.locator('#resource-gallery [role="option"]')
-        assert.equal(await cards.count(), Number(await page.locator(`[data-resource-style-count="${type}"]`).textContent()))
+        assert.equal(await optionCount(cards), Number(await page.locator(`[data-resource-style-count="${type}"]`).textContent()))
+        if (type === "image" && ["bds", "bdi"].includes(format)) {
+          for (const [id, count] of [[2, 2], [6, 1], [7, 1]]) {
+            const states = page.locator(`#resource-gallery [data-style-id="${id}"]`).locator(".ui-style-state")
+            await states.last().waitFor()
+            const layout = await states.evaluateAll(items => {
+              const preview = items[0].parentElement
+              const style = getComputedStyle(preview)
+              return { count: items.length, gap: style.gap, checker: style.backgroundImage !== "none",
+                width: items.reduce((sum, item) => sum + item.getBoundingClientRect().width, 0), previewWidth: preview.getBoundingClientRect().width,
+                seamless: items.every(item => getComputedStyle(item.firstElementChild).backgroundImage === "none" && getComputedStyle(item.firstElementChild).borderRadius === "0px") }
+            })
+            assert.equal(layout.count, count, `STYLE${id} 只合并相同切片（包括回退）`)
+            assert.ok(layout.checker && layout.seamless && layout.gap === "0px" && Math.abs(layout.width - layout.previewWidth) < 1)
+          }
+          await page.locator('#resource-gallery [data-style-id="7"]').click()
+          for (const state of ["normal", "highlighted"]) assert.equal(await page.locator(`#style-detail-${state}`).isVisible(), true)
+          await page.screenshot({ path: `.ui-current/resource-style-states-${format}-${colorScheme}.png` })
+        }
         if (format === "bda" && await cards.count()) {
           await cards.first().click()
           assert.equal(await page.locator("#resource-detail").isVisible(), true)
@@ -70,12 +92,85 @@ try {
     await page.locator('#atlas-editor-dialog').getByRole("button", { name: "关闭", exact: true }).click()
     await page.locator(".workspace #resource-list-view").waitFor()
     await page.locator('[data-workspace-page="overview"]').click()
-    await page.setViewportSize({ width: 390, height: 844 })
+    await page.setViewportSize({ width: format === "bds" ? 320 : 390, height: 844 })
     await page.locator('#mobile-navigation [data-mobile-page="resources"]').click()
-    await page.locator('#mobile-resource-tabs [data-mobile-resource="resource"]').click()
+    const mobileCategory = page.getByRole("combobox", { name: "资源分类" })
+    assert.ok((await mobileCategory.boundingBox()).height >= 44, "分类保留 44px 触控高度")
+    assert.equal(await mobileCategory.locator('option[value="style"]').isDisabled(), format === "ssf")
+    if (format !== "ssf") {
+      await mobileCategory.selectOption("style:image")
+      await page.locator('#resource-gallery .ui-style-card[data-style-kind="image"]').first().waitFor()
+      assert.equal(await page.locator('#resource-gallery .ui-style-card:not([data-style-kind="image"])').count(), 0)
+      assert.equal(await page.locator('[data-resource-style-type="image"]').getAttribute("aria-pressed"), "true")
+      const filters = page.locator('.resource-filter-options select:visible')
+      assert.ok(await filters.evaluateAll(selects => selects.length >= 2 && selects.every(select => select.getBoundingClientRect().height >= 44)), "用途、状态和排序使用可触控的原生下拉")
+      if (format === "bds") await page.screenshot({ path: `.ui-current/resource-page-mobile-${colorScheme}.png` })
+    }
+    await mobileCategory.selectOption("catalog:all")
+    await page.locator('#resource-catalog[aria-label="全部资源"]').waitFor()
+    await mobileCategory.selectOption("catalog:font")
+    await page.locator('#resource-catalog[aria-label="字体"]').waitFor()
+    assert.equal(await page.getByRole("combobox", { name: "样式用途" }).isVisible(), false)
+    await mobileCategory.selectOption("image")
     await page.locator(".source #resource-gallery .ui-image-card").first().waitFor()
     assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false)
     assert.deepEqual(await page.evaluate(async () => [...(await import("/src/app/state.ts")).appState.archive.changed]), initial, "浏览和切换资源不修改文件")
+    if (format === "bds") {
+      const dark = page.locator('[data-resource-theme="dark"]')
+      const light = page.locator('[data-resource-theme="light"]')
+      const confirm = page.getByRole("dialog", { name: "创建深色目录？" })
+      const snapshot = () => page.evaluate(async () => {
+        const { appState } = await import("/src/app/state.ts")
+        const { archive, undoStack } = appState
+        const paths = archive.names().filter(path => path.startsWith("light/skin/") && !path.endsWith("/"))
+        return {
+          undo: undoStack.length,
+          dark: archive.names().filter(path => path.startsWith("dark/skin/") && !path.endsWith("/")).length,
+          copied: paths.every(path => archive.getBytes(path)?.toString() === archive.getBytes(path.replace(/^light\//, "dark/"))?.toString()),
+        }
+      })
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.locator('[data-resource-page="style"]').click()
+      await page.locator("#resource-search").fill("STYLE2")
+      await dark.click()
+      await confirm.waitFor()
+      await page.screenshot({ path: `.ui-current/resource-theme-confirm-${colorScheme}.png`, animations: "disabled" })
+      assert.equal(await light.getAttribute("aria-pressed"), "true")
+      assert.deepEqual(await snapshot(), { undo: 0, dark: 0, copied: false })
+      await page.keyboard.press("Escape")
+      await confirm.waitFor({ state: "detached" })
+      assert.equal(await page.locator("#theme").inputValue(), "light")
+      assert.equal(await page.locator("#resource-search").inputValue(), "STYLE2")
+      assert.deepEqual(await snapshot(), { undo: 0, dark: 0, copied: false })
+      await dark.click()
+      await confirm.getByRole("button", { name: "创建并切换" }).click()
+      await page.waitForFunction(() => document.querySelector('[data-resource-theme="dark"]').ariaPressed === "true")
+      const created = await snapshot()
+      assert.equal(await page.locator("#resource-search").inputValue(), "STYLE2")
+      assert.equal(created.undo, 1)
+      assert.ok(created.dark > 0 && created.copied, "新目录包含当前外观的原始文件")
+      await light.click()
+      await dark.click()
+      assert.equal(await confirm.count(), 0, "已有目录直接切换，无需再确认")
+      assert.deepEqual(await snapshot(), created)
+      await page.locator("#desktop-undo").click()
+      assert.equal(await light.getAttribute("aria-pressed"), "true", "撤销后回到仍存在的外观")
+      assert.deepEqual(await snapshot(), { undo: 0, dark: 0, copied: false })
+
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.locator('#mobile-navigation [data-mobile-page="edit"]').click()
+      await page.locator("#mobile-app-more > summary").click()
+      await page.locator('[data-mobile-action="mobile-canvas-options"]').click()
+      const options = page.getByRole("group", { name: "外观", exact: true })
+      await options.getByRole("button", { name: "深色" }).click()
+      await confirm.getByRole("button", { name: "取消" }).click()
+      await confirm.waitFor({ state: "detached" })
+      assert.equal(await options.getByRole("button", { name: "浅色" }).getAttribute("aria-pressed"), "true")
+      await options.getByRole("button", { name: "深色" }).click()
+      await confirm.getByRole("button", { name: "创建并切换" }).click()
+      await page.waitForFunction(() => document.querySelector('[aria-label="外观"] button[aria-pressed="true"]').textContent === "深色")
+      assert.deepEqual(await snapshot(), created)
+    }
     assert.deepEqual(errors, [])
     await page.close()
     console.log(`resource page ${format} ${colorScheme}: desktop, narrow, mobile and image editing passed`)

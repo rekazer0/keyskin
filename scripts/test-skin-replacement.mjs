@@ -21,7 +21,7 @@ try {
     await page.waitForFunction(() => !document.querySelector('#open').disabled)
     const confirmation = page.getByRole('dialog', { name: '是否导出当前皮肤？', exact: true })
     assert.equal(await confirmation.count(), 0, 'first open needs no confirmation')
-    const share = page.locator('#share-page')
+    const share = page.locator('#share-dialog')
     const idle = () => page.waitForFunction(() => !document.querySelector('#open').disabled)
     const sameArchive = () => page.evaluate(async () => window.originalArchive === (await import('/src/app/state.ts')).appState.archive)
     await page.evaluate(async () => { window.originalArchive = (await import('/src/app/state.ts')).appState.archive })
@@ -70,7 +70,7 @@ try {
         await idle()
         await page.locator('#file-operation-close').click()
       }
-      await share.locator('#share-back').click()
+      await share.getByRole('button', { name: '关闭', exact: true }).click()
       await share.waitFor({ state: 'hidden' })
     }
 
@@ -87,7 +87,7 @@ try {
       await idle()
       await share.waitFor({ state: 'visible' })
       assert.equal(await sameArchive(), true, 'recent-file replacement also preserves the current skin for export')
-      await share.locator('#share-back').click()
+      await share.getByRole('button', { name: '关闭', exact: true }).click()
       await page.locator('[data-workspace-page="files"]').click()
       const template = page.locator('#file-project-chooser [data-template="default-android"]')
       await template.click()
@@ -95,7 +95,7 @@ try {
       await idle()
       await share.waitFor({ state: 'visible' })
       assert.equal(await sameArchive(), true)
-      await share.locator('#share-back').click()
+      await share.getByRole('button', { name: '关闭', exact: true }).click()
     }
     await input.setInputFiles(nextSkin)
     await confirmation.getByRole('button', { name: '不导出', exact: true }).click()

@@ -1,10 +1,16 @@
+import { syncInspectorSourceToggle, toggleInspectorSource, updateSourceHighlight } from "./app/source-panel"
+import { scrollSelectedSource } from "./app/config-context"
+import { populateKeyInspector } from "./app/key-inspector"
+import { appState } from "./app/state"
+import { animationObjectHeading } from "./app/dom"
+import { confirmDeletion } from "./app/ask"
 /*
  * 动画资源检查器的公共骨架（DESIGN.md §10「动画资源」）：手心 skin.json、百度 anim.ini 与 BDA animationConfig
  * 共用同一套分组——列表（选一个动画）→ 预览（播放器）→ 参数分组。桌面宽度下列表放进左侧栏、
  * 播放器放到画布上（animation-workspace.ts），检查器只留参数分组。
  * 这里只负责呈现与交互；读写配置、撤销与选择状态都由各格式的适配器通过回调完成。
  */
-import { bindListActionKeys, bindListboxKeys, bindMenuKeys, element, emptyState, iconButton, listToolbar, paneHeader } from "./dom-element.ts"
+import { bindListActionKeys, bindListboxKeys, element, emptyState, iconButton, listToolbar } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 import { animationPlayer, type AnimationPlayerOptions } from "./animation-player.ts"
 import { animationWorkspaceHosts } from "./animation-workspace.ts"
@@ -129,6 +135,12 @@ function listOption(view: AnimationResourceView, item: AnimationListItem, select
   card.setAttribute("aria-selected", String(selected))
   card.tabIndex = selected ? 0 : -1
   card.title = `${item.title} · ${item.kind} · ${item.uses ? `${item.uses} 处引用` : "未使用"}\n${item.problem ?? item.detail}`
+  const dragID = appState.archive?.format === "sxi" ? item.id.match(/^\d+$/)?.[0]
+    : (appState.archive?.format === "bdi" || appState.archive?.format === "bds") ? item.id.match(/^ANIM(\d+)$/)?.[1] : undefined
+  if (view.mode !== "all" && dragID) {
+    card.dataset.animationDraggable = dragID
+    card.title += "\n拖到画布应用；已有选择时也可按 Alt + Enter"
+  }
   if (item.problem) card.dataset.problem = ""
   return card
 }
@@ -328,10 +340,10 @@ type ListActions = Pick<AnimationResourceView, "create" | "duplicate" | "remove"
 
 const listActions = (view: AnimationResourceView, desktop = false) => {
   const noun = desktop && animationWorkspaceHosts()?.allTypes ? "动画" : MODE_NOUN[view.mode]
-  const toolbar = actionsToolbar({ ...view, noun, current: view.items.find((item) => item.id === view.selected)?.title }) ??
-    (view.presets?.items.length ? element("div", "ui-list-toolbar") : undefined)
+  const toolbar = actionsToolbar({ ...view, noun, duplicate: desktop ? undefined : view.duplicate, current: view.items.find((item) => item.id === view.selected)?.title }) ??
+    (!desktop && view.presets?.items.length ? element("div", "ui-list-toolbar") : undefined)
   if (desktop && toolbar) toolbar.dataset.variant = "animation-library"
-  if (toolbar && view.presets?.items.length) {
+  if (!desktop && toolbar && view.presets?.items.length) {
     const button = Object.assign(element("button", "ui-button"), { type: "button", textContent: "预设" })
     button.setAttribute("aria-label", "动效预设")
     button.disabled = !view.editable
@@ -375,41 +387,12 @@ function actionsToolbar(view: ListActions): HTMLElement | undefined {
     select.addEventListener("change", () => { if (select.value) view.create!.run(select.value) })
     create.append(plus, select)
   }
-  return listToolbar({
+  const bar = listToolbar({
     create,
     duplicate: view.duplicate && { label: current ? `复制${current}` : `复制${noun}`, run: view.duplicate, disabled: !view.editable || !current },
-    remove: view.remove && { label: current ? `删除${current}` : `删除${noun}`, run: view.remove.run, disabled: !view.editable || !current || Boolean(view.remove.blocked), title: view.remove.blocked },
+    remove: view.remove && { label: current ? `删除${current}` : `删除${noun}`, run: async () => { if (await confirmDeletion(`删除${current || noun}？`) && bar.isConnected) view.remove!.run() }, disabled: !view.editable || !current || Boolean(view.remove.blocked), title: view.remove.blocked },
   })
-}
-
-/** A second entrance to the same create action, without duplicating any document logic. */
-function quickCreate(view: AnimationResourceView): HTMLElement[] {
-  const create = view.create
-  if (!create?.options.length) return []
-  const label = "新建动画"
-  if (create.options.length === 1 || !view.editable) {
-    return [actionButton("plus", label, () => create.run(create.options[0][0]), !view.editable)]
-  }
-  const details = element("details", "toolbar-more")
-  const trigger = element("summary", "ui-icon-button")
-  trigger.setAttribute("aria-label", label)
-  trigger.setAttribute("aria-haspopup", "menu")
-  trigger.title = label
-  trigger.append(createIcon("plus", 14))
-  const menu = element("div", "ui-menu")
-  menu.setAttribute("role", "menu")
-  menu.setAttribute("aria-label", label)
-  for (const [kind, name] of create.options) {
-    const option = element("button", "ui-list-item")
-    option.type = "button"
-    option.setAttribute("role", "menuitem")
-    option.textContent = name
-    option.addEventListener("click", () => { details.open = false; create.run(kind) })
-    menu.append(option)
-  }
-  details.append(trigger, menu)
-  bindMenuKeys(details)
-  return [details]
+  return bar
 }
 
 function animationBadge(item: AnimationListItem): HTMLElement {
@@ -420,17 +403,26 @@ function animationBadge(item: AnimationListItem): HTMLElement {
   return badge
 }
 
-function objectHeader(view: AnimationResourceView, item: AnimationListItem): HTMLElement {
-  const actions = actionsToolbar({ ...view, create: undefined, noun: "动画", current: item.title })
-  const heading = paneHeader({ title: item.info || item.title, actions: actions ? [actions] : [] })
-  heading.querySelector(".ui-badge")?.replaceWith(animationBadge(item))
-  const path = element("div", "animation-object-path")
-  path.textContent = path.title = view.context
-  const references = element("div", "animation-object-references")
-  references.append(createIcon("link", 14), item.uses ? `${item.uses} 处引用` : "未使用")
-  const header = element("div", "animation-object-header")
-  header.append(heading, path, references)
-  return header
+function renderObjectHeader(context: string, item: AnimationListItem | undefined, mode: AnimationMode): void {
+  const toggle = iconButton("code-xml", "查看源代码", () => {
+    toggleInspectorSource(populateKeyInspector)
+    animationObjectHeading.querySelector("button")?.focus({ preventScroll: true })
+  })
+  toggle.classList.add("ui-inspector-source-toggle")
+  toggle.dataset.variant = "filled"
+  toggle.dataset.size = "lg"
+  syncInspectorSourceToggle(toggle)
+  const icon = element("span", "ui-inspector-object-icon")
+  icon.append(createIcon((item ? item.particle : mode === "particle") ? "wand-sparkles" : "film", 16))
+  const copy = element("div", "ui-inspector-object-copy")
+  const name = element("div", "ui-inspector-object-name")
+  const title = element("strong")
+  title.textContent = title.title = item?.info || item?.title || "动画"
+  name.append(title, ...item ? [animationBadge(item)] : [])
+  const path = element("span", "ui-inspector-object-context animation-object-path")
+  path.textContent = path.title = context
+  copy.append(name, path)
+  animationObjectHeading.replaceChildren(icon, copy, toggle)
 }
 
 function previewSection(view: AnimationResourceView, item: AnimationListItem): HTMLElement {
@@ -447,15 +439,9 @@ function stageContent(view: AnimationResourceView, item: AnimationListItem | und
   label.textContent = "时间轴"
   const title = element("strong")
   title.textContent = item.info || item.title
-  const time = element("output", "animation-stage-meta")
-  time.setAttribute("aria-live", "off")
-  heading.append(label, title, animationBadge(item), time)
-  const player = view.player && animationPlayer({ ...view.player, dockedTime: time })
-  if (player) player.dataset.layout = "dock"
-  const target = view.player?.keyboard?.targetLabel?.()
-  const trigger = target && element("div", "animation-stage-trigger")
-  if (trigger) trigger.append(createIcon("mouse-pointer-2", 14), `按键按下 · ${target}`, ...(item.particle ? [" · ", item.detail] : []))
-  return [heading, ...player ? [player] : [], ...trigger ? [trigger] : [], ...view.warnings ?? []]
+  heading.append(label, title, animationBadge(item))
+  const player = view.player && animationPlayer({ ...view.player, docked: true })
+  return [heading, ...player ? [player] : [], ...view.warnings ?? []]
 }
 
 /** Fills `container` with the list, and the selected animation's preview and parameters. */
@@ -464,9 +450,10 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
   const hosts = animationWorkspaceHosts()
   view.listOwner = container
   view.listContext = JSON.stringify([view.mode, hosts?.allTypes, view.context])
+  const editingStyle = appState.animationStyleEditing && appState.archive?.format !== "bda"
+  if (view.mode !== "all" && (!editingStyle || appState.inspectorTab === "source")) renderObjectHeader(view.context, item, view.mode)
   if (hosts && view.mode !== "all") {
     hosts.setMode(view.mode === "particle", countLabel(view), [view.totalCount - view.particleCount, view.particleCount])
-    hosts.create.replaceChildren(...quickCreate(view))
     hosts.setStyles(view.styles?.noun, view.styles?.items.length ?? 0)
     const list = listBox(view, true)
     const actions = listActions(view, true)
@@ -478,9 +465,14 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
     syncChildren(hosts.styles, styles ? [styles, ...styleToolbar ? [styleToolbar] : []] : [])
     hosts.filter()
     hosts.stage.replaceChildren(...stageContent(view, item))
+    if (appState.inspectorTab === "source") {
+      container.replaceChildren()
+      updateSourceHighlight()
+      scrollSelectedSource()
+      return
+    }
     container.replaceChildren(...view.listRows?.length ? [section("配置", view.listRows, { className: view.sectionClass })] : [])
     if (item) {
-      container.prepend(objectHeader(view, item))
       if (view.styleLinks?.length && view.styles) {
         const styles = view.styles
         const links = view.styleLinks.map(link => {

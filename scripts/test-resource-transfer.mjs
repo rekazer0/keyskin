@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { chromium, webkit } from "playwright"
@@ -119,7 +120,19 @@ try {
       await page.locator('.ui-image-card[data-path$="/drop-b.png"]').waitFor()
       await page.locator('.ui-image-card[data-path$="/drop-a.png"]').click()
       await page.locator('.ui-image-card[data-path$="/drop-b.png"]').click({ modifiers: ["ControlOrMeta"] })
-      await page.locator("#resource-delete").click()
+      const group = page.locator('.ui-image-card[data-path$="/drop-b.png"]')
+      await group.focus()
+      await group.press('Backspace')
+      const confirmation = page.locator('dialog[open][data-delete-confirmation]')
+      assert.equal(await confirmation.count(), 0, 'Backspace never deletes resources')
+      await group.press('Delete')
+      assert.equal(await confirmation.getByRole('button', { name: '取消', exact: true }).evaluate(node => node === document.activeElement), true)
+      await page.keyboard.press('Escape')
+      await confirmation.waitFor({ state: 'detached' })
+      assert.equal(await selected.count(), 2, 'cancel leaves the selected files untouched')
+      await group.click({ button: 'right' })
+      await page.getByRole('menu', { name: '资源操作' }).getByRole('menuitem', { name: '删除选中图片' }).click()
+      await confirmDeletion(page)
       assert.equal(await page.locator('.ui-image-card[data-path$="/drop-a.png"], .ui-image-card[data-path$="/drop-b.png"]').count(), 0)
       await page.keyboard.press("ControlOrMeta+z")
       await page.locator('.ui-image-card[data-path$="/drop-b.png"]').waitFor()
@@ -145,6 +158,7 @@ try {
       await page.locator(`.ui-style-card[data-path="STYLE${created[0]}"]`).click()
       await page.locator(`.ui-style-card[data-path="STYLE${created[1]}"]`).click({ modifiers: ["ControlOrMeta"] })
       await page.locator('#resource-selection-actions .ui-list-toolbar [data-list-action="remove"]').click()
+      await confirmDeletion(page)
       assert.equal(await page.locator(`.ui-style-card[data-path="STYLE${created[0]}"]`).count(), 0)
       await page.keyboard.press("ControlOrMeta+z")
       assert.equal(await page.locator(`.ui-style-card[data-path="STYLE${created[0]}"]`).count(), 1)
@@ -152,7 +166,7 @@ try {
       await page.locator('[data-resource-page="image"]').click()
       await page.setViewportSize({ width: 390, height: 844 })
       await page.locator('#mobile-navigation [data-mobile-page="resources"]').click()
-      await page.locator('#mobile-resource-tabs [data-mobile-resource="resource"]').click()
+      await page.locator('#mobile-resource-category').selectOption('image')
       await cards.nth(0).click()
       assert.equal(await page.locator("#resource-list-view").isVisible(), true)
       await cards.nth(0).dblclick()

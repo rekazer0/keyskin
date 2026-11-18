@@ -1,5 +1,7 @@
-import { canvasWrap, mobilePropertyTabs, modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, bdaConfigFields, documentFieldsGroup, documentFields, textStyleGroup, bdaSelectedStyleHeading, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { canvasWrap, modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, bdaConfigFields, documentFieldsGroup, documentFields, textStyleGroup, bdaSelectedStyleHeading, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
+import { availableSkinThemes, usesSkinThemeDirectories } from "./config-context"
+import { createSkinTheme } from "./bda-documents"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
 import { createIcon, groupIcon } from "../icons"
@@ -102,19 +104,15 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
     const changed = appState.mobileInspectorCategory !== current.dataset.mobileCategory
     appState.mobileInspectorCategory = current.dataset.mobileCategory
     if (changed) syncMobileKeyAnimation()
-    for (const button of mobilePropertyTabs.querySelectorAll<HTMLButtonElement>("button")) {
-      button.setAttribute("aria-pressed", String(button.dataset.mobileCategory === current.dataset.mobileCategory))
-    }
   }
   // 分类栏只定位同一列内的分组，不切换或隐藏属性。
   revealActiveRailButton()
   if (scroll) {
-    quickInspector.scrollTop = 0
     scrollToSinglePageInspectorGroup()
-    // 程序滚动的落点：随后的 scroll 事件按位置反推分组时不改掉这次点选。
-    pinnedScrollTop = quickInspector.scrollTop
     playEnter(current)
   }
+  // 点击或编辑了露出一部分的分区：实际滚动前保持选中，不回跳上一组。
+  if (scroll || current?.contains(document.activeElement)) pinnedScrollTop = quickInspector.scrollTop
 }
 
 /** 选中画布上的区域后，把分类栏定位到该区域对应的分组（例如输入码区域 → 输入区）。 */
@@ -129,6 +127,13 @@ function revealActiveRailButton(): void {
   const rail = mobileInspectorGroups.parentElement
   const button = mobileInspectorGroups.querySelector<HTMLElement>('button[aria-pressed="true"]')
   if (!rail || !button) return
+  if (mobilePortraitQuery.matches) {
+    const view = mobileInspectorGroups.getBoundingClientRect()
+    const box = button.getBoundingClientRect()
+    if (box.left < view.left) mobileInspectorGroups.scrollLeft += box.left - view.left
+    else if (box.right > view.right) mobileInspectorGroups.scrollLeft += box.right - view.right
+    return
+  }
   const view = rail.getBoundingClientRect()
   const box = button.getBoundingClientRect()
   // 第一项连同上面的筛选按钮一起露出来
@@ -242,9 +247,6 @@ export function syncMobileInspectorGroups(): void {
   // 分类轨只在检查器没有任何分组时隐藏。单分区文档（例如只有 [PANEL] 的 help.ini）
   // 此前也会被当成「没有可切换的分组」而整条收起，属性检查器于是少了一侧导航。
   mobileInspectorGroups.hidden = groups.length === 0
-  // Keep the horizontal inspector navigation evenly distributed when the
-  // available groups change (for example: 面板 / 提示栏 / 扩展区域).
-  mobileInspectorGroups.style.setProperty("--inspector-group-count", String(Math.max(groups.length, 1)))
   mobileInspectorGroups.replaceChildren(...groups.map((group) => {
     const button = railButton()
     const label = railLabels.get(group) ?? mobileInspectorGroupLabel(group)
@@ -253,6 +255,7 @@ export function syncMobileInspectorGroups(): void {
     text.textContent = label
     button.append(groupIcon(label), text)
     button.title = railCodes.has(group) ? `${label}（${railCodes.get(group)}）` : label
+    button.dataset.mobileCategory = group.dataset.mobileCategory
     button.dataset.mobileInspectorGroup = group.dataset.mobileInspectorGroup
     button.addEventListener("click", () => setMobileInspectorGroup(group.dataset.mobileInspectorGroup ?? "0"))
     return button
@@ -334,6 +337,9 @@ export function applyModeState(): void {
     }
     for (const button of layoutActionButtons) button.disabled = true
   }
+  for (const field of [...keyFields, ...toolbarFields, ...gapFields, ...skinFields]) {
+    if (field.hasAttribute("data-number-slider")) field.dispatchEvent(new Event("inspector-slider-sync"))
+  }
   updatePanelToolButtons()
   updateSourceFileActions()
   updateSourceSearchStatus()
@@ -355,8 +361,20 @@ export function requestEditMode(): void {
   })
 }
 
-export function selectChoice(select: HTMLSelectElement, value: string): void {
+export async function selectChoice(select: HTMLSelectElement, value: string): Promise<void> {
   if (select.value === value) return
+  if (select === theme && usesSkinThemeDirectories() && !availableSkinThemes().includes(value)) {
+    const archive = appState.archive
+    const current = theme.value
+    const label = value === "dark" ? "深色" : "浅色"
+    const choice = await ask({
+      title: `创建${label}目录？`,
+      detail: `当前皮肤没有${label}目录。将复制当前外观的布局和资源作为起点。`,
+      actions: [{ value: "cancel", label: "取消" }, { value: "create", label: "创建并切换", variant: "primary" }],
+    })
+    if (choice !== "create" || appState.archive !== archive || theme.value !== current) return
+    if (!availableSkinThemes().includes(value) && !createSkinTheme(value)) return
+  }
   select.value = value
   syncAiDesignContext()
   select.dispatchEvent(new Event("change"))

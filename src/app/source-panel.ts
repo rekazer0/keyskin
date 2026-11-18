@@ -3,9 +3,9 @@ import { shortcutLabel } from "../dom-element"
 import { sxiFragmentRange, sxiSectionRanges } from "../palm/sxi-edit.ts"
 import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { syncAtlasWorkspace } from "./tile-editing"
-import { files, sourceName, quickInspector, asset, resourceInspector, resourceDetail, styleResourceDetail, resourceSourceToggle, inspectorPane, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
+import { files, sourceName, quickInspector, asset, resourceInspector, resourceDetail, styleResourceDetail, resourceSourceToggle, inspectorSourceToggle, inspectorPane, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
 import { appState } from "./state"
-import { showsLayoutProperties, isSkinInfoPath, selectedSourceSections, selectedBdaStyleSourceRange, styleConfigPath, sxiSourceRanges } from "./config-context"
+import { showsLayoutProperties, isSkinInfoPath, selectedSourceSections, selectedBdaSourceRange, scrollSelectedSource, styleConfigPath, sxiSourceRanges } from "./config-context"
 import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, visualResolver, bdaAppearanceStylePath } from "./bda-documents"
 import { inspectorTabButtons, source, mobilePortraitQuery, preview } from "./canvas-interaction"
 import { loadVisibleSourceEditor } from "./resource-inspector"
@@ -24,13 +24,30 @@ import { openStylePicker } from "./style-picker"
 import { openStyleReferenceStateImage } from "./style-references"
 import { previewItems } from "../preview-items.ts"
 
+export function syncInspectorSourceToggle(button: HTMLButtonElement): void {
+  const active = appState.inspectorTab === "source"
+  button.setAttribute("aria-controls", sourceEditor.id)
+  button.setAttribute("aria-pressed", String(active))
+  button.title = button.ariaLabel = active ? "返回属性" : "查看源代码"
+}
+
+export function toggleInspectorSource(refresh: () => void): void {
+  source.commit()
+  appState.inspectorTab = appState.inspectorTab === "source" ? "properties" : "source"
+  updateInspectorView()
+  refresh()
+  if (appState.inspectorTab === "source") {
+    updateSourceHighlight()
+    scrollSelectedSource()
+  }
+}
+
 export function updateInspectorView(): void {
   syncAtlasWorkspace()
   const styleSelected = appState.resourceConfigActive && appState.resourceInspectorMode === "style" && Boolean(appState.selectedStyleID)
   const styleSource = styleSelected && appState.inspectorTab === "source"
   resourceSourceToggle.hidden = !styleSelected
-  resourceSourceToggle.setAttribute("aria-pressed", String(styleSource))
-  resourceSourceToggle.title = resourceSourceToggle.ariaLabel = styleSource ? "返回属性" : "查看源代码"
+  syncInspectorSourceToggle(resourceSourceToggle)
   if (styleSelected) styleResourceDetail.hidden = styleSource
   // 复用同一个编辑器，源码模式保留样式对象头和资源列表。
   if (styleSource) {
@@ -67,6 +84,8 @@ export function updateInspectorView(): void {
     button.disabled = !available
     button.setAttribute("aria-selected", String(tab === appState.inspectorTab && available))
   }
+  inspectorSourceToggle.hidden = appState.resourceConfigActive || !propertiesAvailable || appState.inspectorTab === "ai" || appState.animationDesignMode !== "all" || appState.sidebarView !== "overview"
+  syncInspectorSourceToggle(inspectorSourceToggle)
   if (appState.resourceConfigActive) {
     sourceName.textContent = appState.inspectorTab === "source" && appState.selectedResourcePath
       ? appState.archive?.format === "bda" ? "BDA 切片由 appearanceConfig 管理" : appState.tilePath
@@ -91,7 +110,8 @@ export function updateInspectorView(): void {
     return
   }
   asset.hidden = true
-  quickInspector.hidden = appState.inspectorTab !== "properties" || !propertiesAvailable
+  const localSource = appState.inspectorTab === "source" && (!inspectorSourceToggle.hidden || appState.animationDesignMode !== "all")
+  quickInspector.hidden = !propertiesAvailable || appState.inspectorTab !== "properties" && !localSource
   sourceEditor.hidden = appState.inspectorTab !== "source"
   aiDesignPanel.hidden = appState.inspectorTab !== "ai"
   updateSourceFindVisibility()
@@ -170,11 +190,11 @@ export function updateSourceHighlight(): void {
   source.setLanguage(jsonSource ? "json" : "ini")
   const matches = sourceSearchMatches()
   updateSourceSearchStatus(matches)
-  const bdaStyleRange = selectedBdaStyleSourceRange(source.value)
+  const bdaRange = selectedBdaSourceRange(source.value)
   const selectedRanges = sxiSource
     ? sxiSourceRanges(source.value)
     : bdaSource
-    ? bdaStyleRange ? [bdaStyleRange] : jsonPropertyRanges(source.value, selectedBdaSourceKeys())
+    ? bdaRange ? [bdaRange] : jsonPropertyRanges(source.value, selectedBdaSourceKeys())
     : sections.length ? iniSectionRanges(source.value, sections) : appState.sourceHistoryHighlight ? [appState.sourceHistoryHighlight] : []
   const searchRanges = matches.slice(0, SOURCE_SEARCH_HIGHLIGHT_LIMIT)
     .map((start) => [start, start + query.length] as const)
@@ -335,6 +355,7 @@ export function selectKeyFromSourceOffset(offset: number): void {
   ))
   if (!match) return
   if (appState.selectedKeySections.length === 1 && appState.selectedKeySections[0] === match.section) return
+  appState.selectedToolbarSections = []
   appState.selectedCandidate = false
   syncCandidateSelection()
   appState.selectedKeySections = [match.section]

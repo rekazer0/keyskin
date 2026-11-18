@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import { SkinArchive } from "../src/skin.ts"
 import { buildSxiZip } from "../src/palm/palm-export.ts"
-import { canExport, exportFormatFromPath } from "../src/export.ts"
+import { exportFormatFromPath } from "../src/export.ts"
 import { compactPalmJSON } from "../src/palm/palm-json.ts"
 import { applySxiFragments, encodeSkinJson, parseSkinJson, setSxiFragment, sxiFragmentPath } from "../src/palm/sxi-json.ts"
 import { sxiBaiduFiles } from "../src/palm/sxi-to-baidu.ts"
@@ -104,18 +104,9 @@ test("editing a skin.json fragment saves only skin.json and info.json", () => {
   assert.ok(!Object.keys(saved).some((name) => /\.(?:ini|css|til|cnd|pop|txt)$/.test(name)))
 })
 
-test("an opened .sxi saves in place and exports to Baidu formats", () => {
+test("an opened .sxi requires a converter to export to Baidu formats", () => {
   const archive = sxiArchive()
   assert.equal(exportFormatFromPath("skin.SXI"), "sxi")
-  assert.ok(canExport("sxi", "sxi"))
-  assert.ok(canExport("sxi", "bds"))
-  assert.ok(canExport("sxi", "bdi"))
-  assert.ok(canExport("sxi", "bda"))
-  assert.ok(canExport("bds", "sxi"))
-  assert.ok(!canExport("bds", "bda"))
-  assert.ok(canExport("ssf", "bda"))
-  assert.ok(canExport("ssf", "sxi"))
-  assert.ok(canExport("sxi", "ssf"))
   assert.equal(exportFormatFromPath("skin.mssf"), "ssf")
   // Export goes through the converter, never a direct repackage.
   assert.throws(() => archive.toBytes("bds"), /需要转换/)

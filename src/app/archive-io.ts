@@ -1,18 +1,18 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetUnavailable, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
-import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel } from "./canvas-interaction"
+import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
-import { canExport, exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
+import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { buildSxiZipAsync } from "../palm/palm-export.ts"
 import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
-import { aiDesignStatus, aiDesignPanel, theme, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationClose, fileOperationDetail, fileOperationResult } from "./dom"
+import { aiDesignStatus, aiDesignPanel, theme, mode, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationClose, fileOperationDetail, fileOperationResult } from "./dom"
 import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
 import { applyModeState, syncSegmentedControls, setMobilePane } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
@@ -33,13 +33,13 @@ import { convertBdaArchive } from "../bda-convert.ts"
 import { flushNumberInputWheel } from "../number-input-wheel.ts"
 import { loadBdaBase } from "../operations.ts"
 import { isSsfPath, looksLikeSsf } from "../ssf/ssf-package.ts"
-import { convertSsfDocument, exportSsf, ssfDocumentBytes } from "../ssf/ssf-convert.ts"
+import { convertLegacyToBda, convertSsfDocument, exportSsf, ssfDocumentBytes } from "../ssf/ssf-convert.ts"
 import { convertSxiToBaidu, convertSxiToBda } from "../palm/sxi-to-baidu.ts"
 import { rebuildSsfPreview, ssfTemplates } from "./ssf-preview"
 import { isSsfBoardPath } from "./ssf-documents"
-import { isSxiBoardAddress, palmThemes, preferredPalmBoard, sxiPointer } from "./sxi-documents"
+import { isSxiBoardAddress, preferredPalmBoard, sxiPointer } from "./sxi-documents"
 import { boardFileName } from "../palm/sxi-layout.ts"
-import { layoutSource } from "./config-context"
+import { availableSkinThemes } from "./config-context"
 export async function loadArchive(
   bytes: Uint8Array | SkinArchive,
   path: string,
@@ -124,10 +124,7 @@ export async function loadArchive(
   aiNewSession.setAttribute("aria-expanded", "false")
   if (pendingSourceDirectory !== undefined) appState.sourceWorkspacePendingArchive = nextArchive
   appState.sourceTransfer = undefined
-  // A Sogou skin's looks are the skeleton's themes; the other formats keep theirs in `<theme>/skin/`.
-  const availableThemes = appState.archive.format === "sxi" ? palmThemes() : ["light", "dark"].filter((value) =>
-    layoutSource()?.names().some((name) => name.startsWith(`${value}/skin/`)),
-  )
+  const availableThemes = availableSkinThemes()
   if (!availableThemes.includes(theme.value)) theme.value = availableThemes[0] ?? "light"
   syncSegmentedControls()
   const preferredDevice = localStorage.getItem("default-device")
@@ -136,6 +133,7 @@ export async function loadArchive(
   } else if (preferredDevice && Array.from(device.options).some((option) => option.value === preferredDevice)) {
     device.value = preferredDevice
   }
+  if (mobilePortraitQuery.matches) mode.value = "preview"
   canvasWrap.classList.remove("empty")
   appState.currentPath = path
   appState.unsavedNew = isNew
@@ -148,9 +146,7 @@ export async function loadArchive(
   syncAiDesignContext()
   if (!isNew && isTauri() && path) recordRecentFile(path, documentName.textContent, existingSourceWorkspace)
   saveButton.disabled = false
-  for (const button of exportTargets) {
-    button.disabled = exportTargetUnavailable(button.dataset.exportFormat as ExportFormat)
-  }
+  for (const button of exportTargets) button.disabled = false
   syncMobileShareLabel()
   updateFileOperationProgress(68, "正在生成文件列表…")
   await waitForInterfacePaint()
@@ -380,7 +376,6 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<PackagedResult> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
-  if (!canExport(appState.archive.format, format)) throw new Error(`${appState.archive.format.toUpperCase()} 皮肤不能导出为 ${format.toUpperCase()}`)
   updateFileOperationProgress(22, `正在生成 ${format.toUpperCase()} 皮肤包…`)
   await waitForInterfacePaint()
   if (appState.archive.format === "ssf" && format === "sxi" || appState.archive.format === "sxi" && format === "ssf") {
@@ -413,29 +408,33 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const result = await buildSxiZipAsync(source, async (fraction, detail) => update(start + fraction * (1 - start), detail))
     return { bytes: result.bytes, converted: true, warnings: [...warnings, ...result.warnings] }
   }
-  if (appState.archive.format === "ssf" && format !== "ssf" && format !== "sxi") {
-    const report = conversionProgress(22, 80, `正在准备 ${format.toUpperCase()} 模板…`)
+  if (format === "bda" && appState.archive.format !== "bda") {
+    const report = conversionProgress(22, 80, "正在准备 BDA 模板…")
     await report(0.02)
     const templates = await ssfTemplates()
-    const result = await convertSsfDocument(appState.archive, format, templates, (fraction, detail) => report(0.05 + fraction * 0.9, detail))
-    // The converter writes Android BDA; iOS gets the same platform conversion as any BDA.
-    const bytes = format === "bda" && targetBdaPlatform === "ios"
-      ? await report(0.97, "正在生成 iOS 皮肤包…").then(() => convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync())
-      : result.bytes
-    return { bytes, converted: true, warnings: result.warnings }
+    await report(0.15, "正在转换 BDA 配置…")
+    const result = appState.archive.format === "ssf"
+      ? await convertSsfDocument(appState.archive, format, templates, (fraction, detail) => report(0.15 + fraction * 0.8, detail))
+      : appState.archive.format === "sxi"
+        ? await convertSxiToBda(appState.archive, templates.bda)
+        : await convertLegacyToBda(appState.archive, templates.bda)
+    if (appState.archive.format === "bdi" || appState.archive.format === "bds") {
+      result.warnings.unshift("新版 BDA 使用官方面板布局，原皮肤的按键位置、自定义布局和手势可能无法保留")
+    }
+    if (targetBdaPlatform !== "ios") return { ...result, converted: true }
+    await report(0.97, "正在生成 iOS BDA 皮肤包…")
+    const bytes = await convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync()
+    return { ...result, bytes, converted: true }
   }
-  if (appState.archive.format === "sxi" && format !== "sxi") {
-    if (format === "ssf") throw new Error("手心皮肤不能直接导出为搜狗皮肤")
-    const report = conversionProgress(22, 80, `正在转换为 ${format.toUpperCase()}…`)
-    await report(0.2)
-    const result = format === "bda"
-      ? await convertSxiToBda(appState.archive, (await ssfTemplates()).bda)
-      : await convertSxiToBaidu(appState.archive, format)
-    // The BDA writer emits the Android package; iOS gets the usual platform conversion.
-    const bytes = format === "bda" && targetBdaPlatform === "ios"
-      ? await report(0.97, "正在生成 iOS 皮肤包…").then(() => convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync())
-      : result.bytes
-    return { bytes, converted: true, warnings: result.warnings }
+  if (appState.archive.format === "ssf" && (format === "bdi" || format === "bds")) {
+    const report = conversionProgress(22, 80, `正在准备 ${format.toUpperCase()} 模板…`)
+    await report(0.02)
+    const result = await convertSsfDocument(appState.archive, format, await ssfTemplates(), (fraction, detail) => report(0.05 + fraction * 0.9, detail))
+    return { ...result, converted: true }
+  }
+  if (appState.archive.format === "sxi" && (format === "bdi" || format === "bds")) {
+    await conversionProgress(22, 80, `正在转换为 ${format.toUpperCase()}…`)(0.2)
+    return { ...await convertSxiToBaidu(appState.archive, format), converted: true }
   }
   if (format === "ssf") {
     if (appState.archive.format === "ssf") {

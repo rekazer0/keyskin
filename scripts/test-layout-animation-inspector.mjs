@@ -47,7 +47,7 @@ try {
   const card = row('BACK_ANIM_STYLE').getByRole('button', { name: /动画 1/ })
   await card.scrollIntoViewIfNeeded()
   await page.waitForFunction(() => document.querySelector('.key-animation-fields [data-key-field="BACK_ANIM_STYLE"]')?.value === '7')
-  await card.click()
+  await row('BACK_ANIM_STYLE').getByRole('button', { name: '更换动画样式', exact: true }).click()
   const picker = page.frameLocator('#picker-frame')
   await picker.locator('[data-library-kind="anim"][aria-pressed="true"]').waitFor()
   // Esc 分层：先关预览栏，再关选择器。

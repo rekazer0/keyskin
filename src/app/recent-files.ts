@@ -4,31 +4,31 @@ import { runFileOperation } from "./file-operations"
 import { prepareDocumentReplacement } from "./edit-history"
 import { loadNativePath, loadSourceWorkspace } from "./archive-io"
 import { symbolSpan, createIcon } from "../icons"
-import { isTauri, sourceDirectoryEnabledBySettings, preview } from "./canvas-interaction"
+import { isTauri, sourceDirectoryEnabledBySettings, mobilePortraitQuery } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
-import { canvasWrap, welcomeScroller, $ } from "./dom"
-import { setMobilePane } from "./mobile-layout"
+import { canvasWrap, mode, welcomeScroller, $ } from "./dom"
+import { selectChoice } from "./mobile-layout"
+import { selectFile } from "./navigation"
 import { bindListboxKeys } from "../dom-element"
 import { playPageSlide } from "../motion"
 import { renderBlobPreview, archiveDemoImage, MissingPreviewImageError, releaseArchivePreview, showMissingPreview } from "../template-preview"
 
 export const recentFilesKey = "recent-files"
 
-const recentPageSize = 9
+const mobileRecentPageSize = 9
+const desktopRecentRows = 3
+const defaultRecentHistoryLimit = 27
 const recentHistoryLimitKey = "recent-history-limit"
 
 function recentHistoryLimit(): number {
-  const value = Number(localStorage.getItem(recentHistoryLimitKey))
-  return Number.isInteger(value) && value > 0 ? value : 0
+  const value = Number(localStorage.getItem(recentHistoryLimitKey) ?? defaultRecentHistoryLimit)
+  return Number.isInteger(value) && value >= 0 ? value : defaultRecentHistoryLimit
 }
 
 export function saveRecentHistoryLimit(limit: number): void {
   if (limit === recentHistoryLimit()) return
   localStorage.setItem(recentHistoryLimitKey, String(limit))
-  const items = readRecentFiles()
-  if (!limit || items.length <= limit) return
-  localStorage.setItem(recentFilesKey, JSON.stringify(items.slice(0, limit)))
-  renderRecentFiles()
+  if (limit && readRecentFiles().length > limit) renderRecentFiles()
 }
 
 function readRecentFiles(): RecentFile[] {
@@ -72,9 +72,13 @@ function formatRecentTime(at: number): string {
 
 function openRecentFile(item: RecentFile): void {
   if (appState.fileOperationRunning) return
-  // 从菜单回到启动页后再点当前皮肤，直接回到编辑，不重新读盘、不丢未保存修改。
+  // 当前皮肤直接重用内存中的文档，不重新读盘、不丢未保存修改。
   if (appState.archive && !appState.unsavedNew && item.path === appState.currentPath) {
     canvasWrap.classList.remove("empty")
+    if (mobilePortraitQuery.matches) {
+      if (appState.layoutPath && (appState.selectedPath !== appState.layoutPath || appState.resourceConfigActive)) selectFile(appState.layoutPath)
+      selectChoice(mode, "preview")
+    }
     return
   }
   void runFileOperation("打开", async () => {
@@ -100,11 +104,11 @@ function recentFormatLabel(path: string): string {
   return path.match(/\.(bdi|bds|bda|m?ssf|sxi)$/i)?.[0]?.toLowerCase() ?? "皮肤"
 }
 
-function recentCard(item: RecentFile, resume = false): HTMLButtonElement {
+function recentCard(item: RecentFile): HTMLButtonElement {
   const card = document.createElement("button")
   card.type = "button"
   card.className = "ui-project-card template-card recent-card ui-skin-entry"
-  card.dataset.variant = resume ? "resume" : "recent"
+  card.dataset.variant = "recent"
   card.dataset.recent = item.path
   card.title = `打开 ${item.name}\n${item.path}`
   const preview = document.createElement("span")
@@ -139,21 +143,8 @@ function recentCard(item: RecentFile, resume = false): HTMLButtonElement {
   const mobileMeta = document.createElement("span")
   mobileMeta.className = "ui-skin-entry-meta"
   const extension = recentFormatLabel(item.path).replace(/^\./, "").toUpperCase()
-  mobileMeta.textContent = resume
-    ? `${({ BDI: "百度 iOS", BDS: "百度 Android", BDA: "百度", SSF: "搜狗", MSSF: "搜狗", SXI: "手心" } as Record<string, string>)[extension] ?? "皮肤"} · ${extension}`
-    : `${formatRecentTime(item.at)} · ${extension}`
+  mobileMeta.textContent = `${formatRecentTime(item.at)} · ${extension}`
   foot.append(mobileMeta)
-  if (resume) {
-    const label = document.createElement("span")
-    label.className = "ui-skin-entry-label"
-    label.textContent = "继续创作"
-    card.append(label)
-    const action = document.createElement("span")
-    action.className = "ui-button ui-skin-entry-action"
-    action.dataset.variant = "primary"
-    action.append(createIcon("pen-line"), "继续编辑", createIcon("chevron-right"))
-    card.append(action)
-  }
   card.append(preview, foot)
   const chevron = createIcon("chevron-right", 20)
   chevron.classList.add("ui-skin-entry-chevron")
@@ -183,7 +174,7 @@ export function waitForPreviewFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()))
 }
 
-// 最近皮肤最多 9 张，逐个串行取图，避免同时读多份皮肤阻塞 UI。
+// 逐个串行取图，避免同时读多份皮肤阻塞 UI。
 const recentPreviewQueue: HTMLButtonElement[] = []
 
 const recentPreviewQueued = new Set<HTMLButtonElement>()
@@ -262,10 +253,8 @@ async function drainRecentPreviews(): Promise<void> {
       try {
         const fileStamp = await invoke<number[]>("skin_file_stamp", { path })
         const stamp = fileStamp.join(":")
-        if (card.dataset.variant !== "resume") {
-          const meta = card.querySelector<HTMLElement>(".ui-skin-entry-meta")
-          if (meta) meta.textContent += ` · ${(fileStamp[0] / 1024 / 1024).toFixed(1)} MB`
-        }
+        const meta = card.querySelector<HTMLElement>(".ui-skin-entry-meta")
+        if (meta) meta.textContent += ` · ${(fileStamp[0] / 1024 / 1024).toFixed(1)} MB`
         const cached = recentPreviewCache.get(path)
         if (cached?.stamp === stamp) {
           host.replaceChildren(cached.image.cloneNode(true))
@@ -320,6 +309,7 @@ function renderRecentPage(items: RecentFile[]): void {
   recentPreviewObserver?.disconnect()
   recentPreviewQueue.length = 0
   recentPreviewQueued.clear()
+  const { recentPageSize } = appState
   const pageCount = Math.ceil(items.length / recentPageSize)
   appState.recentPage = Math.min(appState.recentPage, Math.max(0, pageCount - 1))
   const index = appState.recentPage
@@ -364,45 +354,44 @@ export function wireRecentPage(): void {
   }
   previous.addEventListener("click", () => turnPage(-1, previous, next))
   next.addEventListener("click", () => turnPage(1, next, previous))
+  new ResizeObserver(([entry]) => {
+    if (!entry?.contentRect.width) return
+    const columns = getComputedStyle(grid).gridTemplateColumns.split(" ").length
+    const size = mobilePortraitQuery.matches ? mobileRecentPageSize : columns * desktopRecentRows
+    if (size === appState.recentPageSize) return
+    const focused = document.activeElement
+    const cards = [...grid.querySelectorAll<HTMLButtonElement>(".recent-card")]
+    const focusedIndex = cards.findIndex((card) => card === focused)
+    const offset = appState.recentPage * appState.recentPageSize + Math.max(0, focusedIndex)
+    const items = readRecentFiles()
+    appState.recentPageSize = size
+    appState.recentPage = Math.floor(offset / size)
+    renderRecentPage(items)
+    const current = grid.querySelectorAll<HTMLButtonElement>(".recent-card")
+    const focusedButton = [previous, next].find((button) => button === focused)
+    if (focusedIndex >= 0) {
+      const card = current[offset % size]
+      if (card) {
+        current[0]!.tabIndex = -1
+        card.tabIndex = 0
+        card.ariaSelected = cards[focusedIndex]!.ariaSelected
+        card.focus({ preventScroll: true })
+      }
+    } else if (focusedButton?.disabled) {
+      const alternate = focusedButton === previous ? next : previous
+      const fallback = alternate.disabled ? current[0] : alternate
+      fallback?.focus({ preventScroll: true })
+    }
+    observeRecentPreviews()
+  }).observe(grid)
 }
 
 export function renderRecentFiles(): void {
-  const items = readRecentFiles()
+  const limit = recentHistoryLimit()
+  const saved = readRecentFiles()
+  const items = limit && saved.length > limit ? saved.slice(0, limit) : saved
+  if (items !== saved) localStorage.setItem(recentFilesKey, JSON.stringify(items))
   renderRecentPage(items)
-  const resume = $("#mobile-welcome-resume")
-  if (appState.archive) {
-    const card = recentCard({ path: appState.currentPath, name: ($("#document-name").textContent || "未命名").replace(/\.(?:bdi|bds|bda|m?ssf|sxi)$/i, ""), at: Date.now() }, true)
-    card.querySelector(".ui-skin-entry-meta")!.textContent = `${appState.archive.format.toUpperCase()} · ${preview.keys.length} 个按键 · ${appState.unsavedNew || appState.archive.changed.size ? "有未保存的修改" : "本地编辑"}`
-    const image = document.createElement("img")
-    image.alt = "当前皮肤预览"
-    image.src = preview.canvas.toDataURL()
-    card.querySelector(".template-preview")!.replaceChildren(image)
-    card.querySelector<HTMLElement>(".template-preview")!.dataset.preview = "rendered"
-    card.addEventListener("click", event => { event.stopImmediatePropagation(); canvasWrap.classList.remove("empty"); setMobilePane("inspector") }, { capture: true })
-    resume.replaceChildren(card)
-  } else if (items.length && isTauri()) resume.replaceChildren(recentCard(items[0], true))
-  else {
-    const start = document.createElement("button")
-    start.type = "button"
-    start.className = "ui-skin-entry"
-    start.dataset.variant = "resume"
-    const label = document.createElement("span")
-    label.className = "ui-skin-entry-label"
-    label.textContent = "从灵感开始"
-    const name = document.createElement("strong")
-    name.className = "template-name"
-    name.textContent = "设计你的皮肤"
-    const note = document.createElement("span")
-    note.className = "ui-skin-entry-meta"
-    note.textContent = "从模板新建，或打开已有皮肤"
-    const action = document.createElement("span")
-    action.className = "ui-button ui-skin-entry-action"
-    action.dataset.variant = "primary"
-    action.append(createIcon("plus"), "开始创作", createIcon("chevron-right"))
-    start.append(label, createIcon("keyboard", 20), name, note, action)
-    start.addEventListener("click", () => $("#mobile-welcome-new").click())
-    resume.replaceChildren(start)
-  }
   // 预览图按路径缓存，这里裁掉已不在列表里的条目并释放它们占用的 blob URL
   const listed = new Set(items.map((item) => item.path))
   for (const [path, cached] of [...recentPreviewCache]) {

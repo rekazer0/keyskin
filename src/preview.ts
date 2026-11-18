@@ -29,7 +29,7 @@ export class Preview {
   readonly onEvent: (event: PreviewEvent) => void
   readonly onSelect: (sections: string[]) => void
   readonly onMove: (sections: string[], deltaX: number, deltaY: number) => void
-  private readonly toolbarSlots: boolean
+  readonly toolbarSlots: boolean
   readonly hintCanvas?: HTMLCanvasElement
   document?: IniDocument
   private defaults?: IniDocument
@@ -66,6 +66,7 @@ export class Preview {
   /** 动效设计 / 粒子设计的编辑模式里点画布改了选中的按键（和普通画布一样多选，点空白处清空）。 */
   onAnimationKeys: (sections: string[]) => void = () => {}
   private renderDeferred = false
+  marquee?: { pointerId: number; start: { x: number; y: number }; clientX: number; clientY: number; rect?: Rect; key?: PreviewItem }
   editDrag?: {
     pointerId: number
     startX: number
@@ -75,9 +76,7 @@ export class Preview {
   editTouch?: {
     pointerId: number
     pointerType: string
-    key: PreviewItem
-    startX: number
-    startY: number
+    key?: PreviewItem
     clientX: number
     clientY: number
     startedAt: number
@@ -97,6 +96,7 @@ export class Preview {
     hintIndex?: number
     hintCellWidth?: number
   }
+  joinedSelection = false
   selected = new Set<string>()
   /**
    * Sections touched by an unconfirmed AI draft. Drawn in the selection orange
@@ -179,6 +179,9 @@ export class Preview {
     canvas.addEventListener("pointerdown", (event) => pointerDown(this, event))
     canvas.addEventListener("pointermove", (event) => pointerMove(this, event))
     canvas.addEventListener("pointerup", (event) => pointerUp(this, event))
+    canvas.addEventListener("lostpointercapture", (event) => {
+      if (this.marquee?.pointerId === event.pointerId || this.editTouch?.pointerId === event.pointerId) this.cancelPointerInteraction()
+    })
     canvas.addEventListener("contextmenu", (event) => event.preventDefault())
     canvas.addEventListener("pointercancel", () => {
       this.cancelDragDraw()
@@ -250,7 +253,7 @@ export class Preview {
   }
 
   cancelPointerInteraction(): void {
-    const hadInteraction = Boolean(this.active || this.editTouch || this.editDrag)
+    const hadInteraction = Boolean(this.active || this.editTouch || this.editDrag || this.marquee)
     this.cancelDragDraw()
     if (this.active?.holdTimer !== undefined) window.clearTimeout(this.active.holdTimer)
     this.active = undefined
@@ -293,6 +296,7 @@ export class Preview {
       void this.draw()
     }, 180)
     this.pressed = { section: key.section, timeout }
+    this.draw()
   }
 
   private clearPress(): void {
@@ -320,9 +324,13 @@ export class Preview {
     void this.draw()
   }
 
-  setSelected(sections: readonly string[]): void {
+  setSelected(sections: readonly string[], joined = false): void {
+    if (!sections.length) {
+      this.mobileMultiSelect = false
+      if (!this.selected.size && this.joinedSelection === joined) return
+    }
+    this.joinedSelection = joined
     this.selected = new Set(sections)
-    if (!sections.length) this.mobileMultiSelect = false
     void this.draw()
   }
 
@@ -648,6 +656,7 @@ export class Preview {
   }
 
   private cancelEditDrag(): void {
+    this.marquee = undefined
     this.cancelDragDraw()
     if (!this.editDrag) return
     for (const key of this.keys) {

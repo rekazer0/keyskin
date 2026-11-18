@@ -71,16 +71,26 @@ try {
         result.allocations = window.allocations.size
         return result
       })
-      const cards = page.locator("#resource-gallery > .ui-style-card")
-      assert.equal(await cards.count(), 6246, "all styles remain available")
+      const cards = page.locator("#resource-gallery .ui-style-card")
+      assert.equal(await cards.first().getAttribute("aria-setsize"), "6246", "all filtered styles remain available")
+      assert.ok(await cards.count() < 150, "opening a large gallery mounts only nearby rows")
       assert.ok(styles.reads < 10, "opening styles must not decode a stylesheet for every card")
       assert.ok(styles.allocations < 100, "offscreen cards must not allocate canvas contexts")
+      const gallery = page.locator("#resource-gallery")
+      for (const fraction of [0.25, 0.5, 0.75, 1]) {
+        await gallery.evaluate((grid, fraction) => { grid.scrollTop = fraction * (grid.scrollHeight - grid.clientHeight) }, fraction)
+        await page.waitForFunction(() => {
+          const grid = document.querySelector("#resource-gallery")
+          const rect = grid.getBoundingClientRect()
+          return [...grid.querySelectorAll(".ui-style-card")].some(card => {
+            const bounds = card.getBoundingClientRect()
+            return bounds.top >= rect.top && bounds.bottom <= rect.bottom
+          })
+        })
+        assert.ok(await cards.count() < 150, "scrolling releases distant pages instead of accumulating cards")
+      }
       await page.waitForFunction(() => {
-        const card = document.querySelector('#resource-gallery > .ui-style-card:last-of-type')
-        const bounds = card.getBoundingClientRect()
-        const list = card.parentElement.getBoundingClientRect()
-        if (bounds.top < list.top || bounds.bottom > list.bottom) { card.scrollIntoView({ block: "end" }); return false }
-        const canvas = card.querySelector("canvas")
+        const canvas = document.querySelector('#resource-gallery [data-style-id="7239"] canvas')
         return canvas?.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data.some((value, at) => at % 4 === 3 && value)
       })
       const keyboard = await page.evaluate(() => {
@@ -89,13 +99,13 @@ try {
         card.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }))
         const unrelated = window.offsetReads
         card.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true }))
-        card.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
+        document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
         const columns = getComputedStyle(document.querySelector('#resource-gallery')).gridTemplateColumns.split(' ').length
         const down = { reads: window.offsetReads, selected: document.querySelector('#resource-gallery [aria-selected="true"]').dataset.styleId,
-          expected: document.querySelectorAll('#resource-gallery .ui-style-card')[columns].dataset.styleId }
+          expected: document.querySelector(`#resource-gallery [aria-posinset="${columns + 1}"]`).dataset.styleId }
         window.offsetReads = 0
         const start = performance.now()
-        card.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }))
+        document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }))
         return { milliseconds: performance.now() - start, reads: window.offsetReads, unrelated, down }
       })
       assert.equal(keyboard.unrelated, 0, "unrelated keys must not measure thousands of cards")
@@ -104,6 +114,15 @@ try {
       assert.ok(keyboard.down.reads < 20, "ArrowDown must not measure offscreen rows")
       assert.equal(await cards.last().getAttribute("aria-selected"), "true", "End selects the last style")
       await page.screenshot({ path: `${output}/${engine.name()}-styles.png` })
+      await page.keyboard.press("Shift+Home")
+      assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedResourceGalleryPaths.length), 6246, "range selection includes unmounted styles")
+      await page.keyboard.press("Escape")
+      await page.keyboard.press("Control+a")
+      assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedResourceGalleryPaths.length), 6246, "select all includes unmounted styles")
+      await page.keyboard.press("Escape")
+      await gallery.evaluate(grid => { grid.scrollTop = grid.scrollHeight })
+      await page.waitForFunction(() => document.querySelector('#resource-gallery [data-style-id="7239"]'))
+      assert.ok(await cards.count() < 150, "grid stays windowed after jumping to the end")
       const search = await page.evaluate(() => {
         window.reads = 0
         const input = document.querySelector("#resource-search")
@@ -115,6 +134,10 @@ try {
       assert.equal(await cards.count(), 1)
       assert.equal(await cards.first().getAttribute("data-style-id"), "7239")
       assert.equal(search.reads, 0, "search reuses the parsed document")
+      await page.locator('[data-workspace-page="overview"]').click()
+      await page.locator('[data-workspace-page="resources"]').click()
+      assert.equal(await cards.first().getAttribute("aria-setsize"), "6246", "reopening restores the full collection")
+      assert.ok(await cards.count() < 150, "reopening does not rebuild all cards")
       const inventory = await page.evaluate(async () => {
         const { openResourceInventory } = await import("/src/app/resource-inventory.ts")
         window.reads = 0

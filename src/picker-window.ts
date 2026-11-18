@@ -48,6 +48,7 @@ export type StyleLibraryPayload = {
   sliceBack: boolean
   editable: boolean
   canAdd: boolean
+  initialImages?: boolean
   imageSelection?: boolean
   soundOnly: boolean
   foreground: boolean
@@ -124,7 +125,6 @@ const librarySlice = $("#style-library-slice") as HTMLButtonElement
 const libraryImport = $("#style-library-import") as HTMLButtonElement
 const libraryNew = $("#style-library-new") as HTMLButtonElement
 const libraryImportInput = $("#style-library-import-input") as HTMLInputElement
-const mobilePicker = matchMedia("(max-width: 760px)")
 // 新建在网格末尾的虚线卡；工具条只放复制（⌘D 同）。
 const libraryToolbar = listToolbar({ duplicate: { label: "复制样式", run: () => { if (librarySelected?.styleID) emitLibrary("style-library-duplicate", librarySelected) } } })
 const libraryDuplicate = libraryToolbar.querySelector("button")!
@@ -420,7 +420,7 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? style?.sound ?? "")
   const compatible = selected.imagePath ? library.imagesCompatible : library.imageSelection ? style?.kind === "image" : Boolean(style?.compatible ?? sound)
   libraryApply.disabled = !compatible || !library.editable
-  libraryApplyToStyle.hidden = !selected.imagePath || !library.applyToStyle || Boolean(library.imageSelection)
+  libraryApplyToStyle.hidden = !selected.imagePath || !library.applyToStyle || Boolean(library.imageSelection || library.initialImages)
   libraryApplyToStyle.disabled = !library.editable
   // 不兼容时只禁用并说明原因，不改按钮文字。
   libraryApply.title = compatible ? "" : "样式类型不兼容"
@@ -545,13 +545,13 @@ function renderLibrary(): void {
   libraryNew.hidden = chooser || !payload || Boolean(payload.imageSelection) || sound || Boolean(payload.ssfAnimation)
   libraryNew.disabled = !payload?.canAdd || !payload.editable
   const images = chooser || libraryMode === "images" && !sound
-  title.textContent = images ? "全部图片" : mobilePicker.matches ? library?.kind === "anim" ? "选择动效" : "选择样式" : "全部样式"
+  title.textContent = images ? "全部图片" : "全部样式"
   setWindowTitle(title.textContent)
   for (const button of libraryButtons("[data-library-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.libraryMode === libraryMode))
     button.disabled = (sound || Boolean(payload?.ssfAnimation)) && button.dataset.libraryMode === "images"
   }
-  libraryModes.hidden = chooser || sound
+  libraryModes.hidden = chooser || sound || Boolean(payload?.initialImages)
   libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => { libraryKind = value; renderLibrary() }))
   const usageOptions = [...styleUsageOptions, ...(payload?.recentStyles?.length && !images ? [["recent", "最近使用"] as const] : [])]
   libraryFilters.replaceChildren(styleFilterButtons(usageOptions, "libraryFilter", libraryFilter, value => { libraryFilter = value; renderLibrary() }))
@@ -613,7 +613,7 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
       releaseLibraryBitmaps()
     }
     library = payload
-    libraryMode = payload.imageSelection ? "images" : "styles"
+    libraryMode = payload.imageSelection || payload.initialImages ? "images" : "styles"
     libraryKind = payload.kind
     libraryFilter = "all"
   } else if (reset) library = undefined

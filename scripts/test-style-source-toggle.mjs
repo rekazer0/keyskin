@@ -39,9 +39,9 @@ try {
         const checkSource = () => page.evaluate(async () => {
           const { appState } = await import("/src/app/state.ts")
           const { source } = await import("/src/app/canvas-interaction.ts")
-          const { selectedBdaStyleSourceRange, sxiSourceRanges } = await import("/src/app/config-context.ts")
+          const { selectedBdaSourceRange, sxiSourceRanges } = await import("/src/app/config-context.ts")
           const { iniSectionRanges } = await import("/src/highlight.ts")
-          const range = appState.archive.format === "bda" ? selectedBdaStyleSourceRange(source.value)
+          const range = appState.archive.format === "bda" ? selectedBdaSourceRange(source.value)
             : appState.archive.format === "sxi" ? sxiSourceRanges(source.value)[0]
             : iniSectionRanges(source.value, [`STYLE${appState.selectedStyleID}`])[0]
           const appearance = appState.archive.format === "bda" ? (await import("/src/app/bda-documents.ts")).currentBdaAppearance() : undefined

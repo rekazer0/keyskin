@@ -8,6 +8,7 @@ import { encodePng } from "../src/ssf/ssf-png.ts"
 import { bdaAnimatedSkinBytes } from "../tests/helpers/bda-animation-fixture.mjs"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 
 const archive = SkinArchive.open(bdsFixture())
 for (const path of archive.names().filter(path => archive.isImage(path))) {
@@ -40,8 +41,10 @@ try {
       await page.locator('#image-resource-slices [role="option"]').first().waitFor()
       assert.equal(await page.locator('#image-resource-slices [role="option"]').count(), 2)
       assert.equal(await page.locator('#image-resource-preview-frame img').isVisible(), true)
-      assert.equal(await page.locator('#resource-page-heading #resource-selection-actions').isVisible(), true)
-      assert.equal(await page.locator('.source #resource-selection-actions').count(), 0)
+      assert.equal(await page.locator('#resource-list-view :is(#resource-rename, #resource-delete)').count(), 0)
+      for (const id of ['resource-rename', 'resource-delete', 'atlas-copy-image', 'atlas-create-image', 'atlas-import-folder']) {
+        assert.equal(await page.locator(`.resource-detail-heading #${id}`).isVisible(), true, id)
+      }
       const savedState = () => page.evaluate(async () => {
         const { appState } = await import("/src/app/state.ts")
         return { undo: appState.undoStack.length, til: appState.archive.getText("light/res/btn.til") }
@@ -89,6 +92,26 @@ try {
       assert.match(saved.til, /SOURCE_RECT=10,0,9,10\nINNER_RECT=12,2,5,6/)
       await page.keyboard.press('ControlOrMeta+z')
       await page.waitForFunction(() => document.querySelector('#image-resource-slices [data-slice-index="1"]')?.title === '10, 0, 10, 10')
+      assert.deepEqual(await savedState(), before)
+      await slice.dblclick()
+      const deleteTile = dialog.getByRole('button', { name: '删除选中切片', exact: true })
+      await deleteTile.click()
+      const deleteDialog = page.locator('dialog[open][data-delete-confirmation]')
+      await deleteDialog.getByRole('button', { name: '取消', exact: true }).click()
+      await deleteDialog.waitFor({ state: 'detached' })
+      assert.equal(await width.inputValue(), '10')
+      assert.deepEqual(await savedState(), before)
+      await dialog.locator('h2').click()
+      await page.keyboard.press('Delete')
+      await confirmDeletion(page)
+      await dialog.getByText('有未保存的切片修改').waitFor()
+      assert.deepEqual(await savedState(), before, 'confirmed deletion stays in the draft until saved')
+      await save.click()
+      await dialog.waitFor({ state: 'hidden' })
+      await slice.waitFor({ state: 'detached' })
+      assert.doesNotMatch((await savedState()).til, /\[IMG1\]/)
+      await page.keyboard.press('ControlOrMeta+z')
+      await slice.waitFor()
       assert.deepEqual(await savedState(), before)
       await page.setViewportSize({ width: 812, height: 700 })
       await card.focus()

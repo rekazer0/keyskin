@@ -7,7 +7,7 @@ import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
-import { sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode, saveButton } from "../dom"
+import { settingsWorkspace, sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
@@ -29,10 +29,13 @@ import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 import { syncMobileKeyPreview } from "../mobile-key-preview"
 import { wireMobileInspector } from "../mobile-inspector"
-import { mobileKeyPreview, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel, mobileSaveButton, mobileFilesClose } from "../dom"
+import { mobileKeyPreview, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel, mobileFilesClose } from "../dom"
 
 /** 启动环境、全局指针、画布预览、检查器与缩放。只在启动时由 main.ts 按顺序调用一次。 */
+import { wireAnimationDrop } from "../animation-drop"
+
 export function wireCanvasAndInspector(): void {
+  wireAnimationDrop()
   bindFieldServices({ editing: isEditing, decorateStyle: decorateStyleReferenceInput })
   installClientLogging(document.querySelector<HTMLElement>("#about-update")?.dataset.currentVersion ?? "unknown")
   installSafeAreaLock()
@@ -180,7 +183,8 @@ export function wireCanvasAndInspector(): void {
     event.preventDefault()
     const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
       : (current + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + buttons.length) % buttons.length
-    buttons[next].click()
+    // 分组可随焦点定位；跳到其他文件的入口只在明确激活时打开。
+    if (buttons[next].hasAttribute("data-mobile-inspector-group")) buttons[next].click()
     buttons[next].focus()
   })
   for (const button of bdaInspectorStateButtons) {
@@ -208,10 +212,6 @@ export function wireCanvasAndInspector(): void {
   mobileKeyPreview.addEventListener("keyup", () => syncMobileKeyPreview())
   mobileKeyPreview.addEventListener("blur", () => syncMobileKeyPreview())
   syncMobileInspectorHeader()
-  mobileSaveButton.addEventListener("click", () => saveButton.click())
-  const syncSave = () => { mobileSaveButton.disabled = saveButton.disabled }
-  new MutationObserver(syncSave).observe(saveButton, { attributes: true, attributeFilter: ["disabled"] })
-  syncSave()
   mobileFilesClose.addEventListener("click", () => setMobilePane("inspector"))
   mobilePortraitQuery.addEventListener("change", () => {
     const pane = document.documentElement.dataset.mobilePane
@@ -229,6 +229,12 @@ export function wireCanvasAndInspector(): void {
     for (const button of mobileMoreActions) {
       const target = document.getElementById(button.dataset.mobileAction!)
       button.disabled = !appState.archive || target instanceof HTMLButtonElement && target.disabled
+      if (button.dataset.mobileAction === "canvas-gestures") {
+        button.setAttribute("aria-checked", String(!appState.previewPanLocked))
+        button.querySelector("small")!.textContent = appState.previewPanLocked ? "关闭" : "开启"
+        button.disabled ||= deviceShell.hidden || Boolean(appState.layoutOverview)
+      }
+      if (button.dataset.mobileAction === "preview-zoom-fit") button.disabled ||= deviceShell.hidden
       if (button.dataset.mobileAction === "toggle-guides") {
         button.setAttribute("aria-pressed", String(appState.guidesVisible))
         button.querySelector<HTMLInputElement>("input")!.checked = appState.guidesVisible
@@ -240,12 +246,13 @@ export function wireCanvasAndInspector(): void {
   mobileAppMore.querySelector("summary")!.addEventListener("click", syncMobileMenu)
   mobileAppMore.addEventListener("toggle", syncMobileMenu)
   for (const button of mobileMoreActions) button.addEventListener("click", () => {
-    if (button.dataset.mobileAction === "mode") {
+    if (button.dataset.mobileAction === "canvas-gestures") toggleCanvasLock()
+    else if (button.dataset.mobileAction === "mode") {
       document.querySelector<HTMLButtonElement>('.titlebar [data-mobile-choice="mode"]')!.click()
     } else {
       const target = document.getElementById(button.dataset.mobileAction!)
       if (button.dataset.mobileAction === "layout-overview-toggle") setMobilePane("canvas")
-      if (button.dataset.mobileAction === "mobile-source-view" || button.dataset.mobileAction === "mobile-ai-view") setMobilePane("inspector")
+      if (button.dataset.mobileAction === "mobile-source-view") setMobilePane("inspector")
       target?.click()
     }
   })
@@ -266,14 +273,15 @@ export function wireCanvasAndInspector(): void {
     setPreviewPan(0, 0)
     applyPreviewZoom(1)
   })
-  previewZoomFit.addEventListener("dblclick", () => {
+  function toggleCanvasLock() {
     if (appState.layoutOverview) return
     appState.previewPanLocked = !appState.previewPanLocked
     previewZoomFit.ariaPressed = String(appState.previewPanLocked)
     previewZoomFit.ariaLabel = appState.previewPanLocked ? "适配窗口，画布已锁定，双击解锁" : "适配窗口，双击锁定画布"
     previewZoomFit.title = appState.previewPanLocked ? "画布已锁定（双击解锁）" : "适配窗口（双击锁定画布）"
     finishPreviewPan()
-  })
+  }
+  previewZoomFit.addEventListener("dblclick", toggleCanvasLock)
   previewZoomIn.addEventListener("click", () => {
     if (appState.layoutOverview) zoomLayoutOverview(1.2)
     else applyPreviewZoom(appState.previewZoom + 0.1)
@@ -318,7 +326,7 @@ export function wireCanvasAndInspector(): void {
   // 捕获阶段处理，不让按键移动选中的按键。
   window.addEventListener("keydown", (event) => {
     const step = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, [number, number]>)[event.key]
-    if (event.isComposing || document.querySelector("dialog[open]")) return
+    if (!settingsWorkspace.hidden || event.isComposing || document.querySelector("dialog[open]")) return
     if (keyEventElement(event.target)?.closest("#ai-sessions")) return
     const typing = Boolean(keyEventElement(event.target)?.closest("input, textarea, select, [contenteditable], .cm-editor"))
     if (appState.layoutOverview) {
@@ -352,7 +360,7 @@ export function wireCanvasAndInspector(): void {
     return { distance: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
   }
   canvasWrap.addEventListener("pointerdown", (event) => {
-    if (event.pointerType !== "touch" || appState.previewPanLocked || appState.layoutOverview || deviceShell.hidden || canvasWrap.classList.contains("empty")) return
+    if (event.pointerType !== "touch" || appState.previewPanLocked && !isEditing() || appState.layoutOverview || deviceShell.hidden || canvasWrap.classList.contains("empty")) return
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
     if (touches.size !== 2) return
     pinch = { ...pinchPoint(), zoom: appState.previewZoom }
@@ -362,7 +370,7 @@ export function wireCanvasAndInspector(): void {
   canvasWrap.addEventListener("pointermove", (event) => {
     if (!touches.has(event.pointerId)) return
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
-    if (!pinch || touches.size !== 2) return
+    if (!pinch || touches.size !== 2 || appState.previewPanLocked) return
     event.preventDefault()
     const point = pinchPoint()
     setPreviewPan(appState.previewPanX + point.x - pinch.x, appState.previewPanY + point.y - pinch.y)
@@ -379,12 +387,15 @@ export function wireCanvasAndInspector(): void {
   canvasWrap.addEventListener("pointerup", endTouch, { capture: true })
   canvasWrap.addEventListener("pointercancel", endTouch, { capture: true })
   window.addEventListener("blur", () => {
+    touches.clear()
+    pinch = undefined
     finishPreviewPan()
     if (editorCrosshair.checked) previewCoordinates.hidden = true
   })
   canvasWrap.addEventListener("pointerdown", (event) => {
     if (
       event.button !== 0 ||
+      preview.marquee?.pointerId === event.pointerId ||
       appState.previewPanLocked ||
       event.pointerType === "touch" ||
       deviceShell.hidden ||

@@ -5,7 +5,6 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import { SkinArchive } from "../src/skin.ts"
 import { buildSxiZip } from "../src/palm/palm-export.ts"
 import { convertSxiToBaidu, convertSxiToBda, sxiToBaiduArchive } from "../src/palm/sxi-to-baidu.ts"
-import { canExport } from "../src/export.ts"
 import { IniDocument } from "../src/ini.ts"
 import { parseXmlPlist } from "../src/palm/palm-plist.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
@@ -16,15 +15,6 @@ import { decodePng } from "../src/ssf/ssf-png.ts"
 function sxi() {
   return SkinArchive.open(buildSxiZip(SkinArchive.open(bdsFixture())).bytes, "sxi")
 }
-
-test("an .sxi exports to Baidu formats and Sogou through conversion", () => {
-  assert.ok(canExport("sxi", "bdi"))
-  assert.ok(canExport("sxi", "bds"))
-  assert.ok(canExport("sxi", "bda"))
-  assert.ok(canExport("sxi", "sxi"))
-  assert.ok(canExport("sxi", "ssf"))
-  assert.ok(canExport("bds", "sxi"))
-})
 
 test("an .sxi conversion nests the theme under skin/ and fills the global board models", () => {
   const archive = sxi()

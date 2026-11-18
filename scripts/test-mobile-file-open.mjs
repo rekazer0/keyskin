@@ -5,7 +5,7 @@ import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
 
-const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { host: '127.0.0.1', port: 41932, strictPort: false } })
+const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { hmr: false, host: '127.0.0.1', port: 41932, strictPort: false } })
 await server.listen()
 let browser
 try {
@@ -26,10 +26,12 @@ try {
       if (platform === 'Android') {
         const picker = page.waitForEvent('filechooser')
         await page.locator('#mobile-welcome-open').click()
-        await page.locator('.ui-mobile-file-choice').click()
         await (await picker).setFiles({ name: '安卓搜狗.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
         await page.waitForFunction(() => document.querySelector('#document-name').textContent === '安卓搜狗.ssf' && !document.querySelector('#open').disabled)
         assert.ok(await page.locator('#preview').evaluate((canvas) => canvas.getBoundingClientRect().height > 20))
+        assert.equal(await page.locator('#mode').inputValue(), 'preview')
+        await page.getByRole('button', { name: '开始编辑', exact: true }).click()
+        assert.equal(await page.locator('#mode').inputValue(), 'edit')
         await input.setInputFiles({ name: '无效.txt', mimeType: 'text/plain', buffer: Buffer.from('invalid') })
         await page.waitForFunction(() => document.querySelector('#event-log').dataset.kind === 'error')
         assert.match(await page.locator('#event-log').textContent(), /仅支持/)
@@ -41,16 +43,29 @@ try {
         await page.waitForFunction(() => !document.querySelector('#dirty').hidden)
         await page.waitForFunction(() => !document.querySelector('#file-operation-dialog').open && !document.querySelector('#open').disabled)
         assert.equal(await page.locator('#recent-files').isHidden(), true, '网页端不显示最近打开')
-        await page.locator('#mobile-project-toggle').click();await page.locator('#mobile-home').click()
-        await page.getByRole('dialog', { name: '未保存保护' }).getByRole('button', { name: '暂不保存，离开' }).click()
-        await page.locator('#mobile-welcome-open').click()
-        const picker = page.waitForEvent('filechooser')
-        await page.locator('.ui-mobile-file-choice').click()
-        const chooser = await picker
-        assert.equal(await page.getByRole('dialog', { name: '未保存保护' }).count(), 0)
+        const currentSkin = await page.locator('#document-name').textContent()
+        await page.locator('#mobile-navigation [data-mobile-page="home"]').click()
+        await page.locator('#mobile-welcome-open').waitFor()
+        assert.equal(await page.locator('#document-name').textContent(), currentSkin, 'returning home keeps the current skin')
+        assert.equal(await page.locator('#dirty').evaluate(node => node.hidden), false, 'returning home keeps unsaved changes')
+        const pickReplacement = async () => {
+          const picker = page.waitForEvent('filechooser')
+          await page.locator('#mobile-welcome-open').click()
+          return picker
+        }
+        const chooser = await pickReplacement()
+        assert.equal(await page.getByRole('dialog', { name: '是否导出当前皮肤？' }).count(), 0)
         await chooser.setFiles({ name: '苹果搜狗.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
-        await page.getByRole('dialog', { name: '是否导出当前皮肤？' }).getByRole('button', { name: '不导出', exact: true }).click()
+        const prompt = page.getByRole('dialog', { name: '是否导出当前皮肤？' })
+        await prompt.getByRole('button', { name: '取消', exact: true }).click()
+        await prompt.waitFor({ state: 'hidden' })
+        assert.equal(await page.locator('#document-name').textContent(), currentSkin)
+        assert.equal(await page.locator('#dirty').evaluate(node => node.hidden), false)
+        await (await pickReplacement()).setFiles({ name: '苹果搜狗.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
+        await prompt.getByRole('button', { name: '不导出', exact: true }).click()
         await page.waitForFunction(() => document.querySelector('#document-name').textContent === '苹果搜狗.ssf' && !document.querySelector('#open').disabled)
+        assert.equal(await page.locator('#mode').inputValue(), 'preview')
+        assert.equal(await page.getByRole('button', { name: '开始编辑', exact: true }).isVisible(), true)
       }
       assert.deepEqual(errors, [])
       console.log(`PASS: ${platform} file picker${platform === 'Android' ? ', SSF import and invalid-file rejection' : platform === 'iPhone' ? ', picker before export prompt' : ''}`)

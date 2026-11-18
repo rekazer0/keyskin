@@ -1,4 +1,3 @@
-import { createIcon } from "./icons"
 import { element, iconButton } from "./dom-element.ts"
 import { closeDialog } from "./motion.ts"
 import { bindDialog } from "./app/ask.ts"
@@ -8,6 +7,7 @@ import "./atlas-workspace.css"
 
 type AtlasState = {
   active: boolean
+  preview: boolean
   styleActive: boolean
   soundActive: boolean
   styleSelected: boolean
@@ -42,9 +42,9 @@ export function createAtlasWorkspace(actions: {
   const sidebar = get(".sidebar")
   const categories = get("#resource-page-sidebar")
   const workspace = get(".workspace")
-  const selectionActions = get("#resource-selection-actions")
-  const selectionActionsHome = selectionActions.parentElement!
+  const canvasWrap = get(".canvas-wrap")
   const canvas = get("#atlas-canvas") as HTMLCanvasElement
+  const image = get("#workspace-image")
   const figure = get("#workspace-image-figure")
   const figureHome = figure.parentElement!
   const inspector = get("#tile-inspector")
@@ -84,7 +84,7 @@ export function createAtlasWorkspace(actions: {
   dialog.append(form)
   bindDialog(dialog, discard)
   document.body.append(dialog)
-  // 原画布保留完整图集的命中区域，显示画布只分配视口大小的像素。
+  // 原图由浏览器合成，命中区域跟随原图，只有标注画布分配视口大小的像素。
   const viewport = Object.assign(element("canvas"), { id: "atlas-viewport", width: 1, height: 1 })
   viewport.setAttribute("aria-hidden", "true")
   canvas.after(viewport)
@@ -110,7 +110,7 @@ export function createAtlasWorkspace(actions: {
   const extras = element("span", "atlas-resource-extras")
   extras.hidden = true
   extras.append(copy, create, folder, input)
-  get("#image-resource-preview-note").after(extras)
+  get("#resource-selection-actions").after(extras)
   const grid = button("atlas-grid", "显示切片网格", "grid-2x2", actions.guides)
   const autoSlice = button("atlas-auto-slice", "自动切片", "scissors", actions.autoSlice)
   for (const tool of [grid, autoSlice]) tool.dataset.variant = "filled"
@@ -130,13 +130,6 @@ export function createAtlasWorkspace(actions: {
   const zoom = element("div", "preview-zoom-control glass-module")
   zoom.id = "atlas-zoom"
   zoom.setAttribute("aria-label", "图集缩放")
-  const zoomButton = (id: string, label: string, icon: string, action: () => void) => {
-    const control = Object.assign(element("button"), { id, type: "button", title: label })
-    control.setAttribute("aria-label", label)
-    control.append(createIcon(icon, 16))
-    control.addEventListener("click", action)
-    return control
-  }
   let state: AtlasState | undefined
   let zoomValue = 1
   let fitted = true
@@ -148,7 +141,7 @@ export function createAtlasWorkspace(actions: {
     if (panX === x && panY === y) return
     panX = x
     panY = y
-    canvas.style.translate = `${Math.round(x)}px ${Math.round(y)}px`
+    image.style.translate = canvas.style.translate = `${Math.round(x)}px ${Math.round(y)}px`
     actions.redraw()
   }
   const resize = () => {
@@ -157,8 +150,9 @@ export function createAtlasWorkspace(actions: {
       zoomValue = Math.max(0.01, Math.min(1, (wrap.clientWidth - 64) / state.width, (wrap.clientHeight - 64) / state.height))
       setPan(0, 0)
     }
-    canvas.style.width = `${Math.round(state.width * zoomValue)}px`
-    canvas.style.height = `${Math.round(state.height * zoomValue)}px`
+    image.style.width = canvas.style.width = `${Math.round(state.width * zoomValue)}px`
+    image.style.height = canvas.style.height = `${Math.round(state.height * zoomValue)}px`
+    image.dataset.sampling = zoomValue * devicePixelRatio > 1 ? "nearest" : "auto"
     fit.setAttribute("aria-pressed", String(fitted))
   }
   // 与主画布一致：以指针为锚点缩放，锚点下的图像位置保持不动
@@ -176,8 +170,8 @@ export function createAtlasWorkspace(actions: {
     }
     actions.redraw()
   }
-  const fit = zoomButton("atlas-zoom-fit", "适配", "scan", () => { fitted = true; resize(); actions.redraw() })
-  zoom.append(zoomButton("atlas-zoom-out", "缩小", "minus", () => zoomBy(1 / 1.2)), fit, zoomButton("atlas-zoom-in", "放大", "plus", () => zoomBy(1.2)))
+  const fit = button("atlas-zoom-fit", "适配", "scan", () => { fitted = true; resize(); actions.redraw() })
+  zoom.append(button("atlas-zoom-out", "缩小", "minus", () => zoomBy(1 / 1.2)), fit, button("atlas-zoom-in", "放大", "plus", () => zoomBy(1.2)))
   stage.append(zoom)
   wrap.addEventListener("wheel", event => {
     if (!desktopActive) return
@@ -233,20 +227,21 @@ export function createAtlasWorkspace(actions: {
     actions.finish(dialog.returnValue === "save")
     finishing = false
   })
+  const isDesktopEditor = () => media.matches && !canvasWrap.classList.contains("empty")
+  let desktopEditor = isDesktopEditor()
   const update = (next: AtlasState) => {
     state = next
     form.dataset.readonly = String(!next.editable)
-    desktopActive = next.active && Boolean(next.path) && media.matches
-    extras.hidden = !next.active || !media.matches
+    desktopEditor = isDesktopEditor()
+    desktopActive = desktopEditor && next.active && Boolean(next.path)
+    extras.hidden = !desktopEditor || !next.active || !next.preview
     save.disabled = !next.editable
     const message = next.dirty ? "有未保存的切片修改" : ""
     if (status.textContent !== message) status.textContent = message
-    const libraryActive = (next.active || next.styleActive || next.soundActive) && media.matches
+    const libraryActive = desktopEditor && (next.active || next.styleActive || next.soundActive)
     document.body.classList.toggle("resource-workspace", libraryActive)
     get("#resource-gallery").dataset.variant = libraryActive ? "cards" : ""
-    document.body.classList.toggle("style-workspace", next.styleActive && media.matches)
-    const selectionHost = libraryActive ? get("#resource-page-heading") : selectionActionsHome
-    if (selectionActions.parentElement !== selectionHost) selectionHost.append(selectionActions)
+    document.body.classList.toggle("style-workspace", desktopEditor && next.styleActive)
     if (libraryActive) {
       if (categories.parentElement !== sidebar) sidebar.append(categories)
       if (list.parentElement !== workspace) workspace.append(list)
@@ -274,6 +269,7 @@ export function createAtlasWorkspace(actions: {
       canvas.style.removeProperty("width")
       canvas.style.removeProperty("height")
       canvas.style.removeProperty("translate")
+      image.removeAttribute("style")
       if (viewport.width !== 1) viewport.width = 1
       if (viewport.height !== 1) viewport.height = 1
     }
@@ -292,7 +288,11 @@ export function createAtlasWorkspace(actions: {
     if (lastPath !== next.path) { lastPath = next.path; fitted = true }
     resize()
   }
-  media.addEventListener("change", () => { if (state) { update(state); actions.redraw() } })
+  const syncLayout = () => { if (state) { update(state); actions.redraw() } }
+  media.addEventListener("change", syncLayout)
+  new MutationObserver(() => {
+    if (desktopEditor !== isDesktopEditor()) syncLayout()
+  }).observe(canvasWrap, { attributes: true, attributeFilter: ["class"] })
   return { update, viewportCanvas: () => desktopActive ? viewport : undefined }
 }
 

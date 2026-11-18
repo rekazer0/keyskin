@@ -632,9 +632,11 @@ export function setGuidesVisible(enabled: boolean): void {
 export function syncCandidateSelection(): void {
   const selected = appState.selectedCandidate && (appState.selectedPath === appState.layoutPath || appState.selectedPath === toolbarStrip.dataset.path)
     || appState.archive?.format !== "bda" && isToolbarPath(appState.selectedPath) && !appState.selectedToolbarSections.length
+  const whole = Boolean(selected && appState.selectedCandidate !== "parts" && appState.selectedCandidate !== "input")
+  toolbarPreview.setSelected(appState.selectedToolbarSections, whole)
   const inputSelected = Boolean(selected && appState.selectedCandidate === "input")
-  candidateArea.classList.toggle("candidate-selected", Boolean(selected && !inputSelected))
-  candidateArea.setAttribute("aria-selected", String(Boolean(selected && !inputSelected)))
+  candidateArea.classList.toggle("candidate-selected", whole)
+  candidateArea.setAttribute("aria-selected", String(whole))
   candidateInput.setAttribute("aria-selected", String(inputSelected))
 }
 

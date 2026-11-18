@@ -12,7 +12,7 @@ import {
   type AnimationListItem,
 } from "../animation-inspector.ts"
 import { baiduConfigControl } from "../baidu-config-controls.ts"
-import { field, fieldControl, section, type FieldSpec } from "./property-rows"
+import { field, section, type FieldSpec } from "./property-rows"
 import { decodeFrames } from "../native-motion.ts"
 import { createIcon } from "../icons.ts"
 import {
@@ -42,10 +42,11 @@ import {
 import { visualResolver } from "./bda-documents"
 import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./config-context"
 import { commitText, commitTextChanges, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
-import { addStyle } from "./style-picker"
+import { addStyle, editStyleConfig, refreshStyleReferenceThumbnails } from "./style-picker"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
+import { chooseReferenceValue } from "./ask"
 import { appState } from "./state"
 import { cachedIniDocument } from "./style-document"
 import { animationKeySample } from "./animation-key-sample"
@@ -414,8 +415,8 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
 const styleAnimationEntries = new WeakMap<IniDocument, LegacyAnimationEntry[]>()
 
 /** 样式字段值里引用的动画编号，各自在 anim.ini 里的条目（找不到为 undefined）。 */
-function referencedAnimations(value: string): Array<{ id: string; entry?: LegacyAnimationEntry }> {
-  const ids = value.split(",").map((part) => part.trim()).filter((part) => /^\d+$/.test(part))
+function referencedAnimations(value: string): Array<{ id: string; slot: number; entry?: LegacyAnimationEntry }> {
+  const ids = value.split(",").flatMap((part, slot) => /^\d+$/.test(part.trim()) ? [{ id: part.trim(), slot }] : [])
   if (!ids.length) return []
   const path = legacyAnimationConfigPath()
   const document = path && cachedIniDocument(path)
@@ -425,7 +426,7 @@ function referencedAnimations(value: string): Array<{ id: string; entry?: Legacy
     entries = parseLegacyAnimationFile(document.toString()).entries
     styleAnimationEntries.set(document, entries)
   }
-  return ids.map((id) => ({ id, entry: entries.find((candidate) => candidate.index === Number(id)) }))
+  return ids.map(({ id, slot }) => ({ id, slot, entry: entries.find((candidate) => candidate.index === Number(id)) }))
 }
 
 /** 动画样式引用的全部动画（PRESS_ANIM、RELEASE_ANIM……去重）。 */
@@ -472,49 +473,70 @@ export function styleAnimationPlayers(styleID: string, styles: IniDocument, thum
   }))
 }
 
-/** 检查器动画引用卡的内容：样式播放的每个动画一格真实缩略图；单击选择样式，⌘ 单击打开那个动画。 */
-export function styleAnimationReferenceStates(styleID: string, styles: IniDocument, choose: () => void): StyleReferenceState[] {
+function chooseLegacyAnimation(current: string, commit: (value: string) => void): void {
+  const archive = appState.archive
+  const path = legacyAnimationConfigPath()
+  if (!isEditing() || !archive || !path || !archive.isText(path)) return
+  const entries = parseLegacyAnimationFile(archive.getText(path)).entries
+  chooseReferenceValue("动画", current, entries.map(entry => [String(entry.index), `动画 ${entry.index} · ${kindLabel(entry)}`]), value => {
+    if (appState.archive === archive && legacyAnimationConfigPath() === path && isEditing() && value !== current) commit(value)
+  })
+}
+
+/** 修改这张样式引用的动画资源，不更换外层样式编号。 */
+export function styleAnimationReferenceStates(styleID: string, styles: IniDocument): StyleReferenceState[] {
   const entries = styleAnimations(styleID, styles)
   const players = styleAnimationPlayers(styleID, styles, true)
-  if (!entries.length) return [{ label: "未设置", content: createIcon("image-off", 16), onClick: choose }]
+  if (!entries.length) return [{ label: "未设置动画", content: createIcon("image-off", 16) }]
   return entries.map((entry, index) => ({
-    label: `动画 ${entry.index} · ${kindLabel(entry)}`,
+    label: `更换动画 ${entry.index} · ${kindLabel(entry)}`,
     content: players[index],
-    onClick: (edit: boolean) => edit ? openAnimation(legacyAnimationConfigPath()!, entry.kind === "particle", entry.section) : choose(),
+    onClick: edit => {
+      if (edit) return openAnimation(legacyAnimationConfigPath()!, entry.kind === "particle", entry.section)
+      chooseLegacyAnimation(String(entry.index), next => {
+        const section = `STYLE${styleID}`
+        if (editStyleConfig(document => {
+          for (const field of STYLE_ANIM_FIELDS) {
+            const value = document.get(section, field)
+            const replaced = value?.split(",").map(part => part.trim() === String(entry.index) ? next : part).join(",")
+            if (replaced !== undefined && replaced !== value) document.set(section, field, replaced)
+          }
+        })) refreshStyleReferenceThumbnails()
+      })
+    },
   }))
 }
 
-/** 样式里 PRESS_ANIM 等字段：编号输入框放进样式引用卡，右侧每个引用的动画一格真实缩略图，单击打开那个动画。 */
+/** 样式里 PRESS_ANIM 等字段：预览格只更换对应槽位，⌘ 单击打开动画。 */
 export function decorateStyleAnimationField(row: HTMLElement, key: string, value: string): void {
   const path = legacyAnimationConfigPath()
   const input = row.querySelector("input")
   if (!STYLE_ANIM_FIELDS.some((field) => field === key) || !path || !input) return
   const animations = referencedAnimations(value)
   const document = animations.some(({ entry }) => entry) ? cachedIniDocument(path) : undefined
-  const states: StyleReferenceState[] = animations.map(({ id, entry }) => entry ? {
-    label: `动画 ${id} · ${kindLabel(entry)}`,
-    content: animationPlayer({ thumbnail: true, clip: iniPreviewClip(document!, entry.section, { fillBefore: true }), key: `${path}|${entry.section}`, resolver: visualResolver(), readFile: readSkinFile }),
-    onClick: () => openAnimation(path, entry.kind === "particle", entry.section),
-  } : { label: `anim.ini 里没有动画 ${id}`, content: createIcon("image-off", 16) })
+  const choose = (current = "", index = 0) => chooseLegacyAnimation(current, next => {
+    if (!row.isConnected || input.disabled) return
+    const slots = value.split(",")
+    slots[index] = next
+    input.value = slots.join(",")
+    input.dispatchEvent(new Event("change", { bubbles: true }))
+  })
+  const states: StyleReferenceState[] = animations.map(({ id, slot, entry }) => ({
+    label: entry ? `更换动画 ${id} · ${kindLabel(entry)}` : `更换动画 ${id}（缺失）`,
+    content: entry ? animationPlayer({ thumbnail: true, clip: iniPreviewClip(document!, entry.section, { fillBefore: true }), key: `${path}|${entry.section}`, resolver: visualResolver(), readFile: readSkinFile }) : createIcon("image-off", 16),
+    onClick: edit => edit && entry ? openAnimation(path, entry.kind === "particle", entry.section) : choose(id, slot),
+  }))
   row.classList.add("style-reference-field")
   if (!animations.length) {
     const control = input.closest<HTMLElement>(".ui-input") ?? input
     control.hidden = true
-    const add = styleReferenceAddButton("添加动画", () => {
-      const entries = parseLegacyAnimationFile(appState.archive!.getText(path)).entries
-      const select = fieldControl({ kind: "choice", value: "", options: entries.map(entry => [String(entry.index), `动画 ${entry.index} · ${kindLabel(entry)}`]), layout: "select", unset: true }, "选择动画", (value) => {
-        input.value = value
-        input.dispatchEvent(new Event("change", { bubbles: true }))
-      }, { editable: !input.disabled })
-      add.replaceWith(select)
-      select.focus()
-    }, input.disabled)
-    row.firstElementChild?.append(add)
+    row.firstElementChild?.append(styleReferenceAddButton("添加动画", () => choose(), input.disabled))
     return
   }
   ;(input.closest(".ui-input") ?? input).replaceWith(styleReferenceCard({
     name: input,
     kind: styleKindIcon("anim"),
+    reference: { label: "更换动画", run: states[0].onClick! },
     states,
     disabled: input.disabled,
   }))

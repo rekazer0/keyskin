@@ -15,8 +15,9 @@ import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
 import { openImageResourceChooser } from "./resource-inspector"
 import { sourceEditPath, ssfDocument, ssfPackage, ssfTheme } from "./ssf-documents"
+import { chooseReferenceValue } from "./ask"
 import { appState } from "./state"
-import { styleKindIcon, styleReferenceAddButton, styleReferenceCard } from "../style-card"
+import { styleCard, styleKindIcon, styleReferenceAddButton, styleReferenceCard } from "../style-card"
 import { element, iconButton } from "../dom-element.ts"
 import { sanitizeFontFileName, uniqueFontFileName } from "../font-files.ts"
 import { type Change } from "../history.ts"
@@ -184,20 +185,32 @@ function referenceCard(label: string, reference: CardReference, target: SsfLocat
   name.disabled = !isEditing()
   name.spellcheck = false
   name.setAttribute("aria-label", label)
-  name.addEventListener("change", () => editTargets([{ path: reference.path, section: reference.section }], (document, target) => {
-    const next = name.value.trim()
+  const commit = (next: string) => editTargets([{ path: reference.path, section: reference.section }], (document, target) => {
     if (next) setSsfValue(document, target.section, reference.key, withFile(document.get(target.section, reference.key), next))
     else document.remove(target.section, reference.key)
-  }))
+  })
+  name.addEventListener("change", () => commit(name.value.trim()))
+  const choose = () => {
+    const archive = appState.archive
+    const images = ssfDocument(target.path)
+    const choices = images.sections().filter(id => ["NORMAL", "PRESSED"].some(key => parseSsfImage(images.get(id, key))?.file))
+    chooseReferenceValue("样式", section, choices.map(id => [id, id, () => styleCard({
+      id, label: id, kind: "image",
+      draw: async (canvas, pressed) => drawVisualPreview(canvas, [await imageVisual(stateImage(images, id, pressed ? "PRESSED" : "NORMAL"))], false),
+    })]), id => {
+      if (row.isConnected && appState.archive === archive && id !== section) commit(id)
+    })
+  }
   const image = ssfDocument(target.path)
   const states = ["NORMAL", "PRESSED"].map((key) => ({
-    label: `${key === "PRESSED" ? "按下" : "正常"}${label}`,
+    label: `更换${key === "PRESSED" ? "按下" : "正常"}图片`,
     draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await imageVisual(stateImage(image, target.section, key))], false),
-    onClick: isEditing() ? () => editImage([target], key) : undefined,
+    onClick: (edit: boolean) => edit ? editImage([target], key) : chooseImage([target], key),
+    editLabel: `编辑${key === "PRESSED" ? "按下" : "正常"}图片`,
   }))
   const row = element("div", "ui-field style-reference-field")
   caption(row, reference.key, label)
-  row.append(styleReferenceCard({ name, kind: styleKindIcon("image"), states, disabled: !isEditing(), remove: {
+  row.append(styleReferenceCard({ name, kind: styleKindIcon("image"), reference: { label: "更换样式", run: choose }, states, disabled: !isEditing(), remove: {
     label: `移除${label}`,
     run: () => editTargets([{ path: reference.path, section: reference.section }], (document, target) => document.remove(target.section, reference.key)),
   } }))
@@ -237,14 +250,15 @@ function imageCard(label: string, keys: readonly string[], targets: SsfLocation[
     })
     names.push(name)
     return {
-      label: `${stateLabel}${label}：${file ?? "未设置"}${own ? "" : "（沿用正常图片）"}`,
+      label: `更换${stateLabel}${label}：${file ?? "未设置"}${own ? "" : "（沿用正常图片）"}`,
       // Thumbnails decode images; a whole phoneSkin.ini has hundreds, so only visible ones are drawn.
       draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await imageVisual(value)], false),
-      onClick: isEditing() ? () => editImage(targets, key) : undefined,
+      onClick: (edit: boolean) => edit ? editImage(targets, key) : chooseImage(targets, key),
+      editLabel: `编辑${stateLabel}${label}`,
     }
   })
   const configured = targets.some(target => keys.some(key => parseSsfImage(stateImage(ssfDocument(target.path), target.section, key))?.file))
-  if (configured) row.append(styleReferenceCard({ name: names, kind: styleKindIcon("image"), states, disabled: !isEditing() }))
+  if (configured) row.append(styleReferenceCard({ name: names, kind: styleKindIcon("image"), reference: { label: `更换${keys.length > 1 ? "正常" : ""}${label}`, run: states[0].onClick }, states, disabled: !isEditing() }))
   else row.firstElementChild?.append(styleReferenceAddButton(`添加${label}`, () => chooseImage(targets, keys[0]), !isEditing()))
   return row
 }
@@ -272,6 +286,7 @@ function stretchField(targets: SsfLocation[], key: string): HTMLElement {
       input.min = String(minimum[index])
       input.max = Number.isFinite(maximum[index]) ? String(maximum[index]) : ""
       input.step = "1"
+      input.dispatchEvent(new Event("inspector-slider-sync"))
     }
   }
   const update = (values: string[], previewOnly = false) => {
@@ -298,9 +313,12 @@ function stretchField(targets: SsfLocation[], key: string): HTMLElement {
     row.dispatchEvent(new Event("input", { bubbles: true }))
   }
   ssfNumberParts(row, "STRETCH", ["左", "右", "上", "下"], stretch?.map(String) ?? ["", "", "", ""], (values) => update(values))
-  const inputs = [...row.querySelectorAll("input")]
+  const inputs = [...row.querySelectorAll<HTMLInputElement>('input:not([type="range"])')]
   row.addEventListener("ssf-stretch-preview", () => update(inputs.map((input) => input.value), true))
-  for (const input of inputs) input.disabled = true
+  for (const input of inputs) {
+    input.disabled = true
+    input.dispatchEvent(new Event("inspector-slider-sync"))
+  }
   // Decode before editing, so commits stay synchronous and retain the numeric gesture's undo token.
   void Promise.all(targets.map((target) => imageVisual(stateImage(ssfDocument(target.path), target.section, key)))).then((images) => {
     if (!row.isConnected) return
@@ -317,6 +335,7 @@ function stretchField(targets: SsfLocation[], key: string): HTMLElement {
         if (mixed) input.placeholder = "混合"
       }
       input.disabled = !isEditing() || !Number.isFinite(width) || !Number.isFinite(height)
+      input.dispatchEvent(new Event("inspector-slider-sync"))
     }
   })
   const constrain = (event: Event) => {
@@ -568,7 +587,7 @@ function markMixed(row: HTMLElement, targets: SsfLocation[], keys: string[]): vo
     }
     return
   }
-  const inputs = Array.from(row.querySelectorAll<HTMLInputElement>("input:not([type=color])"))
+  const inputs = Array.from(row.querySelectorAll<HTMLInputElement>("input:not([type=color], [type=range])"))
   const quad = QUADS[keys[0]]
   if (quad) {
     const parts = values.map((value) => value.split(",").map((part) => part.trim()))
@@ -581,6 +600,7 @@ function markMixed(row: HTMLElement, targets: SsfLocation[], keys: string[]): vo
       else { input.value = ""; input.placeholder = "混合" }
     }
   }
+  for (const input of inputs) input.dispatchEvent(new Event("inspector-slider-sync"))
 }
 
 /** Rows of one section: its image pairs as cards, then every other value. */

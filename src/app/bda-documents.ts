@@ -53,13 +53,33 @@ export function createMissingVariant(path: string): boolean {
     showError(new Error("当前配置没有可复制的对应布局"), `创建${label}`)
     return false
   }
-  // 进撤销栈，所以不再确认（DESIGN.md §7）。
-  const archive = appState.archive
-  commitBatch(copies.map(({ source, target }) => ({ kind: "bytes" as const, path: target, before: archive.getBytes(target), after: archive.getBytes(source)!.slice() })))
+  commitVariantCopies(copies, label)
   renderFiles()
+  return true
+}
+
+export function createSkinTheme(target: string): boolean {
+  const archive = appState.archive
+  if (!archive) return false
+  const label = `${target === "dark" ? "深色" : "浅色"}目录`
+  const copies = variantCopyPaths(archive.names(), theme.value, orientation.value, target, orientation.value)
+  if (!copies.length) {
+    showError(new Error("当前外观没有可复制的文件"), `创建${label}`)
+    return false
+  }
+  if (copies.some(({ target }) => archive.getSourceBytes(archive.sourcePath(target)))) {
+    showError(new Error("目标路径已被其他文件占用"), `创建${label}`)
+    return false
+  }
+  commitVariantCopies(copies, label)
+  return true
+}
+
+function commitVariantCopies(copies: ReturnType<typeof variantCopyPaths>, label: string): void {
+  const archive = appState.archive!
+  commitBatch(copies.map(({ source, target }) => ({ kind: "bytes", path: target, before: archive.getBytes(target), after: archive.getBytes(source)!.slice() })))
   updateDirty()
   showStatus(`已创建${label}`)
-  return true
 }
 
 export function bdaBasePath(path = preferredPath()): string {

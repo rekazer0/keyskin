@@ -73,6 +73,17 @@ try {
   await page.locator('#ai-design-chat .ai-resize').waitFor()
   assert.equal(await page.locator('#ai-sessions').isVisible(), false)
 
+  // The welcome starts at the top even in a tall inspector; choosing a sample only fills the composer.
+  const welcome = page.locator('#ai-design-chat .ai-welcome')
+  const heading = await welcome.locator('h2').boundingBox()
+  const bar = await page.locator('#ai-design-panel .ai-bar').boundingBox()
+  assert.ok(heading.y >= bar.y + bar.height && heading.y < bar.y + bar.height + 48)
+  const samples = welcome.locator('button[data-palette]')
+  assert.equal(await samples.count(), 6)
+  await samples.first().click()
+  assert.equal(await page.locator('#ai-design-chat #text-input').innerText(), await samples.first().getAttribute('data-ai-prompt'))
+  assert.equal(await page.locator('#ai-design-chat .ai-run').count(), 0)
+
   // Run the real panel request with a model result that proposes a file change.
   const archiveBefore = await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
@@ -134,6 +145,10 @@ try {
   })
   await page.getByRole('button', { name: '会话', exact: true }).click()
   await page.locator('#ai-sessions').waitFor()
+  assert.ok(await page.getByRole('button', { name: '清理记录', exact: true }).isDisabled())
+  await page.locator('[data-session-filter="applied"]').click()
+  assert.equal(await page.locator('#ai-session-list').innerText(), '暂无已应用的会话')
+  await page.locator('[data-session-filter="all"]').click()
   assert.equal(await page.locator('#ai-session-list [role="option"]').count(), 1)
   assert.equal(await page.locator('#ai-session-list [role="option"] strong').innerText(), '第一个会话')
   assert.equal(await page.locator('#ai-new-session [data-icon="message-square"]').count(), 1)
@@ -275,7 +290,7 @@ try {
     old.replaceWith(section)
     const { initializeModelSettings } = await import('/src/model-settings.ts')
     initializeModelSettings(section, { desktop: true, icon: () => document.createElement('span'), onSaved() {} })
-    document.querySelector('#settings-dialog').showModal()
+    document.querySelector('#workspace-navigation [data-settings-entry=settings]').click()
     document.querySelector('#settings-model-nav').hidden = false
     ;(await import('/src/app/preferences.ts')).showSettingsPage('model')
     section.hidden = false

@@ -523,7 +523,7 @@ export function legacyAnimationReferences(
 }
 
 /** 样式里动效指针字段对应的时机。 */
-const STYLE_ANIM_FIELD_LABELS: Record<string, string> = {
+export const STYLE_ANIM_FIELD_LABELS: Record<string, string> = {
   PRESS_ANIM: EVENT_LABELS.press,
   RELEASE_ANIM: EVENT_LABELS.release,
   SHOW_ANIM: EVENT_LABELS.show,

@@ -1,11 +1,6 @@
 /** Package formats the editor opens, edits and saves in place. */
 export type ExportFormat = "bdi" | "bds" | "bda" | "ssf" | "sxi"
 
-export function canExport(source: ExportFormat, target: ExportFormat): boolean {
-  if (source === "sxi" || source === "ssf") return true
-  return target !== "bda" || source === "bda"
-}
-
 export function exportFormatFromPath(path: string): ExportFormat | undefined {
   const match = path.match(/\.([^.\\/]+)$/)
   const extension = match?.[1].toLowerCase()

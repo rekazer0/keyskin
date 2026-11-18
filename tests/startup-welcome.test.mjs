@@ -6,8 +6,9 @@ import { appSource } from "./helpers/app-source.mjs"
 const main = appSource()
 const previews = readFileSync(new URL("../src/template-preview.ts", import.meta.url), "utf8")
 
-test("startup welcome screen pages recent skins and keeps template previews lazy", () => {
-  assert.match(main, /const recentPageSize = 9/)
+test("startup welcome screen pages desktop and mobile skins and keeps template previews lazy", () => {
+  assert.match(main, /const desktopRecentRows = 3/)
+  assert.match(main, /const mobileRecentPageSize = 9/)
   assert.match(main, /items\.slice\(start, start \+ recentPageSize\)/)
   assert.match(readFileSync(new URL("../src/project-chooser.ts", import.meta.url), "utf8"), /hydrateTemplateCardPreviews\(body, \{ lazy: true \}\)/)
   assert.match(main, /await waitForPreviewFrame\(\)/)

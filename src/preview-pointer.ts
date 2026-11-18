@@ -1,5 +1,5 @@
 import type { Preview } from "./preview.ts"
-import { effectivePreviewItem, visiblePreviewItems } from "./preview-items.ts"
+import { effectivePreviewItem, isFullPanelPreviewItem, visiblePreviewItems } from "./preview-items.ts"
 import { gestureDirection } from "./layout.ts"
 import { isTouchLongPress } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
@@ -25,6 +25,34 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
   if (self.pointerInteractionLocked || event.button !== 0) return
   const point = self.point(event)
   const key = self.hit(point)
+  if (self.mode === "edit" && self.editTool === "select" && !self.toolbarSlots && event.pointerType === "mouse") {
+    self.marquee = { pointerId: event.pointerId, start: point, clientX: event.clientX, clientY: event.clientY, key }
+    self.canvas.setPointerCapture(event.pointerId)
+    if (key) {
+      if (!self.animationView) self.flashPress(key)
+      playPressedKey(self, key)
+    }
+    return
+  }
+  if (self.mode === "edit" && self.editTool === "select" && event.pointerType === "touch") {
+    self.editTouch = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      key,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      startedAt: Date.now(),
+      longPress: false,
+    }
+    const touch = self.editTouch
+    if (key) touch.longPressTimer = window.setTimeout(() => {
+      if (self.editTouch !== touch) return
+      touch.longPress = true
+      holdSelection(self, key)
+    }, 450)
+    self.canvas.setPointerCapture(event.pointerId)
+    return
+  }
   if (self.animationView) {
     if (self.mode !== "edit") {
       if (key) playPressedKey(self, key)
@@ -46,33 +74,9 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
     }
     return
   }
-  if (self.mode === "edit" && self.editTool === "select" && event.pointerType === "touch") {
-    self.editTouch = {
-      pointerId: event.pointerId,
-      pointerType: event.pointerType,
-      key,
-      startX: point.x,
-      startY: point.y,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      startedAt: Date.now(),
-      longPress: false,
-    }
-    const touch = self.editTouch
-    touch.longPressTimer = window.setTimeout(() => {
-      if (self.editTouch !== touch) return
-      touch.longPress = true
-      self.mobileMultiSelect = true
-      self.selected.add(key.section)
-      self.selectionAnchor = key.section
-      self.onSelect([...self.selected])
-      void self.draw()
-    }, 450)
-    self.canvas.setPointerCapture(event.pointerId)
-    return
-  }
   if (self.mode === "edit") {
-    selectKey(self, key, event)
+    pickKey(self, key, event)
+    notifySelection(self)
     self.flashPress(key)
     playPressedKey(self, key)
     if (self.editTool === "move" && !key.section.startsWith("LIST")) {
@@ -122,7 +126,19 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
   void self.draw()
 }
 
+function updateMarquee(self: Preview, event: PointerEvent) {
+  const drag = self.marquee!
+  if (!drag.rect && Math.hypot(event.clientX - drag.clientX, event.clientY - drag.clientY) < 3) return
+  const { x, y } = self.point(event)
+  return drag.rect = { x: Math.min(x, drag.start.x), y: Math.min(y, drag.start.y),
+    width: Math.abs(x - drag.start.x), height: Math.abs(y - drag.start.y) }
+}
+
 export function pointerMove(self: Preview, event: PointerEvent): void {
+  if (self.marquee && self.marquee.pointerId === event.pointerId) {
+    if (updateMarquee(self, event)) void self.draw()
+    return
+  }
   if (self.active && event.pointerId === self.active.pointerId) {
     const point = self.point(event)
     if (self.active.direction === "hold" && self.active.hintCellWidth && !self.active.clearOnHold) {
@@ -155,10 +171,7 @@ export function pointerMove(self: Preview, event: PointerEvent): void {
   }
   if (self.editTouch?.pointerId === event.pointerId && !self.editTouch.longPress) {
     const distance = Math.hypot(event.clientX - self.editTouch.clientX, event.clientY - self.editTouch.clientY)
-    if (distance > 12 && self.editTouch.longPressTimer !== undefined) {
-      window.clearTimeout(self.editTouch.longPressTimer)
-      self.editTouch.longPressTimer = undefined
-    }
+    if (distance > 12) self.cancelEditTouch()
   }
   if (!self.editDrag || self.editDrag.pointerId !== event.pointerId) return
   const point = self.point(event)
@@ -176,31 +189,48 @@ export function pointerMove(self: Preview, event: PointerEvent): void {
 }
 
 export function pointerUp(self: Preview, event: PointerEvent): void {
+  if (event.pointerType === "mouse" && self.marquee && self.marquee.pointerId === event.pointerId) {
+    const { key } = self.marquee
+    const box = updateMarquee(self, event)
+    self.marquee = undefined
+    if (box) {
+      const hits = visiblePreviewItems(self.keys, self.skinState).filter(({ editable, rect }) => editable &&
+        rect.x <= box.x + box.width && rect.x + rect.width >= box.x &&
+        rect.y <= box.y + box.height && rect.y + rect.height >= box.y &&
+        !isFullPanelPreviewItem({ rect }, self.panelWidth, self.panelHeight))
+      self.selected = new Set([...(isAdditiveSelection(event) ? self.selected : []), ...hits.map(item => item.section)])
+      self.selectionAnchor = hits.at(-1)?.section
+    } else if (key) pickKey(self, key, event)
+    else self.selected.clear()
+    if (!self.selected.size) self.mobileMultiSelect = false
+    notifySelection(self)
+    void self.draw()
+    return
+  }
   if (self.editTouch?.pointerId === event.pointerId) {
     const touch = self.editTouch
     self.cancelEditTouch()
     const distance = Math.hypot(event.clientX - touch.clientX, event.clientY - touch.clientY)
-    const longPress = touch.longPress || isTouchLongPress(
-      touch.pointerType,
-      Date.now() - touch.startedAt,
-      distance,
-    )
-    if (longPress) {
-      self.mobileMultiSelect = true
-      self.selected.add(touch.key.section)
-      self.selectionAnchor = touch.key.section
-      self.onSelect([...self.selected])
-    } else {
-      selectKey(self, touch.key, {
-        metaKey: event.metaKey,
-        ctrlKey: event.ctrlKey || self.mobileMultiSelect,
-        shiftKey: event.shiftKey,
-      })
-      if (distance <= 12) {
-        self.flashPress(touch.key)
-        playPressedKey(self, touch.key)
-      }
+    if (touch.longPress || distance > 12) return
+    if (!touch.key) {
+      self.selected.clear()
+      self.mobileMultiSelect = false
+      notifySelection(self)
+      void self.draw()
+      return
     }
+    if (isTouchLongPress(touch.pointerType, Date.now() - touch.startedAt, distance)) {
+      holdSelection(self, touch.key)
+      return
+    }
+    pickKey(self, touch.key, {
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey || self.mobileMultiSelect,
+      shiftKey: event.shiftKey,
+    })
+    notifySelection(self)
+    if (!self.animationView) self.flashPress(touch.key)
+    playPressedKey(self, touch.key)
     void self.draw()
     return
   }
@@ -263,9 +293,17 @@ function playPressedKey(self: Preview, key: PreviewItem): void {
     : key)
 }
 
-export function selectKey(self: Preview, key: PreviewItem, event: Pick<PointerEvent, "metaKey" | "ctrlKey" | "shiftKey">): void {
-  pickKey(self, key, event)
-  self.onSelect([...self.selected])
+function notifySelection(self: Preview): void {
+  if (self.animationView) self.onAnimationKeys([...self.selected])
+  else self.onSelect([...self.selected])
+}
+
+function holdSelection(self: Preview, key: PreviewItem): void {
+  self.mobileMultiSelect = true
+  self.selected.add(key.section)
+  self.selectionAnchor = key.section
+  notifySelection(self)
+  void self.draw()
 }
 
 /** 点按键改选择：Shift 连选、Cmd/Ctrl 加减选；不通知。 */

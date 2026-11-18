@@ -9,10 +9,7 @@ import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
 import { adaptAndroidToolbar } from "../ios-toolbar.ts"
-import { applyLegacyBaiduMotion } from "../legacy-to-bda-motion.ts"
-import { convertBaiduToSsf } from "../ssf/baidu-to-ssf.ts"
-import { SsfPackage } from "../ssf/ssf-package.ts"
-import { convertSsfToBda } from "../ssf/ssf-to-bda.ts"
+import { convertLegacyToBda } from "../ssf/ssf-convert.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 import { parseSkinJson, same } from "./sxi-json.ts"
 import { boardFileName, boardIni, bubbleIni, candidateIni } from "./sxi-layout.ts"
@@ -243,14 +240,6 @@ function palmMotionWarnings(archive: SkinArchive, target: "baidu" | "bda" = "bda
  * through Sogou; motion is read directly from the intermediate Baidu archive, including resources.
  */
 export async function convertSxiToBda(archive: SkinArchive, template: SkinArchive): Promise<Converted> {
-  if (template.format !== "bda") throw new Error("BDA 转换需要 BDA 模板")
-  const converted = sxiToBaiduArchive(archive)
-  const ssf = await convertBaiduToSsf(converted, { animations: false })
-  const pkg = await SsfPackage.open(ssf.bytes)
-  const bda = convertSsfToBda(pkg, template)
-  const motionWarnings = applyLegacyBaiduMotion(converted, bda.archive)
-  // This warning describes only the discarded SSF intermediary, not the resulting BDA.
-  const staticWarnings = ssf.warnings.filter((warning) => warning !== "百度按键动画在搜狗皮肤中没有对应，已忽略")
-  const bdaWarnings = bda.warnings.filter((warning) => warning !== "按键动画（anim.ini）暂不转换为 BDA 动效，已忽略；转为 BDS/BDI 可保留")
-  return { bytes: bda.archive.toBytes(), warnings: [...new Set([...staticWarnings, ...bdaWarnings, ...motionWarnings, ...palmMotionWarnings(archive)])] }
+  const bda = await convertLegacyToBda(sxiToBaiduArchive(archive), template)
+  return { ...bda, warnings: [...new Set([...bda.warnings, ...palmMotionWarnings(archive)])] }
 }

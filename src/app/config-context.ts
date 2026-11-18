@@ -1,5 +1,5 @@
 import { sxiFragmentRange, sxiSectionRanges } from "../palm/sxi-edit.ts"
-import { palmAnimationTableAddress, palmCandidateAddress, palmStyleTableAddress, sxiPointer } from "./sxi-documents"
+import { palmAnimationTableAddress, palmCandidateAddress, palmStyleTableAddress, palmThemes, sxiPointer } from "./sxi-documents"
 import { palmStylePointer } from "./sxi-styles"
 import { palmTilePointer } from "../palm/palm-style-edit.ts"
 import { appState } from "./state"
@@ -11,6 +11,7 @@ import { jsonPropertyRanges, iniSectionRanges } from "../highlight.ts"
 import { source, toolbarPreview, candidateBackgroundPreview } from "./canvas-interaction"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { updateSourceHighlight } from "./source-panel"
+import { selectedAnimationSourceID } from "./animation-resource"
 import { IniDocument } from "../ini.ts"
 import { bdaAppearancePart, bdaBasePath, textDocument, currentBdaAppearance } from "./bda-documents"
 import { firstExistingPath } from "../resources.ts"
@@ -34,6 +35,8 @@ export function selectedSourceSections(): string[] {
   if (appState.resourceConfigActive && appState.resourceInspectorMode === "style") {
     return appState.selectedStyleID && appState.archive?.format !== "bda" ? [`STYLE${appState.selectedStyleID}`] : []
   }
+  const animation = selectedAnimationSourceID()
+  if (animation && /^ANIM\d+$/i.test(animation)) return [animation]
   const toolbarSections = isToolbarPath(appState.selectedPath) ? effectiveToolbarSections() : []
   if (toolbarSections.length) return toolbarSections
   // A Sogou board's source is its phoneSkin.ini: the selected key's classes are what to reveal.
@@ -57,6 +60,7 @@ function effectiveSelectedSections(): string[] {
 }
 
 export function effectiveToolbarSections(): string[] {
+  if (appState.selectedCandidate === true) return []
   if (!appState.selectedDocument) return appState.selectedToolbarSections
   return [...new Set(appState.selectedToolbarSections.flatMap((section) => {
     const effective = effectivePanelSection(appState.selectedDocument!, section, currentSkinState())
@@ -77,7 +81,8 @@ export function effectiveKeyValue(section: string, key: string): string | undefi
 export function sxiSourceRanges(text: string): Array<readonly [number, number]> {
   const pointer = sxiPointer(appState.selectedPath)
   if (!pointer) return []
-  const part = !appState.resourceConfigActive ? pointer
+  const animation = pointer[2] === "ss_2" ? selectedAnimationSourceID() : undefined
+  const part = !appState.resourceConfigActive ? animation ? [...pointer, animation] : pointer
     : appState.resourceInspectorMode === "style" ? appState.selectedStyleID ? palmStylePointer(appState.selectedStyleID) : undefined
     : appState.selectedResourcePath ? palmTilePointer(appState.selectedResourcePath) : undefined
   const sections = appState.resourceConfigActive ? [] : selectedSourceSections()
@@ -92,16 +97,18 @@ export function scrollSelectedSource(): void {
   const sections = selectedSourceSections()
   const bdaKeys = selectedBdaSourceKeys()
   const sxiRange = sxiSourceRanges(source.value)[0]
-  if (!sxiRange && !sections.length && !bdaKeys.length && !appState.sourceHistoryHighlight) return
-  const bdaRange = selectedBdaStyleSourceRange(source.value) ?? jsonPropertyRanges(source.value, bdaKeys)[0]
+  const bdaRange = selectedBdaSourceRange(source.value) ?? jsonPropertyRanges(source.value, bdaKeys)[0]
   const iniRange = iniSectionRanges(source.value, sections)[0]
   const range = sxiRange ?? bdaRange ?? iniRange ?? appState.sourceHistoryHighlight
   if (range) source.revealRange(range[0], range[1])
 }
 
 /** 同一个编号可以出现在不同样式表中，必须按完整路径定位。 */
-export function selectedBdaStyleSourceRange(text: string): readonly [number, number] | undefined {
-  if (appState.archive?.format !== "bda" || !appState.resourceConfigActive || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID) return
+export function selectedBdaSourceRange(text: string): readonly [number, number] | undefined {
+  if (appState.archive?.format !== "bda") return
+  const animation = selectedAnimationSourceID()
+  if (animation && /(?:^|\/)animationConfig$/i.test(appState.selectedPath)) return sxiFragmentRange(text, ["effects", animation])
+  if (!appState.resourceConfigActive || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID) return
   const part = bdaAppearancePart(appState.selectedPath)
   return part?.kind === "styles" ? sxiFragmentRange(text, [part.group, appState.selectedStyleID]) : undefined
 }
@@ -120,6 +127,17 @@ export function setSourceValue(text: string): void {
  */
 export function layoutSource(): SkinArchive | undefined {
   return appState.archive?.format === "ssf" ? ssfSkeleton() : appState.archive
+}
+
+export function usesSkinThemeDirectories(): boolean {
+  const format = appState.archive?.format
+  return format === "bdi" || format === "bds" || format === "bda"
+}
+
+export function availableSkinThemes(): string[] {
+  if (appState.archive?.format === "sxi") return palmThemes()
+  const names = layoutSource()?.names() ?? []
+  return ["light", "dark"].filter(value => names.some(name => name.startsWith(`${value}/skin/`)))
 }
 
 export function currentConfigPath(name: string): string {

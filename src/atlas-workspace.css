@@ -1,6 +1,6 @@
 #atlas-zoom { display: none; }
 .atlas-resource-extras { display: flex; gap: var(--space-xs); }
-.atlas-resource-extras[hidden], #image-resource-preview[data-empty="true"] .atlas-resource-extras { display: none; }
+.atlas-resource-extras[hidden] { display: none; }
 .atlas-stretch { display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm); font-size: var(--font-size-sm); }
 .atlas-stretch[hidden] { display: none; }
 .resource-workspace:not(.atlas-workspace) main { grid-template-columns: min(var(--resource-sidebar-width), 24vw) minmax(0, 1fr) var(--space-2xs) min(var(--inspector-width), 32vw); }
@@ -13,20 +13,20 @@
 .resource-workspace #resource-list-view > :is(.ui-pane-header, .resource-filters) { padding: 0 var(--space-md); }
 .resource-workspace #resource-list-view > .resource-actions { margin: 0 var(--space-md); }
 #resource-page-sidebar { display: none; }
+#resource-theme[hidden] { display: none; }
 .resource-workspace #resource-page-sidebar { display: flex; }
-#resource-page-description, #resource-create-style, #resource-view-switch, #resource-sort-field { display: none; }
+#resource-page-description, #resource-create-style, #resource-sort-field { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-list-view { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); align-items: start; gap: var(--space-xl) var(--space-sm); padding: var(--space-2xl); }
-.resource-workspace:not(.atlas-workspace) #resource-page-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; grid-column: 1 / -1; gap: var(--space-sm); height: auto; padding: 0; }
+.resource-workspace:not(.atlas-workspace) #resource-page-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-column: 1 / -1; gap: var(--space-sm); height: auto; padding: 0; }
 .resource-workspace:not(.atlas-workspace) #resource-list-title { grid-column: 1; grid-row: 1; font-size: var(--font-size-xl); }
 .resource-workspace:not(.atlas-workspace) #resource-count { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-page-description { display: block; grid-column: 1; grid-row: 2; margin: 0; }
 .resource-workspace:not(.atlas-workspace) #resource-create-style { display: inline-flex; grid-column: 2; grid-row: 1 / 3; align-self: center; }
 .resource-workspace:not(.atlas-workspace) #resource-create-style[hidden] { display: none; }
-.resource-workspace:not(.atlas-workspace) #resource-font-theme:not([hidden]) { grid-column: 2; grid-row: 1 / 3; align-self: center; }
 .resource-workspace:not(.atlas-workspace) #resource-upload { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-list-view:has(#resource-catalog[aria-label="字体"]:not([hidden])) #resource-upload:not([hidden]) { display: inline-flex; }
-.resource-workspace:not(.atlas-workspace) #resource-view-switch { display: flex; grid-column: 4; grid-row: 1 / 3; align-self: center; }
-.resource-workspace:not(.atlas-workspace) #resource-sort-field { display: inline-flex; order: 2; }
+.resource-workspace:not(.atlas-workspace) #resource-sort-field { display: inline-flex; }
+.resource-workspace:not(.atlas-workspace) .resource-filters > .ui-search { flex-basis: calc(3 * var(--space-2xl)); }
 .resource-workspace:not(.atlas-workspace) .resource-filters .ui-style-filters { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-list-view > .resource-filters { grid-column: 1 / -1; grid-row: 2; align-self: start; padding: 0; min-width: 0; }
 .resource-workspace:not(.atlas-workspace) #resource-list-view > .resource-actions { grid-column: 2; grid-row: 2; align-self: start; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); width: auto; height: auto; margin: 0; padding: 0; background: transparent; }
@@ -36,15 +36,13 @@
 .resource-workspace #resource-gallery[hidden] { display: none; }
 @media (max-width: 1100px) {
   .resource-workspace:not(.atlas-workspace) #resource-list-view { padding: var(--space-lg); }
-  .resource-workspace:not(.atlas-workspace) #resource-sort-field { flex-basis: 100%; }
+  .resource-workspace:not(.atlas-workspace) .resource-filter-options .ui-select { padding-inline: var(--space-xs); }
   .resource-workspace:not(.atlas-workspace) #resource-page-heading { grid-template-columns: minmax(0, 1fr) auto; }
   .resource-workspace:not(.atlas-workspace) #resource-create-style { grid-row: 3; grid-column: 1; justify-self: start; }
-  .resource-workspace:not(.atlas-workspace) #resource-font-theme:not([hidden]) { grid-row: 3; grid-column: 1; justify-self: start; }
-  .resource-workspace:not(.atlas-workspace) #resource-view-switch { grid-column: 2; grid-row: 3; }
 }
 .resource-workspace .ui-sound-library > .ui-list-toolbar { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-detail:has(#sound-resource-detail:not([hidden])) > .resource-detail-heading,
-.resource-workspace:not(.atlas-workspace) #resource-detail:has(#image-resource-preview[data-empty="true"]) > .resource-detail-heading { display: none; }
+.resource-workspace:not(.atlas-workspace) #resource-detail:has(#image-resource-detail:not([hidden]) #image-resource-preview[data-empty="true"]) > .resource-detail-heading { display: none; }
 #image-resource-preview { display: none; }
 .resource-workspace:not(.atlas-workspace) #image-resource-preview:not([hidden]) { display: grid; gap: var(--space-md); align-content: start; padding: var(--space-lg); }
 .resource-workspace:not(.atlas-workspace) #image-resource-detail:has(#image-resource-preview[data-empty="true"]) { place-content: center; }
@@ -54,8 +52,11 @@
 #image-resource-preview[data-empty="true"] .image-resource-preview-frame,
 #image-resource-preview[data-empty="true"] #image-resource-slices { display: none; }
 .image-resource-preview-frame > img { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
-#resource-selection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
-.resource-workspace #resource-page-heading > #resource-selection-actions { grid-column: 3; grid-row: 1 / 3; align-self: center; }
+#resource-selection-actions { flex: none; }
+.resource-workspace #resource-page-heading > #resource-download { grid-column: 3; grid-row: 1 / 3; align-self: center; }
+@media (max-width: 1100px) {
+  .resource-workspace #resource-page-heading > #resource-download { grid-column: 2; grid-row: 3; }
+}
 #sound-resource-detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: auto; }
 #sound-resource-detail[hidden] { display: none; }
 #sound-resource-detail > .ui-sound-preview { flex: 1; border-top: 0; background: transparent; }
@@ -67,12 +68,15 @@
 .atlas-image-title strong, .atlas-image-title small { font: var(--font-size-xs) var(--font-mono); }
 .atlas-image-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .atlas-image-title small { color: var(--secondary); white-space: nowrap; }
-.atlas-workspace .tile-toolbar { flex: none; flex-wrap: wrap; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); margin: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: var(--panel); }
+.atlas-workspace .tile-toolbar { flex: none; flex-wrap: wrap; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); margin: 0; border: 0; position: relative; border-bottom: 1px solid transparent; border-radius: 0; background: var(--panel); }
 .atlas-workspace #delete-tile { margin-left: 0; }
 .atlas-surface { position: relative; display: grid; place-items: center; flex: 1; min-height: 0; overflow: hidden; }
 .atlas-workspace #workspace-image-figure { width: 100%; height: 100%; max-height: none; padding: var(--space-2xl); box-sizing: border-box; overflow: visible; }
 .atlas-workspace #atlas-zoom { display: flex; right: var(--space-md); bottom: var(--space-md); }
-.atlas-workspace #atlas-canvas { max-width: none; max-height: none; touch-action: none; box-shadow: var(--shadow-sm); background: transparent; }
+#workspace-image { display: none; }
+.atlas-workspace #workspace-image:has(+ #atlas-canvas:not([hidden])) { display: block; grid-area: 1 / 1; max-width: none; max-height: none; pointer-events: none; }
+.atlas-workspace #workspace-image[data-sampling="nearest"] { image-rendering: pixelated; }
+.atlas-workspace #atlas-canvas { grid-area: 1 / 1; max-width: none; max-height: none; touch-action: none; box-shadow: var(--shadow-sm); background: transparent; }
 #atlas-viewport { display: none; position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .atlas-workspace #atlas-canvas:not([hidden]) + #atlas-viewport { display: block; }
 .resource-workspace #resource-back { display: none; }
@@ -83,8 +87,16 @@
 .atlas-workspace #tile-preview { min-height: 0; }
 .atlas-workspace #tile-inspector .geometry-fields:not([hidden]) { display: grid; gap: var(--space-sm); }
 .atlas-workspace #tile-inspector .ui-field { grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm); }
-.atlas-workspace .atlas-stretch { margin-top: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--line-soft); }
+.atlas-workspace .atlas-stretch { margin-top: var(--space-xs); padding-top: var(--space-sm); position: relative; border-top: 1px solid transparent; }
 .atlas-workspace .atlas-stretch:not([hidden]):has(input:not(:checked)) ~ :is(#tile-inner-title, .geometry-fields) { display: none; }
 .atlas-surface.atlas-panning, .atlas-surface.atlas-panning #atlas-canvas { cursor: grabbing; }
 .resource-workspace #resource-gallery { display: grid; flex: 1; align-content: start; align-items: start; gap: var(--space-sm); min-height: 0; overflow: auto; overscroll-behavior: contain; scroll-padding-block: var(--space-sm); padding: var(--space-sm) var(--space-md) var(--space-lg); }
 .resource-workspace #resource-gallery[data-kind="sound"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+
+/* 弱分隔线独立绘制，不改变面板外形或控件尺寸。 */
+.atlas-workspace .atlas-stretch::before {
+  content: ""; position: absolute; top: -1px; inset-inline: var(--space-xs); height: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none;
+}
+.atlas-workspace .tile-toolbar::after {
+  content: ""; position: absolute; bottom: -1px; inset-inline: var(--space-xs); height: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none;
+}

@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import { chromium } from "playwright"
@@ -47,6 +48,13 @@ try {
       ;(await import("/src/app/mobile-layout.ts")).setMobilePane("layout")
     })
     if (format === "bds") {
+      const project = page.getByRole("dialog", { name: "项目侧栏" })
+      await project.getByRole("button", { name: "源文件", exact: true }).click()
+      await project.getByRole("button", { name: "关闭项目侧栏" }).click()
+      await project.waitFor({ state: "hidden" })
+      await page.locator("#mobile-project-toggle").click()
+      assert.equal(await project.getByRole("button", { name: "源文件", exact: true }).getAttribute("aria-pressed"), "true")
+      await project.getByRole("button", { name: "概览", exact: true }).click()
       await page.evaluate(async bytes => {
         (await import("/src/app/state.ts")).appState.archive.setBytes("light/skin/res/mobile_duration.wav", new Uint8Array(bytes))
       }, Array.from(wav(8000)))
@@ -75,6 +83,7 @@ try {
       await inventory.getByRole("searchbox").fill("98765")
       assert.match(await inventory.getByRole("listbox").innerText(), /样式 98765/)
       await inventory.getByRole("button", { name: "清理未使用样式", exact: true }).click()
+      await confirmDeletion(page)
       const after = await page.evaluate(async path => {
         const { appState } = await import("/src/app/state.ts")
         return { text: appState.archive.getText(path), undo: appState.undoStack.length }
@@ -87,11 +96,18 @@ try {
       assert.equal(await page.evaluate(async path => (await import("/src/app/state.ts")).appState.archive.getText(path), before.path), before.text)
       await page.locator("#mobile-files-close").click()
       await page.locator("#mobile-project-dialog").waitFor({ state: "hidden" })
+      const resources = page.locator("#mobile-navigation [data-mobile-page=resources]")
+      await resources.click()
+      await page.locator("#mobile-resource-category").selectOption("image")
+      await page.locator("#resource-search").fill("mobile")
+      await resources.click()
+      assert.equal(await page.locator("#mobile-resource-category").inputValue(), "image")
+      assert.equal(await page.locator("#resource-search").inputValue(), "mobile")
       await page.locator("#mobile-navigation [data-mobile-page=edit]").click()
       await page.locator("#mobile-app-more > summary").click()
       await page.locator('#mobile-app-more [data-mobile-action="mobile-export-open"]').click()
-      const exporting = page.getByRole("dialog", { name: "导出皮肤", exact: true })
-      assert.match(await exporting.innerText(), /当前样式表检查：\d+ 项缺失引用/)
+      const exporting = page.getByRole("dialog", { name: "分享与导出", exact: true })
+      assert.match(await exporting.innerText(), /资源检查 · \d+ 项缺失引用/)
       await exporting.locator('summary', { hasText: '查看缺失引用' }).click()
       assert.match(await exporting.locator('ul').innerText(), /missing_mobile_image/)
       assert.match(await exporting.locator('ul').innerText(), /missing_mobile_sound/)
@@ -101,7 +117,7 @@ try {
       await capture(page, `${prefix}-preflight-inventory`)
       await inventory.getByRole("button", { name: "关闭", exact: true }).last().click()
       assert.equal(await exporting.isVisible(), true, "closing inventory returns to format selection")
-      await exporting.getByRole("button", { name: "取消", exact: true }).click()
+      await exporting.getByRole("button", { name: "关闭", exact: true }).click()
     }
     if (format === "sxi") {
       const beforeGeometry = await page.evaluate(async () => {
@@ -113,12 +129,10 @@ try {
         ;(await import("/src/app/preview-render.ts")).setGuidesVisible(true)
         return appState.archive.getText("skin.json")
       })
-      const size = page.locator('[data-document-key="rect.size"] input[type="number"]').first()
+      const size = page.locator('[data-document-key="rect.size"] input[type="range"]').first()
       await page.getByRole("group", { name: "尺寸标注", exact: true }).getByRole("button", { name: /^宽度/ }).click()
       assert.equal(await size.evaluate(node => node === document.activeElement), true)
-      const value = await size.inputValue()
-      await size.fill(String(Number(value) + 1))
-      await size.press("Tab")
+      await size.press("ArrowRight")
       await undo(page)
       assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.getText("skin.json")), beforeGeometry)
       await page.evaluate(async () => { (await import("/src/app/preview-render.ts")).setGuidesVisible(false) })

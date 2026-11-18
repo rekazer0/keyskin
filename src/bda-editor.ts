@@ -5,7 +5,7 @@ import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from ".
 import { renderBdaAnimationEditor, type BdaAnimationView } from "./bda-animation-editor.ts"
 import type { KeyboardPlayback } from "./animation-player.ts"
 import { bdaLayoutStyleGroups, NEW_FORE_LAYER, type BdaLayoutStyleItem } from "./bda-layout-styles.ts"
-import { element, emptyState, shortcutLabel } from "./dom-element.ts"
+import { element, emptyState, iconButton, shortcutLabel } from "./dom-element.ts"
 import { typographyRows } from "./app/typography.ts"
 import { skinMetadataSections } from "./app/skin-metadata"
 import { field, section } from "./app/property-rows.ts"
@@ -30,7 +30,7 @@ type LayoutEditorOptions = {
     paths: string[][],
     ref: BdaStyleRef,
     field: string,
-    action: "replace" | "edit",
+    action: "replace" | "edit" | "image",
     owner: HTMLElement,
     highlighted?: boolean,
   ) => void
@@ -142,7 +142,7 @@ function stylePreview(
   onImageAction?: StyleEditorOptions["onImageAction"],
   imageResourceNames?: readonly [string | undefined, string | undefined],
 ): HTMLElement {
-  const preview = element("div", "bda-style-preview ui-checker")
+  const preview = element("div", "bda-style-preview ui-checker ui-style-ref-states")
   for (const [index, [highlighted, label]] of ([[false, "正常"], [true, "按下"]] as const).entries()) {
     const state = ref.type === "image" && onImageAction ? element("button") : element("figure")
     if (state instanceof HTMLButtonElement) {
@@ -163,7 +163,13 @@ function stylePreview(
       state.append(name)
     }
     state.append(canvas)
-    preview.append(state)
+    if (state instanceof HTMLButtonElement && editable && onImageAction && resourceName) {
+      const slot = element("span", "ui-style-state-slot")
+      const edit = iconButton("pencil-line", `编辑${label}图片切片`, () => onImageAction(ref, highlighted, "slice"))
+      edit.dataset.size = "lg"
+      slot.append(state, edit)
+      preview.append(slot)
+    } else preview.append(state)
     void resolver?.resolve(bdaStyleID(ref), highlighted)
       .then((visual) => { if (canvas.isConnected) drawVisual(canvas, visual) })
       .catch(() => {})
@@ -330,34 +336,40 @@ export function renderBdaLayoutEditor(container: HTMLElement, options: LayoutEdi
     }
     keyInput.addEventListener("change", commit)
     // 单击换样式，⌘ 单击编辑样式；没有引用时从标题添加。
-    const act = (edit: boolean, highlighted = false) => {
+    const act = (action: "replace" | "edit" | "image", highlighted = false) => {
       const ref = currentRef()
-      if (edit && !ref) return
-      options.onStyleRefAction?.(item.paths ?? [item.path], ref ?? { type: item.type, key: -1 }, item.field, edit ? "edit" : "replace", field, highlighted)
+      if (action !== "replace" && !ref) return
+      options.onStyleRefAction?.(item.paths ?? [item.path], ref ?? { type: item.type, key: -1 }, item.field, action, field, highlighted)
     }
-    const onClick = options.editable ? act : undefined
+    const reference = (edit: boolean) => act(edit ? "edit" : "replace")
     const ref = item.ref
-    const states: StyleReferenceState[] = item.mixed ? [{ label: "混合", content: "混合", onClick }]
+    const states: StyleReferenceState[] = item.mixed ? [{ label: "混合", content: "混合", onClick: reference }]
       : ref ? [false, true].map((highlighted) => ({
-        label: highlighted ? "按下" : "正常",
+        label: ref.type === "image" ? `更换${highlighted ? "按下" : "正常"}图片` : highlighted ? "按下" : "正常",
         draw: async (canvas: HTMLCanvasElement) => drawVisual(canvas, await options.resolver?.resolve(bdaStyleID(ref), highlighted).catch(() => undefined)),
-        onClick: options.editable ? (edit: boolean) => act(edit, highlighted) : undefined,
+        onClick: ref.type === "image" ? (edit: boolean) => act(edit ? "edit" : "image", highlighted) : undefined,
       })) : []
     // 追加前景层：只有一行「前景」标签，右端 plus（排在前景层之前）。
     if (item.field === NEW_FORE_LAYER) {
       field.classList.add("bda-fore-style-add")
       caption.textContent = "前景"
       field.append(caption)
-      caption.append(styleReferenceAddButton("添加前景", () => act(false), !options.editable))
+      caption.append(styleReferenceAddButton("添加前景", () => act("replace"), !options.editable))
       return field
     }
     field.append(caption)
     if (!ref && !item.mixed) {
-      caption.append(styleReferenceAddButton(`添加${item.label}`, () => act(false), !options.editable))
+      caption.append(styleReferenceAddButton(`添加${item.label}`, () => act("replace"), !options.editable))
       return field
+    }
+    if (ref && !item.mixed && options.editable && options.onStyleRefAction) {
+      const edit = iconButton("pencil-line", `编辑${item.label}样式`, () => act("edit"))
+      edit.dataset.size = "lg"
+      caption.append(edit)
     }
     field.append(styleReferenceCard({
       name: keyInput,
+      reference: { label: "更换样式", run: reference },
       kind: ref || item.mixed ? styleKindIcon(item.type) : undefined,
       states,
       remove: ref || item.mixed ? { label: "移除", run: () => options.onStyleRefChange?.(item.paths ?? [item.path], undefined, field) } : undefined,

@@ -115,6 +115,34 @@ test('mouse edit click and touch tap both trigger animations; right click does n
   assert.deepEqual(played, ['KEY1', 'KEY1'])
 })
 
+test('a native scene without press effects paints before selection is committed on release', (t) => {
+  const { preview } = harness(t)
+  preview.mode = 'edit'
+  preview.editTool = 'select'
+  preview.drawnScene = { keys: [] }
+  preview.scene = async () => preview.drawnScene
+  const paints = []
+  preview.draw = () => paints.push(preview.keyPressed(keys[0]))
+  const event = { button: 0, pointerType: 'mouse', pointerId: 1, clientX: 0, clientY: 0 }
+  pointerDown(preview, event)
+  assert.deepEqual(paints, [true])
+  assert.equal(preview.selected.size, 0)
+  pointerUp(preview, event)
+  assert.deepEqual([...preview.selected], ['KEY1'])
+})
+
+test('clearing an empty toolbar only repaints if its joined selection changes', (t) => {
+  const { preview } = harness(t)
+  let paints = 0
+  preview.draw = () => paints++
+  preview.setSelected([], true)
+  preview.setSelected([])
+  preview.mobileMultiSelect = true
+  preview.setSelected([])
+  assert.equal(preview.mobileMultiSelect, false)
+  assert.equal(paints, 2)
+})
+
 test('late image decoding cannot replace a newer press or revive a reset animation', async (t) => {
   const { preview, timers } = harness(t)
   const pending = []

@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 // 手心 (.sxi) 动画检查器：打开一份带全部 9 类动画的皮肤，从列表选中每一个动画，像用户一样读写分组字段、
 // 组合轨道与浮动物体；检查 skin.json（及其导出的 anim.ini）、撤销重做、改动标记与重置、筛选、只读模式，
 // 以及新建 / 复制 / 删除，并确认没有页面错误。
@@ -275,7 +276,9 @@ try {
   await waitFor("107", "a12.floaters.1.file", "snow.png")
   assert.equal((await animation(107)).a12.floaters[1].ride, undefined)
   await fields.getByRole("button", { name: "删除物体 2", exact: true }).click()
+  await confirmDeletion(page)
   await fields.getByRole("button", { name: "删除物体 1", exact: true }).click()
+  await confirmDeletion(page)
   await waitFor("107", "a12.floaters", [])
 
   // 保存原生 SXI 后重新打开，所有编辑值及未暴露的字段必须原样保留。
@@ -377,6 +380,7 @@ try {
   assert.equal((await animation(10)).id, 'ANIM10')
   assert.deepEqual((await animation(10)).a1, (await animation(1)).a1)
   await page.getByRole('button', { name: '删除动画 10', exact: true }).click()
+  await confirmDeletion(page)
   assert.equal(await animation(10), undefined)
   await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
   assert.equal((await animation(10)).id, 'ANIM10')

@@ -1,3 +1,4 @@
+import { confirmDeletion } from "./ask"
 import { bindListboxKeys, element, emptyState, searchField } from "../dom-element.ts"
 import { createIcon } from "../icons.ts"
 import { closeDialog } from "../motion.ts"
@@ -184,9 +185,11 @@ export function openResourceInventory(): void {
     })
     filters.append(button)
   }
-  clean.addEventListener("click", () => {
+  clean.addEventListener("click", async () => {
     if (!isEditing()) { requestEditMode(); return }
     if (appState.archive !== archive) { closeDialog(dialog); return }
+    const revision = archive.revision
+    if (!await confirmDeletion("删除未使用的样式？") || appState.archive !== archive || archive.revision !== revision) return
     status.textContent = `已清理 ${removeUnusedStyles()} 个样式，可撤销恢复`
     refresh()
   })

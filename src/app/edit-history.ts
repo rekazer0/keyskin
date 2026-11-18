@@ -1,4 +1,4 @@
-import { mode, dirty, undoButton, redoButton, sourceName, documentName, mobileDocumentStatus } from "./dom"
+import { canvasWrap, mode, theme, resourceSearch, dirty, undoButton, redoButton, sourceName, documentName, mobileDocumentStatus } from "./dom"
 import { appState } from "./state"
 import { ask } from "./ask"
 import { flushNumberInputWheel, numberInputGesture } from "../number-input-wheel.ts"
@@ -10,7 +10,7 @@ import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
 import { insertedTextRange } from "../highlight.ts"
 import { IniDocument } from "../ini.ts"
-import { legacyAnimationConfigPath, setSourceValue } from "./config-context"
+import { availableSkinThemes, legacyAnimationConfigPath, setSourceValue, usesSkinThemeDirectories } from "./config-context"
 import { tileSlices } from "../tiles.ts"
 import { updateSourceHighlight } from "./source-panel"
 import { populateTileInspector, drawAtlas, loadTiles } from "./tile-editing"
@@ -20,10 +20,11 @@ import { renderFiles } from "./file-tree"
 import { isBdaAppearancePartPath, refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
 import { selectFile } from "./navigation"
 import { selectResourceImage, renderResourceInspector } from "./resource-inspector"
+import { openResources } from "./resource-navigation"
 import { decodedBdaEditorSource } from "../bda-source.ts"
 import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { sxiPointer } from "./sxi-documents"
-import { openSharePage } from "./mobile-export"
+import { openShareDialog } from "./mobile-export"
 
 export function isEditing(): boolean {
   return mode.value === "edit"
@@ -55,7 +56,10 @@ export async function prepareDocumentReplacement(intent: "open" | "leave" = "lea
       detail: `打开其他皮肤将关闭 ${documentName.textContent || "当前皮肤"}，未保存的修改将不会保留。`,
       actions: [{ value: "cancel", label: "取消" }, { value: "discard", label: "不导出" }, { value: "export", label: "去分享导出", variant: "primary" }],
     })
-    if (decision === "export") openSharePage()
+    if (decision === "export") {
+      canvasWrap.classList.remove("empty")
+      openShareDialog(true)
+    }
     return decision === "discard"
   }
   if (!hasUnsavedChanges()) return true
@@ -174,9 +178,24 @@ function refreshSnapshotViews(): void {
 
 function refreshHistorySelection(): void {
   const candidate = appState.selectedCandidate
+  const toolbarSections = appState.selectedToolbarSections
   const path = appState.selectedResourcePath
   const index = appState.selectedTileIndex
   const resourceMode = appState.resourceConfigActive ? appState.resourceInspectorMode : "document"
+  const themes = usesSkinThemeDirectories() ? availableSkinThemes() : []
+  if (themes.length && !themes.includes(theme.value)) {
+    const { resourceCatalog } = appState
+    const search = resourceSearch.value
+    theme.value = themes[0]
+    theme.dispatchEvent(new Event("change"))
+    if (resourceMode !== "document") {
+      openResources(resourceMode)
+      appState.resourceCatalog = resourceCatalog
+      resourceSearch.value = search
+      if (resourceCatalog || search) renderResourceInspector()
+    }
+    return
+  }
   renderFiles()
   if (appState.resourceConfigActive && appState.resourceCatalog) {
     renderResourceInspector()
@@ -198,7 +217,8 @@ function refreshHistorySelection(): void {
   )) {
     selectFile(appState.selectedPath, appState.sidebarView, resourceMode)
   }
-  if (candidate) {
+  if (candidate || toolbarSections.length) {
+    appState.selectedToolbarSections = toolbarSections
     appState.selectedCandidate = candidate
     syncCandidateSelection()
     populateKeyInspector()

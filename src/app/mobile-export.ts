@@ -1,21 +1,25 @@
-import { exportTargets } from "./canvas-interaction"
-import { $, mobileExportOpen, sharePage, mobileExportFormats, documentName, dirty, adbShareButton, canvasWrap, saveButton, fileOperationDialog, fileOperationClose, shareContent, shareTitle, shareBack, shareDocumentName, shareDocumentStatus, shareDocumentFormat, shareAdbAction, shareExport, shareExportName, shareResourceCheck } from "./dom"
+import { exportTargets, isAndroidTauri } from "./canvas-interaction"
+import { $, mobileExportOpen, mobileShareButton, shareDialog, mobileExportFormats, documentName, dirty, adbShareButton, saveButton, fileOperationDialog, fileOperationClose, shareTitle, shareDocumentName, shareDocumentStatus, shareDocumentFormat, shareAdbAction, shareExport, shareExportName, shareResourceCheck } from "./dom"
 import { currentExportFormat, saveArchive } from "./archive-io"
-import { exportTargetUnavailable, runFileOperation } from "./file-operations"
+import { runFileOperation } from "./file-operations"
 import { type ExportFormat, exportName } from "../export.ts"
-import { bdaPlatform, type BdaPlatform } from "../bda-platform.ts"
+import { skinPlatform, type BdaPlatform } from "../bda-platform.ts"
 import { appState } from "./state"
 import { element } from "../dom-element.ts"
-import { playEnter, closeDialog } from "../motion"
+import { closeDialog } from "../motion"
+import { bindDialog } from "./ask"
 import { openResourceInventory, resourcePreflight } from "./resource-inventory"
 
-export function openSharePage(): void {
-  canvasWrap.classList.remove("empty")
-  sharePage.hidden = false
+export function openShareDialog(focusExport = false): void {
+  if (shareDialog.open || !appState.archive) return
+  shareDialog.showModal()
+  shareDialog.dataset.focusExport = String(focusExport)
+  shareTitle.focus({ preventScroll: true })
 }
 
-/** 桌面和手机共用页内分享工作区，不再打开格式选择弹窗。 */
 export function wireMobileExport(): void {
+  const shareHint = mobileShareButton.closest(".ui-share-action")!.querySelector("small")!
+  const supportedHint = shareHint.textContent
   const summary = element("p", "ui-field-note")
   const details = element("details")
   details.append(Object.assign(element("summary"), { textContent: "查看缺失引用" }))
@@ -25,24 +29,23 @@ export function wireMobileExport(): void {
   inventory.addEventListener("click", openResourceInventory)
   shareResourceCheck.append(summary, details, inventory)
   const submit = shareExport
-  const selected = () => mobileExportFormats.find(input => input.checked && !input.disabled)
+  const exportDetails = $("#share-export-details")
+  let bdaChoice = ""
+  const currentChoice = () => currentExportFormat() === "bda" ? bdaChoice : currentExportFormat()
+  const selected = () => mobileExportFormats.find(input => input.checked)
   const syncSelection = () => {
     const input = selected()
-    submit.disabled = !input || saveButton.disabled
-    shareExportName.textContent = input ? exportName(documentName.textContent ?? "皮肤", input.dataset.exportFormat as ExportFormat) : ""
+    const exporting = shareDialog.open && !!input && input.value !== currentChoice()
+    saveButton.hidden = exporting
+    submit.hidden = exportDetails.hidden = !exporting
+    submit.disabled = !exporting || input.disabled
+    shareExportName.textContent = exporting ? exportName(documentName.textContent ?? "皮肤", input.dataset.exportFormat as ExportFormat) : ""
   }
   const sync = () => {
-    shareBack.disabled = appState.fileOperationRunning
+    for (const button of shareDialog.querySelectorAll<HTMLButtonElement>(".ui-share-content > .ui-dialog-header button")) button.disabled = appState.fileOperationRunning
     inventory.disabled = appState.fileOperationRunning
     mobileExportOpen.disabled = !appState.archive || exportTargets.every(input => input.disabled)
-    for (const input of exportTargets) {
-      const label = input.closest("label")!
-      const format = input.dataset.exportFormat as ExportFormat
-      const unavailable = exportTargetUnavailable(format)
-      label.setAttribute("aria-disabled", String(input.disabled))
-      label.title = unavailable ? `当前 ${appState.archive?.format.toUpperCase()} 格式暂不支持另存为 ${format.toUpperCase()}` : ""
-      label.querySelector("small")!.textContent = `.${format}${unavailable ? " · 暂不支持" : ""}`
-    }
+    for (const input of exportTargets) input.closest("label")!.setAttribute("aria-disabled", String(input.disabled))
     shareAdbAction.hidden = adbShareButton.hidden
     shareDocumentName.textContent = documentName.textContent
     shareDocumentStatus.textContent = dirty.hidden ? "所有修改已保存" : "有未保存的修改"
@@ -50,56 +53,46 @@ export function wireMobileExport(): void {
     syncSelection()
   }
   const observer = new MutationObserver(sync)
-  for (const input of [...exportTargets, saveButton, adbShareButton, dirty]) observer.observe(input, { attributes: true, attributeFilter: ["disabled", "hidden"] })
+  for (const input of [...exportTargets, adbShareButton, dirty]) observer.observe(input, { attributes: true, attributeFilter: ["disabled", "hidden"] })
   observer.observe(documentName, { childList: true, characterData: true, subtree: true })
+  const operationOpen = () => shareDialog.contains(fileOperationDialog) && fileOperationDialog.open
   const close = () => {
-    if (appState.fileOperationRunning) return
-    sharePage.hidden = true
+    if (operationOpen()) {
+      if (!fileOperationClose.disabled) void closeDialog(fileOperationDialog).then(() => shareTitle.focus({ preventScroll: true }))
+    } else if (!appState.fileOperationRunning) void closeDialog(shareDialog)
   }
-  shareBack.addEventListener("click", () => {
-    close()
-    if (!sharePage.hidden) return
-    const target = $<HTMLButtonElement>('[data-workspace-page="overview"]')
-    if (target.getClientRects().length) target.focus()
-    else $("#mobile-app-more > summary").focus()
-  })
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-workspace-page], #mobile-navigation button, #recent-files")) button.addEventListener("click", close)
-  document.addEventListener("keydown", event => {
-    if (event.key !== "Escape" || event.defaultPrevented || sharePage.hidden) return
-    if (fileOperationDialog.open && fileOperationDialog.dataset.inline === "true") {
-      if (!fileOperationClose.disabled) {
-        event.preventDefault()
-        void closeDialog(fileOperationDialog)
-      }
-      return
-    }
-    if (document.querySelector("dialog[open]")) return
+  bindDialog(shareDialog, close)
+  shareDialog.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || event.defaultPrevented || !operationOpen()) return
     event.preventDefault()
-    shareBack.click()
+    close()
   })
-  mobileExportOpen.addEventListener("click", openSharePage)
+  mobileExportOpen.addEventListener("click", () => openShareDialog(true))
+  $("#workspace-export").addEventListener("click", () => openShareDialog())
   new MutationObserver(() => {
-    if (sharePage.hidden) return
-    const current = currentExportFormat()
-    const platform = appState.archive ? bdaPlatform(appState.archive) : "unknown"
-    for (const input of mobileExportFormats) input.checked = input.value === current || input.value === `${current}:${platform}`
-    if (!selected()) {
-      const first = mobileExportFormats.find(input => !input.disabled)
-      if (first) first.checked = true
-    }
+    if (!shareDialog.open) { syncSelection(); return }
+    mobileShareButton.hidden = !isAndroidTauri() && typeof navigator.share !== "function"
+    shareHint.textContent = mobileShareButton.hidden ? "当前环境不支持系统分享，可使用保存或另存为。" : supportedHint
+    bdaChoice = appState.archive?.format === "bda" ? `bda:${skinPlatform(appState.archive)}` : ""
+    const current = currentChoice()
+    for (const input of mobileExportFormats) input.checked = input.value === current
     const check = resourcePreflight()
     summary.textContent = check.supported ? `资源检查 · ${check.missing.length} 项缺失引用 · ${check.unused} 个未使用样式` : "此格式的资源依赖将在转换时检查"
     details.hidden = !check.missing.length
     details.open = false
     missing.replaceChildren(...check.missing.map(text => Object.assign(element("li", "ui-field-note"), { textContent: text })))
-    sharePage.scrollTop = 0
+    shareDialog.querySelector(".ui-dialog-body")!.scrollTop = 0
     sync()
-    playEnter(shareContent)
-    queueMicrotask(() => shareTitle.focus({ preventScroll: true }))
-  }).observe(sharePage, { attributes: true, attributeFilter: ["hidden"] })
+    if (!appState.fileOperationRunning) {
+      const focus = shareDialog.dataset.focusExport === "true" ? selected() : saveButton
+      focus?.focus({ preventScroll: true })
+    }
+  }).observe(shareDialog, { attributes: true, attributeFilter: ["open"] })
   const exportSelected = () => {
     const input = selected()
-    if (!input || submit.disabled) return
+    if (!input || input.disabled) return
+    if (input.value === currentChoice()) { saveButton.click(); return }
+    if (submit.disabled) return
     const format = input.dataset.exportFormat as ExportFormat
     const platform = input.dataset.bdaPlatform as Exclude<BdaPlatform, "unknown"> | undefined
     void runFileOperation("另存为", () => saveArchive(true, format, platform))
@@ -119,6 +112,5 @@ export function wireMobileExport(): void {
     }
   }).observe(fileOperationDialog)
   submit.addEventListener("click", exportSelected)
-  new MutationObserver(() => { if (canvasWrap.classList.contains("empty")) close() }).observe(canvasWrap, { attributes: true, attributeFilter: ["class"] })
   sync()
 }

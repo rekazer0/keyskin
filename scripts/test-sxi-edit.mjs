@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import { chromium } from 'playwright'
@@ -141,11 +142,11 @@ try {
   await undoRedo('redo')
   assert.deepEqual((await state()).skin, added.skin)
   await page.locator('#mobile-inspector-groups').getByRole('button', { name: '样式', exact: true }).click()
-  // 引用卡单击打开「全部样式」并定位当前样式；改切片从预览栏的「选择切片」进。
+  // 图片预览直接打开「全部图片」，选图后只改当前样式的正常图。
   const normal = fields.locator('[data-key-field="FORE_STYLE"]').locator('..').locator('.ui-style-ref').last().locator('.ui-style-state[data-state="normal"]')
   await normal.click()
   await pickerDialog.waitFor({ state: 'visible' })
-  await picker.locator('#style-library-slice:not([hidden])').click()
+  await picker.locator('.ui-image-card[data-path$="/btn.png"]').click()
   await picker.locator('#picker-canvas[style*="width"]').waitFor()
   await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
@@ -224,6 +225,7 @@ try {
   assert.deepEqual(await page.evaluate(async () => (await import('/src/app/state.ts')).appState.selectedKeySections), [`KEY${copy.id}`])
   assert.equal(copied.undo, beforeCopy.undo + 1)
   await page.locator('[data-key-action="delete"]').click()
+  await confirmDeletion(page)
   assert.deepEqual(keysOf((await state()).skin), keysOf(beforeCopy.skin))
   await undoRedo('undo')
   assert.deepEqual(keysOf((await state()).skin), keysOf(copied.skin))

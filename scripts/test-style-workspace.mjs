@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -118,10 +119,12 @@ try {
   const createdID = await page.locator('#resource-gallery .ui-style-card[aria-selected="true"]').getAttribute('data-style-id')
   const created = page.locator(`#resource-gallery .ui-style-card[data-style-id="${createdID}"]`)
   await page.getByRole('button', { name: '删除样式', exact: true }).click()
+  await confirmDeletion(page)
   await created.waitFor({ state: 'detached' })
   await page.locator('#desktop-undo').click()
   await created.click()
   await created.press('Delete')
+  await confirmDeletion(page)
   await created.waitFor({ state: 'detached' })
   await page.locator('#desktop-undo').click()
   await created.waitFor()

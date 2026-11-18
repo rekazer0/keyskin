@@ -51,18 +51,23 @@ try {
   for (const selector of [".titlebar button", "#document-name", "#workspace-navigation button"]) {
     assert.equal(await page.locator(selector).evaluateAll(nodes => nodes.some(node => node.hasAttribute("data-tauri-drag-region") || node.querySelector("[data-tauri-drag-region]"))), false)
   }
-  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
-  await page.locator("#settings-dialog").waitFor({ state: "visible" })
+  await page.locator("#workspace-navigation [data-settings-entry='settings']").click()
+  await page.locator("#settings-workspace").waitFor({ state: "visible" })
+  const settingsHeader = await page.locator(".settings-header").boundingBox()
+  await mockDragCommands()
+  await dragFrom(settingsHeader.x + settingsHeader.width / 2, settingsHeader.y + settingsHeader.height / 2)
+  assert.deepEqual(await page.evaluate(() => window.dragCommands), Array(4).fill(["move_macos_window", { dx: 20, dy: 25 }]))
+  await page.evaluate(() => { delete window.__TAURI_INTERNALS__ })
   await page.keyboard.press("Escape")
-  await page.locator("#settings-dialog").waitFor({ state: "hidden" })
-  await page.locator("#workspace-navigation [data-app-dialog='settings']").focus()
+  await page.locator("#settings-workspace").waitFor({ state: "hidden" })
+  await page.locator("#workspace-navigation [data-settings-entry='settings']").focus()
   await page.keyboard.press("Alt+Enter")
   await page.locator("#browser-open").setInputFiles({ name: "拖动.bds", mimeType: "application/octet-stream", buffer: Buffer.from(bdsFixture()) })
   await page.waitForFunction(() => !document.querySelector("#open").disabled && !document.querySelector("#file-operation-dialog").open)
   await page.locator("#pinned-toolbar .ui-pinned-tool > button").first().click()
-  await page.locator("#settings-dialog").waitFor({ state: "visible" })
+  await page.locator("#settings-workspace").waitFor({ state: "visible" })
   await page.keyboard.press("Escape")
-  await page.locator("#settings-dialog").waitFor({ state: "hidden" })
+  await page.locator("#settings-workspace").waitFor({ state: "hidden" })
   assert.equal(await page.locator("#document-name").isVisible(), true, "desktop editor shows the document name")
   assert.equal(await page.locator("#document-name").textContent(), "拖动.bds")
   assert.equal(await fileTop.isVisible(), false, "the editor uses its own titlebar")
@@ -87,7 +92,7 @@ try {
       document.querySelector("#window-material").checked = platform === "windows"
       window.dragCommands.length = 0
     }, platform)
-    for (const selector of [".titlebar .ui-menu", "#workspace-navigation [data-app-dialog='settings'] svg", "#document-name", "#pinned-toolbar .ui-pinned-tool > button:first-child", '#workspace-navigation [data-workspace-page="files"] svg']) {
+    for (const selector of [".titlebar .ui-menu", "#workspace-navigation [data-settings-entry='settings'] svg", "#document-name", "#pinned-toolbar .ui-pinned-tool > button:first-child", '#workspace-navigation [data-workspace-page="files"] svg']) {
       assert.equal(await press(selector), false, `${platform}: ${selector} does not start a drag`)
     }
     assert.equal(await press(".titlebar-right", { button: 2, buttons: 2 }), false)

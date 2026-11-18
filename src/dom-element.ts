@@ -122,8 +122,8 @@ export function listToolbar(actions: { create?: ToolbarAction | HTMLElement; dup
 const listActionBars = new WeakMap<HTMLElement, HTMLElement>()
 
 /**
- * 列表获得焦点时 Delete / Backspace 点工具条的删除（`[data-list-action="remove"]`），⌘/Ctrl D 点复制；
- * 按钮禁用或隐藏时按键也无效。工具条每次重建时重复调用即可，监听只挂一次。
+ * 列表获得焦点时 Delete 点工具条的删除（`[data-list-action="remove"]`），⌘/Ctrl D 点复制；
+ * 工具条内被禁用或隐藏的动作不会执行。工具条每次重建时重复调用即可，监听只挂一次。
  */
 export function bindListActionKeys(list: HTMLElement, bar: HTMLElement): void {
   const bound = listActionBars.has(list)
@@ -132,12 +132,15 @@ export function bindListActionKeys(list: HTMLElement, bar: HTMLElement): void {
   list.addEventListener("keydown", (event) => {
     if (event.defaultPrevented || (event.target as Element).closest("input, textarea, select, [contenteditable]")) return
     const mod = event.metaKey || event.ctrlKey
-    const action = !mod && (event.key === "Delete" || event.key === "Backspace") ? "remove"
+    if (!mod && event.key === "Backspace") { event.preventDefault(); return }
+    const action = !mod && event.key === "Delete" ? "remove"
       : mod && !event.shiftKey && event.key.toLowerCase() === "d" ? "duplicate" : undefined
-    const button = action && listActionBars.get(list)?.querySelector<HTMLButtonElement>(`[data-list-action="${action}"]`)
+    const bar = listActionBars.get(list)
+    const button = action && bar && [...bar.querySelectorAll<HTMLButtonElement>(`[data-list-action="${action}"]`)]
+      .find(button => !bar.contains(button.closest("[hidden]")))
     if (!button) return
     event.preventDefault()
-    if (!button.disabled && !button.hidden && !button.closest("[hidden]")) button.click()
+    if (!button.disabled && !event.repeat) button.click()
   })
 }
 
@@ -163,27 +166,34 @@ export function hydrateShortcuts(root: ParentNode = document): void {
  * 列表框 / 网格（role=listbox，子项 role=option + aria-selected）的方向键、Home、End。
  * 网格里上下键按列数跳行；选中项不变时什么也不做。
  */
-export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElement, event: KeyboardEvent) => void): void {
+export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElement, event: KeyboardEvent) => void,
+  windowed?: () => { length: number; current: number; columns: number; at(index: number): HTMLElement | undefined } | undefined): void {
   list.addEventListener("keydown", (event) => {
     // 嵌套的列表框（例如资源网格里的音效列表）已经处理过这次按键。
     if (event.defaultPrevented) return
     if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-    const options = [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter((option) => !option.hidden)
-    if (!options.length) return
+    if (list.getAttribute("aria-orientation") === "horizontal" && ["ArrowDown", "ArrowUp"].includes(event.key)) return
+    const model = windowed?.()
+    const options = model ? [] : [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter(option => !option.hidden)
+    const length = model?.length ?? options.length
+    if (!length) return
     const focused = options.indexOf(document.activeElement as HTMLElement)
-    const index = focused >= 0 ? focused : options.findIndex((option) => option.getAttribute("aria-selected") === "true")
-    let columns = 1
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    const index = model?.current ?? (focused >= 0 ? focused : options.findIndex(option => option.getAttribute("aria-selected") === "true"))
+    let columns = model?.columns ?? 1
+    if (!model && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       const top = options[0]!.offsetTop
       const rowEnd = options.findIndex((option) => option.offsetTop !== top)
       columns = rowEnd < 0 ? options.length : rowEnd || 1
     }
     const step = ({ ArrowRight: 1, ArrowLeft: -1, ArrowDown: columns, ArrowUp: -columns } as Record<string, number>)[event.key]
     const next = step !== undefined ? (index < 0 ? 0 : index + step)
-      : event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : undefined
+      : event.key === "Home" ? 0 : event.key === "End" ? length - 1 : undefined
     if (next === undefined) return
     event.preventDefault()
-    const option = options[Math.max(0, Math.min(options.length - 1, next))]!
+    const target = Math.max(0, Math.min(length - 1, next))
+    const option = model ? model.at(target) : options[target]
+    if (!option) return
+    if (model) option.scrollIntoView({ block: "nearest" })
     if (option.getAttribute("aria-selected") !== "true" || list.getAttribute("aria-multiselectable") === "true") onSelect(option, event)
   })
 }

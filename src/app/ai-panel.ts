@@ -696,6 +696,7 @@ function syncModelProfiles(all: ModelConfiguration[]): void {
   const key = current ? modelConfigurationKey(current) : remembered
   const index = key ? models.findIndex((model) => modelConfigurationKey(model) === key) : -1
   if (models.length) aiDesignModel.value = String(Math.max(index, 0))
+  $('#mobile-navigation [data-mobile-page="ai"]').hidden = models.length === 0
   aiDesignModel.hidden = models.length === 0
   aiDesignThinking.hidden = aiDesignIntensity.hidden = aiDesignModel.hidden
   aiModelSettings.hidden = models.length > 0

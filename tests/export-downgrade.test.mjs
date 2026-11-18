@@ -24,7 +24,6 @@ test('multi-stage BDA → SXI opens progress first, then confirms unique warning
   const surface = downgradeSurface()
   const context = run(declarations('exportArchive', 'exportArchiveBytes', 'acceptDowngrade', 'conversionProgress', 'percentProgress', 'exportTargetLabel'), { summarizeWarnings,
     archive: { format: 'bda' }, bdaBase: {},
-    canExport: () => true,
     updateFileOperationProgress: () => {}, waitForInterfacePaint: async () => {},
     convertBdaArchive: () => {
       assert.deepEqual(events, ['progress'], 'progress opens before conversion starts')

@@ -1,4 +1,4 @@
-import { adbShareButton, sharePage, shareOperation } from "./dom"
+import { fileOperationLog, fileOperationLogLines, adbShareButton, shareDialog, shareOperation } from "./dom"
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
 import { newButton, openButton, saveButton, mobileShareButton, eventLog, fileOperationDialog, fileOperationProgress, fileOperationPercent, fileOperationDetail, fileOperationTitle, fileOperationIcon, fileOperationResult, fileOperationClose, fileOperationCancel, workspaceImage, assetImage, deviceShell, workspaceImageFigure, sourceEditor, asset, sourceName, assetBackButton } from "./dom"
@@ -10,7 +10,6 @@ import { updateDirty, commitBatch, commitTextChanges } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { updateSourceFileActions } from "./source-files"
 import { exportTargets, isTauri, LARGE_SKIN_BYTES } from "./canvas-interaction"
-import { canExport, type ExportFormat } from "../export.ts"
 import { operationError, operationErrorDetail } from "../operations.ts"
 import { clientLog, flushClientLogs } from "../client-log.ts"
 import { ask } from "./ask.ts"
@@ -103,13 +102,6 @@ export async function decodePngMask(bytes: Uint8Array): Promise<{ width: number;
   return { width: canvas.width, height: canvas.height, mask: alphaMask(pixels, canvas.width, canvas.height), pixels }
 }
 
-/** 不支持的格式保留可见，由分享页说明原因。 */
-export function exportTargetUnavailable(format: ExportFormat): boolean {
-  const source = appState.archive?.format
-  if (!source) return false
-  return !canExport(source, format)
-}
-
 function setFileOperationBusy(busy: boolean): void {
   appState.fileOperationRunning = busy
   newButton.disabled = busy
@@ -120,7 +112,7 @@ function setFileOperationBusy(busy: boolean): void {
   updatePanelToolButtons()
   updateSourceFileActions()
   for (const button of exportTargets) {
-    button.disabled = busy || !appState.archive || exportTargetUnavailable(button.dataset.exportFormat as ExportFormat)
+    button.disabled = busy || !appState.archive
   }
 }
 
@@ -140,11 +132,23 @@ export function showError(error: unknown, action = "操作"): void {
   }
 }
 
+fileOperationLog.addEventListener("toggle", () => {
+  if (fileOperationLog.open) fileOperationLogLines.scrollTop = fileOperationLogLines.scrollHeight
+})
+
+function appendExportLog(detail: string): void {
+  if (fileOperationLog.hidden || !appState.fileOperationRunning || fileOperationLogLines.lastElementChild?.textContent === detail) return
+  const follow = fileOperationLog.open && fileOperationLogLines.scrollTop + fileOperationLogLines.clientHeight >= fileOperationLogLines.scrollHeight - 1
+  fileOperationLogLines.append(Object.assign(document.createElement("div"), { textContent: detail }))
+  if (follow) fileOperationLogLines.scrollTop = fileOperationLogLines.scrollHeight
+}
+
 export function updateFileOperationProgress(value: number, detail: string): void {
   animateProgress(fileOperationProgress, Math.max(0, Math.min(100, value)), (current) => {
     fileOperationProgress.textContent = `${Math.round(current)}%`
     fileOperationPercent.textContent = fileOperationProgress.textContent
   })
+  appendExportLog(detail)
   fileOperationDetail.textContent = detail
 }
 
@@ -165,6 +169,8 @@ export function showFileOperationProgress(): void {
 }
 
 export function showFileOperationCompatibility(title: string, warnings: string[]): void {
+  appendExportLog(`兼容性确认：${title}`)
+  warnings.forEach(appendExportLog)
   fileOperationTitle.textContent = "兼容性确认"
   fileOperationResult.replaceChildren(...warnings.map(text => Object.assign(document.createElement("p"), { textContent: text })))
   fileOperationResult.hidden = false
@@ -303,7 +309,11 @@ export async function runFileOperation(
     showStatus(`正在${appState.currentFileOperation}，请稍后再${action}`, "progress")
     return
   }
-  const inline = !sharePage.hidden && ["保存", "导出", "另存为", "分享皮肤", "分享到 ADB"].includes(action)
+  const exporting = ["保存", "导出", "另存为"].includes(action)
+  const inline = shareDialog.open && (exporting || ["分享皮肤", "分享到 ADB"].includes(action))
+  fileOperationLog.hidden = !exporting
+  fileOperationLog.open = false
+  fileOperationLogLines.replaceChildren()
   fileOperationDialog.dataset.inline = String(inline)
   ;(inline ? shareOperation : document.body).append(fileOperationDialog)
   appState.currentFileOperation = action
@@ -355,7 +365,7 @@ export async function runFileOperation(
       durationMs: Math.round(performance.now() - started),
     })
     showStatus(completed ? `${action}完成` : `${action}已取消`)
-    if (completed && ["保存", "导出", "另存为"].includes(action)) {
+    if (completed && exporting) {
       showFileOperationProgress()
       fileOperationDialog.dataset.outcome = "success"
       fileOperationClose.textContent = inline ? "完成" : "继续编辑"
@@ -380,6 +390,7 @@ export async function runFileOperation(
       fileOperationTitle.textContent = `${action}未完成`
       fileOperationDetail.textContent = "处理已停止"
       fileOperationResult.textContent = operationErrorDetail(error)
+      appendExportLog(fileOperationResult.textContent)
       fileOperationResult.hidden = false
     }
   } finally {

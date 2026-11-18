@@ -8,15 +8,12 @@ import { convertSsfSxi } from '../src/palm/ssf-sxi-convert.ts'
 import { convertBaiduToSsf } from '../src/ssf/baidu-to-ssf.ts'
 import { SsfPackage } from '../src/ssf/ssf-package.ts'
 import { ssfFixture } from './helpers/ssf-fixture.mjs'
-import { canExport } from '../src/export.ts'
 import { decodeAiffPcm } from '../src/sounds.ts'
 
 const read = name => new Uint8Array(readFileSync(new URL(`../public/${name}`, import.meta.url)))
 const templates = { sogou: SkinArchive.open(read('sogou-template.bds')), bda: SkinArchive.open(read('default-template.bda'), 'bda') }
 
 test('Sogou and Palm cross-convert with their own configs, images and sound resources', async () => {
-  assert.ok(canExport('ssf', 'sxi'))
-  assert.ok(canExport('sxi', 'ssf'))
   const files = unzipSync(ssfFixture({ single: true }))
   delete files['default/res/day_keyboard_start.webp']
   const source = SkinArchive.open(zipSync(files), 'ssf')

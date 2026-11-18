@@ -17,27 +17,33 @@ try {
     await page.waitForFunction(() => !document.querySelector('#open').disabled)
     const close = page.locator('#file-operation-dialog[open] #file-operation-close')
     if (await close.isVisible()) await close.click()
-    const select = () => page.evaluate(async () => {
-      const { selectFile } = await import('/src/app/navigation.ts')
-      const { showResourceList } = await import('/src/app/resource-inspector.ts')
-      const { setMobilePane } = await import('/src/app/mobile-layout.ts')
-      selectFile('light/skin/res/btn.png', 'overview', 'image')
-      showResourceList()
-      setMobilePane('inspector')
-    })
-    await select()
     const button = page.locator('#resource-rename')
+    const cardPath = '.ui-image-card[data-path="light/skin/res/btn.png"]'
+    if (width < 760) {
+      await page.locator('#mobile-navigation [data-mobile-page="resources"]').click()
+      await page.locator('#mobile-resource-category').selectOption('image')
+      await page.locator(cardPath).dblclick()
+    } else {
+      const selectMode = value => page.evaluate(async value => {
+        const { mode } = await import('/src/app/dom.ts')
+        mode.value = value
+        mode.dispatchEvent(new Event('change', { bubbles: true }))
+      }, value)
+      await selectMode('preview')
+      await page.locator('[data-workspace-page="resources"]').click()
+      await page.locator('[data-resource-page="image"]').click()
+      await page.locator(cardPath).click()
+      assert.equal(await button.isVisible(), true)
+      assert.equal(await button.isDisabled(), true, 'preview cannot rename')
+      await selectMode('edit')
+    }
+    const originalCard = page.locator(cardPath)
     assert.equal(await button.isVisible(), true)
-    assert.equal(await button.isDisabled(), true, 'preview cannot rename')
-    await page.evaluate(async () => {
-      const { mode } = await import('/src/app/dom.ts')
-      mode.value = 'edit'
-      mode.dispatchEvent(new Event('change', { bubbles: true }))
-    })
-    await select()
-    await page.locator('.ui-image-card[data-path="light/skin/res/btn.png"]').click()
-    await page.evaluate(async () => (await import('/src/app/resource-inspector.ts')).showResourceList())
     assert.equal(await button.isEnabled(), true)
+    const actions = page.locator('.resource-detail-heading')
+    assert.equal(await actions.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, 'inspector header fits')
+    const rows = await actions.locator('button:visible').evaluateAll(buttons => buttons.map(el => el.getBoundingClientRect().y + el.getBoundingClientRect().height / 2))
+    assert.ok(rows.length > 1 && Math.max(...rows) - Math.min(...rows) < 1, 'inspector actions stay on one row')
     const snapshot = () => page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
       return { names: appState.archive.names(), undo: appState.undoStack.length, css: appState.archive.getText('light/skin/res/default.css'), selected: appState.selectedResourceGalleryPath }
@@ -52,7 +58,9 @@ try {
     await page.keyboard.press('Escape')
     await dialog.waitFor({ state: 'detached' })
     assert.deepEqual(await snapshot(), original)
-    await button.click()
+    if (width < 760) await page.locator('#resource-back').click()
+    await originalCard.click({ button: 'right' })
+    await page.getByRole('menu', { name: '资源操作' }).getByRole('menuitem', { name: '重命名…' }).click()
     for (const name of ['', '../bad.png', 'wrong.jpg', 'BG.png']) {
       await input.fill(name)
       await dialog.getByRole('button', { name: '重命名', exact: true }).click()
@@ -72,10 +80,6 @@ try {
     assert.equal(await page.locator('#resource-list-view').isVisible(), true, 'rename keeps the image list open')
     const card = page.locator('.ui-image-card[data-path="light/skin/res/新图片.png"]')
     assert.equal(await card.getAttribute('aria-selected'), 'true')
-    const overflow = await button.locator('..').evaluate(el => el.scrollWidth > el.clientWidth + 1)
-    assert.equal(overflow, false, 'operation bar fits')
-    const rows = await button.locator('..').locator('button:visible').evaluateAll(buttons => buttons.map(el => el.getBoundingClientRect().y))
-    assert.ok(Math.max(...rows) - Math.min(...rows) < 1, 'operation bar stays on one row')
     mkdirSync('.ui-current', { recursive: true })
     await page.screenshot({ path: `.ui-current/image-rename-${width}.png` })
     await card.focus()

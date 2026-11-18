@@ -58,7 +58,7 @@ for (const engine of [chromium, webkit]) describe(engine.name(), () => {
   })
 
   test('设置内的菜单先处理 Esc，第二次才关闭设置', async () => {
-    await page.locator('#workspace-navigation [data-app-dialog="settings"]').click()
+    await page.locator('#workspace-navigation [data-settings-entry="settings"]').click()
     // 浏览器测试不连接桌面服务；只展示已绑定的桌面模型设置控件。
     await page.locator('#settings-model-section').evaluate(node => node.removeAttribute('data-platform-hidden'))
     await page.evaluate(async () => (await import('/src/app/preferences.ts')).showSettingsPage('model'))
@@ -67,9 +67,9 @@ for (const engine of [chromium, webkit]) describe(engine.name(), () => {
     assert.equal(await focused(page.locator('#model-profile-add [role="menuitem"]').first()), true)
     await page.keyboard.press('Escape')
     assert.equal(await page.locator('#model-profile-add[open]').count(), 0)
-    assert.equal(await page.locator('#settings-dialog:modal').count(), 1)
+    assert.equal(await page.locator('#settings-workspace').isVisible(), true)
     assert.equal(await focused(summary), true)
     await page.keyboard.press('Escape')
-    await page.locator('#settings-dialog').waitFor({ state: 'hidden' })
+    await page.locator('#settings-workspace').waitFor({ state: 'hidden' })
   })
 })

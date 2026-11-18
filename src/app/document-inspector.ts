@@ -17,7 +17,7 @@ import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
 import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect, updateBdaKeySound, bdaSoundResourceType } from "../bda-encode.ts"
 import { renderBdaMetadataEditor, renderBdaLayoutEditor, renderBdaConfigEditor } from "../bda-editor.ts"
 import { updateBdaRefs, updateSelectedBdaPanelProperty, updateBdaAppearanceStyleRef } from "./key-inspector"
-import { openImageResourceChooser } from "./resource-inspector"
+import { openImageResourceChooser, replaceBdaStyleImage } from "./resource-inspector"
 import { populateSsfInspector } from "./ssf-inspector"
 import { populateSxiInspector } from "./sxi-inspector"
 import { populateLegacyAnimationInspector } from "./legacy-animation-inspector"
@@ -500,6 +500,7 @@ export function populateBdaConfigInspector(): void {
       onStyleRefChange: (paths, ref, owner) => { updateBdaAppearanceStyleRef(paths, ref, owner) },
       onStyleRefAction: (paths, ref, field, action, owner, highlighted) => {
         if (action === "edit") openStyleReferenceEditor(bdaStyleID(ref))
+        else if (action === "image") replaceBdaStyleImage(ref, Boolean(highlighted))
         else openBdaStyleReferencePicker(paths, ref, field, owner, highlighted)
       },
     })

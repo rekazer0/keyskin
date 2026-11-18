@@ -66,12 +66,13 @@ export function ssfMediaField(path: string, key: string, value: string, commit: 
   name.setAttribute("aria-label", label)
   name.addEventListener("change", () => commit(name.value.trim()))
   const file = key === "sound" ? soundPath(value) : undefined
-  row.append(styleReferenceCard({ name, kind: styleKindIcon(key === "sound" ? "sound" : "anim"), disabled: !isEditing(),
-    states: [{ label, content: key === "sound" ? keySoundSample(file?.split("/").pop() ?? value, file) : ssfAnimationPreview(path, key, value),
-      onClick: edit => {
-        if (edit && key !== "sound") editSsfAnimation(path, key, value)
-        else choose()
-      },
+  const action = (edit: boolean) => {
+    if (edit && key !== "sound") editSsfAnimation(path, key, value)
+    else choose()
+  }
+  row.append(styleReferenceCard({ name, reference: key === "sound" ? undefined : { label: "更换动画", run: action }, kind: styleKindIcon(key === "sound" ? "sound" : "anim"), disabled: !isEditing(),
+    states: [{ label: `更换${key === "sound" ? "音效" : "动画"}`, content: key === "sound" ? keySoundSample(file?.split("/").pop() ?? value, file) : ssfAnimationPreview(path, key, value),
+      onClick: action,
     }],
     remove: { label: `移除${label}`, run: () => commit("") },
   }))

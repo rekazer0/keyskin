@@ -1,4 +1,4 @@
-// 48 Figma screens, using the production editor and a real editable fixture.
+// 47 Figma screens, using the production editor and a real editable fixture.
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -20,6 +20,7 @@ const load = async()=>{
   await page.locator('#browser-open').setInputFiles({name:'轻雾.bdi',mimeType:'application/octet-stream',buffer:Buffer.from(mobileFigmaFixture())})
   await page.waitForFunction(()=>!document.querySelector('#open').disabled && !document.querySelector('.canvas-wrap').classList.contains('empty'))
   if(await page.locator('#file-operation-dialog[open]').count())await page.locator('#file-operation-close').click()
+  await page.getByRole('button', {name:'开始编辑',exact:true}).click()
   await page.evaluate(async()=>{(await import('/src/app/canvas-interaction.ts')).setSimulatedComposition('nihao');(await import('/src/app/preview-render.ts')).refreshSimulationPreview()})
 }
 const capture=async(id, note='')=>{
@@ -57,7 +58,7 @@ const select=async(sections=['KEY11'],path='light/skin/port/py_26.ini')=>{
 }
 const more=async(action)=>{
   await page.locator('#mobile-app-more > summary').click()
-  await page.locator(action==='settings' ? '#mobile-app-more [data-app-dialog="settings"]' : `#mobile-app-more [data-mobile-action="${action}"]`).click()
+  await page.locator(action==='settings' ? '#mobile-app-more [data-settings-entry="settings"]' : `#mobile-app-more [data-mobile-action="${action}"]`).click()
 }
 const resource=async(kind)=>{
   await page.locator('#mobile-project-toggle').click()
@@ -86,7 +87,6 @@ try{
   await page.locator('#mobile-welcome-open').waitFor()
   await capture('01')
   await page.locator('#mobile-welcome-new').click();await capture('02');await closeDialog()
-  await page.locator('#mobile-welcome-open').click();await capture('03');await closeDialog()
   await load();await select([]);await capture('04')
   await select();await capture('05')
   await page.locator('#mobile-property-tabs [data-mobile-category="typography"]').click();await capture('06')
@@ -96,7 +96,7 @@ try{
   await page.locator('[data-sidebar-view="source"]').click();await capture('10')
   await select();await more('mobile-source-view');await page.getByRole('button',{name:'返回属性',exact:true}).waitFor();await capture('11')
   await resource('style');await capture('12')
-  await page.locator('#mobile-resource-tabs [data-mobile-resource="resource"]').click();await capture('13')
+  await page.locator('#mobile-resource-category').selectOption('image');await capture('13')
   await page.locator('#resource-gallery .ui-image-card').first().dblclick()
   await page.waitForFunction(()=>document.querySelector('#atlas-canvas').getBoundingClientRect().height>100)
   const atlasMapping=await page.evaluate(async()=>{
@@ -106,7 +106,7 @@ try{
   })
   assert.ok(Math.abs(atlasMapping.x-atlasMapping.width/2)<0.01 && Math.abs(atlasMapping.y-atlasMapping.height/2)<0.01,'fitted atlas retains original image coordinates')
   await capture('14')
-  await resource('sound');assert.equal(await page.locator('[data-mobile-resource="sound"]').getAttribute('aria-pressed'),'true');await page.locator('#resource-gallery [role="option"][data-sound-id]').first().click();await page.locator('.ui-sound-waveform[aria-label*="时长"]').waitFor();await capture('15')
+  await resource('sound');assert.equal(await page.locator('#mobile-resource-category').inputValue(),'sound');await page.locator('#resource-gallery [role="option"][data-sound-id]').first().click();await page.locator('.ui-sound-waveform[aria-label*="时长"]').waitFor();await capture('15')
   await select();await resource('motion');await capture('16')
   await select();await resource('particle');await capture('17')
   await select();await more('mode')
@@ -144,9 +144,13 @@ try{
     await capture(id)
     await page.locator('.mobile-settings-back').click()
   }
-  await closeDialog();await select();await more('mobile-ai-view');await capture('34')
+  await closeDialog()
+  assert.equal(await page.locator('#mobile-navigation [data-mobile-page=ai]').isVisible(), false)
   await select();await page.evaluate(async()=>{const {appState}=await import('/src/app/state.ts');appState.unsavedNew=true;(await import('/src/app/edit-history.ts')).updateDirty()})
-  await page.locator('#mobile-project-toggle').click();await page.locator('#mobile-home').click();await capture('35');await closeDialog()
+  await page.locator('#mobile-navigation [data-mobile-page="home"]').click()
+  await page.locator('#browser-open').setInputFiles({name:'替换皮肤.bdi',mimeType:'application/octet-stream',buffer:Buffer.from(mobileFigmaFixture())})
+  await page.getByRole('dialog',{name:'是否导出当前皮肤？'}).waitFor();await capture('35');await closeDialog()
+  await page.locator('#mobile-navigation [data-mobile-page="edit"]').click()
   await more('mobile-share');await capture('36');await closeDialog()
   await page.evaluate(async()=>{
     const ops=await import('/src/app/file-operations.ts')
@@ -157,14 +161,15 @@ try{
   await more('mobile-export-open');await page.locator('.mobile-export-formats input[value="bds"]').check()
   await savedDownload(()=>page.locator('#mobile-export-dialog button[value="export"]').click(),'bds');await capture('23','通过真实导出按钮下载 BDS 并重开校验');await closeDialog()
   await load();await select()
-  await savedDownload(()=>page.locator('#mobile-save').click(),'bdi');await capture('24','通过真实保存按钮下载 BDI 并重开校验');await closeDialog()
+  await more('mobile-export-open')
+  await savedDownload(()=>page.locator('#share-dialog #save').click(),'bdi');await capture('24','从更多进入保存，下载 BDI 并重开校验');await closeDialog()
   await page.evaluate(async()=>{const ops=await import('/src/app/file-operations.ts');await ops.runFileOperation('导出',()=>{ops.showFileOperationProgress();throw new Error('验收注入：目标位置不可写。原始皮肤和当前修改保持不变。')})});await capture('38','注入目标位置不可写错误，验证生产错误分支')
   await page.getByRole('button',{name:'重试导出',exact:true}).click();await page.locator('#mobile-export-dialog[open]').waitFor();await closeDialog()
   await resource('motion');await page.getByRole('button',{name:'播放预览',exact:true}).last().click();await page.waitForFunction(()=>Number(document.querySelector('.mobile-animation-stage [aria-label="预览时间"]')?.value)>0);await capture('39')
   await select();await page.evaluate(async()=>{document.querySelector('#app-theme').value='dark';(await import('/src/app/preferences.ts')).applyAppTheme()});await capture('40');await page.evaluate(async()=>{document.querySelector('#app-theme').value='light';(await import('/src/app/preferences.ts')).applyAppTheme()})
   await page.locator('.mobile-background-states [data-appearance-state="pressed"]').click();await capture('43')
   await page.locator('#mobile-property-tabs [data-mobile-category="typography"]').click()
-  const font=page.locator('[data-style-field="FONT_SIZE"]');await font.fill('40');await font.dispatchEvent('change');await font.blur();await capture('44')
+  await page.locator('.key-typography-fields [data-document-key="FONT_SIZE"]').getByRole('slider').press('ArrowRight');await capture('44')
   await page.locator('#mobile-property-tabs [data-mobile-category="appearance"]').click();await page.locator('#mobile-inspector-resize').press('End');await capture('45')
   await page.locator('#mobile-inspector-resize').press('Home');await capture('46')
   await page.locator('#mobile-inspector-resize').press('ArrowDown');
@@ -178,7 +183,7 @@ try{
   await page.locator('.mobile-export-formats input[value="sxi"]').check()
   await page.locator('#mobile-export-dialog button[value="export"]').click()
   await page.locator('#file-operation-dialog[data-stage="compatibility"]').waitFor();await capture('22');await page.locator('#file-operation-close').click()
-  assert.equal(captures.length,48,'Every screen except the two specification boards is captured')
+  assert.equal(captures.length,47,'Exclude the two specification boards and the removed file-choice screen')
   assert.deepEqual(errors,[])
   writeFileSync(`${output}/coverage.json`,JSON.stringify({viewport:{width:390,height:766},captures,downloads,errors},null,2))
   console.log(`PASS all ${captures.length} Figma screens`)

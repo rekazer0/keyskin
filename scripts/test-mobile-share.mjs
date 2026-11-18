@@ -7,7 +7,7 @@ import { createServer } from 'vite'
 import { SkinArchive } from '../src/skin.ts'
 
 const root = new URL('..', import.meta.url).pathname
-const server = await createServer({ root, logLevel: 'error', server: { host: '127.0.0.1', port: 0 } })
+const server = await createServer({ root, logLevel: 'error', server: { hmr: false, host: '127.0.0.1', port: 41871, strictPort: false } })
 await server.listen()
 let browser
 try {
@@ -52,11 +52,14 @@ try {
       await page.waitForFunction(() => document.querySelector('#document-name').textContent === '分享回归.bdi' && !document.querySelector('#open').disabled)
       const close = page.locator('#file-operation-dialog[open] #file-operation-close')
       if (await close.isVisible()) await close.click()
-      const share = async () => {
-        if (!await page.locator('#share-page').isVisible()) {
+      const openShare = async () => {
+        if (!await page.locator('#share-dialog').isVisible()) {
           await page.locator('#mobile-app-more > summary').click()
-          await page.locator('#mobile-app-more [data-mobile-action=mobile-export-open]').click()
+          await page.getByRole('menuitem', { name: '分享与导出…', exact: true }).click()
         }
+      }
+      const share = async () => {
+        await openShare()
         await page.locator('#mobile-share').click()
       }
       await share()
@@ -82,13 +85,19 @@ try {
         assert.equal(await tap.count(), 0, 'remove the completed action button')
         await close.click()
       }
-      await page.evaluate(() => Object.defineProperty(navigator, 'share', { value: undefined }))
-      await share()
-      await page.waitForSelector('#file-operation-dialog[data-outcome="error"]')
-      assert.match(await page.locator('#file-operation-result').textContent(), /不支持系统文件分享/)
-      await close.click()
+      await page.locator('#share-dialog').getByRole('button', { name: '关闭', exact: true }).click()
+      await page.locator('#share-dialog').waitFor({ state: 'hidden' })
+      await page.evaluate(() => { Object.defineProperty(navigator, 'share', { value: undefined }); window.showSaveFilePicker = undefined })
+      await openShare()
+      assert.equal(await page.locator('#mobile-share').isHidden(), true)
+      assert.ok(await page.getByText('当前环境不支持系统分享，可使用保存或另存为。').isVisible())
+      const download = page.waitForEvent('download')
+      await page.locator('#share-dialog #save').click()
+      const file = await download
+      assert.equal(file.suggestedFilename(), '分享回归.bdi')
+      assert.equal(SkinArchive.open(readFileSync(await file.path()), 'bdi').format, 'bdi')
       assert.deepEqual(errors, [])
-      console.log(`PASS: iOS activation=${activation}: fresh tap, valid BDI, cancellation, rejection, unsupported-browser feedback`)
+      console.log(`PASS: iOS activation=${activation}: fresh tap, valid BDI, cancellation, rejection, verified download without system sharing`)
     } finally {
       await context.close()
     }

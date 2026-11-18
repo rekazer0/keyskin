@@ -105,6 +105,7 @@ try {
   // Long-press references refresh the preview immediately and follow undo/redo.
   const holdAction = () => page.evaluate(async () => (await import('/src/app/canvas-interaction.ts')).preview.keys.find(key => key.center === 'q').hold)
   const previousHold = await holdAction()
+  await row('L_KEY').getByRole('button', { name: /添加/ }).click()
   await change(row('L_KEY').locator('input'), 'Key_2')
   assert.equal(await holdAction(), '2')
   assert.equal(await gesture('HOLD').inputValue(), '2')
@@ -118,7 +119,7 @@ try {
   await page.locator('#desktop-undo').click()
   assert.equal(await holdAction(), previousHold)
   // A composite edit preserves its other coordinates; reset survives inspector reconstruction.
-  const coord = () => row('FG_RECT').locator('input')
+  const coord = () => row('FG_RECT').locator('input[type=number]')
   // A section reference has one editable name and normal / pressed previews that edit its images.
   const backgroundCard = fields.locator('[data-inspector-group-label="背景"] [data-document-key="BG_IMAGES"] .ui-style-ref')
   assert.equal(await backgroundCard.count(), 1)
@@ -139,7 +140,7 @@ try {
   await change(extendedRow('NORMAL_ON').locator('input'), '26fn.png')
   assert.equal(await extended.getAttribute('open'), '')
   assert.equal(await read(skin, 'SMA_Key26Bg_Q', 'NORMAL'), '26keyq.png,2,96,3,139')
-  await backgroundCard.locator('.ui-style-state').first().click()
+  await backgroundCard.locator('.ui-style-state').first().click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
   await page.getByRole('button', { name: '更换图片…', exact: true }).click()
   await page.frameLocator('#picker-frame').locator('#style-library-grid .ui-image-card').filter({ hasText: '26key' }).first().click()
   await page.getByRole('dialog', { name: '编辑图片', exact: true }).getByRole('button', { name: '完成', exact: true }).click()
@@ -194,7 +195,7 @@ try {
   const editor = page.getByRole('dialog', { name: '编辑图片', exact: true })
   const stretchInputs = editor.locator('input[type=number]')
   const openStretch = async () => {
-    await fields.locator('[data-inspector-group-label="背景"] .ui-style-state').first().click()
+    await fields.locator('[data-inspector-group-label="背景"] .ui-style-state').first().click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
     await page.waitForFunction(() => document.querySelector('.ui-image-editor input[type=number]')?.disabled === false)
   }
   const finishStretch = async () => {
@@ -282,7 +283,7 @@ try {
   await selectKey('F36')
   const pressedBackground = fields.locator('[data-inspector-group-label="背景"] .ui-style-state').nth(1)
   assert.equal(await read(skin, 'SMA_Key26Bg_Backspace_Qwerty', 'PRESSED'), undefined)
-  await pressedBackground.click()
+  await pressedBackground.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
   await page.getByRole('button', { name: '更换图片…', exact: true }).click()
   const picker = page.frameLocator('#picker-frame')
   await picker.locator('#style-library-grid .ui-image-card').filter({ hasText: '26fn' }).first().click()
@@ -304,7 +305,7 @@ try {
   assert.equal(await read(skin, 'KeyBg_Default_Latin', 'NORMAL'), '26key.png,1,97,1,141')
   // Image changes have markers and reset both states, including an originally absent pressed state.
   await selectKey('q')
-  await fields.locator('[data-inspector-group-label="背景"] .ui-style-state').first().click()
+  await fields.locator('[data-inspector-group-label="背景"] .ui-style-state').first().click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
   await page.getByRole('button', { name: '更换图片…', exact: true }).click()
   await picker.locator('#style-library-view:not([hidden])').waitFor()
   const resources = picker.locator('#style-library-grid .ui-image-card')
@@ -328,13 +329,17 @@ try {
   await row('TEXT_COLOR').locator('.ui-color-field').first().locator('.ui-swatch').click()
   await change(row('TEXT_COLOR').locator('.ui-color-field').first().locator('.ui-color-popover input[type=text]'), '0x7F556677')
   // Size and bold are offered before the style has them.
-  assert.match(await row('TEXT_SIZE').locator('input').getAttribute('placeholder'), /^未设置/)
-  await change(row('TEXT_SIZE').locator('input'), '0.05')
+  assert.match(await row('TEXT_SIZE').locator('input[type=number]').getAttribute('placeholder'), /^未设置/)
+  const addSize = row('TEXT_SIZE').locator('[data-config-add]:visible')
+  if (await addSize.count()) await addSize.click()
+  await change(row('TEXT_SIZE').locator('input[type=number]'), '0.05')
   assert.equal(await read(skin, 'TextStyle_Key_Q', 'TEXT_SIZE'), '0.05')
-  await row('BOLD').locator('input').check()
+  const addWeight = row('BOLD').locator('[data-config-add]:visible')
+  if (await addWeight.count()) await addWeight.click()
+  await row('BOLD').getByRole('button', { name: '粗', exact: true }).click()
   assert.equal(await read(skin, 'TextStyle_Key_Q', 'BOLD'), 'true')
   assert.equal(await read(twin, 'TextStyle_Key_Q', 'BOLD'), 'true')
-  await row('BOLD').locator('input').uncheck()
+  await row('BOLD').getByRole('button', { name: '常规', exact: true }).click()
   assert.equal(await read(skin, 'TextStyle_Key_Q', 'BOLD'), undefined)
   for (const [section, key, value] of [['Key_Q', 'FG_STYLE', 'FGStyle_Key_Q'], ['FGStyle_Key_Q', 'LABEL_STYLE', 'TextStyle_Key_Q'], ['TextStyle_Key_Q', 'TEXT_COLOR', '0x7F556677'], ['TextStyle_Key_Q', 'TEXT_SIZE', '0.05'], ['TextStyle_Key_Q', 'BOLD', undefined]]) {
     assert.equal(await read(twin, section, key), value, `720 copy: [${section}] ${key}`)
@@ -356,7 +361,9 @@ try {
   await selectKey('F38')
   const space = fields.locator('[data-inspector-group-label="文字"]')
   assert.equal(await read(skin, 'TextStyle_Space_Label', 'TEXT_COLOR'), undefined)
-  await space.locator('[data-document-key~="TEXT_COLOR"] .ui-color-field').first().locator('.ui-swatch').click()
+  const addText = space.locator(':scope > h3 [data-config-section-add]:visible')
+  if (await addText.count()) await addText.click()
+  await space.getByRole('button', { name: '添加颜色正常', exact: true }).click()
   await change(space.locator('[data-document-key~="TEXT_COLOR"] .ui-color-field').first().locator('.ui-color-popover input[type=text]'), '#336699')
   assert.equal(await read(skin, 'TextStyle_Space_Label', 'TEXT_COLOR'), '0xFF336699')
   await page.locator('#selected-key').click()

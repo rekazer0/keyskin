@@ -15,7 +15,7 @@ import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
 import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes, mobilePortraitQuery } from "./canvas-interaction"
 import { actionDescription } from "../actions.ts"
-import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
+import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, animationObjectHeading, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { effectivePanelSection } from "../panel-tools.ts"
 import { createIcon } from "../icons"
@@ -316,6 +316,9 @@ export function populateKeyInspector(): void {
     selectedKeyContext.textContent = nativeTitle.context
     selectedKeyContext.title = nativeTitle.context
   }
+  if (appState.selectedCandidate === "parts" && (!toolbarSelected || appState.selectedToolbarSections.length > 1)) {
+    selectedKeyName.textContent = `工具按钮 · ${appState.selectedToolbarSections.join("、")}`
+  }
   if (appState.selectedCandidate === "input") selectedKeyName.textContent = "拼音栏"
   selectedKeyName.title = selectedKeyName.textContent ?? ""
   syncAiDesignContext()
@@ -327,13 +330,15 @@ export function populateKeyInspector(): void {
   }
   setInspectorKind(appState.archive?.format === "bda" ? "bda" : appState.archive ? "bds" : "")
   syncMobileInspectorHeader()
-  for (const field of skinFields) {
-    field.type = "text"
-    field.value = skinSelected ? appState.selectedDocument?.get("", field.dataset.skinField ?? "") ?? "" : ""
-    field.disabled = !skinSelected || !isEditing()
-    syncSkinConfigControl(field)
+  if (!skinFieldsGroup.hidden) {
+    for (const field of skinFields) {
+      field.type = "text"
+      field.value = appState.selectedDocument?.get("", field.dataset.skinField ?? "") ?? ""
+      field.disabled = !isEditing()
+      syncSkinConfigControl(field)
+    }
+    skinFieldsGroup.replaceChildren(...skinMetadataSections([...skinFieldsGroup.querySelectorAll<HTMLElement>(".ui-field")]))
   }
-  if (!skinFieldsGroup.hidden) skinFieldsGroup.replaceChildren(...skinMetadataSections([...skinFieldsGroup.querySelectorAll<HTMLElement>(".ui-field")]))
   const general = cachedIniDocument(genConfigPath())
   const toolbarGen = toolbarSelected ? general : undefined
   for (const field of toolbarFields) {
@@ -346,7 +351,7 @@ export function populateKeyInspector(): void {
     field.value = part === undefined ? value : value.split(",")[Number(part)]?.trim() ?? ""
     field.disabled = !toolbarSelected || !isEditing()
   }
-  const keyboard = keyboardContext()
+  const keyboard = keyboardFieldsGroup.hidden ? undefined : keyboardContext()
   const config = keyboard ? keyboardConfig(keyboard.gen, keyboard.styles) : undefined
   for (const field of keyboardFields) {
     const name = field.dataset.keyboardField ?? ""
@@ -418,10 +423,14 @@ export function populateKeyInspector(): void {
     if (!common && new Set(values).size > 1) field.placeholder = "混合"
   }
   const paddingSection = quickInspector.querySelector<HTMLElement>(".inspector-padding-section")
-  if (paddingSection) keyLayoutFieldsGroup.querySelector(".geometry-fields")!.append(paddingSection)
   keyLayoutFieldsGroup.querySelector(".mobile-geometry-detail")?.remove()
   keyLayoutFieldsGroup.querySelector(".ui-geometry-preview")?.remove()
   const previewRects = preview.keys.filter(key => sections.includes(key.section)).map(key => key.rect)
+  const showPadding = hasSelection && !bdaSelected && !ssfSelected && !listSelected
+  if (paddingSection && (!showPadding || !previewRects.length)) {
+    const fields = keyLayoutFieldsGroup.querySelector(".geometry-fields")!
+    if (paddingSection.parentElement !== fields) fields.append(paddingSection)
+  }
   if (hasSelection && previewRects.length) {
     const editableRects = selectedRects()
     const editable = isEditing() && !bdaSelected && !ssfSelected && !sections.some(isListCell) && editableRects.length === previewRects.length
@@ -429,18 +438,23 @@ export function populateKeyInspector(): void {
     const detail = element("details", "ui-disclosure mobile-geometry-detail")
     const summary = Object.assign(element("summary", "ui-button"), { textContent: "内边距与缩放" })
     detail.append(summary)
-    keyLayoutFieldsGroup.querySelector("h3")!.after(detail)
+    // 在脱离文档的片段中摆好控件，避免 WebKit 为中间布局重复计算样式。
+    const fragment = detail.ownerDocument.createDocumentFragment()
+    fragment.append(detail)
     const sync = () => {
       const mobile = mobilePortraitQuery.matches
       if (mobile) detail.append(geometry)
       else detail.after(geometry)
+      if (paddingSection && showPadding) {
+        (mobile ? detail : geometry.querySelector(".ui-geometry-box")!).append(paddingSection)
+      }
       detail.hidden = !mobile
       detail.open = false
     }
     sync()
+    keyLayoutFieldsGroup.querySelector("h3")!.after(fragment)
     mobilePortraitQuery.addEventListener("change", sync)
     releaseOnRemove(detail, () => mobilePortraitQuery.removeEventListener("change", sync))
-    if (paddingSection && !bdaSelected && !ssfSelected && !sections.some(isListCell)) geometry.querySelector(".ui-geometry-box")!.append(paddingSection)
   }
   populatePrimaryCssFields(hasSelection, sections)
   populateTextStyleGroup()
@@ -460,7 +474,7 @@ export function populateKeyInspector(): void {
   textNote.setAttribute("aria-label", textNote.title)
   textNote.hidden = !textNote.title
   // Unset padding reads as 0,0,0,0 (see the PADDING field values above); a LIST cell has none.
-  if (paddingSection) paddingSection.hidden = bdaSelected || ssfSelected || !hasSelection || sections.some(isListCell)
+  if (paddingSection) paddingSection.hidden = !showPadding
   const multiLayout = $("#inspector-multi-layout")
   const multiAvailable = sections.length > 1 && !bdaSelected && !ssfSelected && !sections.some(isListCell)
   multiLayout.dataset.available = String(multiAvailable)
@@ -532,6 +546,7 @@ export function populateKeyInspector(): void {
         : values[0] ? actionDescription(values[0]) : ""
   }
   void updateStylePreviews()
+  animationObjectHeading.replaceChildren()
   populateDocumentInspector()
   populateBdaConfigInspector()
   populateAnimationStyleInspector()

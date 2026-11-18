@@ -59,6 +59,11 @@ function emptyRow(row: HTMLElement): boolean {
   return values.length > 0 && values.every(input => !("placeholder" in input && input.placeholder.includes("混合")) && emptyConfigValue(valueOf(input)))
 }
 
+function focusFirstControl(container: HTMLElement): void {
+  Array.from(container.querySelectorAll<HTMLElement>('.ui-field :is(input:not([type=hidden]), select, textarea, button):not(:disabled)'))
+    .find(control => control.getClientRects().length > 0)?.focus()
+}
+
 /** 整组未配置时只留标题和添加入口；展开只改变界面，不创建默认配置。 */
 function syncEmptySections(fresh = false): void {
   for (const section of document.querySelectorAll<HTMLElement>("#quick-inspector .ui-section, #resource-inspector .ui-section")) {
@@ -83,7 +88,7 @@ function syncEmptySections(fresh = false): void {
           row.removeAttribute("data-config-pending")
           row.querySelector("[data-config-add]")?.remove()
         }
-        section.querySelector<HTMLElement>('.ui-field input:not([type=hidden]):not(:disabled), .ui-field select:not(:disabled), .ui-field button:not(:disabled)')?.focus()
+        focusFirstControl(section)
       })
       add.dataset.configSectionAdd = ""
       add.setAttribute("aria-expanded", "false")
@@ -94,11 +99,11 @@ function syncEmptySections(fresh = false): void {
 }
 
 /** 空配置复用引用字段的添加入口；展开只改变界面，提交仍由原控件负责。 */
-function syncEmptyFields(fresh = false): void {
-  const root = inspector()
-  if (!root) return
+function syncEmptyFields(root: HTMLElement, fresh = false): void {
   for (const row of root.querySelectorAll<HTMLElement>(".ui-field")) {
-    if (row.classList.contains("style-reference-field") || row.dataset.supported === "false" || row.querySelector(".ui-list-toolbar")) continue
+    const soundPicker = row.querySelector<HTMLElement>('.ui-style-ref[data-variant="sound"] .ui-style-state')
+    if (row.classList.contains("style-reference-field") && !soundPicker || row.dataset.supported === "false"
+      || row.querySelector('.ui-list-toolbar, .ui-field-pair[data-variant="colors"]')) continue
     const caption = row.firstElementChild
     if (!(caption instanceof HTMLElement) || caption.matches("input, select, textarea")) continue
     const inputs = Array.from(row.querySelectorAll<InspectorInput>("input:not([type=file]), select, textarea"))
@@ -114,10 +119,11 @@ function syncEmptyFields(fresh = false): void {
     if (!add) {
       const label = caption.querySelector(".document-field-name")?.textContent ?? caption.textContent ?? "配置"
       add = styleReferenceAddButton(`添加${label.trim()}`, () => {
+        if (soundPicker) { soundPicker.click(); return }
         row.setAttribute("data-config-expanded", "")
         row.removeAttribute("data-config-pending")
         add?.remove()
-        row.querySelector<HTMLElement>('input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)')?.focus()
+        focusFirstControl(row)
       })
       add.dataset.configAdd = ""
       // 部分旧行是 label，不能让添加按钮的点击再触发开关或第一个选项。
@@ -218,7 +224,7 @@ function setFilterOpen(open: boolean): void {
   const input = filterInput()
   if (!root || !input) return
   root.toggleAttribute("data-filter-open", open)
-  root.querySelector(".inspector-filter-open")?.setAttribute("aria-expanded", String(open))
+  document.querySelector(".inspector-filter-open")?.setAttribute("aria-expanded", String(open))
   if (open) {
     input.focus()
     input.select()
@@ -250,7 +256,7 @@ function bindFilter(root: HTMLElement): void {
     }
   })
   input.addEventListener("blur", () => { if (!input.value) setFilterOpen(false) })
-  const openButton = root.querySelector(".inspector-filter-open")
+  const openButton = document.querySelector(".inspector-filter-open")
   // 按下时不让输入框失焦，否则空输入会先因 blur 收起、再被 click 重新打开。
   openButton?.addEventListener("pointerdown", (event) => event.preventDefault())
   openButton?.addEventListener("click", () => setFilterOpen(!root.hasAttribute("data-filter-open")))
@@ -467,7 +473,9 @@ export function initInspectorShell(): void {
     scheduled = true
     requestAnimationFrame(() => {
       scheduled = false
-      syncEmptyFields()
+      syncEmptyFields(root)
+      const styleFields = document.getElementById("style-detail-fields")
+      if (styleFields) syncEmptyFields(styleFields)
       syncEmptySections()
       decorateSections()
       if (filterQuery) applyFilter()
@@ -502,7 +510,8 @@ export function syncInspectorRows(context: string): void {
     else if (fresh || rowValue(row) === baselines.get(row.el)) markRow(row, false)
   }
   updateStatus()
-  syncEmptyFields(fresh)
+  const root = inspector()
+  if (root) syncEmptyFields(root, fresh)
   syncEmptySections(fresh)
   syncGestures()
 }

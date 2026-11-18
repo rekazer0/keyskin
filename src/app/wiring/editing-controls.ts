@@ -4,8 +4,8 @@ import { renderResourceCatalogSearch } from "../resource-page"
 import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
-import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight } from "../source-panel"
-import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, fontImportInput } from "../dom"
+import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight, toggleInspectorSource } from "../source-panel"
+import { settingsWorkspace, sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, fontImportInput } from "../dom"
 import { appState } from "../state"
 import { resourceSourceToggle } from "../dom"
 import { resizeMobileInspector } from "../mobile-inspector"
@@ -17,7 +17,7 @@ import { syncCandidateSelection, updateDevicePreview, refreshPreview, setGuidesV
 import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode } from "../mobile-layout"
 import { ensureAiChat, aiDesignErrorMessage } from "../ai-panel"
 import { switchSsfPreviewLayout } from "../ssf-preview"
-import { switchPalmLayout } from "../sxi-documents"
+import { preferredPalmBoard, switchPalmLayout } from "../sxi-documents"
 import { preferredPath, createMissingVariant, bdaAvailableLayoutPaths, bdaAppearanceStyleGroups, bdaAppearanceStylePath } from "../bda-documents"
 import { renderFiles } from "../file-tree"
 import { selectFile } from "../navigation"
@@ -35,21 +35,16 @@ import { openPanelCopyDialog, updatePanelCopyForm, copyPanel } from "../panel-co
 import { openLayoutImageDialog, acceptLayoutImageFile, syncLayoutImageConfig, updateLayoutImageForm, applyLayoutImage, layoutImageScopeText } from "../layout-image-replace"
 import { type LayoutImageTarget } from "../../layout-image.ts"
 import { type LayoutImageConfig } from "../types"
+import { inspectorSourceToggle } from "../dom"
 import { layoutConversionButton, mobileLayoutImageTarget, mobileLayoutImageConfig, mobilePanelScaleMode } from "../dom"
 import { openLayoutConversionDialog } from "../layout-conversion"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
-  resourceSourceToggle.addEventListener("click", () => {
-    source.commit()
-    appState.inspectorTab = appState.inspectorTab === "source" ? "properties" : "source"
-    updateInspectorView()
+  inspectorSourceToggle.addEventListener("click", () => toggleInspectorSource(populateKeyInspector))
+  resourceSourceToggle.addEventListener("click", () => toggleInspectorSource(() => {
     if (appState.inspectorTab === "properties") void renderStyleResourceDetail()
-    else {
-      updateSourceHighlight()
-      scrollSelectedSource()
-    }
-  })
+  }))
   fontImportInput.addEventListener("change", () => {
     const file = fontImportInput.files?.[0]
     if (file) void importFontFile(file, fontImportInput.dataset.theme)
@@ -83,7 +78,7 @@ export function wireEditingControls(): void {
   })
   window.addEventListener("keydown", (event) => {
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== "f") return
-    if (sourceEditor.hidden) return
+    if (!settingsWorkspace.hidden || sourceEditor.hidden) return
     event.preventDefault()
     openSourceFind()
   })
@@ -175,13 +170,35 @@ export function wireEditingControls(): void {
   }
   for (const control of [theme, orientation]) {
     control.addEventListener("change", () => {
-      const path = preferredPath()
+      const browsing = control === theme && appState.resourceConfigActive
+      const archive = appState.archive
+      const otherOrientation = orientation.value === "port" ? "land" : "port"
+      let path = preferredPath()
       // 切换外观或横竖屏时，搜狗皮肤停留在当前键盘（概览里选的可能不是 9 / 26 键）。
       if (appState.archive?.format === "ssf") {
         return switchSsfPreviewLayout(path.replace(/[^/]+$/, appState.layoutPath.split("/").pop()!))
       }
-      if (appState.archive?.format === "sxi") return switchPalmLayout()
-      if (!createMissingVariant(path)) return
+      if (archive?.format === "sxi") {
+        if (browsing && !preferredPalmBoard()) orientation.value = otherOrientation
+        return switchPalmLayout()
+      }
+      if (control === theme && archive) {
+        // 外观目录已就绪；在目标外观中选择可用布局，不补复制单个布局。
+        const layouts = () => {
+          if (archive.format === "bda") return bdaAvailableLayoutPaths()
+          const prefix = `${theme.value}/skin/${orientation.value}/`
+          return archive.names().filter(name => name.startsWith(prefix) && /^(?!gen\.ini$)[^/]+\.ini$/i.test(name.slice(prefix.length)))
+        }
+        let paths = layouts()
+        if (!paths.length) {
+          const previous = orientation.value
+          orientation.value = otherOrientation
+          paths = layouts()
+          if (!paths.length) orientation.value = previous
+        }
+        path = paths.includes(preferredPath()) ? preferredPath() : paths[0] ?? path
+        if (!paths.length) renderFiles()
+      } else if (!createMissingVariant(path)) return
       let selected = false
       if (appState.archive?.format === "bda") {
         renderFiles()
@@ -244,9 +261,10 @@ export function wireEditingControls(): void {
   deleteTileButton.addEventListener("click", deleteSelectedTile)
   resourceBackButton.addEventListener("click", () => {
     if (appState.resourceInspectorMode === "image" && appState.bdaSliceReturn) {
-      const { path, styleID } = appState.bdaSliceReturn
-      appState.bdaSliceReturn = undefined
+      const { path, styleID, styleReturnPath, styleReturnCandidate } = appState.bdaSliceReturn
       selectFile(path, "overview", "style")
+      appState.styleReturnPath = styleReturnPath
+      appState.styleReturnCandidate = styleReturnCandidate
       selectStyleResource(styleID)
       return
     }
@@ -259,9 +277,10 @@ export function wireEditingControls(): void {
       appState.styleReturnPath = ""
       appState.styleReturnCandidate = false
       selectFile(path, "overview")
-      appState.selectedKeySections = selection
+      appState.selectedKeySections = candidate ? [] : selection
+      appState.selectedToolbarSections = candidate ? selection : []
       appState.selectedCandidate = candidate
-      preview.setSelected(selection)
+      preview.setSelected(appState.selectedKeySections)
       syncCandidateSelection()
       populateKeyInspector()
       if (inspectorGroup) setMobileInspectorGroup(inspectorGroup, false)
@@ -486,6 +505,7 @@ export function wireEditingControls(): void {
   })
   candidateArea.addEventListener("click", (event) => {
     if (!isEditing()) return
+    if (event.target instanceof Element && event.target.closest("#toolbar-preview")) return
     const inputRegion = event.target instanceof Element && Boolean(event.target.closest("#candidate-input"))
     if (inputRegion) appState.textStyleTarget = "input"
     selectCandidateBar(inputRegion)

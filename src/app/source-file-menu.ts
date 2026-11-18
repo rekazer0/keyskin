@@ -1,4 +1,4 @@
-import { bindMenuKeys, element } from "../dom-element"
+import { openActionMenu } from "./context-menu"
 import { openRenameDialog } from "./ask"
 import { source } from "./canvas-interaction"
 import { files, sourceFileToolbar, sourceRenameButton } from "./dom"
@@ -34,42 +34,8 @@ function renameSourceFile(): void {
 export function wireSourceFileMenu(): void {
   sourceRenameButton.addEventListener("click", renameSourceFile)
   const openMenu = (row: HTMLElement, x: number, y: number) => {
-    document.querySelector<HTMLDetailsElement>('.ui-menu[data-variant="context"]:popover-open')?.hidePopover()
     if (row.getAttribute("aria-selected") !== "true") row.click()
-    const menu = element("details", "ui-menu")
-    menu.dataset.variant = "context"
-    menu.popover = "manual"
-    menu.open = true
-    const summary = element("summary")
-    summary.hidden = true
-    const items = element("div")
-    items.setAttribute("role", "menu")
-    items.setAttribute("aria-label", "源文件操作")
-    for (const action of sourceFileToolbar.querySelectorAll<HTMLButtonElement>(":scope > button:not(#source-file-search-toggle)")) {
-      const item = element("button", "ui-list-item")
-      item.type = "button"
-      item.setAttribute("role", "menuitem")
-      item.disabled = action.disabled
-      const icon = action.querySelector(".ui-icon")?.cloneNode(true)
-      if (icon) item.append(icon)
-      item.append(action.title || action.getAttribute("aria-label") || "")
-      item.addEventListener("click", () => { menu.hidePopover(); row.focus(); action.click() })
-      items.append(item)
-    }
-    menu.append(summary, items)
-    bindMenuKeys(menu, row)
-    const listeners = new AbortController()
-    document.addEventListener("pointerdown", event => {
-      if (!menu.contains(event.target as Node)) menu.hidePopover()
-    }, { capture: true, signal: listeners.signal })
-    menu.addEventListener("toggle", () => {
-      if (!menu.matches(":popover-open")) { listeners.abort(); menu.remove() }
-    })
-    document.body.append(menu)
-    menu.showPopover()
-    menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - menu.offsetWidth))}px`
-    menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - menu.offsetHeight))}px`
-    items.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus()
+    openActionMenu(row, x, y, "源文件操作", sourceFileToolbar.querySelectorAll<HTMLButtonElement>(":scope > button:not(#source-file-search-toggle)"))
   }
   files.addEventListener("contextmenu", event => {
     const row = (event.target as Element).closest<HTMLElement>(".raw-files .source-tree-row")

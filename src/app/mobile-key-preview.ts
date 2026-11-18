@@ -5,7 +5,6 @@ import { layoutLabel } from "./file-tree"
 
 /** 复用画布的真实渲染，保持原生格式、文字、图片和按下态一致。 */
 export function syncMobileKeyPreview(pressed = false): void {
-  const size = preview.logicalSize()
   const layoutName = appState.layoutPath && /\.ini$/i.test(appState.layoutPath)
     ? layoutLabel(appState.layoutPath.split("/").pop()!) : layout.selectedOptions[0]?.textContent ?? "画布"
   if (!appState.selectedKeySections.length && appState.selectedPath === appState.layoutPath && /\.ini$/i.test(appState.layoutPath)) {
@@ -26,11 +25,11 @@ export function syncMobileKeyPreview(pressed = false): void {
   if (/^[\p{L}\p{N}]$/u.test(label)) selectedKeyName.textContent = `按键 ${label}`
   if (pressed) preview.flashPress(key)
   else preview.cancelPointerInteraction()
-  preview.drawSync()
-  void preview.rendered().then(() => {
-    if (appState.selectedKeySections.length !== 1 || appState.selectedKeySections[0] !== section || mobileKeyPreview.hidden) return
+  void preview.whenDrawn().then(() => {
+    if (appState.selectedKeySections.length !== 1 || appState.selectedKeySections[0] !== section || mobileKeyPreview.hidden || !preview.keys.includes(key)) return
     const { rect } = key
     if (rect.width <= 0 || rect.height <= 0 || !preview.canvas.width || !preview.canvas.height) return
+    const size = preview.logicalSize()
     const scaleX = preview.canvas.width / size.width, scaleY = preview.canvas.height / size.height
     mobileKeyCanvas.width = Math.max(1, Math.round(rect.width * scaleX))
     mobileKeyCanvas.height = Math.max(1, Math.round(rect.height * scaleY))
@@ -42,6 +41,6 @@ export function syncMobileKeyPreview(pressed = false): void {
     thumbnail.width = mobileKeyCanvas.width
     thumbnail.height = mobileKeyCanvas.height
     thumbnail.getContext("2d")?.drawImage(mobileKeyCanvas, 0, 0)
-    selectedKeyPreview.replaceChildren(/^[\p{L}\p{N}]$/u.test(label) ? label : thumbnail)
-  })
+    selectedKeyPreview.replaceChildren(thumbnail)
+  }).catch(() => {})
 }

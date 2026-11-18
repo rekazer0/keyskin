@@ -160,7 +160,7 @@ function palmTargets(): { scope: "candidate"; targets: TextTarget[] } | undefine
 /** The selected candidate bar's text targets; keys keep their own 文字 group. */
 function textTargets(): { scope: "candidate"; targets: TextTarget[] } | undefined {
   const archive = appState.archive
-  if (!archive || archive.format === "ssf" || appState.selectedKeySections.length) return
+  if (!archive || archive.format === "ssf" || appState.selectedKeySections.length || appState.selectedCandidate === "parts") return
   const context = archive.format === "bda" ? bdaTargets() : archive.format === "sxi" ? palmTargets() : cssTargets()
   if (context && appState.selectedCandidate === "input") context.targets = context.targets.filter(target => target.id === "input")
   return context

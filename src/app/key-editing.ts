@@ -1,3 +1,4 @@
+import { confirmDeletion } from "./ask"
 import { appState } from "./state"
 import { preview, source, toolbarPreview } from "./canvas-interaction"
 import { normalizeKeySections } from "../ini.ts"
@@ -62,8 +63,12 @@ export function copySelectedKeys(): void {
   updateDirty()
 }
 
-export function deleteSelectedKeys(): void {
-  if (!canvasEditable()) return
+export async function deleteSelectedKeys(): Promise<void> {
+  const { archive, layoutPath, selectedKeySections } = appState
+  if (!canvasEditable() || !selectedKeySections.length) return
+  const revision = archive?.revision
+  if (!await confirmDeletion(`删除 ${selectedKeySections.length} 个按键？`) || appState.archive !== archive || archive?.revision !== revision
+    || appState.layoutPath !== layoutPath || appState.selectedKeySections !== selectedKeySections || !canvasEditable()) return
   if (palmBoard()) {
     deletePalmKeys(appState.selectedKeySections)
     return selectPalmKeys([])

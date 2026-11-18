@@ -13,7 +13,7 @@ import { refreshPreview } from "./preview-render"
 import { field } from "./property-rows"
 
 /** 候选与时长只存草稿；确认后沿用引用字段，并合为一次撤销。 */
-export function openMobileMotionPicker(input: HTMLInputElement): void {
+export function openMobileMotionPicker(input: HTMLInputElement, openLibrary: () => void): void {
   const archive = appState.archive
   const styles = styleConfigDocument()
   if (!archive || !styles || input.disabled) return
@@ -25,17 +25,19 @@ export function openMobileMotionPicker(input: HTMLInputElement): void {
   let duration = ""
   let section = ""
   const dialog = element("dialog", "ui-dialog ui-mobile-sheet ui-mobile-motion-picker")
-  dialog.setAttribute("aria-label", "选择动效")
+  dialog.setAttribute("aria-label", "选择动画")
   const form = element("form")
   form.method = "dialog"
   const header = element("header", "ui-dialog-header")
   const title = element("div")
-  title.append(Object.assign(element("h2"), { textContent: "选择动效" }), Object.assign(element("p", "ui-field-note"), { textContent: "当前皮肤 · 真实动效预览" }))
-  header.append(title)
+  title.append(Object.assign(element("h2"), { textContent: "选择动画" }), Object.assign(element("p", "ui-field-note"), { textContent: "当前皮肤的动画样式" }))
+  const library = Object.assign(element("button", "ui-button"), { type: "button", textContent: "全部样式" })
+  library.addEventListener("click", () => closeDialog(dialog, "library"))
+  header.append(title, library)
   const body = element("div", "ui-dialog-body")
   const list = element("div", "ui-mobile-motion-list")
   list.setAttribute("role", "listbox")
-  list.setAttribute("aria-label", "动效")
+  list.setAttribute("aria-label", "动画")
   const parameters = element("div", "ui-mobile-motion-parameters")
   const sync = () => {
     for (const option of list.querySelectorAll<HTMLElement>('[role="option"]')) {
@@ -47,7 +49,7 @@ export function openMobileMotionPicker(input: HTMLInputElement): void {
     section = sources && sources.length === 1 ? sources[0] : ""
     duration = section && config?.get(section, "DURATION") || ""
     parameters.replaceChildren()
-    if (duration && Number.isFinite(Number(duration))) parameters.append(field({ key: "motion-duration", label: "时长", spec: { kind: "number", value: duration, min: 0, unit: "ms", step: 1, range: "duration" }, commit: value => { duration = String(value) } }), Object.assign(element("p", "ui-field-note"), { textContent: "时长属于共享动效，确认后同步更新引用它的按键" }))
+    if (duration && Number.isFinite(Number(duration))) parameters.append(field({ key: "motion-duration", label: "时长", spec: { kind: "number", value: duration, min: 0, unit: "ms", step: 1, range: "duration" }, commit: value => { duration = String(value) } }), Object.assign(element("p", "ui-field-note"), { textContent: "修改时长会影响所有引用此动画的按键" }))
   }
   const ids = availableStyleIDs().filter(id => styleKind(id, styles) === "anim")
   for (const id of [...ids, "0"]) {
@@ -72,7 +74,9 @@ export function openMobileMotionPicker(input: HTMLInputElement): void {
   bindDialog(dialog)
   dialog.addEventListener("close", () => {
     // 引用卡传入的是槽位代理，不挂在 DOM；用文档版本与选区防止异步写错对象。
-    if (dialog.returnValue === "apply" && archive === appState.archive && archive.revision === revision && selection === `${appState.selectedPath}|${appState.selectedKeySections.join(",")}` && !input.disabled && isEditing()) {
+    const current = archive === appState.archive && archive.revision === revision && selection === `${appState.selectedPath}|${appState.selectedKeySections.join(",")}` && !input.disabled && isEditing()
+    if (current && dialog.returnValue === "library") openLibrary()
+    if (current && dialog.returnValue === "apply") {
       const depth = appState.undoStack.length
       if (path && section && duration !== "" && config && Number(duration) >= 0 && Number.isFinite(Number(duration))) {
         const before = archive.getText(path)

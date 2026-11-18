@@ -101,7 +101,7 @@ export function styleConfigDocument(): IniDocument | undefined {
  * default.css 的一次改动：一个撤销步骤，源码编辑器正显示它时同步。STYLE_NUM 记的是最大编号，
  * 新建超过它就跟上，删掉的正是它就退到剩下的最大编号。
  */
-function editStyleConfig(change: (styles: IniDocument) => void): boolean {
+export function editStyleConfig(change: (styles: IniDocument) => void): boolean {
   const path = styleConfigPath()
   if (!appState.archive?.isText(path) || !isEditing()) return false
   const styles = IniDocument.parse(appState.archive.getText(path))
@@ -149,7 +149,7 @@ export function duplicateStyle(styleID: string): string | undefined {
   return id
 }
 
-/** 删除没有被引用的样式；可撤销，不弹确认。被引用（含文字回退）的样式不能删。 */
+/** 删除没有被引用的样式；可撤销；确认由操作入口负责。被引用（含文字回退）的样式不能删。 */
 export function removeStyle(styleID: string): boolean {
   return removeStyleIDs([styleID]) > 0
 }
@@ -228,7 +228,8 @@ export function applyStyleLibrarySelection(toStyle = false): void {
     if (target.dataset.bdaStyleType && target.dataset.bdaStyleType !== "image") return
     const styleID = target.value.split(",")[0]?.trim() ?? ""
     const highlighted = appState.styleLibraryHighlighted
-    if (!toStyle) {
+    const directImage = appState.styleLibraryInitialImages && availableStyleIDs().includes(styleID)
+    if (!toStyle && !directImage) {
       if (appState.archive?.format === "bda") {
         createImageStyleReference(target, styleID, bdaImageResourceID(selected.imagePath), highlighted)
       } else {
@@ -252,7 +253,13 @@ export function applyStyleLibrarySelection(toStyle = false): void {
         void refreshStyleReferenceThumbnails()
       }
     } else {
-      openImageSlicePicker(selected.imagePath, styleWriteTarget(styleReferenceForeground(styleReferenceKey(target)) ? "FORE_STYLE" : "BACK_STYLE", appState.styleLibraryHighlighted ? "HL_IMG" : "NM_IMG", [styleID]))
+      const image = styleWriteTarget(styleReferenceForeground(styleReferenceKey(target)) ? "FORE_STYLE" : "BACK_STYLE", highlighted ? "HL_IMG" : "NM_IMG", [styleID])
+      openImageSlicePicker(selected.imagePath, image)
+      if (directImage && appState.pickerTarget === image && appState.pickerSlices.length <= 1) {
+        void applyImageSliceSelection(appState.pickerSlices[0]?.index ?? WHOLE_IMAGE_INDEX).then(() => {
+          if (appState.pickerTarget === image) clearImageSlicePicker()
+        })
+      }
     }
   }
 }
@@ -314,16 +321,20 @@ export function editStyleLibrarySelection(): void {
   else if (selected.imagePath) selectFile(selected.imagePath, "overview")
 }
 
-export function openStylePicker(input: HTMLInputElement, highlighted = false): void {
-  appState.styleLibraryHighlighted = highlighted
+export function openStylePicker(input: HTMLInputElement, highlighted = false, initialImages = false): void {
   if (input.disabled) return
+  appState.styleLibraryHighlighted = highlighted
+  appState.styleLibraryInitialImages = initialImages
   appState.stylePickerTarget = input
   appState.pickerTarget = undefined
   appState.styleLibrarySelected = undefined
   const animation = layoutAnimationFields.has(styleReferenceKey(input)) || Boolean(input.dataset.ssfAnimationPath)
-  if (mobilePortraitQuery.matches && animation && ["bdi", "bds"].includes(appState.archive?.format ?? "")) { openMobileMotionPicker(input); return }
-  pickerDialog.dataset.kind = animation ? "animation" : "style"
-  void showPickerWindow("styles", mobilePortraitQuery.matches ? animation ? "选择动效" : "选择样式" : "全部样式", 1100, 760)
+  const openLibrary = () => {
+    pickerDialog.dataset.kind = animation ? "animation" : "style"
+    void showPickerWindow("styles", "全部样式", 1100, 760)
+  }
+  if (mobilePortraitQuery.matches && animation && ["bdi", "bds"].includes(appState.archive?.format ?? "")) openMobileMotionPicker(input, openLibrary)
+  else openLibrary()
 }
 
 type StyleLibraryCache = {
@@ -406,7 +417,7 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     },
   }
   const payload: StyleLibraryPayload = {
-    session, sliceBack, imageSelection,
+    session, sliceBack, imageSelection, initialImages: Boolean(target && appState.styleLibraryInitialImages),
     recentStyles: (appState.recentStyles.get(source)?.get(recentStyleScope()) ?? []).filter(id => ids.includes(id)),
     editable: isEditing() && !target?.disabled,
     canAdd, soundOnly: key === "SOUND_STYLE",

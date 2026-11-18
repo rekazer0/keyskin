@@ -1,6 +1,7 @@
+import { confirmDeletion } from "../ask"
 import { renameResourceImage } from "../image-rename"
 import { ssfPackage, ssfTheme } from "../ssf-documents"
-import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, resourceBackButton, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
+import { settingsWorkspace, aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, resourceBackButton, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
 import { bindDialog } from "../ask.ts"
 import { closeDialog } from "../../motion.ts"
 import { applyImageSliceSelection, resourcePickerPayload, selectImageResource, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
@@ -11,9 +12,8 @@ import { emitStyleLibrary, emitStyleLibraryPreview, emitStyleLibraryImage, apply
 import { canvasEditable, isEditing, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
 import { soundPathForFilename } from "../../sounds.ts"
 import { bindPaneResize, applyModeState } from "../mobile-layout"
-import { currentConfigPath } from "../config-context"
 import { refreshPreview, setGuidesVisible, updateDevicePreview, refreshSimulationPreview, fitCanvasPreview } from "../preview-render"
-import { showStyle, renderResourceInspector, selectResourceImage, uploadResourceImage, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
+import { renderResourceInspector, selectResourceImage, uploadResourceImage, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
 import { wireResourceSelection } from "../resource-gallery"
 import { wireResourceTransfer, downloadResourceSelection, resourceDropTarget, uploadResourceFiles, deleteCatalogFont } from "../resource-transfer"
 import { createAtlasWorkspace } from "../../atlas-workspace"
@@ -37,6 +37,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { setSourceDropTarget, sourceDropFolder, commitSourceUploads } from "../source-files"
 import { updateSourceHighlight, updateInspectorView } from "../source-panel"
 import { initInspectorShell } from "../../inspector-shell.ts"
+import { resourceWindow } from "../resource-grid-window"
 import { bindListboxKeys } from "../../dom-element.ts"
 import { startOnboarding, startOnboardingOnFirstLaunch } from "../onboarding"
 import { clearMobilePickerPreview, previewMobilePickerSelection } from "../mobile-picker-preview"
@@ -99,22 +100,15 @@ export function wireResourcesAndStartup(): void {
   bindListboxKeys(resourceGallery, (card, event) => {
     card.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: event.ctrlKey, metaKey: event.metaKey, shiftKey: event.shiftKey }))
     card.focus()
-  })
+  }, () => resourceWindow)
   resourceRenameButton.addEventListener("click", renameResourceImage)
   resourceGallery.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented) return
-    if (event.key === "F2" && !resourceRenameButton.disabled && !resourceRenameButton.hidden) {
+    if (!event.defaultPrevented && event.key === "F2" && !resourceRenameButton.disabled && !resourceRenameButton.hidden) {
       event.preventDefault()
-      renameResourceImage()
-      return
+      resourceRenameButton.click()
     }
-    if (event.key.toLowerCase() !== "d" || !(event.metaKey || event.ctrlKey) || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID || appState.selectedResourceGalleryPaths.length !== 1) return
-    event.preventDefault()
-    const id = duplicateStyle(appState.selectedStyleID)
-    if (id) showStyle(id)
   })
   appState.animationWorkspace = createAnimationWorkspace({
-    back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),
     relayout: () => populateKeyInspector(),
     changeMode: particle => selectFile(appState.selectedPath, "overview", particle ? "particle" : "motion"),
     changeLayout: option => {
@@ -217,12 +211,16 @@ export function wireResourcesAndStartup(): void {
   resourceDownloadButton.addEventListener("click", () => {
     void runFileOperation("下载资源", downloadResourceSelection)
   })
-  resourceDeleteButton.addEventListener("click", () => {
-    if (appState.resourceCatalog === "font") { deleteCatalogFont(); return }
-    if (!appState.archive || appState.resourceInspectorMode !== "image" || !isEditing()) return
-    const paths = appState.selectedResourceGalleryPaths.filter(path => appState.archive!.isImage(path))
+  resourceDeleteButton.addEventListener("click", async () => {
+    if (appState.resourceCatalog === "font") { await deleteCatalogFont(); return }
+    const archive = appState.archive
+    if (!archive || appState.resourceInspectorMode !== "image" || !isEditing()) return
+    const paths = appState.selectedResourceGalleryPaths.filter(path => archive.isImage(path))
     if (!paths.length) return
-    commitBatch(paths.map(path => ({ kind: "bytes", path, before: appState.archive!.getBytes(path) })))
+    const revision = archive.revision
+    const target = paths.length === 1 ? `图片「${paths[0].split("/").pop()}」` : `${paths.length} 张图片`
+    if (!await confirmDeletion(`删除${target}？`) || appState.archive !== archive || archive.revision !== revision || !isEditing()) return
+    commitBatch(paths.map(path => ({ kind: "bytes", path, before: archive.getBytes(path) })))
     if (paths.includes(appState.selectedResourcePath)) {
       appState.selectedResourcePath = ""
       appState.slices = []
@@ -249,7 +247,9 @@ export function wireResourcesAndStartup(): void {
   simulatedOutput.addEventListener("input", refreshSimulationPreview)
   window.addEventListener("keydown", (event) => {
     // 列表、菜单、搜索框已经处理过这次按键（方向键选项、Delete 删除列表项、Esc 清除）。
-    if (event.defaultPrevented) return
+    if (event.defaultPrevented || !settingsWorkspace.hidden) return
+    const deleting = event.key === "Delete" && !event.repeat && !event.metaKey && !event.ctrlKey
+      && !isTextEditingTarget(event.target) && !document.querySelector('dialog[open]:not(#atlas-editor-dialog)')
     const movement: Record<string, readonly [number, number]> = {
       ArrowLeft: [-1, 0],
       ArrowRight: [1, 0],
@@ -272,7 +272,7 @@ export function wireResourcesAndStartup(): void {
       return
     }
     if (appState.resourceConfigActive && !isTextEditingTarget(event.target)) {
-      if ((event.key === "Delete" || event.key === "Backspace") && isEditing()) {
+      if (deleting && isEditing()) {
         event.preventDefault()
         deleteSelectedTile()
         return
@@ -297,12 +297,7 @@ export function wireResourcesAndStartup(): void {
         }
       }
     }
-    if (
-      (event.key === "Delete" || event.key === "Backspace") &&
-      canvasEditable() &&
-      appState.selectedKeySections.length &&
-      !isTextEditingTarget(event.target)
-    ) {
+    if (deleting && canvasEditable() && appState.selectedKeySections.length) {
       event.preventDefault()
       deleteSelectedKeys()
       return
@@ -332,6 +327,7 @@ export function wireResourcesAndStartup(): void {
         if (dialog.dispatchEvent(new Event("cancel", { cancelable: true }))) dialog.close()
         return
       }
+      if (!settingsWorkspace.hidden) { settingsWorkspace.dispatchEvent(new Event("settings-request-exit")); return }
       if (await prepareDocumentReplacement()) void invoke("quit_app")
     })
   }

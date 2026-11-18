@@ -1,5 +1,5 @@
 import { invoke, Channel } from "@tauri-apps/api/core"
-import { adbShareButton, settingsAdbNav, settingsAdbPanel, settingsDialog, adbExecutable, adbSerial, adbHost, adbPort, adbPairPort, adbPairCode, adbPairButton, adbPairStatus, adbDirectory, adbPackage, adbActivity, adbTestButton, adbTestStatus } from "./dom"
+import { adbShareButton, settingsAdbNav, settingsAdbPanel, settingsWorkspace, adbExecutable, adbSerial, adbHost, adbPort, adbPairPort, adbPairCode, adbPairButton, adbPairStatus, adbDirectory, adbPackage, adbActivity, adbTestButton, adbTestStatus } from "./dom"
 import { documentName } from "./dom"
 import { exportName, skinFileName } from "../export"
 import { isTauri } from "./canvas-interaction"
@@ -60,7 +60,7 @@ export function wireAdbShare(): void {
     })
   }
   // 无 id 的一次性字段不参与设置草稿或持久化。
-  settingsDialog.addEventListener("close", () => { adbPairCode.value = "" })
+  settingsWorkspace.addEventListener("settings-exit", () => { adbPairCode.value = "" })
   if (!supported) return
   const busy = (value: boolean) => {
     adbTestButton.disabled = value

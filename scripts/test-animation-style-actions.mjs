@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 // 动画工作区「样式」页底部的新建 / 复制 / 删除，以及列表短时工具条仍贴底。
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
@@ -26,7 +27,11 @@ try {
   await page.locator('[data-animation-mode="particle"]').click()
   const bottom = await page.evaluate(() => [document.querySelector(".sidebar").getBoundingClientRect().bottom, document.querySelector(".animation-library-pane:not([hidden]) > .ui-list-toolbar").getBoundingClientRect().bottom])
   assert.ok(bottom[0] - bottom[1] < 40, `粒子列表短时工具条也贴底：${bottom}`)
-  await page.locator(".animation-library-tabs button").nth(1).click()
+  assert.equal(await action("duplicate").count(), 0, "动画列表底部没有复制")
+  assert.equal(await action("remove").count(), 1, "保留删除动画")
+  assert.equal(await page.locator('#animation-library').getByRole('combobox', { name: '新建粒子' }).count()
+    + await action("create").count(), 1, "保留新建动画")
+  await page.locator('#document-fields .animation-style-link').first().click()
   const before = await styleCount()
   await action("create").click()
   await page.waitForFunction((n) => document.querySelectorAll('.animation-library-pane:not([hidden]) [data-style-id]').length === n + 1, before)
@@ -37,6 +42,7 @@ try {
   assert.notEqual(await page.locator('.animation-library-pane:not([hidden]) [data-style-id][aria-selected="true"]').getAttribute("data-style-id"), created, "复制出的样式被选中")
   assert.equal(await action("remove").isDisabled(), false, "未被引用的样式可删除")
   await action("remove").click()
+  await confirmDeletion(page)
   await page.waitForFunction((n) => document.querySelectorAll('.animation-library-pane:not([hidden]) [data-style-id]').length === n + 1, before)
   await page.locator(`.animation-library-pane:not([hidden]) [data-style-id]:not([data-style-id="${created}"])`).first().click()
   // 测试皮肤里原有的样式都挂在按键上

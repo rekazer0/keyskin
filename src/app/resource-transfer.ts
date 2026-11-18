@@ -1,3 +1,4 @@
+import { confirmDeletion } from "./ask"
 import { zipSync } from "fflate"
 import { isSoundPath, soundMimeType } from "../sounds"
 import { appState } from "./state"
@@ -60,7 +61,7 @@ export function startResourceDrag(event: DragEvent): void {
 export async function uploadResourceFiles(files: File[]): Promise<boolean> {
   const archive = appState.archive
   if (!archive || !isEditing() || !files.length) return false
-  const fontTheme = appState.resourceFontTheme
+  const fontTheme = theme.value
   const catalog = appState.resourceCatalog
   const scope = `${theme.value}/${orientation.value}`
   const changes: Array<Extract<Change, { kind: "bytes" }>> = []
@@ -84,7 +85,7 @@ export async function uploadResourceFiles(files: File[]): Promise<boolean> {
       change = { kind: "bytes", path, before: archive.getBytes(path)?.slice(), after: new Uint8Array(await file.arrayBuffer()) }
     } else throw new Error("请选择 PNG 图片或 OGG、WAV、AIFF、MP3 音效文件")
     if (appState.archive !== archive || !isEditing() || scope !== `${theme.value}/${orientation.value}`) return false
-    if (catalog !== appState.resourceCatalog || catalog === "font" && fontTheme !== appState.resourceFontTheme) return false
+    if (catalog !== appState.resourceCatalog) return false
     if (paths.has(change.path)) throw new Error(`存在重名资源：${file.name}`)
     paths.add(change.path)
     changes.push(change)
@@ -113,10 +114,13 @@ export async function uploadResourceFiles(files: File[]): Promise<boolean> {
 }
 
 /** 删除选中的实际文件并清除它的引用，同名的另一模式字体保留。 */
-export function deleteCatalogFont(): void {
+export async function deleteCatalogFont(): Promise<void> {
   const archive = appState.archive
   const path = appState.selectedResourceCatalogItem
   if (!archive || appState.resourceCatalog !== "font" || !isEditing() || !isFontFile(path) || !archive.getBytes(path)) return
+  const revision = archive.revision
+  if (!await confirmDeletion(`删除字体「${path.split("/").pop()}」？`, "字体引用也将被清除，删除后可撤销恢复。")
+    || appState.archive !== archive || archive.revision !== revision || !isEditing()) return
   const names = archive.names()
   const changes: Change[] = [{ kind: "bytes", path, before: archive.getBytes(path)?.slice() }]
   for (const stylePath of skinStylePaths(names)) {

@@ -91,6 +91,12 @@
   backdrop-filter: none;
 }
 
+@media (max-width: 760px) and (orientation: portrait) {
+  :root[data-mobile-pane="inspector"] .canvas-wrap > .device-shell:not(.canvas-only)[data-orientation="port"] {
+    max-height: calc(var(--mobile-preview-height) - 2 * var(--space-md));
+  }
+}
+
 .device-shell[data-family="android"] {
   border-radius: 34px;
   background: #222326;
@@ -448,7 +454,7 @@
   height: 17px;
 }
 
-.device-shell[data-mode="edit"] #candidate-area.candidate-selected::after,
+.device-shell[data-mode="edit"] #candidate-area.candidate-selected #toolbar-strip::after,
 .device-shell[data-mode="edit"] #candidate-input[aria-selected="true"]::after {
   content: "";
   position: absolute;
@@ -685,15 +691,6 @@
   box-shadow: none;
 }
 
-@media (max-width: 1060px) {
-
-  #device-control {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-}
-
 /* 设置「深色画布降低对比」 */
 :root[data-app-theme="dark"][data-dark-canvas-soften="true"] .canvas-wrap[data-background="dark"] { background-color: #303238; }
 
@@ -704,15 +701,6 @@
     box-shadow var(--duration-base) var(--ease-standard),
     opacity var(--duration-base) var(--ease-standard);
 }
-#device-control {
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: var(--material-content);
-}
-
 /* [CAND] TYPE=3：候选栏盖在面板顶部那一行上，不另占键盘高度。 */
 .device-shell[data-candidate-overlay] .keyboard-dock #panel-viewport,
 .device-shell[data-candidate-overlay] #candidate-area {

@@ -94,6 +94,14 @@ export async function convertSsfDocument(
   return { bytes: await converted.platformBytesAsync(format, warnings), warnings }
 }
 
+/** Reuse the BDA template for static appearance; map motion directly from the Baidu source. */
+export async function convertLegacyToBda(archive: SkinArchive, template: SkinArchive): Promise<Converted> {
+  const ssf = await convertBaiduToSsf(archive, { animations: false })
+  const bda = convertSsfToBda(await SsfPackage.open(ssf.bytes), template)
+  const motionWarnings = applyLegacyBaiduMotion(archive, bda.archive)
+  return { bytes: bda.archive.toBytes(), warnings: [...new Set([...ssf.warnings, ...bda.warnings, ...motionWarnings])] }
+}
+
 /** Converts any editable Baidu skin to `.ssf`; BDA goes through the official BDS base layout first. */
 export async function exportSsf(archive: SkinArchive, bdaBase: SkinArchive | undefined, sogouTemplate?: SkinArchive): Promise<Converted> {
   // 官方骨架决定每个按键类的显示尺寸：按它缩图，包里不再存客户端用不到的分辨率。

@@ -23,20 +23,24 @@ const LAYOUT = 'light/skin/port/py_26.ini'
 const server = await createServer({ root: new URL('..', import.meta.url).pathname, logLevel: 'error', server: { port: 41865, strictPort: false, host: '127.0.0.1', hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, hasTouch: true })
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 
 const listed = () => page.locator('#animation-library [data-animation-id]').evaluateAll((nodes) => nodes.map((node) => node.dataset.animationId))
-const clickKey = async (section, modifiers = []) => {
+const keyPoint = async (section) => {
   const [point, size] = await page.evaluate(async (section) => {
     const { preview } = await import('/src/app/canvas-interaction.ts')
     const key = preview.keys.find((item) => item.section === section)
     return [[key.rect.x + key.rect.width / 2, key.rect.y + key.rect.height / 2], [preview.panelWidth, preview.surfaceHeight]]
   }, section)
   const box = await page.locator('#preview').boundingBox()
+  return { x: box.x + point[0] / size[0] * box.width, y: box.y + point[1] / size[1] * box.height }
+}
+const clickKey = async (section, modifiers = []) => {
+  const { x, y } = await keyPoint(section)
   for (const key of modifiers) await page.keyboard.down(key)
-  await page.mouse.click(box.x + point[0] / size[0] * box.width, box.y + point[1] / size[1] * box.height)
+  await page.mouse.click(x, y)
   for (const key of modifiers) await page.keyboard.up(key)
 }
 const selectedKeys = () => page.evaluate(async () => [...(await import('/src/app/canvas-interaction.ts')).preview.selected])
@@ -91,7 +95,7 @@ try {
   assert.deepEqual(await listed(), ['ANIM1', 'ANIM2'])
 
   // 粒子：按键 2 没有粒子，提示切到「全部」。
-  await page.locator('#animation-library .ui-pane-header button[aria-label="返回"]').click()
+  await page.locator('[data-workspace-page="overview"]').click()
   await open('particle')
   await clickKey('KEY2')
   await page.locator('.animation-key-filter').waitFor()
@@ -99,6 +103,45 @@ try {
   const onlyKey2 = page.locator('.animation-key-filter').getByRole('button', { name: '按键 2 的粒子', exact: true })
   assert.equal(await onlyKey2.isDisabled(), true)
   assert.equal(await onlyKey2.getAttribute('title'), '按键 2 按下时没有播放粒子')
+
+  // 手机不依赖修饰键，也不能把划过按键当成点选。
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForFunction(() => document.documentElement.dataset.mobilePane === 'inspector')
+  await page.evaluate(async (path) => (await import('/src/app/navigation.ts')).selectFile(path, 'overview', 'motion'), ANIM)
+  await page.locator('#preview').waitFor()
+  const touch = await page.context().newCDPSession(page)
+  const send = (type, ...touchPoints) => touch.send('Input.dispatchTouchEvent', { type, touchPoints })
+  await page.locator('#preview').tap({ trial: true })
+  const first = await keyPoint('KEY1')
+  await send('touchStart', first)
+  await send('touchMove', { x: first.x + 25, y: first.y })
+  await send('touchMove', first)
+  await send('touchEnd')
+  assert.deepEqual(await selectedKeys(), [], '滑开再回到原键也不应选中')
+  await send('touchStart', await keyPoint('KEY1'))
+  await page.locator('.animation-key-filter').waitFor({ state: 'attached' })
+  await send('touchEnd')
+  const second = await keyPoint('KEY2')
+  await page.touchscreen.tap(second.x, second.y)
+  assert.deepEqual(await selectedKeys(), ['KEY1', 'KEY2'], '长按后轻点即可增加筛选按键')
+  assert.equal(await page.locator('.animation-key-filter').getByRole('button', { name: '2 个按键 的动效', exact: true, includeHidden: true }).count(), 1)
+  await page.touchscreen.tap(second.x, second.y)
+  assert.deepEqual(await selectedKeys(), ['KEY1'], '再点只移除这个键')
+
+  // 同一手势在普通布局走按键选择，而不是动效筛选；空白点击退出多选。
+  await page.evaluate(async (path) => (await import('/src/app/navigation.ts')).selectFile(path), LAYOUT)
+  await page.locator('#preview').tap({ trial: true })
+  await send('touchStart', await keyPoint('KEY1'))
+  await page.waitForFunction(() => document.querySelector('#selected-key-context')?.textContent.includes('KEY1'))
+  await send('touchEnd')
+  const b = await keyPoint('KEY2')
+  await page.touchscreen.tap(b.x, b.y)
+  assert.deepEqual(await selectedKeys(), ['KEY1', 'KEY2'])
+  const box = await page.locator('#preview').boundingBox()
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+  assert.deepEqual(await selectedKeys(), [])
+  assert.ok(await page.locator('#mobile-undo').isDisabled(), '改变选区不入撤销栈')
 
   assert.deepEqual(errors, [])
   console.log('animation key filter: pick key in edit mode, filtered list, multi-select, clear passed')

@@ -9,7 +9,8 @@
   height: var(--_toolbar-h);
   box-sizing: border-box;
   padding: 0 var(--space-md);
-  border-bottom: 1px solid var(--line);
+  position: relative;
+  border-bottom: 1px solid transparent;
   background: var(--panel);
 }
 .picker-toolbar .ui-search { width: min(260px, 40vw); }
@@ -28,7 +29,7 @@
 /* 全部样式：与切片共用窗口，网格单独滚动，预览固定在底部。 */
 .style-library-view { position: relative; height: calc(var(--viewport-height) - var(--_toolbar-h)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 .style-library-view[hidden] { display: none; }
-.style-library-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--line); }
+.style-library-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); position: relative; border-bottom: 1px solid transparent; }
 .style-library-bar > [hidden] { display: none; }
 .style-library-bar > .ui-list-toolbar { margin-left: auto; }
 .style-library-bar:not(:has(> :not([hidden]))) { display: none; }
@@ -37,7 +38,7 @@
 .style-library-scroll > .style-library-grid { padding: calc(var(--space-lg) + var(--_library-before, 0px)) var(--space-lg) calc(var(--space-lg) + var(--_library-after, 0px)); }
 .style-library-empty { position: absolute; inset: 50% 0 auto; pointer-events: none; }
 .style-library-empty[hidden] { display: none; }
-.style-library-preview { grid-row: 3; display: flex; align-items: flex-start; gap: var(--space-lg); padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--line); background: var(--panel); }
+.style-library-preview { grid-row: 3; display: flex; align-items: flex-start; gap: var(--space-lg); padding: var(--space-md) var(--space-lg); position: relative; border-top: 1px solid transparent; background: var(--panel); }
 .style-library-preview[hidden] { display: none; }
 .style-library-preview > .ui-icon-button { margin-left: auto; }
 .style-library-preview-image { display: flex; flex: 0 0 180px; height: 120px; overflow: hidden; border-radius: var(--radius-sm); }
@@ -97,4 +98,13 @@
   .picker-toolbar #picker-title { font-size: var(--font-size-title); }
   .style-library-preview-actions > #style-library-apply { justify-content: center; }
   .style-library-preview-actions > #style-library-cancel { justify-content: center; background: var(--content); }
+}
+
+/* 弱分隔线独立绘制，不改变面板外形或控件尺寸。 */
+.style-library-preview::before {
+  content: ""; position: absolute; top: -1px; inset-inline: var(--space-xs); height: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none;
+}
+.picker-toolbar::after,
+.style-library-bar::after {
+  content: ""; position: absolute; bottom: -1px; inset-inline: var(--space-xs); height: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none;
 }

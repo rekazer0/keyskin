@@ -2,9 +2,6 @@
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/fonts/ibm-plex-mono-500.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2"); }
-@font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: swap; src: url("/fonts/inter-latin.woff2") format("woff2"); }
-@font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: swap; src: url("/fonts/inter-latin.woff2") format("woff2"); }
-@font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: swap; src: url("/fonts/inter-latin.woff2") format("woff2"); }
 /*
  * 键设设计规范 · 唯一的设计 token 来源（规则见 DESIGN.md，由 tests/design-system.test.mjs 强制）。
  * 其它 CSS 只能通过 var(--…) 引用这里的值：不得写色值、字号、圆角、时长、缓动的字面量，
@@ -12,10 +9,15 @@
  */
 
 :root {
-  --share-content-width: 1040px;
-  --share-format-height: 64px;
+  --toolbar-spotlight-x: 0px;
+  --toolbar-spotlight-y: 0px;
+  --toolbar-spotlight-w: 0px;
+  --toolbar-spotlight-h: 0px;
+  --tool-tile-min-width: 104px;
+  --share-dialog-max-height: 720px;
+  --share-format-height: 56px;
   /* 字体 */
-  --font-ui: "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-ui: system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans SC Variable", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-home-heading: inherit;
 
@@ -62,6 +64,10 @@
 
   /* 版式 */
   --workspace-navigation-width: 80px;
+  --settings-sidebar-width: 208px;
+  --settings-content-width: 760px;
+  --settings-field-width: 320px;
+  --settings-theme-card-width: 136px;
   --workspace-navigation-button-size: 40px;
   --workspace-status-height: 30px;
   --content-max-width: 1100px;  /* 欢迎页等整页内容的最大宽度 */
@@ -71,12 +77,14 @@
   --style-reference-height: 88px;
   --style-reference-meta-width: 84px;
   --project-template-card-width: 200px;
-  --home-card-width: 220px;
-  --home-preview-height: 120px;
+  --home-card-width: 228px;
+  --home-preview-height: 136px;
+  --home-recent-preview-height: 160px;
   --home-background: var(--panel);
   --toolbar-icon-card-width: 72px;
   --skin-preview-size: 80px;
-  --about-logo-size: 72px;
+  --about-logo-size: 128px;
+  --about-description-width: 52ch;
   --resource-tile-size: 80px; /* 资源磁贴固定宽度，高度为宽度的 4/5，随侧栏宽度自动增减列 */
 
   --resource-tile-icon-stroke-width: 2;
@@ -86,9 +94,27 @@
   --control-height-md: 28px;  /* 默认：按钮、输入框、下拉、分段控件 */
   --control-height-lg: 32px;  /* 主要操作、对话框底部按钮 */
   --animation-card-width: 104px;
-  --animation-stage-width: 320px; /* 横排播放器舞台保持 2:1，不随工作区无限放大 */
   --animation-curve-height: 48px;
-  --ai-chat-input-min-height: 96px;
+  --ai-chat-input-min-height: 56px;
+  /* 风格样张展示预设本身，不随编辑器主题换色。 */
+  --ai-neon-key: #302C4E;
+  --ai-neon-ink: #AACDFF;
+  --ai-neon-accent: #59EDDD;
+  --ai-cream-key: #FFF4E6;
+  --ai-cream-ink: #714659;
+  --ai-cream-accent: #CA839D;
+  --ai-glass-key: #E8F0FB;
+  --ai-glass-ink: #445E81;
+  --ai-glass-accent: #648AB4;
+  --ai-gold-key: #282628;
+  --ai-gold-ink: #F4DDBA;
+  --ai-gold-accent: #D5AF71;
+  --ai-matcha-key: #F4F2DD;
+  --ai-matcha-ink: #475940;
+  --ai-matcha-accent: #84996A;
+  --ai-typewriter-key: #F3E2C8;
+  --ai-typewriter-ink: #624B3F;
+  --ai-typewriter-accent: #A95743;
   --ai-chat-input-max-height: 60vh;
   --ai-chat-input-footer: 40px;
   --ai-chat-send-size: 28px;
@@ -112,7 +138,7 @@
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
   --disabled-opacity: 0.4;
   /* —— 以下为颜色与材质 —— */
-  font-family: "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   color: #121419;
   color-scheme: light;
   background: transparent;
@@ -129,9 +155,9 @@
   --shadow-md: 0 6px 18px rgb(18 24 40 / 10%);
   --shadow-lg: 0 16px 40px rgb(18 24 40 / 16%);
 
-  --line: #e3e6eb;
-  --line-soft: #eef1f5;
-  --line-strong: #cdd2db;
+  --line: #e3e6eb9E;
+  --line-soft: #eef1f58C;
+  --line-strong: #cdd2dbB2;
   --text: #121419;
   --secondary: #5b616e;
   --tertiary: #6f7684;
@@ -168,8 +194,9 @@
   --window: var(--material-window);
   --toolbar: var(--material-toolbar);
   --titlebar-surface: var(--panel);
-  --titlebar-backdrop-filter: none;
-  --workspace-navigation-opacity: 0.56;
+  --titlebar-backdrop-filter: var(--workspace-navigation-backdrop-filter);
+  --workspace-navigation-backdrop-filter: none;
+  --workspace-navigation-opacity: 0.64;
   --workspace-navigation-surface: var(--toolbar);
   --workspace-navigation-text: var(--secondary);
   --workspace-navigation-hover-text: var(--text);
@@ -177,7 +204,7 @@
   --workspace-navigation-base: var(--material-toolbar);
   --workspace-navigation-selected-text: var(--accent);
   --workspace-navigation-selected-surface: var(--accent-soft);
-  --workspace-navigation-selected-border: color-mix(in srgb, var(--accent) 24%, transparent);
+  --workspace-navigation-selected-border: color-mix(in srgb, var(--accent) 15%, transparent);
   --sidebar: var(--material-sidebar);
   --inspector: var(--material-inspector);
   --panel: var(--material-panel);
@@ -236,7 +263,7 @@
 @media (max-width: 760px) {
   :root, :root.macos { --titlebar-height: calc(48px + var(--safe-area-top)); }
   /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
-  :root { --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-workspace-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-navigation-height)); --mobile-inspector-split: min(calc(var(--mobile-workspace-height) / 2), 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --style-card-width: 128px; --style-reference-height: 64px; --style-reference-meta-width: 48px; }
+  :root { --tool-tile-min-width: 76px; --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-workspace-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-navigation-height)); --mobile-inspector-split: min(calc(var(--mobile-workspace-height) / 2), 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --style-card-width: 128px; --style-reference-height: 64px; --style-reference-meta-width: 48px; }
   :root { --ai-chat-input-min-height: var(--control-height-lg); --ai-chat-input-max-height: 30vh; --ai-chat-input-footer: calc(var(--control-height-lg) + var(--space-sm)); --ai-chat-send-size: var(--control-height-lg); }
   :root:has(#resource-inspector:not([hidden]) #resource-list-view:not([hidden])) { --mobile-preview-height: 0px; }
   :root[data-keyboard-open="true"]:has(#mobile-key-preview:not([hidden])) { --mobile-preview-height: 148px; }
@@ -246,9 +273,9 @@
   color: #f2f3f4;
   color-scheme: dark;
   background: transparent;
-  --line: #282c33;
-  --line-soft: #1f2329;
-  --line-strong: #3a3f48;
+  --line: #282c339E;
+  --line-soft: #1f23298C;
+  --line-strong: #3a3f48B2;
   --text: #f3f5f8;
   --secondary: #a1a8b3;
   --tertiary: #8b93a0;
@@ -328,7 +355,7 @@
   --window: rgb(255 255 255 / var(--window-material-layer));
   --toolbar: rgb(255 255 255 / var(--window-material-layer));
   --workspace-navigation-surface: rgb(255 255 255 / var(--workspace-navigation-opacity));
-  --titlebar-backdrop-filter: saturate(180%) blur(24px);
+  --workspace-navigation-backdrop-filter: saturate(180%) blur(24px);
   --sidebar: rgb(255 255 255 / var(--window-material-layer));
   --inspector: rgb(255 255 255 / var(--window-material-layer));
   --panel: rgb(255 255 255 / var(--window-material-layer));
@@ -347,8 +374,8 @@
   /* 控件色差：+4.4% / +8.6% 的中性色等于 #f4f5f8 / #ebebeb 叠在白底上的暗度，
      11% / 19.8% 等于 #e3e6eb / #cdd2db。色差固定，滑杆只影响玻璃本身的通透度。 */
   --material-content: rgb(19 24 38 / 4.4%);
-  --line: rgb(19 24 38 / 11%);
-  --line-strong: rgb(19 24 38 / 19.8%);
+  --line: rgb(19 24 38 / 6.82%);
+  --line-strong: rgb(19 24 38 / 13.86%);
 }
 
 /* 深色模式沿用同一套层系数，只是底色更深，浅色文字压在深色玻璃上仍然够清晰。 */
@@ -370,8 +397,8 @@
   --material-panel: rgb(30 33 38 / var(--window-material-layer));
   --material-control: rgb(38 42 48 / var(--window-material-floating));
   --material-content: rgb(255 255 255 / 2.5%);
-  --line: rgb(255 255 255 / 9.2%);
-  --line-strong: rgb(255 255 255 / 17.1%);
+  --line: rgb(255 255 255 / 5.70%);
+  --line-strong: rgb(255 255 255 / 11.97%);
 }
 
 :root[data-window-material="off"] {
@@ -406,31 +433,30 @@
 /* 移动工作室复用默认控件字号、圆角和图标尺寸。 */
 @media (max-width: 760px) {
   :root {
-    --font-ui: "Inter", "Noto Sans SC Variable", "PingFang SC", system-ui, sans-serif;
     --font-mono: "IBM Plex Mono", "Noto Sans SC Variable", ui-monospace, monospace;
     --font-size-title: 16px;
-    --font-size-homebrand: 24px;
-    --font-size-homeskin: 18px;
     --font-size-homesection: 15px;
     --font-size-homeaction: 14px;
     --radius-home: 20px;
     --radius-homepreview: 10px;
     --mobile-home-gutter: 20px;
+    --about-logo-size: 104px;
     --font-size-page: 24px;
     --mobile-page-padding: 20px;
-    --mobile-home-preview-height: 108px;
     --mobile-picker-height: 60%;
     --mobile-motion-sheet-height: 540px;
-    --mobile-home-gradient: linear-gradient(150deg, #EEF3FF, #FFFFFF);
     --mobile-navigation-height: calc(var(--mobile-primary-height) + var(--space-md) * 2 + var(--safe-area-bottom));
+    --mobile-navigation-surface: color-mix(in srgb, var(--panel) 76%, transparent);
+    --mobile-navigation-filter: blur(20px);
+    --mobile-document-title-width: 180px;
     --mobile-control-height: 44px;
     --mobile-primary-height: 56px;
     --mobile-sidebar-width: 352px;
     --mobile-simulation-height: clamp(120px, 34vh, 280px);
     --state-ok: #27846D;
-    --line: #E4E9F1;
-    --line-soft: #E4E9F1;
-    --line-strong: #D3DCE9;
+    --line: #E4E9F19E;
+    --line-soft: #E4E9F18C;
+    --line-strong: #D3DCE9B2;
     --text: #1C2331;
     --secondary: #667182;
     --tertiary: #777D90;
@@ -448,9 +474,8 @@
     --canvas-surface: #F7F9FB;
   }
   :root[data-app-theme="dark"] {
-    --mobile-home-gradient: linear-gradient(150deg, #25324B, #202833);
-    --line: #2A3038;
-    --line-soft: #1E232A;
+    --line: #2A30389E;
+    --line-soft: #1E232A8C;
     --text: #F4F6F8;
     --secondary: #9AA3AF;
     --tertiary: #7C8590;
@@ -515,9 +540,9 @@
   --text: #293448;
   --secondary: #536177;
   --tertiary: #7B879A;
-  --line: #E0E6EF;
-  --line-soft: #E5EAF2;
-  --line-strong: #C7D6E8;
+  --line: #E0E6EF9E;
+  --line-soft: #E5EAF28C;
+  --line-strong: #C7D6E8B2;
   --accent: #3D6DF2;
   --accent-soft: #E7EEFF;
   --on-accent: #FFFFFF;
@@ -537,9 +562,9 @@
   --text: #E6EAF3;
   --secondary: #AEB8C9;
   --tertiary: #8590A2;
-  --line: #2C333F;
-  --line-soft: #252B35;
-  --line-strong: #3F495A;
+  --line: #2C333F9E;
+  --line-soft: #252B358C;
+  --line-strong: #3F495AB2;
   --accent: #9DB4FF;
   --accent-soft: #25304A;
   --on-accent: #14161C;
@@ -564,9 +589,9 @@
   --text: #2A2622;
   --secondary: #5D5448;
   --tertiary: #857A6B;
-  --line: #E4D8C4;
-  --line-soft: #EDE4D5;
-  --line-strong: #CDBCA2;
+  --line: #E4D8C49E;
+  --line-soft: #EDE4D58C;
+  --line-strong: #CDBCA2B2;
   --accent: #B5543A;
   --accent-soft: #F6E2D8;
   --on-accent: #FFFCF5;
@@ -597,9 +622,9 @@
   --text: #111111;
   --secondary: #42423D;
   --tertiary: #65655D;
-  --line: #111111;
-  --line-soft: #D5D4CB;
-  --line-strong: #111111;
+  --line: #1111119E;
+  --line-soft: #D5D4CB8C;
+  --line-strong: #111111B2;
   --accent: #111111;
   --accent-soft: #DDFF3B;
   --on-accent: #DDFF3B;
@@ -627,9 +652,9 @@
   --text: #2A2640;
   --secondary: #4C4468;
   --tertiary: #7A7497;
-  --line: #D2C7EC;
-  --line-soft: #E8E0F4;
-  --line-strong: #AFA0CF;
+  --line: #D2C7EC9E;
+  --line-soft: #E8E0F48C;
+  --line-strong: #AFA0CFB2;
   --accent: #6D4AFF;
   --accent-soft: #EDE7FF;
   --accent-fill: linear-gradient(135deg, #7A5AF8, #C062E8);
@@ -661,9 +686,9 @@
   --text: #CBEDD8;
   --secondary: #A4C4B0;
   --tertiary: #7E9C8B;
-  --line: #2E5A3D;
-  --line-soft: #22392B;
-  --line-strong: #4C805B;
+  --line: #2E5A3D9E;
+  --line-soft: #22392B8C;
+  --line-strong: #4C805BB2;
   --accent: #4FF08A;
   --accent-soft: #0F2418;
   --on-accent: #08120C;
@@ -688,7 +713,75 @@
   --shadow-lg: none;
   --font-ui: "IBM Plex Mono", "Noto Sans SC Variable", monospace;
   --font-mono: "IBM Plex Mono", "Noto Sans SC Variable", monospace;
-  font-family: var(--font-ui);
+}
+
+:root[data-interface-theme="rose-quartz"][data-app-theme]:not([data-interface-theme="default"]) {
+  --text: #30222A;
+  --secondary: #624955;
+  --tertiary: #765764;
+  --line: #DFC8C2;
+  --line-soft: #EDE0D9;
+  --line-strong: #BE9D9C;
+  --accent: #8B3053;
+  --accent-soft: #F7DDE6;
+  --on-accent: #FFFAF8;
+  --material-window: #F8EBE3;
+  --material-toolbar: var(--material-panel);
+  --material-sidebar: #F9F0EA;
+  --material-inspector: #FFFBF5;
+  --material-panel: #FFFBF5;
+  --material-menu: var(--material-panel);
+  --material-content: #F2E5DC;
+  --material-control: #F2E8E2;
+  --canvas: #EEE3DA;
+  --workspace-navigation-base: #50283C;
+  --workspace-navigation-text: #EBD0D8;
+  --workspace-navigation-hover-text: #FFF5ED;
+  --workspace-navigation-hover-surface: #FFF5ED22;
+  --workspace-navigation-selected-text: #50283C;
+  --workspace-navigation-selected-surface: #F6D7DE;
+  --workspace-navigation-selected-border: #F6D7DE;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-button: var(--radius-full);
+  --font-home-heading: Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+  --hover: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+:root[data-interface-theme="deep-sea"][data-app-theme]:not([data-interface-theme="default"]) {
+  --text: #ECF6FF;
+  --secondary: #B2C6DD;
+  --tertiary: #9BB3CE;
+  --line: #425A78;
+  --line-soft: #263B56;
+  --line-strong: #597593;
+  --accent: #79E7EF;
+  --accent-soft: #14374A;
+  --on-accent: #081D2B;
+  --material-window: #0B1325;
+  --material-toolbar: var(--material-panel);
+  --material-sidebar: #111E32;
+  --material-inspector: #101B2E;
+  --material-panel: #14223A;
+  --material-menu: #1A2B47;
+  --material-content: #1B2E49;
+  --material-control: #1D304D;
+  --canvas: #0D172A;
+  --workspace-navigation-base: #080F20;
+  --workspace-navigation-selected-text: var(--on-accent);
+  --workspace-navigation-selected-surface: #79E7EF;
+  --workspace-navigation-selected-border: var(--workspace-navigation-selected-surface);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --font-home-heading: var(--font-mono);
+  --home-background: linear-gradient(90deg, var(--material-window) 28%, transparent),
+    repeating-radial-gradient(circle at 92% 12%, #85DAFF20 0 1px, transparent 1px var(--space-2xl)),
+    radial-gradient(ellipse at 92% 12%, #1A3554, var(--material-window) 62%);
+  --hover: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 :root[data-interface-theme][data-app-theme]:not([data-interface-theme="default"])[data-window-material-kind="glass"][data-window-material="on"] {
@@ -700,4 +793,10 @@
   --panel: color-mix(in srgb, var(--material-panel) calc(var(--window-material-layer) * 100%), transparent);
   --control: color-mix(in srgb, var(--material-control) calc(var(--window-material-floating) * 100%), transparent);
   --workspace-navigation-surface: color-mix(in srgb, var(--workspace-navigation-base) calc(var(--workspace-navigation-opacity) * 100%), transparent);
+}
+
+@media (min-width: 761px) {
+  :root.macos[data-window-material-kind="glass"][data-window-material="on"] {
+    --titlebar-backdrop-filter: none;
+  }
 }

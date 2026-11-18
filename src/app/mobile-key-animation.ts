@@ -85,7 +85,7 @@ export function syncMobileKeyAnimation(): void {
       spec: { kind: "choice", value: repeat, options, layout: "select" }, commit: value => write("REPEAT_CNT", String(value)),
     }))
     const scope = element("small", "ui-field-note")
-    scope.textContent = `共享动效 · 样式 ${id} 被 ${styleUsages(id).length} 处引用`
+    scope.textContent = `共享动画 · 样式 ${id} 被 ${styleUsages(id).length} 处引用`
     root.append(params, scope)
   }
   if (!root.childElementCount) root.remove()

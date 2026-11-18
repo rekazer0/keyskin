@@ -29,7 +29,7 @@ pub async fn set_material(window: tauri::WebviewWindow, enabled: bool) -> Result
                 let view = unsafe { &*pointer.cast::<NSView>() };
                 if !retain_material(view, enabled) && enabled {
                     target
-                        .set_effects(EffectsBuilder::new().effect(Effect::Sidebar).build())
+                        .set_effects(EffectsBuilder::new().effect(Effect::HudWindow).build())
                         .map_err(|error| error.to_string())?;
                 }
                 Ok(())

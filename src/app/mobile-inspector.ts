@@ -3,12 +3,11 @@ import { createIcon } from "../icons"
 import { actionDescription, knownFunctionCodes, knownSkinStates } from "../actions"
 import { bindDialog } from "./ask"
 import { requestEditMode, setMobilePane, setMobileInspectorGroup } from "./mobile-layout"
-import { mobilePortraitQuery, preview } from "./canvas-interaction"
+import { mobilePortraitQuery, preview, toolbarPreview } from "./canvas-interaction"
 import { appState } from "./state"
-import { mobileInspectorResize, mobilePropertyTabs, quickInspector, inspectorPane } from "./dom"
+import { mobileInspectorResize, mobilePropertyTabs, quickInspector, inspectorPane, mobileInspectorGroups, keyFields, toolbarFields, gapFields } from "./dom"
 import { syncMobileAppearance } from "./mobile-appearance"
-import { isEditing } from "./edit-history"
-import { stepButton } from "./property-rows"
+import { wireNumberSlider } from "./property-rows"
 import { syncMobileKeyAnimation } from "./mobile-key-animation"
 import { wireGestureRecording } from "./gesture-recording"
 
@@ -16,9 +15,8 @@ import { wireGestureRecording } from "./gesture-recording"
 export function syncMobilePropertyGroups(groups: HTMLElement[]): void {
   const selected = appState.selectedKeySections.length > 0
   inspectorPane.dataset.mobileKey = String(selected)
-  mobilePropertyTabs.hidden = !selected || appState.selectedKeySections.length > 1 || !appState.archive || appState.selectedPath !== appState.layoutPath
   const actionLibrary = quickInspector.querySelector<HTMLButtonElement>(".mobile-action-library")
-  if (actionLibrary) actionLibrary.disabled = appState.archive?.format === "ssf"
+  if (actionLibrary) actionLibrary.disabled = !quickInspector.querySelector(".key-gesture-fields .inspector-gesture > input:not([readonly]):not(:disabled)")
   const context = JSON.stringify([appState.selectedPath, appState.selectedKeySections])
   if (context !== appState.mobileInspectorContext) {
     appState.mobileInspectorContext = context
@@ -27,30 +25,12 @@ export function syncMobilePropertyGroups(groups: HTMLElement[]): void {
     preview.setAppearanceState()
   }
   for (const group of groups) {
-    const label = group.dataset.inspectorGroupLabel ?? group.querySelector("h3")?.textContent ?? ""
-    group.dataset.inspectorGroupLabel = label
-    group.dataset.mobileCategory = /布局|排列|几何/.test(label) ? "geometry" : /音效|声音/.test(label) ? "sound"
-      : /动画|动效|粒子/.test(label) ? "animation" : /手势|动作/.test(label) ? "actions" : /文字|字体|提示/.test(label) ? "typography" : "appearance"
+    const label = group.dataset.inspectorGroupLabel ?? ""
+    group.dataset.mobileCategory = ({ 布局: "geometry", 样式: "appearance", 文字: "typography", 手势: "actions", 音效: "sound", 动画: "animation" } as Record<string, string>)[label] ?? label
   }
-  if (!groups.some(group => group.dataset.mobileCategory === appState.mobileInspectorCategory)) {
-    appState.mobileInspectorCategory = groups[0]?.dataset.mobileCategory ?? "geometry"
-  }
-  for (const button of mobilePropertyTabs.querySelectorAll<HTMLButtonElement>("button")) {
-    button.disabled = !groups.some(group => group.dataset.mobileCategory === button.dataset.mobileCategory)
-  }
-  for (const button of quickInspector.querySelectorAll<HTMLButtonElement>(".geometry-fields .ui-step")) {
-    button.disabled = !isEditing() || button.parentElement!.querySelector("input")!.disabled
-  }
-  syncCategory()
+  preview.setAppearanceState(mobilePortraitQuery.matches && appState.mobileAppearancePressed ? appState.selectedKeySections[0] : undefined)
   syncMobileAppearance()
   syncMobileKeyAnimation()
-}
-
-function syncCategory(): void {
-  preview.setAppearanceState(mobilePortraitQuery.matches && appState.mobileAppearancePressed ? appState.selectedKeySections[0] : undefined)
-  for (const button of mobilePropertyTabs.querySelectorAll<HTMLButtonElement>("button")) {
-    button.setAttribute("aria-pressed", String(button.dataset.mobileCategory === appState.mobileInspectorCategory))
-  }
 }
 
 function openActionLibrary(): void {
@@ -124,7 +104,7 @@ function openActionLibrary(): void {
   dialog.append(form)
   bindDialog(dialog)
   dialog.addEventListener("close", () => {
-    if (dialog.returnValue === "apply" && input.isConnected && !input.disabled) {
+    if (dialog.returnValue === "apply" && input.isConnected && !input.disabled && !input.readOnly) {
       input.value = chosen
       input.dispatchEvent(new Event("input", { bubbles: true }))
     }
@@ -153,37 +133,49 @@ export function wireMobileInspector(): void {
       : quickInspector.querySelector<HTMLInputElement>(`[data-key-field="${dimension}"]`)
     if (!input) return
     if (input.disabled) { requestEditMode(); return }
-    appState.mobileInspectorCategory = "geometry"
-    syncCategory()
-    input.scrollIntoView({ block: "nearest" })
-    input.focus()
-    input.select()
+    const group = input.closest<HTMLElement>(".mobile-inspector-managed")
+    if (group?.dataset.mobileInspectorGroup) setMobileInspectorGroup(group.dataset.mobileInspectorGroup)
+    if (mobilePortraitQuery.matches) {
+      const slider = input.previousElementSibling?.querySelector<HTMLInputElement>(".ui-slider")
+      slider?.scrollIntoView({ block: "nearest" })
+      slider?.focus()
+    } else {
+      input.scrollIntoView({ block: "nearest" })
+      input.focus()
+      input.select()
+    }
   }
   const actions = element("button", "ui-button mobile-action-library")
   actions.type = "button"
   actions.append(createIcon("list"), "动作库")
   actions.addEventListener("click", openActionLibrary)
   quickInspector.querySelector(".key-gesture-fields > h3")!.append(actions)
-  for (const input of quickInspector.querySelectorAll<HTMLInputElement>('.geometry-fields [data-key-field="width"], .geometry-fields [data-key-field="height"]')) {
-    const label = input.getAttribute("aria-label")!
-    input.parentElement!.prepend(stepButton(-1, input, 1, 1, label, input.disabled))
-    input.parentElement!.append(stepButton(1, input, 1, 1, label, input.disabled))
+  for (const input of [...keyFields, ...toolbarFields, ...gapFields].filter(field => field.type === "number")) {
+    wireNumberSlider(input, {
+      commit: input.dataset.keyField ? "input" : "change",
+      bounds: () => {
+        const key = input.dataset.keyField
+        const toolbarPart = input.dataset.toolbarField === "VIEW_RECT" ? input.dataset.toolbarPart : undefined
+        if (!["x", "y", "width", "height"].includes(key ?? "") && toolbarPart === undefined) return { step: 1 }
+        const size = (toolbarPart === undefined ? preview : toolbarPreview).logicalSize()
+        const max = key === "y" || key === "height" || toolbarPart === "1" || toolbarPart === "3" ? size.height : size.width
+        return { min: input.min === "" ? -max : Number(input.min), max, step: 1 }
+      },
+    })
   }
-  for (const button of mobilePropertyTabs.querySelectorAll<HTMLButtonElement>("button")) button.addEventListener("click", () => {
-    const group = quickInspector.querySelector<HTMLElement>(`.mobile-inspector-managed[data-mobile-category="${button.dataset.mobileCategory}"]`)
-    if (group) setMobileInspectorGroup(group.dataset.mobileInspectorGroup!)
+  // 同一条分类栏在手机放到对象头下方；不复制分组、筛选、重置或格式专属操作。
+  const rail = mobileInspectorGroups.parentElement!
+  const positionRail = () => {
+    if (mobilePortraitQuery.matches) mobilePropertyTabs.append(rail)
+    else quickInspector.prepend(rail)
+  }
+  quickInspector.addEventListener("focusin", event => {
+    if (!mobilePortraitQuery.matches || !(event.target instanceof HTMLElement)) return
+    const id = event.target.closest<HTMLElement>(".mobile-inspector-managed")?.dataset.mobileInspectorGroup
+    if (id && id !== quickInspector.dataset.mobileInspectorGroup) setMobileInspectorGroup(id, false)
   })
-  mobilePropertyTabs.addEventListener("keydown", event => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
-    const buttons = Array.from(mobilePropertyTabs.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"))
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    if (index < 0) return
-    event.preventDefault()
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-      : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length
-    buttons[next].click()
-    buttons[next].focus()
-  })
+  positionRail()
+  mobilePortraitQuery.addEventListener("change", positionRail)
   mobileInspectorResize.addEventListener("pointerdown", event => {
     mobileInspectorResize.setPointerCapture(event.pointerId)
     mobileInspectorResize.dataset.dragged = "false"

@@ -8,7 +8,7 @@ import type { Rect } from "./preview-items.ts"
 export type AnimationDirectEdit = { text: string; section: string; editable: boolean; commit(text: string): void }
 
 type StageAPI = {
-  stage: HTMLElement; timeline: HTMLElement; lanes: HTMLElement; key: Rect
+  stage: HTMLElement; timeline: HTMLElement; lanes: HTMLElement; docked?: boolean; key: Rect
   fit(): number
   duration(): number
   stop(): void
@@ -21,8 +21,8 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
   let before: string | undefined
   let active: HTMLElement | undefined
   const doc = () => IniDocument.parse(text)
-  const pivot = () => {
-    const document = doc(), raw = document.get(edit.section, "PIVOT")
+  const pivot = (document = doc()) => {
+    const raw = document.get(edit.section, "PIVOT")
     const values = (raw ?? document.get(edit.section, "PIVOT_PX") ?? "50,50").split(",").map((value) => Number(value) / (raw !== undefined ? 100 : document.get(edit.section, "PIVOT_PX") !== undefined ? 108 : 100))
     return values.length === 2 && values.every(Number.isFinite) ? values : [0.5, 0.5]
   }
@@ -33,11 +33,12 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
   const tail = handles.find((handle) => handle.field === "DURATION")
   const extent = tail ? Math.max(400, api.duration() * 1.5) : api.duration()
   const fields = element("div", "ui-animation-direct-fields")
-  const curve = element("canvas", "ui-animation-curve")
-  curve.width = 320; curve.height = 96
-  curve.setAttribute("aria-label", "插值曲线")
-  const curveCodes = doc().get(edit.section, "INTPOL")
+  let curve: HTMLCanvasElement | undefined
+  const curveCodes = api.docked ? undefined : doc().get(edit.section, "INTPOL")
   if (curveCodes !== undefined && !handles.some((handle) => handle.field === "VELOCITY")) {
+    curve = element("canvas", "ui-animation-curve")
+    curve.width = 320; curve.height = 96
+    curve.setAttribute("aria-label", "插值曲线")
     const wrap = element("label", "ui-input ui-select")
     const select = element("select")
     select.setAttribute("aria-label", "运动曲线")
@@ -50,7 +51,7 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
     fields.append(curve, wrap)
   }
   const drawCurve = () => {
-    if (!fields.contains(curve)) return
+    if (!curve) return
     const context = curve.getContext("2d")!, style = getComputedStyle(api.stage)
     context.clearRect(0, 0, curve.width, curve.height)
     context.strokeStyle = style.getPropertyValue("--line").trim()
@@ -66,16 +67,21 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
     }
   }
   const sync = () => {
+    const document = doc(), current = animationHandles(document, edit.section), origin = pivot(document)
+    const axisY = api.docked && current.find(handle => handle.label.endsWith(" Y"))
+    const axisYPoint = axisY ? animationHandlePoint(axisY, api.key, origin) : undefined
     for (const [node, original] of nodes) {
-      const handle = animationHandles(doc(), edit.section).find((item) => item.field === original.field && item.index === original.index)!
+      const handle = current.find((item) => item.field === original.field && item.index === original.index)!
       node.setAttribute("aria-valuenow", String(handle.value))
       node.setAttribute("aria-valuetext", `${handle.value} ${handle.unit}`)
       node.title = `${handle.label} · ${handle.value} ${handle.unit}`
       const short = handle.field === "DURATION" ? "单程" : handle.label.startsWith("缩放") || handle.label.startsWith("位移") ? handle.label.slice(-1) : handle.label.startsWith("方向") ? `角${handle.index ? "上" : "下"}` : handle.label.startsWith("速度") ? `速${handle.index ? "上" : "下"}` : handle.label
       node.textContent = `${short} ${handle.value}${handle.unit}`
-      if (handle.field === "DURATION") node.style.left = `${Math.min(98, (Number(doc().get(edit.section, "DELAY") ?? 0) + handle.value) / extent * 100)}%`
+      if (handle.field === "DURATION") node.style.left = `${Math.min(98, (Number(document.get(edit.section, "DELAY") ?? 0) + handle.value) / extent * 100)}%`
       else if (handle.label !== "终止透明度") {
-        const point = animationHandlePoint(handle, api.key, pivot())
+        const point = animationHandlePoint(handle, api.key, origin)
+        // Shift X only along the axis that doesn't affect its drag value.
+        if (axisYPoint && handle.label.endsWith(" X")) node.dataset.offset = point[1] <= axisYPoint[1] ? "up" : "down"
         node.style.left = `${(160 + (point[0] - 160) * api.fit()) / 320 * 100}%`
         node.style.top = `${(80 + (point[1] - 80) * api.fit()) / 160 * 100}%`
       }
@@ -118,7 +124,7 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
     })
     node.addEventListener("pointermove", (event) => {
       if (before === undefined || active !== node || !node.hasPointerCapture(event.pointerId)) return
-      const box = (handle.field === "DURATION" ? api.lanes : api.stage).getBoundingClientRect()
+      const box = (handle.field === "DURATION" ? api.lanes : overlay).getBoundingClientRect()
       if (!box.width || !box.height) return
       let value: number
       if (handle.field === "DURATION") value = (event.clientX - box.left) / box.width * extent - Number(doc().get(edit.section, "DELAY") ?? 0)

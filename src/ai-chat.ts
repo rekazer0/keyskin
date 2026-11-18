@@ -114,7 +114,6 @@ function configureAppearance(chat: DeepChat): void {
   const fast = "var(--duration-fast) var(--ease-standard)"
   const xs = "var(--font-size-xs)"
   const sm = "var(--font-size-sm)"
-  const lg = "var(--font-size-lg)"
 
   chat.chatStyle = {
     width: "100%",
@@ -138,7 +137,7 @@ function configureAppearance(chat: DeepChat): void {
   // The box grows with its text and its top edge drags it taller; the bottom band holds the model picker
   // (overlaid from the panel) and the send button.
   chat.textInput = {
-    placeholder: { text: "描述想要的风格或改动，例如“换成深海蓝，回车键用亮青色”…", style: { color: muted } },
+    placeholder: { text: "描述想改的地方，例如：把回车键换成亮青色…", style: { color: muted } },
     characterLimit: 8_000,
     styles: {
       text: { color: text, fontSize: sm, lineHeight: "1.6", padding: "12px 12px 0",
@@ -149,7 +148,7 @@ function configureAppearance(chat: DeepChat): void {
         border: `1px solid ${lineStrong}`, borderRadius: radiusLg, backgroundColor: control,
         boxShadow: "var(--shadow-sm)",
       },
-      focus: { borderColor: accent, boxShadow: "var(--focus-ring)" },
+      focus: { borderColor: secondary },
     },
   }
 
@@ -167,25 +166,35 @@ function configureAppearance(chat: DeepChat): void {
     .ai-run-holder .message-bubble { max-width: 100%; padding: 0; border: 0;
       border-radius: 0; background: transparent; box-shadow: none; color: ${text}; }
 
-    /* --- empty state: sits on the composer, not in the middle of nowhere -- */
-    .intro-panel { position: static; flex-direction: column; justify-content: flex-end;
+    .intro-panel { position: static; flex-direction: column; justify-content: flex-start;
       box-sizing: border-box; width: 100%; height: auto; min-height: 100%; margin: 0; }
-    .ai-welcome { display: grid; gap: 8px; box-sizing: border-box; padding: 16px 16px 12px;
-      text-align: left; color: ${text}; }
-    .ai-welcome h2 { margin: 0; font-size: ${lg}; font-weight: 600; }
-    .ai-welcome p { margin: 0 0 4px; color: ${secondary}; font-size: ${xs}; line-height: 1.6; }
-    .ai-welcome h3 { margin: 8px 0 0; color: ${muted}; font-size: ${xs}; font-weight: 500; }
-    .ai-suggestions { display: grid; gap: 4px; }
+    .ai-welcome { display: grid; gap: var(--space-sm); box-sizing: border-box; width: 100%;
+      padding: var(--space-xl) var(--space-lg); text-align: left; color: ${text}; }
+    .ai-welcome h2 { margin: 0; font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); }
+    .ai-welcome p { margin: 0; color: ${secondary}; font-size: ${sm}; line-height: 1.6; }
+    .ai-welcome h3 { margin: var(--space-md) 0 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
+    .ai-suggestions { display: grid; gap: var(--space-sm); }
     .ai-suggestions[data-layout="grid"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .ai-suggestions[data-layout="chips"] { display: flex; flex-wrap: wrap; gap: 6px; }
-    .ai-suggestions[data-layout="chips"] button { width: auto; padding: 4px 12px; border-radius: ${radiusFull}; }
-    .ai-suggestions button { display: grid; gap: 2px; width: 100%; min-width: 0; padding: 8px 12px;
-      font: inherit; text-align: left; color: ${text}; background: ${sunken};
-      border: 1px solid transparent; border-radius: ${radiusMd}; cursor: default;
+    .ai-suggestions[data-layout="chips"] { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+    .ai-suggestions button { display: grid; gap: var(--space-2xs); min-width: 0; padding: var(--space-sm);
+      font: inherit; text-align: left; color: ${text}; background: ${control};
+      border: 1px solid ${line}; border-radius: ${radiusLg}; cursor: pointer;
       transition: background-color ${fast}, border-color ${fast}; }
-    .ai-suggestions strong { font-size: ${sm}; font-weight: 500; }
-    .ai-suggestions span { overflow: hidden; color: ${muted}; font-size: ${xs};
-      text-overflow: ellipsis; white-space: nowrap; }
+    .ai-suggestions[data-layout="chips"] button { padding: var(--space-xs) var(--space-sm); background: ${sunken}; border-color: transparent; border-radius: ${radiusFull}; }
+    .ai-suggestions strong { font-size: ${sm}; font-weight: var(--font-weight-semibold); }
+    .ai-suggestions button > span:not(.ai-keys) { color: ${secondary}; font-size: ${xs}; }
+    [data-palette="neon"] { --_key: var(--ai-neon-key); --_ink: var(--ai-neon-ink); --_accent: var(--ai-neon-accent); }
+    [data-palette="cream"] { --_key: var(--ai-cream-key); --_ink: var(--ai-cream-ink); --_accent: var(--ai-cream-accent); }
+    [data-palette="glass"] { --_key: var(--ai-glass-key); --_ink: var(--ai-glass-ink); --_accent: var(--ai-glass-accent); }
+    [data-palette="gold"] { --_key: var(--ai-gold-key); --_ink: var(--ai-gold-ink); --_accent: var(--ai-gold-accent); }
+    [data-palette="matcha"] { --_key: var(--ai-matcha-key); --_ink: var(--ai-matcha-ink); --_accent: var(--ai-matcha-accent); }
+    [data-palette="typewriter"] { --_key: var(--ai-typewriter-key); --_ink: var(--ai-typewriter-ink); --_accent: var(--ai-typewriter-accent); }
+    .ai-keys { display: flex; align-items: center; justify-content: center; gap: var(--space-xs); padding: var(--space-sm) 0;
+      margin-bottom: var(--space-xs); border-radius: ${radiusMd}; background: color-mix(in srgb, var(--_key) 78%, var(--_accent)); }
+    .ai-keys kbd { display: grid; place-items: center; width: var(--space-xl); height: var(--space-xl); border-radius: ${radiusSm};
+      background: var(--_key); color: var(--_ink); box-shadow: 0 2px 0 color-mix(in srgb, var(--_ink) 25%, transparent);
+      font: var(--font-weight-medium) var(--font-size-sm) var(--font-mono); }
+    .ai-keys kbd:last-child { width: var(--space-2xl); background: var(--_accent); color: var(--_key); }
     @media (hover: hover) {
       .ai-suggestions button:hover { border-color: ${line}; background: ${accentSoft}; }
       .ai-suggestions button:hover strong { color: ${accent}; }
@@ -287,18 +296,10 @@ function configureAppearance(chat: DeepChat): void {
       background: ${control}; box-shadow: var(--shadow-md); }
     #scroll-button svg { width: 12px; height: 12px; color: ${secondary}; }
 
-    /* Phones get half a screen at best: a two-line composer, suggestions as
-       scrolling rows of chips, and no drag grip. */
     @media (max-width: 760px) {
       .ai-resize { display: none; }
-      .ai-welcome { display: flex; flex-wrap: nowrap; gap: 6px; padding: 8px 16px 12px;
-        overflow-x: auto; scrollbar-width: none; scroll-padding: 0 16px; }
-      .ai-welcome p, .ai-welcome h2, .ai-welcome h3 { display: none; }
-      .ai-suggestions, .ai-suggestions[data-layout] { display: contents; }
-      .ai-welcome::-webkit-scrollbar { display: none; }
-      .ai-suggestions button, .ai-suggestions[data-layout] button { flex: none; width: auto; padding: 6px 12px;
-        min-height: var(--control-height-lg); border-radius: ${radiusFull}; white-space: nowrap; }
-      .ai-suggestions span { display: none; }
+      .ai-welcome { padding-block: var(--space-md); }
+      .ai-suggestions[data-layout="chips"] button { align-items: center; min-height: var(--control-height-lg); }
     }
 
     @media (prefers-reduced-motion: reduce) {

@@ -1,3 +1,4 @@
+import { confirmDeletion } from "./ask"
 // Palm skin.json `ss_2` in the shared animation inspector (DESIGN.md §10「动画资源」): the list of
 // animations in the current view, then the selected one's player, parameter sections, dedicated
 // editors for combination tracks and liquid floaters, and where it is played. Every edit is written
@@ -394,9 +395,11 @@ function floatersSection(pointer: SxiPointer, entry: AnimationEntry): HTMLElemen
     const block = element("div", "ui-subsection animation-floater")
     const heading = element("h4")
     heading.textContent = `物体 ${index + 1}`
-    heading.append(editButton("trash-2", `删除物体 ${index + 1}`, () => edit((model) => {
-      model.floaters = (Array.isArray(model.floaters) ? model.floaters : []).filter((_, position) => position !== index)
-    })))
+    heading.append(editButton("trash-2", `删除物体 ${index + 1}`, async () => {
+      if (await confirmDeletion(`删除物体 ${index + 1}？`) && block.isConnected) edit((model) => {
+        model.floaters = (Array.isArray(model.floaters) ? model.floaters : []).filter((_, position) => position !== index)
+      })
+    }))
     block.append(heading)
     for (const field of fields) block.append(...fieldRows([...target, "floaters", index], field, floater[field.key]))
     node.append(block)

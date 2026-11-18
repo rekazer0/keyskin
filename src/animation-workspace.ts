@@ -27,7 +27,6 @@ type AnimationWorkspaceHosts = {
   /** Syncs the animation category and the active list's count. */
   setMode(particle: boolean, count: string, totals: readonly [motion: number, particle: number]): void
   readonly allTypes: boolean
-  readonly create: HTMLElement
   /** Names the second list (样式 / 目标) with its count; `undefined` hides its switch. */
   setStyles(noun: string | undefined, count: number): void
   /** Switches the left column between the animation list and the style list. */
@@ -45,14 +44,16 @@ export function animationWorkspaceHosts(): AnimationWorkspaceHosts | undefined {
   return shared.hosts
 }
 
-export function createAnimationWorkspace(actions: { back(): void; relayout(): void; changeMode(particle: boolean): void; changeLayout(option: HTMLButtonElement): void }) {
+export function createAnimationWorkspace(actions: { relayout(): void; changeMode(particle: boolean): void; changeLayout(option: HTMLButtonElement): void }) {
   const sidebar = document.querySelector<HTMLElement>(".sidebar")!
   const workspace = document.querySelector<HTMLElement>(".workspace")!
   const library = element("section", "animation-library")
   library.id = "animation-library"
-  const create = element("div", "animation-library-create")
-  const tabs = element("div", "ui-segmented animation-library-tabs")
-  const header = paneHeader({ back: { to: "概览", run: actions.back }, title: "动画", actions: [tabs, create] })
+  const header = paneHeader({ back: { to: "动画", run: () => show("animations") }, title: "动画" })
+  const back = header.querySelector("button")!
+  back.setAttribute("aria-label", "返回动画")
+  back.hidden = true
+  const title = header.querySelector("h2")!
   const count = header.querySelector<HTMLElement>(".ui-badge")!
   let allTypes = false
   const modes = element("div", "ui-style-filters animation-library-modes")
@@ -79,22 +80,16 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
   })
   const search = searchField({ label: "搜索", onInput: () => filter() })
   const searchInput = search.querySelector("input")!
-  /* —— 左栏分两份列表：动画 与 样式，用分段开关切换 —— */
-  tabs.dataset.variant = "icon"
-  tabs.dataset.size = "sm"
-  tabs.setAttribute("role", "group")
-  tabs.setAttribute("aria-label", "左侧列表")
   const bodies: Record<AnimationList, HTMLElement> = {
     animations: element("div", "animation-library-pane"),
     styles: element("div", "animation-library-pane"),
   }
-  const tabButtons = { animations: tab("animations", "动画"), styles: tab("styles", "样式") }
   const body = element("div", "animation-library-body")
   body.append(bodies.animations, bodies.styles)
   library.append(header, search, modes, body)
-  for (const group of [modes, tabs]) group.addEventListener("keydown", event => {
+  modes.addEventListener("keydown", event => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
-    const buttons = [...group.querySelectorAll<HTMLButtonElement>("button:not([hidden])")]
+    const buttons = [...modes.querySelectorAll<HTMLButtonElement>("button:not([hidden])")]
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
     if (index < 0) return
     event.preventDefault()
@@ -212,23 +207,12 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
   const show = (next: AnimationList) => {
     if (next === "styles" && !styleNoun) return
     list = next
-    for (const key of ["animations", "styles"] as const) {
-      tabButtons[key].setAttribute("aria-pressed", String(key === list))
-      bodies[key].hidden = key !== list
-    }
-    create.hidden = list === "styles"
+    bodies.animations.hidden = list !== "animations"
+    bodies.styles.hidden = list !== "styles"
+    title.textContent = list === "styles" ? styleNoun : "动画"
+    back.hidden = list !== "styles"
     searchInput.setAttribute("aria-label", `搜索${list === "styles" ? styleNoun : "动画名称"}`)
     filter()
-  }
-  function tab(name: AnimationList, label: string): HTMLButtonElement {
-    const button = element("button")
-    button.type = "button"
-    button.setAttribute("aria-label", label)
-    button.title = label
-    button.append(createIcon(name === "animations" ? "film" : "paintbrush", 14))
-    button.addEventListener("click", () => show(name))
-    tabs.append(button)
-    return button
   }
 
   const filter = () => {
@@ -260,7 +244,6 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
     library: bodies.animations,
     styles: bodies.styles,
     stage,
-    create,
     get allTypes() { return allTypes },
     setMode(particle, total, [motionCount, particleCount]) {
       animationCount = total
@@ -276,13 +259,6 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
     setStyles(next, total) {
       styleNoun = next ?? ""
       styleCount = total
-      const label = styleNoun || "样式"
-      if (tabButtons.styles.getAttribute("aria-label") !== label) {
-        tabButtons.styles.setAttribute("aria-label", label)
-        tabButtons.styles.title = label
-        tabButtons.styles.replaceChildren(createIcon(label === "目标" ? "crosshair" : "paintbrush", 14))
-      }
-      tabButtons.styles.hidden = !styleNoun
       if (!styleNoun && list === "styles") show("animations")
       applyCount()
     },
@@ -296,13 +272,9 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
   const layoutSelect = element("select")
   layoutSelect.setAttribute("aria-label", "动画预览布局")
   layoutControl.append(layoutIcon, layoutSelect)
-  const toolbar = workspace.querySelector(".preview-toolbar")!
+  const toolbar = workspace.querySelector(".preview-toolbar-start")!
   toolbar.prepend(layoutControl)
-  const guides = workspace.querySelector("#toggle-guides")!
-  const toolbarStart = guides.parentElement!
-  const toolbarEnd = workspace.querySelector(".preview-toolbar-end")!
-  const fit = workspace.querySelector("#preview-zoom-fit")!
-  const zoom = fit.parentElement!
+  const zoomOut = workspace.querySelector("#preview-zoom-out")!
   const zoomValue = element("output", "animation-zoom-value")
   zoomValue.setAttribute("aria-label", "画布缩放比例")
   zoomValue.setAttribute("aria-live", "off")
@@ -337,14 +309,10 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
     if (active === Boolean(shared.hosts)) return
     shared.hosts = active ? hosts : undefined
     if (active) {
-      toolbarEnd.prepend(guides)
-      toolbarEnd.append(fit)
-      zoom.firstElementChild?.after(zoomValue)
+      zoomOut.after(zoomValue)
       syncZoom()
       zoomObserver.observe(panelStatus, { childList: true })
     } else {
-      toolbarStart.prepend(guides)
-      zoom.firstElementChild?.after(fit)
       zoomObserver.disconnect()
       zoomValue.remove()
       layoutControl.hidden = true
@@ -353,12 +321,10 @@ export function createAnimationWorkspace(actions: { back(): void; relayout(): vo
       bodies.animations.replaceChildren()
       bodies.styles.replaceChildren()
       stage.replaceChildren()
-      create.replaceChildren()
       allTypes = false
       searchInput.value = ""
       searchInput.dispatchEvent(new Event("input"))
       styleNoun = ""
-      tabButtons.styles.hidden = true
       show("animations")
     }
   }

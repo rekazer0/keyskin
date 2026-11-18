@@ -8,12 +8,13 @@ import { SkinArchive } from '../src/skin.ts'
 import { appSource, declarations, run } from './helpers/app-source.mjs'
 
 test('input and candidate bar selections are mutually exclusive and clear on key selection', () => {
-  const area = {}, input = {}
+  const area = {}, input = {}, toolbar = {}
   const context = run(declarations('syncCandidateSelection'), {
     selectedCandidate: 'input', selectedPath: 'cand.cnd', layoutPath: 'py_9.ini',
     archive: { format: 'bdi' }, selectedToolbarSections: [],
     toolbarStrip: { dataset: { path: 'cand.cnd' } },
     isToolbarPath: path => path === 'cand.cnd',
+    toolbarPreview: { setSelected: (sections, joined) => Object.assign(toolbar, { sections, joined }) },
     candidateArea: { classList: { toggle: (_, value) => { area.outlined = value } }, setAttribute: (_, value) => { area.selected = value } },
     candidateInput: { setAttribute: (_, value) => { input.selected = value } },
   })
@@ -21,10 +22,18 @@ test('input and candidate bar selections are mutually exclusive and clear on key
   assert.equal(input.selected, 'true')
   assert.equal(area.selected, 'false')
   assert.equal(area.outlined, false)
+  context.selectedCandidate = 'parts'
+  context.selectedToolbarSections = ['ICON2']
+  context.syncCandidateSelection()
+  assert.equal(input.selected, 'false')
+  assert.equal(area.outlined, false)
+  assert.deepEqual(toolbar, { sections: ['ICON2'], joined: false })
+  context.selectedToolbarSections = ['ICON1', 'ICON2', 'ICON3']
   context.selectedCandidate = true
   context.syncCandidateSelection()
   assert.equal(input.selected, 'false')
   assert.equal(area.outlined, true)
+  assert.equal(toolbar.joined, true)
   context.selectedCandidate = false
   context.selectedPath = context.layoutPath
   context.syncCandidateSelection()
@@ -35,14 +44,15 @@ test('input and candidate bar selections are mutually exclusive and clear on key
 test('candidate selection clears partial toolbar and keyboard selection in every format', () => {
   for (const format of ['bdi', 'bds', 'bda', 'ssf', 'sxi']) {
     const calls = []
-    const context = run(declarations('selectCandidateBar'), {
+    const context = run(declarations('selectCandidateBar', 'syncCandidateSelection'), {
       archive: { format }, layoutPath: 'py_26.ini', selectedPath: 'other', sidebarView: 'source',
       selectedToolbarSections: ['ICON2'], selectedKeySections: ['KEY1'],
       toolbarStrip: { dataset: { path: 'cand.cnd' } },
       selectFile: (path, view, mode, preserve) => calls.push([path, view, mode, preserve]),
       preview: { setSelected: value => calls.push(['keys', [...value]]) },
       toolbarPreview: { setSelected: value => calls.push(['toolbar', [...value]]) },
-      syncCandidateSelection() {}, scheduleSelectionInspectorSync() {}, mobilePortraitQuery: { matches: false },
+      isToolbarPath: () => false, candidateArea: { classList: { toggle() {} }, setAttribute() {} }, candidateInput: { setAttribute() {} },
+      scheduleSelectionInspectorSync() {}, mobilePortraitQuery: { matches: false },
     })
     context.selectCandidateBar()
     assert.equal(context.selectedCandidate, true, format)

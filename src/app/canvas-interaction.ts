@@ -1,4 +1,4 @@
-import { settingsDialog, $,  device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, shareTargetLabel, mobileUndoButton, undoButton, mobileRedoButton, redoButton } from "./dom"
+import { settingsWorkspace, $,  device, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, shareTargetLabel, mobileUndoButton, undoButton, mobileRedoButton, redoButton } from "./dom"
 import { LazySourceCodeEditor } from "../lazy-source-editor.ts"
 import { effectiveDeviceValue } from "../canvas-background.ts"
 import { deviceSpec } from "../devices.ts"
@@ -10,7 +10,7 @@ import { appState } from "./state"
 import { syncCandidateSelection, setPreviewPan, refreshSimulationPreview, simulationLanguage } from "./preview-render"
 import { selectFile } from "./navigation"
 import { setMobilePane, revealInspectorGroup } from "./mobile-layout"
-import { moveSelectedKeys } from "./key-editing"
+import { moveSelectedKeys, selectParentObject } from "./key-editing"
 import { isEditing } from "./edit-history"
 import { populateKeyInspector } from "./key-inspector"
 import { updateSourceHighlight } from "./source-panel"
@@ -32,9 +32,9 @@ import { createIcon } from "../icons"
 
 export const scrollbarIdleTimers = new WeakMap<HTMLElement, number>()
 
-export const settingsNavItems = Array.from(settingsDialog.querySelectorAll<HTMLButtonElement>("[data-settings-page]"))
+export const settingsNavItems = Array.from(settingsWorkspace.querySelectorAll<HTMLButtonElement>("[data-settings-page]"))
 
-export const settingsPages = Array.from(settingsDialog.querySelectorAll<HTMLElement>("[data-settings-panel]"))
+export const settingsPages = Array.from(settingsWorkspace.querySelectorAll<HTMLElement>("[data-settings-panel]"))
 
 export const mobileLayoutQuery = matchMedia("(max-width: 760px), (max-width: 950px) and (max-height: 600px)")
 export const mobilePortraitQuery = matchMedia("(max-width: 760px) and (orientation: portrait)")
@@ -74,8 +74,6 @@ export function previewScreenWidth(): number {
   const spec = deviceSpec(currentDeviceValue()) ?? { width: 2160, height: 3840 }
   return orientation.value === "land" ? spec.height : spec.width
 }
-
-export const resourceSearchControl = resourceSearch.closest("label")!
 
 export const LAST_SOURCE_WORKSPACE_KEY = "last-source-workspace"
 
@@ -122,6 +120,7 @@ export const preview = new Preview(
     handlePreviewEvent(event)
   },
   (sections) => {
+    appState.selectedToolbarSections = []
     appState.selectedCandidate = false
     syncCandidateSelection()
     // 选中按键只是换选择对象：右侧停在源代码 / AI 设计时保持该选项，不跳回属性。
@@ -261,21 +260,31 @@ export function scheduleSelectionInspectorSync(canvasPreview: Preview): void {
   }))
 }
 
-export function selectCandidateBar(inputRegion = false): void {
+export function selectCandidateBar(inputRegion = false, sections: string[] = [], joined = false): void {
   const path = ["bda", "ssf"].includes(appState.archive?.format ?? "") ? appState.layoutPath : toolbarStrip.dataset.path
   if (!path) return
   if (appState.selectedPath !== path) selectFile(path, appState.sidebarView, "document", true)
-  appState.selectedCandidate = inputRegion ? "input" : true
+  appState.selectedCandidate = inputRegion ? "input" : sections.length && !joined ? "parts" : true
   appState.selectedKeySections = []
-  appState.selectedToolbarSections = []
+  appState.selectedToolbarSections = sections
   preview.setSelected([])
-  toolbarPreview.setSelected([])
   syncCandidateSelection()
   scheduleSelectionInspectorSync(toolbarPreview)
   if (mobilePortraitQuery.matches) setMobilePane("inspector")
 }
 
-export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, () => selectCandidateBar(), true)
+export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections) => {
+  const { panelWidth, panelHeight } = toolbarPreview
+  const parts = toolbarPreview.keys.filter(({ editable, rect }) => editable &&
+    rect.x < panelWidth && rect.x + rect.width > 0 && rect.y < panelHeight && rect.y + rect.height > 0)
+  const picked = parts.filter(part => sections.includes(part.section)).map(part => part.section)
+  if (parts.length && !picked.length) {
+    selectFile(appState.layoutPath, appState.sidebarView, "document", true)
+    selectParentObject()
+    return
+  }
+  selectCandidateBar(false, picked, parts.length > 1 && picked.length === parts.length)
+}, true)
 
 export const candidateBackgroundPreview = new Preview(candidateBackgroundCanvas, () => {}, () => {})
 

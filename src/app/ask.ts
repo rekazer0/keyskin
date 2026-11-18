@@ -1,4 +1,4 @@
-import { element, iconButton } from "../dom-element.ts"
+import { element, iconButton, bindListboxKeys, searchField, emptyState } from "../dom-element.ts"
 import { closeDialog } from "../motion.ts"
 
 type AskAction = { value: string; label: string; variant?: "primary" | "quiet" | "danger" }
@@ -57,7 +57,7 @@ export function openRenameDialog(name: string, commit: (name: string) => void): 
  */
 export function bindDialog(dialog: HTMLDialogElement, cancel: () => void = () => closeDialog(dialog, "cancel")): void {
   const header = dialog.querySelector(".ui-dialog-header")
-  if (header && dialog.id !== "settings-dialog" && dialog.dataset.variant !== "operation" && !dialog.matches(".picker-dialog, .ui-mobile-sheet, .ui-image-editor")) {
+  if (header && dialog.dataset.variant !== "operation" && !dialog.matches(".picker-dialog, .ui-mobile-sheet, .ui-image-editor")) {
     const back = iconButton("arrow-left", "返回上一页", cancel)
     back.classList.add("ui-mobile-back")
     header.prepend(back)
@@ -71,20 +71,21 @@ export function bindDialog(dialog: HTMLDialogElement, cancel: () => void = () =>
     if (event.target === dialog) cancel()
   })
   dialog.addEventListener("submit", (event) => {
-    if (event.defaultPrevented) return
+    if (event.defaultPrevented || (event.target as Element).closest("dialog") !== dialog) return
     event.preventDefault()
     closeDialog(dialog, (event.submitter as HTMLButtonElement | null)?.value ?? "")
   })
 }
 
 /**
- * 只给撤销不了的操作用（DESIGN.md §7）：一个 .ui-dialog[data-size=sm]，标题、可选的一句说明和一排按钮。
+ * 删除与不可撤销操作统一使用（DESIGN.md §7）：一个 .ui-dialog[data-size=sm]，标题、可选的一句说明和一排按钮。
  * 返回被点按钮的 value；Esc、点遮罩或右上角关闭都算 "cancel"。有「取消」时焦点先落在它上面，否则落在主按钮。
  */
-export function ask(options: { title: string; prompt?: string; detail?: string; actions: AskAction[] }): Promise<string> {
+export function ask(options: { title: string; prompt?: string; detail?: string; deletion?: boolean; actions: AskAction[] }): Promise<string> {
   const dialog = element("dialog", "ui-dialog")
   dialog.dataset.size = "sm"
   dialog.dataset.variant = "ask"
+  if (options.deletion) dialog.dataset.deleteConfirmation = ""
   if (options.prompt) dialog.dataset.layout = "confirmation"
   dialog.setAttribute("aria-label", options.title)
   const form = element("form")
@@ -125,4 +126,72 @@ export function ask(options: { title: string; prompt?: string; detail?: string; 
     dialog.remove()
     resolve(dialog.returnValue || "cancel")
   }, { once: true }))
+}
+
+export async function confirmDeletion(title: string, detail = "删除后可撤销恢复。"): Promise<boolean> {
+  if (document.querySelector('dialog[open][data-delete-confirmation]')) return false
+  return await ask({ title, detail, deletion: true, actions: [
+    { value: "cancel", label: "取消" }, { value: "delete", label: "删除", variant: "danger" },
+  ] }) === "delete"
+}
+
+/** Select an existing resource without writing until confirmation. */
+export function chooseReferenceValue(label: string, current: string, choices: ReadonlyArray<readonly [string, string, (() => HTMLElement)?]>, commit: (value: string) => void): void {
+  const title = label === "样式" ? "全部样式" : `选择${label}`
+  const dialog = element("dialog", "ui-dialog")
+  dialog.dataset.size = label === "样式" ? "lg" : "sm"
+  dialog.setAttribute("aria-label", title)
+  const form = element("form")
+  form.method = "dialog"
+  const header = element("header", "ui-dialog-header")
+  header.append(Object.assign(element("h2"), { textContent: title }))
+  const body = element("div", "ui-dialog-body")
+  const list = element("div", "ui-listbox")
+  list.setAttribute("role", "listbox")
+  list.setAttribute("aria-label", label)
+  let selected = choices.some(([value]) => value === current) ? current : undefined
+  const select = (row: HTMLElement) => {
+    selected = row.dataset.value!
+    for (const option of list.querySelectorAll<HTMLElement>('[role="option"]')) {
+      option.setAttribute("aria-selected", String(option === row))
+      option.tabIndex = option === row ? 0 : -1
+    }
+    apply.disabled = false
+    row.focus()
+  }
+  const render = (query = "") => {
+    const visible = choices.filter(([value, title]) => `${value} ${title}`.toLowerCase().includes(query.trim().toLowerCase()))
+    const focus = visible.find(([value]) => value === selected)?.[0] ?? visible[0]?.[0]
+    list.replaceChildren(...visible.map(([value, title, build]) => {
+      const row = build?.() ?? Object.assign(element("button", "ui-list-item"), { type: "button", textContent: title })
+      row.dataset.value = value
+      row.setAttribute("role", "option")
+      row.setAttribute("aria-selected", String(value === selected))
+      row.tabIndex = value === focus ? 0 : -1
+      row.addEventListener("click", () => select(row))
+      row.addEventListener("dblclick", () => apply.click())
+      if (!build) row.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); select(row); apply.click() } })
+      return row
+    }))
+    if (!list.childElementCount) list.append(emptyState("search", "没有可选内容"))
+  }
+  bindListboxKeys(list, select)
+  const footer = element("footer", "ui-dialog-footer")
+  const cancel = Object.assign(element("button", "ui-button"), { textContent: "取消", value: "cancel" })
+  const apply = Object.assign(element("button", "ui-button"), { textContent: "应用", value: "apply", disabled: !selected })
+  apply.dataset.variant = "primary"
+  footer.append(cancel, apply)
+  body.dataset.layout = "stack"
+  body.append(searchField({ label: `搜索${label}`, onInput: render }), list)
+  form.append(header, body, footer)
+  dialog.append(form)
+  bindDialog(dialog)
+  dialog.addEventListener("close", () => {
+    if (dialog.returnValue === "apply" && selected !== undefined && choices.some(([value]) => value === selected)) commit(selected)
+    dialog.remove()
+  }, { once: true })
+  document.body.append(dialog)
+  render()
+  dialog.showModal()
+  cancel.focus()
 }

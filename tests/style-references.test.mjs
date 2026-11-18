@@ -60,3 +60,16 @@ test('shared styles retain references across applicable layouts and refresh afte
   assert.equal(context.styleUsages('3').length, 0)
   assert.equal(context.styleUsages('4').length, 1)
 })
+
+test('large-library usage counts retain direct and numeric text fallback references', () => {
+  const layout = 'light/skin/port/py_9.ini'
+  const context = setup({
+    'light/skin/port/res/default.css': '[STYLE1]\nSHOW=a\n',
+    [layout]: '[KEY1]\nFORE_STYLE=199,100,1,0100\n',
+  })
+  assert.equal(context.styleUsages('1').length, 3, 'direct reference plus both ends of the fallback range')
+  assert.equal(context.styleUsages('0100').length, 1, 'noncanonical IDs still match directly')
+  context.archive.setText(layout, '[KEY1]\nFORE_STYLE=200\n')
+  assert.equal(context.styleUsages('1').length, 0)
+  assert.equal(context.styleUsages('2').length, 1)
+})

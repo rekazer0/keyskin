@@ -1,3 +1,4 @@
+import { confirmDeletion } from "./ask"
 // 皮肤字体按浅色 / 深色分别管理，同一模式的横竖屏共用字体与 GLOBAL FONT_PATH。
 import { appState } from "./state"
 import { cachedIniDocument } from "./style-document"
@@ -135,7 +136,7 @@ function setGlobalFont(value: string, scope = theme.value): void {
 }
 
 /** 移除当前模式的 GLOBAL 字体文件与引用（可撤销）。 */
-function removeSelectedFont(scope = theme.value): void {
+async function removeSelectedFont(scope = theme.value): Promise<void> {
   if (!isEditing()) return
   const archive = appState.archive
   const styles = fontStylePaths(scope)
@@ -165,6 +166,9 @@ function removeSelectedFont(scope = theme.value): void {
     showStatus("当前字体没有需要移除的文件或引用")
     return
   }
+  const revision = archive.revision
+  if (!await confirmDeletion(`删除字体「${fileName}」？`, "字体引用也将被清除，删除后可撤销恢复。")
+    || appState.archive !== archive || archive.revision !== revision || !isEditing()) return
   commitBatch(changes)
   refreshPreview()
   populateKeyInspector()

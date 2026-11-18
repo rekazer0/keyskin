@@ -1,3 +1,4 @@
+import { confirmDeletion } from "./ask"
 import type { JsonObject } from "../palm/sxi-ini.ts"
 import { type BdaTileUsage } from "./types"
 import { appState } from "./state"
@@ -166,6 +167,7 @@ export function syncAtlasWorkspace(): void {
   const slice = appState.movingTile ?? appState.slices.find(item => item.index === appState.selectedTileIndex)
   appState.atlasWorkspace?.update({
     active: appState.resourceConfigActive && appState.resourceInspectorMode === "image",
+    preview: Boolean(appState.selectedResourceGalleryPath),
     styleActive: appState.resourceConfigActive && appState.resourceInspectorMode === "style",
     soundActive: appState.resourceConfigActive && appState.resourceInspectorMode === "sound",
     styleSelected: Boolean(appState.selectedStyleID),
@@ -181,7 +183,9 @@ export function scheduleAtlasDraw(): void {
   if (appState.atlasDrawFrame) return
   appState.atlasDrawFrame = requestAnimationFrame(() => {
     appState.atlasDrawFrame = 0
-    drawAtlas()
+    // 只有切片本身变化才需要刷新检查器；平移和缩放只更新画面。
+    if (appState.movingTile) drawAtlas()
+    else paintAtlas()
   })
 }
 
@@ -189,6 +193,11 @@ export function drawAtlas(): void {
   if (appState.atlasDrawFrame) cancelAnimationFrame(appState.atlasDrawFrame)
   appState.atlasDrawFrame = 0
   syncAtlasWorkspace()
+  drawTilePreview()
+  paintAtlas()
+}
+
+function paintAtlas(): void {
   if (!workspaceImage.complete || !workspaceImage.naturalWidth) return
   const { naturalWidth, naturalHeight } = workspaceImage
   const figure = atlasCanvas.parentElement!
@@ -229,9 +238,10 @@ export function drawAtlas(): void {
   context.setTransform(scaleX, 0, 0, scaleY,
     bounds ? (imageBounds.left - bounds.left) * backingWidth / bounds.width : 0,
     bounds ? (imageBounds.top - bounds.top) * backingHeight / bounds.height : 0)
-  context.imageSmoothingEnabled = scaleX <= 1
-  context.drawImage(workspaceImage, 0, 0)
-  drawTilePreview()
+  if (!viewport) {
+    context.imageSmoothingEnabled = scaleX <= 1
+    context.drawImage(workspaceImage, 0, 0)
+  }
   if (!appState.resourceConfigActive || !appState.guidesVisible) return
 
   const allVisible = appState.tileDraft
@@ -591,8 +601,12 @@ export function moveSelectedTile(deltaX: number, deltaY: number, coalesce = fals
   commitTile({ index: existing.index, source, ...(inner ? { inner } : {}) }, coalesce)
 }
 
-export function deleteSelectedTile(): void {
-  if (!appState.archive || !slicesEditable() || !appState.selectedResourcePath || !isEditing() || appState.selectedTileIndex === undefined) return
+export async function deleteSelectedTile(): Promise<void> {
+  const { archive, selectedResourcePath, selectedTileIndex, tileDocument } = appState
+  if (!archive || !slicesEditable() || !selectedResourcePath || !isEditing() || selectedTileIndex === undefined) return
+  const revision = archive.revision
+  if (!await confirmDeletion(`删除切片 IMG${selectedTileIndex}？`) || appState.archive !== archive || archive.revision !== revision || !isEditing()
+    || appState.selectedResourcePath !== selectedResourcePath || appState.selectedTileIndex !== selectedTileIndex || appState.tileDocument !== tileDocument) return
   if (sliceStore() === "palm") {
     // Palm styles find a slice by its IMG id, so the others keep their numbers.
     const [path, index] = [appState.selectedResourcePath, appState.selectedTileIndex]

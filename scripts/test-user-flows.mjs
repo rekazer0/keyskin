@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 import { exportSkin } from "../tests/helpers/export-skin.mjs"
 // End-to-end user simulation: drives every editor feature the way a person would.
 // Run: node scripts/test-user-flows.mjs
@@ -412,7 +413,7 @@ await check("styles: library filters, search, preview, apply, new and delete sty
   await selectKey(page)
   await railTab(page, "样式")
   // 引用卡单击打开「全部样式」并定位当前样式。
-  const card = page.locator(".ui-style-ref .ui-style-state:visible").first()
+  const card = page.locator(".ui-style-ref .ui-style-ref-action:visible").first()
   await card.click()
   // 网页端与桌面端共用 picker.html，样式库在页内弹窗的 iframe 里。
   const pickerDialog = page.locator("#picker-dialog")
@@ -445,6 +446,7 @@ await check("styles: library filters, search, preview, apply, new and delete sty
   await created.and(page.locator('[aria-selected="true"]')).waitFor()
   await page.waitForFunction((id) => new RegExp(`STYLE ?${id}`).test(document.querySelector("#resource-name")?.textContent ?? ""), next)
   await page.getByRole("button", { name: "删除样式", exact: true }).click()
+  await confirmDeletion(page)
   await created.waitFor({ state: "detached" })
   await page.locator("#desktop-undo").click()
   await created.waitFor()
@@ -464,7 +466,7 @@ await check("overview: every sidebar item, image slices, sounds and info", () =>
     // Image pages replace the overview list; come back to keep walking it.
     if (await page.locator("#atlas-back").isVisible()) await page.locator("#atlas-back").click()
     // So do 动效设计 / 粒子设计 (without an anim.ini they create one directly, as an undoable step).
-    if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library button[aria-label="返回"]').click()
+    if (await page.locator("body.animation-workspace").count()) await page.locator('[data-workspace-page="overview"]').click()
   }
   await page.locator('[data-workspace-page="resources"]').click()
   await page.locator('[data-resource-page="image"]').click()
@@ -569,6 +571,7 @@ await check("source files: tree, editor, search, upload, copy/paste, delete and 
   assert.equal(await copy.getAttribute("aria-selected"), "true")
   await copy.click()
   await page.locator("#source-delete").click()
+  await confirmDeletion(page)
   await copy.waitFor({ state: "detached" })
   assert.equal(await uploaded.isVisible(), true, "the tree stays open after deleting")
   await page.locator("#desktop-undo").click()
@@ -630,8 +633,8 @@ await check("tools: panel copy, replace keyboard style and iOS 26 adaptation", (
  * ---------------------------------------------------------------------------------------------- */
 await check("settings: every page, live preview, cancel restores and save persists", () => withPage(async (page) => {
   await openTemplate(page)
-  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
-  const dialog = page.locator("#settings-dialog")
+  await page.locator("#workspace-navigation [data-settings-entry='settings']").click()
+  const dialog = page.locator("#settings-workspace")
   await dialog.waitFor({ state: "visible" })
   for (const tab of await page.locator(".settings-nav-item:visible").all()) {
     await tab.click()
@@ -654,12 +657,12 @@ await check("settings: every page, live preview, cancel restores and save persis
   await page.locator("#settings-cancel").click()
   await dialog.waitFor({ state: "hidden" })
   await page.waitForFunction(() => document.documentElement.dataset.appTheme !== "dark")
-  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
+  await page.locator("#workspace-navigation [data-settings-entry='settings']").click()
   await page.locator('[data-setting-choice="interface-density"][data-value="compact"]').click()
   await page.locator("#settings-save").click()
   await dialog.waitFor({ state: "hidden" })
   assert.equal(await page.evaluate(() => localStorage.getItem("interface-density")), "compact")
-  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
+  await page.locator("#workspace-navigation [data-settings-entry='settings']").click()
   await dialog.getByRole("button", { name: "关闭", exact: true }).click()
   await dialog.waitFor({ state: "hidden" })
 }))

@@ -1,9 +1,11 @@
+import { bindResourceMenu } from "./resource-gallery"
+import { clearResourceWindow } from "./resource-grid-window"
 import { bindListActionKeys, bindListboxKeys, element, emptyState } from "../dom-element"
 import { createIcon } from "../icons"
-import { skinFontFiles } from "../font-files"
+import { skinFontFiles, themeOfPath } from "../font-files"
 import { loadEmbeddedFont } from "../atlas"
 import { appState } from "./state"
-import { $, resourceGallery, resourceListView, resourceSearch, resourceDetail, resourceListTitle, resourceCount, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceDeleteButton, resourceRenameButton, resourceSelectionActions, resourceCategory, theme, orientation } from "./dom"
+import { $, resourceGallery, resourceListView, resourceSearch, resourceUsage, resourceDetail, resourceListTitle, resourceCount, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceDeleteButton, resourceRenameButton, resourceSelectionActions, resourceName, resourceMeta, resourceCategory, resourceTheme, theme, orientation } from "./dom"
 import { addStyle, availableStyleIDs, canAddStyle, styleKind, styleConfigDocument, styleSoundFile } from "./style-picker"
 import { styleKindIcon, styleTypeOptions, styleFilterButtons, styleUsageOptions } from "../style-card"
 import { styleUsages } from "./style-references"
@@ -11,22 +13,26 @@ import { currentSoundEntries, renderResourceInspector, showStyle } from "./resou
 import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
 import { resourceInventoryItems } from "./resource-inventory"
+import { availableSkinThemes, usesSkinThemeDirectories } from "./config-context"
+import { selectChoice } from "./mobile-layout"
 import { openResources } from "./resource-navigation"
 import { fontSample } from "./font-picker"
 import { skinFontField } from "./skin-fonts"
-import { resourceSearchControl, releaseKeySound } from "./canvas-interaction"
+import { releaseKeySound } from "./canvas-interaction"
 import { field, section } from "./property-rows"
 import { releaseOnRemove } from "../dom-lifecycle"
 
 export function resourceStyleMatchesUsage(id: string): boolean {
-  if (!document.body.classList.contains("resource-workspace") || appState.resourceUsageFilter === "all" || !["bdi", "bds", "sxi"].includes(appState.archive?.format ?? "")) return true
+  if (!appState.resourceConfigActive || appState.resourceUsageFilter === "all" || !["bdi", "bds", "sxi"].includes(appState.archive?.format ?? "")) return true
   const used = styleUsages(id).length > 0
   return appState.resourceUsageFilter === "used" ? used : !used
 }
 
+const resourceNames = new Intl.Collator(undefined, { numeric: true })
+
 export function sortResources<T>(items: T[], name: (item: T) => string = item => String(item)): T[] {
   const direction = $<HTMLSelectElement>("#resource-sort").value === "descending" ? -1 : 1
-  return items.sort((a, b) => direction * name(a).localeCompare(name(b), undefined, { numeric: true }))
+  return items.sort((a, b) => direction * resourceNames.compare(name(a), name(b)))
 }
 
 function setText(selector: string, value: string): void {
@@ -39,7 +45,7 @@ export function renderStyleFilters(bdaGroup?: string): void {
   if (!bar) {
     bar = document.createElement("span")
     bar.className = "ui-style-filter-bar"
-    resourceSearchControl.after(bar)
+    resourceUsage.parentElement!.before(bar)
   }
   const filterKind = bdaGroup ? "bda" : "legacy"
   if (bar.dataset.kind === filterKind) {
@@ -78,14 +84,26 @@ export function renderStyleFilters(bdaGroup?: string): void {
   )
 }
 
+function resourceFonts(): string[] {
+  return skinFontFiles(appState.archive?.names() ?? []).filter(path => {
+    const scope = themeOfPath(path)
+    return !["light", "dark"].includes(scope) || scope === theme.value
+  })
+}
+
 /** 分类数量来自当前资源范围，引用统计复用删除保护的跨布局索引。 */
 export function updateResourcePage(title: string, count: number): void {
   appState.resourceCatalog = ""
   resourceListView.querySelector(".resource-actions")!.prepend(resourceUploadButton)
-  $("#resource-font-theme").hidden = true
+  $(document.body.classList.contains("resource-workspace") ? "#resource-page-heading" : ".resource-actions").append(resourceDownloadButton)
   $("#resource-catalog").hidden = true
   resourceGallery.hidden = false
   const archive = appState.archive
+  resourceTheme.hidden = !usesSkinThemeDirectories() && availableSkinThemes().length < 2
+  for (const button of resourceTheme.querySelectorAll<HTMLButtonElement>("[data-resource-theme]")) {
+    const pressed = String(button.dataset.resourceTheme === theme.value)
+    if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed)
+  }
   const ids = archive?.format === "ssf" ? [] : availableStyleIDs()
   const supported = Boolean(archive && ["bdi", "bds", "sxi"].includes(archive.format))
   const key = `${archive?.revision}|${theme.value}|${orientation.value}|${appState.selectedPath}`
@@ -99,23 +117,15 @@ export function updateResourcePage(title: string, count: number): void {
     }
     appState.resourcePageStatistics = { archive, key, types, unused: supported ? ids.filter(id => !styleUsages(id).length).length : 0 }
   }
-  const counts = { style: ids.length, image: pickableImagePaths().length, sound: currentSoundEntries().length, font: skinFontFiles(archive?.names() ?? []).length, all: 0 }
+  const counts = { style: ids.length, image: pickableImagePaths().length, sound: currentSoundEntries().length, font: resourceFonts().length, all: 0 }
   counts.all = counts.image + counts.sound + counts.font
   setText("#mobile-resource-summary", `共 ${(counts.style + counts.all).toLocaleString()} 个资源 · ${archive?.format.toUpperCase() ?? ""}`)
-  for (const [kind, value] of [["style", counts.style], ["resource", counts.image], ["sound", counts.sound]] as const) {
-    const button = document.querySelector(`[data-mobile-resource="${kind}"]`)!
-    let badge = button.querySelector("small")
-    if (!badge) { badge = element("small"); button.append(badge) }
-    if (badge.textContent !== String(value)) badge.textContent = String(value)
-  }
   for (const [kind, value] of Object.entries(counts)) setText(`[data-resource-count="${kind}"]`, value.toLocaleString())
   setText("#resource-total", `${(counts.style + counts.all).toLocaleString()} 项`)
   setText("#resource-unused-summary", supported ? `${appState.resourcePageStatistics?.unused.toLocaleString()} 个样式未被引用` : "当前格式不提供样式引用统计")
   $<HTMLButtonElement>("#resource-show-unused").disabled = !supported
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-usage]")) {
-    button.disabled = !supported || appState.resourceInspectorMode !== "style"
-    button.setAttribute("aria-pressed", String(button.dataset.resourceUsage === appState.resourceUsageFilter))
-  }
+  resourceUsage.parentElement!.hidden = !supported || appState.resourceInspectorMode !== "style"
+  resourceUsage.value = appState.resourceUsageFilter
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-page], [data-resource-catalog], [data-resource-style-type]")) {
     const type = button.dataset.resourceStyleType
     const selected = type ? appState.resourceInspectorMode === "style" && type === appState.resourceStyleType
@@ -126,6 +136,7 @@ export function updateResourcePage(title: string, count: number): void {
       setText(`[data-resource-style-count="${type}"]`, (appState.resourcePageStatistics?.types[type] ?? 0).toLocaleString())
     }
   }
+  syncMobileResourceCategory()
   const kind = appState.resourceInspectorMode
   const total = counts[kind]
   setText("#resource-page-description", `${total.toLocaleString()} 个${title}${kind === "style" ? ` · ${counts.all.toLocaleString()} 个资源` : ""}${count !== total ? ` · 筛出 ${count.toLocaleString()} 项` : ""}`)
@@ -138,6 +149,7 @@ export function updateResourcePage(title: string, count: number): void {
 function renderCatalog(): void {
   const archive = appState.archive
   if (!archive || !appState.resourceCatalog) return
+  clearResourceWindow()
   const catalog = appState.resourceCatalog
   updateResourcePage(catalog === "font" ? "字体" : "全部资源", 0)
   appState.resourceCatalog = catalog
@@ -154,11 +166,8 @@ function renderCatalog(): void {
   host.replaceChildren()
   resourceListTitle.textContent = appState.resourceCatalog === "font" ? "字体" : "全部资源"
   const query = resourceSearch.value.trim().toLowerCase()
-  const scoped = catalog === "font" && ["bdi", "bds"].includes(archive.format)
-  const fonts = skinFontFiles(archive.names()).filter(path => !scoped || path.startsWith(`${appState.resourceFontTheme}/`))
-  const themeSwitch = $("#resource-font-theme")
-  themeSwitch.hidden = !scoped
-  for (const button of themeSwitch.querySelectorAll<HTMLButtonElement>("[data-font-theme]")) button.setAttribute("aria-pressed", String(button.dataset.fontTheme === appState.resourceFontTheme))
+  const canEditFonts = catalog === "font" && ["bdi", "bds"].includes(archive.format) && isEditing()
+  const fonts = resourceFonts()
   const scope = new Set([...pickableImagePaths(), ...currentSoundEntries().map(entry => entry.path)])
   const items = appState.resourceCatalog === "font" ? [] : resourceInventoryItems().filter(item => scope.has(item.id))
   const entries = [...items.map(item => ({ ...item, font: false })), ...fonts.map(path => ({
@@ -167,13 +176,13 @@ function renderCatalog(): void {
   const visible = sortResources(entries, item => item.title)
     .filter(item => `${item.title} ${item.detail}`.toLowerCase().includes(query))
   resourceCount.textContent = String(visible.length)
-  setText("#resource-page-description", `${scoped ? appState.resourceFontTheme === "dark" ? "深色 · " : "浅色 · " : ""}${entries.length.toLocaleString()} 项${query ? ` · 筛出 ${visible.length.toLocaleString()} 项` : ""}`)
+  setText("#resource-page-description", `${entries.length.toLocaleString()} 项${query ? ` · 筛出 ${visible.length.toLocaleString()} 项` : ""}`)
   $<HTMLButtonElement>("#resource-create-style").hidden = true
-  resourceListView.querySelector(".resource-filters")!.append(resourceUploadButton, resourceSelectionActions)
-  resourceSelectionActions.querySelectorAll<HTMLElement>(".ui-list-toolbar").forEach(toolbar => { toolbar.hidden = true })
+  resourceListView.querySelector(".resource-filters")!.append(resourceUploadButton, resourceDownloadButton)
+  resourceSelectionActions.querySelector<HTMLElement>(".ui-list-toolbar")!.hidden = true
   resourceUploadButton.hidden = catalog !== "font"
-  resourceUploadButton.disabled = !scoped || !isEditing()
-  resourceUploadButton.setAttribute("aria-label", "上传字体")
+  resourceUploadButton.disabled = !canEditFonts
+  resourceUploadButton.setAttribute("aria-label", `上传字体至${theme.value === "dark" ? "深色" : "浅色"}皮肤`)
   resourceUploadButton.querySelector("span:last-child")!.textContent = "上传"
   resourceUploadInput.accept = ".ttf,.otf,.ttc"
   resourceRenameButton.hidden = true
@@ -187,8 +196,10 @@ function renderCatalog(): void {
   resourceDeleteButton.setAttribute("aria-label", resourceDeleteButton.title)
   resourceSearch.setAttribute("aria-label", catalog === "font" ? "搜索字体" : "搜索资源")
   if (!visible.some(item => item.id === appState.selectedResourceCatalogItem)) appState.selectedResourceCatalogItem = ""
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-usage]")) button.disabled = true
+  resourceUsage.parentElement!.hidden = true
+  resourceListView.querySelector<HTMLElement>(".ui-style-filter-bar")?.setAttribute("hidden", "")
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-page], [data-resource-catalog], [data-resource-style-type]")) button.setAttribute("aria-pressed", String(button.dataset.resourceCatalog === appState.resourceCatalog))
+  syncMobileResourceCategory()
   const choose = (row: HTMLElement, focus = true) => {
     appState.selectedResourceCatalogItem = row.dataset.catalogId!
     if (focus) row.focus({ preventScroll: true })
@@ -198,7 +209,7 @@ function renderCatalog(): void {
     }
     resourceDetail.hidden = true
     if (row.dataset.font === "true") {
-      const field = skinFontField(scoped ? appState.resourceFontTheme : row.dataset.catalogId!.split("/")[0])
+      const field = skinFontField(appState.selectedResourceCatalogItem.split("/")[0])
       const detail = $("#style-detail-fields")
       const sample = fontSample({ value: appState.selectedResourceCatalogItem, label: row.querySelector("strong")!.textContent!, ...loadEmbeddedFont(archive, appState.selectedResourceCatalogItem) })
       sample.dataset.size = "lg"
@@ -228,9 +239,11 @@ function renderCatalog(): void {
     $("#sound-resource-detail").hidden = true
     $("#style-resource-detail").hidden = false
     $("#style-detail-previews").hidden = true
+    resourceName.textContent = row.querySelector("strong")!.textContent
+    resourceMeta.textContent = row.dataset.catalogId!
     resourceDetail.hidden = false
     resourceDownloadButton.disabled = row.dataset.font !== "true"
-    resourceDeleteButton.disabled = !scoped || !isEditing() || row.dataset.font !== "true"
+    resourceDeleteButton.disabled = !canEditFonts || row.dataset.font !== "true"
   }
   for (const item of visible) {
     const row = element("div", "ui-list-item ui-resource-catalog-item")
@@ -266,6 +279,20 @@ export function renderResourceCatalogSearch(): boolean {
   return true
 }
 
+function syncMobileResourceCategory(): void {
+  const select = $<HTMLSelectElement>("#mobile-resource-category")
+  for (const button of $("#resource-page-tabs").querySelectorAll<HTMLButtonElement>("[data-resource-choice]")) {
+    const value = button.dataset.resourceChoice!
+    const option = select.querySelector<HTMLOptionElement>(`[value="${value}"]`)!
+    const label = button.querySelector(":scope > span:not([aria-hidden])")?.textContent ?? ""
+    const count = button.querySelector("small")?.textContent
+    const text = count ? `${label} (${count})` : label
+    if (option.text !== text) option.text = text
+    option.disabled = button.disabled
+    if (button.ariaPressed === "true" && select.value !== value) select.value = value
+  }
+}
+
 export function wireResourcePage(): void {
   const types = $("#resource-style-types")
   for (const type of ["anim", "text", "image", "color", "sound", "empty"]) {
@@ -285,6 +312,20 @@ export function wireResourcePage(): void {
     })
     types.append(button)
   }
+  const category = $<HTMLSelectElement>("#mobile-resource-category")
+  const styleChoices = element("optgroup")
+  const fileChoices = element("optgroup")
+  styleChoices.label = "样式"
+  fileChoices.label = "资源"
+  category.append(styleChoices, fileChoices)
+  for (const button of $("#resource-page-tabs").querySelectorAll<HTMLButtonElement>("button")) {
+    const { resourceStyleType, resourcePage, resourceCatalog } = button.dataset
+    const value = resourceStyleType ? `style:${resourceStyleType}` : resourcePage ?? `catalog:${resourceCatalog}`
+    button.dataset.resourceChoice = value
+    const group = resourceStyleType || resourcePage === "style" ? styleChoices : fileChoices
+    group.append(new Option("", value))
+  }
+  category.addEventListener("change", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-choice="${category.value}"]`)?.click())
   const redraw = () => { if (appState.resourceCatalog) renderCatalog(); else renderResourceInspector() }
   $("#resource-create-style").addEventListener("click", () => {
     if (appState.resourceInspectorMode !== "style") { resourceUploadButton.click(); return }
@@ -292,14 +333,23 @@ export function wireResourcePage(): void {
     if (id) showStyle(id)
   })
   $("#resource-sort").addEventListener("change", redraw)
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-view]")) button.addEventListener("click", () => {
-    resourceGallery.dataset.view = button.dataset.resourceView
-    $("#resource-catalog").dataset.view = button.dataset.resourceView
-    for (const option of document.querySelectorAll<HTMLButtonElement>("[data-resource-view]")) option.setAttribute("aria-pressed", String(option === button))
+  for (const button of resourceTheme.querySelectorAll<HTMLButtonElement>("[data-resource-theme]")) button.addEventListener("click", async () => {
+    if (resourceTheme.hidden || theme.value === button.dataset.resourceTheme) return
+    const { resourceCatalog, resourceInspectorMode } = appState
+    const search = resourceSearch.value
+    const focused = document.activeElement === button
+    await selectChoice(theme, button.dataset.resourceTheme!)
+    if (theme.value !== button.dataset.resourceTheme) return
+    openResources(resourceInspectorMode)
+    appState.resourceCatalog = resourceCatalog
+    resourceSearch.value = search
+    if (resourceCatalog || search) redraw()
+    if (focused) button.focus({ preventScroll: true })
   })
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-usage]")) button.addEventListener("click", () => {
-    appState.resourceUsageFilter = button.dataset.resourceUsage!
-    renderResourceInspector()
+
+  resourceUsage.addEventListener("change", () => {
+    appState.resourceUsageFilter = resourceUsage.value
+    redraw()
   })
   $("#resource-show-unused").addEventListener("click", () => {
     appState.resourceUsageFilter = "unused"
@@ -310,27 +360,13 @@ export function wireResourcePage(): void {
   })
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-catalog]")) button.addEventListener("click", () => {
     appState.resourceCatalog = button.dataset.resourceCatalog!
-    appState.resourceFontTheme = theme.value
     resourceSearch.value = ""
     renderCatalog()
   })
   bindListboxKeys($("#resource-catalog"), row => row.click())
   bindListActionKeys($("#resource-catalog"), resourceSelectionActions)
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-font-theme]")) button.addEventListener("click", () => {
-    appState.resourceFontTheme = button.dataset.fontTheme!
-    renderCatalog()
-  })
+  bindResourceMenu($("#resource-catalog"), '[role="option"]', row => row.click())
   $("#resource-page-tabs").addEventListener("click", event => {
     if ((event.target as Element).closest("[data-resource-page]")) appState.resourceCatalog = ""
   }, { capture: true })
-  for (const group of [$("#resource-usage-filter"), $("#resource-view-switch"), $("#resource-font-theme")]) group.addEventListener("keydown", event => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
-    const buttons = [...group.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")]
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    if (index < 0) return
-    event.preventDefault()
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length
-    buttons[next]?.click()
-    buttons[next]?.focus()
-  })
 }

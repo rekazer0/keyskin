@@ -38,7 +38,7 @@ export type FieldSpec =
   | { kind: "parts"; affixes: readonly string[]; values: readonly string[]; columns?: number; expression?: boolean; step?: number; unit?: string; options?: readonly Choice[] }
   | { kind: "switch"; checked: boolean }
   /** ≤4 项分段（都有图标时纯图标），grid3 是 3×3 图标格，更多项或 select 用下拉；当前值不在选项里时总是下拉。 */
-  | { kind: "choice"; value: string; options: readonly Choice[]; layout?: "grid3" | "select" | "labeled" | "wrap"; unset?: boolean }
+  | { kind: "choice"; value: string; options: readonly Choice[]; layout?: "grid3" | "select" | "labeled" | "wrap"; unset?: boolean; mobileRange?: keyof typeof RANGES }
   | { kind: "flags"; values: readonly string[]; options: readonly Choice[]; keepOne?: string }
   | { kind: "color"; value: string; codec: ColorCodec; details?: boolean }
   | { kind: "colorPair"; values: readonly [string, string]; codec: ColorCodec; details?: boolean }
@@ -122,7 +122,10 @@ export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElemen
     }
   }
   if (options.rowKey !== undefined) row.dataset.inspectorRowKey = JSON.stringify(options.rowKey)
-  if (spec.kind === "sound") row.classList.add("style-reference-field")
+  if (spec.kind === "sound") {
+    row.classList.add("style-reference-field")
+    row.dataset.configEmpty = String(!options.mixed && !spec.value.trim())
+  }
   if (options.commit && spec.kind !== "readonly") {
     row.dataset.inspectorValue = JSON.stringify(["baseline" in options ? options.baseline : specValue(spec)])
     row.addEventListener("inspector-reset", (event) => {
@@ -199,7 +202,14 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
       input.addEventListener("change", () => send(input.checked, {}))
       return input
     }
-    case "choice": return choiceControl(state.mixed ? { ...spec, value: "", layout: "select" } : spec, label, disabled, (value) => send(value, {}), placeholder)
+    case "choice": {
+      const change = (value: string) => send(value, {})
+      const choices = choiceControl(state.mixed ? { ...spec, value: "", layout: "select" } : spec, label, disabled, change, placeholder)
+      if (!spec.mobileRange) return choices
+      const control = element("span", "ui-number-choices")
+      control.append(choices, numberControl({ kind: "number", value: state.mixed ? "" : spec.value, range: spec.mobileRange }, label, placeholder, disabled, change))
+      return control
+    }
     case "flags": return flagsControl(spec, label, disabled, (values) => send(values, {}))
     case "color": return colorControl(spec.value, spec.codec, label, disabled, Boolean(state.mixed), (value, merge) => send(value, { merge }), undefined, spec.details)
     case "colorPair": {
@@ -278,36 +288,18 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
     if (validNumber(text, spec.expression) && (!text || spec.min === undefined || Number(text) >= spec.min)) commit(accepted = text)
     else input.value = accepted
   })
-  // 手机上左右两端是 − / + 步进按钮（桌面由 .ui-step 隐藏，改用拖标签、滚轮）
-  const step = spec.step === undefined ? 1 : Math.abs(spec.step)
-  if (spec.expression) box.append(input)
-  else box.append(stepButton(-1, input, step, spec.min, label, disabled), input)
+  box.append(input)
   if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
-  if (!spec.expression) box.append(stepButton(1, input, step, spec.min, label, disabled))
-  const range = spec.range && RANGES[spec.range]
-  return range && input.type === "number" ? sliderField(box, input, range) : box
-}
-
-/** 数值的 − / + 按钮：一次一格，走输入框的 change，撤销与改动标记照旧。 */
-export function stepButton(direction: -1 | 1, input: HTMLInputElement, step: number, min: number | undefined, label: string, disabled: boolean): HTMLButtonElement {
-  const button = element("button", "ui-step")
-  button.type = "button"
-  button.disabled = disabled
-  button.title = `${direction < 0 ? "减小" : "增大"}${label}`
-  button.setAttribute("aria-label", button.title)
-  button.append(createIcon(direction < 0 ? "minus" : "plus"))
-  // 所在行是 <label>：拦下默认动作，点步进按钮不把焦点交给输入框（手机上会弹键盘）
-  button.addEventListener("pointerdown", (event) => event.preventDefault())
-  button.addEventListener("click", (event) => {
-    event.preventDefault()
-    if (input.disabled || input.readOnly) return
-    const current = Number(input.value.trim())
-    const next = (Number.isFinite(current) ? current : 0) + direction * step
-    input.value = String(Number(Math.max(min ?? next, next).toFixed(4)))
-    input.dispatchEvent(new Event("input", { bubbles: true }))
-    input.dispatchEvent(new Event("change", { bubbles: true }))
-  })
-  return button
+  if (input.type !== "number") return box
+  const bounds = spec.range && RANGES[spec.range]
+  if (!bounds) {
+    wireNumberSlider(input)
+    return box
+  }
+  const wrap = element("span", "ui-slider-field")
+  wireNumberSlider(input, { bounds: () => bounds, desktop: wrap })
+  wrap.append(box)
+  return wrap
 }
 
 function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string, placeholder: string, disabled: boolean, commit: (values: string[], index: number) => void): HTMLElement {
@@ -329,6 +321,7 @@ function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string
       input.setAttribute("aria-label", `${label}${affix}`)
     } else input = numberInput(value, `${label}${affix}`, placeholder, disabled, spec.expression, spec.step)
     box.append(input)
+    if (input instanceof HTMLInputElement && input.type === "number") wireNumberSlider(input)
     if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
     pair.append(box)
     input.addEventListener("change", () => {
@@ -341,39 +334,62 @@ function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string
   return pair
 }
 
-/** 数值框旁的滑块（有自然范围的值）：拖动只改数值框，松开提交一次。 */
-function sliderField(control: HTMLElement, input: HTMLInputElement, bounds: Bounds): HTMLElement {
-  const wrap = element("span", "ui-slider-field")
+/** 手机用滑块显示并编辑同一个值；有明确范围的字段也在桌面保留滑块。 */
+export function wireNumberSlider(input: HTMLInputElement, options: {
+  bounds?: () => Partial<Bounds>; desktop?: HTMLElement; commit?: "input" | "change"
+} = {}): void {
+  const control = element("span", "ui-number-slider")
   const range = element("input", "ui-slider")
   range.type = "range"
-  range.min = String(bounds.min)
-  range.step = String(bounds.step ?? 1)
-  const numeric = () => input.value.trim() !== "" && Number.isFinite(Number(input.value))
+  range.dataset.configDerived = ""
+  range.setAttribute("aria-label", `${input.getAttribute("aria-label")}滑块`)
+  let accepted = input.value
   const sync = () => {
-    const value = Number(input.value)
-    range.max = String(Math.max(bounds.max, Number.isFinite(value) ? value : bounds.min))
-    range.value = String(Number.isFinite(value) && input.value.trim() ? value : bounds.min)
-    range.disabled = input.disabled || !numeric()
+    accepted = input.value
+    const bounds = options.bounds?.()
+    const value = Number(accepted) || 0
+    // 没有格式边界的字段保留正负值和大值，不把已存数据压进固定区间。
+    const span = Math.max(100, 2 ** Math.ceil(Math.log2(Math.abs(value) || 1) + 1))
+    const decimals = input.value.split(".")[1]?.length ?? 0
+    const min = bounds?.min ?? (input.min !== "" ? Number(input.min) : -span)
+    const step = bounds?.step ?? (Number(input.step) || 10 ** -decimals)
+    range.min = String(Math.min(min, input.value ? value : min))
+    range.max = String(Math.max(bounds?.max ?? (input.max !== "" ? Number(input.max) : span), input.value ? value : min))
+    // 当前值不恰好落在粗步长上时，保留原值及其精度。
+    const ticks = (value - Number(range.min)) / step
+    range.step = String(input.value && Math.abs(ticks - Math.round(ticks)) > 1e-8 ? 10 ** -decimals : step)
+    range.value = input.value || String(Math.max(min, 0))
+    range.disabled = input.disabled || input.readOnly
+    range.setAttribute("aria-valuetext", input.value || input.placeholder || "未设置")
   }
-  sync()
-  let before: string | undefined
   range.addEventListener("input", () => {
-    before ??= input.value
     input.value = range.value
+    range.setAttribute("aria-valuetext", range.value)
   })
-  const finish = () => {
-    if (before === undefined) return
-    const original = before
-    before = undefined
-    if (input.value !== original) input.dispatchEvent(new Event("change", { bubbles: true }))
-  }
-  range.addEventListener("change", finish)
-  range.addEventListener("pointerup", finish)
-  range.addEventListener("pointercancel", finish)
-  range.addEventListener("keydown", (event) => { if (event.key === "Escape" && before !== undefined) { input.value = before; before = undefined } })
-  input.addEventListener("input", sync)
-  wrap.append(range, control)
-  return wrap
+  range.addEventListener("change", () => {
+    if (!input.disabled && !input.readOnly && range.value !== accepted) {
+      const inspector = range.closest("#quick-inspector, #resource-inspector")
+      const selector = `.ui-number-slider > input[aria-label="${CSS.escape(range.getAttribute("aria-label")!)}"]`
+      const index = document.activeElement === range && inspector ? Array.from(inspector.querySelectorAll(selector)).indexOf(range) : -1
+      input.value = range.value
+      input.dispatchEvent(new Event(options.commit ?? "change", { bubbles: true }))
+      // 动态属性提交后会重建这一行，方向键仍应继续调节同一滑块。
+      if (index >= 0 && !range.isConnected && document.activeElement === document.body) {
+        inspector?.querySelectorAll<HTMLInputElement>(selector)[index]?.focus({ preventScroll: true })
+      }
+    }
+    sync()
+  })
+  range.addEventListener("pointercancel", () => {
+    input.value = accepted
+    sync()
+  })
+  for (const event of ["input", "change", "inspector-slider-sync"]) input.addEventListener(event, sync)
+  input.dataset.numberSlider = ""
+  control.append(range)
+  if (options.desktop) options.desktop.append(control)
+  else input.before(control)
+  sync()
 }
 
 /** 仍自己拼行的检查器（搜狗、手心）用的一排带前缀的数值框；`onChange` 拿到全部格子的值。 */
@@ -524,6 +540,7 @@ function colorControl(value: string, codec: ColorCodec, label: string, disabled:
       else write({ alpha: Math.round(percent * 255 / 100) })
     })
     box.append(alpha, Object.assign(element("span", "ui-input-affix"), { textContent: "%" }))
+    wireNumberSlider(alpha)
     root.append(box)
   }
   const popover = element("div", "ui-menu ui-color-popover")
@@ -532,11 +549,12 @@ function colorControl(value: string, codec: ColorCodec, label: string, disabled:
   popover.setAttribute("aria-label", label)
   const picker = element("input")
   picker.type = "color"
+  picker.disabled = disabled
   picker.value = `#${current?.rgb ?? "000000"}`
   picker.setAttribute("aria-label", `${label}取色`)
   picker.addEventListener("change", () => write({ rgb: picker.value.slice(1).toUpperCase() }))
   const hex = element("span", "ui-input")
-  const text = textInput(value, `${label}色值`, mixed ? "混合" : "未设置", false)
+  const text = textInput(value, `${label}色值`, mixed ? "混合" : "未设置", disabled)
   text.spellcheck = false
   text.addEventListener("change", () => {
     const entered = text.value.trim()
@@ -571,6 +589,15 @@ function colorControl(value: string, codec: ColorCodec, label: string, disabled:
     close()
     swatch.focus()
   })
+  if (details && state && !mixed && !value.trim()) {
+    root.dataset.configPending = ""
+    const add = styleReferenceAddButton(`添加${label}`, () => {
+      root.removeAttribute("data-config-pending")
+      add.remove()
+      swatch.click()
+    }, disabled)
+    root.append(add)
+  }
   return root
 }
 
@@ -586,8 +613,9 @@ function imageControl(spec: Extract<FieldSpec, { kind: "image" }>, label: string
   const visual = spec.load()?.catch(() => undefined)
   const card = styleReferenceCard({
     name,
+    reference: spec.pick ? { label: `更换${label}`, run: spec.pick } : undefined,
     states: [{
-      label: spec.pick ? `选择${label}` : label,
+      label: spec.pick ? `更换${label}` : label,
       draw: async (canvas) => { const loaded = await visual; if (loaded) drawVisualPreview(canvas, [loaded], false) },
       onClick: spec.pick && !disabled ? () => spec.pick!() : undefined,
     }],

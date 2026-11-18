@@ -2,5 +2,5 @@
 export async function exportSkin(page, target) {
   await page.locator('#mobile-export-open').evaluate(button => button.click())
   await target.check()
-  await page.locator('#share-export').click()
+  await page.locator('#share-dialog .ui-share-export-footer > button:visible').click()
 }

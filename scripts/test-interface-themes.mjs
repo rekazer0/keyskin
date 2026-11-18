@@ -16,18 +16,22 @@ const themes = [
   ['refined', 'light', '#293448'], ['workbench', 'dark', '#E6EAF3'],
   ['paper', 'light', '#2A2622'], ['industrial', 'light', '#111111'],
   ['aurora', 'light', '#2A2640'], ['terminal', 'dark', '#CBEDD8'],
+  ['rose-quartz', 'light', '#30222A'], ['deep-sea', 'dark', '#ECF6FF'],
 ]
 const openSettings = async () => {
-  await page.locator('#workspace-navigation [data-app-dialog="settings"]').click()
-  await page.locator('#settings-dialog[open]').waitFor()
+  await page.locator('#workspace-navigation [data-settings-entry="settings"]').click()
+  await page.locator('#settings-workspace:not([hidden])').waitFor()
 }
+const themeList = page.getByRole('listbox', { name: '界面主题', exact: true })
+const themeCard = name => themeList.locator(`[role="option"][data-value="${name}"]`)
 const choose = async name => {
-  await page.locator('#interface-theme').selectOption(name)
+  await themeCard(name).click()
   await page.waitForFunction(value => document.documentElement.dataset.interfaceTheme === value, name)
+  assert.equal(await themeCard(name).getAttribute('aria-selected'), 'true')
 }
 const closeSettings = async action => {
   await page.locator(`#settings-${action}`).click()
-  await page.locator('#settings-dialog').waitFor({ state: 'hidden' })
+  await page.locator('#settings-workspace').waitFor({ state: 'hidden' })
 }
 const capture = async name => {
   await page.evaluate(async () => { await document.fonts.ready })
@@ -50,12 +54,28 @@ try {
   const defaultHome = await layout(homeSelectors)
   await capture('default-home')
   await openSettings()
-  assert.equal(await page.locator('#interface-theme option').count(), 7)
+  assert.equal(await themeList.getByRole('option').count(), themes.length + 1)
+  await page.waitForFunction(() => [...document.querySelectorAll('#settings-theme-list img')].every(image => image.naturalWidth > 0))
+  assert.equal(await themeList.locator('img').count(), themes.length + 1)
+  assert.equal(await themeList.evaluate(list => list.scrollWidth > list.clientWidth && [...list.children].every(card => card.offsetTop === list.firstElementChild.offsetTop)), true, 'theme cards share one scrollable row')
+  assert.equal(await themeCard('default').getAttribute('aria-selected'), 'true')
+  await capture('theme-cards-desktop')
+  await themeCard('default').press('ArrowRight')
+  assert.equal(await themeCard('refined').getAttribute('aria-selected'), 'true')
+  await page.keyboard.press('End')
+  assert.equal(await themeCard('deep-sea').getAttribute('aria-selected'), 'true')
+  assert.equal(await themeCard('deep-sea').evaluate(card => document.activeElement === card), true)
+  assert.ok(await themeList.evaluate(list => list.scrollLeft) > 0)
+  await page.keyboard.press('ArrowUp')
+  assert.equal(await themeCard('deep-sea').getAttribute('aria-selected'), 'true', 'vertical arrows do not select a theme')
+  await page.keyboard.press('Home')
+  assert.equal(await themeCard('default').getAttribute('aria-selected'), 'true')
   await choose('paper')
   assert.equal(await textToken(), '#2A2622')
   assert.equal(await page.evaluate(() => localStorage.getItem('interface-theme')), null, 'preview remains uncommitted')
   await closeSettings('cancel')
   assert.equal(await textToken(), defaultText, 'cancel restores the default palette')
+  assert.equal(await page.locator('#settings-theme-list [aria-selected="true"]').getAttribute('data-value'), 'default')
   assert.equal(await page.locator('#app-theme').isDisabled(), false)
   for (const [name, scheme, text] of themes) {
     await openSettings()
@@ -68,6 +88,12 @@ try {
     await closeSettings('save')
     assert.equal(await page.evaluate(() => localStorage.getItem('interface-theme')), name)
     assert.deepEqual(await layout(homeSelectors), defaultHome, `${name} preserves homepage geometry`)
+    if (name === 'deep-sea') {
+      await page.locator('html').evaluate(root => root.classList.add('macos'))
+      assert.match(await page.locator('.empty-state').evaluate(el => getComputedStyle(el).backgroundImage), /repeating-radial-gradient/)
+      assert.equal(await page.locator('.file-page-drag-region').evaluate(el => getComputedStyle(el).backgroundImage), 'none')
+      await page.locator('html').evaluate(root => root.classList.remove('macos'))
+    }
     await capture(`${name}-home`)
     await page.reload()
     await page.waitForFunction(value => document.documentElement.dataset.interfaceTheme === value, name)
@@ -110,15 +136,20 @@ try {
     assert.deepEqual(await layout(editorSelectors), defaultEditor)
   }
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.locator('#mobile-navigation [data-app-dialog="settings"]').click()
-  await page.locator('#settings-dialog[open]').waitFor()
+  await page.locator('#mobile-navigation [data-settings-entry="settings"]').click()
+  await page.locator('#settings-workspace:not([hidden])').waitFor()
   await page.getByRole('button', { name: '更多外观设置', exact: true }).click()
-  await choose('paper')
-  await capture('paper-mobile-settings')
+  assert.equal(await themeList.evaluate(list => list.scrollWidth > list.clientWidth && list.getBoundingClientRect().right <= document.documentElement.clientWidth), true, 'only the carousel scrolls horizontally on mobile')
+  await themeCard('deep-sea').press('Home')
+  await capture('theme-cards-mobile')
+  for (const name of ['paper', 'deep-sea', 'rose-quartz']) {
+    await choose(name)
+    await capture(`${name}-mobile-settings`)
+  }
   await closeSettings('cancel')
-  assert.equal(await page.locator('html').getAttribute('data-interface-theme'), 'terminal')
+  assert.equal(await page.locator('html').getAttribute('data-interface-theme'), 'deep-sea')
   assert.deepEqual(errors, [])
-  console.log('PASS interface themes: six palettes, default restoration, preview/cancel/save/reload, fixed modes, material compatibility, unchanged home/editor layout and mobile settings')
+  console.log(`PASS interface themes: ${themes.length} palettes, default restoration, preview/cancel/save/reload, fixed modes, material compatibility, unchanged home/editor layout and mobile settings`)
 } finally {
   await browser.close()
   await server.close()

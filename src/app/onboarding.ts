@@ -26,7 +26,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       title: "打开已有皮肤",
       body: compact
         ? "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi）时点这里导入；也可以在其他应用里把皮肤文件分享给键设。"
-        : "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi）时点这里导入，也可以直接把文件拖进窗口。打开过的皮肤会列在「最近打开」里。",
+        : "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi）时点这里导入，也可以直接把文件拖进窗口。打开过的皮肤会列在「我的皮肤」里。",
       when: () => !hasSkin(),
     },
     {
@@ -91,24 +91,15 @@ function onboardingSteps(compact: boolean): TourStep[] {
           when: hasSkin,
         },
     {
-      target: compact ? ["#mobile-app-more"] : ["#workspace-navigation [data-app-dialog='settings']"],
+      target: compact ? ["#mobile-app-more"] : ["#workspace-navigation [data-settings-entry='settings']"],
       title: "设置",
       body: "外观主题、强调色、默认预览设备、画布背景等偏好都在这里调整。",
     },
     {
       target: compact ? ["#mobile-app-more > summary"] : ["#workspace-export"],
       title: "保存与导出",
-      body: compact ? "顶部保存按钮保存当前皮肤；更多菜单进入分享页面。" : "左侧「分享」集中管理保存、分享到输入法、ADB 与各格式导出。",
-      action: { hint: compact ? "打开更多，选择「保存、分享与导出」" : "点击左侧「分享」", done: () => !document.querySelector<HTMLElement>("#share-page")!.hidden },
-    },
-    {
-      target: ["#share-page"],
-      title: "导出给输入法",
-      body: compact
-        ? "改好后先「保存皮肤」，再按要使用的输入法选择导出格式；「分享皮肤」可以把皮肤直接发给输入法安装。"
-        : "改好后先「保存皮肤」，再按要使用的输入法选择导出格式：百度 iOS / Android、新版 BDA、手心或搜狗。",
-      when: () => !document.querySelector<HTMLElement>("#share-page")!.hidden,
-      leave: closeMenus,
+      body: compact ? "顶部保存按钮保存当前皮肤；更多菜单打开分享与导出弹窗。" : "左侧「分享」集中管理保存、分享到输入法、ADB 与各格式导出。",
+      action: { hint: compact ? "打开更多，选择「保存、分享与另存为」" : "点击左侧「分享」", done: () => document.querySelector<HTMLDialogElement>("#share-dialog")!.open },
     },
     {
       title: "准备就绪",

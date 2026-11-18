@@ -1,6 +1,8 @@
-import { element, iconButton } from "../dom-element"
+import { element } from "../dom-element"
 import { createIcon } from "../icons"
-import { $, settingsDialog } from "./dom"
+import { $, settingsWorkspace } from "./dom"
+import { ask } from "./ask"
+import { nativeSettings } from "./preferences"
 import { mobilePortraitQuery } from "./canvas-interaction"
 
 /** 设置首页复用原控件，预览、保存和取消仍由 settings 的草稿负责。 */
@@ -35,8 +37,9 @@ export function wireMobileSettings(): void {
     button.append(createIcon("chevron-right"))
     button.addEventListener("click", action)
     host.append(button)
+    return button
   }
-  const open = (page: string) => settingsDialog.querySelector<HTMLButtonElement>(`[data-settings-page="${page}"]`)!.click()
+  const open = (page: string) => settingsWorkspace.querySelector<HTMLButtonElement>(`[data-settings-page="${page}"]`)!.click()
   const appearance = group("外观", "paintbrush")
   for (const id of ["#app-theme", "#interface-accent", "#window-material-opacity", "#settings-layout-guides"]) move(id, appearance)
   link(appearance, "更多外观设置", () => open("appearance"))
@@ -44,21 +47,33 @@ export function wireMobileSettings(): void {
   for (const id of ["#default-device", "#editor-coordinate-snap", "#reduce-interface-motion"]) move(id, editing)
   link(editing, "预览与画布", () => open("canvas"))
   link(editing, "源代码", () => open("source"))
+  if (!$("#settings-adb-nav").hidden) link(editing, "ADB 预览", () => open("adb"))
   link(editing, "AI 模型", () => $(".mobile-model-link").click())
   const data = group("数据", "hard-drive")
   const storage = element("div", "ui-list-item")
   const storageLabel = element("span", "ui-list-item-text")
-  storageLabel.append(Object.assign(element("strong"), { textContent: "本地缓存" }), Object.assign(element("small"), { textContent: "皮肤素材与预览图" }))
+  storageLabel.append(Object.assign(element("strong"), { textContent: "本地存储用量" }), Object.assign(element("small"), { textContent: "本站占用的存储空间（估算）" }))
   const size = Object.assign(element("small"), { textContent: "由浏览器管理" })
   storage.append(storageLabel, size)
   data.append(storage)
-  link(data, "最近打开", () => open("files"))
-  link(data, "清空最近打开", () => $("#recent-clear").click())
+  if (nativeSettings) {
+    link(data, "文件", () => open("files"))
+    const clear = $("#recent-clear")
+    const action = link(data, "清除记录", async () => {
+      const result = await ask({ title: "清除最近打开记录？", detail: "只移除记录，不删除皮肤文件。此操作不可撤销。", deletion: true,
+        actions: [{ value: "cancel", label: "取消" }, { value: "clear", label: "清除记录", variant: "danger" }],
+      })
+      if (result === "clear") clear.click()
+    })
+    const syncClear = () => { action.hidden = clear.hidden }
+    new MutationObserver(syncClear).observe(clear, { attributes: true, attributeFilter: ["hidden"] })
+    syncClear()
+  }
   const about = group("关于", "info")
   link(about, "版本", () => open("about"), $("#about-update").dataset.currentVersion)
-  const license = Object.assign(element("a", "ui-list-item"), { href: "https://github.com/rekazer0/keyskin", target: "_blank", rel: "noreferrer" })
-  license.append(Object.assign(element("span"), { textContent: "开源许可" }), createIcon("arrow-up-right"))
-  about.append(license)
+  const project = Object.assign(element("a", "ui-list-item"), { href: "https://github.com/rekazer0/keyskin", target: "_blank", rel: "noreferrer" })
+  project.append(Object.assign(element("span"), { textContent: "项目主页（GitHub）" }), createIcon("arrow-up-right"))
+  about.append(project)
   link(about, "帮助与反馈", () => open("about"))
   const footer = element("p", "ui-field-note mobile-settings-note")
   footer.textContent = `键设 KeySkin ${$("#about-update").dataset.currentVersion}`
@@ -66,39 +81,18 @@ export function wireMobileSettings(): void {
   $(".settings-layout").prepend(overview)
   const subtitle = Object.assign(element("p", "ui-field-note mobile-settings-subtitle"), { textContent: "键设 KeySkin · 键盘皮肤编辑器" })
   $("#settings-title").after(subtitle)
-  const nav = $("#mobile-navigation")
-  const navHome = document.createComment("mobile navigation")
-  nav.before(navHome)
-  const settingsButton = nav.querySelector<HTMLButtonElement>("[data-app-dialog=settings]")!
   const sync = () => {
-    const mobile = settingsDialog.open && mobilePortraitQuery.matches
-    const index = mobile && settingsDialog.dataset.mobileSettings === "index"
+    const index = !settingsWorkspace.hidden && mobilePortraitQuery.matches && settingsWorkspace.dataset.mobileSettings === "index"
     for (const { row, placeholder, host } of [...placements].reverse()) {
       if (index && row.parentElement !== host) host.prepend(row)
       else if (!index && row.previousSibling !== placeholder) placeholder.after(row)
     }
-    if (mobile && nav.parentElement !== settingsDialog.querySelector("form")) settingsDialog.querySelector("form")!.append(nav)
-    else if (!mobile && nav.previousSibling !== navHome) navHome.after(nav)
   }
-  nav.addEventListener("click", event => {
-    if (!settingsDialog.open) return
-    const button = (event.target as Element).closest<HTMLButtonElement>("button")
-    if (!button) return
-    event.stopImmediatePropagation()
-    if (button === settingsButton) return
-    settingsDialog.addEventListener("close", () => button.click(), { once: true })
-    $("#settings-cancel").click()
-  }, { capture: true })
-  new MutationObserver(sync).observe(settingsDialog, { attributes: true, attributeFilter: ["open", "data-mobile-settings"] })
+  new MutationObserver(sync).observe(settingsWorkspace, { attributes: true, attributeFilter: ["hidden", "data-mobile-settings"] })
   mobilePortraitQuery.addEventListener("change", sync)
-  settingsDialog.addEventListener("close", sync)
-  settingsDialog.addEventListener("toggle", () => {
-    if (!settingsDialog.open) return
+  settingsWorkspace.addEventListener("settings-enter", () => {
     void navigator.storage?.estimate().then(estimate => {
       if (estimate.usage !== undefined) size.textContent = `${(estimate.usage / 1024 / 1024).toFixed(1)} MB`
     }).catch(() => {})
   })
-  const close = iconButton("x", "关闭设置", () => $("#settings-cancel").click())
-  close.classList.add("mobile-settings-close")
-  $(".settings-header").append(close)
 }

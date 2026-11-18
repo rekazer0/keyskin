@@ -1,11 +1,12 @@
+import { ask, confirmDeletion } from "../ask"
 import { wireSourceFileMenu } from "../source-file-menu"
 import { wireAiSessions } from "../ai-sessions"
-import { wireMobileExport } from "../mobile-export"
+import { openShareDialog, wireMobileExport } from "../mobile-export"
 import { wirePinnedToolbar } from "../pinned-toolbar"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
 import { requestEditMode, setMobilePane } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, settingsEntryButtons, settingsWorkspace, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
 import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelections, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
@@ -99,15 +100,18 @@ export function wireFilesAndSettings(): void {
     setSourceTransfer("move")
   })
   bindListActionKeys(files, sourceDeleteButton.parentElement!)
-  sourceDeleteButton.addEventListener("click", () => {
+  sourceDeleteButton.addEventListener("click", async () => {
+    const archive = appState.archive
     const selected = sourceSelections()
-    if (!appState.archive || !selected.length || !isEditing()) return
+    if (!archive || !selected.length || !isEditing()) return
     const paths = [...new Set(selected.flatMap(sourcePaths))]
     if (!paths.length) return
+    const revision = archive.revision
+    if (!await confirmDeletion(`删除 ${selected.length} 项源文件？`) || appState.archive !== archive || archive.revision !== revision || !isEditing()) return
     commitBatch(paths.map((path) => ({
       kind: "bytes",
       path,
-      before: appState.archive!.getBytes(path)?.slice(),
+      before: archive.getBytes(path)?.slice(),
     })))
     refreshAfterSourceMutation()
     showStatus(`已删除 ${selected.length} 项，可撤销`)
@@ -123,7 +127,7 @@ export function wireFilesAndSettings(): void {
     const menuOpen = toolbarMenus.some((menu) => menu.open)
     for (const menu of toolbarMenus) menu.open = false
     // Esc 取消画布上的按键选择（与点空白处一致）；输入框、弹窗和菜单里的 Esc 留给它们自己。
-    if (menuOpen || !isEditing() || !appState.selectedKeySections.length || document.querySelector("dialog[open]")) return
+    if (menuOpen || !settingsWorkspace.hidden || !isEditing() || !appState.selectedKeySections.length || document.querySelector("dialog[open]")) return
     if (keyEventElement(event.target)?.closest("input, textarea, select, [contenteditable], .cm-editor")) return
     preview.setSelected([])
     appState.selectedKeySections = []
@@ -134,7 +138,9 @@ export function wireFilesAndSettings(): void {
   document.addEventListener("keydown", (event) => {
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "s") return
     event.preventDefault()
-    if (saveButton.disabled || document.querySelector("dialog[open]")) return
+    if (document.querySelector("dialog[open]")) return
+    if (!settingsWorkspace.hidden) { $("#settings-save").click(); return }
+    if (saveButton.disabled) return
     // 正在输入的字段先提交，保存下来的才是屏幕上的值。
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     saveButton.click()
@@ -165,9 +171,11 @@ export function wireFilesAndSettings(): void {
   })
   renderRecentFiles()
   saveButton.addEventListener("click", () => {
+    openShareDialog()
     void runFileOperation("保存", () => saveArchive(false, currentExportFormat()))
   })
   mobileShareButton.addEventListener("click", () => {
+    openShareDialog()
     void runFileOperation("分享皮肤", shareArchiveToMobile)
   })
   wireMobileExport()
@@ -211,15 +219,60 @@ export function wireFilesAndSettings(): void {
     window.clearTimeout(qqGroupReset)
     qqGroupReset = window.setTimeout(() => { copyQqGroupButton.textContent = qqGroupLabel }, 1400)
   })
-  for (const button of appDialogButtons) {
+  const settingsTitle = $("#settings-title")
+  let settingsTrigger: HTMLElement | undefined
+  let confirmingSettingsExit = false
+  settingsWorkspace.addEventListener("settings-exit", () => {
+    const fallback = $('[data-settings-entry="settings"]')
+    const button = settingsTrigger?.getClientRects().length ? settingsTrigger : fallback
+    button.focus({ preventScroll: true })
+  })
+  for (const button of settingsEntryButtons) {
     button.addEventListener("click", () => {
-      settingsController.begin()
-      settingsDialog.showModal()
-      if (button.classList.contains("ai-design-settings")) showSettingsPage("model")
-      else if (button.dataset.appDialog === "about") showSettingsPage("about")
+      const entry = button.dataset.settingsEntry!
+      const opening = settingsWorkspace.hidden
+      if (opening) {
+        settingsTrigger = button
+        settingsController.begin()
+        settingsWorkspace.hidden = false
+        settingsWorkspace.dispatchEvent(new Event("settings-enter"))
+      }
+      if (entry !== "settings") showSettingsPage(entry)
       for (const menu of toolbarMenus) menu.open = false
+      if (opening || entry !== "settings") settingsTitle.focus({ preventScroll: true })
     })
   }
+  const leaveSettings = async (next?: HTMLButtonElement) => {
+    if (settingsWorkspace.hidden || settingsController.isSaving() || confirmingSettingsExit) return
+    if (settingsController.dirty()) {
+      confirmingSettingsExit = true
+      try {
+        if (await ask({ title: "放弃未保存的设置？", detail: "离开后，本次未保存的设置会恢复为之前的值。", actions: [
+          { label: "继续编辑", value: "cancel" }, { label: "放弃更改", value: "discard", variant: "danger" },
+        ] }) !== "discard") return
+      } finally { confirmingSettingsExit = false }
+    }
+    settingsController.cancel()
+    if (next) {
+      next.focus({ preventScroll: true })
+      next.click()
+    }
+  }
+  settingsWorkspace.addEventListener("settings-request-exit", () => void leaveSettings())
+  document.addEventListener("keydown", (event) => {
+    if (settingsWorkspace.hidden || document.querySelector("dialog[open]") || event.isComposing || event.defaultPrevented) return
+    if (event.key === "Escape") {
+      event.preventDefault()
+      void leaveSettings()
+    }
+  })
+  for (const nav of [$("#workspace-navigation"), $("#mobile-navigation")]) nav.addEventListener("click", (event) => {
+    if (settingsWorkspace.hidden) return
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-workspace-page], [data-mobile-page]")
+    if (!button) return
+    event.stopImmediatePropagation()
+    void leaveSettings(button)
+  }, true)
   for (const button of settingsNavItems) {
     button.addEventListener("click", () => showSettingsPage(button.dataset.settingsPage ?? "appearance"))
     button.addEventListener("keydown", (event) => {

@@ -1,10 +1,10 @@
 import { appState } from "./state"
 import { legacyAnimationConfigPath, styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
-import { soundPathForFilename } from "../sounds.ts"
+import { soundPathForFilename, soundResourcePaths } from "../sounds.ts"
 import { theme, orientation, keyFields, toolbarFields, quickInspector } from "./dom"
 import { keyboardFields } from "./canvas-interaction"
-import { openStylePicker, styleConfigDocument, styleKind, availableStyleIDs, styleSoundFile } from "./style-picker"
+import { editStyleConfig, refreshStyleReferenceThumbnails, openStylePicker, styleConfigDocument, styleKind, availableStyleIDs, styleSoundFile } from "./style-picker"
 import { openPalmSkin, palmTheme, sxiPointer } from "./sxi-documents"
 import { drawVisualPreview } from "../atlas.ts"
 import { visualResolver, bdaAppearanceStylePath } from "./bda-documents"
@@ -22,7 +22,10 @@ import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleR
 import { palmStyleLocation } from "../palm/palm-style-edit.ts"
 import { palmFieldLabel } from "../palm/palm-labels.ts"
 import { asObject, type Json } from "../palm/sxi-ini.ts"
-import { palmStylePointer } from "./sxi-styles"
+import { palmStyle, palmStylePointer } from "./sxi-styles"
+import { chooseReferenceValue } from "./ask"
+import { editSxi } from "./sxi-fields"
+import { isEditing } from "./edit-history"
 import type { SkinArchive } from "../skin.ts"
 
 export const layoutAnimationFields = new Set(["ANIM_STYLE", "BACK_ANIM_STYLE", "FORE_ANIM_STYLE", "PRESS_STYLE"])
@@ -105,25 +108,28 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
     if (emptySlot(styleID) && !mixed) return []
     const name = slotInput(index, styleID)
     name.setAttribute("aria-label", key === "FORE_ANIM_STYLE" ? `前景 ${index + 1} 动画样式编号` : `样式 ${index + 1} 编号`)
-    const choose = (highlighted = false) => openStylePicker(slotInput(index, styleID), highlighted)
+    const choose = (highlighted = appState.mobileAppearancePressed ?? false) => openStylePicker(slotInput(index, styleID), highlighted)
     const empty = emptySlot(styleID)
+    const kind = styleKind(styleID, styles)
+    const replaceLabel = key === "SOUND_STYLE" ? "更换音效样式" : animationReference ? "更换动画样式" : "更换样式"
     let states: StyleReferenceState[] = mixed && empty ? [{ label: "混合", content: "混合", onClick: () => choose() }] : []
     if (key === "SOUND_STYLE" && !empty) {
       const path = soundPathForStyle(styleID)
-      states = [{ label: "音效", content: keySoundSample(path?.split("/").pop() ?? styleSoundFile(styleID), path), onClick: (edit) => edit ? openStyleReferenceEditor(styleID) : choose() }]
-    } else if (animationReference && !empty) {
-      states = appState.archive?.format === "sxi" ? palmStyleAnimationStates(styleID, () => choose()) : styleAnimationReferenceStates(styleID, styles ?? IniDocument.parse(""), () => choose())
+      states = [{ label: "更换音效文件", content: keySoundSample(path?.split("/").pop() ?? styleSoundFile(styleID), path), onClick: (edit) => edit ? openStyleReferenceEditor(styleID) : chooseStyleSoundFile(styleID) }]
+    } else if ((animationReference || kind === "anim") && !empty) {
+      states = appState.archive?.format === "sxi" ? palmStyleAnimationStates(styleID) : styleAnimationReferenceStates(styleID, styles ?? IniDocument.parse(""))
     } else if (!empty) {
       states = [false, true].map((highlighted) => ({
-        label: highlighted ? "按下" : "正常",
+        label: ["image", "empty"].includes(kind) ? `更换${highlighted ? "按下" : "正常"}图片` : highlighted ? "按下" : "正常",
         draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await resolver?.resolve(styleID, highlighted).catch(() => undefined)], foreground),
-        onClick: (edit: boolean) => edit ? openStyleReferenceEditor(styleID) : choose(highlighted),
+        onClick: ["image", "empty"].includes(kind) ? (edit: boolean) => edit ? openStyleReferenceEditor(styleID) : openStyleReferenceStateImage(input, key, highlighted, [styleID], true) : undefined,
       }))
     }
     const removable = !input.disabled && !empty
     return [styleReferenceCard({
       name,
-      kind: empty ? undefined : styleKindIcon(styleKind(styleID, styles)),
+      kind: empty ? undefined : styleKindIcon(kind),
+      reference: { label: replaceLabel, run: edit => edit && !empty ? openStyleReferenceEditor(styleID) : choose() },
       states,
       remove: removable ? {
         label: "移除",
@@ -159,7 +165,7 @@ export function styleReferenceForeground(key: string): boolean {
 }
 
 /** Each style id's reference locations, built once per archive revision (thousands of cards ask for it). */
-const usageIndex: { archive?: SkinArchive; key?: string; index?: Map<string, string[]> } = {}
+const usageIndex: { archive?: SkinArchive; key?: string; index?: Map<string, string[]>; parents?: Set<number> } = {}
 
 function styleUsageIndex(): Map<string, string[]> {
   const archive = appState.archive
@@ -167,7 +173,16 @@ function styleUsageIndex(): Map<string, string[]> {
   const key = `${archive.revision}|${theme.value}|${orientation.value}|${styleConfigPath()}`
   if (usageIndex.archive === archive && usageIndex.key === key && usageIndex.index) return usageIndex.index
   const index = new Map<string, string[]>()
-  const add = (id: string, location: string) => index.set(id, [...index.get(id) ?? [], location])
+  const parents = new Set<number>()
+  const add = (id: string, location: string) => {
+    const locations = index.get(id)
+    if (locations) locations.push(location)
+    else {
+      index.set(id, [location])
+      const number = Number(id)
+      if (Number.isSafeInteger(number) && String(number) === id) parents.add(Math.floor(number / 100))
+    }
+  }
   if (archive.format === "sxi") {
     const skin = openPalmSkin()
     const walk = (value: Json, path: string[], orientation: string) => {
@@ -191,7 +206,7 @@ function styleUsageIndex(): Map<string, string[]> {
       if (isStyleReferenceKey(key)) for (const id of new Set(value.split(",").map((part) => part.trim()).filter(Boolean))) add(id, `${path} · [${section}] ${key}`)
     }
   }
-  Object.assign(usageIndex, { archive, key, index })
+  Object.assign(usageIndex, { archive, key, index, parents })
   return index
 }
 
@@ -208,7 +223,8 @@ export function styleUsages(id: string): string[] {
       skin && palmStyleLocation(skin, palmTheme(), orientation, id)?.join(".") === selected ? index.get(`${orientation}:${id}`) ?? [] : [])
   }
   const number = Number(id)
-  const fallback = Number.isSafeInteger(number) ? Array.from({ length: 100 }, (_, offset) => String(number * 100 + offset)).filter((other) => other !== id) : []
+  if (!usageIndex.parents?.has(number)) return index.get(id) ?? []
+  const fallback = Array.from({ length: 100 }, (_, offset) => String(number * 100 + offset)).filter((other) => other !== id)
   return [id, ...fallback].flatMap((other) => index.get(other) ?? [])
 }
 
@@ -268,6 +284,7 @@ export async function openStyleReferenceStateImage(
   key: string,
   highlighted: boolean,
   styleIDs = input.value.split(",").map((value) => value.trim()).filter(Boolean),
+  replace = false,
 ): Promise<void> {
   if (input.disabled) return
   const resolver = visualResolver()
@@ -275,6 +292,12 @@ export async function openStyleReferenceStateImage(
   const foreground = styleReferenceForeground(key)
   const source: "BACK_STYLE" | "FORE_STYLE" = foreground ? "FORE_STYLE" : "BACK_STYLE"
   const property = highlighted ? "HL_IMG" : "NM_IMG"
+  if (replace) {
+    const target = styleWriteTarget(source, property, styleIDs)
+    if (!target.sections?.length || !isEditing()) return
+    appState.stylePickerTarget = undefined
+    return openStyleImageResourceChooser(target)
+  }
   let targetSource = source
   let visual = (await Promise.all(styleIDs.map((styleID) => resolver.resolve(styleID, highlighted).catch(() => undefined))))
     .find((item) => item?.imagePath)
@@ -290,15 +313,34 @@ export async function openStyleReferenceStateImage(
   }
   const target = styleWriteTarget(targetSource, property, styleIDs)
   appState.stylePickerTarget = input
+  appState.styleLibraryInitialImages = false
   appState.styleLibraryHighlighted = highlighted
   if (visual?.imagePath) openImageSlicePicker(visual.imagePath, target, visual.source)
   else openStyleImageResourceChooser(target)
 }
 
+function chooseStyleSoundFile(styleID: string): void {
+  const archive = appState.archive
+  if (!archive || !isEditing()) return
+  const mode = theme.value, direction = orientation.value
+  const current = styleSoundFile(styleID) ?? ""
+  const files = [...new Set(soundResourcePaths(archive.names(), mode, direction).map(path => path.split("/").pop()!))]
+  chooseReferenceValue("音效", current, files.map(file => [file, file]), value => {
+    if (appState.archive !== archive || theme.value !== mode || orientation.value !== direction || !isEditing()) return
+    if (value === current || styleSoundFile(styleID) !== (current || undefined)) return
+    if (archive.format === "sxi") editSxi(skin => {
+      const style = palmStyle(styleID, skin)
+      if (style) style.s_4 = { ...asObject(style.s_4), path_1: value }
+    })
+    else editStyleConfig(styles => styles.set(`STYLE${styleID}`, "PRESS_SOUND_PATH", value))
+    refreshStyleReferenceThumbnails()
+  })
+}
+
 export function openStyleReferenceEditor(styleID: string): void {
   if (!styleID || !availableStyleIDs().includes(styleID) || !appState.archive) return
   const returnPath = appState.selectedPath
-  const returnSelection = [...appState.selectedKeySections]
+  const returnSelection = [...(appState.selectedCandidate ? appState.selectedToolbarSections : appState.selectedKeySections)]
   const returnCandidate = appState.selectedCandidate
   const returnScrollTop = quickInspector.scrollTop
   const returnInspectorGroup = quickInspector.dataset.mobileInspectorGroup ?? ""

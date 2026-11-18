@@ -1,6 +1,6 @@
-import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsDialog, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, interfaceTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
+import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsWorkspace, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, interfaceTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
 import { crossfade, playEnter } from "../motion"
-import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
+import { isTauri, mobilePortraitQuery, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { checkForUpdate } from "../update.ts"
 import { initializeSourceDirectory } from "./source-workspace"
@@ -40,14 +40,30 @@ export async function refreshUpdateStatus(): Promise<void> {
   }
 }
 
+const settingsDescriptions: Record<string, string> = {
+  appearance: "调整界面主题、强调色和窗口材质。",
+  canvas: "设置默认预览设备、画布背景和编辑辅助。",
+  files: "设置「我的皮肤」的记录保留数量。",
+  source: "调整编辑器显示与输入辅助，并管理源码存储目录。",
+  model: "管理 AI 设计使用的对话和图像模型。",
+  adb: "配置 Android 设备连接与皮肤预览。",
+  about: "查看版本、更新、诊断与反馈入口。",
+}
+
 export function showSettingsPage(page: string): void {
-  if (matchMedia("(max-width: 760px)").matches) {
-    settingsDialog.dataset.mobileSettings = "detail"
-    settingsDialog.querySelector("#settings-title")!.textContent = ({ appearance: "外观设置", canvas: "预览与画布设置", files: "文件设置", source: "源代码设置", model: "AI 模型设置", about: "关于与帮助" } as Record<string, string>)[page] ?? "设置"
-  }
   const target = settingsPages.find(panel => panel.dataset.settingsPanel === page && !panel.hasAttribute("data-platform-hidden"))
     ?? settingsPages.find(panel => !panel.hasAttribute("data-platform-hidden"))
   if (!target) return
+  const current = target.dataset.settingsPanel!
+  const category = settingsNavItems.find(tab => tab.dataset.settingsPage === current)?.textContent?.trim() ?? ""
+  settingsWorkspace.querySelector("#settings-category-title")!.textContent = category
+  settingsWorkspace.querySelector("#settings-category-description")!.textContent = settingsDescriptions[current]
+  if (mobilePortraitQuery.matches) {
+    settingsWorkspace.dataset.mobileSettings = "detail"
+    const title = settingsWorkspace.querySelector<HTMLElement>("#settings-title")!
+    title.textContent = ({ appearance: "外观设置", canvas: "预览与画布设置", files: "文件设置", source: "源代码设置", model: "AI 模型设置", about: "关于与帮助" } as Record<string, string>)[current] ?? category
+    if (!settingsWorkspace.hidden) title.focus({ preventScroll: true })
+  }
   const changed = target.hidden
   for (const panel of settingsPages) panel.hidden = panel !== target
   if (changed) playEnter(target)
@@ -56,7 +72,7 @@ export function showSettingsPage(page: string): void {
     button.setAttribute("aria-selected", String(selected))
     button.tabIndex = selected ? 0 : -1
   }
-  settingsDialog.querySelector<HTMLElement>(".settings-content")?.scrollTo({ top: 0 })
+  settingsWorkspace.querySelector<HTMLElement>(".settings-content")?.scrollTo({ top: 0 })
   if (target.dataset.settingsPanel === "about") void refreshUpdateStatus()
 }
 
@@ -102,8 +118,8 @@ export function applyAppTheme(): void {
   const resolved = designScheme === "light" || designScheme === "dark" ? designScheme : preference === "system" ? (systemTheme.matches ? "dark" : "light") : preference
   const root = document.documentElement
   appTheme.disabled = Boolean(designScheme)
-  settingsDialog.querySelector<HTMLElement>('#interface-theme-note')!.hidden = !designScheme
-  for (const button of settingsDialog.querySelectorAll<HTMLButtonElement>('[data-setting-choice="app-theme"]')) button.disabled = appTheme.disabled
+  settingsWorkspace.querySelector<HTMLElement>('#interface-theme-note')!.hidden = !designScheme
+  for (const button of settingsWorkspace.querySelectorAll<HTMLButtonElement>('[data-setting-choice="app-theme"]')) button.disabled = appTheme.disabled
   const apply = () => {
     root.dataset.interfaceTheme = interfaceTheme.value
     root.dataset.appTheme = resolved
@@ -145,10 +161,14 @@ export function applyWindowMaterialOpacity(): void {
   windowMaterialOpacity.value = String(opacity)
   windowMaterialOpacityValue.value = `${opacity}%`
   windowMaterialOpacity.disabled = !windowMaterial.checked
-  const navigationOpacity = Math.max(20, Math.min(100, Number(workspaceNavigationOpacity.value) || 56))
-  workspaceNavigationOpacity.value = String(navigationOpacity)
+  const navigationOpacity = workspaceNavigationOpacity.valueAsNumber
   workspaceNavigationOpacityValue.value = `${navigationOpacity}%`
   workspaceNavigationOpacity.disabled = !windowMaterial.checked
+  for (const [slider, output] of [[windowMaterialOpacity, windowMaterialOpacityValue], [workspaceNavigationOpacity, workspaceNavigationOpacityValue]] as const) {
+    const min = Number(slider.min)
+    slider.style.setProperty("--_slider-position", String((slider.valueAsNumber - min) / (Number(slider.max) - min)))
+    slider.setAttribute("aria-valuetext", output.value)
+  }
   document.documentElement.style.setProperty("--workspace-navigation-opacity", String(navigationOpacity / 100))
   document.documentElement.dataset.windowMaterialKind = appState.windowMaterialKind
   // 滑杆值就是材质填充强度：100% 时每个表面都合成到完全不透明，因此不再像旧版那样乘一个小系数
@@ -193,10 +213,9 @@ export async function initializeWindowMaterial(): Promise<void> {
     : savedWindowMaterial !== "off"
   windowMaterialOpacitySetting.hidden = appState.windowMaterialKind === "none"
   workspaceNavigationOpacitySetting.hidden = appState.windowMaterialKind === "none"
-  workspaceNavigationOpacity.value = localStorage.getItem("workspace-navigation-opacity") ?? "56"
+  workspaceNavigationOpacity.value = localStorage.getItem("workspace-navigation-opacity") ?? workspaceNavigationOpacity.defaultValue
   const storageKey = appState.windowMaterialKind === "acrylic" ? "window-acrylic-opacity" : "window-glass-opacity"
-  // 玻璃默认值取 50%：滑杆现在代表填充强度，100% 等同于实心窗口，默认值要留出材质本身。
-  windowMaterialOpacity.value = localStorage.getItem(storageKey) ?? "87"
+  windowMaterialOpacity.value = localStorage.getItem(storageKey) ?? windowMaterialOpacity.defaultValue
   await applyWindowMaterialWithRetry()
 }
 
@@ -259,8 +278,8 @@ export function setCanvasDropState(active: boolean): void {
   canvasWrap.classList.toggle("drop-target", active)
 }
 
-const recentHistoryLimitInput = settingsDialog.querySelector<HTMLInputElement>("#recent-history-limit")!
-export const settingsController = initializeSettings(settingsDialog, setGuidesVisible, modelSettings, () => {
+const recentHistoryLimitInput = settingsWorkspace.querySelector<HTMLInputElement>("#recent-history-limit")!
+export const settingsController = initializeSettings(settingsWorkspace, setGuidesVisible, modelSettings, () => {
   saveRecentHistoryLimit(recentHistoryLimitInput.valueAsNumber)
 })
 recentHistoryLimitInput.addEventListener("invalid", () => showSettingsPage("files"))

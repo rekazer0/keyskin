@@ -43,12 +43,17 @@ try {
     if (format === 'sxi') {
       const styles = JSON.parse(created.text).default.s_info.ss_1
       assert.equal(Object.keys(styles).length, 1)
-      assert.equal(await row('f_s').getByRole('spinbutton').count(), 1, 'a new Palm style exposes text controls')
+      await row('f_s').locator('[data-config-add]').click()
+      assert.equal(await row('f_s').getByRole('spinbutton').isVisible(), true, 'a new Palm style exposes text controls via +')
+      assert.deepEqual(await snapshot(path), created)
     } else {
-      assert.equal(await row('FONT_CLEARTYPE').getByRole('switch').count(), 1)
-      assert.equal(await row('BORDER_SIZE').getByRole('spinbutton').count(), 1)
-      assert.equal(await row('BORDER_COLOR').locator('.ui-color-field').count(), 1)
-      assert.equal(await row('PRESS_SOUND_PATH').getByRole('combobox').count(), 1, 'sound control exists before any sound is imported')
+      await fields.getByRole('button', { name: '添加文字', exact: true }).click()
+      assert.equal(await row('FONT_CLEARTYPE').getByRole('switch').isVisible(), true)
+      await row('BORDER_COLOR').locator('[data-config-add]').click()
+      assert.equal(await row('BORDER_COLOR').locator('.ui-color-field').isVisible(), true)
+      assert.equal(await row('PRESS_SOUND_PATH').getByRole('button', { name: '添加按下音效路径' }).isVisible(), true, 'sound can be added before any sound is imported')
+      await row('BORDER_SIZE').locator('[data-config-add]').click()
+      assert.deepEqual(await snapshot(path), created)
       for (const key of ['PRESS_ANIM', 'RELEASE_ANIM', 'SHOW_ANIM', 'HIDE_ANIM']) assert.equal(await row(key).locator('input').count() > 0, true)
       const size = row('BORDER_SIZE').getByRole('spinbutton')
       await size.fill('3')

@@ -33,11 +33,11 @@ test("resource batches validate every file before committing, including duplicat
   assert.deepEqual(Array.from(commits[0], change => change.path), ["light/skin/res/a.png", "light/skin/res/b.png"])
 })
 
-test("font uploads use only the selected mode and validate a whole batch before committing", async () => {
+test("font uploads use only the active skin mode and validate a whole batch before committing", async () => {
   for (const mode of ["light", "dark"]) {
     const { context, commits } = uploadContext()
     context.resourceCatalog = "font"
-    context.resourceFontTheme = mode
+    context.theme.value = mode
     await assert.rejects(context.uploadResourceFiles([file("good.ttf"), file("bad.ttf", Uint8Array.of(1))]))
     await assert.rejects(context.uploadResourceFiles([file("image.png")]))
     assert.equal(commits.length, 0)
@@ -46,8 +46,7 @@ test("font uploads use only the selected mode and validate a whole batch before 
   }
   const { context, commits } = uploadContext()
   context.resourceCatalog = "font"
-  context.resourceFontTheme = "light"
-  const delayed = { name: "late.ttf", arrayBuffer: async () => { context.resourceFontTheme = "dark"; return png.buffer } }
+  const delayed = { name: "late.ttf", arrayBuffer: async () => { context.theme.value = "dark"; return png.buffer } }
   assert.equal(await context.uploadResourceFiles([delayed]), false)
   assert.equal(commits.length, 0)
 })

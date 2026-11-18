@@ -1,3 +1,4 @@
+import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -151,6 +152,7 @@ try {
   await page.locator('.source-file-row[data-path="phoneTheme 副本.ini"]').waitFor({ state: 'visible' })
   assert.equal((await snapshot()).undo, before.undo + 1)
   await page.locator('#source-delete').click()
+  await confirmDeletion(page)
   await page.locator('.source-file-row[data-path="phoneTheme 副本.ini"]').waitFor({ state: 'detached' })
   await page.locator('#desktop-undo').click()
   await page.locator('.source-file-row[data-path="phoneTheme 副本.ini"]').waitFor({ state: 'visible' })
@@ -199,6 +201,7 @@ try {
   await copiedFile.click({ button: 'right' })
   assert.equal(await copiedFile.getAttribute('aria-selected'), 'true')
   await menu.getByRole('menuitem', { name: '删除', exact: true }).click()
+  await confirmDeletion(page)
   await copiedFile.waitFor({ state: 'detached' })
   assert.equal((await snapshot()).names.includes('phoneTheme.ini'), true)
   await page.locator('#desktop-undo').click()
@@ -238,6 +241,7 @@ try {
     }, position)
     if (position !== 'top') assert.ok(beforeScroll > 0, `${position} scenario must scroll`)
     await page.locator('#source-delete').click()
+    await confirmDeletion(page)
     await row.waitFor({ state: 'detached' })
     const afterScroll = await page.locator('#files').evaluate(async (list) => {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -297,6 +301,7 @@ try {
   assert.equal(await page.locator('#source-download').isDisabled(), true)
   const beforeDelete = await snapshot()
   await menu.getByRole('menuitem', { name: '删除', exact: true }).click()
+  await confirmDeletion(page)
   await b.waitFor({ state: 'detached' })
   assert.equal((await snapshot()).undo, beforeDelete.undo + 1, 'batch delete is one undo step')
   assert.equal((await snapshot()).names.includes('multi/c.txt'), false)

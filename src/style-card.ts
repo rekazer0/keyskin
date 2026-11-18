@@ -164,6 +164,7 @@ export function styleCard(options: {
   id: string; label: string; kind: string; kindLabel?: string; kindIcon?: string
   info?: string
   animationPreview?: boolean
+  stateLayout?: "single" | "joined"
   draw?: (canvas: HTMLCanvasElement, highlighted: boolean) => void | Promise<void>
   animation?: () => HTMLElement[] | Promise<HTMLElement[]>
   summary?: string
@@ -200,13 +201,15 @@ export function styleCard(options: {
     previews.title = "暂无样式属性"
     previews.setAttribute("aria-label", previews.title)
   } else if (options.kind !== "sound") {
+    const merged = options.stateLayout === "single"
+    if (options.stateLayout) previews.dataset.variant = options.stateLayout
     pendingDraws.set(previews, () => {
-      const canvases = [false, true].map((highlighted) => {
+      const canvases = (merged ? [false] : [false, true]).map((highlighted) => {
         const state = element("span", "ui-style-state")
         state.dataset.state = highlighted ? "pressed" : "normal"
         const canvas = options.canvas?.(160, 80) ?? element("canvas")
         canvas.setAttribute("role", "img")
-        canvas.setAttribute("aria-label", highlighted ? "按下状态" : "正常状态")
+        canvas.setAttribute("aria-label", merged ? "正常与按下状态" : highlighted ? "按下状态" : "正常状态")
         state.append(canvas)
         previews.append(state)
         return canvas
@@ -268,6 +271,7 @@ export type StyleReferenceState = {
   content?: Element | string
   /** `edit` is a Command/Ctrl click: go to the referenced style or animation. */
   onClick?(edit: boolean): void
+  editLabel?: string
 }
 
 /** 引用字段标题右侧的添加入口，选择后才写入配置。 */
@@ -287,6 +291,7 @@ export function styleReferenceCard(options: {
   /** The editable number; Sogou cards have one file name per state. */
   name: HTMLInputElement | HTMLInputElement[]
   kind?: HTMLElement
+  reference?: { label: string; run(edit: boolean): void }
   states: StyleReferenceState[]
   remove?: { label: string; run(): void }
   disabled?: boolean
@@ -297,16 +302,26 @@ export function styleReferenceCard(options: {
     name.classList.add("ui-style-ref-number")
     meta.append(name)
   }
-  if (options.kind) meta.append(options.kind)
+  if (options.reference && !options.disabled) {
+    const { label, run } = options.reference
+    const button = iconButton("layers", label, event => {
+      event.stopPropagation()
+      run(event.metaKey || event.ctrlKey)
+    })
+    button.className = "ui-style-ref-action"
+    if (options.kind) button.replaceChildren(options.kind)
+    meta.append(button)
+  } else if (options.kind) meta.append(options.kind)
   const states = element("span", "ui-style-ref-states")
   const action = (item: HTMLElement, run: ((edit: boolean) => void) | undefined) => {
+    if (!run || options.disabled) return
     item.setAttribute("role", "button")
-    item.tabIndex = options.disabled && !run ? -1 : 0
-    item.addEventListener("click", event => { event.preventDefault(); run?.(event.metaKey || event.ctrlKey) })
+    item.tabIndex = 0
+    item.addEventListener("click", event => { event.preventDefault(); run(event.metaKey || event.ctrlKey) })
     item.addEventListener("keydown", event => {
       if (event.target !== item || (event.key !== "Enter" && event.key !== " ")) return
       event.preventDefault()
-      run?.(event.metaKey || event.ctrlKey)
+      run(event.metaKey || event.ctrlKey)
     })
   }
   const canvases: HTMLCanvasElement[] = []
@@ -324,7 +339,13 @@ export function styleReferenceCard(options: {
       draws.push(item.draw)
     } else if (item.content) state.append(item.content)
     action(state, item.onClick)
-    states.append(state)
+    if (item.editLabel && item.onClick && !options.disabled) {
+      const slot = element("span", "ui-style-state-slot")
+      const edit = iconButton("pencil-line", item.editLabel, () => item.onClick?.(true))
+      edit.dataset.size = "sm"
+      slot.append(state, edit)
+      states.append(slot)
+    } else states.append(state)
   }
   if (options.states.length === 1) states.dataset.variant = "single"
   if (canvases.length) lazyDraw(card, states, canvases, (canvas, index) => draws[index](canvas))

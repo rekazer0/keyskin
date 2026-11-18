@@ -96,6 +96,7 @@ try {
     await geometry.scrollIntoViewIfNeeded()
     await page.screenshot({ path: `${output}${format}-desktop.png` })
     await page.setViewportSize({ width: 390, height: 844 })
+    if (await page.locator('.mobile-geometry-detail > summary').isVisible()) await page.locator('.mobile-geometry-detail > summary').click()
     await geometry.scrollIntoViewIfNeeded()
     assert.equal(await geometry.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
     await page.screenshot({ path: `${output}${format}-mobile.png` })

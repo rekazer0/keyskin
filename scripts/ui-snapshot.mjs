@@ -146,7 +146,7 @@ await withPage(async (page) => {
   await editAndSelectKey(page)
   await capture(page, "bds-key")
   await railTabs(page, "bds-key")
-  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
+  await page.locator("#workspace-navigation [data-settings-entry='settings']").click()
   await capture(page, "settings")
   await page.keyboard.press("Escape")
   // 图片编辑：资源列表与切片工具栏会挪进画布工作区
@@ -217,7 +217,7 @@ for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await page.waitForSelector('#document-fields [data-inspector-group-label="背景"]')
   await capture(page, `${colorScheme}-ssf-key`)
   await railTabs(page, `${colorScheme}-ssf-key`)
-  await page.locator('#document-fields [data-inspector-group-label="背景"] .ui-style-state').first().click()
+  await page.locator('#document-fields [data-inspector-group-label="背景"] .ui-style-state').first().click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
   await page.waitForFunction(() => document.querySelector('.ui-image-editor input[type=range]')?.disabled === false)
   await capture(page, `${colorScheme}-ssf-image-editor`)
   await page.keyboard.press("Escape")

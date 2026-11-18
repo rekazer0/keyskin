@@ -30,13 +30,15 @@ import { type WindowMaterialKind } from "./types"
 import { type SsfTemplates } from "../ssf/ssf-convert.ts"
 import { type JsonObject } from "../palm/sxi-ini.ts"
 import { type SsfPackage } from "../ssf/ssf-package.ts"
+type CandidateSelection = boolean | "input" | "parts"
+
 export const appState = {
   pinnedToolbar: {
     actions: [] as string[],
     editing: false,
     suppressClick: false,
     gesture: undefined as {
-      pointerId: number; x: number; y: number; action: string; fromMenu: boolean;
+      pointerId: number; x: number; y: number; action: string; source: HTMLElement;
       timer?: number; preview?: HTMLElement;
     } | undefined,
   },
@@ -68,7 +70,7 @@ export const appState = {
   layoutDocument: undefined as IniDocument | undefined,
   selectedKeySections: [] as string[],
   selectedToolbarSections: [] as string[],
-  selectedCandidate: false as boolean | "input",
+  selectedCandidate: false as CandidateSelection,
   /** Which text the 文字 group edits for the candidate bar or whole layout (候选字、首选、输入码……). */
   textStyleTarget: "",
   /** Which text layers of the selected BDA keys the 文字 fields edit: the main text or the hints after it. */
@@ -157,10 +159,10 @@ export const appState = {
   selectedBdaStyleGroup: "imageStyles" as BdaAppearanceStyleGroup,
   styleReturnPath: "",
   styleReturnSelection: [] as string[],
-  styleReturnCandidate: false as boolean | "input",
+  styleReturnCandidate: false as CandidateSelection,
   styleReturnScrollTop: 0,
   styleReturnInspectorGroup: "",
-  bdaSliceReturn: undefined as { path: string; styleID: string } | undefined,
+  bdaSliceReturn: undefined as { path: string; styleID: string; styleReturnPath: string; styleReturnCandidate: CandidateSelection } | undefined,
   selectedResourcePath: "",
   tilePath: "",
   tileDocument: IniDocument.parse(""),
@@ -210,7 +212,6 @@ export const appState = {
   */
   inspectorGroupKey: "",
   singlePageInspectorContext: "",
-  mobileStudioStarted: false,
   mobileInspectorCategory: "appearance",
   mobileInspectorContext: "",
   mobileAppearancePressed: false,
@@ -271,19 +272,20 @@ export const appState = {
   sourceStyleProxyTarget: undefined as SourceEditorValueRange | undefined,
   stylePickerTarget: undefined as HTMLInputElement | undefined,
   styleLibraryHighlighted: false,
+  styleLibraryInitialImages: false,
   styleLibrarySession: undefined as { session: string; preview(id: string): Promise<StyleLibraryPreview | undefined>; image(key: string): string | undefined } | undefined,
   styleLibrarySelected: undefined as { styleID?: string; imagePath?: string } | undefined,
   styleUsageFilter: "all",
   resourceStyleType: "all",
   resourceUsageFilter: "all",
   resourceCatalog: "",
-  resourceFontTheme: "light",
   selectedResourceCatalogItem: "",
   resourcePageStatistics: undefined as { archive: SkinArchive; key: string; unused: number; types: Record<string, number> } | undefined,
   // Thumbnails redraw a frame later so they don't share a task with the inspector rebuild.
   stylePreviewsPending: false,
   pickerSelectedIndex: undefined as number | undefined,
   recentPage: 0,
+  recentPageSize: 9,
   recentPreviewRunning: false,
   // 使用教程进行中时的停止函数
   stopOnboarding: undefined as (() => void) | undefined,

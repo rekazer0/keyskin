@@ -29,6 +29,7 @@ for (const format of ['bdi', 'bds']) {
     archive.setText('light/skin/res/logo/pop_menu_icons.til', '[IMG26]\nSOURCE_RECT=0,0,4,4\n[IMG27]\nSOURCE_RECT=4,0,4,4\n')
     archive.delete('light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist')
   }
+  if (format === 'bds') fixtures.push({ format, bytes: archive.toBytes(), selectionOnly: true })
   const converted = unzipSync(buildSxiZip(archive).bytes)
   if (format === 'bds') {
     const skin = JSON.parse(new TextDecoder().decode(converted['skin.json']))
@@ -56,45 +57,57 @@ try {
     const close = page.locator('#file-operation-dialog[open] #file-operation-close')
     if (await close.isVisible()) await close.click()
     await page.getByRole('button', { name: '编辑模式', exact: true }).click()
-    const selectToolbar = async () => {
-      if (fixture.legacy) {
-        await page.locator('#candidate-area').click()
-        return
-      }
-      const point = await page.evaluate(async () => {
-        const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
-        await toolbarPreview.whenDrawn()
-        const key = toolbarPreview.keys.find(key => key.editable) ?? toolbarPreview.keys[0]
-        const box = toolbarPreview.canvas.getBoundingClientRect()
-        return { x: box.x + (key.rect.x + key.rect.width / 2) / toolbarPreview.panelWidth * box.width,
-          y: box.y + (key.rect.y + key.rect.height / 2) / toolbarPreview.panelHeight * box.height }
+    const parts = await page.evaluate(async () => {
+      const { toolbarPreview: p } = await import('/src/app/canvas-interaction.ts')
+      await p.whenDrawn()
+      const box = p.canvas.getBoundingClientRect()
+      return p.keys.filter(key => key.editable).flatMap(({ section, rect }) => {
+        const x1 = Math.max(0, rect.x), x2 = Math.min(p.panelWidth, rect.x + rect.width)
+        const y1 = Math.max(0, rect.y), y2 = Math.min(p.panelHeight, rect.y + rect.height)
+        return x1 < x2 && y1 < y2 ? [{ section, x: box.x + (x1 + x2) / 2 * box.width / p.panelWidth,
+          y: box.y + (y1 + y2) / 2 * box.height / p.panelHeight }] : []
       })
-      await page.mouse.click(point.x, point.y)
-      await page.waitForFunction(() => document.querySelector('#candidate-area').getAttribute('aria-selected') === 'true')
-    }
-    await selectToolbar()
-    const bar = await page.locator('#toolbar-preview').boundingBox()
-    assert.ok(bar)
+    })
     const archiveBeforeSelection = await page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
       return { revision: appState.archive.revision, undo: appState.undoStack.length }
     })
-    for (const [fraction, modifiers] of [[0.03, []], [0.5, ['Shift']], [0.97, ['Control']]]) {
-      for (const key of modifiers) await page.keyboard.down(key)
-      await page.mouse.click(bar.x + bar.width * fraction, bar.y + bar.height / 2)
-      for (const key of modifiers) await page.keyboard.up(key)
+    const check = async (selected, joined) => {
       await page.waitForFunction(async () => !(await import('/src/app/state.ts')).appState.selectionInspectorSyncPending)
-      assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), 'true')
-      assert.deepEqual(await page.evaluate(async () => {
-        const { appState } = await import('/src/app/state.ts')
+      const state = await page.evaluate(async () => {
         const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
-        return { candidate: appState.selectedCandidate, keys: appState.selectedKeySections, sections: appState.selectedToolbarSections, outlines: [...toolbarPreview.selected] }
-      }), { candidate: true, keys: [], sections: [], outlines: [] }, 'left, middle and right select only the entire bar')
+        const { appState } = await import('/src/app/state.ts')
+        return { sections: [...toolbarPreview.selected].sort(), keys: appState.selectedKeySections,
+          scope: appState.selectedCandidate, joined: toolbarPreview.joinedSelection }
+      })
+      assert.deepEqual(state, { sections: selected.map(p => p.section).sort(), keys: [], scope: joined ? true : 'parts', joined })
+      assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), String(joined))
+    }
+    if (parts.length) {
+      assert.ok(parts.length >= 3)
+      const click = p => page.mouse.click(p.x, p.y)
+      await click(parts[0]); await check(parts.slice(0, 1), false)
+      if (fixture.legacy) {
+        await page.keyboard.down('Shift'); await click(parts.at(-1)); await page.keyboard.up('Shift')
+        await check(parts, true)
+      }
+      await click(parts[1]); await check(parts.slice(1, 2), false)
+      await page.keyboard.down('Control')
+      await click(parts[0]); await check(parts.slice(0, 2), false)
+      for (let i = 2; i < parts.length; ++i) {
+        await click(parts[i]); await check(parts.slice(0, i + 1), i === parts.length - 1)
+      }
+      await click(parts[0]); await check(parts.slice(1), false)
+      await click(parts[0]); await check(parts, true)
+      await page.keyboard.up('Control')
+    } else {
+      await page.locator('#toolbar-preview').click(); await check([], true)
     }
     assert.deepEqual(await page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
       return { revision: appState.archive.revision, undo: appState.undoStack.length }
     }), archiveBeforeSelection, 'selecting the bar never edits the skin')
+    if (fixture.selectionOnly) { assert.deepEqual(errors, []); await page.close(); continue }
     const card = page.getByRole('button', { name: `更换${fixture.label}图标`, exact: true })
     await card.waitFor()
     assert.equal(await page.locator('.ui-toolbar-icon').count(), fixture.count)
@@ -133,10 +146,6 @@ try {
       await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
       assert.deepEqual(await sizes(), ['45,47', '250,34', '45,44'])
     }
-    assert.deepEqual(await page.evaluate(async () => {
-      const { appState } = await import('/src/app/state.ts')
-      return appState.selectedToolbarSections
-    }), [], 'every format selects the entire bar')
     const snapshot = () => page.evaluate(async path => {
       const { appState } = await import('/src/app/state.ts')
       const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')

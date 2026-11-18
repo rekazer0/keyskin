@@ -1,6 +1,7 @@
 import type { AiChatSnapshot } from "../ai-chat"
 import type { AiDesignConversation } from "../ai-design"
 import { bindListboxKeys, element, emptyState } from "../dom-element"
+import { createIcon } from "../icons"
 import { ask } from "./ask"
 import { aiNewSession, aiSessionCreate, aiSessionList, aiSessions, aiSessionsClose, aiDesignPanel, aiDesignStatus } from "./dom"
 import { appState } from "./state"
@@ -55,12 +56,12 @@ function renderSessions(): void {
     const meta = element("small")
     meta.textContent = `${new Date(session.createdAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${session.appliedFiles ? `已应用 ${session.appliedFiles} 个文件` : "未应用"}`
     title.append(text, meta)
-    item.append(title)
+    item.append(createIcon("message-square", 16), title)
     item.title = session.title
     item.addEventListener("click", () => selectSession(session.id))
     return item
   }))
-  if (!aiSessionList.childElementCount) aiSessionList.append(emptyState("history"))
+  if (!aiSessionList.childElementCount) aiSessionList.append(emptyState("history", "暂无已应用的会话"))
   if (!aiSessionList.querySelector('[tabindex="0"]')) aiSessionList.querySelector<HTMLElement>('[role="option"]')?.setAttribute("tabindex", "0")
   syncAiSessionControls()
 }
@@ -98,7 +99,7 @@ export function syncAiSessionControls(): void {
   const disabled = appState.aiDesignBusy || Boolean(appState.aiDesignDraft)
   aiSessionCreate.disabled = disabled
   const clear = aiSessions.querySelector<HTMLButtonElement>("[data-session-clear]")
-  if (clear) clear.disabled = disabled
+  if (clear) clear.disabled = disabled || appState.aiSessions.length < 2
   aiSessionList.querySelectorAll<HTMLButtonElement>("button").forEach((item) => { item.disabled = disabled })
 }
 
@@ -118,6 +119,8 @@ export function wireAiSessions(): void {
   }
   aiSessionList.before(filters)
   const clear = Object.assign(element("button", "ui-button"), { type: "button", textContent: "清理记录" })
+  clear.dataset.variant = "quiet"
+  clear.prepend(createIcon("trash-2", 14))
   clear.dataset.sessionClear = ""
   clear.addEventListener("click", () => {
     if (appState.aiDesignBusy || appState.aiDesignDraft) return
@@ -129,7 +132,9 @@ export function wireAiSessions(): void {
       renderSessions()
     })
   })
-  aiSessionList.after(clear)
+  const footer = element("footer")
+  footer.append(clear)
+  aiSessionList.after(footer)
   aiNewSession.addEventListener("click", () => {
     if (!aiSessions.hidden) { closeSessions(); return }
     void ensureAiChat().then(() => {

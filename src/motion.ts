@@ -95,8 +95,10 @@ export function closeDialog(dialog: HTMLDialogElement, value?: string): Promise<
   const options = timing("base", "standard")
   if (!options) { dialog.close(value); return Promise.resolve() }
   const fade = { ...options, fill: "forwards" as const }
+  const travel = getComputedStyle(dialog).getPropertyValue("--_dialog-travel").trim()
+  // 仅淡出的弹窗不声明 transform，避免把内部的固定定位元素移离视口坐标。
   const animations = [
-    dialog.animate([{ offset: 1, opacity: 0, transform: "var(--_dialog-travel, none)" }], fade),
+    dialog.animate([{ offset: 1, opacity: 0, ...(travel && travel !== "none" ? { transform: travel } : {}) }], fade),
     dialog.animate([{ offset: 1, opacity: 0 }], { ...fade, pseudoElement: "::backdrop" }),
   ]
   const finished = new Promise<void>(resolve => {

@@ -28,6 +28,10 @@ export function shownInAnimationView(particle: boolean): boolean {
   return appState.animationDesignMode === "all" || animationWorkspaceHosts()?.allTypes === true || particle === (appState.animationDesignMode === "particle")
 }
 
+export function selectedAnimationSourceID(): string | undefined {
+  if (appState.animationDesignMode !== "all" && !appState.animationStyleEditing) return appState.selectedAnimations[selectionKey()]
+}
+
 /** The remembered animation, or the first one when it is gone (deleted, undone, never chosen). */
 export function selectedAnimation(items: readonly AnimationListItem[]): string | undefined {
   const remembered = appState.selectedAnimations[selectionKey()]
@@ -135,10 +139,6 @@ export function selectAnimation(id: string): void {
 export function keyboardPlayback(plays: (key: PreviewItem) => boolean): KeyboardPlayback {
   const target = () => visiblePreviewItems(preview.keys, preview.skinState).find(plays)
   return {
-    targetLabel() {
-      const key = target()
-      return key && (key.show || keyLabel(key))
-    },
     play() {
       const key = target()
       if (key) void preview.playAnimation(key)

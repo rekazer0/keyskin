@@ -1,8 +1,9 @@
 import { appState } from "./state"
-import { source, toolbarPreview, preview } from "./canvas-interaction"
-import { toggleGuides, mobilePreviewGuides, newTileButton, atlasCanvas, resourceListView, resourceDetail, sourceName, quickInspector, files } from "./dom"
+import { source, preview } from "./canvas-interaction"
+import { candidateComposition, canvasWrap, toggleGuides, mobilePreviewGuides, newTileButton, atlasCanvas, resourceListView, resourceDetail, sourceName, quickInspector, files } from "./dom"
 import { setGuidesVisible, refreshPreview, syncCandidateSelection } from "./preview-render"
 import { bdaAppearancePart, currentBdaAppearance, bdaBasePath, refreshBdaLayout, isBdaVirtualTextPath, isBdaLayoutPath, isBdaAppearancePartPath } from "./bda-documents"
+import { clearResourceWindow } from "./resource-grid-window"
 import { hideImageWorkspace, renderResourceInspector } from "./resource-inspector"
 import { IniDocument } from "../ini.ts"
 import { previewItems } from "../preview-items.ts"
@@ -27,14 +28,17 @@ export function selectFile(
   resourceMode: "document" | "image" | "style" | "sound" | "motion" | "particle" = "document",
   preserveInspectorView = false,
 ): void {
+  const enteringAnimation = (resourceMode === "motion" || resourceMode === "particle") && !preview.animationView &&
+    (appState.archive?.format === "bdi" || appState.archive?.format === "bds" || appState.archive?.format === "sxi")
+  const pickedKeys = enteringAnimation && appState.selectedPath === appState.layoutPath ? [...appState.selectedKeySections] : []
+  if (enteringAnimation && appState.selectedCandidate) canvasWrap.dataset.animationComponent = candidateComposition.hidden && appState.selectedCandidate !== "input" ? "SWITCH" : "CAND"
+  else if (path !== appState.selectedPath) delete canvasWrap.dataset.animationComponent
+  clearResourceWindow()
   appState.resourceCatalog = ""
   if (path !== appState.selectedPath || (resourceMode === "motion" || resourceMode === "particle") && resourceMode !== appState.animationDesignMode) appState.animationStyleEditing = false
-  if (resourceMode !== "image") appState.bdaSliceReturn = undefined
-  if (path !== appState.selectedPath) {
-    source.commit()
-    appState.selectedToolbarSections = []
-    toolbarPreview.setSelected([])
-  }
+  appState.bdaSliceReturn = undefined
+  if (path !== appState.selectedPath) source.commit()
+  appState.selectedToolbarSections = []
   appState.selectedCandidate = false
   const previousInspectorTab = appState.inspectorTab
   const preserveCurrentInspectorView = preserveInspectorView || path === appState.selectedPath
@@ -42,7 +46,7 @@ export function selectFile(
   appState.styleReturnPath = ""
   appState.styleReturnCandidate = false
   // A document refresh (undo, source sync, tree rebuild) keeps the selected animation view and its picked key.
-  if (path !== appState.selectedPath || (resourceMode === "motion" || resourceMode === "particle") && resourceMode !== appState.animationDesignMode) appState.animationKeys = []
+  if (path !== appState.selectedPath || (resourceMode === "motion" || resourceMode === "particle") && resourceMode !== appState.animationDesignMode) appState.animationKeys = pickedKeys
   if (resourceMode === "motion" || resourceMode === "particle") {
     appState.animationDesignMode = resourceMode
     appState.animationWorkspaceMode = resourceMode
@@ -81,7 +85,7 @@ export function selectFile(
   appState.selectedPath = path
   if (path !== appState.layoutPath) {
     appState.selectedKeySections = []
-    preview.setSelected([])
+    preview.setSelected(preview.animationView ? appState.animationKeys : [])
   }
   const appearancePart = bdaAppearancePart(path)
   if (appearancePart) {

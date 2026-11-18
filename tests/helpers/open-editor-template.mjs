@@ -1,5 +1,5 @@
 // Drive the real single-click template entry on each layout.
-export async function openEditorTemplate(page, template = 'default-android') {
+export async function openEditorTemplate(page, template = 'default-android', { preview = false } = {}) {
   await page.waitForSelector('.template-card', { state: 'attached' })
   if (await page.locator('#mobile-welcome-new').isVisible()) {
     await page.locator('#mobile-welcome-new').click()
@@ -11,4 +11,6 @@ export async function openEditorTemplate(page, template = 'default-android') {
   await page.waitForFunction(() => !document.querySelector('#open').disabled && (!document.querySelector('#file-operation-dialog').open || !document.querySelector('#file-operation-close').disabled))
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible()) await close.click()
+  const edit = page.locator('.mobile-preview-return')
+  if (!preview && await edit.isVisible()) await edit.click()
 }

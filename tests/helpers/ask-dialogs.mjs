@@ -10,3 +10,9 @@ export function acceptAskDialogs(page) {
     }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] })
   })
 }
+
+export async function confirmDeletion(page) {
+  const dialog = page.locator('dialog[open][data-delete-confirmation]')
+  await dialog.getByRole('button', { name: '删除', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+}
