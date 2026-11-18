@@ -115,7 +115,7 @@ export function absoluteBoard(rects: ReadonlyArray<{ id: string } & LayoutRect>)
   }
 }
 
-/** 把某个节点的矩形改成绝对定位；用于“移动单个按键”这类编辑。 */
+/** 把某个按键钉到板坐标的指定位置：从原父容器摘出，作为根的绝对定位子项。 */
 export function setNodeRect(node: LayoutNode, id: string, rect: LayoutRect): LayoutNode {
   if (node.id === id) {
     return {
@@ -128,6 +128,36 @@ export function setNodeRect(node: LayoutNode, id: string, rect: LayoutRect): Lay
       },
     }
   }
-  if (!node.children) return node
-  return { ...node, children: node.children.map((child) => setNodeRect(child, id, rect)) }
+  const detached = detachNode(node, id)
+  if (!detached) return node
+  return {
+    ...detached,
+    children: [
+      ...(detached.children ?? []),
+      {
+        id,
+        style: {
+          position: Position.Absolute,
+          inset: { left: rect.x, top: rect.y, right: "auto", bottom: "auto" },
+          size: { width: rect.width, height: rect.height },
+        },
+      },
+    ],
+  }
+}
+
+function detachNode(node: LayoutNode, id: string): LayoutNode | undefined {
+  if (!node.children) return
+  if (node.children.some((child) => child.id === id)) {
+    return { ...node, children: node.children.filter((child) => child.id !== id) }
+  }
+  let detached: LayoutNode | undefined
+  const children = node.children.map((child) => {
+    if (detached) return child
+    const next = detachNode(child, id)
+    if (!next) return child
+    detached = next
+    return next
+  })
+  return detached ? { ...node, children } : undefined
 }

@@ -54,6 +54,22 @@ function median(values: readonly number[]): number {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
 }
 
+/** 合并结果：新组，以及实际并入的项；未并入的项留在池里。 */
+type GroupedItems = { group: PoolItem; used: PoolItem[] }
+
+/** 按主轴排序后取最大不重叠子集，与已选项重叠的项被跳过。 */
+function withoutOverlap(sorted: readonly PoolItem[], axis: "x" | "y", tolerance: number): PoolItem[] {
+  const start = (item: PoolItem) => axis === "x" ? item.bounds.x : item.bounds.y
+  const end = (item: PoolItem) => axis === "x" ? item.bounds.x + item.bounds.width : item.bounds.y + item.bounds.height
+  const chosen: PoolItem[] = []
+  for (const item of sorted) {
+    const last = chosen[chosen.length - 1]
+    if (last && start(item) < end(last) - tolerance) continue
+    chosen.push(item)
+  }
+  return chosen
+}
+
 function itemOf(key: KeyRect): PoolItem {
   return {
     id: key.id,
@@ -64,117 +80,158 @@ function itemOf(key: KeyRect): PoolItem {
   }
 }
 
-/** 行合并：同一 y 带、行高一致、水平间隙一致；行内高度不同则留给下一阶段。 */
-function rowGroup(id: string, items: readonly PoolItem[], tolerance: number): PoolItem | undefined {
-  if (items.length < 2) return
+/**
+ * 行合并：同一 y 带的项按 x 排序；与已选项重叠的键留在池里，其余按间隙用 gap 或 margin-left。
+ * 键宽与键高可以不同，容器取最大高度。
+ */
+function rowGroup(id: string, items: readonly PoolItem[], tolerance: number): GroupedItems | undefined {
   const sorted = [...items].sort((left, right) => left.bounds.x - right.bounds.x)
-  if (!allNear(sorted.map((item) => item.bounds.height), tolerance)) return
-  const gaps = sorted.slice(1).map((item, index) => item.bounds.x - (sorted[index].bounds.x + sorted[index].bounds.width))
-  if (!allNear(gaps, tolerance)) return
-  const keys = sorted.flatMap((item) => item.keys)
+  const used = withoutOverlap(sorted, "x", tolerance)
+  if (used.length < 2) return
+  const gaps = used.slice(1).map((item, index) => item.bounds.x - (used[index].bounds.x + used[index].bounds.width))
+  const uniform = allNear(gaps, tolerance)
+  const keys = used.flatMap((item) => item.keys)
   const bounds = boundsOf(keys)
+  const height = Math.max(...used.map((item) => item.bounds.height))
+  const children = used.map((item, index) => {
+    const margin = !uniform && index > 0 ? { left: gaps[index - 1], right: 0, top: 0, bottom: 0 } : undefined
+    return { ...item.layout, style: { ...item.layout.style, flexShrink: 0, ...(margin ? { margin } : {}) } }
+  })
   const gap = median(gaps)
   const style: StylePropertyValues = {
     display: Display.Flex,
     flexDirection: FlexDirection.Row,
     alignItems: AlignItems.Start,
-    size: { width: bounds.width, height: sorted[0].bounds.height },
-    ...(Math.abs(gap) > tolerance / 2 ? { gap: { width: gap, height: 0 } } : {}),
+    size: { width: bounds.width, height },
+    ...(uniform && Math.abs(gap) > tolerance / 2 ? { gap: { width: gap, height: 0 } } : {}),
   }
-  return { id, kind: "row", keys, bounds, layout: { id, style, children: sorted.map((item) => item.layout) } }
+  return { group: { id, kind: "row", keys, bounds, layout: { id, style, children } }, used }
 }
 
 /**
- * 列合并：纵向间隙一致即可，横向差异用子项的 margin-left 表达（gap 表达纵向间距）。
+ * 列合并：按 y 排序；与已选项重叠的项留在池里，纵向间隙一致时用 gap，不均匀时用 margin-top。
+ * 横向差异用 margin-left 表达。
  */
-function columnGroup(id: string, items: readonly PoolItem[], tolerance: number): PoolItem | undefined {
-  if (items.length < 2) return
+function columnGroup(id: string, items: readonly PoolItem[], tolerance: number): GroupedItems | undefined {
   const sorted = [...items].sort((left, right) => left.bounds.y - right.bounds.y)
-  const gaps = sorted.slice(1).map((item, index) => item.bounds.y - (sorted[index].bounds.y + sorted[index].bounds.height))
-  if (!allNear(gaps, tolerance)) return
-  const keys = sorted.flatMap((item) => item.keys)
+  const used = withoutOverlap(sorted, "y", tolerance)
+  if (used.length < 2) return
+  const gaps = used.slice(1).map((item, index) => item.bounds.y - (used[index].bounds.y + used[index].bounds.height))
+  const uniform = allNear(gaps, tolerance)
+  const keys = used.flatMap((item) => item.keys)
   const bounds = boundsOf(keys)
-  const gap = median(gaps)
-  const children = sorted.map((item) => {
-    const offset = item.bounds.x - bounds.x
-    if (near(offset, 0, tolerance)) return item.layout
+  const children = used.map((item, index) => {
+    const left = item.bounds.x - bounds.x
+    const top = !uniform && index > 0 ? gaps[index - 1] : 0
     return {
       ...item.layout,
       style: {
         ...item.layout.style,
-        margin: { left: offset, right: 0, top: 0, bottom: 0 },
+        flexShrink: 0,
+        ...(near(left, 0, tolerance) && near(top, 0, tolerance) ? {} : { margin: { left, right: 0, top, bottom: 0 } }),
       },
     }
   })
+  const gap = median(gaps)
   const style: StylePropertyValues = {
     display: Display.Flex,
     flexDirection: FlexDirection.Column,
     alignItems: AlignItems.Start,
     size: { width: bounds.width, height: bounds.height },
-    ...(Math.abs(gap) > tolerance / 2 ? { gap: { width: 0, height: gap } } : {}),
+    ...(uniform && Math.abs(gap) > tolerance / 2 ? { gap: { width: 0, height: gap } } : {}),
   }
-  return { id, kind: "column", keys, bounds, layout: { id, style, children } }
+  return { group: { id, kind: "column", keys, bounds, layout: { id, style, children } }, used }
 }
 
-function placeInCell(item: PoolItem, row: number, column: number): LayoutNode {
-  return {
-    ...item.layout,
-    style: {
-      ...item.layout.style,
-      gridRow: { start: row + 1, end: { span: 1 } },
-      gridColumn: { start: column + 1, end: { span: 1 } },
-    },
+/** 按轴的起点把项聚成带（行或列）。 */
+function bandsOf(items: readonly PoolItem[], axis: "x" | "y", tolerance: number): Array<{ start: number; items: PoolItem[] }> {
+  const startOf = (item: PoolItem) => axis === "x" ? item.bounds.x : item.bounds.y
+  const sorted = [...items].sort((left, right) => startOf(left) - startOf(right))
+  const bands: Array<{ start: number; items: PoolItem[] }> = []
+  for (const item of sorted) {
+    const band = bands.find((candidate) => near(candidate.start, startOf(item), tolerance))
+    if (band) band.items.push(item)
+    else bands.push({ start: startOf(item), items: [item] })
   }
+  return bands.sort((left, right) => left.start - right.start)
 }
 
-/** 网格归约：行带与列带交叉，每格一项；列宽行高与间隙一致且总尺寸等于板。 */
+/** 一项在网格里跨越的轨道数与起始轨道。 */
+function placementOf(
+  item: PoolItem,
+  bands: ReadonlyArray<{ start: number }>,
+  tracks: readonly number[],
+  gap: number,
+  axis: "x" | "y",
+  tolerance: number,
+): { index: number; span: number } | undefined {
+  const start = axis === "x" ? item.bounds.x : item.bounds.y
+  const extent = axis === "x" ? item.bounds.width : item.bounds.height
+  const index = bands.findIndex((band) => near(band.start, start, tolerance))
+  if (index < 0) return
+  let span = 1
+  let covered = tracks[index]
+  while (covered < extent - tolerance && index + span < bands.length) {
+    covered += gap + tracks[index + span]
+    span++
+  }
+  return Math.abs(covered - extent) <= tolerance ? { index, span } : undefined
+}
+
+/**
+ * 网格归约：行列带交叉，键可按 range 跨行跨列。
+ * 轨道尺寸取带内中位尺寸；带宽、间隙与总尺寸必须与板一致，否则交给后续阶段。
+ */
 function gridGroup(id: string, items: readonly PoolItem[], size: Size, tolerance: number): PoolItem | undefined {
   if (items.length < 4) return
-  const rows: PoolItem[][] = []
-  for (const item of [...items].sort((left, right) => left.bounds.y - right.bounds.y)) {
-    const row = rows.find((candidate) => candidate.some((other) => near(other.bounds.y, item.bounds.y, tolerance)
-      && near(other.bounds.height, item.bounds.height, tolerance)))
-    if (row) row.push(item)
-    else rows.push([item])
-  }
-  if (rows.length < 2 || rows.some((row) => row.length < 2)) return
-  const columns: PoolItem[][] = []
-  for (const item of [...items].sort((left, right) => left.bounds.x - right.bounds.x)) {
-    const column = columns.find((candidate) => candidate.some((other) => near(other.bounds.x, item.bounds.x, tolerance)
-      && near(other.bounds.width, item.bounds.width, tolerance)))
-    if (column) column.push(item)
-    else columns.push([item])
-  }
-  if (columns.length < 2 || columns.some((column) => column.length < 2)) return
-  if (rows.length * columns.length !== items.length) return
-  const rowBounds = rows.map((row) => boundsOf(row.flatMap((item) => item.keys)))
-  const columnBounds = columns.map((column) => boundsOf(column.flatMap((item) => item.keys)))
-  const gapX = median(columnBounds.slice(1).map((bounds, index) => bounds.x - (columnBounds[index].x + columnBounds[index].width)))
-  const gapY = median(rowBounds.slice(1).map((bounds, index) => bounds.y - (rowBounds[index].y + rowBounds[index].height)))
-  const totalWidth = columnBounds.reduce((sum, bounds) => sum + bounds.width, 0) + gapX * (columnBounds.length - 1)
-  const totalHeight = rowBounds.reduce((sum, bounds) => sum + bounds.height, 0) + gapY * (rowBounds.length - 1)
-  if (!near(totalWidth, size.width, tolerance) || !near(totalHeight, size.height, tolerance)) return
-  if (!near(columnBounds[0].x, 0, tolerance) || !near(rowBounds[0].y, 0, tolerance)) return
+  const rows = bandsOf(items, "y", tolerance)
+  const columns = bandsOf(items, "x", tolerance)
+  if (rows.length < 2 || columns.length < 2) return
+  const rowTracks = rows.map((row) => median(row.items.map((item) => item.bounds.height)))
+  const columnTracks = columns.map((column) => median(column.items.map((item) => item.bounds.width)))
+  const gapY = median(rows.slice(1).map((row, index) => row.start - (rows[index].start + rowTracks[index])))
+  const gapX = median(columns.slice(1).map((column, index) => column.start - (columns[index].start + columnTracks[index])))
+  if (gapX < -tolerance || gapY < -tolerance) return
+  const bounds = boundsOf(items.flatMap((item) => item.keys))
+  if (bounds.width > size.width + tolerance || bounds.height > size.height + tolerance) return
+  const totalWidth = columnTracks.reduce((sum, track) => sum + track, 0) + gapX * (columnTracks.length - 1)
+  const totalHeight = rowTracks.reduce((sum, track) => sum + track, 0) + gapY * (rowTracks.length - 1)
+  if (!near(totalWidth, bounds.width, tolerance) || !near(totalHeight, bounds.height, tolerance)) return
+  const occupied = new Set<string>()
   const children: LayoutNode[] = []
-  for (const [rowIndex, row] of rows.entries()) {
-    for (const item of row) {
-      const columnIndex = columnBounds.findIndex((bounds) => near(item.bounds.x, bounds.x, tolerance))
-      if (columnIndex < 0) return
-      children.push(placeInCell(item, rowIndex, columnIndex))
+  for (const item of items) {
+    const row = placementOf(item, rows, rowTracks, gapY, "y", tolerance)
+    const column = placementOf(item, columns, columnTracks, gapX, "x", tolerance)
+    if (!row || !column) return
+    for (let r = row.index; r < row.index + row.span; r++) {
+      for (let c = column.index; c < column.index + column.span; c++) {
+        const cell = `${r},${c}`
+        if (occupied.has(cell)) return
+        occupied.add(cell)
+      }
     }
+    children.push({
+      ...item.layout,
+      style: {
+        ...item.layout.style,
+        flexShrink: 0,
+        gridRow: { start: row.index + 1, end: { span: row.span } },
+        gridColumn: { start: column.index + 1, end: { span: column.span } },
+      },
+    })
   }
   const style: StylePropertyValues = {
     display: Display.Grid,
-    gridTemplateColumns: columnBounds.map((bounds) => ({ min: bounds.width, max: bounds.width })),
-    gridTemplateRows: rowBounds.map((bounds) => ({ min: bounds.height, max: bounds.height })),
+    gridTemplateColumns: columnTracks.map((track) => ({ min: track, max: track })),
+    gridTemplateRows: rowTracks.map((track) => ({ min: track, max: track })),
     gap: { width: gapX, height: gapY },
-    size: { width: size.width, height: size.height },
+    size: { width: totalWidth, height: totalHeight },
   }
   return {
     id,
     kind: "grid",
     keys: items.flatMap((item) => item.keys),
-    bounds: { x: 0, y: 0, width: size.width, height: size.height },
+    bounds,
     layout: { id, style, children },
   }
 }
@@ -199,6 +256,46 @@ function residualGroup(id: string, items: readonly PoolItem[], size: Size): Pool
   return { id, kind: "residual", keys, bounds, layout: { id, style, children } }
 }
 
+/** 面积达到这个比例的键视为整板背景，不参与排布推导。 */
+const BACKGROUND_AREA_RATIO = 0.8
+
+function isBackground(key: KeyRect, size: Size): boolean {
+  return key.width * key.height >= size.width * size.height * BACKGROUND_AREA_RATIO
+}
+
+/** 背景键与剩余结构合成一根：背景绝对定位，其余结构整体绝对定位在原位。 */
+function backgroundContainer(
+  id: string,
+  background: readonly KeyRect[],
+  rest: { layout: LayoutNode; keys: readonly KeyRect[] } | undefined,
+  size: Size,
+): LayoutNode {
+  const children: LayoutNode[] = background.map((key) => ({
+    id: key.id,
+    style: {
+      position: Position.Absolute,
+      inset: { left: key.x, top: key.y, right: "auto", bottom: "auto" },
+      size: { width: key.width, height: key.height },
+    },
+  }))
+  if (rest?.keys.length) {
+    const bounds = boundsOf(rest.keys)
+    children.push({
+      ...rest.layout,
+      style: {
+        ...rest.layout.style,
+        position: Position.Absolute,
+        inset: { left: bounds.x, top: bounds.y, right: "auto", bottom: "auto" },
+      },
+    })
+  }
+  return {
+    id,
+    style: { position: Position.Relative, display: Display.Block, size: { width: size.width, height: size.height } },
+    children,
+  }
+}
+
 function rectMatches(actual: LayoutRect | undefined, expected: KeyRect, tolerance: number): boolean {
   return actual !== undefined
     && near(actual.x, expected.x, tolerance)
@@ -216,32 +313,44 @@ async function verifies(layout: LayoutNode, keys: readonly KeyRect[], size: Size
   }
 }
 
+/** 按一个轴上的区间重叠聚类：返回彼此不重叠的簇。 */
+function clustersAlong(items: readonly PoolItem[], axis: "x" | "y"): PoolItem[][] {
+  const start = (item: PoolItem) => axis === "x" ? item.bounds.x : item.bounds.y
+  const end = (item: PoolItem) => axis === "x" ? item.bounds.x + item.bounds.width : item.bounds.y + item.bounds.height
+  const sorted = [...items].sort((left, right) => start(left) - start(right))
+  const clusters: Array<{ from: number; to: number; items: PoolItem[] }> = []
+  for (const item of sorted) {
+    const cluster = clusters.find((candidate) => start(item) < candidate.to && candidate.from < end(item))
+    if (cluster) {
+      cluster.items.push(item)
+      cluster.from = Math.min(cluster.from, start(item))
+      cluster.to = Math.max(cluster.to, end(item))
+    } else {
+      clusters.push({ from: start(item), to: end(item), items: [item] })
+    }
+  }
+  return clusters.map((cluster) => cluster.items)
+}
+
 /** 在池里反复合并，直到某个阶段不再产生新组。 */
 function mergePhase(
   pool: PoolItem[],
   tolerance: number,
   id: string,
-  bucketKey: (item: PoolItem) => string,
-  group: (id: string, items: PoolItem[], tolerance: number) => PoolItem | undefined,
+  axis: "x" | "y",
+  group: (id: string, items: PoolItem[], tolerance: number) => GroupedItems | undefined,
   counter: { value: number },
 ): { pool: PoolItem[]; merged: boolean } {
   let merged = false
   let changed = true
   while (changed) {
     changed = false
-    const buckets = new Map<string, PoolItem[]>()
-    for (const item of pool) {
-      const key = bucketKey(item)
-      const bucket = buckets.get(key) ?? []
-      bucket.push(item)
-      buckets.set(key, bucket)
-    }
-    for (const bucket of [...buckets.values()].sort((left, right) => right.length - left.length)) {
-      if (bucket.length < 2) continue
-      const created = group(`${id}:${counter.value}`, bucket, tolerance)
+    for (const cluster of clustersAlong(pool, axis).sort((left, right) => right.length - left.length)) {
+      if (cluster.length < 2) continue
+      const created = group(`${id}:${counter.value}`, cluster, tolerance)
       if (!created) continue
       counter.value++
-      pool = [...pool.filter((item) => !bucket.includes(item)), created]
+      pool = [...pool.filter((item) => !created.used.includes(item)), created.group]
       merged = true
       changed = true
       break
@@ -260,39 +369,76 @@ export async function derivePool(
   const options: DeriveOptions = resolveDeriveOptions(overrides)
   const tolerance = Math.max(0, options.tolerance)
   if (!keys.length) return { layout: absoluteBoard([]), kind: "absolute", cost: 0 }
+
+  // 整板背景键是背景层，不参与排布；先分离，再做池式合并。
+  const background = keys.filter((key) => isBackground(key, size))
+  if (background.length) {
+    const rest = keys.filter((key) => !isBackground(key, size))
+    const derived = rest.length ? await derivePool(id, rest, size, overrides) : undefined
+    const root = backgroundContainer(id, background, derived ? { layout: derived.layout, keys: rest } : undefined, size)
+    if (await verifies(root, keys, size, tolerance)) {
+      return {
+        layout: root,
+        kind: derived && derived.kind !== "absolute" ? derived.kind : "relative",
+        cost: layoutCost(root, options.weights),
+      }
+    }
+  }
+
   let pool: PoolItem[] = keys.map(itemOf)
   const counter = { value: 0 }
+  // 每个阶段结束后留一份快照；验证失败时逐级降级，而不是整树回退。
+  const snapshots: PoolItem[][] = []
 
   // 阶段一：网格归约。
   const grid = gridGroup(`${id}:grid`, pool, size, tolerance)
   if (grid) pool = [grid]
+  snapshots.push(pool)
 
   // 阶段二：行合并。
   if (pool.length > 1) {
-    const result = mergePhase(pool, tolerance, `${id}:row`, (item) => `${Math.round(item.bounds.y)}|${Math.round(item.bounds.height)}`, rowGroup, counter)
+    const result = mergePhase(pool, tolerance, `${id}:row`, "y", rowGroup, counter)
     pool = result.pool
+    snapshots.push(pool)
   }
 
   // 阶段三：列合并。
   if (pool.length > 1) {
-    const result = mergePhase(pool, tolerance, `${id}:column`, (item) => `${Math.round(item.bounds.width)}`, columnGroup, counter)
+    const result = mergePhase(pool, tolerance, `${id}:column`, "x", columnGroup, counter)
     pool = result.pool
+    snapshots.push(pool)
   }
 
-  // 阶段四：残差。
-  let root: LayoutNode
-  if (pool.length === 1) root = pool[0].layout
-  else root = residualGroup(`${id}:residual`, pool, size).layout
-
-  if (!await verifies(root, keys, size, tolerance)) {
-    const fallback = absoluteBoard(keys)
-    return { layout: fallback, kind: "absolute", cost: layoutCost(fallback, options.weights) }
+  for (let index = snapshots.length - 1; index >= 0; index--) {
+    const snapshot = snapshots[index]
+    const root = rootOf(snapshot, id, size, tolerance)
+    if (!await verifies(root, keys, size, tolerance)) continue
+    return { layout: root, kind: kindOf(snapshot), cost: layoutCost(root, options.weights) }
   }
-  const finalKind: DeriveKind = pool.length === 1
-    ? pool[0].kind === "grid" ? "grid"
-      : pool[0].kind === "column" ? "flex-column"
-        : pool[0].kind === "row" ? "flex-row"
-          : "relative"
-    : "relative"
-  return { layout: root, kind: finalKind, cost: layoutCost(root, options.weights) }
+  const fallback = absoluteBoard(keys)
+  return { layout: fallback, kind: "absolute", cost: layoutCost(fallback, options.weights) }
+}
+
+/** 一根：单组用铺满板的框加 padding 表达整体偏移，多组收进残差容器。 */
+function rootOf(pool: readonly PoolItem[], id: string, size: Size, tolerance: number): LayoutNode {
+  if (pool.length !== 1) return residualGroup(`${id}:residual`, pool, size).layout
+  const only = pool[0]
+  if (near(only.bounds.x, 0, tolerance) && near(only.bounds.y, 0, tolerance)) return only.layout
+  return {
+    id: `${id}:frame`,
+    style: {
+      display: Display.Block,
+      size: { width: size.width, height: size.height },
+      padding: { left: only.bounds.x, top: only.bounds.y, right: 0, bottom: 0 },
+    },
+    children: [only.layout],
+  }
+}
+
+function kindOf(pool: readonly PoolItem[]): DeriveKind {
+  if (pool.length !== 1) return "relative"
+  return pool[0].kind === "grid" ? "grid"
+    : pool[0].kind === "column" ? "flex-column"
+      : pool[0].kind === "row" ? "flex-row"
+        : "relative"
 }
