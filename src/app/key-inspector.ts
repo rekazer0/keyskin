@@ -238,6 +238,18 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
   }
 }
 
+
+/**
+ * 当前板的几何是否由文档决定。
+ * 模型可用时以板的几何来源为准，这比按格式判断更准确：同一格式里也有客户端排布的板。
+ */
+function geometryEditableOr(fallback: boolean): boolean {
+  // 模型没建好、或模型里没有这块板（例如手心把板放在 skin.json 里）时退回原判断，
+  // 否则会把本来能编辑的皮肤误判成只读。
+  const board = skinModel.model?.boards.find((item) => item.id === appState.layoutPath)
+  return board ? board.geometry === "document" : fallback
+}
+
 /** 当前布局里每个按键的几何，来自模型；模型还没建好时为空，调用方退回读文档。 */
 function modelRectMap(): Map<string, number[]> {
   const rects = new Map<string, number[]>()
@@ -281,7 +293,7 @@ export function populateKeyInspector(): void {
   // Native properties have their own inspectors; SSF also shows the skeleton's resolved gestures.
   const ssfSelected = appState.archive?.format === "ssf"
   const sxiSelected = appState.archive?.format === "sxi"
-  preview.measurementEditable = !bdaSelected && !ssfSelected
+  preview.measurementEditable = geometryEditableOr(!bdaSelected && !ssfSelected)
   const nativeSelected = ssfSelected || sxiSelected
   const candidateSelected = Boolean(bdaSelected && appState.selectedCandidate && appState.selectedPath === appState.layoutPath)
   skinFieldsGroup.hidden = !skinSelected || bdaSelected || sxiSelected
@@ -441,14 +453,14 @@ export function populateKeyInspector(): void {
   keyLayoutFieldsGroup.querySelector(".mobile-geometry-detail")?.remove()
   keyLayoutFieldsGroup.querySelector(".ui-geometry-preview")?.remove()
   const previewRects = preview.keys.filter(key => sections.includes(key.section)).map(key => key.rect)
-  const showPadding = hasSelection && !bdaSelected && !ssfSelected && !listSelected
+  const showPadding = hasSelection && geometryEditableOr(!bdaSelected && !ssfSelected) && !listSelected
   if (paddingSection && (!showPadding || !previewRects.length)) {
     const fields = keyLayoutFieldsGroup.querySelector(".geometry-fields")!
     if (paddingSection.parentElement !== fields) fields.append(paddingSection)
   }
   if (hasSelection && previewRects.length) {
     const editableRects = selectedRects()
-    const editable = isEditing() && !bdaSelected && !ssfSelected && !sections.some(isListCell) && editableRects.length === previewRects.length
+    const editable = isEditing() && geometryEditableOr(!bdaSelected && !ssfSelected) && !sections.some(isListCell) && editableRects.length === previewRects.length
     const geometry = geometryPreview(editable ? editableRects : previewRects, editable ? rects => resizeSelectedKeys(rects.map((rect, index) => ({ ...rect, section: editableRects[index].section }))) : undefined)
     const detail = element("details", "ui-disclosure mobile-geometry-detail")
     const summary = Object.assign(element("summary", "ui-button"), { textContent: "内边距与缩放" })
@@ -491,7 +503,7 @@ export function populateKeyInspector(): void {
   // Unset padding reads as 0,0,0,0 (see the PADDING field values above); a LIST cell has none.
   if (paddingSection) paddingSection.hidden = !showPadding
   const multiLayout = $("#inspector-multi-layout")
-  const multiAvailable = sections.length > 1 && !bdaSelected && !ssfSelected && !sections.some(isListCell)
+  const multiAvailable = sections.length > 1 && geometryEditableOr(!bdaSelected && !ssfSelected) && !sections.some(isListCell)
   multiLayout.dataset.available = String(multiAvailable)
   multiLayout.hidden = !multiAvailable
   canvasMultiToolbar.dataset.available = String(multiAvailable)
@@ -504,7 +516,7 @@ export function populateKeyInspector(): void {
   layoutNote.hidden = !bdaSelected && !ssfSelected
   layoutNote.title = "此格式的按键几何由输入法定义，仅供查看"
   layoutNote.setAttribute("aria-label", layoutNote.title)
-  const keyToolsAvailable = hasSelection && isEditing() && !bdaSelected && !ssfSelected && !listSelected
+  const keyToolsAvailable = hasSelection && isEditing() && geometryEditableOr(!bdaSelected && !ssfSelected) && !listSelected
   // Sogou skins carry no key geometry, so there is nothing to move, copy or delete.
   for (const button of [...keyModeButtons, ...keyActionButtons]) button.hidden = ssfSelected
   for (const button of keyModeButtons) button.disabled = !keyToolsAvailable
