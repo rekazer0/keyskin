@@ -162,11 +162,25 @@ function nodeOf(kind: string, model: JsonObject, animations: JsonObject): Motion
       duration: 0,
     }
   }
+  // 不认识的家族保留成自定义节点：嵌套字段摊平成点路径，数组用下标，值一律转成可读标量。
   const values = new Map<string, number | string | boolean>()
-  for (const [key, value] of Object.entries(model)) {
-    if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") values.set(key, value)
-  }
+  flatten(model, "", values)
   return { kind: "custom", family: `sxi.${kind}`, values }
+}
+
+/** 把嵌套对象摊平成 `a.b.0` 这样的键，只收标量。 */
+function flatten(value: Json, prefix: string, out: Map<string, number | string | boolean>): void {
+  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+    if (prefix) out.set(prefix, value)
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => flatten(item, prefix ? `${prefix}.${index}` : String(index), out))
+    return
+  }
+  const object = asObject(value)
+  if (!object) return
+  for (const [key, item] of Object.entries(object)) flatten(item, prefix ? `${prefix}.${key}` : key, out)
 }
 
 /** 动画的时长：不同家族的时长字段不同。 */

@@ -136,9 +136,12 @@ function iconSection(items: readonly ToolbarItem[], actionValue: ActionWriter): 
   items.forEach((item, index) => {
     const action = actionValue(item.action)
     lines.push(`[ICON${index + 1}]`)
-    lines.push("POS=0,0")
+    // 位置与尺寸来自面板定义；没有时退回原点，保持旧行为。
+    lines.push(`POS=${item.offset ? `${item.offset.x},${item.offset.y}` : "0,0"}`)
+    if (item.size) lines.push(`SIZE=${item.size.width},${item.size.height}`)
     if (item.icon) lines.push(`IMG=${item.icon}`)
     if (action) lines.push(`KEY=${action}`)
+    if (item.visible === false) lines.push("VISIBLE=0")
     lines.push("")
   })
   return lines

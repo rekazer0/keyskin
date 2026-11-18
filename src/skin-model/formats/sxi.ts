@@ -13,6 +13,7 @@ import { asObject, rectParts, type Json, type JsonObject } from "@/palm/sxi-ini.
 import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
 import { motionsOfSkin, skinAnimationsOf, skinSoundsOf, soundsOfSkin } from "@/skin-model/formats/sxi-motion.ts"
 import { skinStylesOf, stylesOfSkin, sxiStyleKey, sxiStyleName } from "@/skin-model/formats/sxi-style.ts"
+import { atlasImagesOf } from "@/skin-model/formats/sxi-atlas.ts"
 
 export type SxiSource = {
   /** 皮肤包内的全部文件。 */
@@ -237,7 +238,9 @@ export const sxiFormat = {
     // 样式表在 `ss_1`，图片同时切进资源表；按键的样式引用换成 `sxi:编号`。
     const styles = stylesOfSkin(skin, source.files, "light", "port")
     model.styles = styles.styles
-    model.images = styles.images
+    // 图集里的切片也切出来，与散图一起进资源表。
+    const atlas = atlasImagesOf(skin, source.files, "light", "port")
+    model.images = new Map([...styles.images, ...atlas.images])
     for (const key of keys) {
       key.style = {
         ...(key.style.back !== undefined ? { back: sxiStyleName(key.style.back) } : {}),

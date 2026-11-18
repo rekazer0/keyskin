@@ -20,6 +20,9 @@ export type ToolbarItem = {
   label?: string
   action?: SkinAction
   visible?: boolean
+  /** 图标在工具栏里的位置与尺寸；面板文件按它写 `POS` 与 `SIZE`。 */
+  offset?: Point<number>
+  size?: Size<number>
 }
 
 export type Toolbar = {
