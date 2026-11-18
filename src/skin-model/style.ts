@@ -9,10 +9,12 @@ export type ImageFit = "stretch" | "nine-slice" | "center" | "tile"
 export type NineSlice = {
   /** 原图中的切片区域。 */
   source: Rect
-  /** 可拉伸边与角的尺寸。 */
+  /** 可拉伸边与角的尺寸，从切片边缘算起。 */
   inner: Insets
   /** 位图像素到布局单位的比例。 */
   pixelScale?: number
+  /** 图集里的切片序号；写回时与文件名一起写。 */
+  index?: number
 }
 
 export type TextStyle = {

@@ -31,10 +31,10 @@ export type MotionEmitter = {
   count: number
   birthRate: number
   region: Rect
-  velocity: MotionVector
-  velocityDirection: MotionVector
-  acceleration: MotionVector
-  accelerationDirection: MotionVector
+  velocity: MotionRange
+  velocityDirection: MotionRange
+  acceleration: MotionRange
+  accelerationDirection: MotionRange
   scale: MotionRange
   scaleSpeed: MotionRange
   rotation: MotionRange
