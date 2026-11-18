@@ -83,12 +83,13 @@ export function moveKey(model: SkinModel, boardId: string, keyId: string, rect: 
 export function setKeyStyle(model: SkinModel, boardId: string, keyId: string, style: Partial<Record<keyof KeyStyleRefs, string | null>>): SkinModel {
   const patch: Partial<KeyStyleRefs> = {}
   for (const [slot, value] of Object.entries(style)) {
-    if (value === null) {
-      if (slot === "fore") patch.fore = []
+    if (slot === "fore") {
+      // 清空前景就是给一个空列表；非空时由调用方直接传整个数组。
+      if (value === null) patch.fore = []
       continue
     }
-    if (slot === "fore") continue
-    ;(patch as Record<string, string>)[slot] = value
+    // 传 null 表示清掉这个槽位，必须真的写成 undefined，否则旧引用会留下。
+    ;(patch as Record<string, string | undefined>)[slot] = value === null ? undefined : value
   }
   return patchKey(model, boardId, keyId, { style: patch })
 }
