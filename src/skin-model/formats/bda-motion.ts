@@ -77,14 +77,17 @@ function bindingOf(target: string, binding: BdaAnimationBinding): MotionBinding 
 
 /** 单个 BDA 效果 → IR 节点；不认识的类型保留为自定义节点，参数原样带上。 */
 function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationSequence>): MotionNode {
+  void sequences
   if (effect.kind === "group") {
+    // 组合的子项是别的效果编号；IR 里用引用节点保住编号，写回时按它还原。
     return {
       kind: "sequence",
       method: effect.buildMode === 1 ? "sequential" : "parallel",
-      children: effect.items.flatMap((item) => {
-        const nested = sequences.get(item.key)
-        return nested ? [] : []
-      }),
+      children: effect.items.map((item) => ({
+        kind: "custom" as const,
+        family: "bda.ref",
+        values: new Map<string, number | string | boolean>([["id", item.key]]),
+      })),
       delay: effect.delay / 1000,
       duration: 0,
     }
@@ -233,6 +236,24 @@ function effectOf(motion: SkinMotion): BdaAnimationEffect | undefined {
       mirrorUp: emitter.mirror,
       paths: [],
       emitterType: emitter.type === "complex" ? 1 : 0,
+    }
+  }
+  if (root.kind === "sequence") {
+    // 引用节点还原成组合的子项；不是引用节点就写不出来。
+    const items = root.children.flatMap((child) => {
+      if (child.kind !== "custom" || child.family !== "bda.ref") return []
+      const key = child.values.get("id")
+      return typeof key === "string" ? [{ kind: "alpha" as const, key }] : []
+    })
+    return {
+      kind: "group",
+      key: motion.id,
+      buildMode: root.method === "sequential" ? 1 : 0,
+      repeatCount: timeline.repeat,
+      repeatMode: timeline.reverse ? 2 : 0,
+      removeOnFinish: timeline.clear,
+      delay: Math.round(timeline.delay * 1000),
+      items,
     }
   }
   if (root.kind !== "track") return

@@ -11,6 +11,7 @@ import { emptyModel } from "@/skin-model/model.ts"
 import type { SkinAction, KeyEvent } from "@/skin-model/types.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "@/palm/sxi-ini.ts"
 import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
+import { motionsOfSkin, skinAnimationsOf } from "@/skin-model/formats/sxi-motion.ts"
 
 export type SxiSource = {
   /** 皮肤包内的全部文件。 */
@@ -229,6 +230,8 @@ export const sxiFormat = {
       layout: derived.layout,
       keys,
     })
+    // 动画在 `ss_2`，样式绑定在 `ss_1` 的 `s_5`；没有动画配置时留空。
+    model.motions = motionsOfSkin(skin, "light", "port")
     model.provenance = { format: "sxi", nodes: new Map(keys.map((key) => [key.id, { path: SXI_SKIN_PATH }])) }
     return model
   },
@@ -248,6 +251,19 @@ export const sxiFormat = {
       ...(valuesOf(key).length ? { values: valuesOf(key) } : {}),
     }))
     root.keyboard = keyboard
+    // 动效写回 `ss_2`，样式绑定写回 `ss_1` 的 `s_5`。
+    if (model.motions.size) {
+      const struct = asObject(root.light) ?? {}
+      const port = asObject(struct.s_port) ?? {}
+      const built = skinAnimationsOf(model.motions)
+      port.ss_2 = { ...asObject(port.ss_2), ...built.animations }
+      const styles = asObject(port.ss_1) ?? {}
+      for (const [styleId, events] of built.bindings) {
+        styles[styleId] = { ...asObject(styles[styleId]), s_5: { ...asObject(asObject(styles[styleId])?.s_5), ...events } }
+      }
+      port.ss_1 = styles
+      root.light = { ...struct, s_port: port }
+    }
     skin.default = root
     files.set(SXI_SKIN_PATH, new TextEncoder().encode(JSON.stringify(skin)))
     files.set(SXI_INFO_PATH, new TextEncoder().encode(JSON.stringify({
