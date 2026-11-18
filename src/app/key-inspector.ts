@@ -42,8 +42,9 @@ import { skinModel } from "./skin-model-state"
 import { boardTraits } from "./board-traits"
 import { validateModel } from "@/skin-model/validate.ts"
 import { applyFieldChange } from "@/skin-model/edit-binding.ts"
-import { patchKey } from "@/skin-model/edit.ts"
+import { patchKey, setMeta } from "@/skin-model/edit.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
+import type { SkinMeta } from "@/skin-model/types.ts"
 import { element } from "../dom-element"
 import { releaseOnRemove } from "../dom-lifecycle"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
@@ -608,11 +609,28 @@ export function populateKeyInspector(): void {
 export function updateSkinInfo(field: HTMLInputElement): void {
   if (!appState.archive || !appState.selectedDocument || !isSkinInfoPath(appState.selectedPath)) return
   const before = appState.selectedDocument.toString()
-  appState.selectedDocument.set("", field.dataset.skinField ?? "", field.value)
+  const name = field.dataset.skinField ?? ""
+  appState.selectedDocument.set("", name, field.value)
   const text = appState.selectedDocument.toString()
-  commitText(appState.selectedPath, before, text)
+  commitText(appState.selectedPath, before, text, false, modelAfterSkinInfo(name, field.value))
   setSourceValue(text)
   updateDirty()
+}
+
+/** 皮肤信息字段到模型元信息的对照。 */
+const META_FIELDS: Readonly<Record<string, keyof SkinMeta>> = {
+  Name: "name",
+  Author: "author",
+  Version: "version",
+  Description: "description",
+}
+
+/** 皮肤信息改动后的模型；不认识的字段返回 undefined，让提交入口作废重建。 */
+function modelAfterSkinInfo(name: string, value: string): SkinModel | undefined {
+  const field = META_FIELDS[name]
+  const current = skinModel.model
+  if (!current || field === undefined) return
+  return setMeta(current, { [field]: value })
 }
 
 export function renameDocumentTitle(): void {

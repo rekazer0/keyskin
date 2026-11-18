@@ -6,7 +6,7 @@ import type { SkinBoard } from "./board.ts"
 import type { SkinKey, KeyStyleRefs } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
-import type { KeyEvent, SkinAction } from "./types.ts"
+import type { KeyEvent, SkinAction, SkinMeta } from "./types.ts"
 import type { Rect } from "taffy-layout"
 import { setNodeRect, type LayoutBox } from "./layout.ts"
 
@@ -163,6 +163,16 @@ export function removeStyle(model: SkinModel, styleId: string): SkinModel {
   }
 
   return { ...model, styles, boards, motions }
+}
+
+/** 改皮肤元信息；未给出的字段保持不变。 */
+export function setMeta(model: SkinModel, patch: Partial<SkinMeta>): SkinModel {
+  const meta = { ...model.meta, ...patch }
+  // 空串表示清掉这一项，不要留一个空字符串当成「有值」。
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === "") delete (meta as Record<string, unknown>)[key]
+  }
+  return { ...model, meta }
 }
 
 /** 换一块板的尺寸；同时把模型记录的分辨率对齐到主板。 */

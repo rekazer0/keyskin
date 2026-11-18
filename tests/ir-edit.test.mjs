@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard, setKeyAction, setKeyStyle, setStyle } from "../src/skin-model/edit.ts"
+import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard, setKeyAction, setKeyStyle, setMeta, setStyle } from "../src/skin-model/edit.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { validateModel } from "../src/skin-model/validate.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
@@ -79,4 +79,15 @@ test("内边距可以打补丁，也可以清掉", async () => {
   assert.deepEqual(findKey(padded, BOARD, "KEY1").key.padding, { left: 1, top: 2, right: 3, bottom: 4 })
   const cleared = patchKey(padded, BOARD, "KEY1", { padding: null })
   assert.equal(findKey(cleared, BOARD, "KEY1").key.padding, undefined)
+})
+
+test("皮肤信息改动写进模型，空串表示清掉", async () => {
+  const before = await model()
+  const named = setMeta(before, { name: "新名字", author: "作者" })
+  assert.equal(named.meta.name, "新名字")
+  assert.equal(named.meta.author, "作者")
+  assert.equal(before.meta.name, before.meta.name, "原模型不该被改")
+  const cleared = setMeta(named, { name: "" })
+  assert.equal(cleared.meta.name, undefined)
+  assert.equal(cleared.meta.author, "作者", "其它字段应当保留")
 })
