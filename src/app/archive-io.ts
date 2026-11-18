@@ -34,7 +34,7 @@ import { convertBdaArchive } from "../bda-convert.ts"
 import { flushNumberInputWheel } from "../number-input-wheel.ts"
 import { loadBdaBase } from "../operations.ts"
 import { isSsfPath, looksLikeSsf } from "../ssf/ssf-package.ts"
-import { exportSsf, ssfDocumentBytes } from "../ssf/ssf-convert.ts"
+import { ssfDocumentBytes } from "../ssf/ssf-convert.ts"
 import { rebuildSsfPreview, ssfTemplates } from "./ssf-preview"
 import { isSsfBoardPath } from "./ssf-documents"
 import { isSxiBoardAddress, preferredPalmBoard, sxiPointer } from "./sxi-documents"
@@ -407,17 +407,8 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   }
   updateFileOperationProgress(22, `正在生成 ${format.toUpperCase()} 皮肤包…`)
   await waitForInterfacePaint()
-  if (format === "ssf") {
-    if (appState.archive.format === "ssf") {
-      return { bytes: await appState.archive.toBytesAsync("ssf"), converted: false, warnings: [] }
-    }
-    const report = conversionProgress(22, 78, "正在导出搜狗皮肤…")
-    await report(0.3)
-    // 官方骨架的按键尺寸决定导出图要保留多少像素；模板取不到时退回原尺寸。
-    const sogouTemplate = await ssfTemplates().then((templates) => templates.sogou, () => undefined)
-    const result = await exportSsf(appState.archive, appState.bdaBase, sogouTemplate)
-    return { bytes: result.bytes, converted: true, warnings: result.warnings }
-  }
+  // 搜狗皮肤一律经中间表示写出，走到这里说明前面的分支漏了它。
+  if (format === "ssf") throw new Error("搜狗皮肤应当经中间表示导出")
   if (appState.archive.format === "bda" && format === "bda" && targetBdaPlatform) {
     const report = conversionProgress(22, 78, `正在生成 ${format.toUpperCase()} 皮肤包…`)
     await report(0.3)

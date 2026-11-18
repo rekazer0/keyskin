@@ -1,23 +1,17 @@
-// Entry points for Sogou skin documents and conversion, kept apart from the editor so they can be tested directly.
+// 搜狗皮肤文档的入口：打开时把加密容器解成 ZIP，给画布提供官方骨架。
+//
+// 转换成其它格式已经由中间表示承担（`src/skin-model/formats/ssf.ts`），这里只保留
+// 打开文档所必需的部分。
 
 import { zipSync } from "fflate"
-import { convertBdaArchive } from "../bda-convert.ts"
-import { applyLegacyBaiduMotion } from "../legacy-to-bda-motion.ts"
 import { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
-import { convertBaiduToSsf } from "./baidu-to-ssf.ts"
 import { isSkinContainer } from "./ssf-container.ts"
-import { sogouKeySizes } from "./ssf-key-sizes.ts"
 import { SsfPackage, unpackSsf } from "./ssf-package.ts"
-import { syncKeyStateTips } from "./ssf-state-tips.ts"
 import { copySsfSkeleton } from "./ssf-skeleton.ts"
-import { convertSsfToBaidu } from "./ssf-to-baidu.ts"
-import { convertSsfToBda } from "./ssf-to-bda.ts"
-import { adaptSsfNativeToolbar } from "./ssf-native-toolbar.ts"
 
-/** The Sogou canvas/BDI/BDS skeleton and the native BDA template. */
+/** 画布用的骨架包：搜狗画布与原生 BDA 模板。 */
 export type SsfTemplates = { bda: SkinArchive; sogou: SkinArchive }
-type Converted = { bytes: Uint8Array; warnings: string[] }
 
 /** The document's own files, not copies: derived images are cached by the arrays they come from. */
 export function documentPackage(archive: SkinArchive): SsfPackage {
@@ -47,70 +41,4 @@ export function ssfSkeleton(pkg: SsfPackage, template: SkinArchive): SkinArchive
   for (const theme of pkg.themes.keys()) copySsfSkeleton(template, theme, files, Number(pkg.resolution), pkg.skin(theme))
   // Stored the way a two-look BDS package keeps them (`light/port/…`), which reads back as `light/skin/port/…`.
   return SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path: path.replace(/^(light|dark)\/skin\//, "$1/"), data })))
-}
-
-/** 转换分几步：每步之间让出一帧，重活开始前先让进度框出现在屏幕上。 */
-type ConversionReport = (fraction: number, detail: string) => Promise<void>
-
-/** Converts an SSF document into a Baidu package of `format`. */
-export async function convertSsfDocument(
-  archive: SkinArchive,
-  format: "bdi" | "bds" | "bda",
-  templates: SsfTemplates,
-  report: ConversionReport = async () => {},
-): Promise<Converted> {
-  const pkg = documentPackage(archive)
-  if (format === "bda") {
-    await report(0.2, "正在转换按键样式…")
-    const { archive: converted, warnings } = convertSsfToBda(pkg, templates.bda)
-    if ([...pkg.files.keys()].some(path => /(^|\/)anim\.ini$/i.test(path))) {
-      await report(0.6, "正在转换按键动效…")
-      const legacy = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution))
-      await report(0.85, "正在写入动效配置…")
-      const motionWarnings = applyLegacyBaiduMotion(legacy.archive, converted)
-      return { bytes: converted.toBytes(), warnings: [...new Set([
-        ...warnings.filter(warning => !warning.startsWith("按键动画（anim.ini）暂不转换")), ...legacy.warnings, ...motionWarnings,
-      ])] }
-    }
-    return { bytes: converted.toBytes(), warnings }
-  }
-  await report(0.25, `正在转换为 ${format.toUpperCase()}…`)
-  // Keep the SSF canvas geometry and artwork; the toolbar moves into Baidu's native F14 container and logo icons.
-  const { archive: converted, warnings } = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution), format)
-  syncKeyStateTips(converted)
-  adaptSsfNativeToolbar(converted, pkg, format, warnings)
-  if (format === "bds") for (const theme of pkg.themes.keys()) {
-    const prefix = `${theme}/skin/`
-    const css = converted.getBytes(`${prefix}res/default.css`)
-    if (!css) continue
-    // Android skins load direction-local styles; the shared res folder still supplies their images.
-    for (const orientation of ["port", "land"]) {
-      const path = `${prefix}${orientation}/res/default.css`
-      if (converted.isText(`${prefix}${orientation}/gen.ini`) && !converted.isText(path)) converted.setBytes(path, css)
-    }
-  }
-  await report(0.7, `正在打包 ${format.toUpperCase()} 皮肤…`)
-  // Platform packaging also re-encodes the Sogou WAV key sounds into what the target IME plays.
-  return { bytes: await converted.platformBytesAsync(format, warnings), warnings }
-}
-
-/** Reuse the BDA template for static appearance; map motion directly from the Baidu source. */
-export async function convertLegacyToBda(archive: SkinArchive, template: SkinArchive): Promise<Converted> {
-  const ssf = await convertBaiduToSsf(archive, { animations: false })
-  const bda = convertSsfToBda(await SsfPackage.open(ssf.bytes), template)
-  const motionWarnings = applyLegacyBaiduMotion(archive, bda.archive)
-  return { bytes: bda.archive.toBytes(), warnings: [...new Set([...ssf.warnings, ...bda.warnings, ...motionWarnings])] }
-}
-
-/** Converts any editable Baidu skin to `.ssf`; BDA goes through the official BDS base layout first. */
-export async function exportSsf(archive: SkinArchive, bdaBase: SkinArchive | undefined, sogouTemplate?: SkinArchive): Promise<Converted> {
-  // 官方骨架决定每个按键类的显示尺寸：按它缩图，包里不再存客户端用不到的分辨率。
-  const options = sogouTemplate ? { keySizes: sogouKeySizes(sogouTemplate) } : undefined
-  if (archive.format !== "bda") return convertBaiduToSsf(archive, options)
-  if (!bdaBase) throw new Error("无法加载 BDA 官方基础布局")
-  const converted = convertBdaArchive(archive, bdaBase)
-  const result = await convertBaiduToSsf(converted.archive, options)
-  // BDA-only panels (split / one-handed landscape boards) have no Sogou counterpart either.
-  const warnings = converted.warnings.filter((warning) => !warning.includes("没有 BDS/BDI 基础布局"))
-  return { bytes: result.bytes, warnings: [...warnings, ...result.warnings] }
 }
