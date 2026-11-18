@@ -383,6 +383,7 @@ function writeMotions(motions: SkinMotions): string {
 /* —— 模型 —— */
 
 function infoOf(archive: SkinArchive): { name?: string; author?: string; version?: string } {
+  if (!archive.isText("Info.txt")) return {}
   const text = archive.getText("Info.txt")
   if (!text) return {}
   const value = (key: string) => text.match(new RegExp(`^${key}=(.+)$`, "mi"))?.[1]?.trim()
