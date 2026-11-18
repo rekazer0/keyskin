@@ -107,7 +107,15 @@ function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationS
     }
   }
   if (effect.kind === "image") {
-    return { kind: "custom", family: "bda.image", values: new Map<string, number | string | boolean>([["key", effect.key]]) }
+    // 帧内容没有对应概念，但编号与播放设置要留住，否则写回时整条效果会消失。
+    const values = new Map<string, number | string | boolean>([
+      ["key", effect.key],
+      ["repeatCount", effect.repeatCount],
+      ["repeatMode", effect.repeatMode],
+      ["removeOnFinish", effect.removeOnFinish],
+      ["loopForever", effect.loopForever],
+    ])
+    return { kind: "custom", family: "bda.image", values }
   }
   const transform = effect as BdaTransformAnimation
   const track: MotionTrack = {
@@ -198,6 +206,24 @@ export function motionsOfAnimation(animation: BdaAnimation): SkinMotions {
 /** IR 动效 → BDA 效果；只处理能表达的类型，其它类型由调用方报告损失。 */
 function effectOf(motion: SkinMotion): BdaAnimationEffect | undefined {
   const { root, timeline } = motion
+  if (root.kind === "custom" && root.family === "bda.image") {
+    // 图片序列的帧内容没有建模，编号与播放设置照原样写回，避免整条效果被丢掉。
+    const key = root.values.get("key")
+    const number = (name: string): number => {
+      const value = root.values.get(name)
+      return typeof value === "number" ? value : 0
+    }
+    return {
+      kind: "image",
+      key: typeof key === "string" ? key : motion.id,
+      repeatCount: number("repeatCount"),
+      repeatMode: number("repeatMode"),
+      removeOnFinish: root.values.get("removeOnFinish") === true,
+      loopForever: root.values.get("loopForever") === true,
+      startRepeatFrame: 0,
+      sequence: { name: typeof key === "string" ? key : motion.id, frames: [] },
+    }
+  }
   if (root.kind === "frames") {
     return {
       kind: "frame",
