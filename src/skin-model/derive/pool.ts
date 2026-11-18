@@ -60,8 +60,15 @@ function near(left: number, right: number, tolerance: number): boolean {
   return Math.abs(left - right) <= tolerance
 }
 
-function allNear(values: readonly number[], tolerance: number): boolean {
-  return values.every((value) => near(value, values[0], tolerance))
+/** 用统一 gap 是否仍能精确复现：看累计偏差，而不只是逐项差。 */
+function gapFits(gaps: readonly number[], tolerance: number): boolean {
+  const gap = median(gaps)
+  let drift = 0
+  for (const value of gaps) {
+    drift += value - gap
+    if (Math.abs(drift) > tolerance) return false
+  }
+  return true
 }
 
 function median(values: readonly number[]): number {
@@ -128,7 +135,7 @@ function rowGroup(id: string, items: readonly PoolItem[], tolerance: number): Gr
   if (!best) return
   const used = [...best].sort((left, right) => xOf(left.bounds) - xOf(right.bounds))
   const gaps = used.slice(1).map((item, index) => xOf(item.bounds) - rightOf(used[index].bounds))
-  const uniform = allNear(gaps, tolerance)
+  const uniform = gapFits(gaps, tolerance)
   const keys = used.flatMap((item) => item.keys)
   const bounds = boundsOf(keys)
   const height = Math.max(...used.map((item) => heightOf(item.bounds)))
@@ -162,7 +169,7 @@ function columnGroup(id: string, items: readonly PoolItem[], tolerance: number):
   if (!best) return
   const used = [...best].sort((left, right) => yOf(left.bounds) - yOf(right.bounds))
   const gaps = used.slice(1).map((item, index) => yOf(item.bounds) - bottomOf(used[index].bounds))
-  const uniform = allNear(gaps, tolerance)
+  const uniform = gapFits(gaps, tolerance)
   const keys = used.flatMap((item) => item.keys)
   const bounds = boundsOf(keys)
   const children = used.map((item, index) => {
