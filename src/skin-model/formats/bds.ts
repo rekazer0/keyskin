@@ -1,20 +1,20 @@
 // BDS/BDI 转换器：覆盖布局、按键、动作、样式图层、动效与音效。
 //
 // 格式原生数据是归档加路径；read 解析成 IR，write 把 IR 写回同一份归档并保留未建模的内容。
-import { IniDocument } from "../../ini.ts"
-import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "../../legacy-animation.ts"
-import { previewItems } from "../../preview-items.ts"
-import { SkinArchive } from "../../skin.ts"
-import { tileSlices } from "../../tiles.ts"
-import type { Appearance, BoardKind, KeyEvent, Orientation, Size, SkinAction } from "../types.ts"
-import type { Capability, CapabilityLevel } from "../capability.ts"
-import type { SkinKey } from "../key.ts"
-import type { SkinLayer, SkinStyle, SkinStyles } from "../style.ts"
-import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "../motion.ts"
-import { emptyModel } from "../model.ts"
-import { deriveBoard } from "../derive/layout.ts"
-import { buildBoard } from "../build.ts"
-import type { ImportOptions, SkinFormat } from "../format.ts"
+import { IniDocument } from "@/ini.ts"
+import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
+import { previewItems } from "@/preview-items.ts"
+import { SkinArchive } from "@/skin.ts"
+import { tileSlices } from "@/tiles.ts"
+import type { Appearance, BoardKind, KeyEvent, Orientation, Size, SkinAction } from "@/skin-model/types.ts"
+import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
+import type { SkinKey } from "@/skin-model/key.ts"
+import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
+import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
+import { emptyModel } from "@/skin-model/model.ts"
+import { deriveBoard } from "@/skin-model/derive/layout.ts"
+import { buildBoard } from "@/skin-model/build.ts"
+import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 
 export type BdsSource = {
   archive: SkinArchive

@@ -1,5 +1,5 @@
 // 推导成本：按树的结构统计各类节点，用权重折算成可比较的数值。
-import type { LayoutNode } from "../layout.ts"
+import type { LayoutNode } from "@/skin-model/layout.ts"
 import type { DeriveWeights } from "./options.ts"
 
 export type LayoutStats = {

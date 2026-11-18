@@ -4,8 +4,8 @@
 // 合并不可逆，每阶段池内元素数单调下降；整树最后交给 taffy 验证，与输入不一致就回退绝对矩形。
 import { AlignItems, Display, FlexDirection, Position } from "taffy-layout"
 import type { StylePropertyValues } from "taffy-layout"
-import { absoluteBoard, computeLayout, type LayoutNode, type LayoutRect } from "../layout.ts"
-import type { Rect, Size } from "../types.ts"
+import { absoluteBoard, computeLayout, type LayoutNode, type LayoutRect } from "@/skin-model/layout.ts"
+import type { Rect, Size } from "@/skin-model/types.ts"
 import { layoutCost } from "./cost.ts"
 import { resolveDeriveOptions, type DeriveOptions, type DeriveOverrides } from "./options.ts"
 
