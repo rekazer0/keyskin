@@ -1,6 +1,7 @@
 // BDS/BDI 转换器：覆盖布局、按键、动作、样式图层、动效与音效。
 //
 // 格式原生数据是归档加路径；read 解析成 IR，write 从 IR 重新生成全部文件（含重新打包的图集）。
+import { appearanceOf, bdsBoardName, bdsDirectory, isBdsLayoutPath, orientationOf } from "@/skin-model/board-paths.ts"
 import { IniDocument } from "@/ini.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
 import { previewItems } from "@/preview-items.ts"
@@ -43,7 +44,7 @@ export function bdsSource(
   const theme = options.theme ?? "light"
   const orientation = options.orientation ?? "port"
   const kind = options.kind ?? "main"
-  const prefix = `${theme}/skin/${orientation}/`
+  const prefix = bdsDirectory(theme, orientation)
   const candidates = archive.names().filter((name) => name.startsWith(prefix) && name.endsWith(".ini") && !/gen\.ini$/i.test(name))
   const layout = options.layout
     ?? candidates.find((name) => /\/py_26\.ini$/.test(name))
@@ -507,11 +508,12 @@ function parsePanelSize(document: IniDocument): Size<number> {
 
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
 function layoutFiles(archive: SkinArchive, theme: Appearance, orientation: Orientation): string[] {
-  const directory = `${theme}/skin/${orientation}/`
   const panels = new Set(["gen.ini", "more.ini", "toolbar.ini"])
   return archive.names().filter((name) => {
-    if (!name.startsWith(directory) || !name.endsWith(".ini")) return false
-    const leaf = name.slice(directory.length).toLowerCase()
+    // 先按路径规则判断是不是布局，再按内容确认有没有按键段。
+    if (!isBdsLayoutPath(name)) return false
+    if (appearanceOf(name) !== theme || orientationOf(name) !== orientation) return false
+    const leaf = `${bdsBoardName(name)?.toLowerCase() ?? ""}.ini`
     if (panels.has(leaf)) return false
     return archive.getText(name).includes("[KEY")
   })
@@ -597,7 +599,7 @@ export async function layoutBoards(
   }
   const keys = keysOf(document, size)
   const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size, deriveOptions)
-  const directory = `${theme}/skin/${orientation}/`
+  const directory = bdsDirectory(theme, orientation)
   const genPath = archive.names().find((name) => name === `${directory}gen.ini`)
   const parsedPanels = genPath
     ? panelsOf(archive, directory, IniDocument.parse(archive.getText(genPath)), actionOf)
