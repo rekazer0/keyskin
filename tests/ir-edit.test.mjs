@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard, setKeyAction, setKeyStyle, setMeta, setStyle } from "../src/skin-model/edit.ts"
+import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard, setKeyAction, setKeyStyle, setBoardBackdrop, setMeta, setStyle } from "../src/skin-model/edit.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { validateModel } from "../src/skin-model/validate.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
@@ -90,4 +90,17 @@ test("皮肤信息改动写进模型，空串表示清掉", async () => {
   const cleared = setMeta(named, { name: "" })
   assert.equal(cleared.meta.name, undefined)
   assert.equal(cleared.meta.author, "作者", "其它字段应当保留")
+})
+
+test("板的面板背景样式可换可清，其余属性保留", async () => {
+  const before = await model()
+  const board = before.boards[0]
+  const styled = setBoardBackdrop(before, board.id, "9")
+  assert.equal(styled.boards[0].backdrop.style, "9")
+  const withBlur = { ...styled, boards: styled.boards.map((item, index) => index === 0
+    ? { ...item, backdrop: { ...item.backdrop, blur: true } }
+    : item) }
+  const cleared = setBoardBackdrop(withBlur, board.id, null)
+  assert.equal(cleared.boards[0].backdrop.style, undefined)
+  assert.equal(cleared.boards[0].backdrop.blur, true, "其它属性应当保留")
 })

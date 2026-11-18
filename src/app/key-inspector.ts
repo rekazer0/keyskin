@@ -42,7 +42,7 @@ import { skinModel } from "./skin-model-state"
 import { boardTraits } from "./board-traits"
 import { validateModel } from "@/skin-model/validate.ts"
 import { applyFieldChange } from "@/skin-model/edit-binding.ts"
-import { patchKey, setMeta } from "@/skin-model/edit.ts"
+import { patchKey, setBoardBackdrop, setMeta } from "@/skin-model/edit.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import type { SkinMeta } from "@/skin-model/types.ts"
 import { element } from "../dom-element"
@@ -617,6 +617,14 @@ export function updateSkinInfo(field: HTMLInputElement): void {
   updateDirty()
 }
 
+
+/** 面板背景样式改动后的模型；模型里没有这块板时返回 undefined，让提交入口作废重建。 */
+function modelAfterBackdrop(style: string): SkinModel | undefined {
+  const current = skinModel.model
+  if (!current || !current.boards.some((board) => board.id === appState.layoutPath)) return
+  return setBoardBackdrop(current, appState.layoutPath, style.trim() || null)
+}
+
 /** 皮肤信息字段到模型元信息的对照。 */
 const META_FIELDS: Readonly<Record<string, keyof SkinMeta>> = {
   Name: "name",
@@ -704,7 +712,7 @@ export function updateKeyboard(field: HTMLInputElement): void {
   } else if (name === "styleID") {
     const before = context.gen.toString()
     context.gen.set("PANEL", "BACK_STYLE", field.value)
-    commitText(context.genPath, before, context.gen.toString())
+    commitText(context.genPath, before, context.gen.toString(), false, modelAfterBackdrop(field.value))
   } else {
     const styleID = context.gen.get("PANEL", "BACK_STYLE")?.split(",")[0].trim()
     if (!styleID) return

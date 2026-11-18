@@ -165,6 +165,16 @@ export function removeStyle(model: SkinModel, styleId: string): SkinModel {
   return { ...model, styles, boards, motions }
 }
 
+/** 换板的面板背景样式引用；传 null 表示清掉。 */
+export function setBoardBackdrop(model: SkinModel, boardId: string, style: string | null): SkinModel {
+  const board = model.boards.find((item) => item.id === boardId)
+  if (!board) return model
+  const backdrop = style === null
+    ? (({ style: _removed, ...rest }) => rest)(board.backdrop ?? {})
+    : { ...board.backdrop, style }
+  return replaceBoard(model, boardId, { ...board, backdrop })
+}
+
 /** 改皮肤元信息；未给出的字段保持不变。 */
 export function setMeta(model: SkinModel, patch: Partial<SkinMeta>): SkinModel {
   const meta = { ...model.meta, ...patch }
