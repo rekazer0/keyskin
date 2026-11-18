@@ -10,6 +10,7 @@ import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type
 import { exportViaIr, isCrossFormatExport } from "./ir-export"
 import { planImport, prepareImport } from "./import-plan"
 import { skinModel } from "./skin-model-state"
+import { validateModel } from "@/skin-model/validate.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
@@ -391,6 +392,17 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   return { ...result, bytes: await archive.toBytesAsync(format) }
 }
 
+/** 模型自检里值得提醒的问题；模型没建好时不打扰用户。 */
+function modelWarnings(): string[] {
+  const model = skinModel.model
+  if (!model) return []
+  const report = validateModel(model)
+  return report.issues
+    .filter((issue) => issue.code === "missing-style" || issue.code === "missing-image" || issue.code === "missing-sound")
+    .slice(0, 3)
+    .map((issue) => `${issue.subject}：${issue.message}`)
+}
+
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<PackagedResult> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
@@ -427,7 +439,9 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const adjustments: string[] = []
     const bytes = await appState.archive.toBytesAsync(format, soundWarnings, adjustments)
     reportExportWarnings(soundWarnings, adjustments)
-    return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings] }
+    // 同格式保存不重建包，但模型自检能提前发现悬空引用，值得一并提示。
+    const inspection = modelWarnings()
+    return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings, ...inspection] }
   }
   // 源 BDA 转 BDI/BDS 已在前面由中间表示处理，走到这里说明分支漏了它。
   throw new Error(`暂不支持从 ${appState.archive.format} 导出为 ${format}`)
