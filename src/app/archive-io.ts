@@ -130,7 +130,7 @@ export async function loadArchive(
   void skinModel.load(nextArchive, {
     ...(appState.ssfSkeleton ? { skeleton: appState.ssfSkeleton.archive } : {}),
     ...(appState.bdaBase ? { base: appState.bdaBase } : {}),
-  }).catch((error: unknown) => clientLog.info("archive.model.error", { detail: String(error) }))
+  }).then(() => updateDirty()).catch((error: unknown) => clientLog.info("archive.model.error", { detail: String(error) }))
   appState.aiDesignConversationTarget = nextArchive
   appState.aiSessions = []
   appState.aiSessionId = ""

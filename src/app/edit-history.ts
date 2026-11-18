@@ -78,8 +78,11 @@ export async function prepareDocumentReplacement(intent: "open" | "leave" = "lea
 
 export function updateDirty(): void {
   dirty.hidden = !appState.unsavedNew && !appState.archive?.changed.size
+  const model = skinModel.model
+  // 模型建好时把规模带出来：这是中间表示真的在工作的可见证据，也方便判断它是否掉了。
+  const scale = model ? ` · ${model.boards.length} 板 ${model.boards.reduce((total, board) => total + board.keys.length, 0)} 键` : ""
   mobileDocumentStatus.textContent = !appState.archive ? "本地编辑 · 文件仅在本机处理"
-    : !dirty.hidden ? `${appState.archive.format.toUpperCase()} · 有未保存的修改` : `${appState.archive.format.toUpperCase()} · 已保存在本机`
+    : !dirty.hidden ? `${appState.archive.format.toUpperCase()}${scale} · 有未保存的修改` : `${appState.archive.format.toUpperCase()}${scale} · 已保存在本机`
 }
 
 export function updateHistoryButtons(): void {
