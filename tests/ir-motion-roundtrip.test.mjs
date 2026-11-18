@@ -81,3 +81,17 @@ test("Lottie 与视频动效保留媒体类型，不被写成普通帧图", asyn
     assert.equal(root?.kind === "frames" ? root.media : undefined, kind, `${id} 的媒体类型丢了`)
   }
 })
+
+test("动效绑定在写回后保留", async () => {
+  const base = bdsBase()
+  const source = bdaSource(bdaAnimated(), base)
+  const model = await bdaFormat.read(source)
+  const before = [...model.motions.values()].reduce((total, motion) => total + motion.bindings.length, 0)
+  assert.ok(before > 0, "夹具应当带动效绑定")
+  const back = await bdaFormat.read(bdaFormat.write(model, source))
+  const after = [...back.motions.values()].reduce((total, motion) => total + motion.bindings.length, 0)
+  assert.equal(after, before, "绑定数在写回后变了")
+  const sample = [...back.motions.values()].find((motion) => motion.bindings.length)
+  assert.equal(sample.bindings[0].slot, "press")
+  assert.ok(sample.bindings[0].target)
+})
