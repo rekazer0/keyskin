@@ -1,7 +1,9 @@
 // 动效：树形模型。
 //
 // 轨道、组合、帧序列、粒子、路径、物理与自定义家族都是同一棵树上的节点；绑定单独记录目标与事件。
-import type { MotionSlot, Point, Rect } from "./types.ts"
+import type { Point } from "taffy-layout"
+import type { MotionSlot } from "./types.ts"
+import type { LayoutBox } from "./layout.ts"
 
 export type MotionRange = readonly [number, number]
 export type MotionVector = readonly [MotionRange, MotionRange]
@@ -21,7 +23,7 @@ export type MotionTrack = {
   to: MotionVector
   relative: boolean
   easing: Easing
-  pivot?: Point
+  pivot?: Point<number>
 }
 
 export type MotionEmitter = {
@@ -30,7 +32,7 @@ export type MotionEmitter = {
   life: MotionRange
   count: number
   birthRate: number
-  region: Rect
+  region: LayoutBox
   velocity: MotionRange
   velocityDirection: MotionRange
   acceleration: MotionRange
@@ -44,7 +46,7 @@ export type MotionEmitter = {
   finish: "emitted" | "gone"
   removeWithParticles: boolean
   mirror: number
-  path?: readonly Point[]
+  path?: readonly Point<number>[]
 }
 
 export type MotionFrame = { file: string; duration?: number }
@@ -54,8 +56,8 @@ export type MotionNode =
   | { kind: "sequence"; children: MotionNode[]; method: "parallel" | "sequential" | "random"; delay: number; duration: number }
   | { kind: "frames"; frames: MotionFrame[]; loop: number; delay: number; duration: number }
   | { kind: "particles"; emitter: MotionEmitter; delay: number; duration: number }
-  | { kind: "path"; points: readonly Point[]; speed: number; delay: number; duration: number }
-  | { kind: "physics"; gravity: Point; drag: number; bounce: number; delay: number; duration: number }
+  | { kind: "path"; points: readonly Point<number>[]; speed: number; delay: number; duration: number }
+  | { kind: "physics"; gravity: Point<number>; drag: number; bounce: number; delay: number; duration: number }
   | { kind: "custom"; family: string; values: ReadonlyMap<string, number | string | boolean> }
 
 export type MotionBinding = {

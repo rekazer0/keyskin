@@ -1,7 +1,9 @@
 // 按键：动作、状态覆盖、样式/动效/音效引用与几何。
 //
 // 按键不再绑定任何格式的段名或字段：id 是稳定标识，矩形与布局树节点对应，动作按事件存放。
-import type { BoardKind, Insets, KeyEvent, MotionSlot, Rect, SkinAction } from "./types.ts"
+import type { Rect } from "taffy-layout"
+import type { BoardKind, KeyEvent, MotionSlot, SkinAction } from "./types.ts"
+import type { LayoutBox } from "./layout.ts"
 import type { SkinStyle } from "./style.ts"
 
 /** 按键的样式引用：背景、按下背景、前景层、文字与图标。 */
@@ -23,9 +25,9 @@ export type KeyStateOverride = {
 
 export type SkinKey = {
   id: string
-  rect: Rect
-  touchRect?: Rect
-  padding?: Insets
+  rect: LayoutBox
+  touchRect?: LayoutBox
+  padding?: Rect<number>
   /** 默认状态下的动作。 */
   actions: Partial<Record<KeyEvent, SkinAction>>
   style: KeyStyleRefs

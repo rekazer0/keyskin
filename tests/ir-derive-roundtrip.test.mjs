@@ -7,6 +7,7 @@ import { previewItems } from "@/preview-items.ts"
 import { SkinArchive } from "@/skin.ts"
 import { computeLayout } from "@/skin-model/layout.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
+import { box } from "./helpers/boxes.mjs"
 
 const TOLERANCE = 1
 
@@ -27,7 +28,7 @@ function samples() {
       const size = sizeOf(document)
       const keys = previewItems(document, size.width, size.height, undefined, false)
         .filter((item) => /^KEY\d+$/i.test(item.section) && item.rect.width > 0 && item.rect.height > 0)
-        .map((item) => ({ id: item.section, ...item.rect }))
+        .map((item) => ({ id: item.section, ...box(item.rect.x, item.rect.y, item.rect.width, item.rect.height) }))
       if (keys.length >= 4) found.push({ path, name, size, keys })
     }
   }
@@ -36,10 +37,10 @@ function samples() {
 
 function matches(actual, expected) {
   return actual !== undefined
-    && Math.abs(actual.x - expected.x) <= TOLERANCE
-    && Math.abs(actual.y - expected.y) <= TOLERANCE
-    && Math.abs(actual.width - expected.width) <= TOLERANCE
-    && Math.abs(actual.height - expected.height) <= TOLERANCE
+    && Math.abs(actual.position.x - expected.position.x) <= TOLERANCE
+    && Math.abs(actual.position.y - expected.position.y) <= TOLERANCE
+    && Math.abs(actual.size.width - expected.size.width) <= TOLERANCE
+    && Math.abs(actual.size.height - expected.size.height) <= TOLERANCE
 }
 
 test("真实模板布局可推导并回环一致", async () => {

@@ -4,6 +4,7 @@ import test from "node:test"
 import { buildBoard } from "../src/skin-model/build.ts"
 import { absoluteBoard } from "../src/skin-model/layout.ts"
 import { emptyModel } from "../src/skin-model/model.ts"
+import { box, rectOf } from "./helpers/boxes.mjs"
 
 function model() {
   const result = emptyModel({ appearance: "light", orientation: "port" })
@@ -13,10 +14,10 @@ function model() {
     geometry: "document",
     orientation: "port",
     size: { width: 300, height: 100 },
-    layout: absoluteBoard([{ id: "k", x: 10, y: 10, width: 100, height: 50 }]),
+    layout: absoluteBoard([{ id: "k", ...box(10, 10, 100, 50) }]),
     keys: [{
       id: "k",
-      rect: { x: 10, y: 10, width: 100, height: 50 },
+      rect: box(10, 10, 100, 50),
       actions: { press: { kind: "text", value: "a" } },
       style: { back: "1", fore: ["2"] },
     }],
@@ -31,7 +32,7 @@ test("构建后的按键矩形来自布局树", async () => {
   const renders = await buildBoard(skin, skin.boards[0])
   const render = renders.find((item) => item.key.id === "k")
   assert.ok(render)
-  assert.deepEqual(render.rect, { x: 10, y: 10, width: 100, height: 50 })
+  assert.deepEqual(rectOf(render.rect), { x: 10, y: 10, width: 100, height: 50 })
 })
 
 test("构建后的图层来自样式引用", async () => {

@@ -2,15 +2,17 @@
 //
 // 一个样式由若干图层组成，正常、按下、禁用各一份；图片、颜色、文字、边框、图标、渐变与音效
 // 都是同一套图层。九宫格与拉伸信息挂在图片图层上，不再依赖格式自己的字段名。
-import type { Color, Insets, Point, Rect, Size } from "./types.ts"
+import type { Point, Rect, Size } from "taffy-layout"
+import type { Color } from "./types.ts"
+import type { LayoutBox } from "./layout.ts"
 
 export type ImageFit = "stretch" | "nine-slice" | "center" | "tile"
 
 export type NineSlice = {
   /** 原图中的切片区域。 */
-  source: Rect
+  source: LayoutBox
   /** 可拉伸边与角的尺寸，从切片边缘算起。 */
-  inner: Insets
+  inner: Rect<number>
   /** 位图像素到布局单位的比例。 */
   pixelScale?: number
   /** 图集里的切片序号；写回时与文件名一起写。 */
@@ -22,7 +24,7 @@ export type TextStyle = {
   fontSize?: number
   weight?: number
   color?: Color
-  shadow?: { color: Color; size: number; offset?: Point }
+  shadow?: { color: Color; size: number; offset?: Point<number> }
 }
 
 export type SkinLayer =
@@ -30,7 +32,7 @@ export type SkinLayer =
   | { kind: "color"; value: Color }
   | { kind: "text"; text?: string; style: TextStyle }
   | { kind: "border"; color: Color; width: number; radius?: number }
-  | { kind: "icon"; file: string; size?: Size }
+  | { kind: "icon"; file: string; size?: Size<number> }
   | { kind: "gradient"; stops: ReadonlyArray<{ offset: number; color: Color }>; direction: "horizontal" | "vertical" }
   | { kind: "sound"; file: string }
 

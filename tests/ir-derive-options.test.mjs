@@ -6,12 +6,13 @@ import { deriveBoard } from "../src/skin-model/derive/layout.ts"
 import { DEFAULT_DERIVE_OPTIONS, resolveDeriveOptions } from "../src/skin-model/derive/options.ts"
 import { layoutCost, layoutStats } from "../src/skin-model/derive/cost.ts"
 import { computeLayout } from "../src/skin-model/layout.ts"
+import { box, rectOf } from "./helpers/boxes.mjs"
 
 function gridKeys() {
   const keys = []
   for (let row = 0; row < 2; row++) {
     for (let column = 0; column < 3; column++) {
-      keys.push({ id: `k${row}${column}`, x: column * 101, y: row * 51, width: 100, height: 50 })
+      keys.push({ id: `k${row}${column}`, ...box(column * 101, row * 51, 100, 50) })
     }
   }
   return keys
@@ -22,12 +23,12 @@ test("默认参数推导为严格网格", async () => {
   const result = await deriveBoard("board", keys, { width: 302, height: 101 })
   assert.equal(result.kind, "grid")
   const layout = await computeLayout(result.layout, { width: 302, height: 101 })
-  for (const key of keys) assert.deepEqual(layout.get(key.id), { x: key.x, y: key.y, width: key.width, height: key.height })
+  for (const key of keys) assert.deepEqual(rectOf(layout.get(key.id)), rectOf(key))
 })
 
 test("容差为 0 时 1px 偏差无法用网格表达", async () => {
   const keys = gridKeys()
-  keys[4].x += 1
+  keys[4].position.x += 1
   const strict = await deriveBoard("board", keys, { width: 302, height: 101 }, { tolerance: 0 })
   const loose = await deriveBoard("board", keys, { width: 302, height: 101 }, { tolerance: 1 })
   assert.notEqual(strict.kind, "grid")
@@ -35,7 +36,7 @@ test("容差为 0 时 1px 偏差无法用网格表达", async () => {
   const layout = await computeLayout(loose.layout, { width: 302, height: 101 })
   for (const key of keys) {
     const actual = layout.get(key.id)
-    assert.ok(Math.abs(actual.x - key.x) <= 1, `${key.id}.x=${actual.x}`)
+    assert.ok(Math.abs(actual.position.x - key.position.x) <= 1, `${key.id}.x=${actual.position.x}`)
   }
 })
 
@@ -46,7 +47,7 @@ test("权重越高，绝对节点越受罚", () => {
     style: { position: Position.Relative, display: Display.Block, size: { width: 302, height: 101 } },
     children: keys.map((key) => ({
       id: key.id,
-      style: { position: Position.Absolute, inset: { left: key.x, top: key.y, right: "auto", bottom: "auto" }, size: { width: key.width, height: key.height } },
+      style: { position: Position.Absolute, inset: { left: key.position.x, top: key.position.y, right: "auto", bottom: "auto" }, size: key.size },
     })),
   }
   const stats = layoutStats(relative)

@@ -4,6 +4,7 @@ import test from "node:test"
 import { emptyModel, boardsOfKind } from "../src/skin-model/model.ts"
 import { requiredCapabilities, lossOf } from "../src/skin-model/capability.ts"
 import { absoluteBoard, computeLayout } from "../src/skin-model/layout.ts"
+import { box, rectOf } from "./helpers/boxes.mjs"
 
 function model() {
   const result = emptyModel({ appearance: "light", orientation: "port" })
@@ -13,11 +14,11 @@ function model() {
     geometry: "document",
     orientation: "port",
     size: { width: 1080, height: 600 },
-    layout: absoluteBoard([{ id: "k1", x: 10, y: 10, width: 100, height: 50 }]),
+    layout: absoluteBoard([{ id: "k1", ...box(10, 10, 100, 50) }]),
     keys: [
       {
         id: "k1",
-        rect: { x: 10, y: 10, width: 100, height: 50 },
+        rect: box(10, 10, 100, 50),
         actions: { press: { kind: "text", value: "a" } },
         style: { back: "1", fore: [] },
       },
@@ -45,7 +46,7 @@ test("模型可容纳板、样式、动效与音效", () => {
 test("板的布局树可用于计算按键矩形", async () => {
   const skin = model()
   const layout = await computeLayout(skin.boards[0].layout, skin.boards[0].size)
-  assert.deepEqual(layout.get("k1"), { x: 10, y: 10, width: 100, height: 50 })
+  assert.deepEqual(rectOf(layout.get("k1")), { x: 10, y: 10, width: 100, height: 50 })
 })
 
 test("能力需求覆盖实际用到的维度", () => {

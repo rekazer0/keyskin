@@ -1,10 +1,11 @@
 // 板：布局、面板背景、候选栏、气泡、列表、工具栏、输入码与按键。
 //
 // 面板组件用组件级类型表达（候选栏/气泡/列表/工具栏/输入码），而不是各格式的段结构。
+import type { Point, Size } from "taffy-layout"
 import type { SkinKey } from "./key.ts"
 import type { LayoutBoard } from "./layout.ts"
 import type { TextStyle } from "./style.ts"
-import type { BoardGeometry, BoardKind, Orientation, Point, Size, SkinAction } from "./types.ts"
+import type { BoardGeometry, BoardKind, Orientation, SkinAction } from "./types.ts"
 
 export type PanelBackdrop = {
   style?: string
@@ -25,7 +26,7 @@ export type Toolbar = {
   style?: string
   items: ToolbarItem[]
   height?: number
-  iconSize?: Size
+  iconSize?: Size<number>
 }
 
 export type CandidateBar = {
@@ -41,14 +42,14 @@ export type CandidateBar = {
 export type HintBubble = {
   style?: string
   textStyle?: TextStyle
-  offset?: Point
+  offset?: Point<number>
   corner?: number
 }
 
 export type ListPanel = {
   style?: string
   cellStyle?: string
-  cellSize?: Size
+  cellSize?: Size<number>
   count?: number
   orientation?: "horizontal" | "vertical"
 }
@@ -67,7 +68,7 @@ export type SkinBoard = {
   kind: BoardKind
   geometry: BoardGeometry
   orientation: Orientation
-  size: Size
+  size: Size<number>
   layout: LayoutBoard
   backdrop?: PanelBackdrop
   candidate?: CandidateBar

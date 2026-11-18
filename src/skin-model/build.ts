@@ -4,14 +4,14 @@
 // 这是预览与导出共用的“板 → 可绘制按键”的路径。
 import type { SkinBoard } from "./board.ts"
 import type { SkinKey } from "./key.ts"
-import type { LayoutRect } from "./layout.ts"
+import type { LayoutBox } from "./layout.ts"
 import { computeLayout } from "./layout.ts"
 import type { SkinModel } from "./model.ts"
 import { resolveStyle, type SkinLayer, type SkinStyle } from "./style.ts"
 
 export type KeyRender = {
   key: SkinKey
-  rect: LayoutRect
+  rect: LayoutBox
   back?: SkinStyle
   fore: SkinStyle[]
   /** 正常态最终绘制的图层：背景 + 前景。 */

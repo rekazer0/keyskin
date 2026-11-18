@@ -1,13 +1,12 @@
 // IR 的基础语义类型。这里不出现任何输入法格式的字段名。
 //
 // 覆盖的信息维度：外观/方向/平台、分辨率与缩放、按键动作、按键事件、动效槽位、资源与元信息。
+// 位置、尺寸与距离一律使用 taffy 的类型，不另建同名结构。
+import type { Size } from "taffy-layout"
+
 export type Appearance = "light" | "dark"
 export type Orientation = "port" | "land"
 
-export type Rect = { x: number; y: number; width: number; height: number }
-export type Size = { width: number; height: number }
-export type Point = { x: number; y: number }
-export type Insets = { left: number; top: number; right: number; bottom: number }
 /** 统一颜色表示：8 位十六进制 ARGB，如 `FF112233`。 */
 export type Color = string
 
@@ -33,7 +32,7 @@ export type SkinAction =
   | { kind: "system"; code: string }
 
 export type SkinResource =
-  | { kind: "image"; path: string; size?: Size; format?: string }
+  | { kind: "image"; path: string; size?: Size<number>; format?: string }
   | { kind: "audio"; path: string; format?: string; duration?: number }
   | { kind: "font"; path: string; family?: string; weight?: number }
   | { kind: "frame"; path: string; duration?: number }
@@ -46,7 +45,7 @@ export type SkinMeta = {
   platform?: string
   appearance: Appearance
   orientation: Orientation
-  resolution?: Size
+  resolution?: Size<number>
   designWidth?: number
   scale?: number
   description?: string

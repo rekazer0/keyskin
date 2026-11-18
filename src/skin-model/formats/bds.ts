@@ -6,8 +6,10 @@ import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-an
 import { previewItems } from "@/preview-items.ts"
 import { SkinArchive } from "@/skin.ts"
 import { tileSlices } from "@/tiles.ts"
-import type { Appearance, BoardKind, KeyEvent, Orientation, Size, SkinAction } from "@/skin-model/types.ts"
+import type { Size } from "taffy-layout"
+import type { Appearance, BoardKind, KeyEvent, Orientation, SkinAction } from "@/skin-model/types.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
+import type { LayoutBox } from "@/skin-model/layout.ts"
 import type { SkinKey } from "@/skin-model/key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
@@ -116,7 +118,7 @@ function imageLayer(archive: SkinArchive, theme: Appearance, orientation: Orient
   if (!ref) return
   const path = tilePath(archive, theme, orientation, ref.file)
   const emptyNine = ref.slice !== undefined
-    ? { source: { x: 0, y: 0, width: 0, height: 0 }, inner: { left: 0, top: 0, right: 0, bottom: 0 }, index: ref.slice }
+    ? { source: { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }, inner: { left: 0, top: 0, right: 0, bottom: 0 }, index: ref.slice }
     : undefined
   if (!path) return { kind: "image", file: ref.file, ...(emptyNine ? { nineSlice: emptyNine } : {}) }
   const slices = tileSlices(IniDocument.parse(archive.getText(path)))
@@ -128,7 +130,7 @@ function imageLayer(archive: SkinArchive, theme: Appearance, orientation: Orient
     kind: "image",
     file: ref.file,
     nineSlice: {
-      source: { x: sx, y: sy, width: sw, height: sh },
+      source: { position: { x: sx, y: sy }, size: { width: sw, height: sh } },
       inner: { left: ix - sx, top: iy - sy, right: sx + sw - (ix + iw), bottom: sy + sh - (iy + ih) },
       ...(ref.slice !== undefined ? { index: ref.slice } : {}),
     },
@@ -247,11 +249,11 @@ function trackOf(entry: LegacyAnimationEntry): MotionTrack | undefined {
   }
 }
 
-function regionOf(entry: LegacyAnimationEntry): { x: number; y: number; width: number; height: number } {
+function regionOf(entry: LegacyAnimationEntry): LayoutBox {
   const parts = field(entry, "EMIT_REGION")?.split(",").map((part) => Number(part.trim()))
   return parts && parts.length === 4 && parts.every(Number.isFinite)
-    ? { x: parts[0], y: parts[1], width: parts[2], height: parts[3] }
-    : { x: 0, y: 0, width: 0, height: 0 }
+    ? { position: { x: parts[0], y: parts[1] }, size: { width: parts[2], height: parts[3] } }
+    : { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
 }
 
 function emitterOf(entry: LegacyAnimationEntry): MotionEmitter {
@@ -359,7 +361,7 @@ function writeMotions(motions: SkinMotions): string {
     } else if (node.kind === "particles") {
       const emitter = node.emitter
       lines.push("CATEGORY=3", `TYPE=${emitter.type === "complex" ? 1 : 0}`, `PARTICLE_IMAGE=${emitter.images.join("|")}`)
-      lines.push(`TOTAL_NUMBER=${emitter.count}`, `BIRTH_RATE=${emitter.birthRate}`, `EMIT_REGION=${emitter.region.x},${emitter.region.y},${emitter.region.width},${emitter.region.height}`)
+      lines.push(`TOTAL_NUMBER=${emitter.count}`, `BIRTH_RATE=${emitter.birthRate}`, `EMIT_REGION=${emitter.region.position.x},${emitter.region.position.y},${emitter.region.size.width},${emitter.region.size.height}`)
       lines.push(`LIFE=${rangeText(emitter.life)}`, `VELOCITY=${rangeText(emitter.velocity)}`, `VELOCITY_DIRECTION=${rangeText(emitter.velocityDirection)}`)
       lines.push(`ACCELERATION=${rangeText(emitter.acceleration)}`, `ACCELERATION_DIRECTION=${rangeText(emitter.accelerationDirection)}`)
       lines.push(`INIT_SCALE=${rangeText(emitter.scale)}`, `SCALE_SPEED=${rangeText(emitter.scaleSpeed)}`)
@@ -391,7 +393,7 @@ function infoOf(archive: SkinArchive): { name?: string; author?: string; version
   }
 }
 
-function parsePanelSize(document: IniDocument): Size {
+function parsePanelSize(document: IniDocument): Size<number> {
   const size = document.get("PANEL", "SIZE")?.split(",").map((part) => Number(part.trim()))
   if (size && size.length === 2 && size.every(Number.isFinite)) return { width: size[0], height: size[1] }
   return { width: 1080, height: 600 }
@@ -453,8 +455,10 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       if (right) actions["swipe-right"] = right
       return [{
         id: item.section,
-        rect: item.rect,
-        ...(item.touchRect ? { touchRect: item.touchRect } : {}),
+        rect: { position: { x: item.rect.x, y: item.rect.y }, size: { width: item.rect.width, height: item.rect.height } },
+        ...(item.touchRect
+          ? { touchRect: { position: { x: item.touchRect.x, y: item.touchRect.y }, size: { width: item.touchRect.width, height: item.touchRect.height } } }
+          : {}),
         ...(item.padding ? { padding: { left: item.padding[0], top: item.padding[1], right: item.padding[2], bottom: item.padding[3] } } : {}),
         actions,
         style: {
@@ -492,12 +496,12 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     for (const key of board.keys) {
       if (!layout.sections().includes(key.id)) continue
       const rect = renders.find((render) => render.key.id === key.id)?.rect ?? key.rect
-      layout.set(key.id, "VIEW_RECT", `${rect.x},${rect.y},${rect.width},${rect.height}`)
-      if (key.touchRect) layout.set(key.id, "TOUCH_RECT", `${key.touchRect.x},${key.touchRect.y},${key.touchRect.width},${key.touchRect.height}`)
+      layout.set(key.id, "VIEW_RECT", `${rect.position.x},${rect.position.y},${rect.size.width},${rect.size.height}`)
+      if (key.touchRect) {
+        layout.set(key.id, "TOUCH_RECT", `${key.touchRect.position.x},${key.touchRect.position.y},${key.touchRect.size.width},${key.touchRect.size.height}`)
+      }
       if (key.padding !== undefined) {
-        layout.set(key.id, "PADDING", typeof key.padding === "number"
-          ? `${key.padding},${key.padding},${key.padding},${key.padding}`
-          : `${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
+        layout.set(key.id, "PADDING", `${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
       }
       for (const { event, field: name } of EVENT_FIELDS) {
         const value = actionValue(key.actions[event])
