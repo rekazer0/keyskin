@@ -9,7 +9,7 @@ export interface SkinFormat<T> {
   readonly name: string
   readonly capabilities: ReadonlyMap<Capability, CapabilityLevel>
   /** 格式原生数据 → IR。 */
-  read(source: T): SkinModel
+  read(source: T): SkinModel | Promise<SkinModel>
   /** IR → 格式原生数据；给了 `source` 时在原数据上写回，保留未建模的内容。 */
-  write(model: SkinModel, source?: T): T
+  write(model: SkinModel, source?: T): T | Promise<T>
 }

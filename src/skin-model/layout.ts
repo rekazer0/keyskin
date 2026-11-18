@@ -97,8 +97,7 @@ export async function computeLayout(board: LayoutBoard, container: { width: numb
 }
 
 /** 把一组矩形建成同一棵树的绝对节点。 */
-export function absoluteBoard(rects: ReadonlyArray<{ id: string } & LayoutRect>): LayoutBoard {
-  return {
+export function absoluteBoard(rects: ReadonlyArray<{ id: string } & LayoutRect>): LayoutBoard {  return {
     id: "",
     style: {
       display: Display.Flex,
@@ -114,4 +113,21 @@ export function absoluteBoard(rects: ReadonlyArray<{ id: string } & LayoutRect>)
       },
     })),
   }
+}
+
+/** 把某个节点的矩形改成绝对定位；用于“移动单个按键”这类编辑。 */
+export function setNodeRect(node: LayoutNode, id: string, rect: LayoutRect): LayoutNode {
+  if (node.id === id) {
+    return {
+      ...node,
+      style: {
+        ...node.style,
+        position: Position.Absolute,
+        inset: { left: rect.x, top: rect.y, right: "auto", bottom: "auto" },
+        size: { width: rect.width, height: rect.height },
+      },
+    }
+  }
+  if (!node.children) return node
+  return { ...node, children: node.children.map((child) => setNodeRect(child, id, rect)) }
 }

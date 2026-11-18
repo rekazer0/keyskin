@@ -12,7 +12,8 @@ import type { SkinKey } from "../key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "../style.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "../motion.ts"
 import { emptyModel } from "../model.ts"
-import { absoluteBoard } from "../layout.ts"
+import { deriveBoardLayout } from "../derive/layout.ts"
+import { buildBoard } from "../build.ts"
 import type { SkinFormat } from "../format.ts"
 
 export type BdsSource = {
@@ -468,7 +469,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       geometry: "document",
       orientation: source.orientation,
       size,
-      layout: absoluteBoard(keys.map((key) => ({ id: key.id, ...key.rect }))),
+      layout: deriveBoardLayout("board", keys.map((key) => ({ id: key.id, ...key.rect })), size),
       keys,
     })
     model.styles = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
@@ -476,14 +477,16 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     model.provenance = { format: "bds", nodes: new Map(keys.map((key) => [key.id, { path: source.layout }])) }
     return model
   },
-  write(model, source) {
+  async write(model, source) {
     if (!source) throw new Error("BDS 写回需要原始归档")
     const board = model.boards[0]
     if (!board) throw new Error("模型里没有板")
+    const renders = await buildBoard(model, board)
     const layout = IniDocument.parse(source.archive.getText(source.layout))
     for (const key of board.keys) {
       if (!layout.sections().includes(key.id)) continue
-      layout.set(key.id, "VIEW_RECT", `${key.rect.x},${key.rect.y},${key.rect.width},${key.rect.height}`)
+      const rect = renders.find((render) => render.key.id === key.id)?.rect ?? key.rect
+      layout.set(key.id, "VIEW_RECT", `${rect.x},${rect.y},${rect.width},${rect.height}`)
       if (key.touchRect) layout.set(key.id, "TOUCH_RECT", `${key.touchRect.x},${key.touchRect.y},${key.touchRect.width},${key.touchRect.height}`)
       if (key.padding !== undefined) {
         layout.set(key.id, "PADDING", typeof key.padding === "number"

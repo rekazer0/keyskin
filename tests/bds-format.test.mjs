@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
+import { setNodeRect } from "../src/skin-model/layout.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
 
 test("BDS 转换器读出完整模型", () => {
@@ -23,13 +24,13 @@ test("BDS 转换器读出完整模型", () => {
   assert.equal(model.motions.get("ANIM1").root.kind, "track")
 })
 
-test("写回后重新读出保持一致", () => {
+test("写回后重新读出保持一致", async () => {
   const archive = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
   const source = bdsSource(archive)
   assert.ok(source)
   const model = bdsFormat.read(source)
-  model.boards[0].keys[1].rect = { x: 300, y: 5, width: 100, height: 120 }
-  bdsFormat.write(model, source)
+  model.boards[0].layout = setNodeRect(model.boards[0].layout, "KEY2", { x: 300, y: 5, width: 100, height: 120 })
+  await bdsFormat.write(model, source)
   const reopened = SkinArchive.open(archive.toBytes("bds"), "bds")
   const again = bdsFormat.read(bdsSource(reopened))
   assert.deepEqual(again.boards[0].keys[1].rect, { x: 300, y: 5, width: 100, height: 120 })
