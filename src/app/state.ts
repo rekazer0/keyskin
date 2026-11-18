@@ -174,7 +174,7 @@ export const appState = {
   tileDragStart: undefined as TilePoint | undefined,
   tileDraft: undefined as TileRect | undefined,
   tileMode: "select" as "select" | "move",
-  keyMode: "select" as "select" | "move",
+  keyMode: "select" as "select" | "move" | "multi",
   movingTile: undefined as TileSlice | undefined,
   moveStart: undefined as TilePoint | undefined,
   atlasWorkspace: undefined as ReturnType<typeof createAtlasWorkspace> | undefined,
