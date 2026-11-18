@@ -9,6 +9,11 @@ import type { SkinAction } from "@/skin-model/types.ts"
 
 export type BoardPanels = Pick<SkinBoard, "backdrop" | "candidate" | "hint" | "list" | "toolbar" | "input">
 
+/** 面板文件的原路径；导出时沿用，避免重建把文件名换掉。 */
+export type PanelPaths = { candidate?: string; hint?: string; more?: string }
+
+export type ParsedPanels = { panels: BoardPanels; paths: PanelPaths }
+
 type ActionReader = (value: string | undefined) => SkinAction | undefined
 type ActionWriter = (action: SkinAction | undefined) => string | undefined
 
@@ -41,7 +46,7 @@ function toolbarItems(document: IniDocument, actionOf: ActionReader): ToolbarIte
 }
 
 /** 从 `gen.ini` 与它引用的面板文件里读出面板组件。 */
-export function panelsOf(archive: SkinArchive, directory: string, gen: IniDocument, actionOf: ActionReader): BoardPanels {
+export function panelsOf(archive: SkinArchive, directory: string, gen: IniDocument, actionOf: ActionReader): ParsedPanels {
   const backdropStyle = gen.get("PANEL", "BACK_STYLE")?.trim()
   const noBlur = gen.get("PANEL", "NO_BLUR")?.trim() === "1"
   const backdrop: PanelBackdrop | undefined = backdropStyle || noBlur
@@ -110,12 +115,19 @@ export function panelsOf(archive: SkinArchive, directory: string, gen: IniDocume
     : undefined
 
   return {
-    ...(backdrop ? { backdrop } : {}),
-    ...(candidate ? { candidate } : {}),
-    ...(hint ? { hint } : {}),
-    ...(list ? { list } : {}),
-    ...(toolbar ? { toolbar } : {}),
-    ...(input ? { input } : {}),
+    panels: {
+      ...(backdrop ? { backdrop } : {}),
+      ...(candidate ? { candidate } : {}),
+      ...(hint ? { hint } : {}),
+      ...(list ? { list } : {}),
+      ...(toolbar ? { toolbar } : {}),
+      ...(input ? { input } : {}),
+    },
+    paths: {
+      ...(candidatePath ? { candidate: candidatePath } : {}),
+      ...(hintPath ? { hint: hintPath } : {}),
+      ...(morePath ? { more: morePath } : {}),
+    },
   }
 }
 
@@ -132,18 +144,20 @@ function iconSection(items: readonly ToolbarItem[], actionValue: ActionWriter): 
   return lines
 }
 
-/** 重新生成面板文件：`gen.ini`、候选栏 `.cnd`、气泡 `.pop`。 */
+/** 重新生成面板文件：`gen.ini`、候选栏 `.cnd`、气泡 `.pop`；`paths` 给了就沿用原文件名。 */
 export function panelFiles(
   board: SkinBoard,
   directory: string,
   size: { width: number; height: number },
   actionValue: ActionWriter,
+  paths: PanelPaths = {},
 ): Array<{ path: string; data: Uint8Array }> {
   const text = (value: string) => new TextEncoder().encode(value)
   const files: Array<{ path: string; data: Uint8Array }> = []
   const background: string[] = []
   const items = board.toolbar?.items ?? []
   const iconItems = items.filter((item) => item.icon)
+  const nameOf = (path: string | undefined, fallback: string) => (path ?? `${directory}${fallback}`).split("/").pop()!.replace(/\.[^.]+$/, "")
 
   // 候选栏与气泡各自一个文件，`gen.ini` 用 LAYOUT_NAME 指向它们。
   if (board.candidate) {
@@ -156,8 +170,8 @@ export function panelFiles(
       "",
       ...iconSection(board.candidate.icons ?? [], actionValue),
     ]
-    files.push({ path: `${directory}cand.cnd`, data: text(lines.join("\n")) })
-    background.push("[CAND]", "LAYOUT_NAME=cand", "")
+    files.push({ path: paths.candidate ?? `${directory}cand.cnd`, data: text(lines.join("\n")) })
+    background.push("[CAND]", `LAYOUT_NAME=${nameOf(paths.candidate, "cand.cnd")}`, "")
   }
   if (board.hint) {
     const lines = [
@@ -167,13 +181,13 @@ export function panelFiles(
       ...(board.hint.corner !== undefined ? [`CORNER=${board.hint.corner}`] : []),
       "",
     ]
-    files.push({ path: `${directory}hint.pop`, data: text(lines.join("\n")) })
-    background.push("[HINT]", "LAYOUT_NAME=hint", "")
+    files.push({ path: paths.hint ?? `${directory}hint.pop`, data: text(lines.join("\n")) })
+    background.push("[HINT]", `LAYOUT_NAME=${nameOf(paths.hint, "hint.pop")}`, "")
   }
   if (iconItems.length) {
     const lines = ["[PANEL]", `SIZE=${size.width},${size.height}`, "", ...iconSection(iconItems, actionValue)]
-    files.push({ path: `${directory}more.ini`, data: text(lines.join("\n")) })
-    background.push("[MORE]", "LAYOUT_NAME=more", "")
+    files.push({ path: paths.more ?? `${directory}more.ini`, data: text(lines.join("\n")) })
+    background.push("[MORE]", `LAYOUT_NAME=${nameOf(paths.more, "more.ini")}`, "")
   }
 
   const panel: string[] = [

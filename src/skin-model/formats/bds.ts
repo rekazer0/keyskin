@@ -271,6 +271,10 @@ function layoutText(board: SkinBoard, renders: readonly KeyRender[]): string {
     if (key.style.back) lines.push(`BACK_STYLE=${key.style.back}`)
     if (key.style.pressedBack) lines.push(`HL_BACK_STYLE=${key.style.pressedBack}`)
     if (key.style.fore.length) lines.push(`FORE_STYLE=${key.style.fore.join(",")}`)
+    if (key.sound) lines.push(`SOUND_STYLE=${key.sound}`)
+    // 按键自身的动效引用：一张表里按键 id → 动效 id。
+    const motions = Object.entries(key.motions ?? {}).flatMap(([slot, id]) => (id ? [`${slot.toUpperCase()}_ANIM=${id}`] : []))
+    lines.push(...motions)
     lines.push("")
   }
   return `${lines.join("\n")}\n`
@@ -477,6 +481,63 @@ function parsePanelSize(document: IniDocument): Size<number> {
   return { width: 1080, height: 600 }
 }
 
+/** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
+function layoutFiles(archive: SkinArchive, theme: Appearance, orientation: Orientation): string[] {
+  const directory = `${theme}/skin/${orientation}/`
+  const panels = new Set(["gen.ini", "more.ini", "toolbar.ini"])
+  return archive.names().filter((name) => {
+    if (!name.startsWith(directory) || !name.endsWith(".ini")) return false
+    const leaf = name.slice(directory.length).toLowerCase()
+    if (panels.has(leaf)) return false
+    return archive.getText(name).includes("[KEY")
+  })
+}
+
+/** 板种类由布局文件名推断；找不到特征名时归入其它。 */
+function boardKindOf(layout: string): BoardKind {
+  const name = (layout.split("/").pop() ?? "").replace(/\.ini$/i, "").toLowerCase()
+  if (/symbol|^zy|^bq|emoji|^sel|_ch$/.test(name)) return "symbol"
+  if (/^cand|^hy/.test(name)) return "candidate"
+  // 九宫格的名字带 `_9`，要在 `py`/`en` 之前判断，否则会被当成 26 键主板。
+  if (/(?:^|_)(?:9)$|^num|^bh/.test(name)) return "number"
+  if (/^(?:py|en|def|hw|big)/.test(name)) return "main"
+  return "other"
+}
+
+/** 一份布局文档里的按键：动作按事件拆分，样式与几何从预览项上取。 */
+function keysOf(document: IniDocument, size: Size<number>): SkinKey[] {
+  return previewItems(document, size.width, size.height, undefined, false).flatMap((item) => {
+    if (!/^KEY\d+$/i.test(item.section) || item.rect.width <= 0) return []
+    const actions: SkinKey["actions"] = {}
+    const press = actionOf(item.center || item.show)
+    if (press) actions.press = press
+    const hold = actionOf(item.hold)
+    if (hold) actions["long-press"] = hold
+    const up = actionOf(item.up)
+    if (up) actions["swipe-up"] = up
+    const down = item.down && item.down !== item.center ? actionOf(item.down) : undefined
+    if (down) actions["swipe-down"] = down
+    const left = actionOf(item.left)
+    if (left) actions["swipe-left"] = left
+    const right = actionOf(item.right)
+    if (right) actions["swipe-right"] = right
+    return [{
+      id: item.section,
+      rect: { position: { x: item.rect.x, y: item.rect.y }, size: { width: item.rect.width, height: item.rect.height } },
+      ...(item.touchRect
+        ? { touchRect: { position: { x: item.touchRect.x, y: item.touchRect.y }, size: { width: item.touchRect.width, height: item.touchRect.height } } }
+        : {}),
+      ...(item.padding ? { padding: { left: item.padding[0], top: item.padding[1], right: item.padding[2], bottom: item.padding[3] } } : {}),
+      actions,
+      style: {
+        ...(item.backStyle ? { back: item.backStyle } : {}),
+        ...(item.highlightBackStyle ? { pressedBack: item.highlightBackStyle } : {}),
+        fore: item.foreStyles,
+      },
+    }]
+  })
+}
+
 /** 图集名：单页叫 `atlas`，多页追加页码。 */
 function atlasName(page: number): string {
   return page === 0 ? "atlas" : `atlas${page}`
@@ -520,37 +581,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       orientation: source.orientation,
       resolution: size,
     }, "bds")
-    const items = previewItems(layout, size.width, size.height, undefined, false)
-    const keys: SkinKey[] = items.flatMap((item) => {
-      if (!/^KEY\d+$/i.test(item.section) || item.rect.width <= 0) return []
-      const actions: SkinKey["actions"] = {}
-      const press = actionOf(item.center || item.show)
-      if (press) actions.press = press
-      const hold = actionOf(item.hold)
-      if (hold) actions["long-press"] = hold
-      const up = actionOf(item.up)
-      if (up) actions["swipe-up"] = up
-      const down = item.down && item.down !== item.center ? actionOf(item.down) : undefined
-      if (down) actions["swipe-down"] = down
-      const left = actionOf(item.left)
-      if (left) actions["swipe-left"] = left
-      const right = actionOf(item.right)
-      if (right) actions["swipe-right"] = right
-      return [{
-        id: item.section,
-        rect: { position: { x: item.rect.x, y: item.rect.y }, size: { width: item.rect.width, height: item.rect.height } },
-        ...(item.touchRect
-          ? { touchRect: { position: { x: item.touchRect.x, y: item.touchRect.y }, size: { width: item.touchRect.width, height: item.touchRect.height } } }
-          : {}),
-        ...(item.padding ? { padding: { left: item.padding[0], top: item.padding[1], right: item.padding[2], bottom: item.padding[3] } } : {}),
-        actions,
-        style: {
-          ...(item.backStyle ? { back: item.backStyle } : {}),
-          ...(item.highlightBackStyle ? { pressedBack: item.highlightBackStyle } : {}),
-          fore: item.foreStyles,
-        },
-      }]
-    })
+    const keys = keysOf(layout, size)
     const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size, {
       ...bdsFormat.derive,
       ...options?.derive,
@@ -558,11 +589,11 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     })
     const directory = `${source.theme}/skin/${source.orientation}/`
     const genPath = source.archive.names().find((name) => name === `${directory}gen.ini`)
-    const panels = genPath
+    const parsedPanels = genPath
       ? panelsOf(source.archive, directory, IniDocument.parse(source.archive.getText(genPath)), actionOf)
-      : {}
+      : { panels: {}, paths: {} }
     model.boards.push({
-      ...panels,
+      ...parsedPanels.panels,
       id: source.layout,
       kind: source.kind,
       geometry: "document",
@@ -571,6 +602,28 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       layout: derived.layout,
       keys,
     })
+    // 同一主题方向下其余布局文件也是板：九宫格、符号、候选等，一并读进来。
+    for (const layoutPath of layoutFiles(source.archive, source.theme, source.orientation)) {
+      if (layoutPath === source.layout) continue
+      const document = IniDocument.parse(source.archive.getText(layoutPath))
+      const boardSize = parsePanelSize(document)
+      const boardKeys = keysOf(document, boardSize)
+      if (!boardKeys.length) continue
+      const boardDerived = await deriveBoard("board", boardKeys.map((key) => ({ id: key.id, ...key.rect })), boardSize, {
+        ...bdsFormat.derive,
+        ...options?.derive,
+        weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
+      })
+      model.boards.push({
+        id: layoutPath,
+        kind: boardKindOf(layoutPath),
+        geometry: "document",
+        orientation: source.orientation,
+        size: boardSize,
+        layout: boardDerived.layout,
+        keys: boardKeys,
+      })
+    }
     const parsed = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
     model.styles = parsed.styles
     model.images = parsed.images
@@ -580,13 +633,31 @@ export const bdsFormat: SkinFormat<BdsSource> = {
         if (layer.kind === "sound") resources.set(layer.file, { kind: "audio", path: layer.file })
       }
     }
+    // 样式文档里声明的字体也算资源，导出时按名称找回。
+    for (const section of styleDocument.sections()) {
+      const font = styleDocument.get(section, "FONT_FILE")?.trim() || styleDocument.get(section, "FONT_NAME")?.trim()
+      if (font) resources.set(font, { kind: "font", path: font, family: font })
+    }
     model.resources = resources
+    // 按键动作里指向另一块板的，就是板间跳转。
+    for (const board of model.boards) {
+      const transitions = board.keys.flatMap((key) => {
+        const action = key.actions.press
+        if (action?.kind !== "switch") return []
+        return [{ trigger: "press" as const, target: action.board }]
+      })
+      const unique = transitions.filter((entry, index) => transitions.findIndex((other) => other.target === entry.target) === index)
+      if (unique.length) board.transitions = unique
+    }
     if (source.animation) model.motions = motionsOf(source.archive.getText(source.animation))
-    model.provenance = { format: "bds", nodes: new Map(keys.map((key) => [key.id, { path: source.layout }])) }
+    const provenance = new Map(keys.map((key) => [key.id, { path: source.layout }]))
+    for (const [kind, path] of Object.entries(parsedPanels.paths)) provenance.set(`panel:${kind}`, { path })
+    model.provenance = { format: "bds", nodes: provenance }
     return model
   },
   async write(model) {
-    const board = model.boards[0]
+    // 主键盘决定方向目录；模型里板多起来之后，第一块不一定是主键盘。
+    const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
     if (!board) throw new Error("模型里没有板")
     const renders = await buildBoard(model, board)
     const theme = model.meta.appearance
@@ -600,7 +671,9 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       }
     }
     const selected = new Map([...model.images].filter(([id]) => used.has(id)))
-    const pages = packAtlasPages(selected)
+    // 页尺寸跟随板尺寸：小屏皮肤不该产出 2048 的图集，大屏也不该被压到 1024。
+    const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.size.width, board.size.height) / 512) * 512))
+    const pages = packAtlasPages(selected, pageSize, pageSize)
     // 每张图落在哪一页的第几个切片；样式的图片引用据此写成 `图集名,序号`。
     const placement = new Map<string, { page: number; index: number }>()
     pages.forEach((page, pageIndex) => {
@@ -620,8 +693,18 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     const text = (value: string) => new TextEncoder().encode(value)
     const files: Array<{ path: string; data: Uint8Array }> = []
     files.push({ path: "Info.txt", data: text(infoText(model)) })
-    files.push(...panelFiles(board, `${root}/${orientation}/`, board.size, actionValue))
-    files.push({ path: board.id, data: text(layoutText(board, renders)) })
+    // 面板文件与 gen.ini 属于主键盘所在的方向目录。
+    const panelPaths = {
+      ...(model.provenance.nodes.get("panel:candidate") ? { candidate: model.provenance.nodes.get("panel:candidate")!.path } : {}),
+      ...(model.provenance.nodes.get("panel:hint") ? { hint: model.provenance.nodes.get("panel:hint")!.path } : {}),
+      ...(model.provenance.nodes.get("panel:more") ? { more: model.provenance.nodes.get("panel:more")!.path } : {}),
+    }
+    files.push(...panelFiles(board, `${root}/${orientation}/`, board.size, actionValue, panelPaths))
+    // 每块板各自一份布局文件，路径沿用导入时的位置。
+    for (const each of model.boards) {
+      const boardRenders = each === board ? renders : await buildBoard(model, each)
+      files.push({ path: each.id, data: text(layoutText(each, boardRenders)) })
+    }
     files.push({ path: `${root}/res/default.css`, data: text(stylesText(model.styles, imageRef)) })
     pages.forEach((page, pageIndex) => {
       const name = atlasName(pageIndex)

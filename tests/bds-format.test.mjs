@@ -13,8 +13,16 @@ test("BDS 转换器读出完整模型", async () => {
   assert.ok(source)
   const model = await bdsFormat.read(source)
   assert.equal(model.meta.name, "测试皮肤")
-  assert.equal(model.boards.length, 1)
+  assert.equal(model.boards.length, 3)
   const board = model.boards[0]
+  assert.equal(board.id, "light/skin/port/py_26.ini")
+  assert.equal(board.kind, "main")
+  const nine = model.boards[1]
+  assert.equal(nine.id, "light/skin/port/py_9.ini")
+  assert.equal(nine.kind, "number")
+  assert.equal(nine.keys.length, 2)
+  const symbols = model.boards[2]
+  assert.equal(symbols.kind, "symbol")
   assert.equal(board.keys.length, 2)
   const key = board.keys[0]
   assert.deepEqual(rectOf(key.rect), { x: 10, y: 0, width: 100, height: 120 })
