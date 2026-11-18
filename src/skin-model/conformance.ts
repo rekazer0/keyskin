@@ -82,12 +82,21 @@ const TOLERATED: ReadonlyArray<keyof ModelCounts> = ["boards", "keys", "motions"
  * - `notes`：多板、动效、音效这些目标格式表达不了的——如实告知，不算失败。
  * 源模型本身就有自检错误时（例如官方基础布局没有样式），不把错误数变化算成问题。
  */
-function problemsOf(delta: CountDelta, before: ModelCounts, after: ModelCounts): { problems: string[]; notes: string[] } {
+function problemsOf(
+  delta: CountDelta,
+  before: ModelCounts,
+  after: ModelCounts,
+  target: SkinFormatId,
+): { problems: string[]; notes: string[] } {
   const problems: string[] = []
   const notes: string[] = []
+  // BDA 的按键由客户端的面板布局决定，源格式的键盘表达不了，键数变化不算丢失。
+  const clientLaidOut = target === "bda"
   for (const key of REQUIRED) {
     const value = delta[key]
-    if (value !== undefined && value < 0) problems.push(`${key} 少了 ${-value}`)
+    if (value === undefined || value >= 0) continue
+    if (clientLaidOut && key === "mainKeys") notes.push(`${key} 少了 ${-value}（BDA 按键由客户端布局决定）`)
+    else problems.push(`${key} 少了 ${-value}`)
   }
   for (const key of TOLERATED) {
     const value = delta[key]
@@ -145,7 +154,7 @@ export async function checkRoundTrip(
 
   const after = countsOf(reopened.model)
   const delta = deltaOf(before, after)
-  const { problems, notes } = problemsOf(delta, before, after)
+  const { problems, notes } = problemsOf(delta, before, after, target)
   return {
     from: opened.format,
     to: target,
