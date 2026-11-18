@@ -59,6 +59,8 @@ export type RoundTripReport = {
   notes: string[]
   /** 往返是否通过：只看 `problems`。 */
   ok: boolean
+  /** 目标格式缺少外部输入（如搜狗官方骨架），这次检查被跳过。 */
+  skipped?: boolean
 }
 
 function deltaOf(before: ModelCounts, after: ModelCounts): CountDelta {
@@ -139,6 +141,8 @@ export async function checkRoundTrip(
   // 目标格式需要同样的外部输入才能读回（BDA 要布局骨架、搜狗要官方骨架）。
   const reopened = await openSession(converted.output, hints)
   if (!reopened.ok) {
+    // 缺外部输入是检查条件不足，不是导出失败：记成跳过并说明缺什么。
+    const skipped = reopened.error.kind === "missing-basis"
     return {
       from: opened.format,
       to: target,
@@ -146,9 +150,10 @@ export async function checkRoundTrip(
       after: before,
       delta: {},
       loss: converted.loss,
-      problems: [`目标格式读不回来：${reopened.error.message}`],
-      notes: [],
-      ok: false,
+      problems: skipped ? [] : [`目标格式读不回来：${reopened.error.message}`],
+      notes: skipped ? [`跳过：${reopened.error.message}`] : [],
+      ok: skipped,
+      skipped,
     }
   }
 

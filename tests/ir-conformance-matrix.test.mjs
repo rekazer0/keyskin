@@ -72,3 +72,12 @@ test("每条通过的转换都给得出结论行", async () => {
     assert.match(line, /通过/)
   }
 })
+
+test("缺少官方骨架时转搜狗记为跳过，不算失败", async () => {
+  const base = bdsBase()
+  const reports = await checkTargets(base, ["ssf"], { base })
+  const report = reports[0]
+  assert.equal(report.ok, true, "缺外部输入不该判失败")
+  assert.equal(report.skipped, true)
+  assert.ok(report.notes.some((note) => /跳过/.test(note)), "应当说明为什么跳过")
+})
