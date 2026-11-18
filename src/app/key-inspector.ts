@@ -38,6 +38,7 @@ import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
 import { syncSkinConfigControl } from "./config-value-control"
 import { geometryPreview } from "./geometry-preview"
+import { skinModel } from "./skin-model-state"
 import { element } from "../dom-element"
 import { releaseOnRemove } from "../dom-lifecycle"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
@@ -237,6 +238,18 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
   }
 }
 
+/** 当前布局里每个按键的几何，来自模型；模型还没建好时为空，调用方退回读文档。 */
+function modelRectMap(): Map<string, number[]> {
+  const rects = new Map<string, number[]>()
+  const model = skinModel.model
+  if (!model) return rects
+  const board = model.boards.find((item) => item.id === appState.layoutPath)
+  for (const key of board?.keys ?? []) {
+    rects.set(key.id, [key.rect.position.x, key.rect.position.y, key.rect.size.width, key.rect.size.height])
+  }
+  return rects
+}
+
 export function populateKeyInspector(): void {
   // 全局预览逐个切换布局截图时不重建检查器，截完切回原布局再重建。
   if (appState.layoutOverview?.capturing) return
@@ -404,6 +417,7 @@ export function populateKeyInspector(): void {
       continue
     }
     const rectIndex = ["x", "y", "width", "height"].indexOf(name)
+    const modelRects = modelRectMap()
     const values = sections.map((section) => {
       if (rectIndex < 0) {
         if (name.startsWith("PADDING.")) return (effectiveKeyValue(section, "PADDING") ?? "0,0,0,0").split(",")[Number(name.split(".")[1])] ?? "0"
@@ -415,7 +429,8 @@ export function populateKeyInspector(): void {
         }
         return effectiveKeyValue(section, name) ?? ""
       }
-      const rect = document?.get(section, "VIEW_RECT")?.split(",").map(Number)
+      // 几何优先取模型：它与文档同源，但走的是同一套解析，格式之间不再各认一种写法。
+      const rect = modelRects.get(section) ?? document?.get(section, "VIEW_RECT")?.split(",").map(Number)
       return rect?.length === 4 ? String(Math.round(rect[rectIndex])) : ""
     })
     const common = values.every((value) => value === values[0]) ? values[0] : ""

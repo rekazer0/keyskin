@@ -5,6 +5,7 @@ import { flushNumberInputWheel, numberInputGesture } from "../number-input-wheel
 import { flushSourceAutosave, scheduleSourceAutosave } from "./source-workspace"
 import { showError } from "./file-operations"
 import { recordChange, mobilePortraitQuery } from "./canvas-interaction"
+import { skinModel } from "./skin-model-state"
 import { saveArchive, currentExportFormat } from "./archive-io"
 import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
@@ -92,6 +93,7 @@ export function commitText(path: string, before: string, after: string, coalesce
   appState.sourceHistoryHighlight = undefined
   appState.archive.setText(path, after)
   recordChange(appState.undoStack, { kind: "text", path, before, after }, numberInputGesture(), coalesce)
+  skinModel.invalidate()
   appState.redoStack = []
   scheduleSourceAutosave([path])
   updateHistoryButtons()
@@ -102,6 +104,7 @@ export function commitBytes(path: string, before: Uint8Array | undefined, after:
   acceptAiDraftPreview()
   appState.archive.setBytes(path, after)
   recordChange(appState.undoStack, { kind: "bytes", path, before, after }, numberInputGesture())
+  skinModel.invalidate()
   appState.redoStack = []
   scheduleSourceAutosave([path])
   updateHistoryButtons()
@@ -118,6 +121,7 @@ export function commitBatch(changes: Change[]): void {
     }
   }
   recordChange(appState.undoStack, { kind: "batch", changes }, numberInputGesture())
+  skinModel.invalidate()
   appState.redoStack = []
   scheduleSourceAutosave(changes.flatMap((change) => change.kind === "batch" ? [] : [change.path]))
   updateHistoryButtons()

@@ -9,6 +9,7 @@ import { SkinArchive } from "../skin.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { exportViaIr, isCrossFormatExport } from "./ir-export"
 import { planImport, prepareImport } from "./import-plan"
+import { skinModel } from "./skin-model-state"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
@@ -114,6 +115,8 @@ export async function loadArchive(
   appState.sourceWorkspacePendingArchive = undefined
   appState.assetURL = releaseImagePreviewURL(appState.assetURL)
   clearImageSlicePicker()
+  // 换文档时清掉上一份模型；新模型的构建放在工作区建立之后，不阻塞打开。
+  skinModel.reset()
   appState.archive = nextArchive
   appState.resourceStyleType = "all"
   appState.resourceUsageFilter = "all"
@@ -122,6 +125,11 @@ export async function loadArchive(
   appState.resourcePageStatistics = undefined
   const ssfWarnings = rebuildSsfPreview()
   if (ssfWarnings.length) clientLog.info("ssf.preview.warning", { warnings: ssfWarnings.join("；") })
+  // 模型供检查器与导出读取；构建失败只是没有模型，界面仍走原有路径。
+  void skinModel.load(nextArchive, {
+    ...(appState.ssfSkeleton ? { skeleton: appState.ssfSkeleton.archive } : {}),
+    ...(appState.bdaBase ? { base: appState.bdaBase } : {}),
+  }).catch((error: unknown) => clientLog.info("archive.model.error", { detail: String(error) }))
   appState.aiDesignConversationTarget = nextArchive
   appState.aiSessions = []
   appState.aiSessionId = ""
