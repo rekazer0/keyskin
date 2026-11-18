@@ -15,6 +15,8 @@ export type DeriveResult = {
   layout: LayoutNode
   kind: DeriveKind
   cost: number
+  /** 没被任何行列或网格吸收、只能绝对定位的键；导入时据此说明损失。 */
+  residual: string[]
 }
 
 /** 键的标识加上它在板上的已计算布局。 */
@@ -69,15 +71,34 @@ function median(values: readonly number[]): number {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
 }
 
-/** 按主轴排序后取最大不重叠子集，与已选项重叠的项被跳过。 */
+/** 一项在给定轴上与其他项的重叠个数。 */
+function overlapCount(item: PoolItem, others: readonly PoolItem[], axis: "x" | "y", tolerance: number): number {
+  const start = (value: PoolItem) => axis === "x" ? xOf(value.bounds) : yOf(value.bounds)
+  const end = (value: PoolItem) => axis === "x" ? rightOf(value.bounds) : bottomOf(value.bounds)
+  return others.filter((other) => start(other) < end(item) - tolerance && start(item) < end(other) - tolerance).length
+}
+
+/**
+ * 取最大不重叠子集：反复移除与其他项重叠最多的项（面积大者优先），
+ * 覆盖整行的背景键因此被留下，而不是把整行的键挤掉。
+ */
 function withoutOverlap(sorted: readonly PoolItem[], axis: "x" | "y", tolerance: number): PoolItem[] {
-  const start = (item: PoolItem) => axis === "x" ? xOf(item.bounds) : yOf(item.bounds)
-  const end = (item: PoolItem) => axis === "x" ? rightOf(item.bounds) : bottomOf(item.bounds)
-  const chosen: PoolItem[] = []
-  for (const item of sorted) {
-    const last = chosen[chosen.length - 1]
-    if (last && start(item) < end(last) - tolerance) continue
-    chosen.push(item)
+  let chosen = [...sorted]
+  while (chosen.length >= 2) {
+    let worst = 0
+    let worstIndex = -1
+    let worstArea = 0
+    for (const [index, item] of chosen.entries()) {
+      const count = overlapCount(item, chosen.filter((other) => other !== item), axis, tolerance)
+      const area = widthOf(item.bounds) * heightOf(item.bounds)
+      if (count > worst || (count === worst && count > 0 && area > worstArea)) {
+        worst = count
+        worstIndex = index
+        worstArea = area
+      }
+    }
+    if (worst === 0) return chosen
+    chosen = chosen.filter((_, index) => index !== worstIndex)
   }
   return chosen
 }
@@ -93,13 +114,19 @@ function itemOf(key: KeyBox): PoolItem {
 }
 
 /**
- * 行合并：同一 y 带的项按 x 排序；与已选项重叠的键留在池里，其余按间隙用 gap 或 margin-left。
- * 键宽与键高可以不同，容器取最大高度。
+ * 行合并：先按 y 起点分成行带，只在同一行带内合并（跨行键因此不会把别行拖下水）；
+ * 与已选项重叠的键留在池里，其余按间隙用 gap 或 margin-left。
  */
 function rowGroup(id: string, items: readonly PoolItem[], tolerance: number): GroupedItems | undefined {
-  const sorted = [...items].sort((left, right) => xOf(left.bounds) - xOf(right.bounds))
-  const used = withoutOverlap(sorted, "x", tolerance)
-  if (used.length < 2) return
+  let best: PoolItem[] | undefined
+  for (const band of bandsOf(items, "y", tolerance)) {
+    if (band.items.length < 2) continue
+    const used = withoutOverlap(band.items, "x", tolerance)
+    if (used.length < 2) continue
+    if (!best || used.length > best.length) best = used
+  }
+  if (!best) return
+  const used = [...best].sort((left, right) => xOf(left.bounds) - xOf(right.bounds))
   const gaps = used.slice(1).map((item, index) => xOf(item.bounds) - rightOf(used[index].bounds))
   const uniform = allNear(gaps, tolerance)
   const keys = used.flatMap((item) => item.keys)
@@ -121,13 +148,19 @@ function rowGroup(id: string, items: readonly PoolItem[], tolerance: number): Gr
 }
 
 /**
- * 列合并：按 y 排序；与已选项重叠的项留在池里，纵向间隙一致时用 gap，不均匀时用 margin-top。
- * 横向差异用 margin-left 表达。
+ * 列合并：候选是横向区间互相重叠的项（上下堆叠关系）；纵向重叠的项留在池里。
+ * 纵向间隙一致时用 gap，不均匀时用 margin-top，横向差异用 margin-left。
  */
 function columnGroup(id: string, items: readonly PoolItem[], tolerance: number): GroupedItems | undefined {
-  const sorted = [...items].sort((left, right) => yOf(left.bounds) - yOf(right.bounds))
-  const used = withoutOverlap(sorted, "y", tolerance)
-  if (used.length < 2) return
+  let best: PoolItem[] | undefined
+  for (const cluster of overlapClusters(items, "x")) {
+    if (cluster.length < 2) continue
+    const used = withoutOverlap(cluster, "y", tolerance)
+    if (used.length < 2) continue
+    if (!best || used.length > best.length) best = used
+  }
+  if (!best) return
+  const used = [...best].sort((left, right) => yOf(left.bounds) - yOf(right.bounds))
   const gaps = used.slice(1).map((item, index) => yOf(item.bounds) - bottomOf(used[index].bounds))
   const uniform = allNear(gaps, tolerance)
   const keys = used.flatMap((item) => item.keys)
@@ -326,7 +359,7 @@ async function verifies(layout: LayoutNode, keys: readonly KeyBox[], size: Size<
 }
 
 /** 按一个轴上的区间重叠聚类：返回彼此不重叠的簇。 */
-function clustersAlong(items: readonly PoolItem[], axis: "x" | "y"): PoolItem[][] {
+function overlapClusters(items: readonly PoolItem[], axis: "x" | "y"): PoolItem[][] {
   const start = (item: PoolItem) => axis === "x" ? xOf(item.bounds) : yOf(item.bounds)
   const end = (item: PoolItem) => axis === "x" ? rightOf(item.bounds) : bottomOf(item.bounds)
   const sorted = [...items].sort((left, right) => start(left) - start(right))
@@ -349,25 +382,16 @@ function mergePhase(
   pool: readonly PoolItem[],
   tolerance: number,
   id: string,
-  axis: "x" | "y",
   group: (id: string, items: PoolItem[], tolerance: number) => GroupedItems | undefined,
   counter: { value: number },
 ): PoolItem[] {
   let current = [...pool]
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const cluster of clustersAlong(current, axis).sort((left, right) => right.length - left.length)) {
-      if (cluster.length < 2) continue
-      const created = group(`${id}:${counter.value}`, cluster, tolerance)
-      if (!created) continue
-      counter.value++
-      current = [...current.filter((item) => !created.used.includes(item)), created.group]
-      changed = true
-      break
-    }
+  while (true) {
+    const created = group(`${id}:${counter.value}`, current, tolerance)
+    if (!created) return current
+    counter.value++
+    current = [...current.filter((item) => !created.used.includes(item)), created.group]
   }
-  return current
 }
 
 /** 池式推导主流程。 */
@@ -379,7 +403,7 @@ export async function derivePool(
 ): Promise<DeriveResult> {
   const options: DeriveOptions = resolveDeriveOptions(overrides)
   const tolerance = Math.max(0, options.tolerance)
-  if (!keys.length) return { layout: absoluteBoard([]), kind: "absolute", cost: 0 }
+  if (!keys.length) return { layout: absoluteBoard([]), kind: "absolute", cost: 0, residual: [] }
 
   // 整板背景键是背景层，不参与排布；先分离，再做池式合并。
   const background = keys.filter((key) => isBackground(key, size))
@@ -392,6 +416,7 @@ export async function derivePool(
         layout: root,
         kind: derived && derived.kind !== "absolute" ? derived.kind : "relative",
         cost: layoutCost(root, options.weights),
+        residual: derived?.residual ?? [],
       }
     }
   }
@@ -408,13 +433,13 @@ export async function derivePool(
 
   // 阶段二：行合并。
   if (pool.length > 1) {
-    pool = mergePhase(pool, tolerance, `${id}:row`, "y", rowGroup, counter)
+    pool = mergePhase(pool, tolerance, `${id}:row`, rowGroup, counter)
     snapshots.push(pool)
   }
 
   // 阶段三：列合并。
   if (pool.length > 1) {
-    pool = mergePhase(pool, tolerance, `${id}:column`, "x", columnGroup, counter)
+    pool = mergePhase(pool, tolerance, `${id}:column`, columnGroup, counter)
     snapshots.push(pool)
   }
 
@@ -422,10 +447,25 @@ export async function derivePool(
     const snapshot = snapshots[index]
     const root = rootOf(snapshot, id, size, tolerance)
     if (!await verifies(root, keys, size, tolerance)) continue
-    return { layout: root, kind: kindOf(snapshot), cost: layoutCost(root, options.weights) }
+    return {
+      layout: root,
+      kind: kindOf(snapshot),
+      cost: layoutCost(root, options.weights),
+      residual: residualOf(snapshot),
+    }
   }
   const fallback = absoluteBoard(keys)
-  return { layout: fallback, kind: "absolute", cost: layoutCost(fallback, options.weights) }
+  return {
+    layout: fallback,
+    kind: "absolute",
+    cost: layoutCost(fallback, options.weights),
+    residual: keys.map((key) => key.id),
+  }
+}
+
+/** 池里仍是单键的项，就是没有被行列或网格吸收的键。 */
+function residualOf(pool: readonly PoolItem[]): string[] {
+  return pool.filter((item) => item.kind === "key").flatMap((item) => item.keys.map((key) => key.id))
 }
 
 /** 一根：单组用铺满板的框加 padding 表达整体偏移，多组收进残差容器。 */
