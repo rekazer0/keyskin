@@ -7,7 +7,7 @@ import type { SkinKey, KeyStyleRefs } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
 import type { KeyEvent, SkinAction } from "./types.ts"
-import type { LayoutBox } from "./layout.ts"
+import { setNodeRect, type LayoutBox } from "./layout.ts"
 
 /** 找不到目标时返回原模型，调用方据此判断是否真的有改动。 */
 function unchanged(model: SkinModel): SkinModel {
@@ -70,7 +70,12 @@ export function patchKey(model: SkinModel, boardId: string, keyId: string, patch
     actions,
     style,
   }
-  const nextBoard = replaceKey(board, keyId, next)
+  // 几何有两份：按键上的矩形与布局树里的节点。只改一份的话，写回时用的是旧节点算出的位置。
+  const layout = patch.rect ? setNodeRect(board.layout, keyId, patch.rect) : board.layout
+  const nextBoard = (() => {
+    const replaced = replaceKey(board, keyId, next)
+    return replaced ? { ...replaced, layout } : undefined
+  })()
   return nextBoard ? replaceBoard(model, boardId, nextBoard) : unchanged(model)
 }
 
