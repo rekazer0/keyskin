@@ -425,6 +425,7 @@ function listItem(skin: JsonObject, pointer: SxiPointer, entry: AnimationEntry, 
     title: `动画 ${entry.id}`,
     info: info?.trim(),
     kind: kindLabel(entry.kind, entry.model),
+    particle: entry.kind === "a4",
     icon: entry.kind === "a1" ? A1_ICONS[Number(animationBase(entry.model).t ?? 0)] ?? "blend" : FAMILY_ICONS[entry.kind] ?? "clapperboard",
     detail: detail.filter(Boolean).join(" · "),
     uses: references.styles.length + references.combos.length,
@@ -484,7 +485,8 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   const skin = pointer && openPalmSkin()
   const table = skin && pointer ? asObject(sxiValue(skin, pointer)) : undefined
   if (!pointer || !skin || !table) return false
-  const entries = animationEntries(table).filter((entry) => shownInAnimationView(entry.kind === "a4"))
+  const allEntries = animationEntries(table)
+  const entries = allEntries.filter((entry) => shownInAnimationView(entry.kind === "a4"))
   const pressStyleCache = new Map<string, Set<string>>()
   const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, pressStyles(skin, pointer, id, pressStyleCache))
   const { items: keyItems, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(skin, pointer, entry, table)), plays)
@@ -505,6 +507,10 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   renderAnimationResource(container, {
     listSource: appState.archive,
     mode: appState.animationDesignMode,
+    particleCount: allEntries.filter(entry => entry.kind === "a4").length,
+    totalCount: allEntries.length,
+    context: `${SXI_SKIN_PATH} · ${pointer.join(".")}`,
+    styleLinks: entry && styleItems.filter(style => styleAnimations.get(style.id)?.has(entry.id)),
     sectionClass: "document-property-section",
     items,
     selected,

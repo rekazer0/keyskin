@@ -2264,6 +2264,7 @@ main {
 
 @media (min-width: 761px) and (min-height: 601px), (min-width: 951px) {
   .sidebar > .pane-heading { display: none; }
+  #files .sidebar-overview :is([data-nav-mode="motion"], [data-nav-mode="particle"]) { display: none; }
   body:has(> .ui-workspace-navigation) > :is(.titlebar, main) { margin-left: var(--workspace-navigation-width); }
 }
 

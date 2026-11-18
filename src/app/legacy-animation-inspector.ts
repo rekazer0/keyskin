@@ -270,6 +270,7 @@ function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Lega
     title: `动画 ${entry.index ?? entry.section}`,
     info: fieldValue(entry, "INFO")?.trim() || undefined,
     kind: kindLabel(entry),
+    particle: entry.kind === "particle",
     icon: entry.kind === "basic" ? TYPE_ICONS[entry.type ?? 0] ?? "blend" : KIND_ICONS[entry.kind],
     detail,
     uses,
@@ -336,6 +337,10 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   renderAnimationResource(container, {
     listSource: appState.archive,
     mode: appState.animationDesignMode,
+    particleCount: model.entries.filter(entry => entry.kind === "particle").length,
+    totalCount: model.entries.length,
+    context: appState.selectedPath,
+    styleLinks: entry?.index === undefined ? [] : usage.filter(style => styleIndexes.get(style.id)?.has(entry.index!)),
     sectionClass: "document-property-section",
     items,
     selected,

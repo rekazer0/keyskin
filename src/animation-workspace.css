@@ -5,12 +5,16 @@
 .animation-workspace .sidebar { padding: 0; overflow: hidden; }
 /* 侧栏是按内容定行高的栅格：跨满所有行，列表短时工具条也贴在底部 */
 .animation-workspace .animation-library { display: flex; grid-row: 1 / -1; flex-direction: column; gap: var(--space-sm); height: 100%; min-height: 0; padding: var(--space-md); box-sizing: border-box; }
-.animation-library-tabs { flex: none; }
+.animation-library-modes, .animation-library-tabs { flex: none; }
 .animation-library-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .animation-library-pane { display: flex; flex: 1; flex-direction: column; gap: var(--space-sm); min-height: 0; }
 .animation-library-pane[hidden] { display: none; }
 /* 按内容高度起算再收缩到可用空间：基准为 0 时，外层高度一旦不确定，列表会被压成一条缝。 */
-.animation-library-pane > .ui-listbox { flex: 1 1 auto; }
+.animation-library-pane > .ui-listbox { flex: 1 1 auto; padding: 0; border: 0; background: transparent; }
+.animation-library-pane .ui-listbox > .ui-empty { grid-column: 1 / -1; }
+@media (min-width: 761px) and (max-width: 1060px) {
+  .animation-workspace main { grid-template-columns: min(var(--sidebar-width, 248px), 24vw) minmax(0, 1fr) var(--space-2xs) min(var(--inspector-width, 360px), 30vw); }
+}
 
 /* 播放条按内容高度停靠，拖动上边缘可调高，双击恢复（animation-workspace.ts 记忆高度、测量位置）。 */
 .animation-workspace .workspace { grid-template-rows: 48px minmax(0, 1fr) var(--_animation-stage-height, minmax(160px, auto)) 30px; }
@@ -23,13 +27,65 @@
 .animation-workspace .animation-stage-resize-handle:hover { background: var(--accent); }
 }
 .animation-workspace .animation-stage-resize-handle[aria-busy="true"] { background: var(--accent); }
-.animation-workspace .animation-stage { display: flex; flex-direction: column; grid-row: 3; gap: var(--space-sm); min-height: 0; padding: var(--space-sm) var(--space-lg); overflow: auto; box-sizing: border-box; border-top: 1px solid var(--line); background: var(--material-panel); }
+.animation-workspace .animation-stage-resize-handle:focus-visible { outline: 0; box-shadow: var(--focus-ring); background: var(--accent); }
+.animation-workspace .animation-stage { display: flex; flex-direction: column; grid-row: 3; gap: var(--space-sm); min-height: 0; padding: var(--space-md) var(--space-lg); overflow: auto; box-sizing: border-box; border-top: 1px solid var(--line); background: var(--panel); }
 /* 「最近打开」回到启动页时不关闭皮肤，播放条跟着画布一起收起 */
 body:has(.canvas-wrap.empty) :is(.animation-stage, .animation-stage-resize-handle) { display: none; }
-/* 标题行与左侧列表同构：类型图标、名称、类型角标，右侧是时长与引用情况 */
+/* 标题行：动画名称、类型与当前播放时间。 */
 .animation-stage-heading { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
-.animation-stage-icon { flex: none; display: grid; place-items: center; color: var(--tertiary); }
 .animation-stage-heading > strong { flex: 0 1 auto; min-width: 0; overflow: hidden; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .animation-stage-heading > .ui-badge { flex: none; }
-.animation-stage-meta { flex: none; margin-left: auto; color: var(--tertiary); font-size: var(--font-size-xs); }
+.animation-stage-meta { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 
+/* 桌面动画页：类型胶囊、缩略图网格、真实画布以及停靠时间轴。 */
+.animation-library-modes[data-variant="pill"] > .ui-button { gap: var(--space-xs); padding-inline: var(--space-sm); }
+.animation-library-modes small { color: inherit; font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+.animation-library-create[hidden] { display: none; }
+
+.animation-stage-label { padding-right: var(--space-sm); border-right: 1px solid var(--line); color: var(--secondary); font-size: var(--font-size-xs); }
+.animation-workspace .canvas-wrap { padding-bottom: calc(var(--space-2xl) * 2); }
+.animation-workspace .ui-animation-player[data-layout="dock"] .ui-animation-transport,
+.animation-stage-trigger {
+  position: absolute;
+  z-index: 9;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - var(--space-2xl));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--material-panel);
+  box-shadow: var(--shadow-md);
+}
+.animation-workspace .ui-animation-player[data-layout="dock"] .ui-animation-transport {
+  bottom: calc(var(--_animation-stage-offset, 184px) + var(--workspace-status-height) + var(--space-lg));
+  padding: var(--space-xs) var(--space-sm);
+}
+.animation-workspace .ui-animation-transport > [data-variant="primary"] { border-radius: var(--radius-full); }
+.animation-stage-trigger {
+  top: calc(var(--control-height-lg) + var(--space-2xl));
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  color: var(--secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+.animation-object-header { display: grid; gap: var(--space-xs); padding-block: 0 var(--space-lg); border-bottom: 1px solid var(--line-soft); }
+.animation-object-header .ui-pane-header > h2 { font-size: var(--font-size-lg); }
+.animation-object-path { overflow: hidden; color: var(--tertiary); font: var(--font-size-xs) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.animation-object-references { display: flex; align-items: center; gap: var(--space-xs); color: var(--secondary); font-size: var(--font-size-xs); }
+.animation-style-link { justify-content: start; width: 100%; }
+.animation-style-link > small { margin-left: auto; color: var(--tertiary); font-size: var(--font-size-xs); }
+
+.animation-library-pane > .ui-listbox:has(> [data-animation-id]) { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--animation-card-width)), 1fr)); }
+.animation-layout-control { flex: 0 1 auto; min-width: 0; }
+.animation-layout-control[hidden] { display: none; }
+.animation-workspace .preview-toolbar-start:not(:has(#skin-state-control:not([hidden]))) { display: none; }
+.animation-workspace .preview-toolbar-start { margin-right: 0; }
+.animation-workspace .preview-toolbar #device-control { flex: 0 1 auto; }
+.animation-workspace .preview-toolbar #device { max-width: var(--animation-card-width); }
+
+.animation-zoom-value { align-self: center; color: var(--secondary); font: var(--font-size-xs) var(--font-mono); white-space: nowrap; }

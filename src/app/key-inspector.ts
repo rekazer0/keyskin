@@ -249,7 +249,7 @@ export function populateKeyInspector(): void {
   const hasSelection = Boolean((document || appState.archive?.format === "sxi") && sections.length && appState.selectedPath === appState.layoutPath)
   const listSelected = sections.some(isListCell)
   // 动效设计 / 粒子设计：列表进左侧栏、播放器上画布（animation-workspace.ts）。
-  appState.animationWorkspace?.update(!hasSelection && appState.animationDesignMode !== "all")
+  appState.animationWorkspace?.update(!hasSelection && appState.animationDesignMode !== "all", appState.layoutPath)
   preview.animationView = appState.animationDesignMode !== "all"
   // The rebuilt player puts its particles back on its first draw.
   preview.setPlayerParticles()

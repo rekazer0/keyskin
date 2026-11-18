@@ -111,6 +111,13 @@ export function wireResourcesAndStartup(): void {
   appState.animationWorkspace = createAnimationWorkspace({
     back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),
     relayout: () => populateKeyInspector(),
+    changeMode: particle => selectFile(appState.selectedPath, "overview", particle ? "particle" : "motion"),
+    changeLayout: option => {
+      const path = appState.selectedPath
+      const category = appState.animationWorkspaceMode
+      option.click()
+      selectFile(path, "overview", category)
+    },
   })
   appState.atlasWorkspace = createAtlasWorkspace({
     back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),

@@ -18,7 +18,10 @@ export function wireWorkspaceNavigation(): void {
   const tools = [...workspaceToolsDialog.querySelectorAll<HTMLButtonElement>("[data-workspace-tool]")]
   const originalAction = (button: HTMLButtonElement) => $<HTMLButtonElement>(`#${button.dataset.workspaceTool}`)
   const resourceEntry = () => files.querySelector<HTMLButtonElement>('.sidebar-overview [data-nav-mode="style"], .sidebar-overview [data-nav-mode="resource"], .sidebar-overview [data-nav-mode="sound"]')
-  const animationEntry = () => files.querySelector<HTMLButtonElement>('.sidebar-overview [data-nav-mode="motion"], .sidebar-overview [data-nav-mode="particle"]')
+  const animationEntry = () => {
+    const entries = [...files.querySelectorAll<HTMLButtonElement>(`.sidebar-overview [data-nav-mode="${appState.animationWorkspaceMode}"]`)]
+    return entries.find(entry => entry.dataset.path === appState.selectedPath) ?? entries[0]
+  }
   const inspectorTab = (tab: string) => inspectorTabs.querySelector<HTMLButtonElement>(`[data-inspector-tab="${tab}"]`)?.click()
   bindDialog(workspaceToolsDialog)
   const sync = () => {
@@ -51,6 +54,7 @@ export function wireWorkspaceNavigation(): void {
       setSidebarView("overview")
       const entry = page === "resources" ? resourceEntry() : animationEntry()
       entry?.click()
+      if (page === "animation") appState.animationWorkspace?.showAll()
       inspectorTab("properties")
     } else if (appState.archive) {
       canvasWrap.classList.remove("empty")

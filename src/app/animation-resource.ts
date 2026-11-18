@@ -1,3 +1,4 @@
+import { animationWorkspaceHosts } from "../animation-workspace.ts"
 // Which animation the 动效设计 / 粒子设计 inspector shows. One choice per file and view, so switching
 // between motion and particles, or undoing an edit, comes back to the same animation.
 import type { AnimationKeyFilter, AnimationListItem, AnimationStyleFilter, AnimationStyleItem } from "../animation-inspector.ts"
@@ -24,7 +25,7 @@ function selectionKey(): string {
 
 /** Whether an animation belongs in the current view; the raw-file view shows everything. */
 export function shownInAnimationView(particle: boolean): boolean {
-  return appState.animationDesignMode === "all" || particle === (appState.animationDesignMode === "particle")
+  return appState.animationDesignMode === "all" || animationWorkspaceHosts()?.allTypes === true || particle === (appState.animationDesignMode === "particle")
 }
 
 /** The remembered animation, or the first one when it is gone (deleted, undone, never chosen). */
@@ -134,6 +135,10 @@ export function selectAnimation(id: string): void {
 export function keyboardPlayback(plays: (key: PreviewItem) => boolean): KeyboardPlayback {
   const target = () => visiblePreviewItems(preview.keys, preview.skinState).find(plays)
   return {
+    targetLabel() {
+      const key = target()
+      return key && (key.show || keyLabel(key))
+    },
     play() {
       const key = target()
       if (key) void preview.playAnimation(key)

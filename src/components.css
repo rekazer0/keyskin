@@ -35,7 +35,7 @@
 .ui-icon-button { padding: 0; width: var(--_height); background: transparent; color: var(--secondary); }
 .ui-button[data-size="sm"], .ui-icon-button[data-size="sm"] { --_height: var(--control-height-sm); font-size: var(--font-size-xs); }
 .ui-button[data-size="lg"], .ui-icon-button[data-size="lg"] { --_height: var(--control-height-lg); }
-.ui-button[data-variant="primary"] { background: var(--accent); color: var(--on-accent); }
+:is(.ui-button, .ui-icon-button)[data-variant="primary"] { background: var(--accent-fill); color: var(--on-accent); }
 .ui-button[data-variant="quiet"] { background: transparent; color: var(--secondary); }
 .ui-button[data-variant="danger"] { background: transparent; color: var(--state-danger); }
 /* 画布工具条、资源操作条：带底色的图标按钮 */
@@ -54,7 +54,7 @@
 }
 @media (hover: hover) {
   .ui-button:hover, .ui-icon-button:hover { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
-  .ui-button[data-variant="primary"]:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); color: var(--on-accent); }
+  :is(.ui-button, .ui-icon-button)[data-variant="primary"]:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); color: var(--on-accent); }
   .ui-button[data-variant="danger"]:hover { background: color-mix(in srgb, var(--state-danger) 10%, transparent); color: var(--state-danger); }
 }
 .ui-button:active, .ui-icon-button:active { background: color-mix(in srgb, var(--text) 12%, transparent); transform: scale(0.96); }
@@ -687,10 +687,6 @@ body {
 .ui-animation-note[hidden] { display: none; }
 .ui-animation-note > .ui-icon { margin-right: var(--space-xs); vertical-align: -1px; }
 /* 横排（画布下方的播放条）：左边舞台，右边时间轴、走带与说明；右侧整组在舞台高度里纵向居中 */
-.ui-animation-player[data-layout="row"] { grid-template-columns: minmax(240px, 1fr) minmax(200px, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: var(--space-lg); align-items: center; }
-.ui-animation-player[data-layout="row"] > .ui-animation-stage { grid-row: 1; width: 100%; max-width: var(--animation-stage-width); justify-self: center; }
-.ui-animation-player[data-layout="row"] > .ui-animation-controls { grid-column: 2; }
-.ui-animation-player[data-layout="row"] .ui-animation-curve { height: var(--animation-curve-height); }
 .ui-animation-controls { display: grid; align-content: center; gap: var(--space-sm); min-width: 0; min-height: 0; }
 .ui-animation-handles { position: absolute; inset: 0; pointer-events: none; }
 .ui-animation-handle { position: absolute; z-index: 1; height: var(--control-height-sm); min-width: var(--control-height-sm); padding: 0 var(--space-xs); transform: translate(-50%, -50%); border: 1px solid var(--accent); border-radius: var(--radius-full); color: var(--accent); background: var(--panel); font-family: var(--font-mono); font-size: var(--font-size-xs); white-space: nowrap; cursor: grab; touch-action: none; pointer-events: auto; }
@@ -1142,3 +1138,32 @@ body {
 @media (hover: hover) { .ui-geometry-handle:hover::after { background: var(--accent-soft); } }
 .ui-geometry-handle:active::after { background: var(--accent); }
 @media (pointer: coarse) { .ui-geometry-handle { width: var(--mobile-control-height); height: var(--mobile-control-height); } .ui-geometry-handle::after { inset: var(--space-lg); } }
+
+/* 桌面时间轴：采样舞台与轨道并排；窄画布自动换行。 */
+.ui-animation-player[data-layout="dock"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+  align-items: start;
+  gap: var(--space-lg);
+  container-type: inline-size;
+}
+.ui-animation-player[data-layout="dock"] > .ui-animation-stage { width: 100%; max-width: var(--animation-stage-width); }
+.ui-animation-player[data-layout="dock"] .ui-animation-curve { height: var(--animation-curve-height); }
+.ui-animation-curve-label { flex-basis: 100%; color: var(--secondary); font-size: var(--font-size-xs); }
+.ui-animation-player[data-layout="dock"] .ui-animation-timeline:has(.ui-animation-direct-fields) { grid-template-columns: minmax(0, 1fr) minmax(0, 40%); column-gap: var(--space-lg); }
+.ui-animation-player[data-layout="dock"] .ui-animation-direct-fields { grid-area: 1 / 2 / 4; align-content: start; padding: var(--space-sm); border-radius: var(--radius-lg); background: var(--content); }
+.ui-animation-ruler { display: flex; justify-content: space-between; gap: var(--space-2xs); margin-inline: var(--space-sm); border-bottom: 1px solid var(--line-soft); color: var(--tertiary); font: var(--font-size-xs) var(--font-mono); }
+.ui-animation-ruler > span { padding-block: var(--space-xs); border-top: 1px solid var(--line); white-space: nowrap; }
+.ui-animation-ruler[hidden] { display: none; }
+@container (max-width: 480px) {
+  .ui-animation-player[data-layout="dock"] .ui-animation-timeline:has(.ui-animation-direct-fields) { grid-template-columns: minmax(0, 1fr); }
+  .ui-animation-player[data-layout="dock"] .ui-animation-direct-fields { grid-area: auto; }
+}
+@container (max-width: 320px) {
+  .ui-animation-ruler > span:nth-child(even) { display: none; }
+}
+.ui-list-toolbar[data-variant="animation-library"] > [data-list-action="create"] { width: auto; flex: 0 1 auto; }
+.ui-list-toolbar[data-variant="animation-library"] > :is([data-list-action="create"], .ui-select) { background: var(--accent-fill); color: var(--on-accent); }
+.ui-list-toolbar[data-variant="animation-library"] > :is([data-list-action="create"], .ui-select)::after,
+.ui-list-toolbar[data-variant="animation-library"] > :is([data-list-action="create"], .ui-select) :is(select, .ui-input-affix) { color: inherit; }
+.ui-list-toolbar[data-variant="animation-library"] > .ui-select:has(:disabled) { background: var(--control); color: var(--tertiary); }
+.ui-list-toolbar[data-variant="animation-library"] > [data-list-action="duplicate"] { margin-left: auto; }

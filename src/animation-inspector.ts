@@ -4,7 +4,7 @@
  * 播放器放到画布上（animation-workspace.ts），检查器只留参数分组。
  * 这里只负责呈现与交互；读写配置、撤销与选择状态都由各格式的适配器通过回调完成。
  */
-import { bindListActionKeys, bindListboxKeys, element, emptyState, iconButton, listToolbar } from "./dom-element.ts"
+import { bindListActionKeys, bindListboxKeys, bindMenuKeys, element, emptyState, iconButton, listToolbar, paneHeader } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 import { animationPlayer, type AnimationPlayerOptions } from "./animation-player.ts"
 import { animationWorkspaceHosts } from "./animation-workspace.ts"
@@ -25,6 +25,7 @@ export type AnimationListItem = {
   detail: string
   /** How many styles, bindings or combinations play it. */
   uses: number
+  particle?: boolean
   problem?: string
 }
 
@@ -71,6 +72,10 @@ type AnimationResourceView = {
   /** The section class the inspector shell and the category rail pick up in this container. */
   sectionClass: string
   items: AnimationListItem[]
+  particleCount: number
+  totalCount: number
+  context: string
+  styleLinks?: AnimationStyleItem[]
   selected: string | undefined
   editable: boolean
   onSelect(id: string): void
@@ -321,9 +326,11 @@ function styleSection(view: AnimationResourceView): HTMLElement | undefined {
 
 type ListActions = Pick<AnimationResourceView, "create" | "duplicate" | "remove" | "editable"> & { noun: string; current?: string }
 
-const listActions = (view: AnimationResourceView) => {
-  const toolbar = actionsToolbar({ ...view, noun: MODE_NOUN[view.mode], current: view.items.find((item) => item.id === view.selected)?.title }) ??
+const listActions = (view: AnimationResourceView, desktop = false) => {
+  const noun = desktop && animationWorkspaceHosts()?.allTypes ? "动画" : MODE_NOUN[view.mode]
+  const toolbar = actionsToolbar({ ...view, noun, current: view.items.find((item) => item.id === view.selected)?.title }) ??
     (view.presets?.items.length ? element("div", "ui-list-toolbar") : undefined)
+  if (desktop && toolbar) toolbar.dataset.variant = "animation-library"
   if (toolbar && view.presets?.items.length) {
     const button = Object.assign(element("button", "ui-button"), { type: "button", textContent: "预设" })
     button.setAttribute("aria-label", "动效预设")
@@ -342,7 +349,7 @@ function styleActions(view: AnimationResourceView): HTMLElement | undefined {
 }
 
 function actionsToolbar(view: ListActions): HTMLElement | undefined {
-  if (!view.create && !view.duplicate) return
+  if (!view.create && !view.duplicate && !view.remove) return
   const { noun, current } = view
   let create: HTMLElement | undefined
   const plus = element("span", "ui-input-affix")
@@ -375,6 +382,57 @@ function actionsToolbar(view: ListActions): HTMLElement | undefined {
   })
 }
 
+/** A second entrance to the same create action, without duplicating any document logic. */
+function quickCreate(view: AnimationResourceView): HTMLElement[] {
+  const create = view.create
+  if (!create?.options.length) return []
+  const label = "新建动画"
+  if (create.options.length === 1 || !view.editable) {
+    return [actionButton("plus", label, () => create.run(create.options[0][0]), !view.editable)]
+  }
+  const details = element("details", "toolbar-more")
+  const trigger = element("summary", "ui-icon-button")
+  trigger.setAttribute("aria-label", label)
+  trigger.setAttribute("aria-haspopup", "menu")
+  trigger.title = label
+  trigger.append(createIcon("plus", 14))
+  const menu = element("div", "ui-menu")
+  menu.setAttribute("role", "menu")
+  menu.setAttribute("aria-label", label)
+  for (const [kind, name] of create.options) {
+    const option = element("button", "ui-list-item")
+    option.type = "button"
+    option.setAttribute("role", "menuitem")
+    option.textContent = name
+    option.addEventListener("click", () => { details.open = false; create.run(kind) })
+    menu.append(option)
+  }
+  details.append(trigger, menu)
+  bindMenuKeys(details)
+  return [details]
+}
+
+function animationBadge(item: AnimationListItem): HTMLElement {
+  const badge = element("span", "ui-badge")
+  badge.dataset.variant = item.particle ? "accent" : "pill"
+  badge.textContent = item.particle ? "粒子" : "动效"
+  badge.title = item.kind
+  return badge
+}
+
+function objectHeader(view: AnimationResourceView, item: AnimationListItem): HTMLElement {
+  const actions = actionsToolbar({ ...view, create: undefined, noun: "动画", current: item.title })
+  const heading = paneHeader({ title: item.info || item.title, actions: actions ? [actions] : [] })
+  heading.querySelector(".ui-badge")?.replaceWith(animationBadge(item))
+  const path = element("div", "animation-object-path")
+  path.textContent = path.title = view.context
+  const references = element("div", "animation-object-references")
+  references.append(createIcon("link", 14), item.uses ? `${item.uses} 处引用` : "未使用")
+  const header = element("div", "animation-object-header")
+  header.append(heading, path, references)
+  return header
+}
+
 function previewSection(view: AnimationResourceView, item: AnimationListItem): HTMLElement {
   return section("预览", [...view.player ? [animationPlayer(view.player)] : [], ...view.warnings ?? []], { className: view.sectionClass, code: `${item.title} · ${item.kind}` })
 }
@@ -385,18 +443,19 @@ function stageContent(view: AnimationResourceView, item: AnimationListItem | und
     return [emptyState("play")]
   }
   const heading = element("div", "animation-stage-heading")
-  const icon = element("span", "animation-stage-icon")
-  icon.append(createIcon(item.icon, 14))
+  const label = element("span", "animation-stage-label")
+  label.textContent = "时间轴"
   const title = element("strong")
-  title.textContent = item.title
-  const kind = element("span", "ui-badge")
-  kind.textContent = item.kind
-  const detail = element("small", "animation-stage-meta")
-  detail.textContent = `${item.detail} · ${item.uses ? `${item.uses} 处引用` : "未使用"}`
-  heading.append(icon, title, kind, detail)
-  const player = view.player && animationPlayer(view.player)
-  if (player) player.dataset.layout = "row"
-  return [heading, ...player ? [player] : [], ...view.warnings ?? []]
+  title.textContent = item.info || item.title
+  const time = element("output", "animation-stage-meta")
+  time.setAttribute("aria-live", "off")
+  heading.append(label, title, animationBadge(item), time)
+  const player = view.player && animationPlayer({ ...view.player, dockedTime: time })
+  if (player) player.dataset.layout = "dock"
+  const target = view.player?.keyboard?.targetLabel?.()
+  const trigger = target && element("div", "animation-stage-trigger")
+  if (trigger) trigger.append(createIcon("mouse-pointer-2", 14), `按键按下 · ${target}`, ...(item.particle ? [" · ", item.detail] : []))
+  return [heading, ...player ? [player] : [], ...trigger ? [trigger] : [], ...view.warnings ?? []]
 }
 
 /** Fills `container` with the list, and the selected animation's preview and parameters. */
@@ -404,12 +463,13 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
   const item = view.items.find((candidate) => candidate.id === view.selected)
   const hosts = animationWorkspaceHosts()
   view.listOwner = container
-  view.listContext = JSON.stringify([view.mode, view.player?.key])
+  view.listContext = JSON.stringify([view.mode, hosts?.allTypes, view.context])
   if (hosts && view.mode !== "all") {
-    hosts.setMode(view.mode === "particle", countLabel(view))
+    hosts.setMode(view.mode === "particle", countLabel(view), [view.totalCount - view.particleCount, view.particleCount])
+    hosts.create.replaceChildren(...quickCreate(view))
     hosts.setStyles(view.styles?.noun, view.styles?.items.length ?? 0)
     const list = listBox(view, true)
-    const actions = listActions(view)
+    const actions = listActions(view, true)
     if (actions) bindListActionKeys(list, actions)
     syncChildren(hosts.library, [...keyFilterBar(view), ...styleFilterBar(view), list, ...actions ? [actions] : []])
     const styles = styleListBox(view, true)
@@ -419,7 +479,23 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
     hosts.filter()
     hosts.stage.replaceChildren(...stageContent(view, item))
     container.replaceChildren(...view.listRows?.length ? [section("配置", view.listRows, { className: view.sectionClass })] : [])
-    if (item) container.append(...view.sections)
+    if (item) {
+      container.prepend(objectHeader(view, item))
+      if (view.styleLinks?.length && view.styles) {
+        const styles = view.styles
+        const links = view.styleLinks.map(link => {
+          const button = element("button", "ui-button animation-style-link")
+          button.type = "button"
+          button.append(createIcon(styles.icon, 14), link.title)
+          if (link.detail) button.append(Object.assign(element("small"), { textContent: link.detail }))
+          button.append(createIcon("chevron-right", 14))
+          button.addEventListener("click", () => { hosts.show("styles"); styles.onSelect(link.id) })
+          return button
+        })
+        container.append(section(styles.noun === "目标" ? "触发目标" : "动画样式", links, { className: view.sectionClass }))
+      }
+      container.append(...view.sections)
+    }
     return
   }
   if (matchMedia("(max-width: 760px) and (orientation: portrait)").matches && view.mode !== "all" && item) {

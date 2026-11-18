@@ -58,6 +58,7 @@
   /* 版式 */
   --workspace-navigation-width: 64px;
   --workspace-navigation-button-size: 40px;
+  --workspace-status-height: 30px;
   --content-max-width: 1100px;  /* 欢迎页等整页内容的最大宽度 */
   --dialog-max-height: 480px;
   --style-card-width: 160px; /* 样式库与动画列表卡片的最小宽度，随容器拉伸并自动加列 */
@@ -75,6 +76,7 @@
   --control-height-sm: 24px;  /* 行内小按钮、角标按钮 */
   --control-height-md: 28px;  /* 默认：按钮、输入框、下拉、分段控件 */
   --control-height-lg: 32px;  /* 主要操作、对话框底部按钮 */
+  --animation-card-width: 104px;
   --animation-stage-width: 320px; /* 横排播放器舞台保持 2:1，不随工作区无限放大 */
   --animation-curve-height: 48px;
   --ai-chat-input-min-height: 96px;
@@ -129,6 +131,7 @@
   --scrollbar-thumb-border: rgb(0 0 0 / 10%);
   --scrollbar-thumb-highlight: rgb(255 255 255 / 45%);
   --accent: #3a6df0;
+  --accent-fill: var(--accent);
   --accent-soft: #EAF0FF;
   --selection: #ff6b2c;
   --selection-soft: #ffefe6;

@@ -141,6 +141,7 @@ export const appState = {
   resourceConfigActive: false,
   resourceInspectorMode: "image" as "image" | "style" | "sound",
   animationDesignMode: "all" as "all" | "motion" | "particle",
+  animationWorkspaceMode: "motion" as "motion" | "particle",
   /** The animation shown per `path|mode` in the animation inspector (animation-resource.ts). */
   selectedAnimations: {} as Record<string, string>,
   /** 动效 / 粒子设计里按哪个样式（BDA 是按目标）筛动画列表，按 `path|mode` 记住。 */

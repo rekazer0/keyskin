@@ -1,3 +1,4 @@
+import { animationWorkspaceHosts } from "./animation-workspace.ts"
 /*
  * BDA animationConfig 的动画检查器（DESIGN.md §10「动画资源」）：资源配置的「动效设计」列出变换、组合、帧、
  * Lottie 与视频效果，「粒子设计」列出粒子发射器。列表选中一个效果，下面是播放器、参数分组和触发它的目标绑定。
@@ -383,7 +384,7 @@ function animationTargets(animation: BdaAnimation): Array<{ id: string; events: 
 export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAnimationEditorOptions): void {
   const { animation, view } = options
   const effects = KIND_ORDER.flatMap((kind) => [...animation.effects.values()].filter((effect) => effect.kind === kind))
-    .filter((effect) => view.mode === "all" || (effect.kind === "emitter") === (view.mode === "particle"))
+    .filter((effect) => view.mode === "all" || animationWorkspaceHosts()?.allTypes || (effect.kind === "emitter") === (view.mode === "particle"))
   const { items: keyItems, keyFilter } = view.filter(effects.map((effect): AnimationListItem => ({
     id: effectID(effect),
     title: effect.key,
@@ -391,6 +392,7 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     icon: KIND_ICONS[effect.kind],
     detail: timingText(effect),
     uses: bindingCount(animation, effect),
+    particle: effect.kind === "emitter",
     problem: problem(effect, animation),
   })))
   // 目标列表只列绑定了当前入口效果的目标；点一个就把效果列表筛成它播放的那些。
@@ -415,6 +417,10 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
   renderAnimationResource(container, {
     listSource: view.source,
     mode: view.mode,
+    particleCount: [...animation.effects.values()].filter(effect => effect.kind === "emitter").length,
+    totalCount: animation.effects.size,
+    context: options.path,
+    styleLinks: effect && targetItems.filter(item => targetEffects.get(item.id)?.has(effectID(effect))),
     sectionClass: SECTION,
     items,
     selected,

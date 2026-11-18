@@ -40,7 +40,7 @@
   margin: 0 calc(-1 * var(--_gutter));
   padding: 0 var(--space-sm) var(--space-md) var(--_gutter);
 }
-.source:has(#quick-inspector[hidden]) .key-inspector-title { display: none; }
+.source:has(#quick-inspector[hidden], .animation-object-header) .key-inspector-title { display: none; }
 .source .key-inspector-preview {
   display: grid;
   place-items: center;
@@ -70,6 +70,9 @@
 }
 .source #quick-inspector::-webkit-scrollbar { display: none; }
 .source #quick-inspector[hidden] { display: none; }
+
+/* 动画对象头仍与其他对象共用检查器的留白和标题尺度。 */
+.source .animation-object-header { margin-inline: var(--space-lg); }
 
 /* —— 右侧分类栏：顶部筛选，中间分组（图标 + 文字，点击滚动到分组），底部「已改 n · 重置」 —— */
 .source .inspector-rail {
@@ -217,6 +220,12 @@
 .source .ui-field[data-stack] { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
 .source .config-value-control { display: grid; min-width: 0; }
 .source .style-field { display: block; min-width: 0; }
+
+@media (min-width: 761px) and (max-width: 1060px) {
+  .animation-workspace .source .ui-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
+  .animation-workspace .source .ui-field .ui-segmented:not([data-variant="icon"], [data-layout="grid3"]) { flex-wrap: wrap; height: auto; min-height: var(--control-height-md); }
+  .animation-workspace .source .ui-field .ui-segmented:not([data-variant="icon"], [data-layout="grid3"]) > button { flex: 1 0 auto; min-height: var(--control-height-sm); }
+}
 
 /* 改动标记：本次选择后改过的行在左侧留白里有一个点 */
 .source .inspector-modified {

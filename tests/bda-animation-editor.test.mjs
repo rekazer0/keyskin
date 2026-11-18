@@ -83,10 +83,19 @@ class FakeNode {
 
   matches(selector) {
     if (selector.startsWith(".")) return classes(this).includes(selector.slice(1))
+    if (/^[a-z0-9]+$/i.test(selector)) return this.tagName === selector.toUpperCase()
     const attribute = /^\[([a-z-]+)="([^"]*)"\]$/.exec(selector)
     if (attribute) return this.getAttribute(attribute[1]) === attribute[2]
     const data = /^\[data-([a-z-]+)\]$/.exec(selector)?.[1]
     return Boolean(data && data.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()) in this.dataset)
+  }
+
+  querySelector(selector) {
+    return this.querySelectorAll(selector)[0] ?? null
+  }
+
+  checkVisibility() {
+    return false
   }
 
   closest(selector) {
@@ -115,6 +124,21 @@ class FakeNode {
   getBoundingClientRect() {
     return { left: 0, width: 100, height: 60 }
   }
+
+  cloneNode() {
+    const copy = new FakeNode(this.tagName.toLowerCase())
+    copy.attributes = { ...this.attributes }
+    copy.dataset = { ...this.dataset }
+    copy.className = this.className
+    copy._text = this._text
+    copy.value = this.value
+    copy.type = this.type
+    copy.checked = this.checked
+    copy.disabled = this.disabled
+    copy.hidden = this.hidden
+    for (const child of this.children) copy.append(child.cloneNode())
+    return copy
+  }
 }
 
 globalThis.document = {
@@ -125,6 +149,7 @@ globalThis.Option = function Option(text, value) {
   return Object.assign(new FakeNode("option"), { textContent: text, value })
 }
 globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" })
+globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} })
 globalThis.requestAnimationFrame = () => 0
 globalThis.cancelAnimationFrame = () => {}
 globalThis.MutationObserver = class MutationObserver {

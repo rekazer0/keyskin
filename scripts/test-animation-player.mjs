@@ -25,8 +25,8 @@ const fingerprint = () => page.evaluate(async () => {
 })
 // 进入后概览让位给动画列表，先点列表顶部的返回再从概览切换。
 const choose = async (mode) => {
-  if (await page.locator('body.animation-workspace').count()) await page.locator('#animation-library .ui-pane-header button[aria-label="返回"]').click()
-  await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).first().click()
+  if (!await page.locator('body.animation-workspace').count()) await page.locator('[data-workspace-page="animation"]').click()
+  await page.locator(`#animation-library [data-animation-mode="${mode}"]`).click()
 }
 const player = page.locator('#animation-stage .ui-animation-player').first()
 const slider = player.getByRole('slider', { name: '预览时间' })
@@ -34,7 +34,7 @@ const seek = (value) => slider.evaluate((node, value) => {
   node.value = String(value)
   node.dispatchEvent(new Event('input', { bubbles: true }))
 }, value)
-const sample = () => player.locator('canvas').evaluate((canvas) => canvas.toDataURL())
+const sample = () => player.locator('.ui-animation-stage > canvas').evaluate((canvas) => canvas.toDataURL())
 const ready = () => page.waitForFunction(() => !document.querySelector('#animation-stage .ui-animation-player .ui-animation-transport button')?.disabled)
 const pick = async (id) => {
   if (id) await page.locator(`[data-animation-id="${id}"]`).click()
