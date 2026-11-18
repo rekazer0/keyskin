@@ -96,3 +96,18 @@ test("改过的几何写回归档后能读回", async () => {
   assert.ok(again.ok)
   assert.equal(findKey(again.model, boardId, keyId).key.rect.position.x, original + 100, "改动没有落盘")
 })
+
+test("改过的手势动作写回归档后能读回", async () => {
+  const { openSession, saveSession } = await import("../src/skin-model/session.ts")
+  const base = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
+  const opened = await openSession(base)
+  assert.ok(opened.ok)
+  const boardId = opened.model.boards[0].id
+  const keyId = opened.model.boards[0].keys[0].id
+  const edited = applyFieldChange(opened.model, { boardId, keyId, field: "action.press", value: "回车" })
+  const saved = await saveSession(edited, "bds", opened.source)
+  assert.ok(saved.ok)
+  const again = await openSession(SkinArchive.open(saved.bytes, "bds"))
+  assert.ok(again.ok)
+  assert.deepEqual(findKey(again.model, boardId, keyId).key.actions.press, { kind: "enter" }, "动作改动没有落盘")
+})
