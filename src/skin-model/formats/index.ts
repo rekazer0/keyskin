@@ -59,9 +59,7 @@ function entryOf(id: SkinFormatId): SkinFormatEntry {
       id,
       open: (archive, context) => bdaSource(archive, context.base),
       read: (source, options) => bdaFormat.read(source as BdaSource, options),
-      write: () => {
-        throw new Error("BDA 写回尚未实现")
-      },
+      write: (model, source) => bdaFormat.write(model, source as BdaSource | undefined),
       capabilities: bdaFormat.capabilities,
     }
   }
