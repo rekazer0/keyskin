@@ -193,9 +193,11 @@ export function motionsOfAnimation(animation: BdaAnimation): SkinMotions {
   const motions = new Map<string, SkinMotion>()
   for (const [key, effect] of animation.effects) {
     const bindings: MotionBinding[] = []
+    // 效果的键带 `<类型>:` 前缀，绑定的键是裸名，比较前要还原，否则绑定全部丢掉。
+    const bare = bareKeyOf(key, effect.kind)
     for (const [target, entries] of animation.targetBindings) {
       for (const entry of entries) {
-        if (entry.key !== key) continue
+        if (entry.key !== bare && entry.key !== key) continue
         bindings.push(bindingOf(target, entry))
       }
     }

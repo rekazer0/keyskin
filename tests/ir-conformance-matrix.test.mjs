@@ -96,10 +96,16 @@ test("搜狗皮肤自转不丢自己的样式，骨架样式不写进皮肤包",
   }
 })
 
-test("搜狗格式的动效能力标为不支持", async () => {
-  const { ssfFormat } = await import("../src/skin-model/formats/ssf.ts")
-  // 写出还没实现 `ss_2` 这一层，能力表必须如实标成 none，导出时才不会静默丢掉动效。
-  for (const capability of ["motion.track", "motion.sequence", "motion.binding"]) {
-    assert.equal(ssfFormat.capabilities.get(capability), "none", `${capability} 没有如实标注`)
-  }
+test("带动效的皮肤导出搜狗后包里有动画段", async () => {
+  const { openSession, saveSession } = await import("../src/skin-model/session.ts")
+  const { bdaAnimatedSkinBytes } = await import("./helpers/bda-animation-fixture.mjs")
+  const base = bdsBase()
+  const source = SkinArchive.open(new Uint8Array(bdaAnimatedSkinBytes()), "bda")
+  const opened = await openSession(source, { base })
+  assert.ok(opened.ok)
+  assert.ok(opened.model.motions.size > 0, "夹具应当带动作")
+  const saved = await saveSession(opened.model, "ssf", opened.source)
+  assert.ok(saved.ok, saved.ok ? "" : saved.error.message)
+  const names = SkinArchive.open(saved.bytes).names()
+  assert.ok(names.some((name) => /anim\.ini$/i.test(name)), "导出包里没有动画段")
 })

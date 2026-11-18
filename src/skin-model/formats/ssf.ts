@@ -11,6 +11,7 @@ import type { SkinArchive } from "@/skin.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { bdsFormat, bdsSource, layoutText } from "@/skin-model/formats/bds.ts"
 import { buildBoard } from "@/skin-model/build.ts"
+import { ssfAnimationOf } from "@/skin-model/formats/ssf-motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
@@ -198,11 +199,11 @@ function capabilities(): ReadonlyMap<Capability, CapabilityLevel> {
     ["panel.hint", "none"],
     ["panel.list", "none"],
     ["panel.toolbar", "partial"],
-    // 搜狗的动画结构在 `skin.json` 的 `ss_2` 里，写出还没实现这一层；
-    // 标成 none 是为了让导出时的损失报告如实列出，而不是静默丢掉。
-    ["motion.track", "none"],
-    ["motion.sequence", "none"],
-    ["motion.binding", "none"],
+    // 动效经百度风格的动画段转成搜狗的 anim.ini；按动作匹配的绑定能写出来，
+    // 粒子与路径这类没有对应概念的仍然表达不了。
+    ["motion.track", "partial"],
+    ["motion.sequence", "partial"],
+    ["motion.binding", "partial"],
     ["sound", "full"],
     ["font", "partial"],
   ])
@@ -302,6 +303,9 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     for (const board of model.boards) {
       const renders = await buildBoard(model, board)
       files.set(`${resolution}/${boardName(board.id)}.ini`, text(layoutText(board, renders)))
+      // 动效经百度风格的动画段转成搜狗的 anim.ini；转换不了的会进 warnings。
+      const animated = ssfAnimationOf(model, board, model.images)
+      if (animated.animation) files.set(`${resolution}/anim.ini`, text(animated.animation.toString()))
     }
     // 搜狗包里的旧散图不再保留：要么已被上面重写，要么属于骨架而不属于这套皮肤。
     const kept = [...files].map(([path, data]) => ({ path, data }))

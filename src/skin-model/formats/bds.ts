@@ -474,7 +474,7 @@ function animationIndex(id: string): string {
   return id.match(/\d+/)?.[0] ?? id
 }
 
-function writeMotions(motions: SkinMotions): string {
+export function writeMotions(motions: SkinMotions): string {
   const lines: string[] = []
   let counter = Math.max(0, ...[...motions.keys()].map((id) => Number(id.match(/^ANIM(\d+)$/)?.[1] ?? 0))) + 1
   const write = (node: MotionNode, id: string, timeline: MotionTimeline): void => {
