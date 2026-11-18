@@ -54,7 +54,15 @@ export type MotionFrame = { file: string; duration?: number }
 export type MotionNode =
   | { kind: "track"; track: MotionTrack; delay: number; duration: number }
   | { kind: "sequence"; children: MotionNode[]; method: "parallel" | "sequential" | "random"; delay: number; duration: number }
-  | { kind: "frames"; frames: MotionFrame[]; loop: number; delay: number; duration: number }
+  | {
+    kind: "frames"
+    frames: MotionFrame[]
+    loop: number
+    delay: number
+    duration: number
+    /** 帧序列的媒体类型；BDA 里普通帧图、Lottie 与视频是三种不同效果，写回时按它还原。 */
+    media?: "frame" | "lottie" | "video"
+  }
   | { kind: "particles"; emitter: MotionEmitter; delay: number; duration: number }
   | { kind: "path"; points: readonly Point<number>[]; speed: number; delay: number; duration: number }
   | { kind: "physics"; gravity: Point<number>; drag: number; bounce: number; delay: number; duration: number }

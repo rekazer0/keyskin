@@ -95,7 +95,8 @@ function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationS
   if (effect.kind === "frame" || effect.kind === "lottie" || effect.kind === "video") {
     const sequence = effect.resource ? sequences.get(effect.resource.resourceID) : undefined
     const frames: MotionFrame[] = (sequence?.frames ?? []).flatMap((frame) => (frame.resourceID ? [{ file: frame.resourceID, ...(frame.duration !== undefined ? { duration: frame.duration / 1000 } : {}) }] : []))
-    return { kind: "frames", frames, loop: effect.repeatCount, delay: 0, duration: 0 }
+    // 三种效果在 IR 里都是帧序列，媒体类型要留住，否则写回会一律变成普通帧图。
+    return { kind: "frames", frames, loop: effect.repeatCount, delay: 0, duration: 0, media: effect.kind }
   }
   if (effect.kind === "emitter") {
     const emitter = effect as BdaEmitterAnimation
@@ -240,13 +241,19 @@ function effectOf(motion: SkinMotion): BdaAnimationEffect | undefined {
     }
   }
   if (root.kind === "frames") {
+    // 媒体类型由读取时记下；没有记录时按普通帧图处理，与旧行为一致。
+    const media = root.media ?? "frame"
     return {
-      kind: "frame",
+      kind: media,
       key: motion.id,
       repeatCount: timeline.repeat,
+      repeatMode: timeline.reverse ? 2 : 0,
       removeOnFinish: timeline.clear,
+      loopForever: false,
+      startRepeatFrame: 0,
       resource: { type: 0, resourceID: motion.id },
-    }
+      placeholder: { type: 0, resourceID: "" },
+    } as BdaAnimationEffect
   }
   if (root.kind === "particles") {
     const emitter = root.emitter

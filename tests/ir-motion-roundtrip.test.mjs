@@ -6,7 +6,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { openSession } from "../src/skin-model/session.ts"
+import { convertSession, openSession } from "../src/skin-model/session.ts"
 import { countsOf } from "../src/skin-model/conformance.ts"
 import { bdaFormat, bdaSource } from "../src/skin-model/formats/bda.ts"
 import { bdaAnimatedSkinBytes } from "./helpers/bda-animation-fixture.mjs"
@@ -43,5 +43,41 @@ test("BDA 动效的种类在写回后保留", async () => {
   const rewritten = await bdaFormat.read(bdaFormat.write(model, source))
   for (const [id, kind] of kinds) {
     assert.equal(rewritten.motions.get(id)?.root.kind, kind, `${id} 的动效类型变了`)
+  }
+})
+
+test("跨格式往返后动效键与类型都不变", async () => {
+  const base = bdsBase()
+  const source = bdaSource(bdaAnimated(), base)
+  const before = await openSession(bdaAnimated(), { base })
+  assert.ok(before.ok)
+  const saved = await convertSession(bdaAnimated(), "bda", { base })
+  assert.ok(saved.ok, saved.ok ? "" : saved.error.message)
+  const after = await openSession(SkinArchive.open(saved.bytes, "bda"), { base })
+  assert.ok(after.ok)
+  assert.deepEqual(
+    [...after.model.motions.keys()].sort(),
+    [...before.model.motions.keys()].sort(),
+    "往返后动效键变了",
+  )
+  const rebuild = await bdaFormat.read(bdaFormat.write(await bdaFormat.read(source), source))
+  for (const [id, motion] of rebuild.motions) {
+    assert.equal(motion.root.kind, (await bdaFormat.read(source)).motions.get(id)?.root.kind, `${id} 的类型变了`)
+  }
+})
+
+test("Lottie 与视频动效保留媒体类型，不被写成普通帧图", async () => {
+  const base = bdsBase()
+  const source = bdaSource(bdaAnimated(), base)
+  const model = await bdaFormat.read(source)
+  const media = [...model.motions].flatMap(([id, motion]) => (
+    motion.root.kind === "frames" && motion.root.media ? [[id, motion.root.media]] : []
+  ))
+  assert.ok(media.some(([, kind]) => kind === "lottie"), "夹具里应有 Lottie 动效")
+  assert.ok(media.some(([, kind]) => kind === "video"), "夹具里应有视频动效")
+  const back = await bdaFormat.read(bdaFormat.write(model, source))
+  for (const [id, kind] of media) {
+    const root = back.motions.get(id)?.root
+    assert.equal(root?.kind === "frames" ? root.media : undefined, kind, `${id} 的媒体类型丢了`)
   }
 })
