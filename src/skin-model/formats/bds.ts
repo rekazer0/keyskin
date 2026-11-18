@@ -18,6 +18,7 @@ import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrac
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
 import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds-panels.ts"
+import { statStyleOf, tipLines, tipRefsOf, tipOverridesOf } from "@/skin-model/formats/bds-tips.ts"
 import { planExport } from "@/skin-model/export-plan.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
@@ -270,6 +271,7 @@ function infoText(model: SkinModel): string {
 /** 布局文件文本；`VIEW_RECT` 用构建后的矩形，其余字段从按键模型原样写回。 */
 export function layoutText(board: SkinBoard, renders: readonly KeyRender[]): string {
   const lines = ["[PANEL]", `SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keys.length}`, ""]
+  const tipBlocks: string[] = []
   for (const key of board.keys) {
     const rect: LayoutBox = renders.find((render) => render.key.id === key.id)?.rect ?? key.rect
     lines.push(`[${key.id}]`)
@@ -278,6 +280,14 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[]): str
       lines.push(`TOUCH_RECT=${key.touchRect.position.x},${key.touchRect.position.y},${key.touchRect.size.width},${key.touchRect.size.height}`)
     }
     if (key.padding) lines.push(`PADDING=${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
+    // 状态覆盖写成 `[TIPn]` 段，按键只留状态关联。
+    const tips = tipRefsOf(key.overrides)
+    if (tips.length) {
+      lines.push(`STAT_STYLE=${statStyleOf(tips)}`)
+      key.overrides?.forEach((override, index) => {
+        tipBlocks.push(...tipLines(override, index + 1, actionValue))
+      })
+    }
     for (const { event, field: name } of EVENT_FIELDS) {
       const value = actionValue(key.actions[event])
       if (value !== undefined) lines.push(`${name}=${value}`)
@@ -291,7 +301,7 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[]): str
     lines.push(...motions)
     lines.push("")
   }
-  return `${lines.join("\n")}\n`
+  return `${[...lines, ...tipBlocks].join("\n")}\n`
 }
 
 /* —— 动效 —— */
@@ -535,6 +545,8 @@ function keysOf(document: IniDocument, size: Size<number>): SkinKey[] {
     if (left) actions["swipe-left"] = left
     const right = actionOf(item.right)
     if (right) actions["swipe-right"] = right
+    // 皮肤状态下的另一套样式与动作写在 `[TIPn]` 里，由 `STAT_STYLE` 关联。
+    const overrides = tipOverridesOf(document, item.statStyle, { actionOf })
     return [{
       id: item.section,
       rect: { position: { x: item.rect.x, y: item.rect.y }, size: { width: item.rect.width, height: item.rect.height } },
@@ -548,6 +560,7 @@ function keysOf(document: IniDocument, size: Size<number>): SkinKey[] {
         ...(item.highlightBackStyle ? { pressedBack: item.highlightBackStyle } : {}),
         fore: item.foreStyles,
       },
+      ...(overrides.length ? { overrides } : {}),
     }]
   })
 }

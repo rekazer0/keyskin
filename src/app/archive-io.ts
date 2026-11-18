@@ -8,6 +8,7 @@ import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isT
 import { SkinArchive } from "../skin.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { exportViaIr, isCrossFormatExport } from "./ir-export"
+import { planImport, prepareImport } from "./import-plan"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
@@ -77,16 +78,28 @@ export async function loadArchive(
     throw error
   }
   await offerBakedFontRestore(nextArchive)
-  if (nextArchive.format === "bda" && !appState.bdaBase) {
-    updateFileOperationProgress(52, "正在加载 BDA 基础布局…")
-    appState.bdaBase = await SkinArchive.openAsync(await loadBdaBase())
-  }
-  if (nextArchive.format === "ssf") {
-    updateFileOperationProgress(52, "正在生成搜狗皮肤预览…")
-    await ssfTemplates()
-  }
+  // 各格式打开时需要的外部基础统一按计划补齐，不再逐格式分支。
+  const plan = planImport(nextArchive)
+  const preparation = await prepareImport(
+    plan,
+    { hasBdaBase: Boolean(appState.bdaBase), hasSsfTemplates: Boolean(appState.ssfTemplates) },
+    {
+      loadBdaBase: async () => {
+        updateFileOperationProgress(52, "正在加载 BDA 基础布局…")
+        appState.bdaBase = await SkinArchive.openAsync(await loadBdaBase())
+        return appState.bdaBase
+      },
+      loadSsfTemplates: async () => {
+        updateFileOperationProgress(52, "正在生成搜狗皮肤预览…")
+        await ssfTemplates()
+      },
+    },
+  )
+  for (const error of preparation.errors) clientLog.info("archive.prepare.warning", { detail: error })
+  const planWarnings = [...plan.notes]
   const bdaWarnings = bdaCompatibilityWarnings(nextArchive)
   if (bdaWarnings.length) clientLog.info("bda.compatibility.warning", { warnings: bdaWarnings.join("；") })
+  if (planWarnings.length) clientLog.info("archive.plan.notes", { notes: planWarnings.join("；") })
   updateFileOperationProgress(55, "正在建立编辑工作区…")
   let nextSourceWorkspace = existingSourceWorkspace
   let pendingSourceDirectory: string | null | undefined

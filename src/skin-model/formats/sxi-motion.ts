@@ -135,6 +135,17 @@ function nodeOf(kind: string, model: JsonObject, animations: JsonObject): Motion
   if (kind === "a4") {
     return { kind: "particles", emitter: emitterOf(model), delay: number(model.delay) / 1000, duration: number(model.duration) / 1000 }
   }
+  if (kind === "a11") {
+    // 碰撞物理：重力向下、阻力与摩擦力分别对应 IR 的 drag 与 bounce。
+    return {
+      kind: "physics",
+      gravity: { x: 0, y: number(model.g) },
+      drag: number(model.resist ?? model.fric),
+      bounce: number(model.rest),
+      delay: number(model.delay) / 1000,
+      duration: number(model.duration) / 1000,
+    }
+  }
   if (kind === "a3") {
     // 组合动画的子项是别的动画编号，按出现顺序并成序列。
     const ids = Array.isArray(model.animations) ? model.animations.map(String) : []
@@ -234,6 +245,16 @@ function modelOf(motion: SkinMotion, kind: string): JsonObject {
       ...common,
     }
   }
+  if (root.kind === "physics" && kind === "a11") {
+    return {
+      g: String(root.gravity.y),
+      rest: String(root.bounce),
+      resist: String(root.drag),
+      fric: String(root.drag),
+      duration: common.duration,
+      delay: common.delay,
+    }
+  }
   if (root.kind === "frames" && kind === "af2") {
     return {
       type: "0",
@@ -257,8 +278,8 @@ export function skinAnimationsOf(motions: SkinMotions): { animations: JsonObject
   const bindings = new Map<string, Record<string, string>>()
   const warnings: string[] = []
   for (const [id, motion] of motions) {
-    const kind = motion.root.kind === "track" ? "a1" : motion.root.kind === "frames" ? "af2" : "a4"
-    if (motion.root.kind !== "track" && motion.root.kind !== "frames") {
+    const kind = motion.root.kind === "track" ? "a1" : motion.root.kind === "frames" ? "af2" : motion.root.kind === "physics" ? "a11" : "a4"
+    if (motion.root.kind !== "track" && motion.root.kind !== "frames" && motion.root.kind !== "physics") {
       warnings.push(`${id}：动效类型 ${motion.root.kind} 无法写成手心动画`)
       continue
     }
