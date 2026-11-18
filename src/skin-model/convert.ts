@@ -80,3 +80,19 @@ export async function previewConversion(model: SkinModel, target: SkinFormatId):
 export function describeLoss(loss: LossReport): string[] {
   return loss.items.map((item) => item.detail ?? `${item.capability}：${item.reason}`)
 }
+
+/** 导出格式到 IR 格式名；BDI 与 BDS 是同一套容器，平台差异在打包后处理。 */
+export function formatIdOf(format: ExportFormat): SkinFormatId {
+  if (format === "bdi" || format === "bds") return "bds"
+  return format
+}
+
+/**
+ * 是否需要走 IR：源格式与目标格式不同就算跨格式。
+ * BDI 与 BDS 是同一套容器，不算跨格式；同格式保存走原样打包。
+ */
+export function isCrossFormatExport(source: ExportFormat, target: ExportFormat): boolean {
+  if (source === target) return false
+  if (source === "bdi" && target === "bds" || source === "bds" && target === "bdi") return false
+  return true
+}
