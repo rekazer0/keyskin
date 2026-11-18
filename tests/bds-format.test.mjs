@@ -55,3 +55,50 @@ test("重建把用到的图片重新打包成一张图集", async () => {
   const again = await bdsFormat.read(rebuilt)
   assert.ok(again.images.size > 0, "重建的图集读不出图片")
 })
+
+test("读出面板的候选栏、气泡、列表与工具栏", async () => {
+  const archive = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
+  const source = bdsSource(archive)
+  assert.ok(source)
+  const board = (await bdsFormat.read(source)).boards[0]
+  assert.equal(board.backdrop?.style, "1")
+  assert.equal(board.candidate?.style, "6")
+  assert.equal(board.candidate?.cellStyle, "120")
+  assert.equal(board.candidate?.icons?.[0]?.action?.kind, "system")
+  assert.equal(board.hint?.style, "0")
+  assert.deepEqual(board.hint?.offset, { x: 1, y: 2 })
+  assert.equal(board.list?.cellStyle, "120")
+  assert.deepEqual(board.list?.cellSize, { width: 100, height: 50 })
+  assert.equal(board.list?.count, 3)
+})
+
+test("重建后仍能读回面板组件", async () => {
+  const archive = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
+  const source = bdsSource(archive)
+  assert.ok(source)
+  const model = await bdsFormat.read(source)
+  const rebuilt = await bdsFormat.write(model, source)
+  const again = (await bdsFormat.read(rebuilt)).boards[0]
+  assert.ok(again.backdrop?.style)
+  assert.ok(again.candidate)
+  assert.ok(again.hint)
+  assert.ok(again.list)
+  assert.equal(again.list?.cellSize?.width, 100)
+})
+
+test("图集超过一页时按页切分", async () => {
+  const archive = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
+  const source = bdsSource(archive)
+  assert.ok(source)
+  const model = await bdsFormat.read(source)
+  // 造一张比单页还高的图片，逼出第二页。
+  const tall = { width: 8, height: 4096, data: new Uint8Array(8 * 4096 * 4) }
+  model.images = new Map([...model.images, ["tall", tall]])
+  const style = { normal: [{ kind: "image", image: "tall" }] }
+  model.styles = new Map([...model.styles, ["900", style]])
+  const rebuilt = await bdsFormat.write(model, source)
+  const pages = rebuilt.archive.names().filter((name) => /res\/atlas\d*\.png$/.test(name)).sort()
+  assert.equal(pages.length, 2, `图集页数 ${pages.join(",")}`)
+  const again = await bdsFormat.read(rebuilt)
+  assert.ok(again.images.size > 0)
+})

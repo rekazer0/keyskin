@@ -16,7 +16,8 @@ import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
 import type { SkinBoard } from "@/skin-model/board.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
-import { cutTiles, packAtlas, tileDocument, type SkinImage } from "@/skin-model/image.ts"
+import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
+import { panelFiles, panelsOf } from "@/skin-model/formats/bds-panels.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
@@ -476,6 +477,11 @@ function parsePanelSize(document: IniDocument): Size<number> {
   return { width: 1080, height: 600 }
 }
 
+/** 图集名：单页叫 `atlas`，多页追加页码。 */
+function atlasName(page: number): string {
+  return page === 0 ? "atlas" : `atlas${page}`
+}
+
 export const bdsFormat: SkinFormat<BdsSource> = {
   name: "bds",
   capabilities: new Map<Capability, CapabilityLevel>([
@@ -550,7 +556,13 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       ...options?.derive,
       weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
     })
+    const directory = `${source.theme}/skin/${source.orientation}/`
+    const genPath = source.archive.names().find((name) => name === `${directory}gen.ini`)
+    const panels = genPath
+      ? panelsOf(source.archive, directory, IniDocument.parse(source.archive.getText(genPath)), actionOf)
+      : {}
     model.boards.push({
+      ...panels,
       id: source.layout,
       kind: source.kind,
       geometry: "document",
@@ -588,8 +600,12 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       }
     }
     const selected = new Map([...model.images].filter(([id]) => used.has(id)))
-    const atlas = packAtlas(selected)
-    const placement = new Map(atlas.placements.map((entry, index) => [entry.id, index]))
+    const pages = packAtlasPages(selected)
+    // 每张图落在哪一页的第几个切片；样式的图片引用据此写成 `图集名,序号`。
+    const placement = new Map<string, { page: number; index: number }>()
+    pages.forEach((page, pageIndex) => {
+      page.placements.forEach((entry, index) => placement.set(entry.id, { page: pageIndex, index }))
+    })
     const inner = new Map<string, readonly [number, number, number, number]>()
     for (const style of model.styles.values()) {
       for (const layer of style.normal) {
@@ -598,20 +614,20 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       }
     }
     const imageRef = (id: string): string | undefined => {
-      const index = placement.get(id)
-      return index === undefined ? undefined : `atlas,${index}`
+      const hit = placement.get(id)
+      return hit === undefined ? undefined : `${atlasName(hit.page)},${hit.index}`
     }
     const text = (value: string) => new TextEncoder().encode(value)
     const files: Array<{ path: string; data: Uint8Array }> = []
     files.push({ path: "Info.txt", data: text(infoText(model)) })
-    files.push({
-      path: `${root}/${orientation}/gen.ini`,
-      data: text(`[PANEL]\nSIZE=${board.size.width},${board.size.height}\n`),
-    })
+    files.push(...panelFiles(board, `${root}/${orientation}/`, board.size, actionValue))
     files.push({ path: board.id, data: text(layoutText(board, renders)) })
     files.push({ path: `${root}/res/default.css`, data: text(stylesText(model.styles, imageRef)) })
-    files.push({ path: `${root}/res/atlas.til`, data: text(tileDocument(atlas, inner)) })
-    files.push({ path: `${root}/res/atlas.png`, data: encodePng(atlas.image) })
+    pages.forEach((page, pageIndex) => {
+      const name = atlasName(pageIndex)
+      files.push({ path: `${root}/res/${name}.til`, data: text(tileDocument(page, inner)) })
+      files.push({ path: `${root}/res/${name}.png`, data: encodePng(page.image) })
+    })
     if (model.motions.size) files.push({ path: `${root}/res/anim.ini`, data: text(writeMotions(model.motions)) })
     const archive = SkinArchive.fromSourceFiles(files)
     return {

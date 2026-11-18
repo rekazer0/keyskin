@@ -26,42 +26,73 @@ export type PackedAtlas = { image: SkinImage; placements: AtlasPlacement[] }
 
 const GAP = 1
 
-/** 行式打包：按高度降序逐行排布，宽度超过上限就换行。 */
-export function packAtlas(images: SkinImages, maxWidth = 2048): PackedAtlas {
+/** 一页图集：像素与页内切片。 */
+export type AtlasPage = { image: SkinImage; placements: AtlasPlacement[] }
+
+/**
+ * 行式打包：按高度降序逐行排布，超过页宽换行、超过页高换页。
+ * 图片比整页还大时单独占一页并裁到页尺寸，避免无限放大。
+ */
+export function packAtlasPages(images: SkinImages, maxWidth = 2048, maxHeight = 2048): AtlasPage[] {
   const entries = [...images].sort((left, right) => right[1].height - left[1].height || left[0].localeCompare(right[0]))
-  const placements: AtlasPlacement[] = []
-  const rows: Array<{ y: number; height: number; used: number }> = []
+  const pages: AtlasPage[] = []
+  let placements: AtlasPlacement[] = []
   let cursorX = 0
   let cursorY = 0
   let rowHeight = 0
   let width = 0
+  const flush = () => {
+    if (!placements.length) return
+    const height = cursorY + rowHeight
+    const data = new Uint8Array(Math.max(1, width) * Math.max(1, height) * 4)
+    for (const placement of placements) {
+      const image = images.get(placement.id)
+      if (!image) continue
+      for (let row = 0; row < placement.size.height; row++) {
+        const from = row * image.width * 4
+        const to = ((placement.position.y + row) * width + placement.position.x) * 4
+        data.set(image.data.subarray(from, from + image.width * 4), to)
+      }
+    }
+    pages.push({ image: { width: Math.max(1, width), height: Math.max(1, height), data }, placements })
+    placements = []
+    cursorX = 0
+    cursorY = 0
+    rowHeight = 0
+    width = 0
+  }
   for (const [id, image] of entries) {
-    if (cursorX > 0 && cursorX + image.width > maxWidth) {
+    const fitWidth = Math.min(image.width, maxWidth)
+    const fitHeight = Math.min(image.height, maxHeight)
+    // 比整页还大的图独占一页并裁到页尺寸，不把其它切片挤到下一页。
+    if (image.width > maxWidth || image.height > maxHeight) {
+      flush()
+      placements.push({ id, position: { x: 0, y: 0 }, size: { width: fitWidth, height: fitHeight } })
+      cursorX = fitWidth
+      rowHeight = fitHeight
+      width = fitWidth
+      flush()
+      continue
+    }
+    if (cursorX > 0 && cursorX + fitWidth > maxWidth) {
       cursorY += rowHeight + GAP
       cursorX = 0
       rowHeight = 0
     }
-    placements.push({ id, position: { x: cursorX, y: cursorY }, size: { width: image.width, height: image.height } })
-    cursorX += image.width + GAP
-    rowHeight = Math.max(rowHeight, image.height)
+    if (cursorY + fitHeight > maxHeight) flush()
+    placements.push({ id, position: { x: cursorX, y: cursorY }, size: { width: fitWidth, height: fitHeight } })
+    cursorX += fitWidth + GAP
+    rowHeight = Math.max(rowHeight, fitHeight)
     width = Math.max(width, cursorX - GAP)
   }
-  const height = cursorY + rowHeight
-  void rows
-  const data = new Uint8Array(Math.max(1, width) * Math.max(1, height) * 4)
-  for (const placement of placements) {
-    const image = images.get(placement.id)
-    if (!image) continue
-    for (let row = 0; row < image.height; row++) {
-      const from = row * image.width * 4
-      const to = ((placement.position.y + row) * width + placement.position.x) * 4
-      data.set(image.data.subarray(from, from + image.width * 4), to)
-    }
-  }
-  return {
-    image: { width: Math.max(1, width), height: Math.max(1, height), data },
-    placements,
-  }
+  flush()
+  return pages.length ? pages : [{ image: { width: 1, height: 1, data: new Uint8Array(4) }, placements: [] }]
+}
+
+/** 单页打包，供只放得下一页的调用方使用。 */
+export function packAtlas(images: SkinImages, maxWidth = 2048, maxHeight = 2048): PackedAtlas {
+  const [page] = packAtlasPages(images, maxWidth, maxHeight)
+  return { image: page.image, placements: page.placements }
 }
 
 /** 雪碧图的 `.til` 文本：一条切片一个 `[IMGn]`。 */
