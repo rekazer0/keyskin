@@ -959,7 +959,7 @@ fn acrylic_alpha(opacity: u8) -> u8 {
 
 #[cfg(target_os = "macos")]
 #[tauri::command]
-fn move_macos_window(window: tauri::WebviewWindow, dx: i32, dy: i32) -> Result<(), String> {
+fn move_macos_window(window: tauri::WebviewWindow, dx: f64, dy: f64) -> Result<(), String> {
     use objc2_app_kit::{NSWindow, NSWindowStyleMask};
 
     if window.label() != "main" {
@@ -977,8 +977,8 @@ fn move_macos_window(window: tauri::WebviewWindow, dx: i32, dy: i32) -> Result<(
                 return;
             }
             let mut origin = window.frame().origin;
-            origin.x += f64::from(dx);
-            origin.y -= f64::from(dy); // AppKit's screen coordinates increase upwards.
+            origin.x += dx;
+            origin.y -= dy; // AppKit's screen coordinates increase upwards.
             window.setFrameOrigin(origin);
         })
         .map_err(|error| error.to_string())

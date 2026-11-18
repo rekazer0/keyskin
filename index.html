@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://api.github.com" crossorigin />
   </head>
   <body class="app-window">
-    <nav id="workspace-navigation" class="ui-workspace-navigation" aria-label="桌面工作区导航" data-tauri-drag-region="deep">
+    <nav id="workspace-navigation" class="ui-workspace-navigation" aria-label="桌面工作区导航">
       <div class="ui-workspace-navigation-brand"><img src="./src-tauri/icons/128x128.png" alt="键设 KeySkin" draggable="false"></div>
       <button class="ui-icon-button" type="button" data-workspace-page="files" aria-label="文件" aria-current="page"><span data-icon="folder-open" aria-hidden="true"></span><span>文件</span></button>
       <div class="ui-workspace-navigation-pages">
@@ -256,6 +256,7 @@
         <div class="canvas-wrap empty">
           <button id="mobile-key-preview" class="ui-button" type="button" aria-label="按住预览按下态" hidden><span id="mobile-key-size"></span><canvas id="mobile-key-canvas" aria-label="所选按键预览"></canvas><small>按住对比按下态</small></button>
           <div class="empty-state">
+            <span class="file-page-drag-region" data-tauri-drag-region="deep" aria-hidden="true"></span>
             <div class="welcome-main">
               <header class="welcome-hero">
                 <div><h1>键盘皮肤工作台</h1><p>打开已有皮肤，或从内置模板开始。</p></div>
