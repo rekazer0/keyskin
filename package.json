@@ -35,6 +35,7 @@
     "deep-chat": "^2.5.1",
     "fflate": "^0.8.2",
     "lucide": "^1.45.0",
+    "taffy-layout": "^4.0.0",
     "wasm-media-encoders": "^0.7.0"
   },
   "devDependencies": {
