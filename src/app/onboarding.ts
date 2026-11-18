@@ -11,8 +11,6 @@ const closeMenus = () => { for (const menu of toolbarMenus) menu.open = false }
 
 /** 首次打开的使用教程：电脑（宽屏）与手机竖屏的界面不同，按启动时的布局选一套说明。 */
 function onboardingSteps(compact: boolean): TourStep[] {
-  const menu = toolbarMenus[0]
-  const menuSelector = ".pen-file-menu"
   const welcome = !hasSkin()
   const steps: TourStep[] = [
     {
@@ -32,10 +30,10 @@ function onboardingSteps(compact: boolean): TourStep[] {
       when: () => !hasSkin(),
     },
     {
-      target: compact ? ["#mobile-welcome-new"] : ['#new-project-form button[value="create"]'],
+      target: compact ? ["#mobile-welcome-new"] : ["#new-project-form .project-template-grid"],
       title: "从模板新建皮肤",
       body: "第一次使用建议从模板开始：模板保留了官方的基础布局和资源，改起来不容易出错。",
-      action: { hint: compact ? "轻点「从模板新建」，选择模板后点「新建」" : "选择模板后点击「新建」", done: hasSkin },
+      action: { hint: compact ? "轻点「从模板新建」，再轻点模板" : "单击模板即可新建", done: hasSkin },
     },
   )
   steps.push(
@@ -48,18 +46,18 @@ function onboardingSteps(compact: boolean): TourStep[] {
       when: hasSkin,
     },
     {
-      target: [".preview-toolbar"],
+      target: compact ? ["#mobile-app-more > summary"] : [".preview-toolbar"],
       title: "预览选项",
       body: compact
-        ? "切换辅助线、预览设备（各款手机或纯画布）、竖屏 / 横屏和浅色 / 深色。皮肤里的每种组合都可以分别编辑。"
+        ? "在更多菜单的「画布选项」中切换辅助线、预览设备、方向和浅色 / 深色。"
         : "依次是辅助线、皮肤状态、预览设备（各款手机或纯画布）、竖屏 / 横屏、浅色 / 深色。皮肤里的每种组合都可以分别编辑。",
       when: hasSkin,
     },
     {
-      target: compact ? ['#mobile-canvas-mode [data-mode-choice="edit"]'] : ['[data-mode-choice="edit"]'],
+      target: compact ? ["#mobile-app-more > summary"] : ['[data-mode-choice="edit"]'],
       title: "切换到编辑模式",
-      body: compact ? "打开皮肤后可以直接编辑。点「试用」模拟输入，再点「返回编辑」继续修改。" : "打开皮肤后默认处于「交互预览」，配置只读。切换到「编辑模式」后才能选中、拖动和修改按键。",
-      action: { hint: compact ? "轻点右上角的「交互预览」按钮，切换到编辑模式" : "点击右上角的「编辑模式」", done: () => mode.value === "edit" },
+      body: compact ? "打开皮肤后可以直接编辑。在更多菜单中切换「工作模式」模拟输入，再点「返回编辑」继续修改。" : "打开皮肤后默认处于「交互预览」，配置只读。切换到「编辑模式」后才能选中、拖动和修改按键。",
+      action: { hint: compact ? "在更多菜单中切换「工作模式」" : "点击右上角的「编辑模式」", done: () => mode.value === "edit" },
       when: hasSkin,
     },
     {
@@ -75,7 +73,7 @@ function onboardingSteps(compact: boolean): TourStep[] {
       target: ["section.source"],
       title: "属性检查器",
       body: compact
-        ? "在这里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点画布工具栏的撤销按钮可以撤回。分类栏切换样式、文字和动作；布局、音效、动效在功能细节中。"
+        ? "在这里修改选中按键的位置、尺寸、样式、文字和手势，改动立即显示在画布上，点顶部的撤销按钮可以撤回。分类栏切换样式、文字和动作；布局、音效、动效在功能细节中。"
         : `在这里修改选中对象的位置、尺寸、样式、文字和手势，改动立即显示在画布上，可随时撤销（${shortcutLabel("Z")}）。右侧分类栏点击即可跳到对应分组，放大镜可以筛选属性。`,
       when: hasSkin,
     },
@@ -93,28 +91,28 @@ function onboardingSteps(compact: boolean): TourStep[] {
           when: hasSkin,
         },
     {
-      target: compact ? ["#mobile-app-more"] : [".titlebar-preferences"],
+      target: compact ? ["#mobile-app-more"] : ["#workspace-navigation [data-app-dialog='settings']"],
       title: "设置",
       body: "外观主题、强调色、默认预览设备、画布背景等偏好都在这里调整。",
     },
     {
-      target: compact ? ["#mobile-app-more > summary"] : [`${menuSelector} > summary`],
+      target: compact ? ["#mobile-app-more > summary"] : ["#workspace-export"],
       title: "保存与导出",
-      body: compact ? "顶部保存按钮保存当前皮肤；更多菜单选择导出与分享。" : "新建、打开、保存和导出皮肤都在左上角的菜单里。",
-      action: { hint: compact ? "轻点左上角的菜单按钮" : "点击左上角的菜单按钮", done: () => Boolean(menu?.open) },
+      body: compact ? "顶部保存按钮保存当前皮肤；更多菜单进入分享页面。" : "左侧「分享」集中管理保存、分享到输入法、ADB 与各格式导出。",
+      action: { hint: compact ? "打开更多，选择「保存、分享与导出」" : "点击左侧「分享」", done: () => !document.querySelector<HTMLElement>("#share-page")!.hidden },
     },
     {
-      target: [`${menuSelector}[open] .ui-menu`],
+      target: ["#share-page"],
       title: "导出给输入法",
       body: compact
         ? "改好后先「保存皮肤」，再按要使用的输入法选择导出格式；「分享皮肤」可以把皮肤直接发给输入法安装。"
         : "改好后先「保存皮肤」，再按要使用的输入法选择导出格式：百度 iOS / Android、新版 BDA、手心或搜狗。",
-      when: () => Boolean(menu?.open),
+      when: () => !document.querySelector<HTMLElement>("#share-page")!.hidden,
       leave: closeMenus,
     },
     {
       title: "准备就绪",
-      body: "以上就是基本流程。想再看一遍时，打开左上角菜单里的「使用教程」。祝你做出满意的皮肤！",
+      body: "以上就是基本流程。想再看一遍时，点击文件页的「使用教程」。祝你做出满意的皮肤！",
     },
   )
   return steps

@@ -12,18 +12,20 @@ export function pickableSlices(slices: TileSlice[], image: HTMLImageElement): Ti
   return slices.length ? slices : [{ index: WHOLE_IMAGE_INDEX, source: [0, 0, image.naturalWidth, image.naturalHeight] }]
 }
 
-// 画布像素按 devicePixelRatio 分配，切片线和文字在高分屏上不再被拉伸发虚。
-// cssScale 为每个原图像素对应的 CSS 像素；返回画布像素 / 原图像素，供点击换算。
+export function slicePickerLabel(index: number): string {
+  return index === WHOLE_IMAGE_INDEX ? "整张图" : `IMG${index}`
+}
+
+// 按 devicePixelRatio 分配画布像素，切片线和文字在高分屏上不发虚。
 export function drawSlicePicker(
   canvas: HTMLCanvasElement,
   image: HTMLImageElement,
   slices: TileSlice[],
   selectedIndex: number | undefined,
   cssScale: number,
-  colors: { normal: string; selected: string },
-): number {
+): void {
   const context = canvas.getContext("2d")
-  if (!context || !image.naturalWidth) return 1
+  if (!context || !image.naturalWidth) return
   const dpr = window.devicePixelRatio || 1
   const scaleCap = MAX_CANVAS_SIDE / (Math.max(image.naturalWidth, image.naturalHeight) * dpr)
   const css = Math.min(cssScale, scaleCap)
@@ -31,33 +33,43 @@ export function drawSlicePicker(
   canvas.style.height = `${image.naturalHeight * css}px`
   canvas.width = Math.max(1, Math.round(image.naturalWidth * css * dpr))
   canvas.height = Math.max(1, Math.round(image.naturalHeight * css * dpr))
-  const scale = canvas.width / image.naturalWidth
+  const sx = canvas.width / image.naturalWidth
+  const sy = canvas.height / image.naturalHeight
   context.clearRect(0, 0, canvas.width, canvas.height)
   // 放大后保留像素硬边，便于看清切片边界
-  context.imageSmoothingEnabled = scale < 2
+  context.imageSmoothingEnabled = sx < 2
   context.drawImage(image, 0, 0, canvas.width, canvas.height)
   const line = Math.max(1, Math.round(dpr))
-  context.font = `${Math.round(11 * dpr)}px ui-monospace, monospace`
+  const tokens = getComputedStyle(canvas)
+  const token = (name: string) => tokens.getPropertyValue(name).trim()
+  const fontSize = parseFloat(token("--font-size-xs")) * dpr
+  const padding = parseFloat(token("--space-2xs")) * dpr
+  context.font = `${fontSize}px ${token("--font-mono")}`
   context.textBaseline = "top"
-  for (const slice of slices) {
+  const draw = (slice: TileSlice) => {
     const [x, y, width, height] = slice.source
     const selected = slice.index === selectedIndex
     const lineWidth = selected ? line * 2 : line
-    const left = Math.round(x * scale)
-    const top = Math.round(y * scale)
-    const right = Math.round((x + width) * scale)
-    const bottom = Math.round((y + height) * scale)
+    const left = Math.round(x * sx)
+    const top = Math.round(y * sy)
+    const right = Math.round((x + width) * sx)
+    const bottom = Math.round((y + height) * sy)
     context.lineWidth = lineWidth
-    context.strokeStyle = selected ? colors.selected : colors.normal
+    context.strokeStyle = selected ? token("--selection") : token("--secondary")
     // 描边落在整像素内侧，线条锐利且相邻切片不互相覆盖
     context.strokeRect(left + lineWidth / 2, top + lineWidth / 2, Math.max(0, right - left - lineWidth), Math.max(0, bottom - top - lineWidth))
-    const label = slice.index === WHOLE_IMAGE_INDEX ? "整张图" : `IMG${slice.index}`
-    context.fillStyle = context.strokeStyle
-    context.fillRect(left, top, context.measureText(label).width + 6 * dpr, Math.round(15 * dpr))
-    context.fillStyle = "#fff"
-    context.fillText(label, left + 3 * dpr, top + 2 * dpr)
+    const label = slicePickerLabel(slice.index)
+    const labelWidth = Math.ceil(context.measureText(label).width + padding * 2)
+    const labelHeight = Math.ceil(fontSize + padding * 2)
+    if (right - left < labelWidth + lineWidth * 2 || bottom - top < labelHeight + lineWidth * 2) return
+    context.fillStyle = token("--panel")
+    context.fillRect(left + lineWidth, top + lineWidth, labelWidth, labelHeight)
+    context.fillStyle = token("--text")
+    context.fillText(label, left + lineWidth + padding, top + lineWidth + padding)
   }
-  return scale
+  for (const slice of slices) if (slice.index !== selectedIndex) draw(slice)
+  const selected = slices.find(slice => slice.index === selectedIndex)
+  if (selected) draw(selected)
 }
 
 // ⌘/Ctrl + 滚轮、触控板捏合（Chromium 发 ctrl+wheel，WebKit 发 gesture 事件）缩放，指针下的位置保持不动。

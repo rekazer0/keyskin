@@ -84,6 +84,14 @@ export function syncMobileAppearance(): void {
   }
   const heading = element("h3", "mobile-appearance-heading")
   heading.append("外观")
+  const all = element("button", "ui-button")
+  all.type = "button"
+  all.dataset.variant = "quiet"
+  all.textContent = "全部样式"
+  all.disabled = background?.disabled ?? true
+  all.append(createIcon("chevron-right"))
+  all.addEventListener("click", () => chooseBackground())
+  heading.append(all)
   const chooseBackground = () => {
     const list = background?.closest(".ui-style-ref-list")
     ;(list?.querySelector<HTMLElement>(`.ui-style-state[data-state="${appState.mobileAppearancePressed ? "pressed" : "normal"}"]`)

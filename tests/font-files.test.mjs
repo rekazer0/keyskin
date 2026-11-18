@@ -155,3 +155,11 @@ test('removing a font clears its references but leaves system font names alone',
     '[GLOBAL]\n',
   )
 })
+
+test('removing a font preserves references to a same-name file in the other mode', () => {
+  const paths = ['light/skin/res/shared.ttf', 'dark/skin/res/shared.ttf']
+  const text = '[GLOBAL]\nFONT_PATH=shared.ttf\n[STYLE1]\nFONT_NAME=shared\n'
+  const removed = new Set([paths[0]])
+  assert.equal(withFontReferencesCleared(text, 'dark/skin/res/default.css', paths, removed, 'shared'), undefined)
+  assert.equal(withFontReferencesCleared(text, 'light/skin/res/default.css', paths, removed, 'shared'), '[GLOBAL]\n[STYLE1]\n')
+})

@@ -126,6 +126,7 @@ try {
   await sliceCanvas.waitFor()
   const sliceBox = await sliceCanvas.boundingBox()
   await sliceCanvas.click({ position: { x: sliceBox.width / 2, y: sliceBox.height / 2 } })
+  await picker.locator('#picker-apply').click()
   const added = await state()
   const id = added.refs.split(',').at(-1)
   assert.equal(added.refs.split(',').length, 3)

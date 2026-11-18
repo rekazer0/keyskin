@@ -1,11 +1,11 @@
 import { isSxiSourcePath, sxiPointer } from "./sxi-documents"
 import { shortcutLabel } from "../dom-element"
-import { sxiSectionRanges } from "../palm/sxi-edit.ts"
+import { sxiFragmentRange, sxiSectionRanges } from "../palm/sxi-edit.ts"
 import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { syncAtlasWorkspace } from "./tile-editing"
-import { files, sourceName, quickInspector, asset, resourceInspector, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
+import { files, sourceName, quickInspector, asset, resourceInspector, resourceDetail, styleResourceDetail, resourceSourceToggle, inspectorPane, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
 import { appState } from "./state"
-import { showsLayoutProperties, isSkinInfoPath, selectedSourceSections, styleConfigPath, sxiSourceRanges } from "./config-context"
+import { showsLayoutProperties, isSkinInfoPath, selectedSourceSections, selectedBdaStyleSourceRange, styleConfigPath, sxiSourceRanges } from "./config-context"
 import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, visualResolver, bdaAppearanceStylePath } from "./bda-documents"
 import { inspectorTabButtons, source, mobilePortraitQuery, preview } from "./canvas-interaction"
 import { loadVisibleSourceEditor } from "./resource-inspector"
@@ -26,6 +26,18 @@ import { previewItems } from "../preview-items.ts"
 
 export function updateInspectorView(): void {
   syncAtlasWorkspace()
+  const styleSelected = appState.resourceConfigActive && appState.resourceInspectorMode === "style" && Boolean(appState.selectedStyleID)
+  const styleSource = styleSelected && appState.inspectorTab === "source"
+  resourceSourceToggle.hidden = !styleSelected
+  resourceSourceToggle.setAttribute("aria-pressed", String(styleSource))
+  resourceSourceToggle.title = resourceSourceToggle.ariaLabel = styleSource ? "返回属性" : "查看源代码"
+  if (styleSelected) styleResourceDetail.hidden = styleSource
+  // 复用同一个编辑器，源码模式保留样式对象头和资源列表。
+  if (styleSource) {
+    if (sourceEditor.parentElement !== resourceDetail) resourceDetail.append(sourceEditor)
+  } else if (sourceEditor.parentElement !== inspectorPane) {
+    inspectorPane.insertBefore(sourceEditor, aiDesignPanel)
+  }
   const imageSelected = Boolean(appState.archive?.isImage(appState.selectedPath))
   const overviewSelected = isSkinInfoPath(appState.selectedPath) || Boolean(
     files.querySelector(`.sidebar-overview button[data-path="${CSS.escape(appState.selectedPath)}"]`),
@@ -62,7 +74,7 @@ export function updateInspectorView(): void {
     if (sxiPointer(appState.selectedPath)) sourceName.textContent = "skin.json"
     quickInspector.hidden = true
     asset.hidden = true
-    resourceInspector.hidden = appState.inspectorTab !== "properties"
+    resourceInspector.hidden = appState.inspectorTab !== "properties" && !styleSource
     sourceEditor.hidden = appState.inspectorTab !== "source"
     aiDesignPanel.hidden = appState.inspectorTab !== "ai"
     updateSourceFindVisibility()
@@ -158,10 +170,11 @@ export function updateSourceHighlight(): void {
   source.setLanguage(jsonSource ? "json" : "ini")
   const matches = sourceSearchMatches()
   updateSourceSearchStatus(matches)
+  const bdaStyleRange = selectedBdaStyleSourceRange(source.value)
   const selectedRanges = sxiSource
     ? sxiSourceRanges(source.value)
     : bdaSource
-    ? jsonPropertyRanges(source.value, selectedBdaSourceKeys())
+    ? bdaStyleRange ? [bdaStyleRange] : jsonPropertyRanges(source.value, selectedBdaSourceKeys())
     : sections.length ? iniSectionRanges(source.value, sections) : appState.sourceHistoryHighlight ? [appState.sourceHistoryHighlight] : []
   const searchRanges = matches.slice(0, SOURCE_SEARCH_HIGHLIGHT_LIMIT)
     .map((start) => [start, start + query.length] as const)
@@ -270,7 +283,7 @@ export function openSourceStyleDefinition(styleID: string): void {
   const ref = appState.archive.format === "bda" ? bdaStyleRef(styleID) : undefined
   selectFile(ref ? bdaAppearanceStylePath(`${ref.type}Styles`) : styleConfigPath(), "source")
   const range = ref
-    ? jsonPropertyRanges(source.value, [String(ref.key)])[0]
+    ? sxiFragmentRange(source.value, [`${ref.type}Styles`, String(ref.key)])
     : iniSectionRanges(source.value, [`STYLE${styleID}`])[0]
   if (range) source.setSelectionRange(range[0], range[1])
   if (mobilePortraitQuery.matches) setMobilePane("inspector")

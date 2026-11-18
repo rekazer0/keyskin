@@ -13,7 +13,7 @@ import { commitBytes, updateDirty, isEditing, commitText } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
-import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes } from "./canvas-interaction"
+import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes, mobilePortraitQuery } from "./canvas-interaction"
 import { actionDescription } from "../actions.ts"
 import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
@@ -38,6 +38,8 @@ import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
 import { syncSkinConfigControl } from "./config-value-control"
 import { geometryPreview } from "./geometry-preview"
+import { element } from "../dom-element"
+import { releaseOnRemove } from "../dom-lifecycle"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
 
 export function selectedBdaRefs(
@@ -417,13 +419,27 @@ export function populateKeyInspector(): void {
   }
   const paddingSection = quickInspector.querySelector<HTMLElement>(".inspector-padding-section")
   if (paddingSection) keyLayoutFieldsGroup.querySelector(".geometry-fields")!.append(paddingSection)
+  keyLayoutFieldsGroup.querySelector(".mobile-geometry-detail")?.remove()
   keyLayoutFieldsGroup.querySelector(".ui-geometry-preview")?.remove()
   const previewRects = preview.keys.filter(key => sections.includes(key.section)).map(key => key.rect)
   if (hasSelection && previewRects.length) {
     const editableRects = selectedRects()
     const editable = isEditing() && !bdaSelected && !ssfSelected && !sections.some(isListCell) && editableRects.length === previewRects.length
     const geometry = geometryPreview(editable ? editableRects : previewRects, editable ? rects => resizeSelectedKeys(rects.map((rect, index) => ({ ...rect, section: editableRects[index].section }))) : undefined)
-    keyLayoutFieldsGroup.querySelector("h3")!.after(geometry)
+    const detail = element("details", "ui-disclosure mobile-geometry-detail")
+    const summary = Object.assign(element("summary", "ui-button"), { textContent: "内边距与缩放" })
+    detail.append(summary)
+    keyLayoutFieldsGroup.querySelector("h3")!.after(detail)
+    const sync = () => {
+      const mobile = mobilePortraitQuery.matches
+      if (mobile) detail.append(geometry)
+      else detail.after(geometry)
+      detail.hidden = !mobile
+      detail.open = false
+    }
+    sync()
+    mobilePortraitQuery.addEventListener("change", sync)
+    releaseOnRemove(detail, () => mobilePortraitQuery.removeEventListener("change", sync))
     if (paddingSection && !bdaSelected && !ssfSelected && !sections.some(isListCell)) geometry.querySelector(".ui-geometry-box")!.append(paddingSection)
   }
   populatePrimaryCssFields(hasSelection, sections)

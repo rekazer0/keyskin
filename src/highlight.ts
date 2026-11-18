@@ -34,12 +34,15 @@ export function jsonPropertyRanges(source: string, properties: readonly string[]
   if (!properties.length) return []
   const selected = new Set(properties)
   const ranges: Array<readonly [number, number]> = []
-  const property = /^(\s*)("(?:\\.|[^"\\])*")\s*:\s*([\[{])/gm
-  for (const match of source.matchAll(property)) {
-    if (!selected.has(JSON.parse(match[2]))) continue
-    const start = match.index ?? 0
-    const bodyStart = start + match[0].length - 1
-    const open = match[3]
+  // Match complete strings first so escaped property-like text is never mistaken for a key.
+  for (const match of source.matchAll(/"(?:\\.|[^"\\])*"/g)) {
+    const keyStart = match.index
+    const body = /^\s*:\s*([\[{])/.exec(source.slice(keyStart + match[0].length))
+    if (!body || !selected.has(JSON.parse(match[0]))) continue
+    const lineStart = source.lastIndexOf("\n", keyStart - 1) + 1
+    const start = /^\s*$/.test(source.slice(lineStart, keyStart)) ? lineStart : keyStart
+    const bodyStart = keyStart + match[0].length + body[0].length - 1
+    const open = body[1]
     const close = open === "{" ? "}" : "]"
     let depth = 0
     let quoted = false

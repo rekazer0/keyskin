@@ -5,7 +5,7 @@ import { wirePinnedToolbar } from "../pinned-toolbar"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
 import { requestEditMode, setMobilePane } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, appDialogButtons, settingsDialog, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
 import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelections, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
@@ -14,7 +14,7 @@ import { preview, source, scheduleSelectionInspectorSync, isTauri, settingsNavIt
 import { startNewDocument, wireNewProjectChooser } from "../new-document"
 import { runFileOperation, readBrowserSkinFile, showImage, showStatus, showError } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
-import { recentFilesKey, recentPreviewCache, recentThumbRequest, renderRecentFiles } from "../recent-files"
+import { recentFilesKey, recentPreviewCache, recentThumbRequest, renderRecentFiles, wireRecentPage } from "../recent-files"
 import { dismissLayoutOverview } from "../layout-overview"
 import { releaseArchivePreview } from "../../template-preview"
 import { refreshUpdateStatus, settingsController, showSettingsPage, nativeSettings, savedDefaultDevice, applyCanvasBackground, initialCanvasBackground, applyEditorCrosshairSetting, applyAppTheme, systemTheme, savedSourceFontSize, applySourceFontSize, saveSourceFontSize, initializeWindowMaterial, handleWindowMaterialError, applyWindowMaterialWithRetry, currentWindowMaterialOpacity, applyWindowMaterialOpacity, startWindowsWindowDrag, restoreWindowMaterialAfterDrag, applySourceEditorFeatures, setCanvasDropState } from "../preferences"
@@ -117,40 +117,6 @@ export function wireFilesAndSettings(): void {
     menu.addEventListener("click", (event) => {
       if ((event.target as Element).closest("button")) menu.open = false
     })
-    if (menu.classList.contains("pen-file-menu")) {
-      const mobile = matchMedia("(max-width: 760px)")
-      const summary = menu.querySelector("summary")!
-      const blocked = new Map<HTMLElement, boolean>()
-      const syncDrawer = () => {
-        summary.setAttribute("aria-expanded", String(menu.open))
-        if (mobile.matches && menu.open) {
-          for (const other of toolbarMenus) if (other !== menu) other.open = false
-          for (const region of document.querySelectorAll<HTMLElement>("main, .titlebar-center, .titlebar-right")) {
-            if (!blocked.has(region)) blocked.set(region, region.inert)
-            region.inert = true
-          }
-          menu.querySelector<HTMLButtonElement>(".mobile-file-header button")!.focus()
-        } else {
-          for (const [region, inert] of blocked) region.inert = inert
-          blocked.clear()
-          if (!menu.open && menu.contains(document.activeElement)) summary.focus()
-        }
-      }
-      menu.addEventListener("toggle", syncDrawer)
-      mobile.addEventListener("change", syncDrawer)
-      menu.addEventListener("click", event => {
-        if (!mobile.matches || event.target !== menu && !(event.target as Element).closest("button")) return
-        menu.open = false
-        syncDrawer()
-      }, true)
-      menu.addEventListener("keydown", event => {
-        if (!mobile.matches || !menu.open || event.key !== "Tab") return
-        const items = [...menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")].filter(item => item.getClientRects().length)
-        const index = items.indexOf(document.activeElement as HTMLButtonElement)
-        event.preventDefault()
-        items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length]?.focus()
-      })
-    }
   }
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return
@@ -177,9 +143,10 @@ export function wireFilesAndSettings(): void {
   newButton.addEventListener("click", () => void startNewDocument())
   openButton.addEventListener("click", () => {
     if (isTauri()) void runFileOperation("打开", openNative)
-    // 文件选择框必须在点击里同步弹出：先等未保存确认再 click()，移动端浏览器会因失去用户手势而拦掉选择框。
+    // 文件选择框必须在点击里同步弹出：先等导出确认再 click()，移动端浏览器会因失去用户手势而拦掉选择框。
     else browserOpen.click()
   })
+  wireRecentPage()
   $("#recent-clear")?.addEventListener("click", () => {
     localStorage.removeItem(recentFilesKey)
     for (const cached of recentPreviewCache.values()) releaseArchivePreview(cached.image)
@@ -189,7 +156,7 @@ export function wireFilesAndSettings(): void {
   })
   $("#welcome-recent-open")?.addEventListener("click", () => openButton.click())
   $("#mobile-welcome-open").addEventListener("click", () => openButton.click())
-  // 回到启动页但不关闭当前皮肤；在启动页打开别的皮肤时仍会先询问保存。
+  // 回到启动页但不关闭当前皮肤；打开别的皮肤时再询问是否导出。
   $("#recent-files")?.addEventListener("click", () => {
     dismissLayoutOverview()
     canvasWrap.classList.add("empty")
@@ -367,6 +334,12 @@ export function wireFilesAndSettings(): void {
     localStorage.setItem("editor-coordinate-snap", editorCoordinateSnap.checked ? "on" : "off")
   })
   appTheme.value = localStorage.getItem("app-theme") ?? "system"
+  const savedInterfaceTheme = localStorage.getItem(interfaceTheme.id)
+  interfaceTheme.value = Array.from(interfaceTheme.options).some(option => option.value === savedInterfaceTheme) ? savedInterfaceTheme! : "default"
+  interfaceTheme.addEventListener("change", () => {
+    localStorage.setItem(interfaceTheme.id, interfaceTheme.value)
+    applyAppTheme()
+  })
   applyAppTheme()
   appTheme.addEventListener("change", () => {
     localStorage.setItem("app-theme", appTheme.value)
@@ -462,7 +435,7 @@ export function wireFilesAndSettings(): void {
     if (file) {
       await runFileOperation("打开", async () => {
         if (!isSupportedSkinPath(file.name)) throw new Error(UNSUPPORTED_SKIN_MESSAGE)
-        if (!(await prepareDocumentReplacement())) return false
+        if (!(await prepareDocumentReplacement("open"))) return false
         return openSkinBytes(await readBrowserSkinFile(file), file.name)
       })
     }

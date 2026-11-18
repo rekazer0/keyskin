@@ -353,11 +353,23 @@
 
 .mobile-ai-unavailable { display: none; }
 @media (max-width: 760px) and (orientation: portrait) {
-  :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) > :not(.mobile-ai-unavailable, .ai-bar, .ai-sessions) { display: none; }
+  :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) > :not(.mobile-ai-unavailable, .ai-sessions) { display: none; }
   :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) .ai-context { display: none; }
-  :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) .mobile-ai-unavailable { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; gap: var(--space-md); padding: var(--space-lg) var(--mobile-page-gutter); }
-  .mobile-ai-unavailable > h2 { margin: 0 0 var(--space-md); font-size: var(--font-size-lg); }
+  :root[data-mobile-ai-unavailable="true"] #ai-design-panel:not(:has(#ai-draft-panel:not([hidden]))) .mobile-ai-unavailable { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; gap: var(--space-md); padding: var(--space-xl) var(--mobile-page-padding); }
+  .mobile-ai-unavailable > h2 { margin: 0 0 var(--space-md); font-size: var(--font-size-page); }
   .mobile-ai-unavailable > h3 { margin: 0; font-size: var(--font-size-lg); }
   .mobile-ai-unavailable > p { flex: 1; margin: 0; color: var(--secondary); font-size: var(--font-size-sm); line-height: 1.8; }
   .mobile-ai-unavailable > button { flex-shrink: 0; min-height: 48px; }
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  :root[data-mobile-page="ai"] .source { inset: var(--mobile-preview-height) 0 0; height: calc(100% - var(--mobile-preview-height)); border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+  :root[data-mobile-page="ai"] .source > .source-heading { display: none; }
+  :root[data-mobile-page="ai"] .mobile-ai-unavailable { background: var(--window); }
+  .mobile-ai-unavailable > p { flex: none; padding: var(--space-lg); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+  .mobile-ai-unavailable > #mobile-ai-privacy { margin-top: auto; background: var(--panel); }
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .mobile-ai-unavailable > h2 { display: none; }
 }

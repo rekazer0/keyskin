@@ -384,7 +384,7 @@ try {
   await page.screenshot({ path: '/tmp/bdi-ssf-gestures-desktop.png' })
   // Leaving SSF restores editable Baidu actions and its action library.
   await page.locator('#browser-open').setInputFiles({ name: '手势回归.bds', mimeType: 'application/octet-stream', buffer: readFileSync(new URL('../public/sogou-template.bds', import.meta.url)) })
-  await page.getByRole('dialog', { name: '未保存的皮肤', exact: true }).getByRole('button', { name: '不保存', exact: true }).click()
+  await page.getByRole('dialog', { name: '是否导出当前皮肤？', exact: true }).getByRole('button', { name: '不导出', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('#document-name')?.textContent.includes('手势回归'))
   await page.waitForFunction(() => !document.querySelector('#open').disabled && (!document.querySelector('#file-operation-dialog').open || !document.querySelector('#file-operation-close').disabled))
   if (await close.isVisible()) await close.click()

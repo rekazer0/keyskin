@@ -1,7 +1,7 @@
 import { appState } from "./state"
-import { isBdaVirtualTextPath, isBdaAppearancePartPath, bdaAppearanceStylePath, bdaBasePath } from "./bda-documents"
+import { isBdaVirtualTextPath, isBdaAppearancePartPath, bdaBasePath } from "./bda-documents"
 import { symbolSpan } from "../icons"
-import { layout, files, theme, orientation, documentName } from "./dom"
+import { layout, files, theme, orientation, documentName, sidebarLayoutCount } from "./dom"
 import { selectFile, overviewGroupState, currentNavigationMode } from "./navigation"
 import { isSsfBoardPath, ssfThemeFolder, SSF_SOUNDS_PATH } from "./ssf-documents"
 import { mobilePortraitQuery, sourceThumbnail } from "./canvas-interaction"
@@ -13,11 +13,10 @@ import { SXI_SKIN_PATH, sxiFragment, sxiFragmentPath } from "../palm/sxi-json.ts
 import { openPalmSkin, palmBoardTypes, palmOrientation, palmTheme, PALM_SHARED_BOARD, sxiBoardAddress, sxiPointer } from "./sxi-documents"
 import { bdaAppearancePath, bdaConfigPaths } from "../bda.ts"
 import { decodeBdaAppearance } from "../bda-decode.ts"
-import { toolbarConfigPath, styleConfigPath, legacyAnimationConfigPath } from "./config-context"
+import { toolbarConfigPath, legacyAnimationConfigPath } from "./config-context"
 import { firstExistingPath } from "../resources.ts"
 import { selectSourceRow, visibleSourceRows, filterSourceFiles, updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView, setRowSelected } from "./source-files"
 import { isSoundPath, soundMimeType } from "../sounds.ts"
-import { pickableImagePaths } from "./image-pickers"
 import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
 import { askToCreateAnimationConfig, canCreateAnimationConfig } from "./animation-resource"
@@ -27,7 +26,6 @@ import { openResourceInventory } from "./resource-inventory"
 import { emptyState } from "../dom-element"
 
 const layoutGroups = ["键盘布局", "数字与符号", "手写与语音", "手写与选择"]
-const resourceTileLabels: Record<string, string> = { 图片: "图片资源", 样式: "按键样式", 音效: "音效资源" }
 
 function addNavButton(
   parent: HTMLElement,
@@ -59,8 +57,7 @@ function addNavButton(
   labelNode.className = "nav-label"
   labelNode.textContent = label
   button.append(labelNode)
-  // 概览卡片统一为两行内容：标题 + 文件名。英文布局也保留 en_*.ini，
-  // 所有卡片的文字块高度才会完全一致。
+  // 文件名保留在悬停提示中，列表默认只显示名称。
   const metaNode = document.createElement("span")
   metaNode.className = "nav-meta"
   metaNode.textContent = meta || path.split("/").pop() || ""
@@ -138,7 +135,7 @@ const iniTypes: Record<string, Omit<NavEntry, "path">> = {
   "symbol_h.ini": { group: "数字与符号", label: "符号面板（加高）", className: "nav-component", icon: "percent" },
   "help.ini": { group: "手写与选择", label: "帮助面板", className: "nav-component", icon: "circle-help" },
   "logo.ini": { group: "键盘组件", label: "输入法标识", className: "nav-component", icon: "app-window" },
-  "gen.ini": { group: "资源配置", label: "通用配置", className: "nav-style", icon: "sliders-horizontal" },
+  "gen.ini": { group: "键盘布局", label: "通用配置", className: "nav-style", icon: "sliders-horizontal" },
 }
 
 /** Overview name of a keyboard layout file (`py_9.ini` → 拼音 9 键). */
@@ -234,18 +231,14 @@ export function renderFiles(): void {
 
   if (appState.archive.format === "ssf") {
     const folder = ssfThemeFolder()
-    const images = pickableImagePaths()
     const preview = ["square_preview.png", "candidate_preview.png"].find((path) => appState.archive?.getBytes(path))
     entries.push(
       { group: "皮肤", label: "皮肤信息", path: "phoneTheme.ini", className: "nav-overview", icon: "info" },
       ...preview ? [{ group: "皮肤", label: "效果预览", path: preview, className: "nav-overview", icon: "image" }] : [],
       { group: "资源配置", label: "外观切换", path: "time.ini", className: "nav-overview", icon: "sun" },
-      { group: "资源配置", label: "按键样式", path: `${folder}phoneSkin.ini`, className: "nav-style", icon: "palette" },
       { group: "资源配置", label: "按键前景", path: `${folder}keys.ini`, className: "nav-style", icon: "type" },
       { group: "资源配置", label: "按键动画", path: `${folder}anim.ini`, className: "nav-style", icon: "wand-sparkles" },
       { group: "资源配置", label: "按键音效", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "volume-2", navMode: "document" },
-      ...images.length ? [{ group: "资源配置", label: "图片", path: images[0], className: "nav-resource", icon: "images", navMode: "resource", meta: `${images.length} 张图片` }] : [],
-      { group: "资源配置", label: "音效", path: SSF_SOUNDS_PATH, className: "nav-resource", icon: "music", navMode: "sound" },
       { group: "资源配置", label: "运营配置", path: "op.ini", className: "nav-style", icon: "sliders-horizontal" },
     )
     // 搜狗手机输入法的全部键盘（取自官方安装包），按它的叫法列出；键位来自官方骨架，外观来自 phoneSkin.ini。
@@ -305,31 +298,6 @@ export function renderFiles(): void {
         meta: panelName,
       })
     }
-    entries.push({
-      group: "资源配置",
-      label: "样式",
-      path: bdaAppearanceStylePath(appState.selectedBdaStyleGroup),
-      className: "nav-style",
-      icon: "palette",
-      navMode: "style",
-      meta: "appearanceConfig",
-    })
-    entries.push({
-      group: "资源配置",
-      label: "图片",
-      path: appearancePath!,
-      className: "nav-resource",
-      icon: "images",
-      navMode: "resource",
-    })
-    entries.push({
-      group: "资源配置",
-      label: "音效",
-      path: appearancePath!,
-      className: "nav-resource",
-      icon: "audio-lines",
-      navMode: "sound",
-    })
   }
   const legacyAnimationPath = ["sxi", "bdi", "bds"].includes(appState.archive.format) ? legacyAnimationConfigPath() : undefined
   const layoutPaths = ["bda", "ssf", "sxi"].includes(appState.archive.format) ? [] : appState.archive.names()
@@ -359,19 +327,6 @@ export function renderFiles(): void {
   if (hintPath) entries.push({ group: "键盘组件", label: "按键气泡", path: hintPath, className: "nav-component", icon: "message-square" })
   const longHintPath = firstExistingPath(appState.archive.names(), `${theme.value}/skin/${orientation.value}`, ["hint2.pop"])
   if (longHintPath) entries.push({ group: "键盘组件", label: "长按气泡", path: longHintPath, className: "nav-component", icon: "message-square-more" })
-  const stylePath = appearancePath ?? (appState.archive.format === "bda" ? undefined : styleConfigPath())
-  if (stylePath && appState.archive.format !== "bda") {
-    entries.push({
-      group: "资源配置",
-      label: "图片",
-      path: stylePath,
-      className: "nav-resource",
-      icon: "images",
-      navMode: "resource",
-    })
-    entries.push({ group: "资源配置", label: "样式", path: stylePath, className: "nav-style", icon: "palette", navMode: "style" })
-    entries.push({ group: "资源配置", label: "音效", path: stylePath, className: "nav-resource", icon: "volume-2", navMode: "sound" })
-  }
   // 动画资源（手心 skin.json、百度 anim.ini、BDA animationConfig）分「动效设计」与「粒子设计」两个入口，
   // 指向同一个文件，只筛选展示，不改变资源路径和编号。
   const animationPaths = legacyAnimationPath ? [legacyAnimationPath]
@@ -444,31 +399,34 @@ export function renderFiles(): void {
     button.querySelector(".nav-label")!.textContent = name
     button.querySelector(".nav-meta")!.textContent = "皮肤信息"
     const format = document.createElement("span")
-    format.className = "ui-badge skin-card-format"
+    format.className = "ui-badge"
     format.dataset.variant = "accent"
     format.textContent = appState.archive.format.toUpperCase()
-    button.append(format, symbolSpan("chevron-right"))
+    button.querySelector(".nav-meta")!.append(format)
+    button.append(symbolSpan("chevron-right"))
     button.title = `皮肤信息 · ${name}`
   }
   if (skinCard.childElementCount && !skinCard.querySelector(".skin-card-preview")) {
-    const preview = emptyState("image-off")
+    const preview = emptyState("keyboard")
     preview.classList.add("skin-card-preview")
     skinCard.prepend(preview)
   }
+  if (skinCard.childElementCount) overview.append(skinCard)
   const groups = appState.archive.format === "bda"
-    ? ["皮肤信息", "资源配置", "键盘布局", "数字与符号", "手写与选择", "键盘组件", "扩展布局", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
-    : ["皮肤", "资源配置", "键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局"]
+    ? ["键盘布局", "数字与符号", "手写与选择", "键盘组件", "扩展布局", "资源配置", "按键音效", "轻量动画", "开关配置", "贴纸配置", "场景配置"]
+    : ["键盘布局", "数字与符号", "手写与语音", "手写与选择", "键盘组件", "扩展配置", "扩展布局", "资源配置"]
   for (const group of groups) {
     const grouped = entries.filter((entry) => entry.group === group && !skinEntries.includes(entry) && (
       !entry.path && entry.meta === "未创建" || appState.archive?.getBytes(entry.path) !== undefined || isSsfBoardPath(entry.path) || Boolean(sxiPointer(entry.path)) ||
       appState.archive?.format === "bda" && (isBdaAppearancePartPath(entry.path) || Boolean(appState.bdaBase?.isText(bdaBasePath(entry.path))))
     ))
     if (group === "键盘布局" && appState.archive.format !== "ssf") {
-      const layoutRank: Record<string, number> = { "py_9.ini": 0, "py_26.ini": 1, "bh.ini": 3 }
+      const layoutOrder = ["gen.ini", "py_9.ini", "py_26.ini", "def_26.ini", "def_26_new.ini", "def_9.ini", "en_26.ini", "en_26_new.ini", "en_26s.ini", "en_26s_new.ini", "en_9.ini", "en_9s.ini", "bh.ini"]
+      const rank = (name: string) => layoutOrder.includes(name) ? layoutOrder.indexOf(name) : layoutOrder.length
       grouped.sort((a, b) => {
         const aName = a.path.split("/").pop() ?? ""
         const bName = b.path.split("/").pop() ?? ""
-        return (layoutRank[aName] ?? 2) - (layoutRank[bName] ?? 2)
+        return rank(aName) - rank(bName)
       })
     }
     if (appState.archive.format === "bda" && layoutGroups.includes(group)) {
@@ -476,13 +434,11 @@ export function renderFiles(): void {
       const rank = (name: string) => bdaLayoutOrder.includes(name) ? bdaLayoutOrder.indexOf(name) : 100
       grouped.sort((a, b) => rank(a.meta ?? "") - rank(b.meta ?? "") || (a.meta ?? "").localeCompare(b.meta ?? ""))
     }
-    // 皮肤卡片放在它原来所在的分组（「皮肤」/ BDA 的「皮肤信息」）里，分组照常可折叠。
-    const card = skinCard.childElementCount && group === skinEntries[0]?.group ? skinCard : undefined
-    if (!grouped.length && !card) continue
+    if (!grouped.length && group !== "资源配置") continue
     const body = section(group)
-    if (card) body.append(card)
     if (group === "资源配置") {
       const inventory = Object.assign(document.createElement("button"), { type: "button", className: "ui-list-item", textContent: "资源清单" })
+      inventory.classList.add("nav-resource-inventory")
       inventory.dataset.layout = "tile"
       inventory.dataset.variant = "resource"
       inventory.prepend(symbolSpan("list"))
@@ -490,7 +446,7 @@ export function renderFiles(): void {
       body.append(inventory)
     }
     for (const entry of grouped) {
-      const label = group === "资源配置" ? resourceTileLabels[entry.label] ?? entry.label.replace(/ · .+$/, "") : entry.label
+      const label = group === "资源配置" ? entry.label.replace(/ · .+$/, "") : entry.label
       const button = addNavButton(body, label, entry.path, entry.className, entry.icon, entry.navMode, entry.meta)
       // 资源配置条目少且各自独立，排成磁贴
       if (button && group === "资源配置") {
@@ -501,6 +457,8 @@ export function renderFiles(): void {
     }
     if (layoutGroups.includes(group)) decorateLayoutGroup(body)
   }
+  const layoutCount = overview.querySelectorAll('.nav-group:not([data-overview-group="键盘组件"]) :is(.nav-layout, .nav-component)').length
+  sidebarLayoutCount.textContent = `共 ${layoutCount} 个布局`
   const sourceFiles = document.createElement("div")
   sourceFiles.className = "raw-files"
   sourceFiles.setAttribute("role", "tree")

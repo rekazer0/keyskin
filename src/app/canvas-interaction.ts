@@ -1,4 +1,4 @@
-import { settingsDialog, $,  device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, mobileUndoButton, undoButton, mobileRedoButton, redoButton } from "./dom"
+import { settingsDialog, $,  device, resourceSearch, editorCrosshair, previewCoordinates, canvasWrap, previewCanvas, toolbarCanvas, editorCoordinateSnap, previewCoordinateX, previewCoordinateY, toolbarStrip, candidateBackgroundCanvas, skinState, skinStateValue, eventLog, theme, orientation, simulatedOutput, deviceControlIcon, mobileShareButton, shareTargetLabel, mobileUndoButton, undoButton, mobileRedoButton, redoButton } from "./dom"
 import { LazySourceCodeEditor } from "../lazy-source-editor.ts"
 import { effectiveDeviceValue } from "../canvas-background.ts"
 import { deviceSpec } from "../devices.ts"
@@ -125,7 +125,7 @@ export const preview = new Preview(
     appState.selectedCandidate = false
     syncCandidateSelection()
     // 选中按键只是换选择对象：右侧停在源代码 / AI 设计时保持该选项，不跳回属性。
-    if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview", "document", true)
+    if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, appState.sidebarView, "document", true)
     appState.selectedKeySections = sections
     if (!sections.length) source.collapseSelection()
     if (sections.length && mobilePortraitQuery.matches) setMobilePane("inspector")
@@ -255,16 +255,16 @@ export function scheduleSelectionInspectorSync(canvasPreview: Preview): void {
   afterNextPaint(() => void canvasPreview.rendered().then(() => {
     appState.selectionInspectorSyncPending = false
     populateKeyInspector()
-    if (appState.selectedCandidate === "input") revealInspectorGroup(appState.archive?.format === "ssf" ? "输入码" : "INPUT")
+    if (appState.selectedCandidate === "input") revealInspectorGroup(appState.archive?.format === "ssf" ? "输入码" : appState.archive?.format === "bda" ? "输入区" : "INPUT")
     updateSourceHighlight()
     scrollSelectedSource()
   }))
 }
 
-export function selectNativeToolbar(inputRegion = false): void {
-  const path = appState.archive?.format === "ssf" ? appState.layoutPath : toolbarStrip.dataset.path
+export function selectCandidateBar(inputRegion = false): void {
+  const path = ["bda", "ssf"].includes(appState.archive?.format ?? "") ? appState.layoutPath : toolbarStrip.dataset.path
   if (!path) return
-  if (appState.selectedPath !== path) selectFile(path, "overview", "document", true)
+  if (appState.selectedPath !== path) selectFile(path, appState.sidebarView, "document", true)
   appState.selectedCandidate = inputRegion ? "input" : true
   appState.selectedKeySections = []
   appState.selectedToolbarSections = []
@@ -275,17 +275,7 @@ export function selectNativeToolbar(inputRegion = false): void {
   if (mobilePortraitQuery.matches) setMobilePane("inspector")
 }
 
-export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections) => {
-  if (appState.archive?.format === "ssf" || appState.archive?.format === "sxi") return selectNativeToolbar()
-  const path = toolbarStrip.dataset.path
-  if (!path) return
-  if (appState.selectedPath !== path) selectFile(path, "overview", "document", true)
-  appState.selectedCandidate = false
-  appState.selectedToolbarSections = sections
-  toolbarPreview.setSelected(sections)
-  syncCandidateSelection()
-  scheduleSelectionInspectorSync(toolbarPreview)
-}, true)
+export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, () => selectCandidateBar(), true)
 
 export const candidateBackgroundPreview = new Preview(candidateBackgroundCanvas, () => {}, () => {})
 
@@ -659,8 +649,7 @@ function mobileShareLabel(): string {
 
 export function syncMobileShareLabel(): void {
   const label = mobileShareLabel()
-  mobileShareButton.querySelector("span:last-child")!.textContent = label
-  mobileShareButton.title = label
+  shareTargetLabel.textContent = label
   mobileShareButton.setAttribute("aria-label", label)
 }
 // 源文件树缩略图按 PNG 字节缓存：文件被改写时换成新的字节对象，旧缓存随之回收。

@@ -15,28 +15,35 @@ import { visualResolver } from "./bda-documents"
 import { orientation, theme } from "./dom"
 import { palmStyleImage } from "./sxi-styles"
 import { styleConfigPath } from "./config-context"
+import { openResources } from "./resource-navigation"
+import { selectGalleryItem } from "./resource-gallery"
 
 type InventoryItem = { id: string; title: string; detail: string; status: "used" | "unused" | "missing" | "file"; icon: string; open?(): void }
 
-function resourceInventoryItems(): InventoryItem[] {
+export function resourceInventoryItems(): InventoryItem[] {
   const archive = appState.archive
   if (!archive) return []
   const names = archive.names()
+  const isImage = (path: string) => /\.(?:png|webp|jpe?g)$/i.test(path)
   const ids = availableStyleIDs()
   const styles = styleConfigDocument()
-  const items: InventoryItem[] = names.filter(path => archive.isImage(path) || isSoundPath(path)).map(path => {
+  const items: InventoryItem[] = names.filter(path => isImage(path) || isSoundPath(path)).map(path => {
     const bytes = archive.getBytes(path)!
     const size = pngSize(bytes)
-    return { id: path, title: path, status: "file", icon: archive.isImage(path) ? "image" : "volume-2",
+    return { id: path, title: path, status: "file", icon: isImage(path) ? "image" : "volume-2",
       detail: `${size ? `${size[0]} × ${size[1]} · ` : ""}${(bytes.length / 1024).toFixed(1)} KB`,
-      open: () => selectFile(path, "overview", archive.isImage(path) ? "image" : "document"),
+      open: () => {
+        if (isImage(path)) selectFile(path, "overview", "image")
+        else { openResources("sound"); selectGalleryItem(`file:${path}`) }
+      },
     }
   })
   // BDA 的二进制样式引用不使用 legacy 索引，不把其样式误标为未使用。
-  if (["bdi", "bds", "sxi"].includes(archive.format)) for (const id of ids) {
-    const usages = styleUsages(id)
-    items.push({ id: `style:${id}`, title: `样式 ${id}`, detail: `${styleTypeOptions.find(([value]) => value === styleKind(id, styles))?.[1] ?? "样式"} · ${usages.length ? `${usages.length} 处引用` : "未使用"}`,
-      status: usages.length ? "used" : "unused", icon: "palette", open: () => openStyleReferenceEditor(id) })
+  if (["bdi", "bds", "sxi", "bda"].includes(archive.format)) for (const id of ids) {
+    const known = archive.format !== "bda"
+    const usages = known ? styleUsages(id) : []
+    items.push({ id: `style:${id}`, title: `样式 ${id}`, detail: `${styleTypeOptions.find(([value]) => value === styleKind(id, styles))?.[1] ?? "样式"}${known ? ` · ${usages.length ? `${usages.length} 处引用` : "未使用"}` : ""}`,
+      status: known ? usages.length ? "used" : "unused" : "file", icon: "palette", open: () => openStyleReferenceEditor(id) })
   }
   for (const { id, locations } of missingStyleReferences()) items.push({ id: `missing:${id}`, title: `缺失样式 ${id}`, detail: locations.join("；"), status: "missing", icon: "circle-alert" })
   const resolver = visualResolver()

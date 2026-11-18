@@ -63,7 +63,7 @@ try {
       const styles = await page.evaluate(async () => {
         window.allocations.clear()
         const start = performance.now()
-        document.querySelector('.sidebar-overview [data-nav-mode="style"]').click()
+        document.querySelector('[data-workspace-page="resources"]').click()
         const result = { open: performance.now() - start, reads: window.reads }
         await new Promise(requestAnimationFrame)
         await new Promise(requestAnimationFrame)
@@ -90,7 +90,9 @@ try {
         const unrelated = window.offsetReads
         card.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true }))
         card.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
-        const down = { reads: window.offsetReads, selected: document.querySelector('#resource-gallery [aria-selected="true"]').dataset.styleId }
+        const columns = getComputedStyle(document.querySelector('#resource-gallery')).gridTemplateColumns.split(' ').length
+        const down = { reads: window.offsetReads, selected: document.querySelector('#resource-gallery [aria-selected="true"]').dataset.styleId,
+          expected: document.querySelectorAll('#resource-gallery .ui-style-card')[columns].dataset.styleId }
         window.offsetReads = 0
         const start = performance.now()
         card.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }))
@@ -98,7 +100,7 @@ try {
       })
       assert.equal(keyboard.unrelated, 0, "unrelated keys must not measure thousands of cards")
       assert.ok(keyboard.reads < 20, "keyboard navigation measures only the first grid row")
-      assert.equal(keyboard.down.selected, "2", "ArrowDown selects the next row")
+      assert.equal(keyboard.down.selected, keyboard.down.expected, "ArrowDown selects the next row")
       assert.ok(keyboard.down.reads < 20, "ArrowDown must not measure offscreen rows")
       assert.equal(await cards.last().getAttribute("aria-selected"), "true", "End selects the last style")
       await page.screenshot({ path: `${output}/${engine.name()}-styles.png` })

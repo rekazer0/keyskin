@@ -1,4 +1,4 @@
-import { adbShareButton } from "./dom"
+import { adbShareButton, sharePage, shareOperation } from "./dom"
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
 import { newButton, openButton, saveButton, mobileShareButton, eventLog, fileOperationDialog, fileOperationProgress, fileOperationPercent, fileOperationDetail, fileOperationTitle, fileOperationIcon, fileOperationResult, fileOperationClose, fileOperationCancel, workspaceImage, assetImage, deviceShell, workspaceImageFigure, sourceEditor, asset, sourceName, assetBackButton } from "./dom"
@@ -103,11 +103,8 @@ export async function decodePngMask(bytes: Uint8Array): Promise<{ width: number;
   return { width: canvas.width, height: canvas.height, mask: alphaMask(pixels, canvas.width, canvas.height), pixels }
 }
 
-/**
- * Export targets the open skin can reach. BDI/BDS cannot become BDA and a Sogou skin has no Palm
- * (.sxi) path; unreachable items are hidden rather than left as unexplained greyed-out rows.
- */
-export function exportTargetHidden(format: ExportFormat): boolean {
+/** 不支持的格式保留可见，由分享页说明原因。 */
+export function exportTargetUnavailable(format: ExportFormat): boolean {
   const source = appState.archive?.format
   if (!source) return false
   return !canExport(source, format)
@@ -123,8 +120,7 @@ function setFileOperationBusy(busy: boolean): void {
   updatePanelToolButtons()
   updateSourceFileActions()
   for (const button of exportTargets) {
-    button.hidden = exportTargetHidden(button.dataset.exportFormat as ExportFormat)
-    button.disabled = busy || !appState.archive || button.hidden
+    button.disabled = busy || !appState.archive || exportTargetUnavailable(button.dataset.exportFormat as ExportFormat)
   }
 }
 
@@ -160,7 +156,12 @@ export function showSkinLoadProgress(size: number): boolean {
 
 export function showFileOperationProgress(): void {
   appState.fileOperationProgressVisible = true
-  if (!fileOperationDialog.open) fileOperationDialog.showModal()
+  if (!fileOperationDialog.open) {
+    if (fileOperationDialog.dataset.inline === "true") {
+      fileOperationDialog.show()
+      fileOperationDialog.scrollIntoView({ block: "nearest" })
+    } else fileOperationDialog.showModal()
+  }
 }
 
 export function showFileOperationCompatibility(title: string, warnings: string[]): void {
@@ -302,6 +303,9 @@ export async function runFileOperation(
     showStatus(`正在${appState.currentFileOperation}，请稍后再${action}`, "progress")
     return
   }
+  const inline = !sharePage.hidden && ["保存", "导出", "另存为", "分享皮肤", "分享到 ADB"].includes(action)
+  fileOperationDialog.dataset.inline = String(inline)
+  ;(inline ? shareOperation : document.body).append(fileOperationDialog)
   appState.currentFileOperation = action
   setFileOperationBusy(true)
   appState.fileOperationProgressVisible = false
@@ -351,11 +355,11 @@ export async function runFileOperation(
       durationMs: Math.round(performance.now() - started),
     })
     showStatus(completed ? `${action}完成` : `${action}已取消`)
-    if (completed && (action === "保存" || action === "导出")) {
+    if (completed && ["保存", "导出", "另存为"].includes(action)) {
       showFileOperationProgress()
       fileOperationDialog.dataset.outcome = "success"
-      fileOperationClose.textContent = "继续编辑"
-      fileOperationTitle.textContent = action === "保存" ? "皮肤已保存" : "皮肤已导出"
+      fileOperationClose.textContent = inline ? "完成" : "继续编辑"
+      fileOperationTitle.textContent = action === "保存" ? "皮肤已保存" : action === "另存为" ? "另存为完成" : "皮肤已导出"
       fileOperationIcon.replaceChildren(createIcon("check", 20))
       updateFileOperationProgress(100, fileOperationDialog.dataset.resultFile ?? `${action}完成`)
     } else if (appState.fileOperationProgressVisible) {

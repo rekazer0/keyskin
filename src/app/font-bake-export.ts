@@ -81,15 +81,22 @@ async function bakeStyle(archive: SkinArchive, path: string): Promise<void> {
   await Promise.all(styles.map(({ font }) => font?.ready))
   const fallbackColor = themeOfPath(path) === "dark" ? "#f5f5f7" : "#17191c"
   const labels: HTMLCanvasElement[] = []
+  const labelTiles = new Map<string, number>()
   const tiles = styles.map(({ id, fields, font, weight, shadow }) => {
+    const text = fields.SHOW.trim()
     const fontSize = Number(fields.FONT_SIZE) > 0 ? Number(fields.FONT_SIZE) : 24
     const canvasFont = `${weight ?? ""} ${fontSize}px ${canvasFontFamily(font?.family)}`.trim()
     const normalColor = parseColor(fields.NM_COLOR) ?? fallbackColor
     const highlightColor = parseColor(fields.HL_COLOR) ?? normalColor
-    labels.push(renderLabel(fields.SHOW.trim(), canvasFont, fontSize, normalColor, shadow))
-    const normal = labels.length
-    if (highlightColor !== normalColor) labels.push(renderLabel(fields.SHOW.trim(), canvasFont, fontSize, highlightColor, shadow))
-    return { id, normal, highlight: labels.length }
+    const tileFor = (color: string) => {
+      const key = JSON.stringify([text, canvasFont, color, shadow])
+      const existing = labelTiles.get(key)
+      if (existing !== undefined) return existing
+      const index = labels.push(renderLabel(text, canvasFont, fontSize, color, shadow))
+      labelTiles.set(key, index)
+      return index
+    }
+    return { id, normal: tileFor(normalColor), highlight: tileFor(highlightColor) }
   })
   const atlas = packTiles(labels)
   const base = bakedImageBase(path)

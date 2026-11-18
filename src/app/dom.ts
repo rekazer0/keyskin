@@ -57,7 +57,6 @@ export const redoButton = $("#desktop-redo") as HTMLButtonElement
 
 export const toolbarMenus = Array.from(document.querySelectorAll<HTMLDetailsElement>(".toolbar-more"))
 
-export const fileMenu = $<HTMLDetailsElement>(".pen-file-menu")
 export const pinnedToolbar = $("#pinned-toolbar")
 
 
@@ -94,6 +93,7 @@ export const defaultDevice = $("#default-device") as HTMLSelectElement
 export const canvasBackground = $("#canvas-background") as HTMLSelectElement
 
 export const appTheme = $("#app-theme") as HTMLSelectElement
+export const interfaceTheme = $("#interface-theme") as HTMLSelectElement
 
 export const sourceFontSize = $("#source-font-size") as HTMLInputElement
 
@@ -139,19 +139,29 @@ export const sourceDirectoryStatus = $("#source-directory-status")
 
 export const mobileSaveButton = $("#mobile-save") as HTMLButtonElement
 export const mobileDocumentStatus = $("#mobile-document-status")
-export const mobileProjectFiles = $("#mobile-project-files") as HTMLButtonElement
 export const mobileProjectToggle = $("#mobile-project-toggle") as HTMLButtonElement
 export const mobileProjectDialog = $("#mobile-project-dialog") as HTMLDialogElement
 export const mobileFilesClose = $("#mobile-files-close") as HTMLButtonElement
 export const mobileInspectorHistory = $("#mobile-inspector-history")
-export const mobileQuickActions = $(".mobile-quick-actions")
 export const workspacePane = $("main > .workspace")
 export const mobileAppMore = $("#mobile-app-more") as HTMLDetailsElement
 export const mobileMoreActions = Array.from(mobileAppMore.querySelectorAll<HTMLButtonElement>("[data-mobile-action]"))
 export const mobileModeLabel = $("#mobile-mode-label")
 export const mobileExportOpen = $("#mobile-export-open") as HTMLButtonElement
-export const mobileExportDialog = $("#mobile-export-dialog") as HTMLDialogElement
-export const mobileExportFormats = Array.from(mobileExportDialog.querySelectorAll<HTMLInputElement>('input[name="mobile-export-format"]'))
+export const sharePage = $("#share-page")
+export const shareContent = $(".ui-share-content")
+export const shareTitle = $("#share-title")
+export const shareBack = $("#share-back") as HTMLButtonElement
+export const shareDocumentName = $("#share-document-name")
+export const shareDocumentStatus = $("#share-document-status")
+export const shareDocumentFormat = $("#share-document-format")
+export const shareAdbAction = $("#share-adb-action")
+export const shareTargetLabel = $("#share-target-label")
+export const shareExport = $("#share-export") as HTMLButtonElement
+export const shareExportName = $("#share-export-name")
+export const shareResourceCheck = $("#share-resource-check")
+export const shareOperation = $("#share-operation")
+export const mobileExportFormats = Array.from(sharePage.querySelectorAll<HTMLInputElement>('input[name="mobile-export-format"]'))
 
 
 export const sourceColorPicker = $("#source-color-picker") as HTMLInputElement
@@ -198,7 +208,6 @@ export const mobileInspectorSelection = $("#mobile-inspector-selection")
 export const mobileKeyPreview = $("#mobile-key-preview") as HTMLButtonElement
 export const mobileKeyCanvas = $("#mobile-key-canvas") as HTMLCanvasElement
 export const mobileKeySize = $("#mobile-key-size")
-export const mobilePreviewSummary = $("#mobile-preview-summary")
 
 export const asset = $("#asset")
 
@@ -209,6 +218,10 @@ export const replaceAssetButton = $("#replace-asset") as HTMLButtonElement
 export const assetBackButton = $("#asset-back") as HTMLButtonElement
 
 export const files = $("#files")
+
+export const sidebarLayoutCount = $("#sidebar-layout-count")
+
+export const sidebarLayoutSize = $("#sidebar-layout-size")
 
 export const sourceFileToolbar = $("#source-file-toolbar")
 
@@ -237,6 +250,7 @@ export const sidebarViewButtons = Array.from(document.querySelectorAll<HTMLButto
 export const workspaceNavigation = $("#workspace-navigation")
 export const workspaceExport = $("#workspace-export") as HTMLButtonElement
 export const workspaceToolsDialog = $("#workspace-tools-dialog") as HTMLDialogElement
+export const workspaceToolsContext = $("#workspace-tools-context")
 
 export const documentName = $("#document-name")
 
@@ -495,15 +509,23 @@ export const resourceName = $("#resource-name")
 
 export const resourceMeta = $("#resource-meta")
 
+export const resourceSourceToggle = $("#resource-source-toggle") as HTMLButtonElement
+
 export const resourceCount = $("#resource-count")
 
 export const resourceSearch = $("#resource-search") as HTMLInputElement
 
 export const resourceCategory = $("#resource-category") as HTMLSelectElement
 
+export const resourcePageTabs = $("#resource-page-tabs")
 export const resourceGallery = $("#resource-gallery")
 
 export const resourceUploadButton = $("#resource-upload") as HTMLButtonElement
+export const resourceSelectionActions = $("#resource-selection-actions")
+export const imageResourcePreview = $("#image-resource-preview")
+export const imageResourcePreviewFrame = $("#image-resource-preview-frame")
+export const imageResourcePreviewNote = $("#image-resource-preview-note")
+export const soundResourceDetail = $("#sound-resource-detail")
 
 export const resourceDownloadButton = $("#resource-download") as HTMLButtonElement
 

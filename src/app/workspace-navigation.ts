@@ -1,13 +1,16 @@
+import { wireResourcePage } from "./resource-page"
 import { applyWindowMaterialOpacity } from "./preferences"
 import { bindDialog } from "./ask"
 import { closeDialog } from "../motion"
 import { appState } from "./state"
 import { selectFile } from "./navigation"
 import { setSidebarView } from "./source-files"
-import { $, canvasWrap, files, inspectorTabs, mobileExportOpen, workspaceExport, workspaceNavigation, workspaceToolsDialog, workspaceNavigationOpacity } from "./dom"
+import { openResources, resourceNavigationPath } from "./resource-navigation"
+import { $, canvasWrap, files, inspectorTabs, mobileExportOpen, workspaceExport, workspaceNavigation, workspaceToolsDialog, workspaceToolsContext, workspaceNavigationOpacity, sharePage, resourcePageTabs, mode, layout } from "./dom"
 
 /** 桌面导航复用原视图和操作，禁用状态随原入口同步。 */
 export function wireWorkspaceNavigation(): void {
+  wireResourcePage()
   const saveOpacity = () => {
     applyWindowMaterialOpacity()
     localStorage.setItem(workspaceNavigationOpacity.id, workspaceNavigationOpacity.value)
@@ -15,9 +18,10 @@ export function wireWorkspaceNavigation(): void {
   workspaceNavigationOpacity.addEventListener("input", saveOpacity)
   workspaceNavigationOpacity.addEventListener("change", saveOpacity)
   const pages = [...workspaceNavigation.querySelectorAll<HTMLButtonElement>("[data-workspace-page]")]
+  const resourcePages = [...resourcePageTabs.querySelectorAll<HTMLButtonElement>("[data-resource-page]")]
   const tools = [...workspaceToolsDialog.querySelectorAll<HTMLButtonElement>("[data-workspace-tool]")]
-  const originalAction = (button: HTMLButtonElement) => $<HTMLButtonElement>(`#${button.dataset.workspaceTool}`)
-  const resourceEntry = () => files.querySelector<HTMLButtonElement>('.sidebar-overview [data-nav-mode="style"], .sidebar-overview [data-nav-mode="resource"], .sidebar-overview [data-nav-mode="sound"]')
+  const originals = new Map(tools.map(button => [button, $<HTMLButtonElement>(`#${button.dataset.workspaceTool}`)]))
+  const originalAction = (button: HTMLButtonElement) => originals.get(button)!
   const animationEntry = () => {
     const entries = [...files.querySelectorAll<HTMLButtonElement>(`.sidebar-overview [data-nav-mode="${appState.animationWorkspaceMode}"]`)]
     return entries.find(entry => entry.dataset.path === appState.selectedPath) ?? entries[0]
@@ -26,24 +30,39 @@ export function wireWorkspaceNavigation(): void {
   bindDialog(workspaceToolsDialog)
   const sync = () => {
     const loaded = Boolean(appState.archive) && !canvasWrap.classList.contains("empty")
-    const current = workspaceToolsDialog.open ? "tools"
+    const current = !sharePage.hidden ? "share" : workspaceToolsDialog.open ? "tools"
       : !loaded ? "files"
-      : loaded && (appState.sidebarView === "source" || appState.inspectorTab === "source") ? "source"
+      : appState.inspectorTab === "ai" ? "ai"
       : loaded && appState.resourceConfigActive ? "resources"
+      : loaded && (appState.sidebarView === "source" || appState.inspectorTab === "source") ? "source"
       : loaded && appState.animationDesignMode !== "all" ? "animation" : "overview"
     for (const button of pages) {
       const page = button.dataset.workspacePage
-      button.disabled = page === "overview" ? !appState.archive
-        : page !== "files" && (!loaded || page === "resources" && !resourceEntry() || page === "animation" && !animationEntry())
+      button.disabled = appState.fileOperationRunning || (page === "overview" ? !appState.archive
+        : page !== "files" && (!loaded || page === "resources" && !resourceNavigationPath("image") || page === "animation" && !animationEntry()))
       if (page === current) button.setAttribute("aria-current", "page")
       else button.removeAttribute("aria-current")
       if (page === "tools") button.setAttribute("aria-expanded", String(workspaceToolsDialog.open))
     }
+    for (const button of resourcePages) {
+      const kind = button.dataset.resourcePage as "style" | "image" | "sound"
+      button.disabled = !resourceNavigationPath(kind)
+    }
     workspaceExport.disabled = !loaded || mobileExportOpen.disabled
+    if (current === "share") workspaceExport.setAttribute("aria-current", "page")
+    else workspaceExport.removeAttribute("aria-current")
     for (const button of tools) {
       const original = originalAction(button)
       button.disabled = original.disabled
       button.hidden = original.hidden
+    }
+    if (workspaceToolsDialog.open) {
+      const context = [appState.archive?.format.toUpperCase(), layout.selectedOptions[0]?.textContent,
+        mode.value === "edit" ? "编辑模式" : "切换至编辑模式后使用工具"].filter(Boolean).join(" · ")
+      if (workspaceToolsContext.textContent !== context) workspaceToolsContext.textContent = context
+      for (const section of workspaceToolsDialog.querySelectorAll<HTMLElement>(".ui-section")) {
+        section.hidden = !section.querySelector("[data-workspace-tool]:not([hidden])")
+      }
     }
   }
   for (const button of pages) button.addEventListener("click", () => {
@@ -52,9 +71,11 @@ export function wireWorkspaceNavigation(): void {
     else if (page === "tools") workspaceToolsDialog.showModal()
     else if (page === "resources" || page === "animation") {
       setSidebarView("overview")
-      const entry = page === "resources" ? resourceEntry() : animationEntry()
-      entry?.click()
-      if (page === "animation") appState.animationWorkspace?.showAll()
+      if (page === "resources") openResources()
+      else {
+        animationEntry()?.click()
+        appState.animationWorkspace?.showAll()
+      }
       inspectorTab("properties")
     } else if (appState.archive) {
       canvasWrap.classList.remove("empty")
@@ -64,13 +85,41 @@ export function wireWorkspaceNavigation(): void {
       appState.animationDesignMode = "all"
       if (path) selectFile(path, source ? "source" : "overview")
       setSidebarView(source ? "source" : "overview")
-      inspectorTab(source ? "source" : "properties")
+      inspectorTab(source ? "source" : page === "ai" ? "ai" : "properties")
     }
     sync()
+  })
+  for (const button of resourcePages) {
+    button.addEventListener("click", () => {
+      if (button.dataset.resourcePage === "style") appState.resourceStyleType = "all"
+      openResources(button.dataset.resourcePage as "style" | "image" | "sound")
+      sync()
+    })
+  }
+  resourcePageTabs.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
+    const buttons = [...resourcePageTabs.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")]
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    if (index < 0) return
+    event.preventDefault()
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + buttons.length) % buttons.length
+    buttons[next]?.click()
+    buttons[next]?.focus()
   })
   for (const button of tools) button.addEventListener("click", async () => {
     await closeDialog(workspaceToolsDialog)
     originalAction(button).click()
+  })
+  workspaceToolsDialog.addEventListener("keydown", event => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return
+    const buttons = tools.filter(button => !button.disabled && !button.hidden)
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    if (index < 0) return
+    event.preventDefault()
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length
+    buttons[next]?.focus()
   })
   workspaceExport.addEventListener("click", () => mobileExportOpen.click())
   workspaceToolsDialog.addEventListener("close", sync)
@@ -88,6 +137,7 @@ export function wireWorkspaceNavigation(): void {
   observer.observe(files, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-current", "aria-selected", "hidden"] })
   observer.observe(inspectorTabs, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] })
   observer.observe(canvasWrap, { attributes: true, attributeFilter: ["class"] })
+  observer.observe(sharePage, { attributes: true, attributeFilter: ["hidden"] })
   observer.observe(mobileExportOpen, { attributes: true, attributeFilter: ["disabled"] })
   for (const button of tools) observer.observe(originalAction(button), { attributes: true, attributeFilter: ["disabled", "hidden"] })
   sync()

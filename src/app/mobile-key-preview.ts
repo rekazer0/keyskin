@@ -1,4 +1,4 @@
-import { mobileKeyPreview, mobileKeyCanvas, mobileKeySize, mobilePreviewSummary, layout, selectedKeyName, selectedKeyContext, selectedKeyPreview } from "./dom"
+import { mobileKeyPreview, mobileKeyCanvas, mobileKeySize, layout, selectedKeyName, selectedKeyContext, selectedKeyPreview } from "./dom"
 import { mobilePortraitQuery, preview } from "./canvas-interaction"
 import { appState } from "./state"
 import { layoutLabel } from "./file-tree"
@@ -6,9 +6,8 @@ import { layoutLabel } from "./file-tree"
 /** 复用画布的真实渲染，保持原生格式、文字、图片和按下态一致。 */
 export function syncMobileKeyPreview(pressed = false): void {
   const size = preview.logicalSize()
-  mobilePreviewSummary.textContent = appState.layoutPath && /\.ini$/i.test(appState.layoutPath)
+  const layoutName = appState.layoutPath && /\.ini$/i.test(appState.layoutPath)
     ? layoutLabel(appState.layoutPath.split("/").pop()!) : layout.selectedOptions[0]?.textContent ?? "画布"
-  mobilePreviewSummary.title = `${size.width} × ${size.height}`
   if (!appState.selectedKeySections.length && appState.selectedPath === appState.layoutPath && /\.ini$/i.test(appState.layoutPath)) {
     selectedKeyName.textContent = layoutLabel(appState.layoutPath.split("/").pop()!)
     selectedKeyContext.textContent = "轻点上方按键，开始编辑"
@@ -22,7 +21,7 @@ export function syncMobileKeyPreview(pressed = false): void {
   mobileKeyPreview.hidden = !mobilePortraitQuery.matches || document.documentElement.dataset.mobilePane !== "inspector"
     || !key || appState.selectedPath !== appState.layoutPath
   if (mobileKeyPreview.hidden || !key) return
-  selectedKeyContext.textContent = `${mobilePreviewSummary.textContent} · ${section}`
+  selectedKeyContext.textContent = `${layoutName} · ${section}`
   const label = key.show || key.center
   if (/^[\p{L}\p{N}]$/u.test(label)) selectedKeyName.textContent = `按键 ${label}`
   if (pressed) preview.flashPress(key)

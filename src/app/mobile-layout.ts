@@ -1,4 +1,4 @@
-import { mobilePropertyTabs, modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, bdaConfigFields, documentFieldsGroup, documentFields, textStyleGroup, bdaSelectedStyleHeading, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, toolbarFields, skinFields, gapFields } from "./dom"
+import { canvasWrap, mobilePropertyTabs, modeChoiceButtons, mode, theme, orientation, mobileChoiceButtons, mobileInspectorSelection, selectedKeyName, sourceHeading, quickInspector, resourceInspector, mobileInspectorGroups, keyTypographyFieldsGroup, bdaConfigFieldsGroup, bdaConfigFields, documentFieldsGroup, documentFields, textStyleGroup, bdaSelectedStyleHeading, sidebarPane, inspectorPane, panelScaleButton, replaceLayoutImageButton, adaptIos26Button, editorCrosshair, previewCoordinates, deviceShell, replaceAssetButton, keyFields, toolbarFields, skinFields, gapFields } from "./dom"
 import { ask } from "./ask.ts"
 import { element } from "../dom-element.ts"
 import { appState } from "./state"
@@ -303,7 +303,7 @@ export function setMobilePane(pane: "canvas" | "layout" | "inspector"): void {
     return
   }
   if (mobileProjectDialog.open) void closeDialog(mobileProjectDialog)
-  if (mobilePortraitQuery.matches && appState.archive && pane === "canvas" && !appState.layoutOverview) pane = "inspector"
+  if (mobilePortraitQuery.matches && appState.archive && !canvasWrap.classList.contains("empty") && pane === "canvas" && !appState.layoutOverview) pane = "inspector"
   document.documentElement.dataset.mobilePane = pane
   sidebarPane.inert = mobile && pane !== "layout"
   inspectorPane.inert = mobile && pane !== "inspector"

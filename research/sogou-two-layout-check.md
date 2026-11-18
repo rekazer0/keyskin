@@ -1,10 +1,10 @@
-# 好柿花生：大九键与双拼大回车核对
+# SSF 样本：大九键与双拼大回车核对
 
 2026-10-19。只检查截图对应的布局、样式与拉伸；未修改应用代码。检查基于当前工作区（已有未提交修改），没有重新打包桌面程序或在 Android 真机运行。
 
 ## 输入与证据
 
-- `/Users/kaze/Downloads/好柿花生.ssf`，SHA-256：`61faa44356bc06f009e94959e673d58d3edba6fa650b184887e3087791e5d14a`。
+- 本地 SSF 样本，SHA-256：`61faa44356bc06f009e94959e673d58d3edba6fa650b184887e3087791e5d14a`。
 - `/Users/kaze/Downloads/SogouInput_20.17.0_android_sweb.apk`，SHA-256：`3eb2612040fd7daefb7e92b9de5c1a715b03f272b644e0664948742df1c7a416`。
 - 读取已有 JADX 反编译源码：`/Users/kaze/.codex/worktrees/preview-input-apk/bdi/artifacts/sogou-apk-research/decompiled/sources/`。反编译不是无损源码；以下同时与 APK 内 INI、真实 SSF 交叉核对。
 - 原始布局摘取、配置断言结果与浏览器截图：`artifacts/two-layout-check-2026-10-19/`。
@@ -81,6 +81,6 @@ PRESSED=9enter_press.png,1,182,1,145
 ## 本次验证
 
 - Node 断言通过：官方首行键集合、符号列起点、骨架大回车动作、真实皮肤两外观背景引用、原图尺寸、拉伸坐标、专用背景缺失。
-- `SSF_SKIN_PATH=/Users/kaze/Downloads/好柿花生.ssf node scripts/test-ssf-preview.mjs` 通过：118 次概览布局检查，横竖屏、明暗、工具栏、几何、选择及源文件未修改。
+- `SSF_SKIN_PATH=/path/to/sample.ssf node scripts/test-ssf-preview.mjs` 通过：118 次概览布局检查，横竖屏、明暗、工具栏、几何、选择及源文件未修改。
 - 浏览器截图复现用户两处外观；不是与官方 Android 运行结果做像素对比。
 - 没改 TS/CSS，未执行完整单元、全套 E2E、UI 快照或桌面构建。既有未提交修改和 `sites/` 保留。

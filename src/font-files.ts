@@ -149,7 +149,7 @@ export function withFontReferencesCleared(
   const directories = fontSearchDirectories(stylePath)
   const matches = (reference: string): boolean => {
     const path = resolveFontReference(names, reference, directories, { extensions: true })
-    if (path && removed.has(path)) return true
+    if (path) return removed.has(path)
     // 文件已经不在了：按文件名（不含扩展名）继续清引用，否则设备会一直指向缺失字体。
     const base = reference.trim().split("/").pop()?.replace(/\.(?:ttf|otf|ttc)$/i, "").toLowerCase()
     return Boolean(base) && base === stem

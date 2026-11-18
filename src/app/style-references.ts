@@ -1,5 +1,5 @@
 import { appState } from "./state"
-import { styleConfigPath } from "./config-context"
+import { legacyAnimationConfigPath, styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { soundPathForFilename } from "../sounds.ts"
 import { theme, orientation, keyFields, toolbarFields, quickInspector } from "./dom"
@@ -184,7 +184,8 @@ function styleUsageIndex(): Map<string, string[]> {
     if (!path.startsWith(`${theme.value}/`) || !/\.(ini|cnd|pop)$/i.test(path) || !archive.isText(path)) continue
     const local = /^(.*\/skin\/(?:port|land))\//.exec(path)?.[1]
     const effectiveStyles = local && archive.isText(`${local}/res/default.css`) ? `${local}/res/default.css` : `${theme.value}/skin/res/default.css`
-    if (styleConfigPath() !== effectiveStyles) continue
+    // 公共 anim.ini 也会由方向样式表解析粒子图片，不能按动画文件所在目录排除引用。
+    if (styleConfigPath() !== effectiveStyles && path !== legacyAnimationConfigPath()) continue
     const document = path === appState.layoutPath && appState.layoutDocument ? appState.layoutDocument : IniDocument.parse(archive.getText(path))
     for (const { section, key, value } of document.entries()) {
       if (isStyleReferenceKey(key)) for (const id of new Set(value.split(",").map((part) => part.trim()).filter(Boolean))) add(id, `${path} · [${section}] ${key}`)

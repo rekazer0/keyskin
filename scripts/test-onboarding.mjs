@@ -91,8 +91,7 @@ async function walkTour(page, compact) {
   // The page outside the highlighted card is blocked.
   await page.mouse.click(5, 300)
   assert.equal(await stepTitle(page), "从模板新建皮肤")
-  if (compact) await openEditorTemplate(page, 'default-android')
-  else await page.locator('#new-project-form button[value="create"]').click()
+  await openEditorTemplate(page, 'default-android')
   await expectStep(page, "画布：实时预览")
   assert.equal(await page.locator(".canvas-wrap.empty").count(), 0, "template opened")
   await next(page)

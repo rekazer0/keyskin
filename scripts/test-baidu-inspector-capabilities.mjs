@@ -21,7 +21,7 @@ const select = (path) => page.evaluate(async (path) => { await (await import("/s
 const source = (path) => page.evaluate(async (path) => (await import("/src/app/state.ts")).appState.archive.getText(path), path)
 const history = () => page.evaluate(async () => (await import("/src/app/state.ts")).appState.undoStack.length)
 const value = (section, key) => page.evaluate(async ({ section, key }) => (await import("/src/app/state.ts")).appState.selectedDocument.get(section, key), { section, key })
-const group = (code) => page.locator("#document-fields > section").filter({ has: page.locator(`.document-section-code:text-is("${code}")`) })
+const group = (code) => page.locator(`#document-fields :is(section, .ui-subsection):has(> :is(h3, h4) > .document-section-code:text-is("${code}"))`)
 const sectionCodes = () => page.locator("#document-fields > section .document-section-code").evaluateAll((nodes) => [...new Set(nodes.map((node) => node.textContent.trim()))])
 const railTitles = () => page.locator("#mobile-inspector-groups button").evaluateAll((nodes) => nodes.map((node) => node.title))
 const row = (code, key) => group(code).locator(`[data-document-key="${key}"]`)
@@ -85,10 +85,10 @@ try {
   assert.equal(await row("CAND", "MORE_W").getByRole("spinbutton").count(), 1)
   assert.equal(await row("SWITCH", "NML_FONT_STYLE").locator(".ui-style-ref-append").count(), 1)
   assert.equal(await row("SWITCH", "PADDING").getByRole("spinbutton").count(), 1)
-  // 候选栏整体属性只列候选栏、输入区、工具栏，不展开各工具按钮及其动画分组。
+  // 整条选中时，按钮数量不会增加分类栏的入口，原字段仍按所属对象显示。
   assert.equal(await row("INPUT", "FORE_STYLE").locator(".ui-style-ref-append").count(), 1)
-  assert.deepEqual(await sectionCodes(), ["CAND", "INPUT", "SWITCH"])
-  assert.equal((await railTitles()).some((title) => title.includes("工具按钮")), false)
+  assert.deepEqual(await sectionCodes(), ["CAND", "INPUT", "SWITCH", "ICON1", "ICON2", "ICON3", "ICON4", "ICON5"])
+  assert.deepEqual((await railTitles()).filter(title => title.startsWith("工具按钮") || title.includes("动画")), ["工具按钮", "动画"])
   // 点画布上的输入码区域时，分类栏停在它的「输入区」分组。
   await page.locator("#candidate-input-box").dispatchEvent("click")
   await page.waitForFunction(() => (document.querySelector('#mobile-inspector-groups button[aria-pressed="true"]')?.textContent ?? "").includes("输入区"))

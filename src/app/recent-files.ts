@@ -4,14 +4,32 @@ import { runFileOperation } from "./file-operations"
 import { prepareDocumentReplacement } from "./edit-history"
 import { loadNativePath, loadSourceWorkspace } from "./archive-io"
 import { symbolSpan, createIcon } from "../icons"
-import { isTauri, sourceDirectoryEnabledBySettings } from "./canvas-interaction"
+import { isTauri, sourceDirectoryEnabledBySettings, preview } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { canvasWrap, welcomeScroller, $ } from "./dom"
+import { setMobilePane } from "./mobile-layout"
+import { bindListboxKeys } from "../dom-element"
+import { playPageSlide } from "../motion"
 import { renderBlobPreview, archiveDemoImage, MissingPreviewImageError, releaseArchivePreview, showMissingPreview } from "../template-preview"
 
 export const recentFilesKey = "recent-files"
 
-export const recentFilesLimit = 9
+const recentPageSize = 9
+const recentHistoryLimitKey = "recent-history-limit"
+
+function recentHistoryLimit(): number {
+  const value = Number(localStorage.getItem(recentHistoryLimitKey))
+  return Number.isInteger(value) && value > 0 ? value : 0
+}
+
+export function saveRecentHistoryLimit(limit: number): void {
+  if (limit === recentHistoryLimit()) return
+  localStorage.setItem(recentHistoryLimitKey, String(limit))
+  const items = readRecentFiles()
+  if (!limit || items.length <= limit) return
+  localStorage.setItem(recentFilesKey, JSON.stringify(items.slice(0, limit)))
+  renderRecentFiles()
+}
 
 function readRecentFiles(): RecentFile[] {
   try {
@@ -24,7 +42,7 @@ function readRecentFiles(): RecentFile[] {
         && typeof item.name === "string"
         && typeof item.at === "number"
         && (item.source === undefined || typeof item.source === "string"),
-    ).slice(0, recentFilesLimit)
+    )
   } catch {
     return []
   }
@@ -33,8 +51,9 @@ function readRecentFiles(): RecentFile[] {
 export function recordRecentFile(path: string, name: string, source = ""): void {
   if (!path || path.startsWith("content://")) return
   const next = [{ path, name, at: Date.now(), source: source || undefined }, ...readRecentFiles().filter((item) => item.path !== path)]
-    .slice(0, recentFilesLimit)
-  localStorage.setItem(recentFilesKey, JSON.stringify(next))
+  const limit = recentHistoryLimit()
+  localStorage.setItem(recentFilesKey, JSON.stringify(limit ? next.slice(0, limit) : next))
+  appState.recentPage = 0
   renderRecentFiles()
 }
 
@@ -59,7 +78,7 @@ function openRecentFile(item: RecentFile): void {
     return
   }
   void runFileOperation("打开", async () => {
-    if (!(await prepareDocumentReplacement())) return false
+    if (!(await prepareDocumentReplacement("open"))) return false
     if (!item.source || !sourceDirectoryEnabledBySettings()) return loadNativePath(item.path)
     try {
       return await loadSourceWorkspace(item.source, item.path)
@@ -84,7 +103,7 @@ function recentFormatLabel(path: string): string {
 function recentCard(item: RecentFile, resume = false): HTMLButtonElement {
   const card = document.createElement("button")
   card.type = "button"
-  card.className = "template-card recent-card ui-skin-entry"
+  card.className = "ui-project-card template-card recent-card ui-skin-entry"
   card.dataset.variant = resume ? "resume" : "recent"
   card.dataset.recent = item.path
   card.title = `打开 ${item.name}\n${item.path}`
@@ -107,7 +126,7 @@ function recentCard(item: RecentFile, resume = false): HTMLButtonElement {
   format.textContent = recentFormatLabel(item.path)
   const time = document.createElement("span")
   time.textContent = formatRecentTime(item.at)
-  meta.append(format, time)
+  meta.append(time)
   const folder = recentFolderLabel(item.path)
   if (folder) {
     const place = document.createElement("span")
@@ -115,6 +134,7 @@ function recentCard(item: RecentFile, resume = false): HTMLButtonElement {
     place.textContent = `· ${folder}`
     meta.append(place)
   }
+  meta.append(format)
   foot.append(nameRow, meta)
   const mobileMeta = document.createElement("span")
   mobileMeta.className = "ui-skin-entry-meta"
@@ -126,8 +146,13 @@ function recentCard(item: RecentFile, resume = false): HTMLButtonElement {
   if (resume) {
     const label = document.createElement("span")
     label.className = "ui-skin-entry-label"
-    label.textContent = "继续上次的灵感"
-    foot.prepend(label)
+    label.textContent = "继续创作"
+    card.append(label)
+    const action = document.createElement("span")
+    action.className = "ui-button ui-skin-entry-action"
+    action.dataset.variant = "primary"
+    action.append(createIcon("pen-line"), "继续编辑", createIcon("chevron-right"))
+    card.append(action)
   }
   card.append(preview, foot)
   const chevron = createIcon("chevron-right", 20)
@@ -291,19 +316,71 @@ function observeRecentPreviews(): void {
   }
 }
 
-export function renderRecentFiles(): void {
-  const clear = $("#recent-clear")
+function renderRecentPage(items: RecentFile[]): void {
   recentPreviewObserver?.disconnect()
   recentPreviewQueue.length = 0
   recentPreviewQueued.clear()
-  const items = readRecentFiles()
-  clear?.toggleAttribute("hidden", items.length === 0)
+  const pageCount = Math.ceil(items.length / recentPageSize)
+  appState.recentPage = Math.min(appState.recentPage, Math.max(0, pageCount - 1))
+  const index = appState.recentPage
+  const start = index * recentPageSize
+  const cards = items.slice(start, start + recentPageSize).map((item, position) => {
+    const card = recentCard(item)
+    card.role = "option"
+    card.ariaSelected = "false"
+    card.tabIndex = position === 0 ? 0 : -1
+    return card
+  })
+  $("#welcome-recent-grid").replaceChildren(...cards)
+  $("#recent-viewport").hidden = !items.length
+  $("#welcome-recent-empty").hidden = Boolean(items.length)
+  $("#recent-clear").hidden = !items.length
+  $("#welcome-recent-hint").textContent = items.length ? `${items.length} 条` : ""
+  $("#recent-pagination").hidden = pageCount <= 1
+  $("#recent-page-number").textContent = pageCount > 1 ? `${index + 1} / ${pageCount}` : ""
+  $("#recent-prev").toggleAttribute("disabled", index === 0)
+  $("#recent-next").toggleAttribute("disabled", index + 1 >= pageCount)
+}
+
+export function wireRecentPage(): void {
+  $<HTMLInputElement>("#recent-history-limit").value = String(recentHistoryLimit())
   const grid = $("#welcome-recent-grid")
-  const gridEmpty = $("#welcome-recent-empty")
-  const hint = $("#welcome-recent-hint")
-  grid?.replaceChildren(...items.map((item) => recentCard(item)))
+  bindListboxKeys(grid, (option) => {
+    for (const card of grid.querySelectorAll<HTMLElement>('[role="option"]')) {
+      card.ariaSelected = String(card === option)
+      card.tabIndex = card === option ? 0 : -1
+    }
+    option.focus()
+  })
+  const previous = $<HTMLButtonElement>("#recent-prev")
+  const next = $<HTMLButtonElement>("#recent-next")
+  const turnPage = (direction: -1 | 1, button: HTMLButtonElement, fallback: HTMLButtonElement) => {
+    appState.recentPage += direction
+    const focused = document.activeElement === button
+    renderRecentPage(readRecentFiles())
+    if (focused && button.disabled) fallback.focus({ preventScroll: true })
+    playPageSlide(grid, direction)
+    observeRecentPreviews()
+  }
+  previous.addEventListener("click", () => turnPage(-1, previous, next))
+  next.addEventListener("click", () => turnPage(1, next, previous))
+}
+
+export function renderRecentFiles(): void {
+  const items = readRecentFiles()
+  renderRecentPage(items)
   const resume = $("#mobile-welcome-resume")
-  if (items.length && isTauri()) resume.replaceChildren(recentCard(items[0], true))
+  if (appState.archive) {
+    const card = recentCard({ path: appState.currentPath, name: ($("#document-name").textContent || "未命名").replace(/\.(?:bdi|bds|bda|m?ssf|sxi)$/i, ""), at: Date.now() }, true)
+    card.querySelector(".ui-skin-entry-meta")!.textContent = `${appState.archive.format.toUpperCase()} · ${preview.keys.length} 个按键 · ${appState.unsavedNew || appState.archive.changed.size ? "有未保存的修改" : "本地编辑"}`
+    const image = document.createElement("img")
+    image.alt = "当前皮肤预览"
+    image.src = preview.canvas.toDataURL()
+    card.querySelector(".template-preview")!.replaceChildren(image)
+    card.querySelector<HTMLElement>(".template-preview")!.dataset.preview = "rendered"
+    card.addEventListener("click", event => { event.stopImmediatePropagation(); canvasWrap.classList.remove("empty"); setMobilePane("inspector") }, { capture: true })
+    resume.replaceChildren(card)
+  } else if (items.length && isTauri()) resume.replaceChildren(recentCard(items[0], true))
   else {
     const start = document.createElement("button")
     start.type = "button"
@@ -318,13 +395,14 @@ export function renderRecentFiles(): void {
     const note = document.createElement("span")
     note.className = "ui-skin-entry-meta"
     note.textContent = "从模板新建，或打开已有皮肤"
-    start.append(label, name, note, createIcon("keyboard", 20))
+    const action = document.createElement("span")
+    action.className = "ui-button ui-skin-entry-action"
+    action.dataset.variant = "primary"
+    action.append(createIcon("plus"), "开始创作", createIcon("chevron-right"))
+    start.append(label, createIcon("keyboard", 20), name, note, action)
     start.addEventListener("click", () => $("#mobile-welcome-new").click())
     resume.replaceChildren(start)
   }
-  grid?.toggleAttribute("hidden", items.length === 0)
-  if (gridEmpty) gridEmpty.hidden = items.length > 0
-  if (hint) hint.textContent = items.length ? String(items.length) : ""
   // 预览图按路径缓存，这里裁掉已不在列表里的条目并释放它们占用的 blob URL
   const listed = new Set(items.map((item) => item.path))
   for (const [path, cached] of [...recentPreviewCache]) {

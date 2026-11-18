@@ -32,6 +32,29 @@ test('input and candidate bar selections are mutually exclusive and clear on key
   assert.equal(area.outlined, false)
 })
 
+test('candidate selection clears partial toolbar and keyboard selection in every format', () => {
+  for (const format of ['bdi', 'bds', 'bda', 'ssf', 'sxi']) {
+    const calls = []
+    const context = run(declarations('selectCandidateBar'), {
+      archive: { format }, layoutPath: 'py_26.ini', selectedPath: 'other', sidebarView: 'source',
+      selectedToolbarSections: ['ICON2'], selectedKeySections: ['KEY1'],
+      toolbarStrip: { dataset: { path: 'cand.cnd' } },
+      selectFile: (path, view, mode, preserve) => calls.push([path, view, mode, preserve]),
+      preview: { setSelected: value => calls.push(['keys', [...value]]) },
+      toolbarPreview: { setSelected: value => calls.push(['toolbar', [...value]]) },
+      syncCandidateSelection() {}, scheduleSelectionInspectorSync() {}, mobilePortraitQuery: { matches: false },
+    })
+    context.selectCandidateBar()
+    assert.equal(context.selectedCandidate, true, format)
+    assert.deepEqual(Array.from(context.selectedKeySections), [], format)
+    assert.deepEqual(Array.from(context.selectedToolbarSections), [], format)
+    assert.deepEqual(calls, [
+      [['bda', 'ssf'].includes(format) ? 'py_26.ini' : 'cand.cnd', 'source', 'document', true],
+      ['keys', []], ['toolbar', []],
+    ], format)
+  }
+})
+
 test('the input row exposes only its own text target', () => {
   const targets = [{ id: 'candidate' }, { id: 'first' }, { id: 'input' }]
   const context = run(declarations('textTargets'), {

@@ -15,7 +15,7 @@ mod model_oauth;
 #[cfg(target_os = "macos")]
 mod window_material;
 #[cfg(target_os = "macos")]
-mod window_controls;
+mod resource_drag;
 use model_oauth::{
     model_oauth_accounts, model_oauth_cancel, model_oauth_login, model_oauth_logout,
     model_oauth_token,
@@ -2019,6 +2019,7 @@ pub fn run() {
         .manage(OpenedFiles(Mutex::new(Vec::new())));
     #[cfg(target_os = "macos")]
     let builder = builder.invoke_handler(tauri::generate_handler![
+        resource_drag::start_resource_drag,
         move_macos_window,
         read_file,
         skin_file_size,
@@ -2110,23 +2111,6 @@ pub fn run() {
         start_source_observer,
         stop_source_observer
     ]);
-    #[cfg(target_os = "macos")]
-    let builder = builder
-        .setup(|app| {
-            if let Some(window) = app.get_webview_window("main") {
-                window_controls::compact_traffic_lights(&window)?;
-            }
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_)) {
-                if let Some(webview) = window.app_handle().get_webview_window("main") {
-                    if let Err(error) = window_controls::compact_traffic_lights(&webview) {
-                        eprintln!("调整窗口按钮失败: {error}");
-                    }
-                }
-            }
-        });
     builder
         .build(tauri::generate_context!())
         .expect("failed to build BDI editor")

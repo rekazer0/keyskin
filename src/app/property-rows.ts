@@ -6,10 +6,10 @@
  */
 import { drawVisualPreview, type Visual } from "../atlas.ts"
 import { element } from "../dom-element.ts"
-import { fontControl, type FontChoice } from "./font-picker"
+import { fontControl, type FontChoice } from "./font-picker.ts"
 import { createIcon } from "../icons.ts"
 import { styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
-import { soundControl } from "./sound-field"
+import { soundControl } from "./sound-field.ts"
 
 /** 选项：值、文字（纯图标分段时只进悬停提示与 aria-label）、可选图标。 */
 type Choice = readonly [value: string, label: string, icon?: string]

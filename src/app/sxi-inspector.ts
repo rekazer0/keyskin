@@ -84,8 +84,8 @@ function modelGroups(pointer: SxiPointer, model: JsonObject, label: string, omit
   const supported = { ...palmInspectorModel(pointer), ...Object.fromEntries(Object.entries(model).filter(([, value]) => value !== null)) }
   const parts = Object.keys(supported).filter((key) => key !== "b" && !omit.includes(key) && (palmInspectorCollection(pointer, key) || isModel(supported[key]) || isModelList(supported[key])))
   const candidate = pointer[2] === "c" && pointer.length === 4 || pointer.at(-1) === "cand"
-  const groups = candidate ? [renderSxiGroup("位置与尺寸", [{ targets: [pointer], only: ["rect"] }])] : []
-  groups.push(renderSxiGroup(candidate ? "样式" : label, [{ targets: [pointer], omit: [...omit, ...parts, ...candidate ? ["rect"] : []] }], { code: pointer.slice(1).join(".") || String(pointer[0]) }))
+  const groups = candidate ? [renderSxiGroup("布局", [{ targets: [pointer], only: ["rect", "insets"] }])] : []
+  groups.push(renderSxiGroup(candidate ? "样式" : label, [{ targets: [pointer], omit: [...omit, ...parts, ...candidate ? ["rect", "insets"] : []] }], { code: pointer.slice(1).join(".") || String(pointer[0]) }))
   for (const part of parts) {
     const value = supported[part]
     const name = palmPartLabel(part)

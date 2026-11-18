@@ -333,7 +333,8 @@ export class SkinArchive {
   }
 
   normalizedBytes(): Uint8Array {
-    return zipSync(Object.fromEntries(this.files), { level: 6 })
+    // 同一份文件表必须得到同一份字节。缺省 mtime 取当前时间，而 ZIP 的 DOS 时间精度是 2 秒。
+    return zipSync(Object.fromEntries(this.files), { level: 6, mtime: Date.UTC(1980, 6, 1) })
   }
 
   sourcePath(path: string): string {

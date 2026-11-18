@@ -1,5 +1,5 @@
 import {
-  createElement, type IconNode, KeyRound, Component, SquareDashed, Ellipsis,
+  createElement, type IconNode, CircleCheck, BookOpen, FileArchive, KeyRound, Component, SquareDashed, Ellipsis,
   LayoutGrid, Palette, Type, Zap, Images, PanelTop, PanelLeft, Clapperboard, Volume2,
   MousePointer2, Move, Copy, ArrowLeftRight, Trash2, ChevronDown, ChevronRight,
   ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CircleDot, Music, Play, Info,
@@ -18,7 +18,7 @@ import {
   Undo2, Redo2, RotateCw, Share, Menu, Eye, EyeOff, Wifi, Signal, BatteryFull, Lightbulb, SlidersHorizontal,
   Paperclip, Sparkles, VolumeX, Check, ChevronsUpDown, CodeXml, FileDown, Minus, Scan, Paintbrush,
   CircleAlert, FolderInput, Grid2x2, Maximize, Pointer, Timer, Frame, LayoutPanelTop, FlaskConical, History,
-  UserRound, Plug, Gamepad2, ShieldCheck, Wrench, PanelsTopLeft,
+  UserRound, Plug, Gamepad2, ShieldCheck, Wrench, PanelsTopLeft, House,
   Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight,
   Shirt, Pause, Blend, Scaling, ListVideo, Route, Orbit, Waves, PartyPopper, Rabbit, Repeat, Snail,
   SkipBack, Rotate3d, ArrowUpRight, Square, ImageOff, SunMoon, SearchX, ArrowUpLeft, ArrowDownLeft, ArrowDownRight,
@@ -26,8 +26,9 @@ import {
 
 // Exact Lucide names from 属性检查器.pen, read through Pen MCP.
 const icons: Record<string, IconNode> = {
+  "circle-check": CircleCheck, "book-open": BookOpen, "file-archive": FileArchive,
   italic: Italic, underline: Underline, strikethrough: Strikethrough, "align-left": AlignLeft, "align-center": AlignCenter, "align-right": AlignRight,
-  "folder-open": FolderOpen, wrench: Wrench, "panels-top-left": PanelsTopLeft,
+  house: House, "folder-open": FolderOpen, wrench: Wrench, "panels-top-left": PanelsTopLeft,
   "shield-check": ShieldCheck, "key-round": KeyRound, component: Component, "square-dashed": SquareDashed,
   ellipsis: Ellipsis, "layout-grid": LayoutGrid, palette: Palette, type: Type,
   zap: Zap, images: Images, "panel-top": PanelTop, "panel-left": PanelLeft, clapperboard: Clapperboard,

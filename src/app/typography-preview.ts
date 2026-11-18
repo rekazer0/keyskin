@@ -55,7 +55,7 @@ export function typographyPreview(options: {
   const observer = new ResizeObserver(() => { void draw() })
   observer.observe(canvas)
   const theme = new MutationObserver(() => { void draw() })
-  theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-app-theme", "data-accent", "style"] })
+  theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-app-theme", "data-interface-theme", "data-accent", "style"] })
   releaseOnRemove(canvas, () => { generation++; observer.disconnect(); theme.disconnect(); canvas.width = canvas.height = 0 })
   return root
 }

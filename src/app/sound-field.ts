@@ -1,4 +1,4 @@
-import { bindDialog } from "./ask"
+import { bindDialog } from "./ask.ts"
 import { element, bindListboxKeys, searchField, emptyState } from "../dom-element.ts"
 import { styleReferenceCard, soundStyleSample } from "../style-card.ts"
 

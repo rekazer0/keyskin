@@ -252,7 +252,7 @@ test('panel show/hide sounds are adapted like key press sounds', async () => {
   assert.deepEqual(files['res/show.ogg'], ogg)
 })
 
-// 时光气囊 ships enter.aiff with a GuShao "JSONMETA{...}" watermark appended after the FORM chunk.
+// A real sample had a GuShao "JSONMETA{...}" watermark appended after the AIFF FORM chunk.
 test('AIFF with data appended after the FORM chunk still converts', async () => {
   const watermarked = new Uint8Array([...aiff(), ...strToU8('JSONMETA\u0000\u0000\u0000\u0010{"marker":"x"}')])
   assert.equal(decodeAiffPcm(watermarked).samplesDecoded, 32)

@@ -12,7 +12,7 @@ import { source, toolbarPreview, candidateBackgroundPreview } from "./canvas-int
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { updateSourceHighlight } from "./source-panel"
 import { IniDocument } from "../ini.ts"
-import { bdaBasePath, textDocument, currentBdaAppearance } from "./bda-documents"
+import { bdaAppearancePart, bdaBasePath, textDocument, currentBdaAppearance } from "./bda-documents"
 import { firstExistingPath } from "../resources.ts"
 import { parseColor, pngBitmap, type Visual, type VisualResolver } from "../atlas.ts"
 import { isConfiguredSymbolLayout } from "../actions.ts"
@@ -93,10 +93,17 @@ export function scrollSelectedSource(): void {
   const bdaKeys = selectedBdaSourceKeys()
   const sxiRange = sxiSourceRanges(source.value)[0]
   if (!sxiRange && !sections.length && !bdaKeys.length && !appState.sourceHistoryHighlight) return
-  const bdaRange = jsonPropertyRanges(source.value, bdaKeys)[0]
+  const bdaRange = selectedBdaStyleSourceRange(source.value) ?? jsonPropertyRanges(source.value, bdaKeys)[0]
   const iniRange = iniSectionRanges(source.value, sections)[0]
   const range = sxiRange ?? bdaRange ?? iniRange ?? appState.sourceHistoryHighlight
   if (range) source.revealRange(range[0], range[1])
+}
+
+/** 同一个编号可以出现在不同样式表中，必须按完整路径定位。 */
+export function selectedBdaStyleSourceRange(text: string): readonly [number, number] | undefined {
+  if (appState.archive?.format !== "bda" || !appState.resourceConfigActive || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID) return
+  const part = bdaAppearancePart(appState.selectedPath)
+  return part?.kind === "styles" ? sxiFragmentRange(text, [part.group, appState.selectedStyleID]) : undefined
 }
 
 export function setSourceValue(text: string): void {

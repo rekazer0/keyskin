@@ -51,6 +51,48 @@ function emptyConfigValue(value: unknown): boolean {
   return false
 }
 
+function emptyRow(row: HTMLElement): boolean {
+  if (row.dataset.configEmpty !== undefined) return row.dataset.configEmpty === "true"
+  if (row.dataset.inspectorValue !== undefined) return emptyConfigValue(JSON.parse(row.dataset.inspectorValue))
+  const values = Array.from(row.querySelectorAll<InspectorInput>("input:not([type=file]), select, textarea"))
+    .filter(input => !input.hasAttribute("data-config-derived") && !input.matches('[type="color"], [type="range"]'))
+  return values.length > 0 && values.every(input => !("placeholder" in input && input.placeholder.includes("混合")) && emptyConfigValue(valueOf(input)))
+}
+
+/** 整组未配置时只留标题和添加入口；展开只改变界面，不创建默认配置。 */
+function syncEmptySections(fresh = false): void {
+  for (const section of document.querySelectorAll<HTMLElement>("#quick-inspector .ui-section, #resource-inspector .ui-section")) {
+    const heading = section.querySelector<HTMLElement>(":scope > h3")
+    if (!heading || !(/动画$|文字|字体/.test(sectionName(section)) || section.querySelector(".ui-typography-preview"))) continue
+    const fields = Array.from(section.querySelectorAll<HTMLElement>(".ui-field"))
+      .filter(row => row.closest(".ui-section") === section && row.dataset.supported !== "false" && !isHidden(row, section))
+    const empty = fields.length > 0 && fields.every(emptyRow)
+    if (fresh || !empty) section.removeAttribute("data-config-section-expanded")
+    const pending = empty && !section.hasAttribute("data-config-section-expanded")
+    section.toggleAttribute("data-config-section-pending", pending)
+    let add = heading.querySelector<HTMLButtonElement>("[data-config-section-add]")
+    if (!pending) { add?.remove(); continue }
+    if (!add) {
+      add = styleReferenceAddButton(`添加${sectionName(section)}`, () => {
+        section.setAttribute("data-config-section-expanded", "")
+        section.removeAttribute("data-config-section-pending")
+        add?.remove()
+        // 普通空字段直接显示控件，资源引用仍保留原来的选择入口。
+        for (const row of fields) {
+          row.setAttribute("data-config-expanded", "")
+          row.removeAttribute("data-config-pending")
+          row.querySelector("[data-config-add]")?.remove()
+        }
+        section.querySelector<HTMLElement>('.ui-field input:not([type=hidden]):not(:disabled), .ui-field select:not(:disabled), .ui-field button:not(:disabled)')?.focus()
+      })
+      add.dataset.configSectionAdd = ""
+      add.setAttribute("aria-expanded", "false")
+      heading.append(add)
+    }
+    add.disabled = !fields.some(row => row.querySelector("input:not(:disabled):not([readonly]), select:not(:disabled), textarea:not(:disabled):not([readonly]), button:not(:disabled)"))
+  }
+}
+
 /** 空配置复用引用字段的添加入口；展开只改变界面，提交仍由原控件负责。 */
 function syncEmptyFields(fresh = false): void {
   const root = inspector()
@@ -62,9 +104,7 @@ function syncEmptyFields(fresh = false): void {
     const inputs = Array.from(row.querySelectorAll<InspectorInput>("input:not([type=file]), select, textarea"))
     const values = inputs.filter(input => !input.hasAttribute("data-config-derived") && !input.matches('[type="color"], [type="range"]'))
     if (!values.length && row.dataset.inspectorValue === undefined) continue
-    const empty = row.dataset.configEmpty !== undefined ? row.dataset.configEmpty === "true"
-      : row.dataset.inspectorValue !== undefined ? emptyConfigValue(JSON.parse(row.dataset.inspectorValue))
-        : values.every(input => !("placeholder" in input && input.placeholder.includes("混合")) && emptyConfigValue(valueOf(input)))
+    const empty = emptyRow(row)
     let add = caption.querySelector<HTMLButtonElement>("[data-config-add]")
     if (fresh || !empty) row.removeAttribute("data-config-expanded")
     const pending = empty && !row.hasAttribute("data-config-expanded")
@@ -428,6 +468,7 @@ export function initInspectorShell(): void {
     requestAnimationFrame(() => {
       scheduled = false
       syncEmptyFields()
+      syncEmptySections()
       decorateSections()
       if (filterQuery) applyFilter()
     })
@@ -462,5 +503,6 @@ export function syncInspectorRows(context: string): void {
   }
   updateStatus()
   syncEmptyFields(fresh)
+  syncEmptySections(fresh)
   syncGestures()
 }

@@ -29,7 +29,7 @@ import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 import { syncMobileKeyPreview } from "../mobile-key-preview"
 import { wireMobileInspector } from "../mobile-inspector"
-import { mobileKeyPreview, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel, mobileSaveButton, mobileProjectFiles, mobileFilesClose, mobileQuickActions } from "../dom"
+import { mobileKeyPreview, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel, mobileSaveButton, mobileFilesClose } from "../dom"
 
 /** 启动环境、全局指针、画布预览、检查器与缩放。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireCanvasAndInspector(): void {
@@ -212,16 +212,8 @@ export function wireCanvasAndInspector(): void {
   const syncSave = () => { mobileSaveButton.disabled = saveButton.disabled }
   new MutationObserver(syncSave).observe(saveButton, { attributes: true, attributeFilter: ["disabled"] })
   syncSave()
-  mobileProjectFiles.addEventListener("click", () => setMobilePane("layout"))
   mobileFilesClose.addEventListener("click", () => setMobilePane("inspector"))
-  const historyHome = mobileQuickActions.parentElement!
-  const placeHistory = () => {
-    if (mobilePortraitQuery.matches) document.querySelector("#mobile-canvas-history")!.append(mobileQuickActions)
-    else historyHome.prepend(mobileQuickActions)
-  }
-  placeHistory()
   mobilePortraitQuery.addEventListener("change", () => {
-    placeHistory()
     const pane = document.documentElement.dataset.mobilePane
     setMobilePane(pane === "inspector" || pane === "layout" ? pane : "canvas")
     syncMobileInspectorHeader()
@@ -229,7 +221,9 @@ export function wireCanvasAndInspector(): void {
   })
   mobileAppMore.addEventListener("click", (event) => {
     if (event.target === mobileAppMore) mobileAppMore.open = false
-    if ((event.target as Element).closest("button")) mobileAppMore.querySelector<HTMLElement>("summary")!.focus()
+    if ((event.target as Element).closest("button") && (mobileAppMore.contains(document.activeElement) || document.activeElement === document.body)) {
+      mobileAppMore.querySelector<HTMLElement>("summary")!.focus()
+    }
   })
   const syncMobileMenu = () => {
     for (const button of mobileMoreActions) {

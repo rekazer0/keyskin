@@ -6,9 +6,9 @@ import { appSource } from "./helpers/app-source.mjs"
 const main = appSource()
 const previews = readFileSync(new URL("../src/template-preview.ts", import.meta.url), "utf8")
 
-test("startup welcome screen keeps recent skins bounded and template previews lazy", () => {
-  assert.match(main, /const recentFilesLimit = 9/)
-  assert.match(main, /\.slice\(0, recentFilesLimit\)/)
+test("startup welcome screen pages recent skins and keeps template previews lazy", () => {
+  assert.match(main, /const recentPageSize = 9/)
+  assert.match(main, /items\.slice\(start, start \+ recentPageSize\)/)
   assert.match(readFileSync(new URL("../src/project-chooser.ts", import.meta.url), "utf8"), /hydrateTemplateCardPreviews\(body, \{ lazy: true \}\)/)
   assert.match(main, /await waitForPreviewFrame\(\)/)
   assert.match(previews, /new IntersectionObserver/)

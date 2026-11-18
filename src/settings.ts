@@ -6,7 +6,7 @@ import { createSettingsDraft } from './settings-draft'
 type Control = HTMLInputElement | HTMLSelectElement
 
 /** Live preferences reuse the editor's existing change handlers; cancel replays the opening values. */
-export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enabled: boolean) => void, modelEditing: { begin(): void; cancel(): void; dirty(): boolean; save(): Promise<void> }) {
+export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enabled: boolean) => void, modelEditing: { begin(): void; cancel(): void; dirty(): boolean; save(): Promise<void> }, onSaved: () => void) {
   const input = (id: string) => dialog.querySelector<Control>(`#${id}`)!
   const root = document.documentElement
   const density = input('interface-density')
@@ -55,9 +55,12 @@ export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enable
   setGuides(guides.checked)
   const sync = () => {
     for (const button of dialog.querySelectorAll<HTMLButtonElement>('[data-setting-choice]')) {
-      button.setAttribute('aria-pressed', String(input(button.dataset.settingChoice!).value === button.dataset.value))
+      const control = input(button.dataset.settingChoice!)
+      const mode = button.dataset.settingChoice === 'app-theme' && control.disabled
+        ? dialog.querySelector<HTMLSelectElement>('#interface-theme')!.selectedOptions[0]?.dataset.colorScheme
+        : control.value
+      button.setAttribute('aria-pressed', String(mode === button.dataset.value))
     }
-    dialog.querySelector('[data-settings-summary="canvas"]')!.textContent = (input('default-device') as HTMLSelectElement).selectedOptions[0]?.textContent ?? ''
   }
   for (const button of dialog.querySelectorAll<HTMLButtonElement>('[data-setting-choice]')) button.addEventListener('click', () => {
     const control = input(button.dataset.settingChoice!)
@@ -129,6 +132,7 @@ export function initializeSettings(dialog: HTMLDialogElement, setGuides: (enable
       draft.commit()
       // Flush inputs such as a color picker or number field before committing.
       for (const control of controls) if (read(control) !== values.get(control)) control.dispatchEvent(new Event('change', { bubbles: true }))
+      onSaved()
       localStorage.setItem('settings-saved-at', new Date().toISOString())
       begin()
       closeDialog(dialog)

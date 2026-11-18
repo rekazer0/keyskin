@@ -11,12 +11,15 @@ try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   const progress = await page.evaluate(async (bytes) => {
     const { SkinArchive } = await import('/src/skin.ts')
+    const { IniDocument } = await import('/src/ini.ts')
     const { appState } = await import('/src/app/state.ts')
     const { exportArchive } = await import('/src/app/archive-io.ts')
     const { showFileOperationProgress } = await import('/src/app/file-operations.ts')
+    const cssPath = 'light/skin/res/default.css'
     const archive = SkinArchive.open(new Uint8Array(bytes), 'bds')
-    archive.setText('light/skin/res/default.css', '[GLOBAL]\n[STYLE900]\nSHOW=Test\nFONT_SIZE=24\nFONT_WEIGHT=700\n')
-    archive.setText('light/skin/port/py_9.ini', '[KEY1]\nFORE_STYLE=900\n')
+    const label = 'SHOW=Test\nFONT_SIZE=24\nFONT_WEIGHT=700\nNM_COLOR=ffffff\n'
+    archive.setText(cssPath, `[GLOBAL]\n[STYLE900]\n${label}[STYLE901]\n${label}HL_COLOR=ff0000\n[STYLE902]\n${label}BORDER_COLOR=FF000000\nBORDER_SIZE=6\n`)
+    archive.setText('light/skin/port/py_9.ini', '[KEY1]\nFORE_STYLE=900\n[KEY2]\nFORE_STYLE=901\n[KEY3]\nFORE_STYLE=902\n')
     appState.archive = archive
     const seen = []
     let running = true
@@ -30,11 +33,20 @@ try {
     const result = await exportArchive('bdi')
     running = false
     document.querySelector('#file-operation-dialog').close()
-    return { seen, css: SkinArchive.open(result.bytes, 'bdi').getText('light/skin/res/default.css') }
+    const output = SkinArchive.open(result.bytes, 'bdi')
+    const css = output.getText(cssPath)
+    const doc = IniDocument.parse(css)
+    const tile = (id, field) => doc.get(`STYLE${id}`, field)
+    return {
+      seen, css, til: output.getText('light/skin/res/keyskin_font.til'),
+      refs: [tile(900, 'NM_IMG'), tile(900, 'HL_IMG'), tile(901, 'NM_IMG'), tile(901, 'HL_IMG'), tile(902, 'NM_IMG')],
+    }
   }, [...bdsFixture()])
   assert.ok(progress.seen.includes('正在打包 BDI 皮肤包…'))
   assert.ok(progress.seen.includes('正在把按键文字切成字体图片…'))
   assert.match(progress.css, /BAKED_SHOW=Test/)
+  assert.match(progress.til, /TILE_NUM=3\b/)
+  assert.deepEqual(progress.refs, [1, 1, 1, 2, 3].map((tile) => `keyskin_font,${tile}`))
   const withoutBake = await page.evaluate(async (bytes) => {
     const { SkinArchive } = await import('/src/skin.ts')
     const { appState } = await import('/src/app/state.ts')

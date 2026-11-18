@@ -1,3 +1,4 @@
+import { element } from "../dom-element.ts"
 import { sourceKeyLabels } from "../config-labels.ts"
 import { baiduInspectorEntries, baiduInspectorTuple } from "../baidu-inspector-fields.ts"
 import { LEGACY_ANIMATION_FIELDS } from "../legacy-animation.ts"
@@ -260,6 +261,16 @@ function isHiddenConfigEntry(section: string, key: string, showTips = false): bo
   return !showTips && (/^TIP\d*$/i.test(section) || /^TIP(?:_|\d|$)/i.test(key))
 }
 
+function documentSubsection(title: string, code: string, rows: HTMLElement[]): HTMLElement {
+  const block = element("div", "ui-subsection")
+  const heading = element("h4")
+  heading.textContent = title
+  heading.title = code
+  heading.append(Object.assign(element("span", "document-section-code"), { textContent: code }))
+  block.append(heading, ...rows)
+  return block
+}
+
 export function populateDocumentInspector(): void {
   if (appState.archive?.format === "ssf") {
     documentFieldsGroup.hidden = !populateSsfInspector(documentFields)
@@ -295,6 +306,7 @@ export function populateDocumentInspector(): void {
   // 整体布局（选中当前布局、没选按键）不重复展开候选栏和输入区。
   const overallLayout = appState.selectedPath === appState.layoutPath && !listSelected
   const inputSelected = appState.selectedCandidate === "input"
+  const wholeToolbarSelected = isToolbarPath(appState.selectedPath) && !toolbarSections.size && !inputSelected
   const general = inputSelected ? textDocument(genConfigPath()) : undefined
   // 候选栏覆盖全局配置；继承的字段仍写回 gen.ini。
   const inputDocument = inputSelected ? IniDocument.parse(general?.toString() ?? "") : appState.selectedDocument
@@ -307,14 +319,14 @@ export function populateDocumentInspector(): void {
     (!inputSelected || ["INPUT", "SCAND"].includes(entry.section) || entry.section === "CAND" && entry.key === "INPUT_STYLE") &&
     (!listSelected || /^LIST\d*$/i.test(entry.section)) &&
     !/^KEY\d+$/.test(entry.section) &&
-    (/\.pop$/i.test(appState.selectedPath) || !/^ICON\d+$/i.test(entry.section) || toolbarSections.has(entry.section)) &&
+    (/\.pop$/i.test(appState.selectedPath) || !/^ICON\d+$/i.test(entry.section) || wholeToolbarSelected || toolbarSections.has(entry.section)) &&
     !isHiddenConfigEntry(entry.section, entry.key, isToolbarPath(appState.selectedPath)) &&
     (!toolbarSections.size || toolbarSections.has(entry.section)) &&
     !specialized.has(`${entry.section}\u0000${entry.key}`),
   )
-  // F14 的原生图标图片与 SWITCH 的通用样式分别编辑。
+  // 整条候选栏展示全部工具图标；F14 的原生图片与 SWITCH 的通用样式分别编辑。
   const document = appState.selectedDocument
-  if ([...toolbarSections].some((name) => /^ICON\d+$/i.test(name) && document.get(name, "KEY")?.trim().toUpperCase() === "F14")) {
+  if (wholeToolbarSelected || [...toolbarSections].some((name) => /^ICON\d+$/i.test(name) && document.get(name, "KEY")?.trim().toUpperCase() === "F14")) {
     documentFields.append(toolbarIconSection())
     const existing = document.entries().filter((entry) => entry.section === "SWITCH" && !entries.some((item) => item.section === entry.section && item.key === entry.key))
     entries.push(...existing, ...SWITCH_STYLE_KEYS
@@ -384,19 +396,31 @@ export function populateDocumentInspector(): void {
     }
     return [row({ kind: "text", value: entry.value }, commit)]
   }
+  const buttonBlocks: HTMLElement[] = []
+  const animationBlocks: HTMLElement[] = []
   for (const sectionName of [...new Set(entries.map((entry) => entry.section))]) {
     const sectionEntries = entries.filter((item) => item.section === sectionName)
     const title = /\.pop$/i.test(appState.selectedPath) && /^ICON\d+$/i.test(sectionName)
       ? `气泡图案 ${sectionName.slice(4)}`
       : toolbarSections.size === 1 && /^ICON\d+$/i.test(sectionName) ? "按钮"
         : sectionName ? translatedSectionLabel(sectionName).replace(/\s*[（(][^）)]*[）)]\s*$/, "") : "基本信息"
-    documentFields.append(section(title, sectionEntries.filter((entry) => !layoutAnimationFields.has(entry.key)).flatMap(renderEntry), {
-      code: sectionName && title !== sectionName ? sectionName : undefined,
-    }))
-    const animations = sectionEntries.filter((entry) => layoutAnimationFields.has(entry.key))
-    // 动画字段单独成组，组名带上分区名：同一个文档有多个分区时不会出现一串「动画 2 / 动画 3」。
-    if (animations.length) documentFields.append(section(sectionName ? `${title}动画` : "动画", animations.flatMap(renderEntry), { code: sectionName || undefined }))
+    const rows = sectionEntries.filter((entry) => !layoutAnimationFields.has(entry.key)).flatMap(renderEntry)
+    const animations = sectionEntries.filter((entry) => layoutAnimationFields.has(entry.key)).flatMap(renderEntry)
+    if (wholeToolbarSelected && /^ICON\d+$/i.test(sectionName)) {
+      buttonBlocks.push(documentSubsection(title, sectionName, [...rows, ...animations]))
+      continue
+    }
+    documentFields.append(section(title, rows, { code: sectionName && title !== sectionName ? sectionName : undefined }))
+    if (!animations.length) continue
+    if (wholeToolbarSelected && ["CAND", "INPUT", "SWITCH"].includes(sectionName)) {
+      animationBlocks.push(documentSubsection(title, sectionName, animations))
+    } else {
+      // 其他文档仍按分区命名动画，避免出现多组同名「动画」。
+      documentFields.append(section(sectionName ? `${title}动画` : "动画", animations, { code: sectionName || undefined }))
+    }
   }
+  if (buttonBlocks.length) documentFields.append(section("工具按钮", buttonBlocks))
+  if (animationBlocks.length) documentFields.append(section("动画", animationBlocks))
   documentFieldsGroup.dataset.path = appState.selectedPath
 }
 

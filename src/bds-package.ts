@@ -1,5 +1,4 @@
-// 新版百度安卓启用 BDS 前会做完整性检查，加载时也有限制。以下规则都是在 MuMu 上逐项试出来的，
-// 对照的是能正常启用的官方皮肤（孤岛记录、简）。
+// 以下 BDS 兼容性规则在 MuMu 上用可正常启用的官方样本逐项验证。
 import { IniDocument } from "./ini.ts"
 import type { SkinArchive } from "./skin.ts"
 import { skinStylePaths } from "./font-files.ts"

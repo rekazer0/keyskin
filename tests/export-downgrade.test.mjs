@@ -3,9 +3,25 @@ import test from 'node:test'
 import { declarations, run } from './helpers/app-source.mjs'
 import { summarizeWarnings } from '../src/export.ts'
 
+function downgradeSurface() {
+  const fileOperationDialog = { dataset: {} }
+  const fileOperationDetail = { textContent: '' }
+  const fileOperationResult = {}
+  const listed = []
+  const showFileOperationCompatibility = (title, warnings) => {
+    listed.push(warnings)
+    fileOperationDetail.textContent = `有 ${warnings.length} 项内容需要确认 · ${title}。原始皮肤保持不变`
+  }
+  return {
+    fileOperationDialog, listed,
+    globals: { fileOperationDialog, fileOperationDetail, fileOperationResult, showFileOperationCompatibility },
+  }
+}
+
 test('multi-stage BDA → SXI opens progress first, then confirms unique warnings in that window', async () => {
   const warnings = Array.from({ length: 20 }, (_, i) => `降级提示 ${i + 1}`)
   const events = []
+  const surface = downgradeSurface()
   const context = run(declarations('exportArchive', 'exportArchiveBytes', 'acceptDowngrade', 'conversionProgress', 'percentProgress', 'exportTargetLabel'), { summarizeWarnings,
     archive: { format: 'bda' }, bdaBase: {},
     canExport: () => true,
@@ -16,11 +32,14 @@ test('multi-stage BDA → SXI opens progress first, then confirms unique warning
     },
     buildSxiZipAsync: async () => ({ bytes: new Uint8Array([1]), warnings: [...warnings.slice(10), ...warnings.slice(0, 5)] }),
     clientLog: { info: () => {} },
-    showFileOperationResult: detail => assert.equal(detail, warnings.join('\n')),
-    fileOperationResult: {},
-    waitForTap: async (_, label) => {
+    showFileOperationResult: () => assert.fail('降级内容由兼容性确认列出'),
+    ...surface.globals,
+    waitForTap: async (detail, label) => {
       events.push('confirm')
-      assert.equal(label, '继续导出')
+      assert.equal(surface.fileOperationDialog.dataset.stage, 'compatibility')
+      assert.equal(label, '确认并继续')
+      assert.match(detail, /20 项内容需要确认/)
+      assert.deepEqual(surface.listed, [warnings])
       return true
     },
     showFileOperationProgress: () => events.push('progress'),
@@ -30,11 +49,13 @@ test('multi-stage BDA → SXI opens progress first, then confirms unique warning
   assert.deepEqual(events, ['progress', 'confirm'])
   assert.equal(context.fileOperationResult.hidden, true)
   assert.equal(context.fileOperationResult.textContent, '')
+  assert.equal(surface.fileOperationDialog.dataset.stage, undefined)
 })
 
 for (const native of [false, true]) for (const platform of [undefined, 'ios']) {
   test(`${native ? 'native' : 'browser'} ${platform ?? 'standard'} export confirms before choosing or writing a file`, async () => {
     const events = []
+    const surface = downgradeSurface()
     const archive = { markSaved: () => assert.fail('conversion must not mark source as saved') }
     const context = run(declarations('saveArchive', 'saveNative', 'downloadArchive', 'exportForSave', 'exportArchive', 'acceptDowngrade', 'exportTargetLabel'), { summarizeWarnings,
       archive, currentPath: '', documentName: { textContent: '测试' },
@@ -43,7 +64,8 @@ for (const native of [false, true]) for (const platform of [undefined, 'ios']) {
       exportArchiveBytes: async () => ({ bytes: new Uint8Array([1]), converted: true, warnings: ['内容将降级'] }),
       showFileOperationProgress: () => events.push('progress'),
       waitForInterfacePaint: async () => {},
-      showFileOperationResult: () => {}, fileOperationResult: {},
+      showFileOperationResult: () => {},
+      ...surface.globals,
       waitForTap: async () => { events.push('confirm'); return true },
       writeToChosenFile: async (_, bytes) => { events.push('save'); assert.ok(bytes instanceof Uint8Array); return '测试.sxi' },
     })

@@ -12,6 +12,9 @@ export const CENTRAL_SIGNATURE = 0x02014b50
 
 export const END_SIGNATURE = 0x06054b50
 
+const DATA_DESCRIPTOR_FLAG = 1 << 3
+const ENCRYPTION_FLAGS = (1 << 0) | (1 << 6) | (1 << 13)
+
 type ZipEntry = {
   name: string
   central: Uint8Array
@@ -224,21 +227,35 @@ function changedLocal(entry: ZipEntry, data: Uint8Array): {
   local: Uint8Array
   crc: number
   compressedSize: number
+  removedDescriptorFlag: boolean
 } {
   const localView = view(entry.local)
+  if (entry.local.length < 30) throw new Error(`ZIP 条目的文件头不完整：${entry.name}`)
+  const flags = localView.getUint16(6, true)
+  if ((flags | view(entry.central).getUint16(8, true)) & ENCRYPTION_FLAGS) {
+    throw new Error(`无法重写标记为加密的 ZIP 条目：${entry.name}。请使用未加密的原始皮肤包`)
+  }
   const nameLength = localView.getUint16(26, true)
   const extraLength = localView.getUint16(28, true)
   const dataOffset = 30 + nameLength + extraLength
   const trailerOffset = dataOffset + entry.compressedSize
+  if (trailerOffset > entry.local.length) throw new Error(`ZIP 条目的压缩数据不完整：${entry.name}`)
   const { crc, compressed } = compressedPayload(data, entry.method === 0 ? 0 : 6)
   const header = entry.local.slice(0, dataOffset)
-  const trailer = entry.local.slice(trailerOffset)
-  if (localView.getUint16(6, true) & 8) {
-    const descriptorOffset = view(trailer).getUint32(0, true) === 0x08074b50 ? 4 : 0
+  let trailer = entry.local.slice(trailerOffset)
+  const hasDescriptor = (flags & DATA_DESCRIPTOR_FLAG) !== 0
+  const descriptorOffset = hasDescriptor && trailer.length >= 4 && view(trailer).getUint32(0, true) === 0x08074b50 ? 4 : 0
+  const removedDescriptorFlag = hasDescriptor && trailer.length < descriptorOffset + 12
+  if (hasDescriptor && !removedDescriptorFlag) {
     writeUint32(trailer, descriptorOffset, crc)
     writeUint32(trailer, descriptorOffset + 4, compressed.length)
     writeUint32(trailer, descriptorOffset + 8, data.length)
   } else {
+    if (removedDescriptorFlag) {
+      // 新数据的 CRC 和大小已知，直接写入文件头，不再依赖不完整的数据描述符。
+      writeUint16(header, 6, flags & ~DATA_DESCRIPTOR_FLAG)
+      trailer = trailer.subarray(0, 0)
+    }
     writeUint32(header, 14, crc)
     writeUint32(header, 18, compressed.length)
     writeUint32(header, 22, data.length)
@@ -247,7 +264,7 @@ function changedLocal(entry: ZipEntry, data: Uint8Array): {
   output.set(header)
   output.set(compressed, header.length)
   output.set(trailer, header.length + compressed.length)
-  return { local: output, crc, compressedSize: compressed.length }
+  return { local: output, crc, compressedSize: compressed.length, removedDescriptorFlag }
 }
 
 /** 只压缩新增或改动的条目，其他本地文件头和压缩数据原样复用。undefined 表示删除。 */
@@ -267,6 +284,7 @@ export function patchZip(source: ReturnType<typeof parseZip>, changes: ReadonlyM
     const central = entry.central.slice()
     writeUint32(central, 42, localOffset)
     if (changed && data) {
+      if (changed.removedDescriptorFlag) writeUint16(central, 8, view(central).getUint16(8, true) & ~DATA_DESCRIPTOR_FLAG)
       writeUint32(central, 16, changed.crc)
       writeUint32(central, 20, changed.compressedSize)
       writeUint32(central, 24, data.length)

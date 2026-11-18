@@ -26,7 +26,6 @@ import { createAtlasWorkspace } from "../atlas-workspace"
 import { type createAnimationWorkspace } from "../animation-workspace"
 import { type VisualResolver } from "../atlas.ts"
 import { type SourceEditorValueRange } from "../lazy-source-editor.ts"
-import { type ProjectChoice } from "../project-chooser"
 import { type WindowMaterialKind } from "./types"
 import { type SsfTemplates } from "../ssf/ssf-convert.ts"
 import { type JsonObject } from "../palm/sxi-ini.ts"
@@ -163,9 +162,9 @@ export const appState = {
   styleReturnInspectorGroup: "",
   bdaSliceReturn: undefined as { path: string; styleID: string } | undefined,
   selectedResourcePath: "",
-  resourceURLs: [] as string[],
   tilePath: "",
   tileDocument: IniDocument.parse(""),
+  atlasEdits: undefined as Map<string, Exclude<Change, { kind: "batch" }>> | undefined,
   slices: [] as TileSlice[],
   bdaTileUsages: [] as BdaTileUsage[],
   selectedTileIndex: undefined as number | undefined,
@@ -275,14 +274,20 @@ export const appState = {
   styleLibrarySession: undefined as { session: string; preview(id: string): Promise<StyleLibraryPreview | undefined>; image(key: string): string | undefined } | undefined,
   styleLibrarySelected: undefined as { styleID?: string; imagePath?: string } | undefined,
   styleUsageFilter: "all",
+  resourceStyleType: "all",
+  resourceUsageFilter: "all",
+  resourceCatalog: "",
+  resourceFontTheme: "light",
+  selectedResourceCatalogItem: "",
+  resourcePageStatistics: undefined as { archive: SkinArchive; key: string; unused: number; types: Record<string, number> } | undefined,
   // Thumbnails redraw a frame later so they don't share a task with the inspector rebuild.
   stylePreviewsPending: false,
   pickerSelectedIndex: undefined as number | undefined,
-  newProjectOptions: undefined as ProjectChoice | undefined,
+  recentPage: 0,
   recentPreviewRunning: false,
   // 使用教程进行中时的停止函数
   stopOnboarding: undefined as (() => void) | undefined,
-  // 持久缩略图缓存：重启后不必再读整包解 demo 图。按路径存，条目随最近列表裁剪（最多 9 个）。
+  // 持久缩略图缓存：重启后不必再读整包解 demo 图。按路径存，条目随最近记录裁剪。
   recentThumbDb: undefined as Promise<IDBDatabase> | undefined,
   windowMaterialKind: "glass" as WindowMaterialKind,
   windowDragPointerDown: false,
@@ -292,4 +297,7 @@ export const appState = {
   // 投放区：拖入 PNG 与点击选择等价；同时拦掉浏览器直接打开文件的默认行为。
   layoutImageDragDepth: 0,
   // Resource image actions
-  selectedResourceGalleryPath: "",}
+  selectedResourceGalleryPath: "",
+  selectedResourceGalleryPaths: [] as string[],
+  resourceSelectionAnchor: "",
+}

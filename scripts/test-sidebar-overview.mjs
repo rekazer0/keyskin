@@ -11,7 +11,7 @@ const browser = await chromium.launch()
 
 async function checkSkinCard(page, format) {
   const card = page.locator(".skin-card")
-  assert.equal(await card.locator(".skin-card-info > .nav-meta").textContent(), "皮肤信息")
+  assert.equal(await card.locator(".skin-card-info > .nav-meta").evaluate(node => node.firstChild.textContent), "皮肤信息")
   assert.equal(await card.locator('.ui-badge[data-variant="accent"]').textContent(), format)
   const geometry = await card.evaluate((node) => {
     const style = getComputedStyle(node)
@@ -25,9 +25,10 @@ async function checkSkinCard(page, format) {
       fits: preview.left >= bounds.left && preview.right <= info.left && info.right <= bounds.right && badge.bottom <= bounds.bottom,
     }
   })
-  assert.equal(geometry.border, "1px")
-  assert.deepEqual(geometry.preview, [48, 48])
+  assert.equal(geometry.border, "0px")
+  assert.deepEqual(geometry.preview, [80, 80])
   assert.ok(geometry.fits, JSON.stringify(geometry))
+  assert.equal(await card.evaluate(node => node.parentElement.className), "sidebar-overview", "skin card has no redundant disclosure heading")
   await page.mouse.move(0, 0)
   await page.waitForTimeout(150)
   const background = await card.evaluate((node) => getComputedStyle(node).backgroundColor)
@@ -53,7 +54,7 @@ async function checkSkinCard(page, format) {
 async function checkResourceTiles(page) {
   const geometry = await page.locator('.nav-group-body:has(> [data-layout="tile"])').evaluate((grid) => {
     const bounds = grid.getBoundingClientRect()
-    const nodes = Array.from(grid.children)
+    const nodes = Array.from(grid.children).filter(node => node.getBoundingClientRect().height > 0)
     const rects = nodes.map((node) => node.getBoundingClientRect())
     const navNodes = nodes.filter((node) => node.matches(".nav-item"))
     const gap = parseFloat(getComputedStyle(grid).columnGap)
@@ -97,36 +98,44 @@ try {
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
     if (width >= 760) {
       await openEditorTemplate(page, 'official-android-bds')
-      await page.locator(".canvas-wrap:not(.empty)").waitFor()
+      await page.locator(".canvas-wrap:not(.empty):has(#preview)").waitFor()
       await page.waitForFunction(() => !document.querySelector("#open").disabled)
       const close = page.locator("#file-operation-dialog[open] #file-operation-close")
       if (await close.isVisible()) await close.click()
-      assert.equal(await page.locator('.sidebar-overview [data-layout="tile"]').count(), 7)
-      assert.equal(await page.getByRole("button", { name: "资源清单", exact: true }).count(), 1)
-      assert.deepEqual(await page.locator('[data-layout="tile"] > .nav-label').allTextContents(), ["通用配置", "图片资源", "按键样式", "音效资源", "动效设计", "粒子设计"])
-      let previousGeometry
-      for (const sidebarWidth of [180, 248, 260, 320, 480, 700, 248]) {
-        const sidebar = page.locator(".sidebar")
-        const initialWidth = await sidebar.evaluate((node) => node.getBoundingClientRect().width)
-        const handle = await page.locator("#sidebar-resize-handle").boundingBox()
-        const x = handle.x + handle.width / 2
-        const y = handle.y + handle.height / 2
-        await page.mouse.move(x, y)
-        await page.mouse.down()
-        await page.mouse.move(x + sidebarWidth - initialWidth, y, { steps: 8 })
-        const geometry = await checkResourceTiles(page)
-        if (sidebarWidth === 260) {
-          assert.equal(geometry.columns, previousGeometry.columns)
-          assert.ok(geometry.gap > previousGeometry.gap, "resource gaps grow while dragging within the same column count")
-        }
-        previousGeometry = geometry
-        await page.mouse.up()
-        await page.evaluate(() => new Promise(requestAnimationFrame))
-        assert.ok(Math.abs(await sidebar.evaluate((node) => node.getBoundingClientRect().width) - sidebarWidth) < 1)
-        await checkResourceTiles(page)
-        await sidebar.screenshot({ path: `/tmp/keyskin-resource-tiles-${sidebarWidth}.png` })
-        await page.locator('.nav-group-body:has(> [data-layout="tile"])').screenshot({ path: `/tmp/keyskin-resource-grid-${sidebarWidth}.png` })
-      }
+      assert.equal(await page.locator("#document-name").isVisible(), true)
+      assert.equal(await page.locator(".titlebar-preferences").count(), 0)
+      assert.equal(await page.getByRole("button", { name: "资源清单", exact: true }).isVisible(), false)
+      assert.equal(await page.locator('[data-overview-group="资源配置"]').isVisible(), false)
+      const general = page.locator('[data-overview-group="键盘布局"] button.nav-item').first()
+      assert.equal(await general.locator(".nav-label").textContent(), "通用配置")
+      assert.equal(await general.getAttribute("data-layout"), null, "general configuration uses a normal layout row")
+      const path = await general.getAttribute("data-path")
+      await general.click()
+      assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedPath), path)
+      assert.equal(await general.getAttribute("aria-current"), "true")
+      assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.changed.size), 0)
+      const summary = page.locator(".ui-sidebar-summary")
+      assert.equal(await summary.isVisible(), true)
+      const footerBounds = await summary.evaluate(node => {
+        const summary = node.getBoundingClientRect()
+        const workspace = document.querySelector(".workspace").getBoundingClientRect()
+        const statusHeight = parseFloat(getComputedStyle(node).getPropertyValue("--workspace-status-height"))
+        return { top: summary.top, bottom: summary.bottom, expectedTop: workspace.bottom - statusHeight, expectedBottom: workspace.bottom }
+      })
+      assert.equal(footerBounds.top, footerBounds.expectedTop, "summary aligns with the canvas footer")
+      assert.equal(footerBounds.bottom, footerBounds.expectedBottom, "summary and canvas end at the same height")
+      assert.equal(await page.locator(".sidebar-overview .nav-item > .source-item-count").count(), 0, "layout rows omit redundant key counts")
+      const total = await page.locator('.nav-group:not([data-overview-group="键盘组件"]) :is(.nav-layout, .nav-component)').count()
+      assert.equal(await page.locator("#sidebar-layout-count").textContent(), `共 ${total} 个布局`)
+      const dimensions = await page.evaluate(async () => {
+        const { appState } = await import("/src/app/state.ts")
+        return `${Math.round(appState.canvasLogicalSize.width)} × ${Math.round(appState.canvasLogicalSize.layoutPanelHeight)}`
+      })
+      assert.equal(await page.locator("#sidebar-layout-size").textContent(), dimensions)
+      await page.locator(".sidebar").screenshot({ path: "/tmp/keyskin-sidebar-reference.png" })
+      await page.evaluate(async () => (await import("/src/app/source-files.ts")).setSidebarView("source"))
+      assert.equal(await summary.isVisible(), false, "source view hides the overview summary")
+      await page.evaluate(async () => (await import("/src/app/source-files.ts")).setSidebarView("overview"))
       await checkSkinCard(page, "BDS")
       assert.equal(await page.locator(".skin-card-preview.ui-empty").count(), 1, "missing preview retains a compact placeholder")
       await page.reload()
@@ -185,6 +194,16 @@ try {
     await rows.last().click()
     if (width < 760) await page.locator('#mobile-project-toggle').click()
     assert.equal(await rows.last().getAttribute("aria-current"), "true")
+    assert.equal(await page.locator("#sidebar-layout-size").textContent(), await page.evaluate(async () => {
+      const { appState } = await import("/src/app/state.ts")
+      return `${Math.round(appState.canvasLogicalSize.width)} × ${Math.round(appState.canvasLogicalSize.layoutPanelHeight)}`
+    }), "summary follows the newly selected layout")
+    const summaryFits = await page.locator(".ui-sidebar-summary").evaluate(node => {
+      const bounds = node.getBoundingClientRect()
+      const sidebar = node.closest(".sidebar").getBoundingClientRect()
+      return bounds.top >= sidebar.top && bounds.bottom <= sidebar.bottom && node.scrollWidth <= node.clientWidth
+    })
+    assert.ok(summaryFits, "summary stays inside the sidebar without overflow")
     assert.equal(await rows.last().isVisible(), true)
     assert.equal(await page.locator(".mobile-overview-groups").count(), 0)
     assert.equal(await page.locator(".skin-card-info").isVisible(), true)

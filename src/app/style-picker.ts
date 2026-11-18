@@ -1,3 +1,4 @@
+import { openMobileMotionPicker } from "./mobile-motion-picker"
 import { appState } from "./state"
 import { bdaStyleRef, bdaStyleID } from "../bda.ts"
 import { currentBdaAppearance, visualResolver } from "./bda-documents"
@@ -10,7 +11,7 @@ import { commitText, commitBytes, isEditing, updateDirty, updateHistoryButtons }
 import { addBdaStyle, updateBdaStyle } from "../bda-encode"
 import { updateBdaRefs } from "./key-inspector"
 import { bdaImageResourceID } from "./tile-editing"
-import { theme, orientation } from "./dom"
+import { theme, orientation, pickerDialog } from "./dom"
 import { openImageSlicePicker, applyImageSliceSelection, imageDataURL, showPickerWindow, closePickerWindow, emitToPicker, clearImageSlicePicker } from "./image-pickers"
 import { type Visual, type VisualResolver } from "../atlas.ts"
 import { afterNextPaint, mobilePortraitQuery } from "./canvas-interaction"
@@ -158,7 +159,7 @@ export function removeUnusedStyles(): number {
   return removeStyleIDs(availableStyleIDs())
 }
 
-function removeStyleIDs(candidates: string[]): number {
+export function removeStyleIDs(candidates: string[]): number {
   if (!canAddStyle() || !isEditing()) return 0
   const available = new Set(availableStyleIDs())
   const ids = [...new Set(candidates)].filter(id => available.has(id) && !styleUsages(id).length)
@@ -319,7 +320,10 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false): v
   appState.stylePickerTarget = input
   appState.pickerTarget = undefined
   appState.styleLibrarySelected = undefined
-  void showPickerWindow("styles", "全部样式", 1100, 760)
+  const animation = layoutAnimationFields.has(styleReferenceKey(input)) || Boolean(input.dataset.ssfAnimationPath)
+  if (mobilePortraitQuery.matches && animation && ["bdi", "bds"].includes(appState.archive?.format ?? "")) { openMobileMotionPicker(input); return }
+  pickerDialog.dataset.kind = animation ? "animation" : "style"
+  void showPickerWindow("styles", mobilePortraitQuery.matches ? animation ? "选择动效" : "选择样式" : "全部样式", 1100, 760)
 }
 
 type StyleLibraryCache = {

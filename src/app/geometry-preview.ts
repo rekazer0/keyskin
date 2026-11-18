@@ -103,7 +103,7 @@ export function geometryPreview(original: Rect[], commit?: (rects: Rect[]) => vo
   const resize = new ResizeObserver(draw)
   resize.observe(canvas)
   const theme = new MutationObserver(draw)
-  theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-app-theme", "data-accent", "style"] })
+  theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-app-theme", "data-interface-theme", "data-accent", "style"] })
   releaseOnRemove(canvas, () => { resize.disconnect(); theme.disconnect(); canvas.width = canvas.height = 0 })
   return root
 }

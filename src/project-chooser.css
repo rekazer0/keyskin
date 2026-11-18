@@ -1,39 +1,34 @@
 /* 文件页与手机新建对话框共用同一份模板表单。 */
 #new-project-dialog { --_width: 920px; height: min(620px, calc(var(--viewport-height) - var(--space-2xl))); overflow: hidden; }
-.project-chooser { height: 100%; min-height: 0; box-sizing: border-box; grid-template-rows: auto minmax(0, 1fr) auto; }
+.project-chooser { height: 100%; min-height: 0; box-sizing: border-box; grid-template-rows: auto minmax(0, 1fr); }
 #file-project-chooser:empty { display: none; }
-#file-project-chooser .project-chooser { display: flex; flex-direction: column; gap: var(--space-xl); height: auto; }
+#file-project-chooser { min-height: 0; }
+#file-project-chooser .project-chooser { display: grid; height: auto; gap: var(--space-xl); grid-template-rows: auto auto; }
 #file-project-chooser .ui-dialog-header { padding: 0; }
-#file-project-chooser .ui-dialog-header h2 { font-size: var(--font-size-xl); }
-#file-project-chooser .ui-dialog-header > .ui-icon-button,
-#file-project-chooser button[value="cancel"] { display: none; }
-#file-project-chooser .project-chooser-body { overflow: visible; padding: 0; }
-#file-project-chooser .ui-dialog-footer { flex-wrap: wrap; padding: var(--space-lg) 0 0; }
-#file-project-chooser .project-chooser-fields { flex-basis: var(--project-template-card-width); }
-.project-chooser-fields > .ui-field { flex: 1; min-width: 0; }
-.project-location { justify-content: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-chooser-body { overflow: auto; min-height: 0; }
-.project-chooser fieldset { display: block; margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
-.project-chooser legend { margin-bottom: 12px; padding: 0; font-size: var(--font-size-md); font-weight: 600; }
+#file-project-chooser .ui-dialog-header > div { display: grid; grid-template-columns: 1fr auto; gap: var(--space-sm); }
+#file-project-chooser .ui-dialog-header h2 { margin: 0; font-size: var(--font-size-xl); }
+#file-project-chooser .ui-dialog-header p { grid-column: 1 / -1; color: var(--tertiary); font-size: var(--font-size-md); }
+#file-project-chooser .ui-dialog-header > .ui-icon-button { display: none; }
+#file-project-chooser .project-chooser-body { padding: 0; overflow: visible; }
+#file-project-chooser .project-chooser legend { display: none; }
+#file-project-chooser .project-template-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--home-card-width)), 1fr)); gap: var(--space-lg); }
+#file-project-chooser .project-template-card .template-preview { height: var(--home-preview-height); }
+.project-template-count { align-self: center; color: var(--tertiary); font-size: var(--font-size-sm); white-space: nowrap; }
+.project-chooser-body { display: flex; flex-direction: column; gap: var(--space-lg); overflow: auto; min-height: 0; }
+.project-chooser-body > * { flex-shrink: 0; }
+.project-chooser fieldset { display: block; margin: 0; padding: 0; border: 0; min-width: 0; }
+.project-chooser legend { margin-bottom: var(--space-md); padding: 0; font-size: var(--font-size-md); font-weight: 600; }
 .project-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(0, var(--project-template-card-width))); gap: var(--space-md); }
-.project-chooser .project-template-card {
-  position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 12px;
-  min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md);
-  background: var(--material-control); box-shadow: none; cursor: pointer;
-}
-.project-chooser .project-template-card:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 .5px var(--accent); }
-.project-chooser .project-template-card input { position: absolute; right: 16px; top: 16px; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); z-index: 1; }
-.project-chooser .project-template-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-.project-chooser .template-preview { display: flex; align-items: center; justify-content: center; width: 100%; height: 108px; overflow: hidden; border-radius: var(--radius-md); background: var(--material-content); color: var(--secondary); font-size: var(--font-size-xs); }
-.project-chooser .template-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.project-chooser .project-template-card > span:not(.template-preview) { display: grid; gap: 6px; min-width: 0; }
-.project-chooser .project-template-card strong { font-size: var(--font-size-sm); font-weight: 500; line-height: 1.5; color: inherit; overflow-wrap: anywhere; }
-.project-chooser .project-template-card small { font-size: var(--font-size-xs); color: var(--secondary); line-height: 1.5; }
-.project-license { margin: 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--secondary); }
-.project-chooser-fields { display: flex; flex: 1; min-width: 0; gap: 12px; }
-@media(max-width: 640px) {
+.project-chooser .project-template-card { outline: 0; box-shadow: none; animation: none; }
+.project-chooser .template-preview { height: calc(var(--project-template-card-width) / 2); }
+.project-chooser .project-template-card > span:not(.template-preview) { display: grid; gap: var(--space-xs); min-width: 0; }
+.project-template-name { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
+.project-chooser .project-template-card strong { flex: 1; min-width: 0; color: var(--text); font-size: var(--font-size-homecard); font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.project-chooser .project-template-card small { min-width: 0; overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.project-template-check { flex: none; color: var(--accent); visibility: hidden; }
+.project-template-card[aria-selected="true"] .project-template-check { visibility: visible; }
+@media(max-width: 760px) {
   .project-template-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .project-chooser-fields { flex-basis: 100%; }
 }
 .mobile-project-intro { display: none; }
 @media (max-width: 760px) and (orientation: portrait) {
@@ -44,9 +39,6 @@
   .project-chooser .template-preview { height: 80px; }
   .project-chooser fieldset { margin-bottom: var(--space-md); }
   .project-chooser legend { display: none; }
-  .project-chooser .project-template-card input { top: var(--space-sm); right: var(--space-sm); opacity: 0; }
   .project-chooser .project-template-card strong { font-size: var(--font-size-xs); }
-  .project-chooser .project-template-card small { font-size: var(--font-size-micro); }
-  .project-chooser .project-chooser-fields { display: none; }
-  .project-chooser .ui-dialog-footer > button[value="cancel"] { display: none; }
+  .project-chooser .project-template-card small { font-size: var(--font-size-xs); }
 }

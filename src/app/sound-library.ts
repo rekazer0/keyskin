@@ -8,12 +8,15 @@ import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
 import { uploadKeySound } from "./resource-inspector"
 import type { SoundEntry } from "./types"
+import { bindResourceCard, selectGalleryItem, syncResourceSelection } from "./resource-gallery"
+import { releaseOnRemove } from "../dom-lifecycle"
+import { sortResources } from "./resource-page"
 
-export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void): void {
+export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void, previewHost?: HTMLElement): void {
   if (appState.keySoundFinished) releaseKeySound()
   resourceGallery.dataset.kind = "sound"
   const query = resourceSearch.value.trim().toLowerCase()
-  const visible = entries.filter(entry => `${entry.filename} ${entry.usage}`.toLowerCase().includes(query))
+  const visible = sortResources(entries.filter(entry => `${entry.filename} ${entry.usage}`.toLowerCase().includes(query)), entry => entry.filename)
   resourceCount.textContent = query ? `${visible.length} / ${entries.length}` : String(entries.length)
   const library = element("div", "ui-sound-library")
   const chooseFile = (entry?: SoundEntry) => {
@@ -37,6 +40,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
   const list = element("div", "ui-sound-list")
   list.setAttribute("role", "listbox")
   list.setAttribute("aria-label", "音效文件")
+  list.setAttribute("aria-multiselectable", "true")
   const detail = element("section", "ui-sound-preview")
   detail.setAttribute("aria-label", "音效试听")
   const status = element("p", "ui-field-note")
@@ -46,16 +50,9 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     const bytes = appState.archive?.getBytes(entry.path)?.byteLength ?? 0
     return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`
   }
-  const selectEntry = (entry: SoundEntry) => {
-    if (appState.selectedSoundID !== entry.id) releaseKeySound()
-    appState.selectedSoundID = entry.id
-    appState.selectedResourceGalleryPath = entry.id
-    onSelect()
-    updateSelection()
-  }
   const audition = (entry: SoundEntry) => {
     const stopping = appState.keySoundPath === entry.path
-    if (appState.selectedSoundID !== entry.id) selectEntry(entry)
+    if (!appState.selectedResourceGalleryPaths.includes(entry.id)) selectGalleryItem(entry.id)
     if (stopping) { releaseKeySound(); return }
     releaseKeySound()
     status.dataset.error = "false"
@@ -84,7 +81,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     }
   }
   const updateSelection = () => {
-    for (const { entry, select } of rows) select.setAttribute("aria-selected", String(entry.id === appState.selectedSoundID))
+    for (const { entry, select } of rows) select.setAttribute("aria-selected", String(appState.selectedResourceGalleryPaths.includes(entry.id)))
     detail.replaceChildren()
     const selected = entries.find(entry => entry.id === appState.selectedSoundID)
     if (!selected) {
@@ -164,23 +161,30 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void):
     const size = element("small", "ui-sound-size")
     size.textContent = fileSize(entry)
     select.append(createIcon("audio-lines", 16), text, format, size)
-    select.addEventListener("click", () => selectEntry(entry))
+    bindResourceCard(select, entry.id, () => audition(entry))
+    select.addEventListener("keydown", event => {
+      if (event.key === "Enter") { event.preventDefault(); audition(entry) }
+    })
     const play = iconButton("play", `试听 ${entry.filename}`, () => audition(entry))
     row.append(select, play)
     list.append(row)
     rows.push({ entry, row, select, play })
   }
-  bindListboxKeys(list, (option) => {
+  bindListboxKeys(list, (option, event) => {
     const target = rows.find(({ select }) => select === option)
     if (!target) return
-    selectEntry(target.entry)
+    target.select.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: event.ctrlKey, metaKey: event.metaKey, shiftKey: event.shiftKey }))
     target.select.focus()
   })
   // 无结果只放图标；清除用搜索框尾部的 x。
   if (!visible.length) list.append(emptyState(query ? "search-x" : "audio-lines"))
-  library.append(toolbar, list, detail)
+  library.append(toolbar, list)
+  if (previewHost) previewHost.replaceChildren(detail)
+  else library.append(detail)
+  resourceGallery.addEventListener("resource-selection-change", updateSelection)
+  releaseOnRemove(library, () => resourceGallery.removeEventListener("resource-selection-change", updateSelection))
   resourceGallery.append(library)
-  updateSelection()
+  syncResourceSelection()
   updatePlaying()
   onSelect()
 }

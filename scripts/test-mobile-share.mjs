@@ -53,9 +53,11 @@ try {
       const close = page.locator('#file-operation-dialog[open] #file-operation-close')
       if (await close.isVisible()) await close.click()
       const share = async () => {
-        await page.locator('#mobile-app-more > summary').click()
-        await page.locator('#mobile-app-more [data-mobile-action=mobile-share]').click()
-        await page.getByRole('dialog', {name:'分享皮肤',exact:true}).getByRole('button',{name:'继续，打开系统分享'}).click()
+        if (!await page.locator('#share-page').isVisible()) {
+          await page.locator('#mobile-app-more > summary').click()
+          await page.locator('#mobile-app-more [data-mobile-action=mobile-export-open]').click()
+        }
+        await page.locator('#mobile-share').click()
       }
       await share()
       const tap = page.locator('#file-operation-dialog[open] button', { hasText: /^分享$/ })

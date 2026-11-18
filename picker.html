@@ -26,7 +26,11 @@
     <input id="style-library-import-input" type="file" accept=".png,image/png" hidden>
     <main>
       <section id="image-picker-view" class="image-picker-view" hidden>
-        <div class="picker-canvas-stage"><canvas id="picker-canvas" class="ui-checker" width="720" height="420" aria-label="原始图片切片选择器"></canvas></div>
+        <div class="picker-canvas-stage"><canvas id="picker-canvas" class="ui-checker" width="720" height="420" aria-label="原始图片切片选择器" tabindex="0"></canvas></div>
+        <footer class="ui-dialog-footer picker-slice-actions">
+          <label class="ui-input ui-select"><select id="picker-slice" aria-label="切片" disabled></select></label>
+          <button id="picker-apply" class="ui-button" data-variant="primary" type="button" disabled>应用</button>
+        </footer>
       </section>
       <section id="style-library-view" class="style-library-view" hidden>
         <div class="style-library-bar">

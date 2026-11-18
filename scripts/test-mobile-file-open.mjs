@@ -36,7 +36,7 @@ try {
         assert.equal(await page.locator('#document-name').textContent(), '安卓搜狗.ssf')
       }
       if (platform === 'iPhone') {
-        // iOS 只在点击里同步调用 click() 时弹选择框：有未保存修改时先选文件，再询问是否保存。
+        // iOS 只在点击里同步调用 click() 时弹选择框：先选文件，再询问是否导出当前皮肤。
         await openEditorTemplate(page, 'official-android-bds')
         await page.waitForFunction(() => !document.querySelector('#dirty').hidden)
         await page.waitForFunction(() => !document.querySelector('#file-operation-dialog').open && !document.querySelector('#open').disabled)
@@ -49,11 +49,11 @@ try {
         const chooser = await picker
         assert.equal(await page.getByRole('dialog', { name: '未保存保护' }).count(), 0)
         await chooser.setFiles({ name: '苹果搜狗.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(ssfFixture()) })
-        await page.getByRole('dialog', { name: '未保存保护' }).getByRole('button', { name: '暂不保存，离开' }).click()
+        await page.getByRole('dialog', { name: '是否导出当前皮肤？' }).getByRole('button', { name: '不导出', exact: true }).click()
         await page.waitForFunction(() => document.querySelector('#document-name').textContent === '苹果搜狗.ssf' && !document.querySelector('#open').disabled)
       }
       assert.deepEqual(errors, [])
-      console.log(`PASS: ${platform} file picker${platform === 'Android' ? ', SSF import and invalid-file rejection' : platform === 'iPhone' ? ', picker before unsaved prompt' : ''}`)
+      console.log(`PASS: ${platform} file picker${platform === 'Android' ? ', SSF import and invalid-file rejection' : platform === 'iPhone' ? ', picker before export prompt' : ''}`)
     } finally {
       await context.close()
     }

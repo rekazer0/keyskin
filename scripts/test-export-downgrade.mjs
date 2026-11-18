@@ -26,8 +26,8 @@ try {
       const activation = navigator.userActivation
       Object.defineProperty(navigator, 'userActivation', { value: { isActive: false } })
       window.exportEvents = []
-      const showModal = HTMLDialogElement.prototype.showModal
-      HTMLDialogElement.prototype.showModal = function () {
+      const showModal = HTMLDialogElement.prototype.show
+      HTMLDialogElement.prototype.show = function () {
         window.exportEvents.push(this.id || 'confirmation')
         return showModal.call(this)
       }
@@ -49,27 +49,27 @@ try {
     await page.waitForFunction(() => !document.querySelector('#file-operation-dialog').open)
     const startExport = async () => {
       await page.evaluate(() => { window.exportEvents = [] })
-      await page.locator('.pen-file-menu > summary').click()
-      await page.locator('#mobile-export-open').click()
-      await page.locator('#mobile-export-dialog input[value="sxi"]').check()
+      await page.locator('#mobile-export-open').evaluate(button => button.click())
+      await page.locator('#share-page input[value="sxi"]').check()
       await page.evaluate(() => { window.exportEvents = [] })
-      await page.locator('#mobile-export-dialog button[value="export"]').click()
+      await page.locator('#share-export').click()
     }
     await startExport()
     const confirmation = page.locator('#file-operation-dialog')
-    const continueExport = confirmation.getByRole('button', { name: '继续导出', exact: true })
+    const continueExport = confirmation.getByRole('button', { name: '确认并继续', exact: true })
     await continueExport.waitFor()
     await confirmation.evaluate(dialog => Promise.all(dialog.getAnimations().map(animation => animation.finished)))
     assert.deepEqual(await page.evaluate(() => window.exportEvents), ['file-operation-dialog'])
     assert.equal(await page.locator('dialog[open]').count(), 1)
-    assert.equal(await confirmation.locator('#file-operation-result').textContent(), expected)
+    assert.equal(await page.locator('dialog:modal').count(), 0, 'compatibility remains inline')
+    assert.deepEqual(await confirmation.locator('#file-operation-result > p').allTextContents(), expected.split('\n'))
     assert.equal(await confirmation.locator('.ui-dialog-meter').isVisible(), true)
     const body = confirmation.locator('.ui-dialog-body')
     const scroll = await body.evaluate(element => ({ top: element.scrollTop, height: element.clientHeight, total: element.scrollHeight }))
     assert.equal(scroll.top, 0, 'long warnings start at the first item')
     assert.ok(scroll.total > scroll.height, 'only the complete warning list scrolls')
     const shell = await confirmation.evaluate(dialog => ({ height: dialog.getBoundingClientRect().height, total: dialog.scrollHeight, client: dialog.clientHeight }))
-    assert.ok(shell.height <= Math.min(482, viewport.height - 30), 'dialog height stays bounded on desktop and mobile')
+    assert.ok(shell.height <= viewport.height, 'inline operation stays bounded by the viewport')
     assert.equal(shell.total, shell.client, 'dialog shell never scrolls')
     const header = await confirmation.locator('.ui-dialog-header').boundingBox()
     const footer = await confirmation.locator('.ui-dialog-footer').boundingBox()
@@ -106,14 +106,14 @@ try {
     assert.deepEqual(await page.evaluate(() => window.exportEvents), ['file-operation-dialog', 'picker', 'write'])
     assert.ok(await page.evaluate(() => window.exportSize > 0))
     assert.equal(await page.locator('#file-operation-dialog').isVisible(), true)
-    assert.equal(await page.locator('#file-operation-title').textContent(), '导出完成')
+    assert.equal(await page.locator('#file-operation-title').textContent(), '另存为完成')
     assert.equal(await page.locator('#file-operation-progress').evaluate(meter => meter.value), 100)
     assert.match(await page.locator('#file-operation-result').textContent(), /测试.sxi\n保存位置：浏览器中选择的文件夹/)
     await page.locator('#file-operation-close').click()
     assert.deepEqual(errors, [])
     await page.close()
   }
-  console.log('PASS: one window shows progress, unique scrollable warnings, safe cancellation and the final result on desktop/mobile')
+  console.log('PASS: inline page shows progress, unique scrollable warnings, safe cancellation and the final result on desktop/mobile')
 } finally {
   await browser?.close()
   await server.close()

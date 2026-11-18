@@ -64,7 +64,7 @@ try {
     assert.deepEqual(await page.locator("#mobile-property-tabs > button").allTextContents(), ["几何", "外观", "文字", "动作", "音效", "动效"])
     const headerHeight = await page.locator('.source > .pane-heading').evaluate(node => node.getBoundingClientRect().height)
     assert.ok(headerHeight <= 117, `compact property header: ${headerHeight}px at ${width}px`)
-    const controls = await page.locator('#mobile-canvas-mode button:visible, #mobile-save:visible, #mobile-property-tabs > button:visible, .ui-property-link:visible').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height))
+    const controls = await page.locator('#mobile-save:visible, #mobile-property-tabs > button:visible, .ui-property-link:visible').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height))
     assert.ok(controls.every(height => height >= 44), "visible controls provide 44px touch targets")
     const canvasImage = async () => {
       await page.evaluate(async () => (await import("/src/app/canvas-interaction.ts")).preview.whenDrawn())

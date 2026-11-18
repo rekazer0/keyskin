@@ -68,6 +68,18 @@ export function playEnter(element: Element | null | undefined): void {
   entering.set(element, element.animate([{ opacity: 0 }, { opacity: 1 }], options))
 }
 
+/** 横向翻页时，新一页从对应的一侧进入。 */
+export function playPageSlide(element: Element, direction: -1 | 1): void {
+  entering.get(element)?.cancel()
+  const options = timing("base", "standard")
+  if (!options) return
+  const offset = direction === 1 ? "var(--space-xl)" : "calc(-1 * var(--space-xl))"
+  entering.set(element, element.animate([
+    { opacity: 0, transform: `translateX(${offset})` },
+    { opacity: 1, transform: "translateX(0)" },
+  ], options))
+}
+
 /** 方向图标从上一个方向旋转到当前方向。 */
 export function playRotation(element: Element, fromDegrees: number): void {
   entering.get(element)?.cancel()

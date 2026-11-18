@@ -1,7 +1,7 @@
 import { canvasFontFamily, retinaThumbnail } from "../atlas.ts"
 import { bindListboxKeys, element, emptyState, searchField } from "../dom-element.ts"
 import { releaseOnRemove } from "../dom-lifecycle.ts"
-import { bindDialog } from "./ask"
+import { bindDialog } from "./ask.ts"
 import { createIcon } from "../icons.ts"
 
 export const SYSTEM_FONTS = [
@@ -63,7 +63,7 @@ async function drawFontSample(canvas: HTMLCanvasElement, choice: FontChoice, sam
   canvas.setAttribute("aria-busy", "false")
 }
 
-function fontSample(choice: FontChoice, sample?: string): HTMLCanvasElement {
+export function fontSample(choice: FontChoice, sample?: string): HTMLCanvasElement {
   const canvas = element("canvas", "ui-font-sample")
   canvas.setAttribute("role", "img")
   const resize = new ResizeObserver(() => { void drawFontSample(canvas, choice, sample) })

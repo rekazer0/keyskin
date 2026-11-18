@@ -219,7 +219,7 @@ Global.n0[67] = SkinLayoutManagerKt.e();
 
 ## iPhone 截图与输入串背景分支
 
-用户另提供 `好可爱蛙_智能深色-18键.bds` 与 iPhone 官方百度输入法截图。
+用户另提供一份 BDS 样本与 iPhone 官方百度输入法截图。
 这个皮肤虽然 Info.txt 写 `SupportPlatform=A`，截图仍显示 iOS 把输入串放在候选栏上方的一整行。
 该文件 `[INPUT] BACK_STYLE=7`，STYLE7 的 `NM_COLOR=EF3B3B3B`；前景 STYLE8 的字号 45。
 
@@ -236,7 +236,7 @@ iPhone 的整行宽度和位置依据截图验证，不从 Android APK 推导。
 | fix/preview-device-parity | 通过 | 195/195 | 最终复核 0 处差异 |
 | fix/input-background-preview | 通过 | 193/193 | 最终复核 0 处差异 |
 
-输入背景专项端到端测试同时通过内置小米模板和用户提供的青蛙皮肤。
+输入背景专项端到端测试同时通过内置小米模板和用户提供的 BDS 样本。
 完整 `npm run test:e2e` 两个分支均运行完，真实皮肤遍历均通过 75/75；最后的综合用户流程均为 21/22。
 共同失败为 `scripts/test-user-flows.mjs:659`：搜狗皮肤侧栏中 `1080/status1/phoneSkin.ini` 的入口预期 1 个，实际 2 个。
 该失败在生产代码完全未改的 input-background 分支单独重跑仍复现，因此记录为已有的 SSF 侧栏问题；本轮没有更改测试断言或顺带修改 SSF 功能。

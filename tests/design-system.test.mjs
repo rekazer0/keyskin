@@ -1,19 +1,35 @@
 // 设计规范的强制执行（规则见 DESIGN.md）。每条规则按文件统计违规，任何违规都直接失败。
 import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
 import { readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 import postcss from "postcss"
 
 const root = new URL("..", import.meta.url)
 const read = (path) => readFileSync(new URL(path, root), "utf8")
 const list = (dir, ext) => readdirSync(new URL(dir, root)).filter((name) => name.endsWith(ext)).map((name) => `${dir}${name}`)
+// 根目录里被 gitignore 的本地探针页不属于产品界面。
+const projectFiles = (paths) => {
+  if (!paths.length) return paths
+  try {
+    const ignored = execFileSync("git", ["-c", "core.quotepath=false", "check-ignore", "--", ...paths], {
+      cwd: fileURLToPath(root), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    })
+    const skip = new Set(ignored.split("\n").filter(Boolean))
+    return paths.filter((path) => !skip.has(path))
+  } catch (error) {
+    if (error?.status === 1) return paths
+    return paths
+  }
+}
 const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ""))
 
 const cssFiles = list("src/", ".css")
 // 设备模拟按真机还原，数值规则不适用（DESIGN.md §1）
 const scaledCss = (files) => Object.fromEntries(Object.entries(files).filter(([file]) => file !== "src/device-preview.css"))
 const tsFiles = [...list("src/", ".ts"), ...list("src/app/", ".ts"), ...list("src/app/wiring/", ".ts"), ...list("src/ssf/", ".ts"), ...list("src/palm/", ".ts")]
-const htmlFiles = list("", ".html")
+const htmlFiles = projectFiles(list("", ".html"))
 const css = Object.fromEntries(cssFiles.map((f) => [f, stripComments(read(f))]))
 const ts = Object.fromEntries(tsFiles.map((f) => [f, read(f)]))
 const html = Object.fromEntries(htmlFiles.map((f) => [f, read(f)]))

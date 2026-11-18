@@ -28,6 +28,7 @@ async function chooseImage(page, toStyle, name = 'bg') {
   assert.equal(await library.locator('#style-library-apply-to-style').isVisible(), true)
   await library.locator(toStyle ? '#style-library-apply-to-style' : '#style-library-apply').click()
   await library.locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
+  await library.locator('#picker-apply').click()
 }
 async function selectKey(page, format) {
   await page.evaluate(async format => {
@@ -139,6 +140,10 @@ try {
       await picker(page).locator('.ui-image-card[data-path$="/unsliced.png"]').click()
       await picker(page).locator('#style-library-apply').click()
       await picker(page).locator('#picker-canvas').waitFor({ state: 'visible' })
+      assert.equal(await picker(page).locator('#picker-apply').isDisabled(), true)
+      await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
+      assert.equal(await picker(page).locator('#picker-slice').inputValue(), '-1')
+      assert.equal(await picker(page).locator('#picker-apply').isEnabled(), true)
       assert.deepEqual(await imageSlices(), beforeSlices)
       await picker(page).locator('#picker-close').click()
       await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
@@ -163,7 +168,9 @@ try {
       if (toStyle) {
         assert.equal(after.id, before.id)
         // 应用至样式后窗口仍在，整张图已变为真正的切片，再次应用不重复创建。
-        await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
+        await picker(page).locator('#picker-canvas').waitFor()
+        assert.equal(await picker(page).locator('#picker-slice').inputValue(), '1')
+        await picker(page).locator('#picker-canvas').press('Enter')
         assert.deepEqual(await imageSlices(), afterSlices)
         await picker(page).locator('#picker-close').click()
       } else assert.notEqual(after.id, before.id)

@@ -67,6 +67,12 @@ test('Palm styles are looked up by id in the orientation table first, then the s
   assert.deepEqual(palmStyleIDList(skin, 'default', 'land'), ['1728'])
 })
 
+test('compact skin.json locates the selected style without matching escaped text', () => {
+  const text = JSON.stringify({ note: '"ss_1": {"5": {}}', default: { ss_1: { 5: { id: 'STYLE5', text: 'a}b' }, 6: { id: 'STYLE6' } } } })
+  const range = sxiFragmentRange(text, ['default', 'ss_1', '5'])
+  assert.equal(text.slice(...range), '"5":{"id":"STYLE5","text":"a}b"}')
+})
+
 test('a new Palm style takes the id after every one the theme\'s tables use (as default.css does), or the one asked for', () => {
   const skin = parseSkinJson(original)
   skin.default.s_land = { ss_1: { 1: { id: 'STYLE1' }, 2000: { id: 'STYLE2000' } } }

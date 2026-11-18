@@ -1,0 +1,118 @@
+import assert from "node:assert/strict"
+import { mkdirSync } from "node:fs"
+import { chromium } from "playwright"
+import { createServer } from "vite"
+import { SkinArchive } from "../src/skin.ts"
+import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
+
+const archive = SkinArchive.open(bdsFixture())
+const path = "light/skin/res/default.css"
+archive.setText(path, archive.getText(path) + "\n[STYLE7]\nINFO=空分组\n[STYLE8]\nFONT_CLEARTYPE=0\nPRESS_ANIM=1\n[STYLE9]\nFONT_SIZE=0\n[STYLE10]\nNM_COLOR=FF688C46\nHL_COLOR=80445632\nBORDER_SIZE=4\n")
+const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41947, strictPort: false, hmr: false } })
+await server.listen()
+const browser = await chromium.launch()
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "light" })
+const errors = []
+page.on("pageerror", error => errors.push(error.message))
+const snapshot = () => page.evaluate(async path => {
+  const { appState } = await import("/src/app/state.ts")
+  return { text: appState.archive.getText(path), undo: appState.undoStack.length }
+}, path)
+const choose = async id => {
+  await page.locator(`#resource-gallery [data-style-id="${id}"]`).click()
+  await page.waitForFunction(id => document.querySelector("#resource-name").textContent === `STYLE${id}`, id)
+}
+const group = id => page.locator(`#style-detail-fields [data-style-detail-group="${id}"]`)
+const pending = locator => locator.evaluate(node => node.hasAttribute("data-config-section-pending"))
+try {
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await page.locator("#browser-open").setInputFiles({ name: "empty-sections.bds", mimeType: "application/octet-stream", buffer: Buffer.from(archive.toBytes("bds")) })
+  await page.waitForFunction(() => !document.querySelector("#open").disabled)
+  const close = page.locator("#file-operation-dialog[open] #file-operation-close")
+  if (await close.isVisible()) await close.click()
+  await page.locator('[data-workspace-page="resources"]').click()
+  await choose("10")
+  await group("typography").locator("[data-config-section-add]").waitFor()
+  assert.equal(await group("typography").locator(".ui-typography-preview").isVisible(), false)
+  const colors = group("color").locator('[data-document-key="NM_COLOR HL_COLOR"] .ui-color-field:visible')
+  assert.deepEqual(await colors.locator(".ui-color-caption").allTextContents(), ["正常", "按下"])
+  assert.deepEqual(await colors.locator(".ui-color-value").allTextContents(), ["#688C46", "#445632"])
+  assert.equal(await group("color").locator('[data-document-key="BORDER_SIZE"] input[type="number"]').inputValue(), "4")
+  mkdirSync(".ui-current", { recursive: true })
+  await page.screenshot({ path: ".ui-current/color-only-style-inspector.png" })
+  const colorOnly = await snapshot()
+  await page.getByRole("button", { name: "编辑模式", exact: true }).click()
+  const opacity = colors.nth(1).locator('input[type="number"]')
+  await opacity.fill("100")
+  await opacity.press("Tab")
+  assert.match((await snapshot()).text, /HL_COLOR=FF445632/)
+  await group("typography").locator("[data-config-section-add]").waitFor()
+  await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
+  assert.deepEqual(await snapshot(), colorOnly)
+  await choose("7")
+  await group("animation").locator("[data-config-section-add]").waitFor()
+  const before = await snapshot()
+  for (const id of ["typography", "animation"]) {
+    const section = group(id)
+    assert.equal(await pending(section), true)
+    assert.equal(await section.locator(".ui-field:visible").count(), 0, "空分组不显示字段")
+    assert.equal(await section.locator(".ui-typography-preview:visible").count(), 0)
+    const add = section.locator("[data-config-section-add]")
+    await add.focus()
+    await page.keyboard.press("Enter")
+    assert.equal(await pending(section), false)
+    assert.ok(await section.locator(".ui-field:visible").count() > 0)
+    assert.deepEqual(await snapshot(), before, "展开不写入默认值或新增撤销记录")
+  }
+  const size = group("typography").locator('[data-document-key="FONT_SIZE"] input[type="number"]')
+  await size.fill("32")
+  await size.press("Tab")
+  assert.match((await snapshot()).text, /FONT_SIZE=32/)
+  assert.equal(await pending(group("typography")), false)
+  await page.evaluate(async () => (await import("/src/app/edit-history.ts")).undo())
+  await choose("7")
+  await group("typography").locator("[data-config-section-add]").waitFor()
+  assert.deepEqual(await snapshot(), before)
+  await choose("8")
+  assert.equal(await pending(group("typography")), false, "显式关闭保留配置分组")
+  assert.equal(await pending(group("animation")), false, "部分配置保留整组")
+  await choose("9")
+  assert.equal(await pending(group("typography")), false, "显式 0 不是空配置")
+  await choose("7")
+  await group("typography").locator("[data-config-section-add]").waitFor()
+  const surfaces = await page.locator(".sidebar, .workspace, .source, .resource-detail-heading").evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor))
+  assert.ok(surfaces.every(color => /^rgba?\(255, 255, 255(?:, [\d.]+)?\)$/.test(color)), JSON.stringify(surfaces))
+  assert.equal(new Set(surfaces).size, 1, "材质下各区仍使用相同白色")
+  assert.deepEqual(await page.locator("#style-detail-previews > button > span").allTextContents(), ["正常", "按下"])
+  await page.screenshot({ path: ".ui-current/empty-inspector-sections.png" })
+  await page.setViewportSize({ width: 812, height: 900 })
+  assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false)
+  await group("typography").locator("[data-config-section-add]").click()
+  assert.equal(await group("typography").locator(".ui-typography-preview").isVisible(), true)
+  await page.screenshot({ path: ".ui-current/empty-inspector-sections-expanded.png" })
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.locator('[data-workspace-page="overview"]').click()
+  await page.evaluate(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    await (await import("/src/app/navigation.ts")).selectFile("light/port/py_26.ini")
+    appState.selectedKeySections = ["KEY2"]
+    ;(await import("/src/app/key-inspector.ts")).populateKeyInspector()
+  })
+  const keyText = page.locator(".key-typography-fields")
+  await keyText.locator("[data-config-section-add]").waitFor()
+  await keyText.locator("[data-config-section-add]").click()
+  assert.equal(await keyText.locator(".ui-typography-preview").isVisible(), true, "按键检查器复用整组展开")
+  await page.evaluate(async () => {
+    const { appState } = await import("/src/app/state.ts")
+    appState.selectedKeySections = ["KEY1", "KEY2"]
+    ;(await import("/src/app/key-inspector.ts")).populateKeyInspector()
+  })
+  assert.equal(await pending(keyText), false, "多选混合值不收起")
+  assert.equal(await keyText.locator('[data-typography="size"] input[type="number"]').getAttribute("placeholder"), "混合")
+  assert.deepEqual(await snapshot(), before, "切换对象与展开字体均不写配置")
+  assert.deepEqual(errors, [])
+  console.log("Empty inspector sections: independent colors, collapsed groups, keyboard expansion, no view writes, editing, undo, explicit zero/false and white surfaces passed")
+} finally {
+  await browser.close()
+  await server.close()
+}

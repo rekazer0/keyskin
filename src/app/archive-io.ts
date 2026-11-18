@@ -1,6 +1,6 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetHidden, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, exportTargetUnavailable, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
@@ -105,6 +105,11 @@ export async function loadArchive(
   appState.assetURL = releaseImagePreviewURL(appState.assetURL)
   clearImageSlicePicker()
   appState.archive = nextArchive
+  appState.resourceStyleType = "all"
+  appState.resourceUsageFilter = "all"
+  appState.resourceCatalog = ""
+  appState.selectedResourceCatalogItem = ""
+  appState.resourcePageStatistics = undefined
   const ssfWarnings = rebuildSsfPreview()
   if (ssfWarnings.length) clientLog.info("ssf.preview.warning", { warnings: ssfWarnings.join("；") })
   appState.aiDesignConversationTarget = nextArchive
@@ -144,8 +149,7 @@ export async function loadArchive(
   if (!isNew && isTauri() && path) recordRecentFile(path, documentName.textContent, existingSourceWorkspace)
   saveButton.disabled = false
   for (const button of exportTargets) {
-    button.hidden = exportTargetHidden(button.dataset.exportFormat as ExportFormat)
-    button.disabled = button.hidden
+    button.disabled = exportTargetUnavailable(button.dataset.exportFormat as ExportFormat)
   }
   syncMobileShareLabel()
   updateFileOperationProgress(68, "正在生成文件列表…")
@@ -218,16 +222,15 @@ export async function loadArchive(
   })
 }
 export async function openNative(): Promise<boolean> {
-  if (!(await prepareDocumentReplacement())) return false
   const path = isAndroidTauri() ? await pickAndroidSkinFile() : await open({
     multiple: false,
     filters: [{ name: "输入法皮肤", extensions: ["bdi", "bds", "bda", "ssf", "mssf", "sxi"] }],
   })
   if (typeof path !== "string") return false
+  if (!(await prepareDocumentReplacement("open"))) return false
   await loadNativePath(path)
   return true
 }
-
 /** 安卓选文件并持久授予读写权限，保存才能写回；取消时返回 undefined。 */
 async function pickAndroidSkinFile(initialUri?: string): Promise<string | undefined> {
   try {
@@ -237,7 +240,6 @@ async function pickAndroidSkinFile(initialUri?: string): Promise<string | undefi
     throw error
   }
 }
-
 /** skinPath 非空时表示从最近皮肤打开：保存仍写回原皮肤文件，并沿用这个源码目录。 */
 export async function loadSourceWorkspace(path: string, skinPath = ""): Promise<boolean> {
   if (isAndroidTauri() && path.startsWith("content://")) {
@@ -294,9 +296,7 @@ export async function restoreLastSourceWorkspace(): Promise<void> {
     }
   })
 }
-
 export const UNSUPPORTED_SKIN_MESSAGE = "仅支持 .bda、.bdi、.bds、.ssf、.mssf 或 .sxi 皮肤文件"
-
 /** Opens a skin file's bytes; a Sogou skin is unpacked first when it uses the encrypted container. */
 export async function openSkinBytes(bytes: Uint8Array, path: string): Promise<boolean> {
   // Android pickers return content:// URIs without the file name, so the bytes decide there.
@@ -319,18 +319,18 @@ export function isSupportedSkinPath(path: string): boolean {
 
 export async function loadDroppedFile(file: File): Promise<boolean> {
   if (!isSupportedSkinPath(file.name)) return false
-  if (!(await prepareDocumentReplacement())) return false
+  if (!(await prepareDocumentReplacement("open"))) return false
   return openSkinBytes(await readBrowserSkinFile(file), file.name)
 }
 
 export async function loadDroppedPath(path: string): Promise<boolean> {
   if (!isSupportedSkinPath(path)) return false
-  if (!(await prepareDocumentReplacement())) return false
+  if (!(await prepareDocumentReplacement("open"))) return false
   return loadNativePath(path)
 }
 
 export async function loadDroppedSourceWorkspace(path: string): Promise<boolean> {
-  if (!(await prepareDocumentReplacement())) return false
+  if (!(await prepareDocumentReplacement("open"))) return false
   return loadSourceWorkspace(path)
 }
 

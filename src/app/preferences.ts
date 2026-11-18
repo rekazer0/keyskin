@@ -1,6 +1,6 @@
-import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsDialog, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
+import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsDialog, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, interfaceTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
 import { crossfade, playEnter } from "../motion"
-import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
+import { isTauri, settingsPages, settingsNavItems, preview, toolbarPreview, source, mobilePortraitQuery } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { checkForUpdate } from "../update.ts"
 import { initializeSourceDirectory } from "./source-workspace"
@@ -12,6 +12,7 @@ import { showError } from "./file-operations"
 import { type WindowMaterialKind } from "./types"
 import { updateSourceHighlight } from "./source-panel"
 import { initializeSettings } from "../settings"
+import { saveRecentHistoryLimit } from "./recent-files"
 import { setGuidesVisible } from "./preview-render"
 import { modelSettings } from "./ai-panel"
 
@@ -42,7 +43,7 @@ export async function refreshUpdateStatus(): Promise<void> {
 export function showSettingsPage(page: string): void {
   if (matchMedia("(max-width: 760px)").matches) {
     settingsDialog.dataset.mobileSettings = "detail"
-    settingsDialog.querySelector("#settings-title")!.textContent = ({ appearance: "外观设置", canvas: "预览与画布设置", source: "源代码设置", model: "AI 模型设置", about: "关于与帮助" } as Record<string, string>)[page] ?? "设置"
+    settingsDialog.querySelector("#settings-title")!.textContent = ({ appearance: "外观设置", canvas: "预览与画布设置", files: "文件设置", source: "源代码设置", model: "AI 模型设置", about: "关于与帮助" } as Record<string, string>)[page] ?? "设置"
   }
   const target = settingsPages.find(panel => panel.dataset.settingsPanel === page && !panel.hasAttribute("data-platform-hidden"))
     ?? settingsPages.find(panel => !panel.hasAttribute("data-platform-hidden"))
@@ -77,7 +78,7 @@ export const initialCanvasBackground = savedCanvasBackground === "default"
   ? "glass"
   : canvasBackgroundValues.includes(savedCanvasBackground as CanvasBackground)
     ? savedCanvasBackground as CanvasBackground
-    : "checkerboard"
+    : mobilePortraitQuery.matches ? "glass" : "checkerboard"
 
 export function applyEditorCrosshairSetting(): void {
   const state = editorCrosshair.checked ? "on" : "off"
@@ -97,17 +98,22 @@ export const systemTheme = matchMedia("(prefers-color-scheme: dark)")
 
 export function applyAppTheme(): void {
   const preference = appTheme.value === "light" || appTheme.value === "dark" ? appTheme.value : "system"
-  const resolved = preference === "system" ? (systemTheme.matches ? "dark" : "light") : preference
+  const designScheme = interfaceTheme.selectedOptions[0]?.dataset.colorScheme
+  const resolved = designScheme === "light" || designScheme === "dark" ? designScheme : preference === "system" ? (systemTheme.matches ? "dark" : "light") : preference
   const root = document.documentElement
+  appTheme.disabled = Boolean(designScheme)
+  settingsDialog.querySelector<HTMLElement>('#interface-theme-note')!.hidden = !designScheme
+  for (const button of settingsDialog.querySelectorAll<HTMLButtonElement>('[data-setting-choice="app-theme"]')) button.disabled = appTheme.disabled
   const apply = () => {
+    root.dataset.interfaceTheme = interfaceTheme.value
     root.dataset.appTheme = resolved
     root.style.colorScheme = resolved
     browserThemeColor.content = getComputedStyle(root).getPropertyValue("--material-toolbar").trim()
   }
   // 启动时直接上色；之后换主题整窗交叉淡化
-  if (root.dataset.appTheme && root.dataset.appTheme !== resolved) crossfade(apply)
+  if (root.dataset.appTheme && (root.dataset.appTheme !== resolved || root.dataset.interfaceTheme !== interfaceTheme.value)) crossfade(apply)
   else apply()
-  if (isTauri()) void getCurrentWindow().setTheme(preference === "system" ? null : preference)
+  if (isTauri()) void getCurrentWindow().setTheme(designScheme ? resolved : preference === "system" ? null : preference)
 }
 
 export function applySourceFontSize(): void {
@@ -253,4 +259,8 @@ export function setCanvasDropState(active: boolean): void {
   canvasWrap.classList.toggle("drop-target", active)
 }
 
-export const settingsController = initializeSettings(settingsDialog, setGuidesVisible, modelSettings)
+const recentHistoryLimitInput = settingsDialog.querySelector<HTMLInputElement>("#recent-history-limit")!
+export const settingsController = initializeSettings(settingsDialog, setGuidesVisible, modelSettings, () => {
+  saveRecentHistoryLimit(recentHistoryLimitInput.valueAsNumber)
+})
+recentHistoryLimitInput.addEventListener("invalid", () => showSettingsPage("files"))

@@ -1,6 +1,6 @@
 import { renameResourceImage } from "../image-rename"
 import { ssfPackage, ssfTheme } from "../ssf-documents"
-import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
+import { aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, layout, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, resourceBackButton, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
 import { bindDialog } from "../ask.ts"
 import { closeDialog } from "../../motion.ts"
 import { applyImageSliceSelection, resourcePickerPayload, selectImageResource, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
@@ -13,17 +13,19 @@ import { soundPathForFilename } from "../../sounds.ts"
 import { bindPaneResize, applyModeState } from "../mobile-layout"
 import { currentConfigPath } from "../config-context"
 import { refreshPreview, setGuidesVisible, updateDevicePreview, refreshSimulationPreview, fitCanvasPreview } from "../preview-render"
-import { showStyle, renderResourceInspector, selectResourceImage, uploadKeySound, uploadResourceImage, currentSoundEntries, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
+import { showStyle, renderResourceInspector, selectResourceImage, uploadResourceImage, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
+import { wireResourceSelection } from "../resource-gallery"
+import { wireResourceTransfer, downloadResourceSelection, resourceDropTarget, uploadResourceFiles, deleteCatalogFont } from "../resource-transfer"
 import { createAtlasWorkspace } from "../../atlas-workspace"
 import { createAnimationWorkspace } from "../../animation-workspace"
 import { selectFile } from "../navigation"
 import { populateKeyInspector } from "../key-inspector"
-import { autoSliceSelectedImage, drawAtlas, scheduleAtlasDraw, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector, nextSliceIndex } from "../tile-editing"
+import { autoSliceSelectedImage, drawAtlas, finishAtlasEdits, scheduleAtlasDraw, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector, nextSliceIndex } from "../tile-editing"
 import { type TileRect, duplicateTileSlice } from "../../tiles.ts"
 import { type Change } from "../../history.ts"
 import { showStatus, runFileOperation, showError } from "../file-operations"
 import { resourceRootPath, setLayoutImageBytes, openLayoutImageDialog, syncLayoutImageConfig } from "../layout-image-replace"
-import { writeToChosenFile, isSupportedSkinPath, loadDroppedPath, loadDroppedSourceWorkspace, loadNativePath, restoreLastSourceWorkspace } from "../archive-io"
+import { isSupportedSkinPath, loadDroppedPath, loadDroppedSourceWorkspace, loadNativePath, restoreLastSourceWorkspace } from "../archive-io"
 import { canvasBackgroundFromDevice } from "../../canvas-background.ts"
 import { applyCanvasBackground, applyWindowMaterialWithRetry, handleWindowMaterialError, sourceDirectoryInitialization, refreshUpdateStatus } from "../preferences"
 import { syncAiDesignContext } from "../ai-panel"
@@ -92,18 +94,21 @@ export function wireResourcesAndStartup(): void {
   bindPaneResize($("#sidebar-resize-handle"), "--sidebar-width", "sidebarWidthV2", 180, 248, 1)
   bindPaneResize(inspectorResizeHandle, "--inspector-width", "inspectorWidthV5", 220, 360, -1)
   // 样式 / 图片列表：方向键换选中，⌘D 复制选中的样式（Delete 由卡片自己处理）。
-  bindListboxKeys(resourceGallery, (card) => {
-    card.click()
+  wireResourceSelection()
+  wireResourceTransfer()
+  bindListboxKeys(resourceGallery, (card, event) => {
+    card.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: event.ctrlKey, metaKey: event.metaKey, shiftKey: event.shiftKey }))
     card.focus()
   })
   resourceRenameButton.addEventListener("click", renameResourceImage)
   resourceGallery.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented) return
     if (event.key === "F2" && !resourceRenameButton.disabled && !resourceRenameButton.hidden) {
       event.preventDefault()
       renameResourceImage()
       return
     }
-    if (event.key.toLowerCase() !== "d" || !(event.metaKey || event.ctrlKey) || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID) return
+    if (event.key.toLowerCase() !== "d" || !(event.metaKey || event.ctrlKey) || appState.resourceInspectorMode !== "style" || !appState.selectedStyleID || appState.selectedResourceGalleryPaths.length !== 1) return
     event.preventDefault()
     const id = duplicateStyle(appState.selectedStyleID)
     if (id) showStyle(id)
@@ -120,7 +125,10 @@ export function wireResourcesAndStartup(): void {
     },
   })
   appState.atlasWorkspace = createAtlasWorkspace({
-    back: () => selectFile(appState.layoutPath || currentConfigPath(layout.value)),
+    begin: () => { appState.atlasEdits = new Map() },
+    finish: save => finishAtlasEdits(save, () => {
+      if (appState.selectedResourcePath) resourceBackButton.click()
+    }),
     autoSlice: () => { void autoSliceSelectedImage() },
     guides: () => setGuidesVisible(!appState.guidesVisible),
     redraw: scheduleAtlasDraw,
@@ -132,8 +140,9 @@ export function wireResourcesAndStartup(): void {
       commitTile({ index: slice.index, source: slice.source, ...(enabled ? { inner: [x + left, y + top, width - left * 2, height - top * 2] as TileRect } : {}) })
     },
     copy: () => {
-      if (!appState.archive || !appState.selectedResourcePath || !isEditing()) return
-      const base = appState.selectedResourcePath.replace(/\.png$/i, "")
+      const path = appState.selectedResourceGalleryPath
+      if (!appState.archive?.isImage(path) || !isEditing()) return
+      const base = path.replace(/\.png$/i, "")
       let target = `${base}_copy`
       for (let index = 2; appState.archive.getBytes(`${target}.png`) || appState.archive.getBytes(`${target}.til`); index++) target = `${base}_copy${index}`
       const changes: Change[] = ["png", "til"].flatMap(extension => {
@@ -151,7 +160,7 @@ export function wireResourcesAndStartup(): void {
       if (!/^[^\\/:*?"<>|]+\.png$/i.test(name) || name.startsWith(".")) return "请输入有效的 PNG 文件名"
       const size = [width, height]
       if (size.some(n => !Number.isInteger(n) || n < 1 || n > 8192)) return "宽高必须是 1 至 8192 的整数"
-      const base = appState.selectedResourcePath.substring(0, appState.selectedResourcePath.lastIndexOf("/")) || resourceRootPath()
+      const base = appState.selectedResourceGalleryPath.substring(0, appState.selectedResourceGalleryPath.lastIndexOf("/")) || resourceRootPath()
       const path = `${base}/${name}`
       if (appState.archive.getBytes(path)) return "同名图片已存在"
       const targetArchive = appState.archive
@@ -173,7 +182,7 @@ export function wireResourcesAndStartup(): void {
     import: files => {
       if (!appState.archive || !isEditing() || !files.length) return
       const targetArchive = appState.archive
-      const base = appState.selectedResourcePath.substring(0, appState.selectedResourcePath.lastIndexOf("/")) || resourceRootPath()
+      const base = appState.selectedResourceGalleryPath.substring(0, appState.selectedResourceGalleryPath.lastIndexOf("/")) || resourceRootPath()
       void runFileOperation("导入图片目录", async () => {
         const changes: Array<Extract<Change, { kind: "bytes" }>> = []
         const paths = new Set<string>()
@@ -205,46 +214,16 @@ export function wireResourcesAndStartup(): void {
     resourceUploadInput.value = ""
     resourceUploadInput.click()
   })
-  resourceUploadInput.addEventListener("change", () => {
-    const file = resourceUploadInput.files?.[0]
-    if (!file || !appState.archive || !isEditing()) return
-    if (appState.resourceInspectorMode === "sound") {
-      void runFileOperation("上传按键音效", () => uploadKeySound(file))
-      return
-    }
-    void runFileOperation("上传图片", async () => {
-      const targetPath = await uploadResourceImage(file)
-      if (!targetPath) return false
-      renderResourceInspector()
-      updateDirty()
-      selectResourceImage(targetPath)
-      return true
-    })
-  })
   resourceDownloadButton.addEventListener("click", () => {
-    void runFileOperation(appState.resourceInspectorMode === "sound" ? "下载按键音效" : "下载图片", async () => {
-      if (appState.resourceInspectorMode === "sound") {
-        const entry = currentSoundEntries().find((item) => item.id === appState.selectedSoundID)
-        const bytes = entry?.path ? appState.archive?.getBytes(entry.path) : undefined
-        if (!entry?.path || !bytes) return false
-        return Boolean(await writeToChosenFile(entry.filename, bytes))
-      }
-      if (!appState.archive || !appState.selectedResourceGalleryPath) return false
-      const bytes = appState.archive.getBytes(appState.selectedResourceGalleryPath)
-      if (!bytes) return false
-      return Boolean(await writeToChosenFile(
-        appState.selectedResourceGalleryPath.split("/").pop() ?? "image.png",
-        bytes,
-      ))
-    })
+    void runFileOperation("下载资源", downloadResourceSelection)
   })
   resourceDeleteButton.addEventListener("click", () => {
-    if (!appState.archive || !appState.selectedResourceGalleryPath || !isEditing()) return
-    const name = appState.selectedResourceGalleryPath.split("/").pop() ?? appState.selectedResourceGalleryPath
-    const before = appState.archive.getBytes(appState.selectedResourceGalleryPath)
-    if (!before) return
-    commitBatch([{ kind: "bytes", path: appState.selectedResourceGalleryPath, before }])
-    if (appState.selectedResourcePath === appState.selectedResourceGalleryPath) {
+    if (appState.resourceCatalog === "font") { deleteCatalogFont(); return }
+    if (!appState.archive || appState.resourceInspectorMode !== "image" || !isEditing()) return
+    const paths = appState.selectedResourceGalleryPaths.filter(path => appState.archive!.isImage(path))
+    if (!paths.length) return
+    commitBatch(paths.map(path => ({ kind: "bytes", path, before: appState.archive!.getBytes(path) })))
+    if (paths.includes(appState.selectedResourcePath)) {
       appState.selectedResourcePath = ""
       appState.slices = []
       appState.selectedTileIndex = undefined
@@ -252,10 +231,11 @@ export function wireResourcesAndStartup(): void {
       hideImageWorkspace()
     }
     appState.selectedResourceGalleryPath = ""
+    appState.selectedResourceGalleryPaths = []
     updateResourceActionButtons()
     renderResourceInspector()
     updateDirty()
-    showStatus(`已删除图片 ${name}，可撤销`)
+    showStatus(`已删除 ${paths.length} 张图片，可撤销`)
   })
   device.addEventListener("change", () => {
     const background = canvasBackgroundFromDevice(device.value)
@@ -329,7 +309,7 @@ export function wireResourcesAndStartup(): void {
     }
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return
     // The AI composer keeps its own text undo; the skin history is not what the user is typing.
-    if (event.composedPath().includes(aiDesignChat)) return
+    if (appState.atlasEdits || event.composedPath().includes(aiDesignChat)) return
     event.preventDefault()
     if (event.shiftKey) redo()
     else undo()
@@ -389,6 +369,19 @@ export function wireResourcesAndStartup(): void {
           payload.position.x / scaleFactor,
           payload.position.y / scaleFactor,
         )
+        if (resourceDropTarget(target)) {
+          if (!isEditing()) return
+          if (payload.type === "drop") {
+            const archive = appState.archive
+            void runFileOperation("上传资源", async () => {
+              const files = await Promise.all(payload.paths.map(async path => new File(
+                [new Uint8Array(await invoke<ArrayBuffer>("read_file", { path }))], path.split(/[\\/]/).pop()!,
+              )))
+              return appState.archive === archive && uploadResourceFiles(files)
+            })
+          }
+          return
+        }
         const folder = sourceDropFolder(target)
         if (payload.type === "enter" || payload.type === "over") {
           setSourceDropTarget(folder === undefined ? undefined : target)
@@ -431,7 +424,7 @@ export function wireResourcesAndStartup(): void {
     })()
     void listen<string[]>("opened", async (event) => {
       const path = event.payload[0]
-      if (path && (await prepareDocumentReplacement())) {
+      if (path && (await prepareDocumentReplacement("open"))) {
         void runFileOperation("打开", () => loadNativePath(path))
       }
     })

@@ -105,7 +105,7 @@ export function refreshSelectedBdaSource(): void {
   const part = bdaAppearancePart(appState.selectedPath)
   if (part) {
     const info = currentBdaAppearance()
-    if (info) setSourceValue(decodedBdaAppearancePart(info.bytes, part))
+    if (info) setSourceValue(part.kind === "styles" ? decodedBdaEditorSource(info.path, info.bytes) : decodedBdaAppearancePart(info.bytes, part))
     return
   }
   if (appState.archive.isBdaConfig(appState.selectedPath)) {
@@ -125,15 +125,17 @@ export function commitBdaSourceEdit(): void {
     const info = currentBdaAppearance()
     if (!info) return
     try {
-      const after = applyDecodedBdaAppearancePart(info.path, info.bytes, source.value, part)
+      const after = part.kind === "styles"
+        ? applyDecodedBdaSource(info.path, info.bytes, source.value)
+        : applyDecodedBdaAppearancePart(info.path, info.bytes, source.value, part)
       commitBytes(info.path, info.bytes, after)
       refreshBdaLayout(appState.layoutPath)
-      setSourceValue(decodedBdaAppearancePart(after, part))
+      refreshSelectedBdaSource()
       refreshPreview()
       populateKeyInspector()
       updateDirty()
     } catch (error) {
-      setSourceValue(decodedBdaAppearancePart(info.bytes, part))
+      refreshSelectedBdaSource()
       showError(error, "编辑 appearanceConfig 片段")
     }
     return

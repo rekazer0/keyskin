@@ -3,7 +3,7 @@ import { source, toolbarPreview, preview } from "./canvas-interaction"
 import { toggleGuides, mobilePreviewGuides, newTileButton, atlasCanvas, resourceListView, resourceDetail, sourceName, quickInspector, files } from "./dom"
 import { setGuidesVisible, refreshPreview, syncCandidateSelection } from "./preview-render"
 import { bdaAppearancePart, currentBdaAppearance, bdaBasePath, refreshBdaLayout, isBdaVirtualTextPath, isBdaLayoutPath, isBdaAppearancePartPath } from "./bda-documents"
-import { hideImageWorkspace, renderResourceInspector, selectResourceImage } from "./resource-inspector"
+import { hideImageWorkspace, renderResourceInspector } from "./resource-inspector"
 import { IniDocument } from "../ini.ts"
 import { previewItems } from "../preview-items.ts"
 import { setSourceValue, showsLayoutProperties } from "./config-context"
@@ -11,7 +11,6 @@ import { decodedBdaAppearancePart, decodedBdaSource, decodedBdaEditorSource, bda
 import { showImage } from "./file-operations"
 import { isListCell } from "../layout.ts"
 import { updateInspectorView, updateSourceSearchStatus } from "./source-panel"
-import { pickableImagePaths } from "./image-pickers"
 import { populateKeyInspector } from "./key-inspector"
 import { isSsfBoardPath, sourceEditPath, ssfBoardDocument } from "./ssf-documents"
 import { isSxiBoardAddress, isSxiSourcePath, showSxiSource, sxiPointer } from "./sxi-documents"
@@ -28,6 +27,7 @@ export function selectFile(
   resourceMode: "document" | "image" | "style" | "sound" | "motion" | "particle" = "document",
   preserveInspectorView = false,
 ): void {
+  appState.resourceCatalog = ""
   if (path !== appState.selectedPath || (resourceMode === "motion" || resourceMode === "particle") && resourceMode !== appState.animationDesignMode) appState.animationStyleEditing = false
   if (resourceMode !== "image") appState.bdaSliceReturn = undefined
   if (path !== appState.selectedPath) {
@@ -58,6 +58,8 @@ export function selectFile(
   }
   if (appState.resourceConfigActive) setGuidesVisible(appState.resourceInspectorMode === "image")
   else if (resourceMode === "motion" || resourceMode === "particle") setGuidesVisible(false)
+  appState.selectedResourceGalleryPaths = []
+  appState.resourceSelectionAnchor = ""
   if (!appState.resourceConfigActive) {
     appState.selectedResourcePath = ""
     appState.drawingTile = false
@@ -98,7 +100,7 @@ export function selectFile(
       appState.selectedKeySections = appState.selectedKeySections.filter(section => existing.has(section))
       preview.setSelected(appState.selectedKeySections)
     }
-    setSourceValue(decodedBdaAppearancePart(info.bytes, appearancePart))
+    setSourceValue(appearancePart.kind === "styles" ? decodedBdaEditorSource(info.path, info.bytes) : decodedBdaAppearancePart(info.bytes, appearancePart))
     source.disabled = false
     const partName = appearancePart.kind === "panel" ? appearancePart.name : appearancePart.group
     sourceName.textContent = `${info.path} · ${partName} · 解码源码`
@@ -195,10 +197,6 @@ export function selectFile(
   }
   updateInspectorView()
   if (appState.resourceConfigActive) renderResourceInspector()
-  if (resourceMode === "image" && appState.archive) {
-    const firstImage = pickableImagePaths()[0]
-    if (firstImage) selectResourceImage(firstImage)
-  }
   if (!quickInspector.hidden) populateKeyInspector()
   setRowSelected(appState.selectedFileButton, false)
   if (preferredSidebarView === "source") ensureSourcePathRendered(path)

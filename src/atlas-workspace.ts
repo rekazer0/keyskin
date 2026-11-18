@@ -9,20 +9,22 @@ import "./atlas-workspace.css"
 type AtlasState = {
   active: boolean
   styleActive: boolean
+  soundActive: boolean
   styleSelected: boolean
   path: string
   width: number
   height: number
   slices: TileSlice[]
   selected?: TileSlice
+  dirty: boolean
   editable: boolean
   bda: boolean
   guides: boolean
-  reference: string
 }
 
 export function createAtlasWorkspace(actions: {
-  back(): void
+  begin(): void
+  finish(save: boolean): void
   copy(): void
   /** 校验失败时返回错误文字，对话框保持打开并在框内显示。 */
   create(name: string, width: number, height: number): string | undefined
@@ -38,26 +40,61 @@ export function createAtlasWorkspace(actions: {
   const toolbar = get("#image-resource-detail > .tile-toolbar")
   const toolbarHome = toolbar.parentElement!
   const sidebar = get(".sidebar")
+  const categories = get("#resource-page-sidebar")
   const workspace = get(".workspace")
+  const selectionActions = get("#resource-selection-actions")
+  const selectionActionsHome = selectionActions.parentElement!
   const canvas = get("#atlas-canvas") as HTMLCanvasElement
-  const wrap = get(".canvas-wrap")
+  const figure = get("#workspace-image-figure")
+  const figureHome = figure.parentElement!
+  const inspector = get("#tile-inspector")
+  const inspectorHome = inspector.parentElement!
+  const dialog = element("dialog", "ui-dialog ui-image-editor atlas-workspace")
+  dialog.id = "atlas-editor-dialog"
+  dialog.dataset.variant = "atlas"
+  dialog.setAttribute("aria-label", "编辑切片")
+  const form = element("form", "ui-form")
+  form.method = "dialog"
+  form.noValidate = true
+  const dialogHeader = element("header", "ui-dialog-header")
+  const dialogTitle = element("div")
+  dialogTitle.append(Object.assign(element("h2"), { textContent: "编辑切片" }))
+  dialogHeader.append(dialogTitle)
+  const body = element("div", "ui-dialog-body")
+  const stage = element("div", "ui-image-editor-preview")
+  const controls = element("div", "ui-image-editor-controls")
+  const wrap = element("div", "canvas-wrap")
+  stage.append(wrap)
+  body.append(stage, controls)
+  const footer = element("footer", "ui-dialog-footer")
+  const status = element("span", "ui-dialog-status")
+  status.setAttribute("role", "status")
+  const cancel = Object.assign(element("button", "ui-button"), { type: "button", textContent: "取消", autofocus: true })
+  const save = Object.assign(element("button", "ui-button"), { type: "submit", textContent: "保存", value: "save" })
+  save.dataset.variant = "primary"
+  const discard = () => { void closeDialog(dialog, "cancel") }
+  cancel.addEventListener("click", discard)
+  form.addEventListener("submit", event => {
+    if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
+    if (save.disabled) event.preventDefault()
+  })
+  footer.append(status, cancel, save)
+  form.append(dialogHeader, body, footer)
+  dialog.append(form)
+  bindDialog(dialog, discard)
+  document.body.append(dialog)
   // 原画布保留完整图集的命中区域，显示画布只分配视口大小的像素。
   const viewport = Object.assign(element("canvas"), { id: "atlas-viewport", width: 1, height: 1 })
   viewport.setAttribute("aria-hidden", "true")
   canvas.after(viewport)
-  const header = element("div", "atlas-header")
   const heading = element("div", "atlas-image-title")
   const title = element("strong")
   const meta = element("small")
   heading.append(title, meta)
-  const badge = element("span", "ui-badge atlas-selection")
-  badge.dataset.variant = "selection"
-  header.append(heading, badge)
-  workspace.prepend(header)
+  dialogTitle.append(heading)
+  wrap.classList.add("ui-checker")
+  wrap.dataset.size = "lg"
   const button = (id: string, label: string, icon: string, action: () => void) => Object.assign(iconButton(icon, label, action), { id })
-  const back = button("atlas-back", "返回", "arrow-left", actions.back)
-  back.title = "返回布局"
-  list.querySelector(".ui-pane-header")!.prepend(back)
   const copy = button("atlas-copy-image", "复制图片及切片", "copy", actions.copy)
   const createDialog = atlasCreateDialog(actions.create)
   const create = button("atlas-create-image", "新建图片", "plus", () => createDialog.open())
@@ -74,14 +111,11 @@ export function createAtlasWorkspace(actions: {
   const extras = element("span", "atlas-resource-extras")
   extras.hidden = true
   extras.append(copy, create, folder, input)
-  list.querySelector(".resource-actions")!.append(extras)
+  get("#image-resource-preview-note").after(extras)
   const grid = button("atlas-grid", "显示切片网格", "grid-2x2", actions.guides)
   const autoSlice = button("atlas-auto-slice", "自动切片", "scissors", actions.autoSlice)
   for (const tool of [grid, autoSlice]) tool.dataset.variant = "filled"
   toolbar.append(grid, autoSlice)
-  const reference = element("div", "atlas-reference")
-  reference.append(Object.assign(element("span"), { textContent: "引用" }), element("output"))
-  get("#tile-preview-wrap").after(reference)
   const sourceHeading = document.createElement("h3")
   sourceHeading.className = "atlas-source-heading"
   sourceHeading.textContent = "切片区域"
@@ -119,7 +153,7 @@ export function createAtlasWorkspace(actions: {
     actions.redraw()
   }
   const resize = () => {
-    if (!desktopActive || !state?.width) return
+    if (!desktopActive || !state?.width || !state.height) return
     if (fitted) {
       zoomValue = Math.max(0.01, Math.min(1, (wrap.clientWidth - 64) / state.width, (wrap.clientHeight - 64) / state.height))
       setPan(0, 0)
@@ -145,7 +179,7 @@ export function createAtlasWorkspace(actions: {
   }
   const fit = zoomButton("atlas-zoom-fit", "适配", "scan", () => { fitted = true; resize(); actions.redraw() })
   zoom.append(zoomButton("atlas-zoom-out", "缩小", "minus", () => zoomBy(1 / 1.2)), fit, zoomButton("atlas-zoom-in", "放大", "plus", () => zoomBy(1.2)))
-  workspace.append(zoom)
+  stage.append(zoom)
   wrap.addEventListener("wheel", event => {
     if (!desktopActive) return
     event.preventDefault()
@@ -193,26 +227,50 @@ export function createAtlasWorkspace(actions: {
   const observer = new ResizeObserver(() => { resize(); actions.redraw() })
   observer.observe(wrap)
   observer.observe(canvas.parentElement!)
-  const media = matchMedia("(min-width: 1000px)")
+  const media = matchMedia("(min-width: 761px) and (min-height: 601px), (min-width: 951px)")
+  let finishing = false
+  dialog.addEventListener("close", () => {
+    finishing = true
+    actions.finish(dialog.returnValue === "save")
+    finishing = false
+  })
   const update = (next: AtlasState) => {
     state = next
-    desktopActive = next.active && media.matches
-    document.body.classList.toggle("atlas-workspace", desktopActive)
-    extras.hidden = !desktopActive
-    const sidebarActive = (next.active || next.styleActive) && media.matches
-    document.body.classList.toggle("resource-workspace", sidebarActive)
+    form.dataset.readonly = String(!next.editable)
+    desktopActive = next.active && Boolean(next.path) && media.matches
+    extras.hidden = !next.active || !media.matches
+    save.disabled = !next.editable
+    const message = next.dirty ? "有未保存的切片修改" : ""
+    if (status.textContent !== message) status.textContent = message
+    const libraryActive = (next.active || next.styleActive || next.soundActive) && media.matches
+    document.body.classList.toggle("resource-workspace", libraryActive)
+    get("#resource-gallery").dataset.variant = libraryActive ? "cards" : ""
     document.body.classList.toggle("style-workspace", next.styleActive && media.matches)
-    if (sidebarActive) {
-      if (list.parentElement !== sidebar) sidebar.append(list)
+    const selectionHost = libraryActive ? get("#resource-page-heading") : selectionActionsHome
+    if (selectionActions.parentElement !== selectionHost) selectionHost.append(selectionActions)
+    if (libraryActive) {
+      if (categories.parentElement !== sidebar) sidebar.append(categories)
+      if (list.parentElement !== workspace) workspace.append(list)
       list.hidden = false
     } else if (list.parentElement !== listHome) {
+      list.append(categories)
       listHome.prepend(list)
       list.hidden = next.active && Boolean(next.path) || next.styleActive && next.styleSelected
     }
     if (desktopActive) {
-      if (toolbar.parentElement !== header) header.insertBefore(toolbar, badge)
+      if (figure.parentElement !== wrap) wrap.append(figure)
+      if (inspector.parentElement !== controls) controls.append(inspector)
+      if (toolbar.parentElement !== stage) stage.prepend(toolbar)
+      if (!dialog.open && !finishing) {
+        actions.begin()
+        dialog.returnValue = ""
+        dialog.showModal()
+      }
       list.hidden = false
     } else {
+      if (dialog.open) discard()
+      if (figure.parentElement === wrap) figureHome.append(figure)
+      if (inspector.parentElement === controls) inspectorHome.append(inspector)
       if (toolbar.parentElement !== toolbarHome) toolbarHome.prepend(toolbar)
       canvas.style.removeProperty("width")
       canvas.style.removeProperty("height")
@@ -223,18 +281,12 @@ export function createAtlasWorkspace(actions: {
     const slice = next.selected
     title.textContent = next.path.split("/").pop() || "图片"
     title.title = next.path
-    get(".source-heading .inspector-context h2").textContent = desktopActive ? (slice ? `切片 #${slice.index}` : "切片") : next.styleActive ? "样式编辑" : "检查器"
+    get(".source-heading .inspector-context h2").textContent = next.styleActive ? "样式编辑" : "检查器"
     meta.textContent = next.path ? `${next.width} × ${next.height} · ${next.slices.length} 个切片` : ""
-    // 选中信息只在这里出现一次（头部 meta 是整张图，角标是当前切片）。
-    badge.textContent = slice ? `#${slice.index} · ${slice.source[2]} × ${slice.source[3]}` : ""
-    badge.hidden = !slice
-    // 引用按切片统计：没选切片时整行隐藏，不说整张图「未使用」。
-    reference.querySelector("output")!.textContent = next.reference || "未使用"
-    reference.hidden = !slice
     toggle.checked = Boolean(slice?.inner)
     toggle.disabled = !slice || !next.editable || next.bda
     stretch.hidden = next.bda
-    copy.disabled = !next.path || !next.editable
+    copy.disabled = !next.editable
     create.disabled = folder.disabled = !next.editable
     autoSlice.disabled = !next.path || !next.editable || next.bda
     grid.setAttribute("aria-pressed", String(next.guides))

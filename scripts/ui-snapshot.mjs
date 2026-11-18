@@ -121,6 +121,7 @@ async function railTabs(page, prefix) {
 }
 
 console.log(`ui-snapshot ${mode}`)
+if (!only || !only.includes("animation")) {
 for (const [name, colorScheme, viewport] of [
   ["file-operation", "light", { width: 1440, height: 900 }],
   ["file-operation-dark", "dark", { width: 1440, height: 900 }],
@@ -145,13 +146,14 @@ await withPage(async (page) => {
   await editAndSelectKey(page)
   await capture(page, "bds-key")
   await railTabs(page, "bds-key")
-  await page.locator(".titlebar-preferences").click()
+  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
   await capture(page, "settings")
   await page.keyboard.press("Escape")
   // 图片编辑：资源列表与切片工具栏会挪进画布工作区
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片资源", { exact: true }) }).first().click()
+  await page.locator('[data-workspace-page="resources"]').click()
+  await page.locator('[data-resource-page="image"]').click()
   await capture(page, "bds-images")
-  await page.locator("#resource-gallery > *").first().click()
+  await page.locator("#resource-gallery > *").first().dblclick()
   await capture(page, "bds-image")
 })
 await withPage(async (page) => {
@@ -168,31 +170,32 @@ await withPage(async (page) => {
   await capture(page, "bda-key")
   await railTabs(page, "bda-key")
 })
+}
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
   await openSkinFile(page, "动效.bda", animatedBda, "light/skin/port/animationConfig")
-  await page.locator('.sidebar-overview button[data-nav-mode="motion"]').click()
+  await page.locator('[data-workspace-page="animation"]').click()
   // 桌面宽度下动画列表在左侧栏，播放器在画布上（animation-workspace.ts）。
   await page.waitForSelector("#animation-library .ui-listbox")
   await capture(page, `${colorScheme}-bda-animation`)
 }, { colorScheme })
 await withPage(async (page) => {
   await openSkinFile(page, "动效.bds", animatedBds, "light/skin/port/res/anim.ini")
-  await page.locator('.sidebar-overview button[data-nav-mode="motion"]').click()
+  await page.locator('[data-workspace-page="animation"]').click()
   await page.waitForSelector("#animation-library .ui-listbox")
   await capture(page, "legacy-animation")
 })
 for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
-  // 手心动画：资源配置里的动效设计与粒子设计
+  // 手心动画：左导航统一入口，工作区内直接切换分类。
   await openSkinFile(page, "动效.sxi", sxiAnimationFixture(), "skin.json/default/s_info/ss_2")
+  await page.locator('[data-workspace-page="animation"]').click()
   for (const mode of ["motion", "particle"]) {
-    // 进入后概览让位给动画列表，先点列表顶部的返回再从概览切换。
-    if (mode === "particle") await page.locator('#animation-library button[aria-label="返回"]').click()
-    await page.locator(`.sidebar-overview button[data-nav-mode="${mode}"]`).click()
+    await page.locator(`#animation-library [data-animation-mode="${mode}"]`).click()
     await page.waitForSelector('#animation-library .ui-listbox [aria-selected="true"]')
     await page.waitForFunction(() => !document.querySelector(".ui-animation-transport button")?.disabled)
     await capture(page, `${colorScheme}-sxi-animation-${mode}`)
   }
 }, { colorScheme })
+if (!only || !only.includes("animation")) {
 await withPage(async (page) => {
   await openTemplate(page, "palm-harmony")
   if (await page.locator("#mode").inputValue() !== "edit") await page.getByRole("button", { name: "编辑模式", exact: true }).click()
@@ -252,6 +255,7 @@ for (const colorScheme of ["light", "dark"]) await withPage(async (page) => {
 }, { viewport: { width: 390, height: 844 }, colorScheme })
 await withPage(async (page) => { await page.waitForSelector("#file-project-chooser .project-chooser"); await capture(page, "file-page") })
 await withPage(async (page) => { await page.waitForTimeout(800); await capture(page, "picker") }, { url: `${baseURL}picker.html` })
+}
 
 await browser.close()
 await server.close()

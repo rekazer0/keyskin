@@ -163,14 +163,15 @@ export function hydrateShortcuts(root: ParentNode = document): void {
  * 列表框 / 网格（role=listbox，子项 role=option + aria-selected）的方向键、Home、End。
  * 网格里上下键按列数跳行；选中项不变时什么也不做。
  */
-export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElement) => void): void {
+export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElement, event: KeyboardEvent) => void): void {
   list.addEventListener("keydown", (event) => {
     // 嵌套的列表框（例如资源网格里的音效列表）已经处理过这次按键。
     if (event.defaultPrevented) return
     if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
     const options = [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter((option) => !option.hidden)
     if (!options.length) return
-    const index = options.findIndex((option) => option.getAttribute("aria-selected") === "true")
+    const focused = options.indexOf(document.activeElement as HTMLElement)
+    const index = focused >= 0 ? focused : options.findIndex((option) => option.getAttribute("aria-selected") === "true")
     let columns = 1
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       const top = options[0]!.offsetTop
@@ -183,7 +184,7 @@ export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElemen
     if (next === undefined) return
     event.preventDefault()
     const option = options[Math.max(0, Math.min(options.length - 1, next))]!
-    if (option.getAttribute("aria-selected") !== "true") onSelect(option)
+    if (option.getAttribute("aria-selected") !== "true" || list.getAttribute("aria-multiselectable") === "true") onSelect(option, event)
   })
 }
 

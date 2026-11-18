@@ -33,7 +33,7 @@ try {
     const close = page.locator('#file-operation-dialog[open] #file-operation-close')
     if (await close.isVisible()) await close.click()
     const before = await snapshot(path)
-    await page.locator('.sidebar-overview [data-nav-mode="style"]').first().click()
+    await page.locator('[data-workspace-page="resources"]').first().click()
     assert.deepEqual(await snapshot(path), before, 'opening a missing style table never writes defaults')
     await page.getByRole('button', { name: '编辑模式', exact: true }).click()
     await page.getByRole('button', { name: '新建样式', exact: true }).click()

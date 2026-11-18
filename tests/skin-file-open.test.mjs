@@ -14,7 +14,7 @@ for (const android of [true, false]) {
     const loaded = []
     const context = run(declarations('openNative'), {
       isAndroidTauri: () => android,
-      prepareDocumentReplacement: async () => true,
+      prepareDocumentReplacement: async (intent) => { assert.equal(intent, 'open'); return true },
       pickAndroidSkinFile: async () => android ? 'content://provider/document/42' : assert.fail('desktop must not use the Android picker'),
       open: async (options) => {
         assert.ok(!android, 'Android must not use the read-only dialog picker')
@@ -31,6 +31,41 @@ for (const android of [true, false]) {
     assert.equal(loaded.length, 1)
   })
 }
+
+test('cancelling the native picker keeps the current skin without asking about export', async () => {
+  const context = run(declarations('openNative'), {
+    isAndroidTauri: () => false,
+    open: async () => null,
+    prepareDocumentReplacement: () => assert.fail('no replacement was chosen'),
+    loadNativePath: () => assert.fail('cancel must not load a skin'),
+  })
+  assert.equal(await context.openNative(), false)
+})
+
+test('opening another skin offers export for saved and unsaved skins and preserves it when exporting or cancelling', async () => {
+  for (const changed of [false, true]) for (const decision of ['cancel', 'discard', 'export']) {
+    const calls = []
+    const archive = { changed: new Set(changed ? ['Info.txt'] : []) }
+    const context = run(declarations('prepareDocumentReplacement', 'hasUnsavedChanges'), {
+      archive, unsavedNew: false,
+      documentName: { textContent: '当前皮肤.bds' },
+      flushNumberInputWheel: () => calls.push('flush-input'),
+      flushSourceAutosave: async () => calls.push('flush-source'),
+      ask: async (options) => { assert.match(options.title, /导出当前皮肤/); calls.push('ask'); return decision },
+      openSharePage: () => calls.push('share'),
+      saveArchive: () => assert.fail('the user exports from the share page'),
+    })
+    assert.equal(await context.prepareDocumentReplacement('open'), decision === 'discard')
+    assert.equal(context.archive, archive)
+    assert.deepEqual(calls, ['flush-input', 'flush-source', 'ask', ...(decision === 'export' ? ['share'] : [])])
+  }
+  const context = run(declarations('prepareDocumentReplacement', 'hasUnsavedChanges'), {
+    flushNumberInputWheel: () => {}, flushSourceAutosave: async () => {},
+    unsavedNew: false,
+    ask: () => assert.fail('the first skin opens without a prompt'),
+  })
+  assert.equal(await context.prepareDocumentReplacement('open'), true)
+})
 
 test('saving a read-only Android skin asks for write access and writes back to the granted file', async () => {
   const original = 'content://provider/document/42'

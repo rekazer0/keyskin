@@ -143,7 +143,7 @@ test('recovers central directory sizes and offsets from local headers', async ()
 })
 
 // Palm 的打包器把真实大小写进中央目录的 ZIP64 extra 字段，却不写 ZIP64 结束记录，
-// fflate 因此不会去读它（拒绝摆烂-乱17.sxi 就报“超过 256 MB”）。
+// fflate 因此不会读到实际大小，可能误报“超过 256 MB”。
 function zip64Archive() {
   const entries = [
     ['Info.txt', strToU8('AtomSkinName=zip64')],

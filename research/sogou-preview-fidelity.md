@@ -4,9 +4,9 @@
 
 ## 工具栏与符号列
 
-- “好柿花生”没有 `logo.png`，其带底座的 S 图标实际是 `ime_function_multimedia.png`。APK 的 `1080/layout/cands.ini` 保留 `IME_Function_Multimedia` 槽位；预览在缺少独立 logo 时使用皮肤的这个资源，同时保留独立 logo 的优先级。
+- SSF 样本没有 `logo.png`，其带底座的 S 图标实际是 `ime_function_multimedia.png`。APK 的 `1080/layout/cands.ini` 保留 `IME_Function_Multimedia` 槽位；预览在缺少独立 logo 时使用皮肤的这个资源，同时保留独立 logo 的优先级。
 - 同一官方配置把 `CandidateCodeView.TEXT_STYLE` 指向 `TextStyle_Text`。`TextStyle_Popup_Code` 属于气泡文字，不应用于常驻符号列。
-- 官方 `layout/template.ini` 中 `TextStyle_Text.TEXT_SIZE=0.039`，字体为 `DROIDSANSFALLBACK.ttf`。“好柿花生”提供了自定义同名字体，必须加载包内字体，不能只取文字颜色。
+- 官方 `layout/template.ini` 中 `TextStyle_Text.TEXT_SIZE=0.039`，字体为 `DROIDSANSFALLBACK.ttf`。SSF 样本提供了自定义同名字体，必须加载包内字体，不能只取文字颜色。
 - 列表的背景和单元格背景分别由 `BG_IMAGE`、`BG_IMAGES` 控制，骨架须同时保留两个引用。
 
 ## 布局变体
@@ -30,7 +30,7 @@ node scripts/extract-sogou-template.mjs /path/to/SogouInput.apk
 npm run typecheck
 npm test
 npm run test:e2e
-SSF_SKIN_PATH=/path/to/好柿花生.ssf node scripts/test-ssf-preview.mjs
+SSF_SKIN_PATH=/path/to/sample.ssf node scripts/test-ssf-preview.mjs
 npm run test:ui
 ```
 
@@ -38,13 +38,13 @@ npm run test:ui
 
 ## 导出后重新打开的验证（2026-10-19）
 
-`好柿花生-1.bdi` 的工具栏空白、灰色背景和底行错位来自导出使用另一套百度骨架。BDI/BDS 现与 SSF 画布共用搜狗骨架及分辨率映射，并在打包时移除只供编辑器绑定的 `SSF_*` 字段。BDA 保留其独立格式几何。
+样本导出的 BDI 工具栏空白、灰色背景和底行错位来自导出使用另一套百度骨架。BDI/BDS 现与 SSF 画布共用搜狗骨架及分辨率映射，并在打包时移除只供编辑器绑定的 `SSF_*` 字段。BDA 保留其独立格式几何。
 
 严格像素对比另发现九宫格共享画布的边界采样会随历史最大尺寸改变。缓冲画布现始终在右侧和底部保留透明采样边距，保持复用且不逐键缩放缓冲区。
 
 ```sh
-SSF_SKIN_PATH=/Users/kaze/Downloads/好柿花生.ssf \
-SSF_CONVERSION_INPUT=/Users/kaze/Downloads/好柿花生-1.bdi \
+SSF_SKIN_PATH=/path/to/sample.ssf \
+SSF_CONVERSION_INPUT=/path/to/exported-sample.bdi \
 SSF_CONVERSION_SHOTS=artifacts/ssf-export-fidelity-2026-10-19 \
 node scripts/test-ssf-conversion.mjs
 ```
@@ -57,8 +57,8 @@ node scripts/test-ssf-conversion.mjs
 
 ## SSF 拉伸与设备像素（2026-11-13）
 
-`兽｜花奏风和.ssf` 的九键删除键布局与 `9del.png` 同为 183×160，皮肤分辨率为 1080。连接的安卓设备屏幕宽度为 2160，当前皮肤配置为 `9del.png,81,82,1,159`。若直接按布局尺寸绘制九宫格，中间的 1px 拉伸带仍是 1px，调整边界看不出变化。
+另一份 SSF 样本的九键删除键布局与 `9del.png` 同为 183×160，皮肤分辨率为 1080。连接的安卓设备屏幕宽度为 2160，当前皮肤配置为 `9del.png,81,82,1,159`。若直接按布局尺寸绘制九宫格，中间的 1px 拉伸带仍是 1px，调整边界看不出变化。
 
 搜狗 `com.sogou.theme.utils.e` 将原图与四个边界构造为 `NinePatchDrawable`，固定边保留图片像素尺寸。预览因此先按设备物理像素绘制九宫格，再映射回布局坐标；弹窗小预览与主键盘共用该规则。
 
-已读取设备当前配置、原图和实时截屏，核对删除键中间窄带拉宽的变形。定向单测覆盖素材与布局同尺寸、设备比例为 2 的情况；`SSF_SKIN_PATH=/path/to/兽｜花奏风和.ssf node scripts/test-ssf-image-editor.mjs` 覆盖真实素材拖动、主画布与弹窗同步及松开后的像素一致性。该比对确认图片拉伸规则，不代表不同键盘高度设置下整键像素完全一致。
+已读取设备当前配置、原图和实时截屏，核对删除键中间窄带拉宽的变形。定向单测覆盖素材与布局同尺寸、设备比例为 2 的情况；`SSF_SKIN_PATH=/path/to/stretch-sample.ssf node scripts/test-ssf-image-editor.mjs` 覆盖真实素材拖动、主画布与弹窗同步及松开后的像素一致性。该比对确认图片拉伸规则，不代表不同键盘高度设置下整键像素完全一致。

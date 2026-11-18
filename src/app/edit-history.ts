@@ -23,6 +23,7 @@ import { selectResourceImage, renderResourceInspector } from "./resource-inspect
 import { decodedBdaEditorSource } from "../bda-source.ts"
 import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { sxiPointer } from "./sxi-documents"
+import { openSharePage } from "./mobile-export"
 
 export function isEditing(): boolean {
   return mode.value === "edit"
@@ -40,13 +41,22 @@ export function hasUnsavedChanges(): boolean {
   return appState.unsavedNew || Boolean(appState.archive?.changed.size)
 }
 
-export async function prepareDocumentReplacement(): Promise<boolean> {
+export async function prepareDocumentReplacement(intent: "open" | "leave" = "leave"): Promise<boolean> {
   flushNumberInputWheel()
   try {
     await flushSourceAutosave()
   } catch (error) {
     showError(error, "自动保存源码")
     return false
+  }
+  if (intent === "open" && appState.archive) {
+    const decision = await ask({
+      title: "是否导出当前皮肤？",
+      detail: `打开其他皮肤将关闭 ${documentName.textContent || "当前皮肤"}，未保存的修改将不会保留。`,
+      actions: [{ value: "cancel", label: "取消" }, { value: "discard", label: "不导出" }, { value: "export", label: "去分享导出", variant: "primary" }],
+    })
+    if (decision === "export") openSharePage()
+    return decision === "discard"
   }
   if (!hasUnsavedChanges()) return true
   const decision = await ask({
@@ -168,13 +178,17 @@ function refreshHistorySelection(): void {
   const index = appState.selectedTileIndex
   const resourceMode = appState.resourceConfigActive ? appState.resourceInspectorMode : "document"
   renderFiles()
-  if (resourceMode === "image" && appState.archive?.isImage(path)) {
+  if (appState.resourceConfigActive && appState.resourceCatalog) {
+    renderResourceInspector()
+  } else if (resourceMode === "image" && appState.archive?.isImage(path)) {
     // 切片界面原地刷新：经 selectFile 会先切到第一张图再切回来，画布在两张图之间闪一下。
     renderResourceInspector()
     selectResourceImage(path)
     appState.selectedTileIndex = appState.slices.some(slice => slice.index === index) ? index : undefined
     populateTileInspector()
     drawAtlas()
+  } else if (resourceMode === "image") {
+    renderResourceInspector()
   } else if (appState.animationDesignMode !== "all" && appState.archive?.format !== "bda" && !legacyAnimationConfigPath() && appState.layoutPath) {
     // Undoing 「自动创建」 removes the animation configuration being shown.
     selectFile(appState.layoutPath, appState.sidebarView)

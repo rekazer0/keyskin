@@ -149,7 +149,6 @@ export function initializeModelSettings(section: HTMLElement, options: {
   const test = $<HTMLButtonElement>("test-model-connection")
   const statusText = $<HTMLElement>("model-configuration-status")
   const pathText = $<HTMLElement>("model-configuration-path")
-  const summary = document.querySelector<HTMLElement>('[data-settings-summary="model"]')
   const imageProvider = $<HTMLSelectElement>("image-model-provider")
   const imageFields = $<HTMLElement>("image-model-fields")
   const imageApiUrl = $<HTMLInputElement>("image-model-api-url")
@@ -270,8 +269,6 @@ export function initializeModelSettings(section: HTMLElement, options: {
       empty.textContent = "还没有服务商"
       profiles.append(empty)
     }
-    const count = draft.reduce((total, group) => total + group.models.length, 0)
-    if (summary) summary.textContent = count ? `${count} 个` : "未配置"
   }
 
   function renderChoices(): void {

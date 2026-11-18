@@ -1,17 +1,16 @@
 import { element, iconButton } from "../dom-element"
 import { createIcon } from "../icons"
-import { fileMenu, pinnedToolbar } from "./dom"
+import { pinnedToolbar, workspaceNavigation } from "./dom"
 import { appState } from "./state"
 
 const storageKey = "pinned-toolbar-actions"
 
 export function wirePinnedToolbar(): void {
   const state = appState.pinnedToolbar
-  const sources = new Map([...fileMenu.querySelectorAll<HTMLButtonElement>(".ui-menu > button")].map(source => {
-    const key = source.id || (source.dataset.appDialog ? `dialog:${source.dataset.appDialog}` : "tour")
+  const sources = new Map([...document.querySelectorAll<HTMLButtonElement>("#project-actions > button, #share-page #save, #share-page #mobile-share, #share-page #adb-share, #share-export, #mobile-export-open, #recent-files, #welcome-recent-open, [data-file-action], #workspace-navigation [data-app-dialog='settings'], .welcome-note [data-start-tour]")].map(source => {
+    const key = source.dataset.fileAction || (source.id === "welcome-recent-open" ? "open" : source.id) || (source.dataset.appDialog ? `dialog:${source.dataset.appDialog}` : "tour")
     source.dataset.toolbarAction = key
     source.setAttribute("aria-keyshortcuts", "Alt+Enter")
-    source.title = "拖到工具栏常驻，或按 Alt + Enter 添加"
     return [key, source] as const
   }))
   try {
@@ -19,7 +18,7 @@ export function wirePinnedToolbar(): void {
     if (Array.isArray(saved)) state.actions = [...new Set(saved.filter((key): key is string => typeof key === "string" && sources.has(key)))]
   } catch { /* 损坏或不可用的本机存储不影响菜单动作。 */ }
 
-  const label = (source: HTMLButtonElement) => source.getAttribute("aria-label") || source.querySelector("span:not([data-icon])")?.textContent?.trim() || ""
+  const label = (source: HTMLButtonElement) => source.getAttribute("aria-label") || source.querySelector("span:not([data-icon])")?.textContent?.trim() || source.textContent?.trim() || ""
   const render = () => {
     pinnedToolbar.dataset.editing = String(state.editing)
     pinnedToolbar.setAttribute("aria-label", state.editing ? "常驻工具栏，编辑中" : "常驻工具栏")
@@ -33,7 +32,7 @@ export function wirePinnedToolbar(): void {
         item = element("div", "ui-pinned-tool")
         item.dataset.toolbarAction = key
         item.setAttribute("role", "group")
-        const action = iconButton(source.querySelector<HTMLElement>("[data-icon]")!.dataset.icon!, name, () => {
+        const action = iconButton((source.dataset.toolbarIcon ?? source.querySelector<HTMLElement>("[data-icon]")!.dataset.icon!), name, () => {
           if (!state.editing && !state.suppressClick) source.click()
         })
         action.dataset.variant = "filled"
@@ -65,7 +64,6 @@ export function wirePinnedToolbar(): void {
       state.actions.push(key)
       save()
     }
-    fileMenu.open = false
   }
   const removeAction = (key: string) => {
     const index = state.actions.indexOf(key)
@@ -73,7 +71,7 @@ export function wirePinnedToolbar(): void {
     if (!state.actions.length) state.editing = false
     save()
     const next = pinnedToolbar.children[Math.min(index, pinnedToolbar.children.length - 1)]
-    ;(next?.querySelector("button") ?? fileMenu.querySelector("summary"))?.focus()
+    ;(next?.querySelector("button") ?? workspaceNavigation.querySelector<HTMLButtonElement>('[data-workspace-page="overview"]'))?.focus()
   }
   const edit = (enabled: boolean) => {
     state.editing = enabled
@@ -90,12 +88,12 @@ export function wirePinnedToolbar(): void {
     return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
   }
 
-  fileMenu.addEventListener("keydown", event => {
+  document.addEventListener("keydown", event => {
     const source = (event.target as Element).closest<HTMLButtonElement>("[data-toolbar-action]")
     if (event.altKey && event.key === "Enter" && source) {
       event.preventDefault()
       addAction(source.dataset.toolbarAction!)
-      fileMenu.querySelector("summary")?.focus()
+      workspaceNavigation.querySelector<HTMLButtonElement>('[data-workspace-page="overview"]')?.focus()
     }
   })
   pinnedToolbar.addEventListener("keydown", event => {
@@ -116,12 +114,13 @@ export function wirePinnedToolbar(): void {
     cancelGesture()
     const target = event.target as Element
     if (state.editing && !pinnedToolbar.contains(target)) edit(false)
-    const fromMenu = fileMenu.open && fileMenu.contains(target)
-    // 禁用菜单项不接收指针事件，仍允许将它的入口固定到工具栏。
-    const source = fromMenu ? [...sources.values()].find(source => {
+    const pinned = target.closest<HTMLElement>(".ui-pinned-tool")
+    const fromMenu = !pinned
+    // 禁用按钮仍可固定；用可见的命中区域定位原操作。
+    const source = pinned ?? [...sources.values()].find(source => {
       const rect = source.getBoundingClientRect()
-      return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom
-    }) : target.closest<HTMLElement>(".ui-pinned-tool")
+      return rect.width > 0 && rect.height > 0 && event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom
+    })
     if (!source || target.closest(".ui-pinned-tool-remove")) return
     if (fromMenu && event.pointerType === "mouse") event.preventDefault()
     const gesture = state.gesture = {
@@ -142,7 +141,7 @@ export function wirePinnedToolbar(): void {
       if (!gesture.fromMenu) return cancelGesture()
       if (!gesture.preview) {
         const preview = element("div", "ui-toolbar-drag-preview")
-        preview.append(createIcon(sources.get(gesture.action)!.querySelector<HTMLElement>("[data-icon]")!.dataset.icon!))
+        preview.append(createIcon((sources.get(gesture.action)!.dataset.toolbarIcon ?? sources.get(gesture.action)!.querySelector<HTMLElement>("[data-icon]")!.dataset.icon!)))
         preview.setAttribute("aria-hidden", "true")
         document.body.append(preview)
         gesture.preview = preview
@@ -179,7 +178,7 @@ export function wirePinnedToolbar(): void {
     cancelGesture()
     state.suppressClick = false
     edit(false)
-    fileMenu.querySelector("summary")?.focus()
+    workspaceNavigation.querySelector<HTMLButtonElement>('[data-workspace-page="overview"]')?.focus()
   }, true)
   window.addEventListener("blur", () => {
     cancelGesture()
@@ -187,6 +186,7 @@ export function wirePinnedToolbar(): void {
     if (state.editing) edit(false)
   })
   pinnedToolbar.addEventListener("contextmenu", event => event.preventDefault())
-  new MutationObserver(render).observe(fileMenu, { subtree: true, attributes: true, attributeFilter: ["disabled", "hidden", "aria-label"], childList: true, characterData: true })
+  const observer = new MutationObserver(render)
+  for (const source of sources.values()) observer.observe(source, { attributes: true, attributeFilter: ["disabled", "hidden", "aria-label"] })
   render()
 }

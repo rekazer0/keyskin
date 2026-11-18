@@ -73,15 +73,70 @@ try {
       await page.waitForFunction(() => document.querySelector('#candidate-area').getAttribute('aria-selected') === 'true')
     }
     await selectToolbar()
+    const bar = await page.locator('#toolbar-preview').boundingBox()
+    assert.ok(bar)
+    const archiveBeforeSelection = await page.evaluate(async () => {
+      const { appState } = await import('/src/app/state.ts')
+      return { revision: appState.archive.revision, undo: appState.undoStack.length }
+    })
+    for (const [fraction, modifiers] of [[0.03, []], [0.5, ['Shift']], [0.97, ['Control']]]) {
+      for (const key of modifiers) await page.keyboard.down(key)
+      await page.mouse.click(bar.x + bar.width * fraction, bar.y + bar.height / 2)
+      for (const key of modifiers) await page.keyboard.up(key)
+      await page.waitForFunction(async () => !(await import('/src/app/state.ts')).appState.selectionInspectorSyncPending)
+      assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), 'true')
+      assert.deepEqual(await page.evaluate(async () => {
+        const { appState } = await import('/src/app/state.ts')
+        const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')
+        return { candidate: appState.selectedCandidate, keys: appState.selectedKeySections, sections: appState.selectedToolbarSections, outlines: [...toolbarPreview.selected] }
+      }), { candidate: true, keys: [], sections: [], outlines: [] }, 'left, middle and right select only the entire bar')
+    }
+    assert.deepEqual(await page.evaluate(async () => {
+      const { appState } = await import('/src/app/state.ts')
+      return { revision: appState.archive.revision, undo: appState.undoStack.length }
+    }), archiveBeforeSelection, 'selecting the bar never edits the skin')
     const card = page.getByRole('button', { name: `更换${fixture.label}图标`, exact: true })
     await card.waitFor()
     assert.equal(await page.locator('.ui-toolbar-icon').count(), fixture.count)
-    if (fixture.legacy) assert.deepEqual(await page.locator('#mobile-inspector-groups .inspector-group-label').allTextContents(),
-      ['图标', '按钮', '按钮动画', '工具栏'], 'toolbar inspector uses concise group names without repeating the selected button number')
+    if (fixture.legacy) {
+      const groups = await page.locator('#mobile-inspector-groups .inspector-group-label').allTextContents()
+      assert.deepEqual(groups.slice(0, 3), ['布局', '样式', '文字'])
+      assert.deepEqual(groups.slice(3), ['图标', '候选栏', '输入区', '工具栏', '工具按钮', '动画'])
+      const buttons = page.locator('#document-fields > [data-inspector-group-label="工具按钮"]')
+      const animation = page.locator('#document-fields > [data-inspector-group-label="动画"]')
+      const blocks = buttons.locator(':scope > .ui-subsection')
+      assert.equal(await blocks.count(), 3)
+      assert.equal(await buttons.locator('[data-document-key="BACK_ANIM_STYLE"]').count(), 3)
+      assert.equal(await animation.locator('[data-document-key="BACK_ANIM_STYLE"]').count(), 2)
+      const buttonRail = page.locator('#mobile-inspector-groups').getByRole('button', { name: '工具按钮', exact: true })
+      await buttonRail.click()
+      assert.equal(await buttonRail.getAttribute('aria-pressed'), 'true')
+      await page.locator('.inspector-filter-open').click()
+      const filter = page.locator('#inspector-filter')
+      for (const query of ['工具按钮 2', 'ICON2']) {
+        await filter.fill(query)
+        assert.equal(await blocks.nth(1).isVisible(), true)
+        assert.equal(await blocks.nth(0).isVisible(), false)
+        assert.equal(await animation.isVisible(), false)
+      }
+      await filter.press('Escape')
+      await filter.press('Escape')
+      assert.equal(await blocks.nth(0).isVisible(), true)
+      const width = blocks.nth(1).locator('[data-document-key="SIZE"]').getByRole('spinbutton', { name: '尺寸W', exact: true })
+      await width.fill('240')
+      await width.press('Tab')
+      const sizes = () => page.evaluate(async () => {
+        const { appState } = await import('/src/app/state.ts')
+        return ['ICON1', 'ICON2', 'ICON3'].map(code => appState.selectedDocument.get(code, 'SIZE'))
+      })
+      assert.deepEqual(await sizes(), ['45,47', '240,34', '45,44'])
+      await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+      assert.deepEqual(await sizes(), ['45,47', '250,34', '45,44'])
+    }
     assert.deepEqual(await page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
       return appState.selectedToolbarSections
-    }), fixture.legacy ? ['ICON2'] : [], 'the toolbar selection matches the native format')
+    }), [], 'every format selects the entire bar')
     const snapshot = () => page.evaluate(async path => {
       const { appState } = await import('/src/app/state.ts')
       const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')

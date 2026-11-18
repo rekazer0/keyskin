@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { LogicalSize } from "@tauri-apps/api/dpi"
-import { bindSlicePickerZoom, drawSlicePicker, MAX_SLICE_ZOOM, MIN_SLICE_ZOOM, pickableSlices } from "./slice-picker-canvas.ts"
-import { tileSliceAt, type TilePoint, type TileSlice } from "./tiles.ts"
+import { bindSlicePickerZoom, drawSlicePicker, MAX_SLICE_ZOOM, MIN_SLICE_ZOOM, pickableSlices, slicePickerLabel } from "./slice-picker-canvas.ts"
+import { tileSliceAt, type TileSlice } from "./tiles.ts"
 import { drawVisualPreview, retinaThumbnail, type Visual } from "./atlas.ts"
 import { hydrateIcons } from "./icons.ts"
 import { nativePickerWindow, pickerEmitter, pickerListener } from "./picker-channel.ts"
@@ -105,6 +105,10 @@ const search = $("#resource-search") as HTMLInputElement
 const searchBox = searchField({ label: "搜索", input: search, onInput: () => { if (view === "styles" || view === "resources") renderLibrary() } })
 const imageView = $("#image-picker-view")
 const canvas = $("#picker-canvas") as HTMLCanvasElement
+const stage = $(".picker-canvas-stage")
+const sliceSelect = $<HTMLSelectElement>("#picker-slice")
+const sliceApply = $<HTMLButtonElement>("#picker-apply")
+const sliceActions = $(".picker-slice-actions")
 const libraryView = $("#style-library-view")
 const libraryGrid = $("#style-library-grid")
 const libraryScroll = $("#style-library-scroll")
@@ -131,10 +135,8 @@ const onMain = pickerListener(() => parent)
 
 let imagePayload: ImagePayload | undefined
 let image: HTMLImageElement | undefined
-let scale = 1
-let fit = 1
+let fit = 0
 let zoom = 1
-let offset: TilePoint = { x: 0, y: 0 }
 let resources: ResourcePayload = []
 let resourcesLoaded = false
 let view: "empty" | "image" | "resources" | "styles" = "empty"
@@ -196,23 +198,49 @@ function setWindowTitle(text: string): void {
 // 窗口高度不固定：测量页面内容高度后调整窗口高度，跟随图片大小变动（宽度保持不变）
 async function fitWindowHeight(): Promise<void> {
   if (!nativePickerWindow) return
+  const payload = imagePayload
   const appWindow = getCurrentWindow()
   const [inner, outer] = await Promise.all([appWindow.innerSize(), appWindow.outerSize()])
+  if (view !== "image" || payload !== imagePayload) return
   const scaleFactor = inner.height / window.innerHeight
   const chrome = (outer.height - inner.height) / scaleFactor
   // documentElement.scrollHeight 不小于视口高度，窗口只会变大不会缩小，所以量 body
   // 画布区域铺满窗口并内部滚动，按画布本身（加内边距）算内容高度
-  const content = $(".picker-toolbar").offsetHeight + Math.max(300, canvas.offsetHeight + 32)
+  const padding = parseFloat(getComputedStyle(stage).paddingTop) * 2
+  const content = $(".picker-toolbar").offsetHeight + Math.max(300, canvas.offsetHeight + padding) + sliceActions.offsetHeight
   void appWindow.setSize(new LogicalSize(outer.width / scaleFactor, Math.ceil(content + chrome)))
 }
 
+function fitSliceImage(): void {
+  if (fit || view !== "image" || !image?.naturalWidth) return
+  const padding = parseFloat(getComputedStyle(stage).paddingTop) * 2
+  const height = nativePickerWindow ? 760 - $(".picker-toolbar").offsetHeight - sliceActions.offsetHeight : stage.clientHeight
+  fit = Math.min(Math.max(1, stage.clientWidth - padding) / image.naturalWidth, Math.max(1, height - padding) / image.naturalHeight)
+  drawImage()
+  void fitWindowHeight()
+}
+
 function drawImage(): void {
-  if (!image?.naturalWidth || !imagePayload) return
-  // 切片框颜色读 token（强调色 / 危险色），随主题变化。
-  const tokens = getComputedStyle(document.documentElement)
-  const colors = { normal: tokens.getPropertyValue("--accent").trim(), selected: tokens.getPropertyValue("--state-danger").trim() }
-  scale = drawSlicePicker(canvas, image, pickableSlices(imagePayload.slices, image), imagePayload.selectedIndex, fit * zoom, colors)
-  offset = { x: 0, y: 0 }
+  if (!fit || !image?.naturalWidth || !imagePayload) return
+  drawSlicePicker(canvas, image, pickableSlices(imagePayload.slices, image), imagePayload.selectedIndex, fit * zoom)
+}
+
+function selectSlice(index: number | undefined): void {
+  if (!imagePayload) return
+  imagePayload.selectedIndex = index
+  sliceSelect.value = index === undefined ? "" : String(index)
+  sliceApply.disabled = !imagePayload.editable || index === undefined
+  drawImage()
+}
+
+function sliceAtPointer(event: MouseEvent): TileSlice | undefined {
+  if (!imagePayload?.editable || !image?.naturalWidth) return
+  const bounds = canvas.getBoundingClientRect()
+  const point = {
+    x: (event.clientX - bounds.left) / bounds.width * image.naturalWidth,
+    y: (event.clientY - bounds.top) / bounds.height * image.naturalHeight,
+  }
+  return tileSliceAt(pickableSlices(imagePayload.slices, image), point)
 }
 
 function showEmptyView(): void {
@@ -234,8 +262,10 @@ function showSliceView(): void {
   back.title = imagePayload?.styleLibrary ? "返回全部样式" : "返回全部图片"
   if (imagePayload) title.textContent = imagePayload.path.split("/").pop() ?? imagePayload.path
   styleName.hidden = !styleName.textContent
-  count.hidden = true
+  count.textContent = String(imagePayload?.slices.length ?? 0)
+  count.hidden = !imagePayload?.slices.length
   setWindowTitle("图片切片")
+  fitSliceImage()
 }
 
 /** 为样式或切片选一张图片：和「全部图片」同一个网格，单击即选中，选完由主窗口决定切图还是关窗。 */
@@ -515,7 +545,7 @@ function renderLibrary(): void {
   libraryNew.hidden = chooser || !payload || Boolean(payload.imageSelection) || sound || Boolean(payload.ssfAnimation)
   libraryNew.disabled = !payload?.canAdd || !payload.editable
   const images = chooser || libraryMode === "images" && !sound
-  title.textContent = images ? "全部图片" : "全部样式"
+  title.textContent = images ? "全部图片" : mobilePicker.matches ? library?.kind === "anim" ? "选择动效" : "选择样式" : "全部样式"
   setWindowTitle(title.textContent)
   for (const button of libraryButtons("[data-library-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.libraryMode === libraryMode))
@@ -583,7 +613,7 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
       releaseLibraryBitmaps()
     }
     library = payload
-    libraryMode = payload.imageSelection || mobilePicker.matches && payload.kind === "all" && payload.imagesCompatible && !payload.soundOnly ? "images" : "styles"
+    libraryMode = payload.imageSelection ? "images" : "styles"
     libraryKind = payload.kind
     libraryFilter = "all"
   } else if (reset) library = undefined
@@ -598,20 +628,29 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
 function showImage(payload: ImagePayload): void {
   imagePayload = payload
   styleName.textContent = payload.styleName ?? ""
+  sliceApply.disabled = true
+  sliceSelect.disabled = true
+  sliceSelect.replaceChildren(new Option("选择切片", ""))
+  sliceSelect.options[0]!.disabled = true
+  canvas.tabIndex = payload.editable ? 0 : -1
+  canvas.hidden = true
+  const source = new Image()
+  image = source
+  fit = 0
+  zoom = 1
   showSliceView()
-  canvas.style.cursor = payload.editable ? "crosshair" : "default"
-  image = new Image()
-  image.onload = () => {
-    if (!image) return
-    // 默认缩放到图片区域的 80%（桌面端高按窗口初始 760 算，窗口高度会跟随画布变化）
-    // 网页端弹窗高度固定，按实际视口算。
-    const area = { width: window.innerWidth, height: (nativePickerWindow ? 760 : window.innerHeight) - $(".picker-toolbar").offsetHeight }
-    fit = Math.min(area.width * 0.8 / image.naturalWidth, area.height * 0.8 / image.naturalHeight)
-    zoom = 1
-    drawImage()
-    void fitWindowHeight()
+  source.onload = () => {
+    if (image !== source) return
+    const slices = pickableSlices(payload.slices, source)
+    for (const { index, source: [, , width, height] } of slices) {
+      sliceSelect.add(new Option(`${slicePickerLabel(index)} · ${width} × ${height}`, String(index)))
+    }
+    sliceSelect.disabled = !payload.editable
+    canvas.hidden = false
+    selectSlice(slices.find(slice => slice.index === payload.selectedIndex)?.index)
+    fitSliceImage()
   }
-  image.src = payload.dataURL
+  source.src = payload.dataURL
 }
 
 document.title = "图片切片"
@@ -672,22 +711,25 @@ document.addEventListener("keydown", (event) => {
   if (nativePickerWindow) void getCurrentWindow().close()
   else void emitMain("picker-close")
 })
-bindSlicePickerZoom($(".picker-canvas-stage"), canvas, (factor) => {
+systemDark.addEventListener("change", drawImage)
+bindSlicePickerZoom(stage, canvas, (factor) => {
   zoom = Math.min(MAX_SLICE_ZOOM, Math.max(MIN_SLICE_ZOOM, zoom * factor))
   drawImage()
 })
+sliceSelect.addEventListener("change", () => selectSlice(Number(sliceSelect.value)))
+sliceApply.addEventListener("click", () => {
+  const index = imagePayload?.selectedIndex
+  if (view === "image" && index !== undefined) void emitMain("image-picker-select", { index })
+})
 canvas.addEventListener("click", (event) => {
-  if (!imagePayload?.editable || !image) return
-  const bounds = canvas.getBoundingClientRect()
-  const point = {
-    x: ((event.clientX - bounds.left) / bounds.width * canvas.width - offset.x) / scale,
-    y: ((event.clientY - bounds.top) / bounds.height * canvas.height - offset.y) / scale,
-  }
-  const selected = tileSliceAt(pickableSlices(imagePayload.slices, image), point)
-  if (!selected) return
-  imagePayload.selectedIndex = selected.index
-  drawImage()
-  void emitMain("image-picker-select", { index: selected.index })
+  const slice = sliceAtPointer(event)
+  if (slice) selectSlice(slice.index)
+})
+canvas.addEventListener("dblclick", (event) => {
+  if (sliceAtPointer(event)?.index === imagePayload?.selectedIndex) sliceApply.click()
+})
+canvas.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.repeat && !event.isComposing) sliceApply.click()
 })
 
 await onMain<ImagePayload>("image-picker-data", (payload) => showImage(payload))

@@ -49,8 +49,6 @@
 }
 #settings-dialog .settings-nav-item { flex: none; }
 #settings-dialog .settings-nav-item > span:nth-child(2) { white-space: nowrap; }
-#settings-dialog .settings-nav-item small { min-width: 0; margin-left: auto; overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
-#settings-dialog .settings-nav-item[aria-selected="true"] small { color: inherit; }
 #settings-dialog .settings-nav-heading { flex: none; padding: var(--space-md) var(--space-sm) var(--space-xs); color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 #settings-dialog .settings-nav-heading:first-child { padding-top: var(--space-sm); }
 #settings-dialog .settings-nav-heading:has(+ .settings-nav-item[hidden]) { display: none; }
@@ -213,7 +211,6 @@
   #settings-dialog .settings-sidebar::-webkit-scrollbar { display: none; }
   #settings-dialog .settings-nav-heading { display: none; }
   #settings-dialog .settings-nav-item { height: 36px; scroll-snap-align: start; font-size: var(--font-size-md); }
-  #settings-dialog .settings-nav-item small,
   #settings-saved-at { display: none; }
   #settings-dialog .settings-content { padding: var(--space-lg) max(16px, env(safe-area-inset-right)) var(--space-xl) max(16px, env(safe-area-inset-left)); }
   #settings-dialog .settings-row { flex-wrap: wrap; gap: var(--space-sm) var(--space-md); min-height: 52px; font-size: var(--font-size-md); }
@@ -237,27 +234,26 @@
 
 :root[data-safe-area-guides="true"] .keyboard-dock > .keyboard-accessories { outline: 1px dashed var(--selection); outline-offset: -1px; }
 
-.mobile-settings-back, .mobile-model-notice, .mobile-model-link, .mobile-model-unavailable { display: none; }
+.mobile-settings-back, .mobile-model-notice, .mobile-model-link, .mobile-model-unavailable, .mobile-settings-overview, .mobile-settings-subtitle, .mobile-settings-close { display: none; }
 @media (max-width: 760px) and (orientation: portrait) {
   #settings-dialog { height: var(--viewport-height); }
-  #settings-dialog > form { gap: 0; }
-  #settings-dialog .settings-header { padding: 0; }
-  #settings-dialog .settings-header h2 { flex: 1; font-size: var(--font-size-lg); }
+  #settings-dialog > form { gap: 0; padding-bottom: var(--mobile-navigation-height); }
+  #settings-dialog .settings-header { padding: var(--space-sm); }
+  #settings-dialog .settings-header h2 { flex: 1; font-size: var(--font-size-page); }
   #settings-dialog .mobile-settings-back { display: grid; }
   #settings-dialog .settings-layout { display: flex; flex: 1; flex-direction: column; }
   #settings-dialog .settings-sidebar { flex: 1; flex-direction: column; align-items: stretch; gap: var(--space-md); padding: var(--space-xl) 0; overflow-y: auto; border: 0; background: transparent; }
-  #settings-dialog .settings-sidebar::before { content: "按你的习惯来"; margin-block: var(--space-md); font-size: var(--font-size-page); font-weight: 600; }
   #settings-dialog .settings-nav-item, #settings-dialog .mobile-model-link { display: flex; min-height: 72px; padding: var(--space-lg); border: 0; border-radius: var(--radius-md); background: var(--panel); color: var(--text); }
   #settings-dialog .settings-nav-item[hidden] { display: none; }
   #settings-dialog .settings-nav-item > :first-child { display: none; }
   #settings-dialog .settings-nav-item::after { content: "›"; margin-left: auto; color: var(--secondary); }
   #settings-dialog .settings-content { flex: 1; padding: var(--space-xl) 0; }
-  #settings-dialog[data-mobile-settings="index"] .settings-content, #settings-dialog[data-mobile-settings="index"] .mobile-settings-back,
+  #settings-dialog[data-mobile-settings="index"] .settings-content, #settings-dialog[data-mobile-settings="index"] .mobile-settings-back, #settings-dialog .settings-sidebar,
   #settings-dialog[data-mobile-settings="detail"] .settings-sidebar { display: none; }
   #settings-dialog .settings-group { gap: var(--space-sm); margin-bottom: var(--space-xl); }
   #settings-dialog .settings-group + .settings-group { padding-top: var(--space-lg); border: 0; }
-  #settings-dialog .settings-row { min-height: 64px; padding: var(--space-md); border: 0; border-radius: var(--radius-md); background: var(--panel); }
-  #settings-dialog .settings-row > .ui-segmented { width: 100%; background: var(--line-soft); }
+  #settings-dialog .settings-row { min-height: var(--mobile-primary-height); padding: var(--space-md); border: 0; border-radius: var(--radius-md); background: var(--panel); }
+  #settings-dialog .settings-row > .ui-segmented { width: auto; background: var(--line-soft); }
   #settings-dialog .settings-row > :is(.ui-select, input:not([type="checkbox"])) { flex-basis: auto; width: min(60%, 240px); }
   #settings-dialog .settings-footer { padding-inline: 0; background: var(--window); }
   #settings-dialog .mobile-model-notice { display: grid; gap: var(--space-sm); padding: var(--space-lg); margin-bottom: var(--space-xl); border-radius: var(--radius-lg); background: var(--accent-soft); }
@@ -266,8 +262,8 @@
 }
 .mobile-accent-presets { display: none; }
 @media (max-width: 760px) and (orientation: portrait) {
-  #settings-dialog .mobile-accent-presets { display: flex; width: 100%; justify-content: space-between; gap: var(--space-sm); }
-  #settings-dialog .mobile-accent-presets > button { width: 44px; height: 44px; padding: var(--space-sm); border: 6px solid var(--panel); border-radius: var(--radius-full); }
+  #settings-dialog .mobile-accent-presets { display: flex; width: auto; justify-content: space-between; gap: var(--space-2xs); }
+  #settings-dialog .mobile-accent-presets > button { width: var(--control-height-md); height: var(--mobile-control-height); padding: var(--space-xs); border: var(--space-sm) solid var(--panel); border-radius: var(--radius-full); }
   #settings-dialog [data-accent="blue"] { background: var(--accent-preset-blue); }
   #settings-dialog [data-accent="green"] { background: var(--accent-preset-green); }
   #settings-dialog [data-accent="purple"] { background: var(--accent-preset-purple); }
@@ -287,4 +283,26 @@
   #settings-dialog .settings-about-logo { justify-self: center; margin-bottom: var(--space-xl); }
   #settings-dialog .settings-about-title { flex-direction: column; gap: var(--space-md); font-size: var(--font-size-page); }
   #settings-dialog .settings-about .settings-group-note { max-width: 280px; margin-top: var(--space-xl); line-height: 1.8; }
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  #settings-dialog .mobile-settings-close { display: grid; }
+  #settings-dialog .settings-header > .ui-icon-button:not(.mobile-settings-back, .mobile-settings-close) { display: none; }
+  #settings-dialog[data-mobile-settings="index"] .mobile-settings-subtitle { display: block; margin: var(--space-xs) 0 0; }
+  #settings-dialog[data-mobile-settings="index"] .mobile-settings-overview { display: flex; flex: 1; flex-direction: column; gap: var(--space-xl); overflow-y: auto; padding: var(--space-lg) var(--space-sm); overscroll-behavior: contain; }
+  .mobile-settings-account { flex: none; gap: var(--space-md); padding: var(--space-md); border: 1px solid var(--line); background: var(--panel); }
+  .mobile-settings-account > .ui-icon { color: var(--accent); }
+  .mobile-settings-group { flex: none; display: grid; gap: var(--space-sm); }
+  .mobile-settings-group > h3 { display: flex; align-items: center; gap: var(--space-sm); margin: 0; color: var(--secondary); font-size: var(--font-size-xs); font-weight: 500; }
+  .mobile-settings-group > h3 > .ui-icon { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+  .mobile-settings-rows { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+  #settings-dialog .mobile-settings-rows > :is(.settings-row, .ui-list-item) { width: 100%; min-height: var(--mobile-primary-height); padding: var(--space-md); margin: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; font-size: var(--font-size-homeaction); }
+  #settings-dialog .mobile-settings-rows > :last-child { border-bottom: 0; }
+  .mobile-settings-rows > .ui-list-item > :first-child { flex: 1; }
+  .mobile-settings-rows > .ui-list-item > small { color: var(--secondary); font-size: var(--font-size-xs); }
+  #settings-dialog .mobile-settings-rows .settings-row:has(.mobile-accent-presets) { gap: var(--space-xs); }
+  #settings-dialog .mobile-settings-rows .settings-row:has(.settings-range) { flex-wrap: wrap; }
+  #settings-dialog .mobile-settings-rows .settings-range { flex-basis: 100%; width: 100%; }
+  #settings-dialog .mobile-settings-rows .ui-segmented > button { padding-inline: var(--space-sm); }
+  .mobile-settings-note { text-align: center; padding-block: var(--space-md); }
 }

@@ -1,6 +1,6 @@
 # 拼音栏首次导入与 Android 浮窗
 
-2026-10-19，样本：`梦·软软食光.bdi`、`我的键盘皮肤.bds`、`baiduinput_AndroidPhone_1000e.apk`。
+2026-10-19，样本：一份 BDI、一份 BDS，以及 `baiduinput_AndroidPhone_1000e.apk`。
 
 ## 原生导入的根因
 
@@ -29,7 +29,7 @@
 - `m(...)`：背景色 `l` 为 0 时使用 StyleParam 图片，否则直接填色。
 - `InputParam.m(...)`：BACK_STYLE / FORE_STYLE 独立解析。
 
-`我的键盘皮肤.bds` 的 `[INPUT] BACK_STYLE=127`，STYLE127 为 `NM_COLOR=f3f6fa`，
+BDS 样本的 `[INPUT] BACK_STYLE=127`，STYLE127 为 `NM_COLOR=f3f6fa`，
 因此把空的 Android 浮窗强制铺满会生成一条多余的浅色矩形。撤回该强制显示和强制全宽改动；
 iOS 的常驻输入行仍独立显示，Android 输入浮窗在输入后出现、随文字宽度变化。
 

@@ -1,6 +1,7 @@
+import { wireMobileSettings } from "./mobile-settings"
 import { element, iconButton } from "../dom-element"
 import { showResourceList } from "./resource-inspector"
-import { wireMobileShareReview } from "./mobile-share-review"
+import { openResources } from "./resource-navigation"
 import { createIcon } from "../icons"
 import { bindDialog } from "./ask"
 import { closeDialog } from "../motion"
@@ -9,20 +10,18 @@ import { mobilePortraitQuery, isTauri } from "./canvas-interaction"
 import { setMobilePane, selectChoice } from "./mobile-layout"
 import { selectFile } from "./navigation"
 import { setSidebarView } from "./source-files"
-import { prepareDocumentReplacement } from "./edit-history"
 import { showSettingsPage } from "./preferences"
-import { $, canvasWrap, mode, theme, orientation, device, settingsDialog, files, mobileAppMore, resourceInspector, mobileQuickActions, newButton, openButton, inspectorTabs, workspaceImageFigure, skinFieldsGroup, simulatedOutput, mobileProjectDialog, mobileProjectToggle, sidebarPane, workspacePane } from "./dom"
+import { $, canvasWrap, mode, theme, orientation, device, settingsDialog, files, mobileAppMore, resourceInspector, newButton, openButton, inspectorTabs, workspaceImageFigure, skinFieldsGroup, simulatedOutput, mobileProjectDialog, mobileProjectToggle, sidebarPane, workspacePane } from "./dom"
 
 /** 手机导航只组织现有视图，文件编辑和提交仍走各自模块。 */
 export function wireMobileStudio(): void {
-  wireMobileShareReview()
   const operationDialog = $("#file-operation-dialog") as HTMLDialogElement
   for (const button of operationDialog.querySelectorAll<HTMLButtonElement>("[data-operation-close]")) button.addEventListener("click", () => ($("#file-operation-close") as HTMLButtonElement).click())
   $("#mobile-operation-share").addEventListener("click", async () => { await closeDialog(operationDialog); $("#mobile-share").click() })
   const retry = $("#mobile-operation-retry") as HTMLButtonElement
   retry.addEventListener("click", async () => {
     const action = appState.currentFileOperation
-    if (appState.fileOperationRunning || !appState.archive || !["保存", "导出"].includes(action)) return
+    if (appState.fileOperationRunning || !appState.archive || !["保存", "导出", "另存为"].includes(action)) return
     await closeDialog(operationDialog)
     $(action === "保存" ? "#mobile-save" : "#mobile-export-open").click()
   })
@@ -31,12 +30,17 @@ export function wireMobileStudio(): void {
     $("#mobile-operation-title").textContent = operationDialog.dataset.stage === "compatibility" ? "兼容性确认" : `${action}${operationDialog.dataset.outcome === "success" ? "完成" : operationDialog.dataset.outcome === "error" ? "失败" : "处理中"}`
     const disabled = ($("#file-operation-close") as HTMLButtonElement).disabled
     for (const button of operationDialog.querySelectorAll<HTMLButtonElement>("[data-operation-close]")) if (button.disabled !== disabled) button.disabled = disabled
-    retry.hidden = operationDialog.dataset.outcome !== "error" || !["保存", "导出"].includes(action) || !appState.archive
-    retry.textContent = action === "保存" ? "重试保存" : "重试导出"
+    retry.hidden = operationDialog.dataset.outcome !== "error" || !["保存", "导出", "另存为"].includes(action) || !appState.archive
+    retry.textContent = action === "保存" ? "重试保存" : action === "另存为" ? "重试另存为" : "重试导出"
   }).observe(operationDialog, { attributes: true, subtree: true, attributeFilter: ["data-outcome", "data-stage", "disabled"] })
-  $("#mobile-export-open").addEventListener("click", () => { $("#mobile-export-source").textContent = `当前皮肤 · ${$("#document-name").textContent}` })
   const root = document.documentElement
   const nav = $("#mobile-navigation")
+  const resourceTabs = $("#mobile-resource-tabs")
+  const tabsHome = document.createComment("mobile resource tabs")
+  resourceTabs.before(tabsHome)
+  const createResource = $("#resource-create-style")
+  const createHome = document.createComment("resource create action")
+  createResource.before(createHome)
   bindDialog(mobileProjectDialog)
   mobileProjectDialog.addEventListener("close", () => {
     workspacePane.before(sidebarPane)
@@ -50,6 +54,13 @@ export function wireMobileStudio(): void {
   routeClose.classList.add("mobile-route-close")
   $(".titlebar").append(routeTitle)
   $(".titlebar-right").append(routeClose)
+  const aiHeading = element("header", "mobile-ai-heading")
+  const aiTitle = element("div")
+  const aiContext = element("p", "ui-field-note")
+  aiTitle.append(Object.assign(element("h1"), { textContent: "AI 设计" }), aiContext)
+  const history = iconButton("history", "查看 AI 会话", () => $("#ai-new-session").click())
+  aiHeading.append(aiTitle, history)
+  canvasWrap.append(aiHeading)
   const figureHome = workspaceImageFigure.parentElement!
   const simulation = simulatedOutput.closest<HTMLElement>(".simulation")!
   const simulationHome = simulation.parentElement!
@@ -72,18 +83,21 @@ export function wireMobileStudio(): void {
     }
   }
   const openResource = (kind: string) => {
-    const entry = files.querySelector<HTMLButtonElement>(`.sidebar-overview [data-nav-mode="${kind}"]`)
-    if (!entry) return
-    entry.click()
-    showResourceList()
+    openResources(kind === "resource" ? "image" : kind as "style" | "sound")
     inspectorTabs.querySelector<HTMLButtonElement>('[data-inspector-tab="properties"]')?.click()
     setMobilePane("inspector")
     setPage("resources")
     for (const button of document.querySelectorAll<HTMLElement>("[data-mobile-resource]")) button.setAttribute("aria-pressed", String(button.dataset.mobileResource === kind))
   }
   for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) button.addEventListener("click", () => {
-    if (!appState.archive) return
     const page = button.dataset.mobilePage!
+    if (page === "home") {
+      $("#recent-files").click()
+      $(".empty-state").scrollTo({ top: 0 })
+      return
+    }
+    if (!appState.archive) return
+    canvasWrap.classList.remove("empty")
     if (page === "resources") openResource("style")
     else {
       if (page === "ai" && mode.value !== "edit") selectChoice(mode, "edit")
@@ -94,16 +108,8 @@ export function wireMobileStudio(): void {
     }
   })
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-mobile-resource]")) button.addEventListener("click", () => openResource(button.dataset.mobileResource!))
-  $("#mobile-preview-summary").addEventListener("click", openProject)
-  $("#mobile-home").addEventListener("click", () => void (async () => {
-    await closeDialog(mobileProjectDialog)
-    if (!(await prepareDocumentReplacement())) return
-    canvasWrap.classList.add("empty")
-    setMobilePane("canvas")
-    setPage("edit")
-  })())
-  $("#mobile-home-navigation [data-home-action=home]").addEventListener("click", () => $(".empty-state").scrollTo({ top: 0 }))
-  $("#mobile-home-navigation [data-home-action=new]").addEventListener("click", () => newButton.click())
+  $("#mobile-home").addEventListener("click", () => void closeDialog(mobileProjectDialog).then(() => $("#recent-files").click()))
+  $("#mobile-welcome-blank").addEventListener("click", () => newButton.click())
   $("#mobile-welcome-new").addEventListener("click", () => newButton.click())
   $("#mobile-welcome-open").addEventListener("click", event => {
     if (!mobilePortraitQuery.matches) return
@@ -135,11 +141,8 @@ export function wireMobileStudio(): void {
     document.body.append(dialog)
     dialog.showModal()
   }, { capture: true })
-  const canvasOptions = element("button", "ui-button mobile-canvas-options")
-  canvasOptions.id = "mobile-canvas-options"
-  canvasOptions.type = "button"
-  canvasOptions.textContent = "画布选项"
-  canvasOptions.addEventListener("click", () => {
+  $("#mobile-app-more [data-mobile-action=mobile-canvas-options]").addEventListener("click", () => {
+    mobileAppMore.open = false
     const dialog = element("dialog", "ui-dialog ui-mobile-sheet")
     dialog.setAttribute("aria-label", "画布选项")
     const form = element("form")
@@ -192,7 +195,6 @@ export function wireMobileStudio(): void {
     document.body.append(dialog)
     dialog.showModal()
   })
-  canvasWrap.append(canvasOptions)
   const previewReturn = element("button", "ui-button mobile-preview-return")
   previewReturn.type = "button"
   previewReturn.dataset.variant = "primary"
@@ -248,6 +250,7 @@ export function wireMobileStudio(): void {
   const modelPage = settingsDialog.querySelector<HTMLElement>("[data-settings-panel=model]")!
   if (modelLink.hidden === false) modelPage.removeAttribute("data-platform-hidden")
   modelPage.dataset.mobileUnavailable = String(!modelLink.hidden)
+  wireMobileSettings()
   const sync = () => {
     const mobilePreview = mobilePortraitQuery.matches && mode.value === "preview" && !canvasWrap.classList.contains("empty")
     if (mobilePreview && simulation.parentElement !== canvasWrap) canvasWrap.append(simulation)
@@ -255,34 +258,43 @@ export function wireMobileStudio(): void {
     simulation.classList.toggle("mobile-simulation", mobilePreview)
     simulationNote.hidden = !mobilePreview
     simulatedOutput.placeholder = mobilePreview ? "每次敲击，\n都有一点小确幸。" : simulationPlaceholder
+    if (mobilePortraitQuery.matches) {
+      if (resourceTabs.parentElement !== $("#resource-list-view")) $("#resource-list-view").append(resourceTabs)
+      if (createResource.parentElement !== $(".resource-actions")) $(".resource-actions").prepend(createResource)
+    } else {
+      if (resourceTabs.previousSibling !== tabsHome) tabsHome.after(resourceTabs)
+      if (createResource.previousSibling !== createHome) createHome.after(createResource)
+    }
     if (!mobilePortraitQuery.matches) {
-      if (workspaceImageFigure.parentElement !== figureHome) figureHome.append(workspaceImageFigure)
+      if (workspaceImageFigure.parentElement !== figureHome && !workspaceImageFigure.closest("#atlas-editor-dialog")) figureHome.append(workspaceImageFigure)
       nav.hidden = true
       return
     }
     $("#document-name").dataset.mobileName = $("#document-name").textContent?.replace(/\.(?:bdi|bds|bda|ssf|mssf|sxi)$/i, "")
     const empty = canvasWrap.classList.contains("empty")
     nav.hidden = false
-    for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) button.disabled = empty && button.dataset.mobilePage !== "edit"
+    for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) button.disabled = appState.fileOperationRunning || button.dataset.mobilePage !== "home" && !appState.archive
     root.dataset.mobileWelcome = String(empty)
     root.dataset.mobileMode = mode.value
-    const metadata = !skinFieldsGroup.hidden && !$("#quick-inspector").hidden
-    const library = !resourceInspector.hidden && appState.resourceConfigActive
+    aiContext.textContent = `键设 Chat · ${$("#document-name").dataset.mobileName || "当前皮肤"} · ${appState.archive?.format.toUpperCase() ?? ""}`
+    const metadata = !empty && !skinFieldsGroup.hidden && !$("#quick-inspector").hidden
+    const library = !empty && !resourceInspector.hidden && appState.resourceConfigActive
     root.dataset.mobileResource = String(library || metadata)
     root.dataset.mobileLibrary = String(library)
+    root.dataset.mobileResourceList = String(library && !$("#resource-list-view").hidden)
     const resourceKind = appState.resourceInspectorMode === "style" ? "style" : appState.resourceInspectorMode === "sound" ? "sound" : "resource"
     for (const button of document.querySelectorAll<HTMLElement>("[data-mobile-resource]")) button.setAttribute("aria-pressed", String(button.dataset.mobileResource === resourceKind))
     const detail = library && !$("#resource-detail").hidden && appState.resourceInspectorMode === "image"
     if (detail) {
       if (workspaceImageFigure.parentElement !== $("#image-resource-detail")) $("#image-resource-detail").prepend(workspaceImageFigure)
-    } else if (workspaceImageFigure.parentElement !== figureHome) figureHome.append(workspaceImageFigure)
+    } else if (workspaceImageFigure.parentElement !== figureHome && !workspaceImageFigure.closest("#atlas-editor-dialog")) figureHome.append(workspaceImageFigure)
     routeTitle.textContent = metadata ? "皮肤信息" : appState.resourceInspectorMode === "style" ? "全部样式" : appState.resourceInspectorMode === "sound" ? "音效资源" : detail ? "图片与切片" : "全部图片"
     root.dataset.mobileAnimation = String(appState.animationDesignMode !== "all")
-    if (!empty && appState.inspectorTab === "ai") setPage("ai")
-    else if (!empty && (appState.resourceConfigActive || appState.animationDesignMode !== "all")) setPage("resources")
+    if (empty) setPage("home")
+    else if (appState.inspectorTab === "ai") setPage("ai")
+    else if (appState.resourceConfigActive || appState.animationDesignMode !== "all") setPage("resources")
     else setPage("edit")
     $(".mobile-page-heading").textContent = appState.sidebarView === "source" ? "源文件" : "项目概览"
-    $("#mobile-canvas-mode [data-mode-choice=edit]").lastChild!.textContent = "编辑"
     if (!empty && mode.value === "preview") root.dataset.mobilePreview = "true"
     else delete root.dataset.mobilePreview
     if (!appState.mobileStudioStarted && !empty) {
@@ -290,7 +302,9 @@ export function wireMobileStudio(): void {
       selectChoice(mode, "edit")
     }
   }
+  new MutationObserver(sync).observe(newButton, { attributes: true, attributeFilter: ["disabled"] })
   new MutationObserver(sync).observe(canvasWrap, { attributes: true, attributeFilter: ["class"] })
+  new MutationObserver(sync).observe($("#resource-list-view"), { attributes: true, attributeFilter: ["hidden"] })
   new MutationObserver(sync).observe($("#resource-detail"), { attributes: true, attributeFilter: ["hidden"] })
   new MutationObserver(sync).observe(skinFieldsGroup, { attributes: true, attributeFilter: ["hidden"] })
   new MutationObserver(sync).observe(resourceInspector, { attributes: true, attributeFilter: ["hidden"] })
@@ -307,8 +321,6 @@ export function wireMobileStudio(): void {
     queueMicrotask(sync)
   })
   mobileAppMore.addEventListener("click", () => queueMicrotask(sync))
-  const placeHistory = () => { if (mobilePortraitQuery.matches) $("#mobile-canvas-history").append(mobileQuickActions) }
-  mobilePortraitQuery.addEventListener("change", () => { placeHistory(); sync() })
-  placeHistory()
+  mobilePortraitQuery.addEventListener("change", sync)
   sync()
 }

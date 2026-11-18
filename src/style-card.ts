@@ -1,5 +1,5 @@
 import { canvasFont, retinaThumbnail, withTextShadow, type VisualResolver } from "./atlas.ts"
-import { element, iconButton } from "./dom-element.ts"
+import { element, emptyState, iconButton } from "./dom-element.ts"
 import { releaseOnRemove } from "./dom-lifecycle.ts"
 import { createIcon } from "./icons.ts"
 import { playEnter } from "./motion.ts"
@@ -45,6 +45,17 @@ export function styleFilterButtons(options: readonly (readonly [string, string])
     button.addEventListener("click", () => change(value))
     group.append(button)
   }
+  group.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+    const buttons = [...group.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")]
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    if (index < 0) return
+    event.preventDefault()
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length
+    buttons[next]?.click()
+    buttons[next]?.focus()
+  })
   return group
 }
 
@@ -345,13 +356,27 @@ export function imageResourceCard(options: { path: string; src?: string; load?: 
   card.dataset.path = options.path
   card.title = options.path
   const image = element("img")
-  if (options.src) image.src = options.src
   image.alt = ""
   image.loading = "lazy"
+  image.decoding = "async"
   const preview = element("span", "ui-image-card-preview")
+  preview.setAttribute("aria-busy", String(Boolean(options.src)))
+  const fail = () => {
+    preview.setAttribute("aria-busy", "false")
+    preview.title = "无法预览此图片"
+    preview.setAttribute("aria-label", preview.title)
+    if (!preview.querySelector(".ui-empty")) preview.append(emptyState("image-off"))
+    image.hidden = true
+  }
   if (options.load) {
     pendingDraws.set(preview, () => {
-      void options.load?.().then(src => { if (src && card.isConnected) image.src = src })
+      if (!card.isConnected) return
+      preview.setAttribute("aria-busy", "true")
+      void options.load?.().then(src => {
+        if (!card.isConnected) return
+        if (src) image.src = src
+        else fail()
+      }).catch(fail)
     })
     drawObserver().observe(preview)
     releaseOnRemove(card, () => drawObserver().unobserve(preview))
@@ -360,9 +385,13 @@ export function imageResourceCard(options: { path: string; src?: string; load?: 
   size.hidden = true
   preview.append(image, size)
   image.addEventListener("load", () => {
+    preview.setAttribute("aria-busy", "false")
     size.textContent = `${image.naturalWidth} × ${image.naturalHeight}`
     size.hidden = false
   })
+  image.addEventListener("error", fail)
+  if (options.src) image.src = options.src
+  else if (!options.load) fail()
   const caption = element("span", "ui-image-card-caption")
   const name = element("strong")
   name.textContent = options.path.split("/").pop() ?? options.path

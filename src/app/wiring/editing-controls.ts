@@ -1,18 +1,20 @@
-import { source, keyboardFields, layoutActionButtons, preview, toolbarPreview, inspectorTabButtons, mobilePortraitQuery, activateSkinState, selectNativeToolbar } from "../canvas-interaction"
+import { source, keyboardFields, layoutActionButtons, preview, inspectorTabButtons, mobilePortraitQuery, activateSkinState, selectCandidateBar } from "../canvas-interaction"
 import { bindDialog } from "../ask.ts"
+import { renderResourceCatalogSearch } from "../resource-page"
 import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
 import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight } from "../source-panel"
-import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, toolbarCanvas, toolbarStrip, fontImportInput } from "../dom"
+import { sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, fontImportInput } from "../dom"
 import { appState } from "../state"
+import { resourceSourceToggle } from "../dom"
 import { resizeMobileInspector } from "../mobile-inspector"
 import { updateSelectedKey, updateKeyboard, updateToolbar, updateSkinInfo, populateKeyInspector } from "../key-inspector"
 import { scrollSelectedSource } from "../config-context"
 import { applyExactGap, moveMixedCoordinate, applyLayoutAction, copySelectedKeys, deleteSelectedKeys } from "../key-editing"
 import { shouldClearMixedInput } from "../../mixed-input.ts"
 import { syncCandidateSelection, updateDevicePreview, refreshPreview, setGuidesVisible } from "../preview-render"
-import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode, revealInspectorGroup } from "../mobile-layout"
+import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode } from "../mobile-layout"
 import { ensureAiChat, aiDesignErrorMessage } from "../ai-panel"
 import { switchSsfPreviewLayout } from "../ssf-preview"
 import { switchPalmLayout } from "../sxi-documents"
@@ -38,9 +40,19 @@ import { openLayoutConversionDialog } from "../layout-conversion"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
+  resourceSourceToggle.addEventListener("click", () => {
+    source.commit()
+    appState.inspectorTab = appState.inspectorTab === "source" ? "properties" : "source"
+    updateInspectorView()
+    if (appState.inspectorTab === "properties") void renderStyleResourceDetail()
+    else {
+      updateSourceHighlight()
+      scrollSelectedSource()
+    }
+  })
   fontImportInput.addEventListener("change", () => {
     const file = fontImportInput.files?.[0]
-    if (file) void importFontFile(file)
+    if (file) void importFontFile(file, fontImportInput.dataset.theme)
   })
   source.addEventListener("valueclick", (event) => {
     const detail = (event as CustomEvent<SourceEditorValueClick>).detail
@@ -259,7 +271,7 @@ export function wireEditingControls(): void {
     }
     showResourceList()
   })
-  searchField({ label: "搜索图片", input: resourceSearch, onInput: renderResourceInspector })
+  searchField({ label: "搜索图片", input: resourceSearch, onInput: () => { if (!renderResourceCatalogSearch()) renderResourceInspector() } })
   resourceCategory.addEventListener("change", () => {
     if (appState.archive?.format !== "bda" || appState.resourceInspectorMode !== "style" || !appState.resourceConfigActive) {
       renderResourceInspector()
@@ -476,30 +488,6 @@ export function wireEditingControls(): void {
     if (!isEditing()) return
     const inputRegion = event.target instanceof Element && Boolean(event.target.closest("#candidate-input"))
     if (inputRegion) appState.textStyleTarget = "input"
-    if (appState.archive?.format === "ssf" || appState.archive?.format === "sxi") return selectNativeToolbar(inputRegion)
-    if (event.target === toolbarCanvas && appState.selectedToolbarSections.length) return
-    if (appState.archive?.format === "bda") {
-      if (appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath, "overview")
-      appState.selectedCandidate = inputRegion ? "input" : true
-      appState.selectedKeySections = []
-      preview.setSelected([])
-      syncCandidateSelection()
-      populateKeyInspector()
-      if (inputRegion) revealInspectorGroup("输入区")
-      updateSourceHighlight()
-      scrollSelectedSource()
-      if (mobilePortraitQuery.matches) setMobilePane("inspector")
-      return
-    }
-    const path = toolbarStrip.dataset.path
-    if (!path) return
-    selectFile(path)
-    appState.selectedToolbarSections = []
-    toolbarPreview.setSelected([])
-    appState.selectedCandidate = inputRegion ? "input" : true
-    syncCandidateSelection()
-    populateKeyInspector()
-    // 输入码区域定位到它的「输入区」分组；候选栏其它位置仍从候选栏开始。
-    if (inputRegion) revealInspectorGroup("INPUT")
+    selectCandidateBar(inputRegion)
   })
 }

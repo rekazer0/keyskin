@@ -1,6 +1,6 @@
-# 冷萃摩卡：iPhone 真机截图对照
+# iPhone 输入行：真机截图对照
 
-2026-10-18，测试用户提供的 `冷萃摩卡无漂浮正常音_restored.bdi` 与 `照片 2.jpg`。
+2026-10-18，测试用户提供的一份 BDI 样本与真机截图。
 选择深色外观、竖屏 `py_26.ini`、iPhone 17 Pro，模拟输入 `ni'hao`；另外回归 Android 输入浮窗。
 
 ## 发现的问题
@@ -27,11 +27,11 @@
 
 - 真实样本断言：背景 source 为 `[0,0,1080,70]`、行高 70、输入字号 45；输入样式仍保留 SCAND 的颜色。
 - 皮肤归档 `changed` 为空，预览与切换设备没有改动原始资源。
-- 内置小米模板、此前的青蛙皮肤、当前摩卡皮肤均通过输入行专项测试。
+- 内置小米模板、此前的 BDS 样本与当前 BDI 样本均通过输入行专项测试。
 - 新增合成样本，将 INPUT / SCAND 设为不同颜色、45 / 90 不同字号，验证实际应用中的 iPhone / Android 分支。
 - 修正测试中的异步轮询：先获取 appState，再同步轮询状态和像素，避免 Promise 造成过早放行。
 - 类型检查通过；单元与设计规范检查 195/195；常规界面快照 0 处差异。
 
-验证截图保存在本工作区 `artifacts/mocha-keyboard-iphone.png`、`artifacts/mocha-fixed-iphone.png`、`artifacts/mocha-fixed-android.png`。
+验证截图仅保存在本地测试产物目录，不随仓库分发。
 - 完整 `npm run test:e2e` 已运行：75 个真实皮肤均通过；综合用户流程 21/22。
   唯一失败仍是此前已有的 SSF 侧栏重复入口断言（`scripts/test-user-flows.mjs:659`，2 ≠ 1），不涉及本次输入行改动。

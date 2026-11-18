@@ -208,6 +208,7 @@ try {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' })
     await page.locator('#browser-open').setInputFiles(process.env.SSF_SKIN_PATH)
+    await page.getByRole('dialog', { name: '是否导出当前皮肤？', exact: true }).getByRole('button', { name: '不导出', exact: true }).click()
     await page.waitForFunction(() => !document.querySelector('#open').disabled)
     const close = page.locator('#file-operation-dialog[open] #file-operation-close')
     if (await close.isVisible()) await close.click()

@@ -17,9 +17,7 @@ try {
   for (const selector of [".titlebar-left", ".titlebar-center", ".titlebar-right", "#pinned-toolbar", ".document-icon svg", "#dirty", ".ui-workspace-navigation-brand img", ".ui-workspace-navigation-pages", ".ui-workspace-navigation-actions"]) {
     assert.equal(await page.locator(selector).evaluate(node => node.closest("[data-tauri-drag-region]")?.getAttribute("data-tauri-drag-region")), "deep", `${selector} inherits the native drag region`)
   }
-  const menus = page.locator(".titlebar .ui-menu")
-  assert.ok(await menus.count())
-  assert.equal(await menus.evaluateAll(nodes => nodes.every(node => node.getAttribute("data-tauri-drag-region") === "false")), true)
+  assert.equal(await page.locator(".titlebar .ui-menu").getAttribute("data-tauri-drag-region"), "false")
   // 按钮及其图标不能显式覆盖 Tauri 对交互控件的保护。
   for (const selector of [".titlebar button", "#document-name", "#workspace-navigation button"]) {
     assert.equal(await page.locator(selector).evaluateAll(nodes => nodes.some(node => node.hasAttribute("data-tauri-drag-region") || node.querySelector("[data-tauri-drag-region]"))), false)
@@ -28,8 +26,23 @@ try {
   await page.locator("#settings-dialog").waitFor({ state: "visible" })
   await page.keyboard.press("Escape")
   await page.locator("#settings-dialog").waitFor({ state: "hidden" })
+  await page.locator("#workspace-navigation [data-app-dialog='settings']").focus()
+  await page.keyboard.press("Alt+Enter")
   await page.locator("#browser-open").setInputFiles({ name: "拖动.bds", mimeType: "application/octet-stream", buffer: Buffer.from(bdsFixture()) })
-  await page.waitForFunction(() => document.querySelector("#document-name").textContent === "拖动.bds")
+  await page.waitForFunction(() => !document.querySelector("#open").disabled && !document.querySelector("#file-operation-dialog").open)
+  await page.locator("#pinned-toolbar .ui-pinned-tool > button").first().click()
+  await page.locator("#settings-dialog").waitFor({ state: "visible" })
+  await page.keyboard.press("Escape")
+  await page.locator("#settings-dialog").waitFor({ state: "hidden" })
+  assert.equal(await page.locator("#document-name").isVisible(), true, "desktop editor shows the document name")
+  assert.equal(await page.locator("#document-name").textContent(), "拖动.bds")
+  const title = await page.locator(".document-title").boundingBox()
+  const titlebar = await page.locator(".titlebar").boundingBox()
+  assert.ok(Math.abs(title.x + title.width / 2 - titlebar.x - titlebar.width / 2) < 1, "document title is centered in the titlebar")
+  const navigation = await page.locator("#workspace-navigation").boundingBox()
+  assert.equal(titlebar.x, navigation.x + navigation.width, "titlebar excludes the left navigation")
+  assert.ok(Math.abs(title.x + title.width / 2 - (navigation.width + (page.viewportSize().width - navigation.width) / 2)) < 1, "document title is centered after excluding the navigation width")
+
   await page.evaluate(() => {
     window.dragCommands = []
     window.__TAURI_INTERNALS__ = {
@@ -52,7 +65,7 @@ try {
       document.querySelector("#window-material").checked = platform === "windows"
       window.dragCommands.length = 0
     }, platform)
-    for (const selector of ["#mobile-app-more .ui-menu", "#workspace-navigation [data-app-dialog='settings'] svg", "#document-name", '#workspace-navigation [data-workspace-page="files"] svg']) {
+    for (const selector of [".titlebar .ui-menu", "#workspace-navigation [data-app-dialog='settings'] svg", "#document-name", "#pinned-toolbar .ui-pinned-tool > button:first-child", '#workspace-navigation [data-workspace-page="files"] svg']) {
       assert.equal(await press(selector), false, `${platform}: ${selector} does not start a drag`)
     }
     assert.equal(await press(".titlebar-right", { button: 2, buttons: 2 }), false)
@@ -62,7 +75,7 @@ try {
       assert.equal(await press(".titlebar-left"), true)
       assert.equal(await press(".document-icon svg"), true)
       assert.deepEqual(await page.evaluate(() => window.dragCommands), [], "clicking without moving leaves the window in place")
-      const { x, y, width, height } = await page.locator(".document-icon").boundingBox()
+      const { x, y, width, height } = await page.locator(".titlebar-left").boundingBox()
       await page.mouse.move(x + width / 2, y + height / 2)
       await page.mouse.down()
       await page.mouse.move(x + width / 2 + 80, y + height / 2 + 100, { steps: 4 })
@@ -75,7 +88,7 @@ try {
   await page.waitForFunction(() => window.dragCommands.filter(command => command === "set_window_material").length === 2)
   assert.deepEqual(await page.evaluate(() => window.dragCommands), ["set_window_material", "wait_for_left_mouse_release", "plugin:window|start_dragging", "set_window_material"])
   assert.deepEqual(errors, [])
-  console.log("window drag: inherited native regions, controls, macOS drag and Windows material drag passed")
+  console.log("window drag: inherited native regions, controls, centered document title, pinned actions, macOS drag and Windows material drag passed")
 } finally {
   await browser.close()
   await server.close()

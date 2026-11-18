@@ -82,8 +82,7 @@ let check = async function check(name, run) {
 }
 
 async function openTemplate(page, template = "official-android-bds") {
-  await page.locator(`#new-project-form input[value="${template}"]`).check()
-  await page.locator('#new-project-form button[value="create"]').click()
+  await page.locator(`#new-project-form [data-template="${template}"]`).click()
   await page.waitForSelector(".canvas-wrap:not(.empty)")
   await page.waitForFunction(() => document.querySelector("#preview")?.getBoundingClientRect().height > 60)
   await closeOperationDialog(page)
@@ -221,7 +220,7 @@ for (const template of ["default-android", "official-android-bds", "xiaomi-unifi
 /* ------------------------------------------------------------------------------------------------
  * 3 · File page creation
  * ---------------------------------------------------------------------------------------------- */
-await check("file page: validation and create", () => withPage(async (page) => {
+await check("file page: select template and create", () => withPage(async (page) => {
   await openFileMenu(page)
   await page.locator("#new").click()
   const form = page.locator("#file-project-chooser #new-project-form")
@@ -229,13 +228,10 @@ await check("file page: validation and create", () => withPage(async (page) => {
   assert.equal(await page.locator("#new-project-dialog").isVisible(), false)
   const names = await form.locator("strong").allTextContents()
   for (const name of ["百度 BDA 默认", "百度 BDS 旧版", "OPPO 双色", "iQOO 圆角黑"]) assert.ok(names.some((text) => text.includes(name)), `file page template: ${name}`)
-  await form.locator("[name=project-name]").fill("../bad")
-  await form.getByRole("button", { name: "新建", exact: true }).click()
-  assert.equal(await page.locator(".canvas-wrap.empty").count(), 1, "invalid name keeps the file page open")
-  await form.locator("[name=project-name]").fill("用户流程测试")
+  assert.equal(await form.locator("[name=project-name], [name=project-save-path]").count(), 0)
   await form.locator("input[value=oppo-dual-color]").check()
   await form.getByRole("button", { name: "新建", exact: true }).click()
-  await page.waitForFunction(() => document.querySelector("#document-name")?.textContent?.includes("用户流程测试"), null, { timeout: 30000 })
+  await page.waitForFunction(() => document.querySelector("#document-name")?.textContent=== "未命名.bds", null, { timeout: 30000 })
 }))
 
 /* ------------------------------------------------------------------------------------------------
@@ -440,7 +436,7 @@ await check("styles: library filters, search, preview, apply, new and delete sty
   await library.locator("#style-library-apply").click()
   await pickerDialog.waitFor({ state: "hidden" })
   // 侧栏样式列表：末尾虚线卡新建并选中；工具条删除未引用样式，可撤销。
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("按键样式", { exact: true }) }).first().click()
+  await page.locator('[data-workspace-page="resources"]').click()
   const gallery = page.locator("#resource-gallery")
   const ids = await gallery.locator(".ui-style-card[data-style-id]").evaluateAll((cards) => cards.map((card) => Number(card.dataset.styleId)))
   const next = String(Math.max(...ids) + 1)
@@ -470,7 +466,9 @@ await check("overview: every sidebar item, image slices, sounds and info", () =>
     // So do 动效设计 / 粒子设计 (without an anim.ini they create one directly, as an undoable step).
     if (await page.locator("body.animation-workspace").count()) await page.locator('#animation-library button[aria-label="返回"]').click()
   }
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片资源", { exact: true }) }).first().click()
+  await page.locator('[data-workspace-page="resources"]').click()
+  await page.locator('[data-resource-page="image"]').click()
+  await page.locator('#resource-gallery .ui-image-card').first().dblclick()
   const sidebarWidth = () => page.locator(".sidebar").evaluate((el) => el.getBoundingClientRect().width)
   const initialWidth = await sidebarWidth()
   const resizeSidebar = async (delta) => {
@@ -490,7 +488,9 @@ await check("overview: every sidebar item, image slices, sounds and info", () =>
   assert.ok(Math.abs(resizedWidth - initialWidth - 40) < 2, "image sidebar shrinks when dragged left")
   assert.equal(await page.evaluate(() => Number(localStorage.getItem("sidebarWidthV2"))), resizedWidth, "image sidebar width is saved")
   await page.locator("#atlas-back").click()
-  await page.locator(".sidebar-overview button[data-path]").filter({ has: page.getByText("图片资源", { exact: true }) }).first().click()
+  await page.locator('[data-workspace-page="resources"]').click()
+  await page.locator('[data-resource-page="image"]').click()
+  await page.locator('#resource-gallery .ui-image-card').first().dblclick()
   assert.equal(await sidebarWidth(), resizedWidth, "image sidebar width survives reopening")
   await page.setViewportSize({ width: 1100, height: 900 })
   assert.equal(await sidebarWidth(), resizedWidth, "compact desktop respects the resized width")
@@ -630,7 +630,7 @@ await check("tools: panel copy, replace keyboard style and iOS 26 adaptation", (
  * ---------------------------------------------------------------------------------------------- */
 await check("settings: every page, live preview, cancel restores and save persists", () => withPage(async (page) => {
   await openTemplate(page)
-  await page.locator(".titlebar-preferences").click()
+  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
   const dialog = page.locator("#settings-dialog")
   await dialog.waitFor({ state: "visible" })
   for (const tab of await page.locator(".settings-nav-item:visible").all()) {
@@ -654,12 +654,12 @@ await check("settings: every page, live preview, cancel restores and save persis
   await page.locator("#settings-cancel").click()
   await dialog.waitFor({ state: "hidden" })
   await page.waitForFunction(() => document.documentElement.dataset.appTheme !== "dark")
-  await page.locator(".titlebar-preferences").click()
+  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
   await page.locator('[data-setting-choice="interface-density"][data-value="compact"]').click()
   await page.locator("#settings-save").click()
   await dialog.waitFor({ state: "hidden" })
   assert.equal(await page.evaluate(() => localStorage.getItem("interface-density")), "compact")
-  await page.locator(".titlebar-preferences").click()
+  await page.locator("#workspace-navigation [data-app-dialog='settings']").click()
   await dialog.getByRole("button", { name: "关闭", exact: true }).click()
   await dialog.waitFor({ state: "hidden" })
 }))
@@ -720,11 +720,11 @@ await check("file: rename, save, export every format and unsaved prompt", () => 
   await expectSaveResult(page, "保存完成")
   await x.fill(String(Number(await x.inputValue()) + 1))
   await x.press("Enter")
-  // 先选模板，替换当前皮肤前才提示未保存。
+  // 先选模板，替换当前皮肤前才询问是否导出。
   await openFileMenu(page)
   await page.locator("#new").click()
   await page.locator("#file-project-chooser").getByRole("button", { name: "新建", exact: true }).click()
-  const unsaved = page.getByRole("dialog", { name: "未保存的皮肤" })
+  const unsaved = page.getByRole("dialog", { name: "是否导出当前皮肤？" })
   await unsaved.waitFor({ state: "visible" })
   await unsaved.getByRole("button", { name: "取消", exact: true }).click()
   await unsaved.waitFor({ state: "detached" })
@@ -767,17 +767,17 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   assert.ok(overviewPaths.length > 0)
   for (const path of overviewPaths) assert.ok(ownPaths.has(path), `Only real SSF files: ${path}`)
   assert.equal(await page.locator('.sidebar-overview button[data-path="phoneTheme.ini"]').count(), 1)
-  assert.equal(await page.locator('.sidebar-overview button[data-path="1080/status1/phoneSkin.ini"]').count(), 1)
+  assert.equal(await page.locator('.sidebar-overview button[data-path="1080/status1/phoneSkin.ini"]').count(), 0)
   assert.equal(await page.locator('.sidebar-overview button[data-path^="light/"]').count(), 31)
   assert.equal(await page.locator('.sidebar-overview .nav-section-count').count(), 0)
-  const images = page.locator('.sidebar-overview button.nav-resource').filter({ has: page.getByText('图片资源', { exact: true }) })
-  const imagePath = await images.getAttribute('data-path')
-  assert.match(imagePath, /\.(png|webp|jpe?g)$/i, 'image gallery points at a real image, not phoneSkin.ini')
-  assert.ok(ownPaths.has(imagePath))
-  await images.click()
+  await page.locator('[data-workspace-page="resources"]').click()
+  await page.locator('[data-resource-page="image"]').click()
   await page.waitForFunction(() => document.querySelectorAll('#resource-gallery .resource-item').length > 0)
+  const imagePath = await page.locator('#resource-gallery .resource-item').first().getAttribute('data-path')
+  assert.match(imagePath, /\.(png|webp|jpe?g)$/i, 'image gallery contains real images')
+  assert.ok(ownPaths.has(imagePath))
   await page.locator('#atlas-back').click()
-  await page.locator('.sidebar-overview button[data-path="1080/status1/phoneSkin.ini"]').click()
+  await page.evaluate(async () => (await import('/src/app/navigation.ts')).selectFile('1080/status1/phoneSkin.ini', 'overview'))
   assert.equal(await page.locator('#source-name').textContent(), '1080/status1/phoneSkin.ini')
   await page.locator('.sidebar-overview button[data-path="light/skin/port/py_9.ini"]').click()
   await editMode(page)
@@ -909,7 +909,9 @@ if (existsSync(skinDirectory)) {
     const failures = []
     for (const name of skins.slice(0, limit)) {
       try {
+        const replacing = await page.evaluate(async () => Boolean((await import('/src/app/state.ts')).appState.archive))
         await page.locator("#browser-open").setInputFiles({ name, mimeType: "application/octet-stream", buffer: readFileSync(join(skinDirectory, name)) })
+        if (replacing) await page.getByRole("dialog", { name: "是否导出当前皮肤？", exact: true }).getByRole("button", { name: "不导出", exact: true }).click()
         await page.waitForFunction((file) => document.querySelector("#document-name")?.textContent?.includes(file.replace(/\.[^.]+$/, "")), name, { timeout: 60000 })
         await closeOperationDialog(page)
         // 标题在加载中途就会更新；等「打开」重新可用，表示整个打开操作结束。
@@ -918,9 +920,6 @@ if (existsSync(skinDirectory)) {
         if ((await page.locator("#mode").inputValue()) !== "edit") await editMode(page)
         // 键位不一定落在画布 45% 处，选不中不算失败。
         await selectKey(page, { timeout: 3000 }).catch(() => {})
-        // Leave edits behind so the next open goes through the unsaved prompt path cleanly.
-        const unsaved = page.getByRole("dialog", { name: "未保存的皮肤" })
-        if (await unsaved.isVisible()) await unsaved.getByRole("button", { name: "不保存" }).click()
       } catch (error) {
         const status = await page.locator("#event-log").textContent().catch(() => "")
         failures.push(`${name}: ${error.message.split("\n")[0]} · 状态：${status} · 标题：${await page.locator("#document-name").textContent().catch(() => "")}`)
