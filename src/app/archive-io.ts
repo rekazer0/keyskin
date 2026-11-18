@@ -30,7 +30,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { type SourceFilePayload, type ChosenFileData, type BrowserSaveFileHandle } from "./types"
 import { readFile, writeFile } from "@tauri-apps/plugin-fs"
-import { convertBdaArchive } from "../bda-convert.ts"
 import { flushNumberInputWheel } from "../number-input-wheel.ts"
 import { loadBdaBase } from "../operations.ts"
 import { isSsfPath, looksLikeSsf } from "../ssf/ssf-package.ts"
@@ -424,15 +423,8 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     reportExportWarnings(soundWarnings, adjustments)
     return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings] }
   }
-  if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
-  const report = conversionProgress(22, 80, "正在转换 BDA 配置…")
-  await report(0.2)
-  const result = convertBdaArchive(appState.archive, appState.bdaBase, format)
-  await report(0.6, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
-  const soundWarnings: string[] = []
-  const bytes = await result.archive.platformBytesAsync(format, soundWarnings)
-  reportExportWarnings(soundWarnings)
-  return { bytes, converted: true, warnings: [...result.warnings, ...soundWarnings] }
+  // 源 BDA 转 BDI/BDS 已在前面由中间表示处理，走到这里说明分支漏了它。
+  throw new Error(`暂不支持从 ${appState.archive.format} 导出为 ${format}`)
 }
 
 
