@@ -1,9 +1,10 @@
 // BDS/BDI 转换器：覆盖布局、按键、动作、样式图层、动效与音效。
 //
-// 格式原生数据是归档加路径；read 解析成 IR，write 把 IR 写回同一份归档并保留未建模的内容。
+// 格式原生数据是归档加路径；read 解析成 IR，write 从 IR 重新生成全部文件（含重新打包的图集）。
 import { IniDocument } from "@/ini.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
 import { previewItems } from "@/preview-items.ts"
+import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
 import { tileSlices } from "@/tiles.ts"
 import type { Size } from "taffy-layout"
@@ -12,10 +13,12 @@ import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import type { LayoutBox } from "@/skin-model/layout.ts"
 import type { SkinKey } from "@/skin-model/key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
+import type { SkinBoard } from "@/skin-model/board.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
-import { emptyModel } from "@/skin-model/model.ts"
+import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
+import { cutTiles, packAtlas, tileDocument, type SkinImage } from "@/skin-model/image.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
-import { buildBoard } from "@/skin-model/build.ts"
+import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 
 export type BdsSource = {
@@ -113,34 +116,74 @@ function tilePath(archive: SkinArchive, theme: Appearance, orientation: Orientat
   ].find((candidate) => archive.getBytes(candidate))
 }
 
-function imageLayer(archive: SkinArchive, theme: Appearance, orientation: Orientation, document: IniDocument, section: string, field: string): SkinLayer | undefined {
-  const ref = imageRef(document.get(section, field))
-  if (!ref) return
-  const path = tilePath(archive, theme, orientation, ref.file)
-  const emptyNine = ref.slice !== undefined
-    ? { source: { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }, inner: { left: 0, top: 0, right: 0, bottom: 0 }, index: ref.slice }
-    : undefined
-  if (!path) return { kind: "image", file: ref.file, ...(emptyNine ? { nineSlice: emptyNine } : {}) }
+/** 图集文件与它的 PNG；切图需要像素，所以两者都要在。 */
+function atlasBytes(archive: SkinArchive, path: string): Uint8Array | undefined {
+  return archive.getBytes(path.replace(/\.til$/i, ".png"))
+}
+
+/** 把一张图集切进图片资源表，返回 `<图集>#<序号>` 键。 */
+function cutAtlas(images: Map<string, SkinImage>, archive: SkinArchive, path: string): void {
+  if ([...images.keys()].some((key) => key.startsWith(`${path}#`))) return
+  const bytes = atlasBytes(archive, path)
+  if (!bytes) return
+  let atlas: RgbaImage
+  try {
+    atlas = decodePng(bytes)
+  } catch {
+    return
+  }
   const slices = tileSlices(IniDocument.parse(archive.getText(path)))
-  const tile = ref.slice === undefined ? slices[0] : slices.find((candidate) => candidate.index === ref.slice)
-  if (!tile) return { kind: "image", file: ref.file, ...(emptyNine ? { nineSlice: emptyNine } : {}) }
-  const [sx, sy, sw, sh] = tile.source
-  const [ix, iy, iw, ih] = tile.inner ?? tile.source
-  return {
-    kind: "image",
-    file: ref.file,
-    nineSlice: {
-      source: { position: { x: sx, y: sy }, size: { width: sw, height: sh } },
-      inner: { left: ix - sx, top: iy - sy, right: sx + sw - (ix + iw), bottom: sy + sh - (iy + ih) },
-      ...(ref.slice !== undefined ? { index: ref.slice } : {}),
-    },
+  for (const [id, image] of cutTiles(atlas, slices.map((slice) => ({ index: slice.index, source: slice.source })), path)) {
+    images.set(id, image)
   }
 }
 
-function styleLayers(archive: SkinArchive, theme: Appearance, orientation: Orientation, document: IniDocument, section: string, pressed: boolean): SkinLayer[] {
+function imageLayer(
+  archive: SkinArchive,
+  images: Map<string, SkinImage>,
+  theme: Appearance,
+  orientation: Orientation,
+  document: IniDocument,
+  section: string,
+  field: string,
+): SkinLayer | undefined {
+  const ref = imageRef(document.get(section, field))
+  if (!ref) return
+  const path = tilePath(archive, theme, orientation, ref.file)
+  if (!path) return
+  cutAtlas(images, archive, path)
+  const slices = tileSlices(IniDocument.parse(archive.getText(path)))
+  const tile = ref.slice === undefined ? slices[0] : slices.find((candidate) => candidate.index === ref.slice)
+  if (!tile) return
+  const [, , sw, sh] = tile.source
+  const inner = tile.inner
+    ? {
+      left: tile.inner[0] - tile.source[0],
+      top: tile.inner[1] - tile.source[1],
+      right: tile.source[0] + sw - (tile.inner[0] + tile.inner[2]),
+      bottom: tile.source[1] + sh - (tile.inner[1] + tile.inner[3]),
+    }
+    : undefined
+  const stretched = inner && (inner.left > 0 || inner.top > 0 || inner.right > 0 || inner.bottom > 0)
+  return {
+    kind: "image",
+    image: `${path}#${tile.index}`,
+    ...(stretched ? { fit: "nine-slice" as const, nineSlice: { inner } } : {}),
+  }
+}
+
+function styleLayers(
+  archive: SkinArchive,
+  images: Map<string, SkinImage>,
+  theme: Appearance,
+  orientation: Orientation,
+  document: IniDocument,
+  section: string,
+  pressed: boolean,
+): SkinLayer[] {
   const layers: SkinLayer[] = []
   const suffix = pressed ? "HL" : "NM"
-  const image = imageLayer(archive, theme, orientation, document, section, `${suffix}_IMG`)
+  const image = imageLayer(archive, images, theme, orientation, document, section, `${suffix}_IMG`)
   if (image) layers.push(image)
   const color = document.get(section, `${suffix}_COLOR`)
   if (color) {
@@ -157,46 +200,79 @@ function styleLayers(archive: SkinArchive, theme: Appearance, orientation: Orien
   return layers
 }
 
-function stylesOf(archive: SkinArchive, theme: Appearance, orientation: Orientation, document: IniDocument): SkinStyles {
+function stylesOf(
+  archive: SkinArchive,
+  theme: Appearance,
+  orientation: Orientation,
+  document: IniDocument,
+): { styles: SkinStyles; images: Map<string, SkinImage> } {
   const styles = new Map<string, SkinStyle>()
+  const images = new Map<string, SkinImage>()
   for (const section of document.sections()) {
     const match = /^STYLE(\d+)$/i.exec(section)
     if (!match) continue
-    const normal = styleLayers(archive, theme, orientation, document, section, false)
-    const pressed = styleLayers(archive, theme, orientation, document, section, true)
+    const normal = styleLayers(archive, images, theme, orientation, document, section, false)
+    const pressed = styleLayers(archive, images, theme, orientation, document, section, true)
     if (normal.length || pressed.length) styles.set(match[1], { normal, ...(pressed.length ? { pressed } : {}) })
   }
-  return styles
+  return { styles, images }
 }
 
-function imageText(layer: Extract<SkinLayer, { kind: "image" }>): string {
-  return layer.nineSlice?.index === undefined ? layer.file : `${layer.file},${layer.nineSlice.index}`
-}
-
-function writeStyles(styles: SkinStyles, document: IniDocument): void {
-  const sections = new Set(document.sections())
+/** 样式表文本；图片引用交给调用方换算成「图集名,切片号」。 */
+function stylesText(styles: SkinStyles, imageRef: (id: string) => string | undefined): string {
+  const lines: string[] = []
   for (const [id, style] of styles) {
-    const section = `STYLE${id}`
-    if (!sections.has(section)) continue
     const image = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
     const pressedImage = (style.pressed ?? []).find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
     const text = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
     const color = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "color" }> => layer.kind === "color")
     const sound = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "sound" }> => layer.kind === "sound")
-    if (image) document.set(section, "NM_IMG", imageText(image))
-    else document.remove(section, "NM_IMG")
-    if (pressedImage) document.set(section, "HL_IMG", imageText(pressedImage))
-    else document.remove(section, "HL_IMG")
+    const normalRef = image && imageRef(image.image)
+    const pressedRef = pressedImage && imageRef(pressedImage.image)
     const textColor = text?.style.color ?? color?.value
-    if (textColor) document.set(section, "NM_COLOR", textColor)
-    else document.remove(section, "NM_COLOR")
-    if (text?.text !== undefined) document.set(section, "SHOW", text.text)
-    else document.remove(section, "SHOW")
-    if (text?.style.fontSize !== undefined) document.set(section, "FONT_SIZE", String(text.style.fontSize))
-    else document.remove(section, "FONT_SIZE")
-    if (sound) document.set(section, "PRESS_SOUND_PATH", sound.file)
-    else document.remove(section, "PRESS_SOUND_PATH")
+    if (!normalRef && !pressedRef && !textColor && !sound) continue
+    lines.push(`[STYLE${id}]`)
+    if (normalRef) lines.push(`NM_IMG=${normalRef}`)
+    if (pressedRef) lines.push(`HL_IMG=${pressedRef}`)
+    if (textColor) lines.push(`NM_COLOR=${textColor}`)
+    if (text?.text !== undefined) lines.push(`SHOW=${text.text}`)
+    if (text?.style.fontSize !== undefined) lines.push(`FONT_SIZE=${text.style.fontSize}`)
+    if (sound) lines.push(`PRESS_SOUND_PATH=${sound.file}`)
+    lines.push("")
   }
+  return `${lines.join("\n")}\n`
+}
+
+/** `Info.txt` 文本。 */
+function infoText(model: SkinModel): string {
+  const lines: string[] = []
+  if (model.meta.name) lines.push(`Name=${model.meta.name}`)
+  if (model.meta.author) lines.push(`Author=${model.meta.author}`)
+  if (model.meta.version) lines.push(`Version=${model.meta.version}`)
+  return `${lines.join("\n")}\n`
+}
+
+/** 布局文件文本；`VIEW_RECT` 用构建后的矩形，其余字段从按键模型原样写回。 */
+function layoutText(board: SkinBoard, renders: readonly KeyRender[]): string {
+  const lines = ["[PANEL]", `SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keys.length}`, ""]
+  for (const key of board.keys) {
+    const rect: LayoutBox = renders.find((render) => render.key.id === key.id)?.rect ?? key.rect
+    lines.push(`[${key.id}]`)
+    lines.push(`VIEW_RECT=${rect.position.x},${rect.position.y},${rect.size.width},${rect.size.height}`)
+    if (key.touchRect) {
+      lines.push(`TOUCH_RECT=${key.touchRect.position.x},${key.touchRect.position.y},${key.touchRect.size.width},${key.touchRect.size.height}`)
+    }
+    if (key.padding) lines.push(`PADDING=${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
+    for (const { event, field: name } of EVENT_FIELDS) {
+      const value = actionValue(key.actions[event])
+      if (value !== undefined) lines.push(`${name}=${value}`)
+    }
+    if (key.style.back) lines.push(`BACK_STYLE=${key.style.back}`)
+    if (key.style.pressedBack) lines.push(`HL_BACK_STYLE=${key.style.pressedBack}`)
+    if (key.style.fore.length) lines.push(`FORE_STYLE=${key.style.fore.join(",")}`)
+    lines.push("")
+  }
+  return `${lines.join("\n")}\n`
 }
 
 /* —— 动效 —— */
@@ -483,42 +559,62 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       layout: derived.layout,
       keys,
     })
-    model.styles = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
+    const parsed = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
+    model.styles = parsed.styles
+    model.images = parsed.images
     if (source.animation) model.motions = motionsOf(source.archive.getText(source.animation))
     model.provenance = { format: "bds", nodes: new Map(keys.map((key) => [key.id, { path: source.layout }])) }
     return model
   },
-  async write(model, source) {
-    if (!source) throw new Error("BDS 写回需要原始归档")
+  async write(model) {
     const board = model.boards[0]
     if (!board) throw new Error("模型里没有板")
     const renders = await buildBoard(model, board)
-    const layout = IniDocument.parse(source.archive.getText(source.layout))
-    for (const key of board.keys) {
-      if (!layout.sections().includes(key.id)) continue
-      const rect = renders.find((render) => render.key.id === key.id)?.rect ?? key.rect
-      layout.set(key.id, "VIEW_RECT", `${rect.position.x},${rect.position.y},${rect.size.width},${rect.size.height}`)
-      if (key.touchRect) {
-        layout.set(key.id, "TOUCH_RECT", `${key.touchRect.position.x},${key.touchRect.position.y},${key.touchRect.size.width},${key.touchRect.size.height}`)
+    const theme = model.meta.appearance
+    const orientation = board.orientation
+    const root = `${theme}/skin`
+    // 只打包图层真正用到的图片；序号就是新图集里的切片号。
+    const used = new Set<string>()
+    for (const style of model.styles.values()) {
+      for (const layer of [...style.normal, ...(style.pressed ?? []), ...(style.disabled ?? [])]) {
+        if (layer.kind === "image" || layer.kind === "icon") used.add(layer.image)
       }
-      if (key.padding !== undefined) {
-        layout.set(key.id, "PADDING", `${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
-      }
-      for (const { event, field: name } of EVENT_FIELDS) {
-        const value = actionValue(key.actions[event])
-        if (value !== undefined) layout.set(key.id, name, value)
-      }
-      if (key.style.back) layout.set(key.id, "BACK_STYLE", key.style.back)
-      if (key.style.pressedBack) layout.set(key.id, "HL_BACK_STYLE", key.style.pressedBack)
-      if (key.style.fore.length) layout.set(key.id, "FORE_STYLE", key.style.fore.join(","))
     }
-    source.archive.setBytes(source.layout, new TextEncoder().encode(layout.toString()))
-    const styleDocument = IniDocument.parse(source.archive.getText(source.styles))
-    writeStyles(model.styles, styleDocument)
-    source.archive.setBytes(source.styles, new TextEncoder().encode(styleDocument.toString()))
-    if (source.animation && model.motions.size) {
-      source.archive.setBytes(source.animation, new TextEncoder().encode(writeMotions(model.motions)))
+    const selected = new Map([...model.images].filter(([id]) => used.has(id)))
+    const atlas = packAtlas(selected)
+    const placement = new Map(atlas.placements.map((entry, index) => [entry.id, index]))
+    const inner = new Map<string, readonly [number, number, number, number]>()
+    for (const style of model.styles.values()) {
+      for (const layer of style.normal) {
+        const nine = layer.kind === "image" ? layer.nineSlice?.inner : undefined
+        if (nine) inner.set(layer.kind === "image" ? layer.image : "", [nine.left, nine.top, nine.right, nine.bottom])
+      }
     }
-    return source
+    const imageRef = (id: string): string | undefined => {
+      const index = placement.get(id)
+      return index === undefined ? undefined : `atlas,${index}`
+    }
+    const text = (value: string) => new TextEncoder().encode(value)
+    const files: Array<{ path: string; data: Uint8Array }> = []
+    files.push({ path: "Info.txt", data: text(infoText(model)) })
+    files.push({
+      path: `${root}/${orientation}/gen.ini`,
+      data: text(`[PANEL]\nSIZE=${board.size.width},${board.size.height}\n`),
+    })
+    files.push({ path: board.id, data: text(layoutText(board, renders)) })
+    files.push({ path: `${root}/res/default.css`, data: text(stylesText(model.styles, imageRef)) })
+    files.push({ path: `${root}/res/atlas.til`, data: text(tileDocument(atlas, inner)) })
+    files.push({ path: `${root}/res/atlas.png`, data: encodePng(atlas.image) })
+    if (model.motions.size) files.push({ path: `${root}/res/anim.ini`, data: text(writeMotions(model.motions)) })
+    const archive = SkinArchive.fromSourceFiles(files)
+    return {
+      archive,
+      layout: board.id,
+      styles: `${root}/res/default.css`,
+      theme,
+      orientation,
+      kind: board.kind,
+      ...(model.motions.size ? { animation: `${root}/res/anim.ini` } : {}),
+    }
   },
 }

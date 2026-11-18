@@ -5,6 +5,7 @@
 import type { BoardKind } from "./types.ts"
 import type { SkinBoard } from "./board.ts"
 import type { SkinMeta, SkinResource } from "./types.ts"
+import type { SkinImages } from "./image.ts"
 import type { SkinStyles } from "./style.ts"
 import type { SkinMotions } from "./motion.ts"
 import type { SkinSounds } from "./sound.ts"
@@ -12,7 +13,10 @@ import type { Provenance } from "./provenance.ts"
 
 export type SkinModel = {
   meta: SkinMeta
+  /** 非图片资源：音频、字体、帧序列。 */
   resources: ReadonlyMap<string, SkinResource>
+  /** 图片资源：导入时切出的像素，导出时重新打包。 */
+  images: SkinImages
   boards: SkinBoard[]
   styles: SkinStyles
   motions: SkinMotions
@@ -25,6 +29,7 @@ export function emptyModel(meta: SkinMeta, format = ""): SkinModel {
   return {
     meta,
     resources: new Map(),
+    images: new Map(),
     boards: [],
     styles: new Map(),
     motions: new Map(),

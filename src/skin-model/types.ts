@@ -32,7 +32,6 @@ export type SkinAction =
   | { kind: "system"; code: string }
 
 export type SkinResource =
-  | { kind: "image"; path: string; size?: Size<number>; format?: string }
   | { kind: "audio"; path: string; format?: string; duration?: number }
   | { kind: "font"; path: string; family?: string; weight?: number }
   | { kind: "frame"; path: string; duration?: number }

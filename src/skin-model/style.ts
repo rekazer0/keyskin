@@ -4,19 +4,14 @@
 // 都是同一套图层。九宫格与拉伸信息挂在图片图层上，不再依赖格式自己的字段名。
 import type { Point, Rect, Size } from "taffy-layout"
 import type { Color } from "./types.ts"
-import type { LayoutBox } from "./layout.ts"
 
 export type ImageFit = "stretch" | "nine-slice" | "center" | "tile"
 
 export type NineSlice = {
-  /** 原图中的切片区域。 */
-  source: LayoutBox
-  /** 可拉伸边与角的尺寸，从切片边缘算起。 */
+  /** 可拉伸边与角的尺寸，从图层图片的边缘算起。 */
   inner: Rect<number>
   /** 位图像素到布局单位的比例。 */
   pixelScale?: number
-  /** 图集里的切片序号；写回时与文件名一起写。 */
-  index?: number
 }
 
 export type TextStyle = {
@@ -28,11 +23,11 @@ export type TextStyle = {
 }
 
 export type SkinLayer =
-  | { kind: "image"; file: string; fit?: ImageFit; nineSlice?: NineSlice; alpha?: number; filter?: Color }
+  | { kind: "image"; image: string; fit?: ImageFit; nineSlice?: NineSlice; alpha?: number; filter?: Color }
   | { kind: "color"; value: Color }
   | { kind: "text"; text?: string; style: TextStyle }
   | { kind: "border"; color: Color; width: number; radius?: number }
-  | { kind: "icon"; file: string; size?: Size<number> }
+  | { kind: "icon"; image: string; size?: Size<number> }
   | { kind: "gradient"; stops: ReadonlyArray<{ offset: number; color: Color }>; direction: "horizontal" | "vertical" }
   | { kind: "sound"; file: string }
 

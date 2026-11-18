@@ -2,7 +2,7 @@
 import { strToU8, zipSync } from "fflate"
 import { encodePng } from "../../src/ssf/ssf-png.ts"
 
-const PNG = encodePng({ width: 2, height: 2, data: new Uint8Array(16).fill(0x80) })
+const PNG = (width, height) => encodePng({ width, height, data: new Uint8Array(width * height * 4).fill(0x80) })
 
 function fixtureFiles() {
   return {
@@ -36,9 +36,9 @@ function fixtureFiles() {
     "light/res/btn.til": strToU8("[IMG0]\nSOURCE_RECT=0,0,10,10\nINNER_RECT=2,2,6,6\n[IMG1]\nSOURCE_RECT=10,0,10,10\n"),
     "light/res/bg.til": strToU8("[IMG0]\nSOURCE_RECT=0,0,10,10\n"),
     "light/res/list_cell.til": strToU8("[IMG0]\nSOURCE_RECT=0,0,4,4\n[IMG1]\nSOURCE_RECT=4,0,4,4\n"),
-    "light/res/btn.png": PNG,
-    "light/res/bg.png": PNG,
-    "light/res/list_cell.png": PNG,
+    "light/res/btn.png": PNG(20, 10),
+    "light/res/bg.png": PNG(10, 10),
+    "light/res/list_cell.png": PNG(8, 4),
   }
 }
 

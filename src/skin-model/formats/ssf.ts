@@ -3,7 +3,7 @@
 // 搜狗皮肤只描述"长什么样"，不含按键几何：几何来自搜狗官方的骨架布局。因此读取路径是
 // 骨架（几何、内置标签、默认动作）叠加皮肤自己的样式与前景；写回只写皮肤自己的段，不动骨架。
 import { IniDocument } from "@/ini.ts"
-import { pngSize } from "@/ssf/ssf-png.ts"
+import { decodePng, encodePng } from "@/raster.ts"
 import { ssfKeyBinding } from "@/ssf/ssf-keymap.ts"
 import { SsfPackage, parseSsfImage, ssfColor, type SsfImageRef, type SsfTheme } from "@/ssf/ssf-package.ts"
 import { ssfSkeleton } from "@/ssf/ssf-convert.ts"
@@ -12,18 +12,20 @@ import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { bdsFormat, bdsSource } from "@/skin-model/formats/bds.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
-import type { LayoutBox } from "@/skin-model/layout.ts"
+import type { SkinImage } from "@/skin-model/image.ts"
 import type { NineSlice, SkinLayer, SkinStyle } from "@/skin-model/style.ts"
 import type { Orientation } from "@/skin-model/types.ts"
 
 export type SsfSource = {
   /** 皮肤包内的全部文件。 */
   files: Map<string, Uint8Array>
-  /** 官方骨架：提供按键几何、内置标签与默认动作，只读。 */
-  skeleton: SkinArchive
+  /** 官方骨架：提供按键几何、内置标签与默认动作，只读。重建时可以缺省。 */
+  skeleton?: SkinArchive
   theme: SsfTheme
   orientation: Orientation
 }
+
+export type SsfRebuilt = Omit<SsfSource, "files"> & { files: Map<string, Uint8Array> }
 
 /** 皮肤自己的段（样式、前景）在 IR 样式表里的名字，与骨架样式区分。 */
 const LOOK_PREFIX = "ssf:"
@@ -34,21 +36,32 @@ function nineSliceOf(ref: SsfImageRef, width: number, height: number): NineSlice
   if (!stretch) return
   const [left, right, top, bottom] = stretch
   if (!(left < right && top < bottom) || right > width || bottom > height) return
-  return {
-    source: { position: { x: 0, y: 0 }, size: { width, height } },
-    inner: { left, right: width - right, top, bottom: height - bottom },
-  }
+  return { inner: { left, right: width - right, top, bottom: height - bottom } }
 }
 
-/** 一张搜狗图片引用 → IR 图片图层；找不到文件时返回 undefined。 */
-function imageLayer(pkg: SsfPackage, theme: SsfTheme, ref: SsfImageRef | undefined): SkinLayer | undefined {
+/** 一张搜狗图片引用 → IR 图片图层；像素同时切进图片资源表。 */
+function imageLayer(
+  pkg: SsfPackage,
+  images: Map<string, SkinImage>,
+  theme: SsfTheme,
+  ref: SsfImageRef | undefined,
+): SkinLayer | undefined {
   if (!ref) return
   const path = pkg.path(theme, ref.file)
   if (!path) return
-  const bytes = ref.stretch ? pkg.file(theme, ref.file) : undefined
-  const size = bytes ? pngSize(bytes) : undefined
-  const nineSlice = size ? nineSliceOf(ref, size[0], size[1]) : undefined
-  return { kind: "image", file: path, ...(nineSlice ? { fit: "nine-slice", nineSlice } : {}) }
+  if (!images.has(path)) {
+    const bytes = pkg.file(theme, ref.file)
+    if (!bytes) return
+    try {
+      images.set(path, decodePng(bytes))
+    } catch {
+      return
+    }
+  }
+  const image = images.get(path)
+  if (!image) return
+  const nineSlice = nineSliceOf(ref, image.width, image.height)
+  return { kind: "image", image: path, ...(nineSlice ? { fit: "nine-slice", nineSlice } : {}) }
 }
 
 /** 段里的字段：皮肤包的两份 INI 各写一半（phoneSkin.ini 管背景，keys.ini 管前景）。 */
@@ -70,12 +83,19 @@ function imageSectionOf(skin: IniDocument, keyDocument: IniDocument, section: st
 }
 
 /** 一个视觉段的完整样式：背景图、按下背景、文字颜色与字号、图标、前景图。 */
-function styleOf(pkg: SsfPackage, theme: SsfTheme, skin: IniDocument, keyDocument: IniDocument, section: string): SkinStyle | undefined {
+function styleOf(
+  pkg: SsfPackage,
+  images: Map<string, SkinImage>,
+  theme: SsfTheme,
+  skin: IniDocument,
+  keyDocument: IniDocument,
+  section: string,
+): SkinStyle | undefined {
   const read = (name: string) => fieldOf(skin, keyDocument, section, name)
   const imageSection = imageSectionOf(skin, keyDocument, section)
   const imageRead = (name: string) => fieldOf(skin, keyDocument, imageSection, name)
   const normal: SkinLayer[] = []
-  const back = imageLayer(pkg, theme, parseSsfImage(imageRead("NORMAL")))
+  const back = imageLayer(pkg, images, theme, parseSsfImage(imageRead("NORMAL")))
   if (back) normal.push(back)
   const color = ssfColor(read("BG_COLOR"))
   if (!back && color) normal.push({ kind: "color", value: color })
@@ -84,16 +104,16 @@ function styleOf(pkg: SsfPackage, theme: SsfTheme, skin: IniDocument, keyDocumen
     const fontSize = Number(read("FONT_SIZE"))
     normal.push({ kind: "text", style: { color: textColor, ...(Number.isFinite(fontSize) && fontSize > 0 ? { fontSize } : {}) } })
   }
-  const icon = imageLayer(pkg, theme, parseSsfImage(read("ICON")))
+  const icon = imageLayer(pkg, images, theme, parseSsfImage(read("ICON")))
   if (icon) normal.push(icon)
   const foregroundSection = imageSectionName(fieldOf(skin, keyDocument, section, "FG_IMAGES"))
   if (foregroundSection) {
-    const foreground = imageLayer(pkg, theme, parseSsfImage(fieldOf(skin, keyDocument, foregroundSection, "NORMAL")))
+    const foreground = imageLayer(pkg, images, theme, parseSsfImage(fieldOf(skin, keyDocument, foregroundSection, "NORMAL")))
     if (foreground) normal.push(foreground)
   }
   if (!normal.length) return
   const pressedColor = ssfColor(read("TEXT_COLOR_PRESSED"))
-  const pressedImage = imageLayer(pkg, theme, parseSsfImage(imageRead("PRESSED")))
+  const pressedImage = imageLayer(pkg, images, theme, parseSsfImage(imageRead("PRESSED")))
   const pressed: SkinLayer[] = [
     ...(pressedImage ? [pressedImage] : []),
     ...(pressedColor ? [{ kind: "text" as const, style: { color: pressedColor } }] : []),
@@ -106,16 +126,11 @@ function boardName(layoutPath: string): string {
   return layoutPath.split("/").pop()?.replace(/\.ini$/i, "") ?? ""
 }
 
-function keyBoxes(model: SkinModel): Map<string, LayoutBox> {
-  const boxes = new Map<string, LayoutBox>()
-  for (const board of model.boards) for (const key of board.keys) boxes.set(key.id, key.rect)
-  return boxes
-}
-
 /** 用皮肤自己的样式与前景覆盖骨架给出的按键样式。 */
 function applyLook(
   model: SkinModel,
   pkg: SsfPackage,
+  images: Map<string, SkinImage>,
   skin: IniDocument,
   keyDocument: IniDocument,
   sections: Map<string, string>,
@@ -127,7 +142,7 @@ function applyLook(
     if (!skin.sections().includes(section) && !keyDocument.sections().includes(section)) return
     const name = `${LOOK_PREFIX}${section}`
     if (!styles.has(name)) {
-      const style = styleOf(pkg, theme, skin, keyDocument, section)
+      const style = styleOf(pkg, images, theme, skin, keyDocument, section)
       if (!style) return
       styles.set(name, style)
     }
@@ -152,7 +167,7 @@ function applyLook(
         if (!referenced) return []
         const name = `${LOOK_PREFIX}${referenced}`
         if (!styles.has(name)) {
-          const layer = imageLayer(pkg, theme, parseSsfImage(fieldOf(skin, keyDocument, referenced, "NORMAL")))
+          const layer = imageLayer(pkg, images, theme, parseSsfImage(fieldOf(skin, keyDocument, referenced, "NORMAL")))
           if (!layer) return []
           styles.set(name, { normal: [layer] })
         }
@@ -220,6 +235,7 @@ export const ssfFormat: SkinFormat<SsfSource> = {
   capabilities: capabilities(),
   derive: { tolerance: 1 },
   async read(source, options?: ImportOptions) {
+    if (!source.skeleton) throw new Error("读取搜狗皮肤需要官方骨架")
     const pkg = SsfPackage.fromFiles(source.files)
     const skeleton = ssfSkeleton(pkg, source.skeleton)
     const base = bdsSource(skeleton, { theme: source.theme, orientation: source.orientation })
@@ -229,40 +245,55 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     model.meta.author = pkg.info.author || model.meta.author
     model.meta.version = pkg.info.version || model.meta.version
     model.provenance = { format: "ssf", nodes: new Map() }
+    const images = new Map(model.images)
     applyLook(
       model,
       pkg,
+      images,
       pkg.skin(source.theme),
       pkg.keys(source.theme),
       skeletonSections(skeleton, base.layout),
       source.orientation === "land",
       source.theme,
     )
+    model.images = images
     return model
   },
   write(model, source) {
-    if (!source) throw new Error("搜狗写回需要原始包")
-    const pkg = SsfPackage.fromFiles(source.files)
-    const skin = pkg.skin(source.theme)
-    const keyDocument = pkg.keys(source.theme)
-    const boxes = keyBoxes(model)
-    for (const [name, style] of model.styles) {
-      if (!name.startsWith("ssf:")) continue
-      const section = name.slice(4)
-      if (!skin.sections().includes(section) && !keyDocument.sections().includes(section)) continue
+    const resolution = String(model.meta.resolution?.width || 1080)
+    const text = (value: string) => new TextEncoder().encode(value)
+    const files = new Map<string, Uint8Array>()
+    const name = (image: string) => image.split("/").pop() ?? image
+    const themeLines = ["[General]", "skin_type=1", `skin_name=${model.meta.name ?? "皮肤"}`, `skin_author=${model.meta.author ?? ""}`, `skin_version=${model.meta.version ?? ""}`, ""]
+    files.set("phoneTheme.ini", text(themeLines.join("\n")))
+    const skinLines: string[] = []
+    const keyLines: string[] = []
+    for (const [styleName, style] of model.styles) {
+      if (!styleName.startsWith(LOOK_PREFIX)) continue
+      const section = styleName.slice(LOOK_PREFIX.length)
       const image = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
+      const pressed = (style.pressed ?? []).find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
       const color = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "color" }> => layer.kind === "color")
-      const text = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
-      const target = skin.sections().includes(section) ? skin : keyDocument
-      const field = target === keyDocument ? "FG_IMAGES" : "NORMAL"
-      if (image) target.set(section, field, image.file.split("/").pop() ?? image.file)
-      if (color) target.set(section, "BG_COLOR", color.value)
-      if (text?.style.color) target.set(section, "TEXT_COLOR", text.style.color)
+      const label = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
+      const isForeground = section.startsWith("Foground") || section.startsWith("SMA_") === false && section === ""
+      const lines = [`[${section}]`]
+      if (image) lines.push(`NORMAL=${name(image.image)}`)
+      if (pressed) lines.push(`PRESSED=${name(pressed.image)}`)
+      if (color) lines.push(`BG_COLOR=${color.value}`)
+      if (label?.style.color) lines.push(`TEXT_COLOR=${label.style.color}`)
+      if (label?.style.fontSize) lines.push(`FONT_SIZE=${label.style.fontSize}`)
+      lines.push("")
+      if (isForeground) keyLines.push(...lines)
+      else skinLines.push(...lines)
     }
-    void boxes
-    const files = new Map(source.files)
-    files.set(`${pkg.folder(source.theme)}phoneSkin.ini`, new TextEncoder().encode(skin.toString()))
-    files.set(`${pkg.folder(source.theme)}keys.ini`, new TextEncoder().encode(keyDocument.toString()))
-    return { ...source, files }
+    files.set(`${resolution}/phoneSkin.ini`, text(skinLines.join("\n")))
+    files.set(`${resolution}/keys.ini`, text(keyLines.join("\n")))
+    for (const [id, image] of model.images) files.set(`${resolution}/${name(id)}`, encodePng(image))
+    return {
+      files,
+      theme: source?.theme ?? (model.meta.appearance === "dark" ? "dark" : "light"),
+      orientation: source?.orientation ?? model.boards[0]?.orientation ?? "port",
+      ...(source?.skeleton ? { skeleton: source.skeleton } : {}),
+    }
   },
 }
