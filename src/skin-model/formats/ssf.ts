@@ -290,8 +290,10 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     files.set(`${resolution}/phoneSkin.ini`, text(skinLines.join("\n")))
     files.set(`${resolution}/keys.ini`, text(keyLines.join("\n")))
     for (const [id, image] of model.images) files.set(`${resolution}/${name(id)}`, encodePng(image))
+    // 搜狗包里的旧散图不再保留：要么已被上面重写，要么属于骨架而不属于这套皮肤。
+    const kept = [...files].map(([path, data]) => ({ path, data }))
     return {
-      files,
+      files: new Map(kept.map((file) => [file.path, file.data])),
       theme: source?.theme ?? (model.meta.appearance === "dark" ? "dark" : "light"),
       orientation: source?.orientation ?? model.boards[0]?.orientation ?? "port",
       ...(source?.skeleton ? { skeleton: source.skeleton } : {}),
