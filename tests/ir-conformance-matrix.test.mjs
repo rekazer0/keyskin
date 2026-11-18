@@ -81,3 +81,17 @@ test("缺少官方骨架时转搜狗记为跳过，不算失败", async () => {
   assert.equal(report.skipped, true)
   assert.ok(report.notes.some((note) => /跳过/.test(note)), "应当说明为什么跳过")
 })
+
+test("搜狗皮肤自转不丢自己的样式，骨架样式不写进皮肤包", async () => {
+  const { unpackSsf } = await import("../src/ssf/ssf-package.ts")
+  const { ssfFixture } = await import("./helpers/ssf-fixture.mjs")
+  const { ssfSkeletonFixture } = await import("./helpers/ssf-skeleton-fixture.mjs")
+  const files = await unpackSsf(ssfFixture())
+  const ssf = SkinArchive.fromSourceFiles([...files].map(([path, data]) => ({ path, data })))
+  const skeleton = SkinArchive.open(ssfSkeletonFixture(), "bds")
+  const base = bdsBase()
+  const reports = await checkTargets(ssf, ["ssf", "bds", "sxi"], { skeleton, base })
+  for (const report of reports) {
+    assert.equal(report.ok, true, `${report.to}：${report.problems.join("；")}`)
+  }
+})

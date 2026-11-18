@@ -92,12 +92,15 @@ function problemsOf(
 ): { problems: string[]; notes: string[] } {
   const problems: string[] = []
   const notes: string[] = []
-  // BDA 的按键由客户端的面板布局决定，源格式的键盘表达不了，键数变化不算丢失。
-  const clientLaidOut = target === "bda"
+  // 目标格式的固有限制：BDA 的按键由客户端布局决定；搜狗皮肤包只存自己的样式段，其余来自官方骨架。
+  const limits: Partial<Record<keyof ModelCounts, string>> = {}
+  if (target === "bda") limits.mainKeys = "BDA 按键由客户端布局决定"
+  if (target === "ssf") limits.styles = "搜狗皮肤包只存自己的样式段，其余来自官方骨架"
   for (const key of REQUIRED) {
     const value = delta[key]
     if (value === undefined || value >= 0) continue
-    if (clientLaidOut && key === "mainKeys") notes.push(`${key} 少了 ${-value}（BDA 按键由客户端布局决定）`)
+    const limit = limits[key]
+    if (limit) notes.push(`${key} 少了 ${-value}（${limit}）`)
     else problems.push(`${key} 少了 ${-value}`)
   }
   for (const key of TOLERATED) {
