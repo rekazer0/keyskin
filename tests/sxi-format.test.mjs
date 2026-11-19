@@ -5,7 +5,7 @@ import { unzipSync } from "fflate"
 import { sxiFormat, sxiSource } from "../src/skin-model/formats/sxi.ts"
 import { sxiFixture } from "./helpers/sxi-fixture.mjs"
 import { rectOf } from "./helpers/boxes.mjs"
-import { readWith, writeWith } from "./support/driver.mjs"
+import { readWith, rectOfKey, writeWith } from "./support/driver.mjs"
 
 function files() {
   const unpacked = unzipSync(sxiFixture())
@@ -19,7 +19,7 @@ test("手心皮肤读出按键、动作与面板", async () => {
   assert.equal(model.meta.name, "手心测试")
   const board = model.boards[0]
   assert.equal(board.keys.length, 2)
-  assert.deepEqual(rectOf(board.keys[0].rect), { x: 0, y: 0, width: 540, height: 300 })
+  assert.deepEqual(rectOf(await rectOfKey(model, board.id, board.keys[0].id)), { x: 0, y: 0, width: 540, height: 300 })
   assert.deepEqual(board.keys[0].actions.press, { kind: "text", value: "q" })
   assert.deepEqual(board.keys[0].actions["swipe-up"], { kind: "text", value: "1" })
   assert.deepEqual(board.keys[1].actions.press, { kind: "system", code: "F31" })
@@ -37,7 +37,7 @@ test("手心皮肤写回后仍能读出同样的按键", async () => {
   const rebuilt = await writeWith(sxiFormat, model)
   const again = await readWith(sxiFormat, rebuilt)
   assert.equal(again.boards[0].keys.length, 2)
-  assert.deepEqual(rectOf(again.boards[0].keys[0].rect), { x: 0, y: 0, width: 540, height: 300 })
+  assert.deepEqual(rectOf(await rectOfKey(again, again.boards[0].id, again.boards[0].keys[0].id)), { x: 0, y: 0, width: 540, height: 300 })
   assert.deepEqual(again.boards[0].keys[0].actions.press, { kind: "text", value: "q" })
   assert.equal(again.meta.name, "手心测试")
 })

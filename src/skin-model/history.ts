@@ -58,9 +58,9 @@ export class ModelHistory {
    * 记录一版。
    * 与当前模型没有差别时不记录，返回 false——避免空改动占满历史。
    */
-  push(model: SkinModel): boolean {
+  async push(model: SkinModel): Promise<boolean> {
     if (model === this.current) return false
-    const diff = diffModels(this.current, model)
+    const diff = await diffModels(this.current, model)
     if (isEmptyDiff(diff)) return false
     // 在中间位置编辑会丢掉后面的重做分支，这与编辑器的常见行为一致。
     this.entries = this.entries.slice(0, this.index + 1)

@@ -3,6 +3,9 @@
 // 撤销栈现在存的是文件内容快照。模型化之后可以直接比较模型，得到「改了什么」，
 // 用于改动标记、AI 设计预览与更细的撤销粒度。
 import type { SkinBoard } from "./board.ts"
+import type { LayoutBox, LayoutNode } from "./layout.ts"
+import { layoutOf } from "./layout-cache.ts"
+import { DEFAULT_DERIVE_OPTIONS } from "./derive/options.ts"
 import type { SkinKey } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
@@ -23,10 +26,9 @@ function isEmpty(set: DiffSet): boolean {
   return !set.added.length && !set.removed.length && !set.changed.length
 }
 
-/** 按键的可比较投影：几何、动作码与样式引用。 */
+/** 按键的可比较投影：动作码与样式引用。几何由布局树比对，不在按键上。 */
 function keySignature(key: SkinKey): string {
   return JSON.stringify({
-    rect: key.rect,
     touchRect: key.touchRect ?? null,
     padding: key.padding ?? null,
     actions: key.actions,
@@ -34,16 +36,30 @@ function keySignature(key: SkinKey): string {
     motions: key.motions ?? null,
     sound: key.sound ?? null,
     label: key.label ?? null,
-    overrides: key.overrides ?? null,
+    stateRefs: key.stateRefs ?? null,
   })
 }
 
 /** 板自身的属性；按键单独比较，否则动一个键就会把整块板算成改动。 */
-function boardSignature(board: SkinBoard): string {
+/**
+ * 布局树的语义投影：结构 + 算出来的矩形。
+ * 拿 style 文本比较会两头出错——等价的表达被判成不同，浮点噪声又被判成改动。
+ */
+function layoutSignature(node: LayoutNode, rects: ReadonlyMap<string, LayoutBox>, tolerance: number): string {
+  const q = (value: number) => Math.round(value / Math.max(1, tolerance))
+  const rect = rects.get(node.id)
+  const box = rect ? `${q(rect.position.x)},${q(rect.position.y)},${q(rect.size.width)},${q(rect.size.height)}` : "-"
+  const structure = `${node.id}:${node.style.display ?? ""}:${node.style.position ?? ""}:${box}`
+  const children = (node.children ?? []).map((child) => layoutSignature(child, rects, tolerance)).join(",")
+  return children ? `${structure}[${children}]` : structure
+}
+
+function boardSignature(board: SkinBoard, rects: ReadonlyMap<string, LayoutBox>, tolerance: number): string {
   return JSON.stringify({
     kind: board.kind,
     geometry: board.geometry,
     size: board.size,
+    layout: layoutSignature(board.layout, rects, tolerance),
     backdrop: board.backdrop ?? null,
     candidate: board.candidate ?? null,
     hint: board.hint ?? null,
@@ -80,7 +96,13 @@ function diffMap<K, V>(before: ReadonlyMap<K, V>, after: ReadonlyMap<K, V>, sign
 }
 
 /** 按 id 比较的列表（板）；板内的按键改动记在 `keys` 里。 */
-function diffBoards(before: readonly SkinBoard[], after: readonly SkinBoard[]): { boards: DiffSet; keys: DiffSet } {
+function diffBoards(
+  before: readonly SkinBoard[],
+  after: readonly SkinBoard[],
+  rectsBefore: ReadonlyMap<string, ReadonlyMap<string, LayoutBox>>,
+  rectsAfter: ReadonlyMap<string, ReadonlyMap<string, LayoutBox>>,
+  tolerance: number,
+): { boards: DiffSet; keys: DiffSet } {
   const boards = empty()
   const keys = empty()
   const beforeById = new Map(before.map((board) => [board.id, board]))
@@ -92,7 +114,9 @@ function diffBoards(before: readonly SkinBoard[], after: readonly SkinBoard[]): 
       for (const key of board.keys) keys.removed.push(`${id}/${key.id}`)
       continue
     }
-    if (boardSignature(board) !== boardSignature(next)) boards.changed.push(id)
+    const signatureBefore = boardSignature(board, rectsBefore.get(id) ?? new Map(), tolerance)
+    const signatureAfter = boardSignature(next, rectsAfter.get(id) ?? new Map(), tolerance)
+    if (signatureBefore !== signatureAfter) boards.changed.push(id)
     const nextKeys = new Map(next.keys.map((key) => [key.id, key]))
     for (const key of board.keys) {
       const updated = nextKeys.get(key.id)
@@ -122,9 +146,14 @@ export type ModelDiff = {
   meta: boolean
 }
 
-/** 比较两份模型。 */
-export function diffModels(before: SkinModel, after: SkinModel): ModelDiff {
-  const boards = diffBoards(before.boards, after.boards)
+/**
+ * 比较两份模型。
+ * 几何比的是布局树算出来的矩形，容差与推导一致；`layoutOf` 有缓存，不会重复计算。
+ */
+export async function diffModels(before: SkinModel, after: SkinModel, tolerance = DEFAULT_DERIVE_OPTIONS.tolerance): Promise<ModelDiff> {
+  const rectsBefore = await layoutMapOf(before)
+  const rectsAfter = await layoutMapOf(after)
+  const boards = diffBoards(before.boards, after.boards, rectsBefore, rectsAfter, tolerance)
   return {
     boards: boards.boards,
     keys: boards.keys,
@@ -134,6 +163,13 @@ export function diffModels(before: SkinModel, after: SkinModel): ModelDiff {
     sounds: diffMap(before.sounds, after.sounds, (sound) => JSON.stringify(sound)),
     meta: JSON.stringify(before.meta) !== JSON.stringify(after.meta),
   }
+}
+
+/** 每块板的矩形表；板没了就是空表，比较时按「没有几何」处理。 */
+async function layoutMapOf(model: SkinModel): Promise<Map<string, ReadonlyMap<string, LayoutBox>>> {
+  const result = new Map<string, ReadonlyMap<string, LayoutBox>>()
+  for (const board of model.boards) result.set(board.id, await layoutOf(board))
+  return result
 }
 
 /** 差异是否为空：没有任何增删改。 */

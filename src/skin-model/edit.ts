@@ -9,6 +9,7 @@ import type { SkinStyle } from "./style.ts"
 import type { KeyEvent, SkinAction, SkinMeta } from "./types.ts"
 import type { Rect } from "taffy-layout"
 import { setNodeRect, type LayoutBox } from "./layout.ts"
+import { cachedLayout } from "./layout-cache.ts"
 
 /** 找不到目标时返回原模型，调用方据此判断是否真的有改动。 */
 function unchanged(model: SkinModel): SkinModel {
@@ -84,8 +85,25 @@ export function patchKey(model: SkinModel, boardId: string, keyId: string, patch
 }
 
 /** 移动按键到新的矩形；布局树的节点随之更新，几何来源仍是文档。 */
+/** 两个矩形是否等价。 */
+function sameRect(left: LayoutBox, right: LayoutBox): boolean {
+  return left.position.x === right.position.x
+    && left.position.y === right.position.y
+    && left.size.width === right.size.width
+    && left.size.height === right.size.height
+}
+
+/** 移动按键：改布局树里对应节点的矩形，按键本身不带几何。 */
 export function moveKey(model: SkinModel, boardId: string, keyId: string, rect: LayoutBox): SkinModel {
-  return patchKey(model, boardId, keyId, { rect })
+  const board = model.boards.find((item) => item.id === boardId)
+  if (!board) return model
+  // 几何没变就不动树：树结构会变，但用户看到的位置没变，不该记成一次改动。
+  const current = cachedLayout(board)?.get(keyId)
+  if (current && sameRect(current, rect)) return model
+  return {
+    ...model,
+    boards: model.boards.map((item) => item.id === boardId ? { ...item, layout: setNodeRect(item.layout, keyId, rect) } : item),
+  }
 }
 
 /** 改按键的样式引用；传 null 表示清掉该槽位。 */

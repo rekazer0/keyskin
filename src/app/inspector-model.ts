@@ -6,6 +6,7 @@ import type { SkinModel } from "@/skin-model/model.ts"
 import type { SkinMeta } from "@/skin-model/types.ts"
 import { applyFieldChange } from "@/skin-model/edit-binding.ts"
 import { patchKey, setBoardBackdrop, setMeta } from "@/skin-model/edit.ts"
+import { cachedLayout } from "@/skin-model/layout-cache.ts"
 import { validateModel } from "@/skin-model/validate.ts"
 import type { BoardTraits } from "./board-traits"
 import { boardTraits } from "./board-traits"
@@ -35,14 +36,15 @@ export function currentTraits(): BoardTraits {
   return boardTraits(appState.layoutPath, undefined, appState.archive?.format)
 }
 
-/** 当前布局里每个按键的几何，来自模型；模型还没建好时为空，调用方退回读文档。 */
+/** 当前布局里每个按键的几何，来自布局树的派生缓存；还没算过时为空。 */
 export function modelRectMap(): Map<string, number[]> {
   const rects = new Map<string, number[]>()
   const model = skinModel.model
   if (!model) return rects
   const board = model.boards.find((item) => item.id === appState.layoutPath)
-  for (const key of board?.keys ?? []) {
-    rects.set(key.id, [key.rect.position.x, key.rect.position.y, key.rect.size.width, key.rect.size.height])
+  if (!board) return rects
+  for (const [id, rect] of cachedLayout(board) ?? []) {
+    rects.set(id, [rect.position.x, rect.position.y, rect.size.width, rect.size.height])
   }
   return rects
 }

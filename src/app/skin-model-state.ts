@@ -7,6 +7,7 @@ import type { SkinArchive } from "@/skin.ts"
 import type { SkinFormatId } from "@/skin-model/formats/index.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { openSession, type SessionError, type SkinHints } from "@/skin-model/session.ts"
+import { warmLayout } from "@/skin-model/layout-cache.ts"
 import { validateModel, type ValidationReport } from "@/skin-model/validate.ts"
 
 export type ModelStatus =
@@ -74,6 +75,8 @@ export class SkinModelState {
       format: this.snapshot.format,
       report: validateModel(model),
     }
+    // 换了板就换了布局树，新树要先算一遍，同步渲染才读得到。
+    void Promise.all(model.boards.map((board) => warmLayout(board)))
   }
 
   /** 快照是否仍然对应当前归档与修订。 */
@@ -125,6 +128,8 @@ export class SkinModelState {
     const report = validateModel(opened.model)
     this.snapshot = { archive, revision: revisionOf(archive), model: opened.model, format: opened.format, report }
     this.status = { state: "ready", model: opened.model, format: opened.format, report }
+    // 布局是异步算的，界面是同步渲染；模型建好后先把每块板的布局预热掉。
+    await Promise.all(opened.model.boards.map((board) => warmLayout(board)))
   }
 
   /** 模型自检的报告；没有模型时返回 undefined。 */

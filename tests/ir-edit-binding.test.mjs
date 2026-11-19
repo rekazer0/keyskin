@@ -5,20 +5,30 @@ import { SkinArchive } from "../src/skin.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { findKey } from "../src/skin-model/edit.ts"
 import { actionOfText, applyFieldChange, canApplyField, editableFields } from "../src/skin-model/edit-binding.ts"
+import { layoutOf } from "../src/skin-model/layout-cache.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
 import { readWith } from "./support/driver.mjs"
 
 const BOARD = "light/skin/port/py_26.ini"
 
 async function model() {
-  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  const built = await readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  // 界面在模型建好时就预热布局；测试走同一条路，编辑才读得到当前矩形。
+  await Promise.all(built.boards.map((board) => layoutOf(board)))
+  return built
+}
+
+/** 按键矩形来自布局树；测试里按同样路径取。 */
+async function rectOf(model, keyId, boardId = BOARD) {
+  const board = model.boards.find((item) => item.id === boardId)
+  return (await layoutOf(board)).get(keyId)
 }
 
 test("几何字段只改一个分量，其余不动", async () => {
   const before = await model()
-  const original = findKey(before, BOARD, "KEY1").key.rect
+  const original = await rectOf(before, "KEY1")
   const after = applyFieldChange(before, { boardId: BOARD, keyId: "KEY1", field: "x", value: 400 })
-  const rect = findKey(after, BOARD, "KEY1").key.rect
+  const rect = await rectOf(after, "KEY1")
   assert.equal(rect.position.x, 400)
   assert.equal(rect.position.y, original.position.y)
   assert.deepEqual(rect.size, original.size)
@@ -27,9 +37,9 @@ test("几何字段只改一个分量，其余不动", async () => {
 test("尺寸字段改高不改宽", async () => {
   const before = await model()
   const after = applyFieldChange(before, { boardId: BOARD, keyId: "KEY1", field: "height", value: 55 })
-  const rect = findKey(after, BOARD, "KEY1").key.rect
+  const rect = await rectOf(after, "KEY1")
   assert.equal(rect.size.height, 55)
-  assert.equal(rect.size.width, findKey(before, BOARD, "KEY1").key.rect.size.width)
+  assert.equal(rect.size.width, (await rectOf(before, "KEY1")).size.width)
 })
 
 test("触摸区字段写进触摸矩形，不动主矩形", async () => {
@@ -37,7 +47,7 @@ test("触摸区字段写进触摸矩形，不动主矩形", async () => {
   const after = applyFieldChange(before, { boardId: BOARD, keyId: "KEY1", field: "touch.x", value: 3 })
   const key = findKey(after, BOARD, "KEY1").key
   assert.equal(key.touchRect?.position.x, 3)
-  assert.deepEqual(key.rect, findKey(before, BOARD, "KEY1").key.rect)
+  assert.deepEqual(await rectOf(after, "KEY1"), await rectOf(before, "KEY1"))
 })
 
 test("手势字段绑定动作，空值解除", async () => {
@@ -89,13 +99,13 @@ test("改过的几何写回归档后能读回", async () => {
   assert.ok(opened.ok)
   const boardId = opened.model.boards[0].id
   const keyId = opened.model.boards[0].keys[0].id
-  const original = findKey(opened.model, boardId, keyId).key.rect.position.x
+  const original = (await rectOf(opened.model, keyId, boardId)).position.x
   const edited = applyFieldChange(opened.model, { boardId, keyId, field: "x", value: original + 100 })
-  const saved = await saveSession(edited, "bds", opened.source)
+  const saved = await saveSession(edited, "bds")
   assert.ok(saved.ok)
   const again = await openSession(SkinArchive.open(saved.bytes, "bds"))
   assert.ok(again.ok)
-  assert.equal(findKey(again.model, boardId, keyId).key.rect.position.x, original + 100, "改动没有落盘")
+  assert.equal((await rectOf(again.model, keyId, boardId)).position.x, original + 100, "改动没有落盘")
 })
 
 test("改过的手势动作写回归档后能读回", async () => {

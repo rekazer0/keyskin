@@ -6,7 +6,7 @@ import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { setNodeRect } from "../src/skin-model/layout.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
 import { box, rectOf } from "./helpers/boxes.mjs"
-import { readWith, writeWith } from "./support/driver.mjs"
+import { readWith, rectOfKey, writeWith } from "./support/driver.mjs"
 
 test("BDS 转换器读出完整模型", async () => {
   const archive = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
@@ -26,7 +26,7 @@ test("BDS 转换器读出完整模型", async () => {
   assert.equal(symbols.kind, "symbol")
   assert.equal(board.keys.length, 2)
   const key = board.keys[0]
-  assert.deepEqual(rectOf(key.rect), { x: 10, y: 0, width: 100, height: 120 })
+  assert.deepEqual(rectOf(await rectOfKey(model, board.id, key.id)), { x: 10, y: 0, width: 100, height: 120 })
   assert.deepEqual(key.actions.press, { kind: "text", value: "q" })
   assert.equal(key.style.back, "2")
   assert.deepEqual(key.style.fore, ["3", "4"])
@@ -45,7 +45,7 @@ test("重建后重新读出保持一致", async () => {
   const again = await readWith(bdsFormat, rebuilt)
   const key = again.boards[0].keys.find((item) => item.id === "KEY2")
   assert.ok(key)
-  assert.deepEqual(rectOf(key.rect), { x: 300, y: 5, width: 100, height: 120 })
+  assert.deepEqual(rectOf(await rectOfKey(again, again.boards[0].id, "KEY2")), { x: 300, y: 5, width: 100, height: 120 })
   assert.equal(again.boards[0].keys[0].style.back, "2")
 })
 

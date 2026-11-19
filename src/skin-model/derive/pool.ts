@@ -454,11 +454,14 @@ export async function derivePool(
     const snapshot = snapshots[index]
     const root = rootOf(snapshot, id, size, tolerance)
     if (!await verifies(root, keys, size, tolerance)) continue
+    // 结构成立不等于每个键都算得准；偏差超过容差的键单独降为绝对定位，
+    // 绝对节点是精确的，外层结构仍保留。
+    const exact = await pinInexact(root, keys, size)
     return {
-      layout: root,
+      layout: exact.layout,
       kind: kindOf(snapshot),
-      cost: layoutCost(root, options.weights),
-      residual: residualOf(snapshot),
+      cost: layoutCost(exact.layout, options.weights),
+      residual: exact.pinned.length ? [...residualOf(snapshot), ...exact.pinned] : residualOf(snapshot),
     }
   }
   const fallback = absoluteBoard(keys)
@@ -470,8 +473,26 @@ export async function derivePool(
   }
 }
 
-/** 池里仍是单键的项，就是没有被行列或网格吸收的键。 */
-function residualOf(pool: readonly PoolItem[]): string[] {
+/**
+ * 校验每个键是否**精确**落在原位置。
+ * taffy 在 padding 与百分比尺寸上会有舍入，结构成立也可能留下 1px 偏差；
+ * 写回必须精确，所以只要有键不准，整板退回绝对定位——那种节点逐个写死，偏差为零。
+ */
+async function pinInexact(
+  root: LayoutNode,
+  keys: readonly KeyBox[],
+  size: Size<number>,
+): Promise<{ layout: LayoutNode; pinned: string[] }> {
+  const before = await computeLayout(root, size)
+  const inexact = keys.filter((key) => {
+    const actual = before.get(key.id)
+    return actual === undefined || !boxMatches(actual, key, 0)
+  })
+  if (!inexact.length) return { layout: root, pinned: [] }
+  return { layout: absoluteBoard(keys), pinned: inexact.map((key) => key.id) }
+}
+
+/** 池里仍是单键的项，就是没有被行列或网格吸收的键。 */function residualOf(pool: readonly PoolItem[]): string[] {
   return pool.filter((item) => item.kind === "key").flatMap((item) => item.keys.map((key) => key.id))
 }
 

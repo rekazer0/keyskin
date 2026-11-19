@@ -18,14 +18,14 @@ import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import type { LayoutBox } from "@/skin-model/layout.ts"
 import type { SkinKey } from "@/skin-model/key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
-import type { SkinBoard } from "@/skin-model/board.ts"
+import type { HintBubble, ListPanel, MoreMenu, SkinBoard } from "@/skin-model/board.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
 import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds-panels.ts"
-import { statStyleOf, tipLines, tipRefsOf, tipOverridesOf } from "@/skin-model/formats/bds-tips.ts"
-import { deriveBoard } from "@/skin-model/derive/layout.ts"
+import { tipLines, tipPoolOf, tipsOf } from "@/skin-model/formats/bds-tips.ts"
 import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
+import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 
 export type BdsSource = {
@@ -315,24 +315,73 @@ function windowText(window: SkinWindow): string {
 }
 
 export function layoutText(board: SkinBoard, renders: readonly KeyRender[], names?: ReadonlyMap<string, string>): string {
-  const lines = ["[PANEL]", `SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keys.length}`, ""]
+  const lines: string[] = []
+  // 空段按原顺序声明；它们的配置在 gen.ini 与面板文件里，段本身只表明存在这个面板。
+  for (const section of board.emptySections ?? []) lines.push(`[${section}]`, "")
+  lines.push("[PANEL]")
+  if (board.backdrop?.blur !== undefined) lines.push(`NO_BLUR=${board.backdrop.blur ? 0 : 1}`)
+  if (board.handwritingStyle) lines.push(`HW_FORE_STYLE=${board.handwritingStyle}`)
+  lines.push(`SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keyCount ?? board.keys.length}`)
+  // TIP_NUM 是原文件声明的槽位数，可能与实际定义数不同；没有声明时按写出的 TIP 段计。
+  const tipCount = board.tipCount ?? board.tips?.size ?? 0
+  if (tipCount) lines.push(`TIP_NUM=${tipCount}`)
+  lines.push("")
+  // 列表段：尺寸、条目、位置与取值都按 IR 里的字段写回。
+  if (board.list && Object.keys(board.list).length) {
+    const list = board.list
+    lines.push("[LIST]")
+    if (list.style) lines.push(`BACK_STYLE=${list.style}`)
+    if (list.cellStyle) lines.push(`CELL_STYLE=${list.cellStyle}`)
+    if (list.cellSize) lines.push(`CELL_SIZE=${list.cellSize.width},${list.cellSize.height}`)
+    if (list.count !== undefined) lines.push(`LIST_NUM=${list.count}`)
+    if (list.order) lines.push(`LIST_ORDER=${list.order}`)
+    if (list.names?.length) lines.push(`NAMES=${list.names.join(" ")}`)
+    if (list.offset) lines.push(`POS=${list.offset.x},${list.offset.y}`)
+    if (list.padding) lines.push(`PADDING=${list.padding.left},${list.padding.top},${list.padding.right},${list.padding.bottom}`)
+    if (list.type !== undefined) lines.push(`TYPE=${list.type}`)
+    if (list.values?.length) lines.push(`VALUES=${list.values.join(" ")}`)
+    lines.push("")
+  }
+  if (board.hint?.layoutName || board.hint?.type !== undefined) {
+    lines.push("[HINT]")
+    if (board.hint.layoutName) lines.push(`LAYOUT_NAME=${board.hint.layoutName}`)
+    if (board.hint.type !== undefined) lines.push(`TYPE=${board.hint.type}`)
+    lines.push("")
+  }
+  // 符号键盘菜单：类别引用原样写回，顺序按布局名排，稳定可复现。
+  if (board.more && (board.more.layouts.size || board.more.cellStyle || board.more.foreStyle || board.more.grid || board.more.layoutName)) {
+    const menu = board.more
+    lines.push("[MORE]")
+    if (menu.cellStyle) lines.push(`CELL_STYLE=${menu.cellStyle}`)
+    if (menu.foreStyle) lines.push(`FORE_STYLE=${menu.foreStyle}`)
+    if (menu.grid) lines.push(`GRID=${menu.grid.width},${menu.grid.height}`)
+    if (menu.layoutName) lines.push(`LAYOUT_NAME=${menu.layoutName}`)
+    for (const [key, value] of [...menu.layouts].sort(([left], [right]) => left.localeCompare(right))) {
+      lines.push(`${key}=${value}`)
+    }
+    lines.push("")
+  }
   const tipBlocks: string[] = []
+  // 板上的状态段全写：有引用的和没引用的都写，孤儿段同样是文件的一部分。
+  for (const [section, override] of board.tips ?? []) {
+    tipBlocks.push(...tipLines(override, section, actionValue))
+  }
   for (const key of board.keys) {
-    const rect: LayoutBox = renders.find((render) => render.key.id === key.id)?.rect ?? key.rect
+    // 几何只有布局树这一个来源：taffy 算出矩形，写回的就是它。
+    const rect = renders.find((render) => render.key.id === key.id)?.rect
+    // 树里没有这个键就没有几何，不写半截的 VIEW_RECT。
+    if (!rect) continue
     lines.push(`[${key.id}]`)
     lines.push(`VIEW_RECT=${rect.position.x},${rect.position.y},${rect.size.width},${rect.size.height}`)
     if (key.touchRect) {
       lines.push(`TOUCH_RECT=${key.touchRect.position.x},${key.touchRect.position.y},${key.touchRect.size.width},${key.touchRect.size.height}`)
     }
     if (key.padding) lines.push(`PADDING=${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
-    // 状态覆盖写成 `[TIPn]` 段，按键只留状态关联。
-    const tips = tipRefsOf(key.overrides)
-    if (tips.length) {
-      lines.push(`STAT_STYLE=${statStyleOf(tips)}`)
-      key.overrides?.forEach((override, index) => {
-        tipBlocks.push(...tipLines(override, index + 1, actionValue))
-      })
-    }
+    if (key.labelPosition) lines.push(`POS_TYPE=${key.labelPosition.join(",")}`)
+    if (key.label) lines.push(`SHOW=${key.label}`)
+    // 状态覆盖写成 `[TIPn]` 段，按键只留状态名与段号；段内容从板上的池里取。
+    const refs = key.stateRefs ?? []
+    if (refs.length) lines.push(`STAT_STYLE=${refs.map((ref) => `${ref.state}_${ref.section}`).join("|")}`)
     for (const { event, field: name } of EVENT_FIELDS) {
       const value = actionValue(key.actions[event])
       if (value !== undefined) lines.push(`${name}=${value}`)
@@ -553,14 +602,15 @@ function parsePanelSize(document: IniDocument): Size<number> {
 
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
 function layoutFiles(access: DocumentAccess, theme: Appearance, orientation: Orientation): string[] {
-  // 这三类与手写区同目录，即便带按键段也不是键盘布局。
-  const panels = new Set(["gen.ini", "more.ini", "toolbar.ini", "bh.ini"])
+  // 这几类与手写区同目录，即便带按键段也不是键盘布局。
   return access.paths().filter((name) => {
     // 先按路径规则判断是不是布局，再按内容确认有没有按键段。
     if (!isBdsLayoutPath(name)) return false
     if (appearanceOf(name) !== theme || orientationOf(name) !== orientation) return false
     const leaf = `${bdsBoardName(name)?.toLowerCase() ?? ""}.ini`
-    if (panels.has(leaf)) return false
+    if (leaf === "gen.ini" || leaf === "more.ini" || leaf === "toolbar.ini") return false
+    // `bh.ini`、`hw_*.ini` 是手写区自己的布局，不是键盘板。
+    if (leaf === "bh.ini" || /^hw_/.test(leaf)) return false
     return (textContent(access, name) ?? "").includes("[KEY")
   })
 }
@@ -576,39 +626,52 @@ function boardKindOf(layout: string): BoardKind {
   return "other"
 }
 
-/** 一份布局文档里的按键：动作按事件拆分，样式与几何从预览项上取。 */
-function keysOf(document: IniDocument, size: Size<number>): SkinKey[] {
+/**
+ * 一份布局文档里的按键：动作按事件拆分，样式从预览项上取。
+ * 几何单独返回：它只喂布局推导，不进按键。
+ */
+function keysOf(document: IniDocument, size: Size<number>): Array<{ key: SkinKey; rect: LayoutBox }> {
   return previewItems(document, size.width, size.height, undefined, false).flatMap((item) => {
     if (!/^KEY\d+$/i.test(item.section) || item.rect.width <= 0) return []
     const actions: SkinKey["actions"] = {}
     const press = actionOf(item.center || item.show)
     if (press) actions.press = press
+    // SHOW 是键上显示的字符；没有 CENTER 时它才兼作动作，两件事分开记。
+    const label = item.show || undefined
     const hold = actionOf(item.hold)
     if (hold) actions["long-press"] = hold
     const up = actionOf(item.up)
     if (up) actions["swipe-up"] = up
-    const down = item.down && item.down !== item.center ? actionOf(item.down) : undefined
+    // 按下与下滑是不同事件，即使动作相同也要各自写回。
+    const down = actionOf(item.down)
     if (down) actions["swipe-down"] = down
     const left = actionOf(item.left)
     if (left) actions["swipe-left"] = left
     const right = actionOf(item.right)
     if (right) actions["swipe-right"] = right
-    // 皮肤状态下的另一套样式与动作写在 `[TIPn]` 里，由 `STAT_STYLE` 关联。
-    const overrides = tipOverridesOf(document, item.statStyle, { actionOf })
+    // 皮肤状态下的另一套样式与动作写在 `[TIPn]` 里；按键只记状态名与段号。
+    const refs = tipsOf(item.statStyle)
     return [{
+      key: {
       id: item.section,
-      rect: { position: { x: item.rect.x, y: item.rect.y }, size: { width: item.rect.width, height: item.rect.height } },
       ...(item.touchRect
         ? { touchRect: { position: { x: item.touchRect.x, y: item.touchRect.y }, size: { width: item.touchRect.width, height: item.touchRect.height } } }
         : {}),
       ...(item.padding ? { padding: { left: item.padding[0], top: item.padding[1], right: item.padding[2], bottom: item.padding[3] } } : {}),
+      ...(label ? { label } : {}),
+      // POS_TYPE 是放置类型，原文件给几个就带回几个。
+      ...(item.positionTypes.length
+        ? { labelPosition: item.positionTypes.map((value) => Number(value)) }
+        : {}),
       actions,
       style: {
         ...(item.backStyle ? { back: item.backStyle } : {}),
         ...(item.highlightBackStyle ? { pressedBack: item.highlightBackStyle } : {}),
         fore: item.foreStyles,
       },
-      ...(overrides.length ? { overrides } : {}),
+      ...(refs.length ? { stateRefs: refs } : {}),
+      },
+      rect: { position: { x: item.rect.x, y: item.rect.y }, size: { width: item.rect.width, height: item.rect.height } },
     }]
   })
 }
@@ -628,6 +691,102 @@ export type LayoutBoards = {
  * 只读布局：把主题方向下的布局文件解析成板与按键几何，不碰样式。
  * BDS 的样式在 `default.css`，BDA 的样式在外观配置里，两者共用这份布局解析。
  */
+/** 布局文件里声明但内容为空的段；有字段的段必须在 IR 里有对应字段。 */
+function emptySectionsOf(document: IniDocument): string[] {
+  return document.sections().filter((section) => {
+    if (/^KEY\d+$/i.test(section) || /^TIP\d+$/i.test(section)) return false
+    return document.entries(section).length === 0
+  })
+}
+
+/** 布局文件里只被输入法自己读的字段，逐个建模。 */
+function boardExtrasOf(document: IniDocument): Pick<SkinBoard, "handwritingStyle"> {
+  const handwritingStyle = document.get("PANEL", "HW_FORE_STYLE")?.trim()
+  return {
+    ...(handwritingStyle ? { handwritingStyle } : {}),
+  }
+}
+
+/** `[MORE]` 段：各类别指向哪块布局，外加它自己的网格与样式。 */
+function moreMenuOf(document: IniDocument): MoreMenu | undefined {
+  const layouts = new Map<string, string>()
+  for (const entry of document.entries("MORE")) {
+    if (!/_LAYOUT$/i.test(entry.key)) continue
+    const value = entry.value.trim()
+    if (value) layouts.set(entry.key.toUpperCase(), value)
+  }
+  const cellStyle = document.get("MORE", "CELL_STYLE")?.trim()
+  const foreStyle = document.get("MORE", "FORE_STYLE")?.trim()
+  const grid = commaNumbers(document.get("MORE", "GRID"))
+  const layoutName = document.get("MORE", "LAYOUT_NAME")?.trim()
+  const menu: MoreMenu = {
+    layouts,
+    ...(cellStyle ? { cellStyle } : {}),
+    ...(foreStyle ? { foreStyle } : {}),
+    ...(grid.length === 2 ? { grid: { width: grid[0], height: grid[1] } } : {}),
+    ...(layoutName ? { layoutName } : {}),
+  }
+  return layouts.size || cellStyle || foreStyle || grid.length || layoutName ? menu : undefined
+}
+
+/** 逗号分隔的数值字段；个数不够就当没写。 */
+function commaNumbers(value: string | undefined): number[] {
+  return (value ?? "").split(",").map((token) => Number(token.trim())).filter((each) => Number.isFinite(each))
+}
+
+/** 布局文件里的 `[LIST]` 段：列表的位置、尺寸、条目与取值。 */
+function listExtrasOf(document: IniDocument): ListPanel | undefined {
+  const style = document.get("LIST", "BACK_STYLE")?.trim()
+  const cellStyle = document.get("LIST", "CELL_STYLE")?.trim()
+  const cell = commaNumbers(document.get("LIST", "CELL_SIZE"))
+  const order = document.get("LIST", "LIST_ORDER")?.trim()
+  const names = document.get("LIST", "NAMES")?.split(/\s+/).filter(Boolean)
+  const pos = commaNumbers(document.get("LIST", "POS"))
+  const padding = commaNumbers(document.get("LIST", "PADDING"))
+  const type = Number(document.get("LIST", "TYPE")?.trim())
+  const values = document.get("LIST", "VALUES")?.split(/\s+/).filter(Boolean)
+  const count = Number(document.get("LIST", "LIST_NUM")?.trim())
+  const panel: ListPanel = {
+    ...(style ? { style } : {}),
+    ...(cellStyle ? { cellStyle } : {}),
+    ...(cell.length === 2 ? { cellSize: { width: cell[0], height: cell[1] } } : {}),
+    ...(Number.isFinite(count) ? { count } : {}),
+    ...(order ? { order } : {}),
+    ...(names?.length ? { names } : {}),
+    ...(pos.length === 2 ? { offset: { x: pos[0], y: pos[1] } } : {}),
+    ...(padding.length === 4 ? { padding: { left: padding[0], top: padding[1], right: padding[2], bottom: padding[3] } } : {}),
+    ...(Number.isFinite(type) ? { type } : {}),
+    ...(values?.length ? { values } : {}),
+  }
+  return Object.keys(panel).length ? panel : undefined
+}
+
+/** 布局文件里的 `[HINT]` 段：引用哪个气泡面板、什么类型。 */
+function hintExtrasOf(document: IniDocument): Pick<HintBubble, "layoutName" | "type"> {
+  const layoutName = document.get("HINT", "LAYOUT_NAME")?.trim()
+  const type = Number(document.get("HINT", "TYPE")?.trim())
+  return {
+    ...(layoutName ? { layoutName } : {}),
+    ...(Number.isFinite(type) ? { type } : {}),
+  }
+}
+function blurOf(document: IniDocument): boolean | undefined {
+  const noBlur = document.get("PANEL", "NO_BLUR")?.trim()
+  return noBlur === undefined ? undefined : noBlur !== "1"
+}
+
+/** 布局文件声明的状态槽位数；它与实际写出的 `[TIPn]` 段数可以不一致。 */
+function tipCountOf(document: IniDocument): number | undefined {
+  const value = Number(document.get("PANEL", "TIP_NUM")?.trim())
+  return Number.isFinite(value) ? value : undefined
+}
+
+/** 布局文件声明的键数；它可能与实际读出的键数不同。 */
+function keyCountOf(document: IniDocument): number | undefined {
+  const value = Number(document.get("PANEL", "KEY_NUM")?.trim())
+  return Number.isFinite(value) ? value : undefined
+}
+
 export async function layoutBoards(
   access: DocumentAccess,
   theme: Appearance,
@@ -645,7 +804,7 @@ export async function layoutBoards(
     weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
   }
   const keys = keysOf(document, size)
-  const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size, deriveOptions)
+  const derived = await deriveBoard("board", keys.map((each) => ({ id: each.key.id, ...each.rect })), size, deriveOptions)
   const directory = bdsDirectory(theme, orientation)
   const genDocument = access.text(`${directory}gen.ini`)
   const parsedPanels = genDocument
@@ -653,13 +812,25 @@ export async function layoutBoards(
     : { panels: {}, paths: {} }
   const boards: SkinBoard[] = [{
     ...parsedPanels.panels,
+    // 布局文件的 `[HINT]` 段指明用哪个气泡面板，gen.ini 那边只有样式，两边合并。
+    ...(Object.keys(hintExtrasOf(document)).length
+      ? { hint: { ...parsedPanels.panels.hint, ...hintExtrasOf(document) } }
+      : {}),
+    ...(listExtrasOf(document) ? { list: { ...parsedPanels.panels.list, ...listExtrasOf(document) } } : {}),
+    ...(blurOf(document) !== undefined ? { backdrop: { ...parsedPanels.panels.backdrop, blur: blurOf(document) } } : {}),
     id: primaryLayout,
     kind: primaryKind,
     geometry: "document",
     orientation,
     size,
     layout: derived.layout,
-    keys,
+    keys: keys.map((each) => each.key),
+    emptySections: emptySectionsOf(document),
+    tips: tipPoolOf(document, { actionOf }),
+    ...(moreMenuOf(document) ? { more: moreMenuOf(document) } : {}),
+    ...boardExtrasOf(document),
+    ...(tipCountOf(document) !== undefined ? { tipCount: tipCountOf(document) } : {}),
+    ...(keyCountOf(document) !== undefined ? { keyCount: keyCountOf(document) } : {}),
   }]
   // 同一主题方向下其余布局文件也是板：九宫格、符号、候选等，一并读进来。
   for (const layoutPath of layoutFiles(access, theme, orientation)) {
@@ -669,7 +840,7 @@ export async function layoutBoards(
     const boardSize = parsePanelSize(other)
     const boardKeys = keysOf(other, boardSize)
     if (!boardKeys.length) continue
-    const boardDerived = await deriveBoard("board", boardKeys.map((key) => ({ id: key.id, ...key.rect })), boardSize, deriveOptions)
+    const boardDerived = await deriveBoard("board", boardKeys.map((each) => ({ id: each.key.id, ...each.rect })), boardSize, deriveOptions)
     boards.push({
       id: layoutPath,
       kind: boardKindOf(layoutPath),
@@ -677,7 +848,16 @@ export async function layoutBoards(
       orientation,
       size: boardSize,
       layout: boardDerived.layout,
-      keys: boardKeys,
+      keys: boardKeys.map((each) => each.key),
+      emptySections: emptySectionsOf(other),
+      tips: tipPoolOf(other, { actionOf }),
+      ...(moreMenuOf(other) ? { more: moreMenuOf(other) } : {}),
+      ...(Object.keys(hintExtrasOf(other)).length ? { hint: hintExtrasOf(other) } : {}),
+      ...(listExtrasOf(other) ? { list: listExtrasOf(other) } : {}),
+      ...(blurOf(other) !== undefined ? { backdrop: { blur: blurOf(other) } } : {}),
+      ...boardExtrasOf(other),
+      ...(tipCountOf(other) !== undefined ? { tipCount: tipCountOf(other) } : {}),
+      ...(keyCountOf(other) !== undefined ? { keyCount: keyCountOf(other) } : {}),
     })
   }
   return { boards, paths: parsedPanels.paths }
@@ -766,16 +946,18 @@ export async function bdsToModel(
   model.styles = parsed.styles
   model.images = parsed.images
   // 散图也要进资源表：它们不属于任何图集，但导出时要原样写回。
+  const allImages = new Map(model.images)
   for (const [path, role] of documents.roles) {
-    if (role.kind !== "image" || model.images.has(path)) continue
+    if (role.kind !== "image" || allImages.has(path)) continue
     const data = documents.binaries.get(path)
     if (!data) continue
     try {
-      model.images.set(path, decodePng(data))
+      allImages.set(path, decodePng(data))
     } catch {
       // 不是 PNG 的文件不进图片表；它本来也不该被识别成 image。
     }
   }
+  model.images = allImages
   const resources = new Map(model.resources)
   // 音效与字体要带字节：模型得能独立写出它们，不能靠导出时回源包捡。
   const locate = (name: string): string | undefined =>
@@ -848,8 +1030,8 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   // 主键盘决定方向目录；模型里板多起来之后，第一块不一定是主键盘。
   const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
   if (!board) throw new Error("模型里没有板")
-  const renders = await buildBoard(model, board)
   const theme = model.meta.appearance
+  const renders = await buildBoard(model, board)
   const orientation = board.orientation
   const root = `${theme}/skin`
   // 只打包图层真正用到的图片；序号就是新图集里的切片号。

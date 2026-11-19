@@ -5,6 +5,7 @@
 import type { CandidateBar, HintBubble, ListPanel, PanelBackdrop, SkinBoard, ToolbarItem } from "@/skin-model/board.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
+import type { LayoutBox } from "@/skin-model/layout.ts"
 import type { SkinKey } from "@/skin-model/key.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { emptyModel } from "@/skin-model/model.ts"
@@ -17,6 +18,7 @@ import { identifySxi, jsonOf, parseSxi } from "@/skin-model/formats/sxi-pipeline
 import { motionsOfSkin, skinAnimationsOf, skinSoundsOf, soundsOfSkin } from "@/skin-model/formats/sxi-motion.ts"
 import { skinStylesOf, stylesOfSkin, sxiStyleKey, sxiStyleName } from "@/skin-model/formats/sxi-style.ts"
 import { atlasImagesOf } from "@/skin-model/formats/sxi-atlas.ts"
+import { buildBoard } from "@/skin-model/build.ts"
 import type { SkinFormat } from "@/skin-model/format.ts"
 import type { FileRole, SkinDocuments, SkinStructure } from "@/skin-model/pipeline.ts"
 import { filesOf } from "@/skin-model/pipeline.ts"
@@ -66,7 +68,7 @@ function actionsOf(record: JsonObject): SkinKey["actions"] {
   return actions
 }
 
-function boxOf(value: Json): SkinKey["rect"] | undefined {
+function boxOf(value: Json): LayoutBox | undefined {
   const parts = rectParts(value)
   if (!parts) return
   return { position: { x: parts[0], y: parts[1] }, size: { width: parts[2], height: parts[3] } }
@@ -86,7 +88,8 @@ function keyStyle(record: JsonObject): SkinKey["style"] {
   }
 }
 
-function keysOf(keyboard: JsonObject): SkinKey[] {
+/** 手心按键：几何单独返回，只喂布局推导，不进按键。 */
+function keysOf(keyboard: JsonObject): Array<{ key: SkinKey; rect: LayoutBox }> {
   return (Array.isArray(keyboard.keys) ? keyboard.keys : []).flatMap((entry) => {
     const record = asObject(entry)
     if (!record) return []
@@ -95,12 +98,14 @@ function keysOf(keyboard: JsonObject): SkinKey[] {
     const id = `KEY${record.id ?? ""}`
     const hit = boxOf(record.hit_rect)
     return [{
-      id,
+      key: {
+        id,
+        ...(hit ? { touchRect: hit } : {}),
+        actions: actionsOf(record),
+        style: keyStyle(record),
+        ...(typeof record.fix_a === "string" ? { label: record.fix_a } : {}),
+      },
       rect,
-      ...(hit ? { touchRect: hit } : {}),
-      actions: actionsOf(record),
-      style: keyStyle(record),
-      ...(typeof record.fix_a === "string" ? { label: record.fix_a } : {}),
     }]
   })
 }
@@ -236,7 +241,7 @@ export async function sxiToModel(documents: SkinDocuments, hints: SxiReadHints):
   const size = sizeBox?.size ?? { width: 1080, height: 600 }
   model.meta.resolution = size
   const keys = keysOf(keyboard)
-  const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size)
+  const derived = await deriveBoard("board", keys.map((each) => ({ id: each.key.id, ...each.rect })), size)
   model.boards.push({
     ...panelsOf(keyboard),
     id: `${hints.boardType}.ini`,
@@ -245,7 +250,7 @@ export async function sxiToModel(documents: SkinDocuments, hints: SxiReadHints):
     orientation: "port",
     size,
     layout: derived.layout,
-    keys,
+    keys: keys.map((each) => each.key),
   })
   // 动画在 `ss_2`，样式绑定在 `ss_1` 的 `s_5`；音效在样式的 `s_4`。
   model.motions = motionsOfSkin(skin, "light", "port")
@@ -255,16 +260,17 @@ export async function sxiToModel(documents: SkinDocuments, hints: SxiReadHints):
   model.styles = styles.styles
   // 图集里的切片也切出来，与散图一起进资源表。
   const atlas = atlasImagesOf(skin, documents.binaries, "light", "port")
-  model.images = new Map([...styles.images, ...atlas.images])
+  const allImages = new Map([...styles.images, ...atlas.images])
   // 散图也要进图片表：没被样式引用的图同样要能在导出时写回。
   for (const [path, data] of documents.binaries) {
-    if (!/\.png$/i.test(path) || model.images.has(path)) continue
+    if (!/\.png$/i.test(path) || allImages.has(path)) continue
     try {
-      model.images.set(path, decodePng(data))
+      allImages.set(path, decodePng(data))
     } catch {
       // 解不出来的不是图片。
     }
   }
+  model.images = allImages
   // 音效与字体是包里的文件，字节要进模型。
   const resources = new Map(model.resources)
   for (const [path, data] of documents.binaries) {
@@ -272,21 +278,24 @@ export async function sxiToModel(documents: SkinDocuments, hints: SxiReadHints):
     else if (/\.(?:ttf|otf|ttc)$/i.test(path)) resources.set(path, { kind: "font", path, data })
   }
   model.resources = resources
-  for (const key of keys) {
-    key.style = {
-      ...(key.style.back !== undefined ? { back: sxiStyleName(key.style.back) } : {}),
-      ...(key.style.pressedBack !== undefined ? { pressedBack: sxiStyleName(key.style.pressedBack) } : {}),
-      fore: key.style.fore.map((name) => sxiStyleName(name)),
+  for (const each of keys) {
+    each.key.style = {
+      ...(each.key.style.back !== undefined ? { back: sxiStyleName(each.key.style.back) } : {}),
+      ...(each.key.style.pressedBack !== undefined ? { pressedBack: sxiStyleName(each.key.style.pressedBack) } : {}),
+      fore: each.key.style.fore.map((name) => sxiStyleName(name)),
     }
   }
-  model.provenance = { format: "sxi", nodes: new Map(keys.map((key) => [key.id, { path: SXI_SKIN_PATH }])) }
+  model.provenance = { format: "sxi", nodes: new Map(keys.map((each) => [each.key.id, { path: SXI_SKIN_PATH }])) }
   return model
 }
 
 /** 模型 → 文档。手心包就是两份 JSON 加图片。 */
-function sxiFromModel(model: SkinModel): SkinDocuments {
+async function sxiFromModel(model: SkinModel): Promise<SkinDocuments> {
   const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
   if (!board) throw new Error("模型里没有板")
+  // 几何由布局树算出来，手心这边同样不绕开布局系统。
+  const renders = await buildBoard(model, board)
+  const rectOf = (key: SkinKey): LayoutBox => renders.find((render) => render.key.id === key.id)?.rect ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
   const binaries = new Map<string, Uint8Array>()
   const roles = new Map<string, FileRole>()
   // 音效与字体从模型写回。
@@ -307,13 +316,16 @@ function sxiFromModel(model: SkinModel): SkinDocuments {
   const root: JsonObject = {}
   const keyboard: JsonObject = {}
   keyboard.board = { ...(asObject(keyboard.board) ?? {}), size: [0, 0, board.size.width, board.size.height] }
-  keyboard.keys = board.keys.map((key) => ({
-    id: Number(key.id.replace(/^KEY/i, "")) || 0,
-    // 手心的矩形是「原点对 + 尺寸对」，不是扁平四元组。
-    rect: [[key.rect.position.x, key.rect.position.y], [key.rect.size.width, key.rect.size.height]],
-    ...(key.touchRect ? { hit_rect: [[key.touchRect.position.x, key.touchRect.position.y], [key.touchRect.size.width, key.touchRect.size.height]] } : {}),
-    ...(valuesOf(key).length ? { values: valuesOf(key) } : {}),
-  }))
+  keyboard.keys = board.keys.map((key) => {
+    const rect = rectOf(key)
+    return {
+      id: Number(key.id.replace(/^KEY/i, "")) || 0,
+      // 手心的矩形是「原点对 + 尺寸对」，不是扁平四元组。
+      rect: [[rect.position.x, rect.position.y], [rect.size.width, rect.size.height]],
+      ...(key.touchRect ? { hit_rect: [[key.touchRect.position.x, key.touchRect.position.y], [key.touchRect.size.width, key.touchRect.size.height]] } : {}),
+      ...(valuesOf(key).length ? { values: valuesOf(key) } : {}),
+    }
+  })
   root.keyboard = keyboard
   // 动效写回 `ss_2`，样式绑定写回 `ss_1` 的 `s_5`。
   if (model.motions.size) {
@@ -337,15 +349,18 @@ function sxiFromModel(model: SkinModel): SkinDocuments {
     root.light = { ...struct, s_port: port }
     // 按键引用走同一张名表，否则会指向不存在的样式编号。
     const keyOf = (name: string | undefined) => (name === undefined ? undefined : built.names.get(name) ?? sxiStyleKey(name) ?? name)
-    keyboard.keys = board.keys.map((key) => ({
-      id: Number(key.id.replace(/^KEY/i, "")) || 0,
-      rect: [[key.rect.position.x, key.rect.position.y], [key.rect.size.width, key.rect.size.height]],
-      ...(key.touchRect ? { hit_rect: [[key.touchRect.position.x, key.touchRect.position.y], [key.touchRect.size.width, key.touchRect.size.height]] } : {}),
-      ...(valuesOf(key).length ? { values: valuesOf(key) } : {}),
-      ...(keyOf(key.style.back) !== undefined ? { i_b: Number(keyOf(key.style.back)) } : {}),
-      ...(keyOf(key.style.pressedBack) !== undefined ? { i_hb: Number(keyOf(key.style.pressedBack)) } : {}),
-      ...(key.style.fore.length ? { i_f: Number(keyOf(key.style.fore[0])) } : {}),
-    }))
+    keyboard.keys = board.keys.map((key) => {
+      const rect = rectOf(key)
+      return {
+        id: Number(key.id.replace(/^KEY/i, "")) || 0,
+        rect: [[rect.position.x, rect.position.y], [rect.size.width, rect.size.height]],
+        ...(key.touchRect ? { hit_rect: [[key.touchRect.position.x, key.touchRect.position.y], [key.touchRect.size.width, key.touchRect.size.height]] } : {}),
+        ...(valuesOf(key).length ? { values: valuesOf(key) } : {}),
+        ...(keyOf(key.style.back) !== undefined ? { i_b: Number(keyOf(key.style.back)) } : {}),
+        ...(keyOf(key.style.pressedBack) !== undefined ? { i_hb: Number(keyOf(key.style.pressedBack)) } : {}),
+        ...(key.style.fore.length ? { i_f: Number(keyOf(key.style.fore[0])) } : {}),
+      }
+    })
   }
   // 音效写回样式的 `s_4`。
   if (model.sounds.size) {

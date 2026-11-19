@@ -365,7 +365,7 @@ async function ssfFromModel(model: SkinModel): Promise<SkinDocuments> {
     const renders = await buildBoard(model, board)
     putText(`${resolution}/${boardName(board.id)}.ini`, layoutText(board, renders), { kind: "layout", board: board.kind, theme: "light", orientation: board.orientation })
     // 动效经百度风格的动画段转成搜狗的 anim.ini；转换不了的会进 warnings。
-    const animated = ssfAnimationOf(model, board, model.images)
+    const animated = await ssfAnimationOf(model, board, model.images)
     if (animated.animation) putText(`${resolution}/anim.ini`, animated.animation.toString(), { kind: "motion" })
   }
   return { roles, texts, structs: new Map(), binaries }

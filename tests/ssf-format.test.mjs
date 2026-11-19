@@ -6,7 +6,7 @@ import { ssfFormat, ssfSource } from "../src/skin-model/formats/ssf.ts"
 import { unpackSsf } from "../src/ssf/ssf-package.ts"
 import { ssfFixture } from "./helpers/ssf-fixture.mjs"
 import { ssfSkeletonFixture } from "./helpers/ssf-skeleton-fixture.mjs"
-import { readWith, writeWith } from "./support/driver.mjs"
+import { readWith, rectOfKey, writeWith } from "./support/driver.mjs"
 
 async function model() {
   const files = await unpackSsf(ssfFixture())
@@ -25,7 +25,9 @@ test("搜狗皮肤读出骨架几何与皮肤样式", async () => {
   assert.equal(board.keys.length, 3)
   assert.equal(board.geometry, "document")
   assert.ok(board.size.width > 0)
-  const keys = board.keys.map((key) => key.rect.position.x)
+  // 几何来自布局树；按 x 排序后与骨架的三列对齐。
+  const rects = await Promise.all(board.keys.map((key) => rectOfKey(skin, board.id, key.id)))
+  const keys = rects.map((rect) => rect.position.x).sort((left, right) => left - right)
   assert.deepEqual(keys, [0, 360, 720])
   const look = [...skin.styles.keys()].filter((name) => name.startsWith("ssf:"))
   assert.ok(look.length > 0, "没有读到皮肤自己的样式")

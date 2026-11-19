@@ -8,6 +8,7 @@ import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
 import type { SkinMotion } from "./motion.ts"
 import { motionNodeKinds } from "./motion.ts"
+import { cachedLayout } from "./layout-cache.ts"
 import { findKey } from "./edit.ts"
 
 export type PropertyKind =
@@ -43,18 +44,19 @@ function styleView(key: string, label: string, value: string | undefined): Prope
   return { key, label, kind: "style", ...(value !== undefined ? { value } : {}) }
 }
 
-/** 按键的几何；几何来源由板的 `geometry` 决定，客户端排布的板不可改。 */
+/** 按键的几何；矩形来自布局树的派生缓存，客户端排布的板不可改。 */
 export function keyGeometry(model: SkinModel, boardId: string, keyId: string): PropertyView[] {
   const found = findKey(model, boardId, keyId)
   if (!found) return []
   const { board, key } = found
   const editable = board.geometry === "document"
   const note = editable ? undefined : "几何由客户端决定，不能在这里改"
+  const rect = cachedLayout(board)?.get(key.id)
   return [
-    { ...numberView("x", "X", key.rect.position.x, note), readOnly: !editable },
-    { ...numberView("y", "Y", key.rect.position.y, note), readOnly: !editable },
-    { ...numberView("width", "宽", key.rect.size.width, note), readOnly: !editable },
-    { ...numberView("height", "高", key.rect.size.height, note), readOnly: !editable },
+    { ...numberView("x", "X", rect?.position.x, note), readOnly: !editable },
+    { ...numberView("y", "Y", rect?.position.y, note), readOnly: !editable },
+    { ...numberView("width", "宽", rect?.size.width, note), readOnly: !editable },
+    { ...numberView("height", "高", rect?.size.height, note), readOnly: !editable },
     { ...numberView("touch.x", "触摸 X", key.touchRect?.position.x, note), readOnly: !editable },
     { ...numberView("touch.y", "触摸 Y", key.touchRect?.position.y, note), readOnly: !editable },
     { ...numberView("touch.width", "触摸宽", key.touchRect?.size.width, note), readOnly: !editable },
@@ -119,20 +121,28 @@ export function keyStyleRefs(model: SkinModel, boardId: string, keyId: string): 
   return views
 }
 
-/** 按键的状态覆盖（提示键）；没有就返回空。 */
+/** 按键引用的状态段；定义在板上，这里按引用取出来展示。 */
 export function keyStates(model: SkinModel, boardId: string, keyId: string): PropertyView[] {
   const found = findKey(model, boardId, keyId)
-  if (!found?.key.overrides?.length) return []
-  return found.key.overrides.map((override, index) => ({
-    key: `state.${index}`,
-    label: `状态 ${override.state}`,
-    kind: "readonly" as const,
-    value: [
-      override.style?.back ? `背景 ${override.style.back}` : "",
-      actionText(override.actions?.press) ?? "",
-    ].filter(Boolean).join(" · "),
-    note: "皮肤状态下的另一套样式",
-  }))
+  if (!found) return []
+  const { board, key } = found
+  const refs = key.stateRefs
+  if (!refs?.length) return []
+  const states = refs.flatMap((ref, index) => {
+    const override = board.tips?.get(ref.section)
+    if (!override) return []
+    return [{
+      key: `state.${index}`,
+      label: `状态 ${ref.state}`,
+      kind: "readonly" as const,
+      value: [
+        override.style?.back ? `背景 ${override.style.back}` : "",
+        actionText(override.actions?.press) ?? "",
+      ].filter(Boolean).join(" · "),
+      note: "皮肤状态下的另一套样式",
+    }]
+  })
+  return states
 }
 
 /** 一个对象的完整字段列表：几何、动作、样式、状态。 */

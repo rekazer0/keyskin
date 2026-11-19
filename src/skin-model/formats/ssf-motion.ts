@@ -9,16 +9,17 @@ import { writeMotions } from "@/skin-model/formats/bds.ts"
 import type { SkinBoard } from "@/skin-model/board.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
+import { cachedLayout } from "@/skin-model/layout-cache.ts"
 
 /**
  * 生成搜狗动画文档。
  * 搜狗按键只有「按下播放」一个入口，因此只处理 `press` 绑定。
  */
-export function ssfAnimationOf(
+export async function ssfAnimationOf(
   model: SkinModel,
   board: SkinBoard,
   images: ReadonlyMap<string, SkinImage>,
-): { animation: IniDocument | undefined; warnings: string[] } {
+): Promise<{ animation: IniDocument | undefined; warnings: string[] }> {
   const warnings: string[] = []
   if (!model.motions.size) return { animation: undefined, warnings }
 
@@ -68,8 +69,11 @@ export function ssfAnimationOf(
     return image ? { file: id.split("/").pop() ?? id, width: image.width, height: image.height } : undefined
   }
   const motion = new BaiduSsfMotion(animations, styles, warnings, 1, picture, animation)
+  // 按键尺寸来自布局树的派生缓存，与写回同一个来源。
   for (const key of board.keys) {
-    motion.press(layout, key.id, { width: key.rect.size.width, height: key.rect.size.height }, { width: board.size.width, height: board.size.height })
+    const rect = cachedLayout(board)?.get(key.id)
+    if (!rect) continue
+    motion.press(layout, key.id, { width: rect.size.width, height: rect.size.height }, { width: board.size.width, height: board.size.height })
   }
   return { animation, warnings }
 }

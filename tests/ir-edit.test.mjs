@@ -6,7 +6,7 @@ import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { validateModel } from "../src/skin-model/validate.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
-import { readWith } from "./support/driver.mjs"
+import { readWith, rectOfKey } from "./support/driver.mjs"
 
 async function model() {
   return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
@@ -16,11 +16,11 @@ const BOARD = "light/skin/port/py_26.ini"
 
 test("改按键矩形返回新模型，原模型不动", async () => {
   const before = await model()
-  const original = findKey(before, BOARD, "KEY1").key.rect
+  const original = await rectOfKey(before, BOARD, "KEY1")
   const after = moveKey(before, BOARD, "KEY1", { position: { x: 400, y: 20 }, size: { width: 90, height: 100 } })
   assert.notEqual(after, before)
-  assert.deepEqual(findKey(after, BOARD, "KEY1").key.rect, { position: { x: 400, y: 20 }, size: { width: 90, height: 100 } })
-  assert.deepEqual(findKey(before, BOARD, "KEY1").key.rect, original, "原模型被改了")
+  assert.deepEqual(await rectOfKey(after, BOARD, "KEY1"), { position: { x: 400, y: 20 }, size: { width: 90, height: 100 } })
+  assert.deepEqual(await rectOfKey(before, BOARD, "KEY1"), original, "原模型被改了")
 })
 
 test("改样式引用与动作", async () => {

@@ -6,12 +6,15 @@ import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { actionText, boardProperties, keyActions, keyGeometry, keyProperties, keyStates, motionProperties, panelProperties, styleProperties, summarizeModel } from "../src/skin-model/inspect.ts"
 import { setKeyAction } from "../src/skin-model/edit.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
-import { readWith } from "./support/driver.mjs"
+import { readWith, warm } from "./support/driver.mjs"
 
 const BOARD = "light/skin/port/py_26.ini"
 
 async function model() {
-  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  const built = await readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  // 检查器读的是布局派生缓存；界面在模型建好时预热，测试走同一条路。
+  await warm(built)
+  return built
 }
 
 test("按键几何来自模型", async () => {

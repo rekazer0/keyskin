@@ -9,6 +9,8 @@ import type { SkinKey } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinAction, KeyEvent } from "./types.ts"
 import type { LayoutBox } from "./layout.ts"
+import { setNodeRect } from "./layout.ts"
+import { cachedLayout } from "./layout-cache.ts"
 
 /** 手势字段名到事件。 */
 const EVENTS: Readonly<Record<string, KeyEvent>> = {
@@ -86,12 +88,14 @@ export function applyFieldChange(model: SkinModel, change: FieldChange): SkinMod
   return moveGeometry(model, boardId, keyId, field, value)
 }
 
-/** 几何字段：把单个值写进矩形，其余分量保持不变。 */
+/** 几何字段：改布局树里对应节点，矩形由树重新算出。 */
 function moveGeometry(model: SkinModel, boardId: string, keyId: string, field: string, value: string | number | boolean | undefined): SkinModel {
   if (typeof value !== "number" || !Number.isFinite(value)) return model
-  const key = model.boards.find((board) => board.id === boardId)?.keys.find((item) => item.id === keyId)
-  if (!key) return model
-  const current: LayoutBox = key.touchRect && field.startsWith("touch.") ? key.touchRect : key.rect
+  const board = model.boards.find((item) => item.id === boardId)
+  const key = board?.keys.find((item) => item.id === keyId)
+  if (!board || !key) return model
+  // 触摸区仍挂在按键上；绘制几何从布局树取。
+  const current: LayoutBox = key.touchRect && field.startsWith("touch.") ? key.touchRect : cachedLayout(board)?.get(keyId) ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
   const next: LayoutBox = {
     position: { ...current.position },
     size: { ...current.size },
@@ -104,7 +108,8 @@ function moveGeometry(model: SkinModel, boardId: string, keyId: string, field: s
   else return model
   return field.startsWith("touch.")
     ? patchKey(model, boardId, keyId, { touchRect: next })
-    : patchKey(model, boardId, keyId, { rect: next })
+    // 绘制几何写进布局树，按键上没有几何可写。
+    : { ...model, boards: model.boards.map((item) => item.id === boardId ? { ...item, layout: setNodeRect(item.layout, keyId, next) } : item) }
 }
 
 /** 一次改动能改哪些字段的清单，供界面做只读判定。 */

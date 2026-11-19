@@ -61,7 +61,7 @@ export function requiredCapabilities(model: SkinModel): CapabilitySet {
     need("board.geometry", board.geometry === "document" ? "full" : "partial")
     if (board.keys.length) need("board.keys")
     if (board.keys.some((key) => Object.keys(key.actions).length)) need("key.actions")
-    if (board.keys.some((key) => (key.overrides?.length ?? 0) > 0)) need("key.states")
+    if (board.keys.some((key) => (key.stateRefs?.length ?? 0) > 0)) need("key.states")
     if (board.keys.some((key) => key.touchRect)) need("key.touch")
     if (board.transitions?.length) need("board.transitions")
     if (board.backdrop) need("panel.backdrop")
