@@ -103,10 +103,11 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
     notifySelection(self)
     self.flashPress(key)
     playPressedKey(self, key)
-    if (self.editTool === "move" && !key.section.startsWith("LIST")) {
+    // 不可编辑的项（列表容器、列表格）不参与拖动。
+    if (self.editTool === "move" && key.editable) {
       const selectedSections = new Set(
         visibleKeys(self.keys)
-          .filter((item) => self.itemSelected(item) && !item.section.startsWith("LIST"))
+          .filter((item) => self.itemSelected(item) && item.editable)
           .flatMap((item) => item.sections),
       )
       const selectedKeys = self.keys.filter((item) => selectedSections.has(item.section))

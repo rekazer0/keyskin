@@ -76,6 +76,11 @@ export type TipRef = {
 
 export type SkinKey = {
   id: string
+  /**
+   * 按键在皮肤里扮演的角色。列表单元格的字要用列表字体、也不能直接被拖动，
+   * 这些是按键自己的语义，不该靠段名前缀去猜。
+   */
+  kind?: "list-cell"
   /** 这个按键覆盖的段；列表单元格这类合成项会指向多个段。 */
   sections?: readonly string[]
   /** 默认状态下是否可见；状态覆盖里的 `visible` 优先。 */

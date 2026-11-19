@@ -157,11 +157,11 @@ export async function paintPreview(self: Preview): Promise<void> {
               fore: await Promise.all(
                 foreStyles.map((style, index) => draft?.foreground && draft.layer === index ? draft.visual : self.resolveVisual(style, highlighted).catch(() => undefined)),
               ),
-              text: key.section.startsWith("LIST:") && self.resolver?.resolveListText
+              text: key.key.kind === "list-cell" && self.resolver?.resolveListText
                 ? self.resolver.resolveListText(foreStyles.join(","), highlighted)
                 : self.resolver?.resolveText(foreStyles.join(","), highlighted),
               // A list cell shows its own entry (NAMES); a label carried by its shared style is not the cell's text.
-              styleTexts: key.section.startsWith("LIST:") ? [] : foreStyles.map((style) =>
+              styleTexts: key.key.kind === "list-cell" ? [] : foreStyles.map((style) =>
                 self.resolver?.resolveStyleText?.(style, highlighted)
               ),
             }

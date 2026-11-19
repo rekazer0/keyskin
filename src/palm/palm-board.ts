@@ -234,6 +234,7 @@ export class PalmBoard {
       return {
         ...cellItem,
         editable: false,
+        key: { ...cellItem.key, kind: "list-cell" as const },
         container: { ...cellItem.container, text: { content: cell.title } },
       }
     })

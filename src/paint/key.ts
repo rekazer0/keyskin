@@ -154,7 +154,7 @@ function paintKeyText(
     context.textAlign = "center"
     context.textBaseline = "middle"
     withTextShadow(context, textVisual, () => {
-      if (key.section.startsWith("LIST:")) drawListText(context, text, centerX, centerY)
+      if (key.key.kind === "list-cell") drawListText(context, text, centerX, centerY)
       else context.fillText(text, centerX, centerY)
     })
   })
