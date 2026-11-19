@@ -10,6 +10,7 @@ import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type
 import { exportViaIr, isCrossFormatExport } from "./ir-export"
 import { planImport, prepareImport } from "./import-plan"
 import { skinModel } from "./skin-model-state"
+import { diagnose } from "@/skin-model/diagnostics.ts"
 import { validateModel } from "@/skin-model/validate.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
@@ -403,6 +404,16 @@ function modelWarnings(): string[] {
     .map((issue) => `${issue.subject}：${issue.message}`)
 }
 
+/** 包里有没有认不出来的文件；有就说明这类文件会在保存时丢掉。 */
+function structureWarnings(archive: SkinArchive, format: ExportFormat): string[] {
+  // bdi 与 bds 是同一套文件结构，识别规则也相同。
+  const diagnostics = diagnose(archive, format === "bdi" ? "bds" : format)
+  if (!diagnostics.unknown.length) return []
+  const sample = diagnostics.unknown.slice(0, 3).map((item) => item.path)
+  const more = diagnostics.unknown.length > sample.length ? ` 等 ${diagnostics.unknown.length} 个` : ""
+  return [`有 ${diagnostics.unknown.length} 个文件认不出来，保存后不会保留：${sample.join("、")}${more}`]
+}
+
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<PackagedResult> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
@@ -440,7 +451,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const bytes = await appState.archive.toBytesAsync(format, soundWarnings, adjustments)
     reportExportWarnings(soundWarnings, adjustments)
     // 同格式保存不重建包，但模型自检能提前发现悬空引用，值得一并提示。
-    const inspection = modelWarnings()
+    const inspection = [...modelWarnings(), ...structureWarnings(appState.archive, format)]
     return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings, ...inspection] }
   }
   // 源 BDA 转 BDI/BDS 已在前面由中间表示处理，走到这里说明分支漏了它。
