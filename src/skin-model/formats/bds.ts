@@ -641,7 +641,8 @@ function boardKindOf(layout: string): BoardKind {
  * 几何单独返回：它只喂布局推导，不进按键。
  */
 function keysOf(document: IniDocument, size: Size<number>): Array<{ key: SkinKey; rect: LayoutBox; placed: boolean }> {
-  return previewItems(document, size.width, size.height, undefined, false).flatMap((item) => {
+  // 第六个参数放行没有 VIEW_RECT 的按键段，它们只有定义没有几何。
+  return previewItems(document, size.width, size.height, undefined, false, true).flatMap((item) => {
     // 没有 VIEW_RECT 的键不进布局树，它们是模板/示例段，另走 unplacedKeys。
     if (!/^KEY\d+$/i.test(item.section)) return []
     const actions: SkinKey["actions"] = {}

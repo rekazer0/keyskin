@@ -342,10 +342,12 @@ export function offsetFromSection(document: IniDocument | undefined, section: st
   return relative && [Math.trunc(rect.width * relative[0] / 100), Math.trunc(rect.height * relative[1] / 100)]
 }
 
-function itemFromSection(document: IniDocument, section: string): PreviewItem | undefined {
-  // 没有 VIEW_RECT 的段仍然是一条按键定义（模板、示例），矩形记成零尺寸，
-  // 由调用方按 `rect.width > 0` 区分「有几何」与「只有定义」。
-  const rect = parseRect(document.get(section, "VIEW_RECT")) ?? { x: 0, y: 0, width: 0, height: 0 }
+function itemFromSection(document: IniDocument, section: string, allowPlaceless = false): PreviewItem | undefined {
+  // 没有 VIEW_RECT 的段通常不是可绘制项；查按键定义时例外——模板键仍要出现，
+  // 它的矩形记成零尺寸，由调用方按 `rect.width > 0` 区分「有几何」与「只有定义」。
+  const parsed = parseRect(document.get(section, "VIEW_RECT"))
+  if (!parsed && !allowPlaceless) return
+  const rect = parsed ?? { x: 0, y: 0, width: 0, height: 0 }
   const value = (name: string) => document.get(section, name) ?? ""
   // CAND.FORE_STYLE styles runtime candidate words; it is not a static
   // foreground for the whole candidate bar.
@@ -504,6 +506,8 @@ export function previewItems(
   panelHeight = DEFAULT_CANDIDATE_HEIGHT,
   defaults?: IniDocument,
   persistentOnly = false,
+  /** 是否把没有 VIEW_RECT 的按键段也列出来（只有按键定义查询需要）。 */
+  placelessKeys = false,
 ): PreviewItem[] {
   const list = persistentOnly || !document.sections().includes("LIST")
     ? []
@@ -511,7 +515,7 @@ export function previewItems(
   const real = document.sections().flatMap((section) => {
     if (/^TIP\d+$/i.test(section)) return []
     if (!persistVisible(document.get(section, "PERSIST"), persistentOnly)) return []
-    const item = itemFromSection(document, section)
+    const item = itemFromSection(document, section, placelessKeys && /^KEY\d+$/i.test(section))
     return item ? [item] : []
   })
   if (real.length) return [...real, ...list]
