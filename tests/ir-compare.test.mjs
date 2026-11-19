@@ -79,3 +79,14 @@ test("元信息变化单独标记", async () => {
   assert.match(describeDiff(diff), /皮肤信息/)
   assert.equal(isEmptyDiff(diff), false)
 })
+
+test("图片尺寸不变但像素改了也要报出来", async () => {
+  const before = await model()
+  const [id, image] = [...before.images][0]
+  const painted = { ...image, data: image.data.slice() }
+  painted.data[0] = (painted.data[0] + 1) % 256
+  const after = { ...before, images: new Map([...before.images, [id, painted]]) }
+  const diff = await diffModels(before, after)
+  assert.deepEqual(diff.images.changed, [id])
+  assert.equal(isEmptyDiff(diff), false)
+})

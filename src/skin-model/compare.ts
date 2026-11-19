@@ -9,6 +9,7 @@ import { DEFAULT_DERIVE_OPTIONS } from "./derive/options.ts"
 import type { SkinKey } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
+import type { SkinImage } from "./image.ts"
 import type { SkinMotion } from "./motion.ts"
 
 /** 一类对象的差异：新增、删除、改动。 */
@@ -71,6 +72,18 @@ function boardSignature(board: SkinBoard, rects: ReadonlyMap<string, LayoutBox>,
 
 function styleSignature(style: SkinStyle): string {
   return JSON.stringify(style)
+}
+
+/**
+ * 图片的可比较投影：尺寸加像素摘要。
+ * 只看尺寸会漏掉「尺寸没变但画面改了」，而那正是用户能看见的变化。
+ */
+function imageSignature(image: SkinImage): string {
+  let hash = 2166136261
+  for (let index = 0; index < image.data.length; index++) {
+    hash = Math.imul(hash ^ image.data[index]!, 16777619)
+  }
+  return `${image.width}x${image.height}:${(hash >>> 0).toString(16)}`
 }
 
 function motionSignature(motion: SkinMotion): string {
@@ -158,7 +171,7 @@ export async function diffModels(before: SkinModel, after: SkinModel, tolerance 
     boards: boards.boards,
     keys: boards.keys,
     styles: diffMap(before.styles, after.styles, styleSignature),
-    images: diffMap(before.images, after.images, (image) => `${image.width}x${image.height}`),
+    images: diffMap(before.images, after.images, imageSignature),
     motions: diffMap(before.motions, after.motions, motionSignature),
     sounds: diffMap(before.sounds, after.sounds, (sound) => JSON.stringify(sound)),
     meta: JSON.stringify(before.meta) !== JSON.stringify(after.meta),
