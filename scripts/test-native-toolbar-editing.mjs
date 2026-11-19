@@ -25,6 +25,8 @@ for (const format of ['bdi', 'bds']) {
   const archive = await nativeToolbarFixture(format)
   archive.setBytes('light/skin/res/replacement.png', replacement)
   if (format === 'bds') {
+    const css = 'light/skin/res/default.css'
+    archive.setText(css, archive.getText(css).replace('NM_IMG=bar,1', 'NM_IMG=bar,1\nHL_IMG=edge,1'))
     archive.setBytes('light/skin/res/logo/pop_menu_icons.png', original)
     archive.setText('light/skin/res/logo/pop_menu_icons.til', '[IMG26]\nSOURCE_RECT=0,0,4,4\n[IMG27]\nSOURCE_RECT=4,0,4,4\n')
     archive.delete('light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist')
@@ -40,6 +42,9 @@ for (const format of ['bdi', 'bds']) {
     target: format === 'bdi' ? 'light/skin/res/logo/function_iphone@3x.png' : 'light/skin/res/logo/pop_menu_icons.png',
     source: 'light/skin/res/replacement.png', count: format === 'bdi' ? 3 : 4 })
 }
+const insetEdges = nativeToolbarFixture()
+insetEdges.setText('light/skin/port/cand1.cnd', '[CAND]\nBACK_STYLE=1\n[ICON1]\nSIZE=109,109\nPOS=20,-54\nANCHOR_TYPE=4\nFIX_SIZE=30,30\nFORE_STYLE=2\nKEY=F31\n[ICON2]\nSIZE=780,58\nPOS=-390,43\nANCHOR_TYPE=2\nKEY=F14\n[ICON3]\nSIZE=109,109\nPOS=-129,-54\nANCHOR_TYPE=6\nFIX_SIZE=30,30\nFORE_STYLE=2\nKEY=F8\n')
+fixtures.unshift({ format: 'bdi', bytes: insetEdges.toBytes(), selectionOnly: true, insetEdges: true })
 const palm = unzipSync(readFileSync(new URL('../public/templates/palm-harmony.sxi', import.meta.url)))
 palm['light/skin/res/replacement.png'] = replacement
 fixtures.push({ format: 'sxi', bytes: zipSync(palm), label: '键盘类型', target: 'light/skin/res/logo/1.0/toolbarMenuItem_KBSwitch_Normal_iphone@3x.png', source: 'light/skin/res/replacement.png', count: 5, builtIn: true })
@@ -83,7 +88,31 @@ try {
       assert.deepEqual(state, { sections: selected.map(p => p.section).sort(), keys: [], scope: joined ? true : 'parts', joined })
       assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), String(joined))
     }
-    if (parts.length) {
+    if (fixture.insetEdges) {
+      await page.waitForFunction(async () => Boolean((await import('/src/app/canvas-interaction.ts')).toolbarPreview.drawnScene?.keys.length))
+      for (const part of [parts[0], parts.at(-1)]) {
+        await page.mouse.click(part.x, part.y)
+        await check([part], false)
+        const selection = await page.evaluate(async section => {
+          const { toolbarPreview: p } = await import('/src/app/canvas-interaction.ts')
+          await p.whenDrawn()
+          const key = p.keys.find(item => item.section === section)
+          const rect = p.editRect(key)
+          const x = Math.floor((rect.x + rect.width / 2) * p.canvas.width / p.panelWidth)
+          const ctx = p.canvas.getContext('2d')
+          const pixel = y => Array.from(ctx.getImageData(x, Math.round(y * p.canvas.height / p.panelHeight), 1, 1).data)
+          const color = document.createElement('canvas').getContext('2d')
+          color.fillStyle = getComputedStyle(p.canvas).getPropertyValue('--selection').trim()
+          color.fillRect(0, 0, 1, 1)
+          return { top: pixel(rect.y + 2), bottom: pixel(rect.y + rect.height - 2),
+            orange: Array.from(color.getImageData(0, 0, 1, 1).data), sourceWidth: key.rect.width }
+        }, part.section)
+        assert.deepEqual(selection.top, selection.orange, `${part.section}: visible top selection border`)
+        assert.deepEqual(selection.bottom, selection.orange, `${part.section}: visible bottom selection border`)
+        assert.equal(selection.sourceWidth, 109, 'selection leaves the authored size intact')
+      }
+    }
+    if (parts.length && !fixture.insetEdges) {
       assert.ok(parts.length >= 3)
       const click = p => page.mouse.click(p.x, p.y)
       await click(parts[0]); await check(parts.slice(0, 1), false)
@@ -100,13 +129,26 @@ try {
       await click(parts[0]); await check(parts.slice(1), false)
       await click(parts[0]); await check(parts, true)
       await page.keyboard.up('Control')
-    } else {
+    } else if (!parts.length) {
       await page.locator('#toolbar-preview').click(); await check([], true)
     }
     assert.deepEqual(await page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
       return { revision: appState.archive.revision, undo: appState.undoStack.length }
     }), archiveBeforeSelection, 'selecting the bar never edits the skin')
+    if (fixture.format === 'bds') {
+      const sampleBackground = (device, color) => page.waitForFunction(async color => {
+        const { candidateBackgroundPreview: p } = await import('/src/app/canvas-interaction.ts')
+        const { canvas } = p
+        return [...canvas.getContext('2d').getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data].join(',') === color
+      }, color, { timeout: 3000 }).catch(error => { throw new Error(`${device}: candidate background did not match ${color}`, { cause: error }) })
+      await sampleBackground('Android with HL_IMG', '80,150,100,255')
+      await page.locator('#device').selectOption('iphone-17-pro-max')
+      await sampleBackground('iPhone uses NM_IMG', '255,255,255,255')
+      await page.locator('#device').selectOption('canvas-checkerboard')
+      await page.locator('#theme').selectOption('dark', { force: true })
+      await sampleBackground('Android without HL_IMG falls back to NM_IMG', '255,255,255,255')
+    }
     if (fixture.selectionOnly) { assert.deepEqual(errors, []); await page.close(); continue }
     const card = page.getByRole('button', { name: `更换${fixture.label}图标`, exact: true })
     await card.waitFor()

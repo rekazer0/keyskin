@@ -17,13 +17,14 @@ function samePixels(left: Uint8Array, right: Uint8Array): boolean {
 }
 
 /** `replace()` 的调用次数：进度按处理过的背景报告，和真实的工作量同步。 */
-function bakeStepCount(theme: JsonObject): number {
+function bakeStepCount(theme: JsonObject, android: boolean): number {
   let steps = 0
   for (const orientation of ["port", "land"]) {
     const layout = asObject(theme[`${orientation}_layout`])
     const boards = asObject(layout?.b) ?? {}
     for (const value of Object.values(boards)) {
       const board = asObject(value)
+      if (android && asObject(asObject(board?.cand)?.b)?.base_b !== undefined) steps += 1
       if (!board || !Array.isArray(board.keys)) continue
       const fixes = asObject(board.key_fix) ?? {}
       for (const entry of board.keys) {
@@ -38,7 +39,7 @@ function bakeStepCount(theme: JsonObject): number {
     }
     for (const [name, value] of Object.entries(asObject(layout?.c) ?? {})) {
       const candidate = asObject(value)
-      if (candidate && candidateDimensions(boards, candidate, name)) steps += 1
+      if (candidate && (android || candidateDimensions(boards, candidate, name))) steps += 1
     }
   }
   return Math.max(1, steps)
@@ -49,7 +50,7 @@ function bakeStepCount(theme: JsonObject): number {
  * 每处理一个背景让出一次，产出 0–1 的完成比例，供异步导出驱动。
  * `resFolder` 是主题共享的 `res` 目录：同主题里相同的成品只在其中写一份。
  */
-export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], resFolder: string): Generator<number> {
+export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], resFolder: string, android: boolean): Generator<number> {
   const shared = asObject(theme.s_info)
   const sharedStyles = asObject(shared?.ss_1)
   const sharedTiles = asObject(shared?.info)
@@ -64,7 +65,7 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
   const byPath = new Map(entries.map((entry) => [entry.path, entry]))
   const bakedStyles: JsonObject = {}, bakedTiles: JsonObject = {}
   const bakedResources: string[] = []
-  const total = bakeStepCount(theme)
+  const total = bakeStepCount(theme, android)
   let done = 0
   for (const orientation of ["port", "land"]) {
     const layout = asObject(theme[`${orientation}_layout`])
@@ -77,21 +78,26 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
       const name = typeof path === "string" ? /\/([^/]+)\.png$/.exec(path)?.[1] : undefined
       if (name && !imagePaths.has(name)) imagePaths.set(name, path as string)
     }
-    const replace = function* (base: JsonObject | undefined, width: number, height: number): Generator<number> {
+    const replace = function* (base: JsonObject | undefined, width: number, height: number, preferHighlight = false): Generator<number> {
       done += 1
       yield Math.min(0.999, done / total)
-      if (!base || !Number.isFinite(width + height) || width <= 0 || height <= 0 || width * height > MAX_PIXELS) return
+      if (!base) return
       const style = asObject(styles[String(base.base_b)])
       const images = asObject(style?.s_2)
       if (!style || !images) return
+      // Android Baidu paints the high image even at rest; Palm paints the normal image.
+      const remap = preferHighlight && typeof images.hl === "string" && images.hl !== "" && images.hl !== images.normal
+      const bake = Number.isFinite(width + height) && width > 0 && height > 0 && width * height <= MAX_PIXELS
+      if (!remap && !bake) return
       const { id: _id, ...appearance } = style
-      const key = `${JSON.stringify(appearance)}:${width}:${height}`
+      const key = `${JSON.stringify(appearance)}:${width}:${height}:${remap}`
       if (variants.has(key)) { base.base_b = variants.get(key); return }
       const copy = structuredClone(style)
       const outputImages = asObject(copy.s_2)!
-      let changed = false
-      for (const state of ["normal", "hl"]) {
-        const reference = images[state]
+      if (remap) outputImages.normal = images.hl
+      let changed = remap
+      if (bake) for (const state of ["normal", "hl"]) {
+        const reference = outputImages[state]
         if (typeof reference !== "string") continue
         const [name, index] = reference.split(",").map((part) => part.trim())
         const table = tiles[name]
@@ -141,6 +147,8 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
     const boards = asObject(layout?.b) ?? {}
     for (const value of Object.values(boards)) {
       const board = asObject(value)
+      const back = asObject(asObject(board?.cand)?.b)
+      if (android && back?.base_b !== undefined) yield* replace(back, 0, 0, true)
       if (!board || !Array.isArray(board.keys)) continue
       const fixes = asObject(board.key_fix) ?? {}
       let nextFix = Math.max(0, ...Object.keys(fixes).map(Number).filter(Number.isFinite)) + 1
@@ -167,7 +175,7 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
       const candidate = asObject(value)
       if (!candidate) continue
       const size = candidateDimensions(boards, candidate, name)
-      if (size) yield* replace(asObject(candidate.b), Math.round(size.width), Math.round(size.height))
+      if (size || android) yield* replace(asObject(candidate.b), Math.round(size?.width ?? 0), Math.round(size?.height ?? 0), android)
     }
   }
   // Android reads the shared tables; iOS also needs the complete orientation tables and resource lists.
@@ -184,8 +192,8 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
 }
 
 /** 同步导出用：一次性把烘焙步骤跑完。 */
-export function bakeBackgrounds(theme: JsonObject, entries: Resource[], resFolder: string): void {
-  const steps = bakeBackgroundsSteps(theme, entries, resFolder)
+export function bakeBackgrounds(theme: JsonObject, entries: Resource[], resFolder: string, android: boolean): void {
+  const steps = bakeBackgroundsSteps(theme, entries, resFolder, android)
   while (!steps.next().done) {
     // 同步导出不需要让出主线程，直接跑完。
   }

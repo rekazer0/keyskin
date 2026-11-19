@@ -39,7 +39,7 @@ import { legacyHintText } from "./preview-hints.ts"
 import { dynamicToolbarRect, keyAnimationStyles } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
-import { drawSceneLayer, type SceneLayer } from "./native-scene.ts"
+import { drawSceneLayer, type SceneLayer, type NativeScene } from "./native-scene.ts"
 import { toolbarImageRect } from "./preview-draw.ts"
 
 export async function paintPreview(self: Preview): Promise<void> {
@@ -268,7 +268,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         withMotion(context, key.rect, motion?.back, () => draw(layers.back))
         layers.fore.forEach((layer, index) => withMotion(context, key.rect, motion?.fore[layers.groups?.[index] ?? 0], () => draw([layer])))
       }
-      strokeSelection(self, context, key)
+      strokeSelection(self, context, key, scene)
       continue
     }
     const area = paddedRect(key)
@@ -332,7 +332,7 @@ export async function paintPreview(self: Preview): Promise<void> {
       })
     }
 
-    strokeSelection(self, context, key)
+    strokeSelection(self, context, key, scene)
 
     const textVisual: TextVisual | undefined = visual?.text
     context.fillStyle = textVisual?.color ?? (self.theme === "dark" ? "#f5f5f7" : "#17191c")
@@ -521,12 +521,15 @@ function beginCanvas(self: Preview): CanvasRenderingContext2D | undefined {
   return context
 }
 
-function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: PreviewItem): void {
+function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: PreviewItem, scene?: NativeScene): void {
   if (previewSelectionVisible(self.mode, !self.joinedSelection && self.itemSelected(key))) {
     const flash = self.mode === "edit" && self.keyPressed(key)
     context.strokeStyle = getComputedStyle(self.canvas).getPropertyValue(flash || self.toolbarSlots ? "--selection" : "--guide-selected").trim()
     context.lineWidth = 4
-    context.strokeRect(key.rect.x + 2, key.rect.y + 2, key.rect.width - 4, key.rect.height - 4)
+    const { x, y, width, height } = self.editRect(key, scene ?? null)
+    if (width <= 0 || height <= 0) return
+    const inset = Math.min(2, width / 2, height / 2)
+    context.strokeRect(x + inset, y + inset, width - inset * 2, height - inset * 2)
   } else if (self.mode === "edit" && self.itemDrafted(key)) {
     // Unconfirmed AI draft: dashed orange, distinct from any solid selection.
     const inset = 3
@@ -574,12 +577,13 @@ function drawGuides(self: Preview, keys: readonly PreviewItem[]): void {
     }
     const rect = group.firstElementChild!, text = group.lastElementChild!
     group.classList.toggle("selected", !self.joinedSelection && self.itemSelected(key))
-    guideCoordinate(rect, "x", key.rect.x)
-    guideCoordinate(rect, "y", key.rect.y)
-    guideCoordinate(rect, "width", key.rect.width)
-    guideCoordinate(rect, "height", key.rect.height)
-    guideCoordinate(text, "x", key.rect.x + 4)
-    guideCoordinate(text, "y", key.rect.y + 4)
+    const bounds = self.mode === "edit" ? self.editRect(key) : key.rect
+    guideCoordinate(rect, "x", bounds.x)
+    guideCoordinate(rect, "y", bounds.y)
+    guideCoordinate(rect, "width", bounds.width)
+    guideCoordinate(rect, "height", bounds.height)
+    guideCoordinate(text, "x", bounds.x + 4)
+    guideCoordinate(text, "y", bounds.y + 4)
     if (text.textContent !== key.section) text.textContent = key.section
   })
 }

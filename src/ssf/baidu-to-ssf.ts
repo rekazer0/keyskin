@@ -8,6 +8,7 @@
 // Light/dark themes become day/night statuses.
 
 import { strToU8, zipSync } from "fflate"
+import { skinPlatform } from "../bda-platform.ts"
 import { IniDocument } from "../ini.ts"
 import { resolveCandidateRect } from "../candidate-style.ts"
 import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
@@ -392,15 +393,16 @@ function styleSources(archive: SkinArchive, theme: Theme): { panel: IniDocument[
 }
 
 /** The first style among `documents` that actually resolves (a copied base gen.ini may name a missing one). */
-function firstStyle(styles: BaiduStyles, documents: IniDocument[], section: string, key: string): StylePair | undefined {
+function firstStyle(styles: BaiduStyles, documents: IniDocument[], section: string, key: string, highlighted = false): StylePair | undefined {
   for (const document of documents) {
     const style = styles.resolve(document.get(section, key)?.trim())
+    if (highlighted && style?.pressed) return { ...style, normal: style.pressed }
     if (style?.normal || style?.color) return style
   }
 }
 
 /** Stacks the candidate bar strip above the keyboard panel the way Sogou's single background does. */
-function keyboardBackground(styles: BaiduStyles, archive: SkinArchive, theme: Theme, warnings: string[]): { background?: RgbaImage; bar?: RgbaImage } {
+function keyboardBackground(styles: BaiduStyles, archive: SkinArchive, theme: Theme, warnings: string[], android: boolean): { background?: RgbaImage; bar?: RgbaImage } {
   const sources = styleSources(archive, theme)
   const fill = (pair: StylePair | undefined, height: number) => {
     if (pair?.normal) return resizeImage(pair.normal.image, SOGOU_WIDTH, height)
@@ -413,7 +415,7 @@ function keyboardBackground(styles: BaiduStyles, archive: SkinArchive, theme: Th
   const panel = fill(firstStyle(styles, sources.panel, "PANEL", "BACK_STYLE"), panelHeight)
   const height = native ? Math.max(1, Math.min(barHeight,
     Math.round(resolveCandidateRect(sources.cand[0], sources.panel[0]).height * styles.scale))) : SOGOU_BAR_HEIGHT
-  let bar = fill(firstStyle(styles, sources.cand, "CAND", "BACK_STYLE"), height)
+  let bar = fill(firstStyle(styles, sources.cand, "CAND", "BACK_STYLE", android), height)
   if (bar && height !== barHeight) {
     const input = firstStyle(styles, sources.panel, "SCAND", "BACK_STYLE")
     const under = fill(input ?? firstStyle(styles, sources.panel, "PANEL", "BACK_STYLE"), barHeight)
@@ -530,7 +532,7 @@ function convertAnimations(archive: SkinArchive, theme: Theme, writer: StatusWri
   if (animations.sections().length) output.set(`${folder}anim.ini`, strToU8(animations.toString()))
 }
 
-function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output: Map<string, Uint8Array>, warnings: string[], animations: boolean, keySizes?: Map<string, SogouKeySize>): void {
+function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output: Map<string, Uint8Array>, warnings: string[], android: boolean, animations: boolean, keySizes?: Map<string, SogouKeySize>): void {
   const styles = new BaiduStyles(archive, theme, "port", warnings)
   const writer = new StatusWriter(folder, output)
   const samples = sampleKeys(archive, theme, warnings)
@@ -581,7 +583,7 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
     writer.skin.appendSection(style, [{ key: "TEXT_COLOR", value: normal }, { key: "TEXT_COLOR_PRESSED", value: pressed }])
   }
 
-  const { background, bar } = keyboardBackground(styles, archive, theme, warnings)
+  const { background, bar } = keyboardBackground(styles, archive, theme, warnings, android)
   if (background) writer.skin.appendSection("RootView", [{ key: "BG_STYLE", value: "1" }, { key: "BG_IMAGE", value: writer.file(background, "bg.png") }])
   else warnings.push(`${theme === "dark" ? "深色" : "浅色"}外观没有可转换的键盘背景`)
   if (bar) {
@@ -724,6 +726,7 @@ export async function convertBaiduToSsf(
   options: BaiduToSsfOptions = {},
 ): Promise<{ bytes: Uint8Array; warnings: string[] }> {
   if (archive.format === "bda") throw new Error("BDA 需要先转换为 BDS 再导出搜狗皮肤")
+  const android = skinPlatform(archive) === "android"
   if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
   const warnings: string[] = []
   const output = new Map<string, Uint8Array>()
@@ -731,7 +734,7 @@ export async function convertBaiduToSsf(
     ["res", "port/res", "land/res"].some((root) => archive.isText(`${theme}/skin/${root}/default.css`)))
   if (!themes.length) throw new Error("皮肤缺少 res/default.css，无法转换")
   const dual = themes.length > 1
-  for (const theme of themes) convertTheme(archive, theme, dual ? `${SOGOU_WIDTH}/${STATUS[theme]}/` : `${SOGOU_WIDTH}/`, output, warnings, options.animations !== false, options.keySizes)
+  for (const theme of themes) convertTheme(archive, theme, dual ? `${SOGOU_WIDTH}/${STATUS[theme]}/` : `${SOGOU_WIDTH}/`, output, warnings, android, options.animations !== false, options.keySizes)
 
   const name = infoValue(archive, "Name") || "百度皮肤"
   const author = infoValue(archive, "Author") ?? ""

@@ -15,6 +15,7 @@
 // - Zip entries are written in sorted converter-relative order and emptied directories keep
 //   an explicit entry, matching the layout the Palm app expects.
 
+import { skinPlatform } from "../bda-platform.ts"
 import type { SkinArchive } from "../skin.ts"
 import { zipArchiveAsync } from "../skin-zip.ts"
 import { buildAnimationWrap } from "./palm-animation.ts"
@@ -77,6 +78,7 @@ type SkinStruct = {
 }
 
 type ExportContext = {
+  android: boolean
   root: PalmVirtualRoot
   warnings: string[]
   sections: Map<string, IniSection[] | undefined>
@@ -590,7 +592,7 @@ function* skinBaseSteps(context: ExportContext, struct: SkinStruct, base: number
 
 function skinFileJson(context: ExportContext, struct: SkinStruct): JsonObject {
   const model = drain(skinBaseSteps(context, struct, 0, 1))
-  bakeBackgrounds(model, context.entries, themeResFolder(struct))
+  bakeBackgrounds(model, context.entries, themeResFolder(struct), context.android)
   fitToolbarArtwork(model, context.entries)
   return model
 }
@@ -599,7 +601,7 @@ function* skinFileSteps(context: ExportContext, struct: SkinStruct, base: number
   const split = base + (end - base) * 0.25
   const model = yield* skinBaseSteps(context, struct, base, split)
   const bakeSpan = (end - base) * 0.7
-  for (const fraction of bakeBackgroundsSteps(model, context.entries, themeResFolder(struct))) {
+  for (const fraction of bakeBackgroundsSteps(model, context.entries, themeResFolder(struct), context.android)) {
     yield split + bakeSpan * fraction
   }
   fitToolbarArtwork(model, context.entries)
@@ -665,12 +667,13 @@ type PreparedExport = {
   darkStruct?: SkinStruct
 }
 
-function prepareExport(entries: ConverterEntry[], warnings: string[] = []): PreparedExport {
+function prepareExport(archive: SkinArchive, entries: ConverterEntry[], warnings: string[] = []): PreparedExport {
   const context: ExportContext = {
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),
     warnings,
     entries,
     sections: new Map(),
+    android: skinPlatform(archive) === "android",
   }
   const skinDir = context.root.isDirectory("skin") ? "skin" : ""
   const hasLight = context.root.isDirectory(palmJoinPath(skinDir, "light"))
@@ -727,7 +730,7 @@ export type SxiExportReport = (fraction: number, detail: string) => Promise<void
 const ZIP_START = 0.58
 
 export function buildSxiZip(archive: SkinArchive): { bytes: Uint8Array; warnings: string[] } {
-  const prepared = prepareExport(collectConverterEntries(archive))
+  const prepared = prepareExport(archive, collectConverterEntries(archive))
   const skin = buildSkin(prepared)
   return { bytes: packSxiFiles(assembleSxiFiles(prepared.entries, skin)), warnings: prepared.context.warnings }
 }
@@ -758,7 +761,7 @@ export async function buildSxiZipAsync(
   }
   await breathe(0, "正在读取皮肤…", true)
   const entries = collectConverterEntries(archive)
-  const prepared = prepareExport(entries, await adaptSxiSounds(entries))
+  const prepared = prepareExport(archive, entries, await adaptSxiSounds(entries))
   const driveModel = async (): Promise<Record<string, Json>> => {
     const steps = buildSkinSteps(prepared)
     let last = performance.now()

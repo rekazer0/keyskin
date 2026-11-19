@@ -34,6 +34,7 @@ test('fixed iOS edge artwork fits the visible bar, with its pressed state and au
     assert.ok(rect.x >= 0 && rect.x + rect.width <= 1125)
     assert.ok(rect.y >= 0 && rect.y + rect.height <= height)
     assert.ok(Math.abs(rect.width / rect.height - 136 / 110) < 0.000001)
+    assert.ok(Math.abs(rect.x + rect.width / 2 - (key.rect.x + key.rect.width / 2)) < 0.000001)
     assert.deepEqual(key.layers(true).fore[0].visual.source, pressed.source)
     assert.deepEqual(key.rect, items.find(item => item.section === key.section).rect)
   }

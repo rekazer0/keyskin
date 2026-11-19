@@ -11,6 +11,7 @@ import { SkinArchive } from "../skin.ts"
 import { adaptAndroidToolbar, fillIosToolbarEdgeSizes } from "../ios-toolbar.ts"
 import { convertLegacyToBda } from "../ssf/ssf-convert.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
+import { adaptBaiduCandidateBackgrounds } from "./palm-candidate-background.ts"
 import { parseSkinJson, same } from "./sxi-json.ts"
 import { boardFileName, boardIni, bubbleIni, candidateIni } from "./sxi-layout.ts"
 import { ANIMATION_FIELDS, FLOATER_FIELDS, animationsIni, infoIni, stylesIni, tilesIni } from "./sxi-style.ts"
@@ -92,8 +93,7 @@ export function sxiBaiduFiles(skin: JsonObject): Map<string, string> {
       }
     }
 
-    // `s_port`/`s_land` merge the orientation `res` over the shared one; only what differs
-    // from `s_info` lives in the orientation folder.
+    // Baidu reads the direction’s CSS as a whole; Palm’s direction table can be partial.
     const shared = asObject(struct.s_info)
     const styleSets: Array<[string, string]> = [["s_info", `${theme}/skin/res`], ["s_port", `${theme}/skin/port/res`], ["s_land", `${theme}/skin/land/res`]]
     for (const [styleKey, directory] of styleSets) {
@@ -101,7 +101,7 @@ export function sxiBaiduFiles(skin: JsonObject): Map<string, string> {
       if (!style) continue
       const own = styleKey === "s_info"
       if (hasEntries(style.ss_1) && (own || !same(style.ss_1, shared?.ss_1))) {
-        add(`${directory}/default.css`, stylesIni(style.ss_1))
+        add(`${directory}/default.css`, stylesIni(own ? style.ss_1 : { ...asObject(shared?.ss_1), ...asObject(style.ss_1) }))
       }
       if ((asObject(style.ss_2) !== undefined || hasEntries(style.ss_2_paths))
         && (own || !same(style.ss_2, shared?.ss_2) || !same(style.ss_2_paths, shared?.ss_2_paths))) {
@@ -171,12 +171,14 @@ export function sxiToBaiduArchive(archive: SkinArchive, target: "bdi" | "bds" = 
 
   const info = derived.get("Info.txt")
   if (!info) throw new Error("skin.json 中缺少皮肤信息")
-  files["Info.txt"] = strToU8(info)
+  files["Info.txt"] = strToU8(`SupportPlatform=${target === "bdi" ? "I" : "A"}\n${info}`)
   const preview = archive.getBytes("preview.png") ?? archive.getBytes("light/skin/preview.png")
   if (preview) files["demo.png"] = preview
   const output = new Map(Object.entries(files))
-  if (target === "bds") adaptAndroidToolbar(output, warnings)
-  else fillIosToolbarEdgeSizes(output)
+  if (target === "bds") {
+    adaptBaiduCandidateBackgrounds(output)
+    adaptAndroidToolbar(output, warnings)
+  } else fillIosToolbarEdgeSizes(output)
   return SkinArchive.open(zipSync(Object.fromEntries(output), { level: 6 }))
 }
 

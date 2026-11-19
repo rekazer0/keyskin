@@ -4,11 +4,22 @@ import { IniDocument } from "./ini.ts"
 import { appendStyle } from "./ios-toolbar.ts"
 import { resolveCandidateRect } from "./candidate-style.ts"
 import { parseXmlPlist } from "./palm/palm-plist.ts"
+import type { Rect } from "./preview-items.ts"
 import { cropImage, decodePng, encodePng, MAX_PIXELS, nineSliceImage, pngSize, resizeImage } from "./ssf/ssf-png.ts"
 
 /** iOS toolbar sizes are @3x pixels, independent of the keyboard's layout width. */
 export function iosToolbarScale(width: number, devicePointWidth: number | undefined): number {
   return devicePointWidth && devicePointWidth > 0 ? width / (3 * devicePointWidth) : 1
+}
+
+/** A fixed bitmap is centered horizontally on its authored hit box, not on the screen edge. */
+export function fixedToolbarIconRect(hit: Rect, bitmap: Pick<Rect, "width" | "height">, width: number, height: number): Rect {
+  const w = Math.min(bitmap.width, width), h = Math.min(bitmap.height, height)
+  const y = hit.y < 0 || hit.y + hit.height > height ? (height - h) / 2 : hit.y + (hit.height - h) / 2
+  return {
+    x: Math.max(0, Math.min(hit.x + (hit.width - w) / 2, width - w)),
+    y: Math.max(0, Math.min(y, height - h)), width: w, height: h,
+  }
 }
 
 /** 菜单图片声明不决定坐标单位；旧皮肤补建 plist 后仍使用布局像素。 */

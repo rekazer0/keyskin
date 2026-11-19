@@ -4,7 +4,7 @@ import type { IniDocument } from "./ini.ts"
 import { sceneKey, type NativeScene, type SceneLayer } from "./native-scene.ts"
 import type { PreviewItem, Rect } from "./preview-items.ts"
 import { defaultToolbarIcon, toolbarImageRect } from "./preview-draw.ts"
-import { iosToolbarScale } from "./ios-toolbar-geometry.ts"
+import { fixedToolbarIconRect, iosToolbarScale } from "./ios-toolbar-geometry.ts"
 
 /** Oversized CND hit boxes must not drag the fixed-size artwork below the visible native bar. */
 export async function iosToolbarImageScene(
@@ -40,16 +40,11 @@ export async function iosToolbarImageScene(
       })
     }
     const fixed = item.foreRect!
-    const oversized = rect.y < 0 || rect.y + rect.height > height
-    const w = fixed.width * scale
-    const h = Math.min(fixed.height * scale, height)
-    const x = oversized && item.center.trim() === "F31" ? 0
-      : oversized && item.center.trim() === "F8" ? width - w
-      : rect.x + (rect.width - w) / 2
-    const y = oversized ? (height - h) / 2 : rect.y + (rect.height - h) / 2
+    const icon = fixedToolbarIconRect(rect, { width: fixed.width * scale, height: fixed.height * scale }, width, height)
+    const { x, y, width: w, height: h } = icon
     const normal = await Promise.all(item.foreStyles.map((id) => resolver.resolve(id, false)))
     if (!normal.some((visual) => visual?.image && visual.source)) return
-    return sceneKey(item.section, rect, async (pressed) => {
+    const key = await sceneKey(item.section, rect, async (pressed) => {
       const visuals = pressed ? await Promise.all(item.foreStyles.map((id) => resolver.resolve(id, true))) : normal
       const back = await resolver.resolve(pressed ? item.highlightBackStyle ?? item.backStyle : item.backStyle, pressed)
       const fore: SceneLayer[] = visuals.flatMap((visual) => {
@@ -63,6 +58,7 @@ export async function iosToolbarImageScene(
       })
       return { back: back ? [{ kind: "image", visual: back, rect }] : [], fore }
     })
+    return { ...key, selectionRect: icon }
   }))
   return { background: [], partial: true, keys: keys.filter((key) => key !== undefined) }
 }

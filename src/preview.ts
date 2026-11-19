@@ -622,7 +622,23 @@ export class Preview {
     return this.nativeItems ? undefined : this.document
   }
 
+  editRect(key: PreviewItem, scene: NativeScene | null = this.drawnScene ?? null): Rect {
+    if (!this.toolbarSlots) return key.rect
+    const { x, y, width, height } = scene?.keys.find(({ section }) => section === key.section)?.selectionRect ?? key.rect
+    const left = Math.max(0, x), top = Math.max(0, y)
+    return { x: left, y: top, width: Math.max(0, Math.min(x + width, this.panelWidth) - left),
+      height: Math.max(0, Math.min(y + height, this.panelHeight) - top) }
+  }
+
   hit(point: { x: number; y: number }): PreviewItem | undefined {
+    if (this.toolbarSlots && this.mode === "edit") {
+      const items = this.keys.flatMap((key) => {
+        const rect = this.editRect(key)
+        return rect.width && rect.height ? [{ ...key, rect }] : []
+      })
+      const hit = previewHitItem(items, point, this.mode, this.panelWidth, this.panelHeight, this.skinState)
+      return hit && this.keys.find((key) => key.section === hit.section)
+    }
     return this.stateDocument
       ? effectivePreviewHitItem(
         this.stateDocument,

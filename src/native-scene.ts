@@ -35,6 +35,7 @@ export type SceneLayers = { back: SceneLayer[]; fore: SceneLayer[]; groups?: num
 export type SceneKey = {
   section: string
   rect: Rect
+  selectionRect?: Rect
   layers(pressed: boolean): SceneLayers
   holdPopup?: {
     candidates: string[]

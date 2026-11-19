@@ -210,11 +210,22 @@ export function refreshNativeScenes(draft?: SsfPackage): void {
   if (archive?.format === "ssf" && ssfScenes(archive, draft)) return
   for (const canvas of [preview, toolbarPreview, candidateBackgroundPreview]) canvas.setScene(undefined)
   preview.setPanelTopInset(0)
-  if (archive?.format !== "bdi" || !inputBarInKeyboard() || candidateArea.hidden) return
+  if ((archive?.format !== "bdi" && archive?.format !== "bds") || candidateArea.hidden) return
   const resolver = visualResolver()
+  if (!resolver) return
+  if (!inputBarInKeyboard()) {
+    // 百度 Android 13.3.18.31：无候选和有候选时均优先绘制 CAND 的 HL_IMG。
+    candidateBackgroundPreview.setScene(async () => {
+      const { panelStyle, panelWidth: width, panelHeight: height } = candidateBackgroundPreview
+      const visual = await resolver.resolve(panelStyle, true)
+      return { background: visual ? [{ kind: "image", visual, rect: { x: 0, y: 0, width, height } }] : [], keys: [] }
+    })
+    return
+  }
+  if (archive.format !== "bdi") return
   const path = toolbarConfigPath()
   const candidate = path && textDocument(path)
-  if (!resolver || !path || !candidate) return
+  if (!candidate) return
   const general = textDocument(genConfigPath())
   const width = preview.panelWidth
   const height = toolbarPreview.panelHeight

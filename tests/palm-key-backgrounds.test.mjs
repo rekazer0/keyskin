@@ -114,21 +114,24 @@ test('iPhone orientation tables resolve baked backgrounds and cached variants wi
   }
 })
 
-test('candidate background decorations scale with the bar in both orientations', () => {
-  const source = fixture()
-  for (const [orientation, width] of [['port', 100], ['land', 200]]) {
-    source.setText(`light/skin/${orientation}/gen.ini`, `[PANEL]\nSIZE=${width},100\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,${width},20\nPADDING=0,4,0,0\n`)
-    source.setText(`light/skin/${orientation}/cand1.cnd`, '[CAND]\nBACK_STYLE=1\n')
-  }
-  const archive = SkinArchive.open(buildSxiZip(source).bytes, 'sxi')
-  const skin = JSON.parse(archive.getText('skin.json')).default
-  for (const [orientation, width] of [['port', 100], ['land', 200]]) {
-    const candidate = skin[`${orientation}_layout`].c.cand1
-    const { tile, png } = image(skin, archive, candidate.b.base_b, 'normal')
-    assert.deepEqual(tile.rect1, [[0, 0], [width, 16]], 'input-code inset is excluded from the background height')
-    assert.equal(tile.rect2, undefined)
-    assert.deepEqual([png.width, png.height], [width, 16])
-    assert.deepEqual([...png.data.slice((8 * width + 1) * 4, (8 * width + 2) * 4)], [40, 80, 120, 255], 'edge decoration retains its design size')
+test('candidate background decorations keep their dimensions and the source platform’s image', () => {
+  for (const [platform, color] of [['I', [40, 80, 120, 255]], ['A', [120, 80, 40, 255]]]) {
+    const source = fixture()
+    source.setText('Info.txt', `Name=Background regression\nSupportPlatform=${platform}\n`)
+    for (const [orientation, width] of [['port', 100], ['land', 200]]) {
+      source.setText(`light/skin/${orientation}/gen.ini`, `[PANEL]\nSIZE=${width},100\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,${width},20\nPADDING=0,4,0,0\n`)
+      source.setText(`light/skin/${orientation}/cand1.cnd`, '[CAND]\nBACK_STYLE=1\n')
+    }
+    const archive = SkinArchive.open(buildSxiZip(source).bytes, 'sxi')
+    const skin = JSON.parse(archive.getText('skin.json')).default
+    for (const [orientation, width] of [['port', 100], ['land', 200]]) {
+      const candidate = skin[`${orientation}_layout`].c.cand1
+      const { tile, png } = image(skin, archive, candidate.b.base_b, 'normal')
+      assert.deepEqual(tile.rect1, [[0, 0], [width, 16]], 'input-code inset is excluded from the background height')
+      assert.equal(tile.rect2, undefined)
+      assert.deepEqual([png.width, png.height], [width, 16])
+      assert.deepEqual([...png.data.slice((8 * width + 1) * 4, (8 * width + 2) * 4)], color, 'edge decoration retains its design size')
+    }
   }
 })
 
