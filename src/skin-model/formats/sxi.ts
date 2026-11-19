@@ -6,7 +6,7 @@ import type { CandidateBar, HintBubble, ListPanel, PanelBackdrop, SkinBoard, Too
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import type { LayoutBox } from "@/skin-model/layout.ts"
-import type { SkinKey } from "@/skin-model/key.ts"
+import type { KeyContainer, SkinKey } from "@/skin-model/key.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { emptyModel } from "@/skin-model/model.ts"
 import type { SkinAction, KeyEvent } from "@/skin-model/types.ts"
@@ -80,11 +80,15 @@ function numberField(record: JsonObject, field: string): string | undefined {
 }
 
 /** 手心按键的样式是数字索引，IR 里直接用索引的字符串形式引用。 */
-function keyStyle(record: JsonObject): SkinKey["style"] {
+function keyStyle(record: JsonObject): KeyContainer {
+  const back = numberField(record, "i_b")
+  const pressed = numberField(record, "i_hb")
+  const fore = numberField(record, "i_f")
   return {
-    ...(numberField(record, "i_b") ? { back: numberField(record, "i_b") } : {}),
-    ...(numberField(record, "i_hb") ? { pressedBack: numberField(record, "i_hb") } : {}),
-    fore: [numberField(record, "i_f")].filter((value): value is string => Boolean(value)),
+    ...(back || pressed
+      ? { back: { ...(back ? { style: back } : {}), ...(pressed ? { pressed } : {}) } }
+      : {}),
+    fore: fore ? [{ style: fore }] : [],
   }
 }
 
@@ -102,7 +106,7 @@ function keysOf(keyboard: JsonObject): Array<{ key: SkinKey; rect: LayoutBox }> 
         id,
         ...(hit ? { touchRect: hit } : {}),
         actions: actionsOf(record),
-        style: keyStyle(record),
+        container: keyStyle(record),
         ...(typeof record.fix_a === "string" ? { label: record.fix_a } : {}),
       },
       rect,
@@ -279,10 +283,17 @@ export async function sxiToModel(documents: SkinDocuments, hints: SxiReadHints):
   }
   model.resources = resources
   for (const each of keys) {
-    each.key.style = {
-      ...(each.key.style.back !== undefined ? { back: sxiStyleName(each.key.style.back) } : {}),
-      ...(each.key.style.pressedBack !== undefined ? { pressedBack: sxiStyleName(each.key.style.pressedBack) } : {}),
-      fore: each.key.style.fore.map((name) => sxiStyleName(name)),
+    const back = each.key.container.back
+    each.key.container = {
+      ...(back
+        ? {
+          back: {
+            ...(back.style !== undefined ? { style: sxiStyleName(back.style) } : {}),
+            ...(back.pressed !== undefined ? { pressed: sxiStyleName(back.pressed) } : {}),
+          },
+        }
+        : {}),
+      fore: each.key.container.fore.map((layer) => ({ ...layer, ...(layer.style ? { style: sxiStyleName(layer.style) } : {}) })),
     }
   }
   model.provenance = { format: "sxi", nodes: new Map(keys.map((each) => [each.key.id, { path: SXI_SKIN_PATH }])) }
@@ -356,9 +367,9 @@ async function sxiFromModel(model: SkinModel): Promise<SkinDocuments> {
         rect: [[rect.position.x, rect.position.y], [rect.size.width, rect.size.height]],
         ...(key.touchRect ? { hit_rect: [[key.touchRect.position.x, key.touchRect.position.y], [key.touchRect.size.width, key.touchRect.size.height]] } : {}),
         ...(valuesOf(key).length ? { values: valuesOf(key) } : {}),
-        ...(keyOf(key.style.back) !== undefined ? { i_b: Number(keyOf(key.style.back)) } : {}),
-        ...(keyOf(key.style.pressedBack) !== undefined ? { i_hb: Number(keyOf(key.style.pressedBack)) } : {}),
-        ...(key.style.fore.length ? { i_f: Number(keyOf(key.style.fore[0])) } : {}),
+        ...(keyOf(key.container.back?.style) !== undefined ? { i_b: Number(keyOf(key.container.back?.style)) } : {}),
+        ...(keyOf(key.container.back?.pressed) !== undefined ? { i_hb: Number(keyOf(key.container.back?.pressed)) } : {}),
+        ...(key.container.fore.length ? { i_f: Number(keyOf(key.container.fore[0].style)) } : {}),
       }
     })
   }

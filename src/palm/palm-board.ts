@@ -88,6 +88,7 @@ function item(section: string, rect: Rect, base: PalmBase, owner: JsonObject, ac
     right: act.RIGHT ?? "",
     hold: act.HOLD ?? "",
     holdSymbols: act.HOLDSYM ?? "",
+    info: act.INFO ?? "",
     backStyle: text(base.back),
     foreStyle: text(base.fores[0]),
     foreStyles: base.fores.map(text),

@@ -29,7 +29,7 @@ test("样式引用不存在的图片时报错", async () => {
 
 test("按键引用不存在的样式时报错", async () => {
   const model = await bdsModel()
-  model.boards[0].keys[0].style.back = "不存在"
+  model.boards[0].keys[0].container = { ...model.boards[0].keys[0].container, back: { style: "不存在" } }
   const report = validateModel(model)
   assert.ok(report.issues.some((issue) => issue.code === "missing-style" && issue.subject.includes("KEY1")))
 })

@@ -175,7 +175,9 @@ function applyLook(
         return referenced === section ? [section] : [section, referenced]
       })
       const back = candidates.map(lookOf).find(Boolean)
-      if (back) key.style.back = back
+      if (back) {
+        key.container = { ...key.container, back: { ...key.container.back, style: back } }
+      }
       const fore = binding.sections.flatMap((section) => {
         const referenced = imageSectionName(fieldOf(skin, keyDocument, section, "FG_IMAGES"))
         if (!referenced) return []
@@ -187,7 +189,9 @@ function applyLook(
         }
         return [name]
       })
-      if (fore.length) key.style.fore = fore
+      if (fore.length) {
+        key.container = { ...key.container, fore: fore.map((style) => ({ style })) }
+      }
     }
   }
   model.styles = styles

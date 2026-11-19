@@ -17,9 +17,8 @@ function model() {
     layout: absoluteBoard([{ id: "k", ...box(10, 10, 100, 50) }]),
     keys: [{
       id: "k",
-      rect: box(10, 10, 100, 50),
       actions: { press: { kind: "text", value: "a" } },
-      style: { back: "1", fore: ["2"] },
+      container: { back: { style: "1" }, fore: [{ style: "2" }] },
     }],
   })
   result.styles.set("1", { normal: [{ kind: "image", file: "bg" }] })

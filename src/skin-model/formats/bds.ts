@@ -398,9 +398,19 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[], name
     }
     // 样式引用要经过同一张名表，否则键会指向不存在的段。
     const styleName = (id: string): string => names?.get(id) ?? id
-    if (key.style.back) lines.push(`BACK_STYLE=${styleName(key.style.back)}`)
-    if (key.style.pressedBack) lines.push(`HL_BACK_STYLE=${styleName(key.style.pressedBack)}`)
-    if (key.style.fore.length) lines.push(`FORE_STYLE=${key.style.fore.map(styleName).join(",")}`)
+    const container = key.container
+    if (container.back?.style) lines.push(`BACK_STYLE=${styleName(container.back.style)}`)
+    if (container.back?.pressed) lines.push(`HL_BACK_STYLE=${styleName(container.back.pressed)}`)
+    if (container.fore.length) lines.push(`FORE_STYLE=${container.fore.map((layer) => (layer.style ? styleName(layer.style) : "")).join(",")}`)
+    if (container.back?.anim) lines.push(`BACK_ANIM_STYLE=${styleName(container.back.anim)}`)
+    // 前景动画与偏移按层写，空位保留：层数由逗号分隔的空位决定。
+    if (container.fore.some((layer) => layer.anim)) {
+      lines.push(`FORE_ANIM_STYLE=${container.fore.map((layer) => (layer.anim ? styleName(layer.anim) : "")).join(",")}`)
+    }
+    if (container.fore.some((layer) => layer.offset)) {
+      lines.push(`FORE_OFFSET=${container.fore.map((layer) => (layer.offset ? `${layer.offset.x},${layer.offset.y}` : "")).join(";")}`)
+    }
+    if (container.press) lines.push(`PRESS_STYLE=${styleName(container.press)}`)
     if (key.sound) lines.push(`SOUND_STYLE=${key.sound}`)
     // 按键自身的动效引用：一张表里按键 id → 动效 id。
     const motions = Object.entries(key.motions ?? {}).flatMap(([slot, id]) => (id ? [`${slot.toUpperCase()}_ANIM=${id}`] : []))
@@ -682,10 +692,32 @@ function keysOf(document: IniDocument, size: Size<number>): Array<{ key: SkinKey
         ? { labelPosition: item.positionTypes.map((value) => Number(value)) }
         : {}),
       actions,
-      style: {
-        ...(item.backStyle ? { back: item.backStyle } : {}),
-        ...(item.highlightBackStyle ? { pressedBack: item.highlightBackStyle } : {}),
-        fore: item.foreStyles,
+      // 按键自己的容器：背景一层、前景若干层（各带偏移与动画）、文字层。
+      container: {
+        ...(item.backStyle || item.highlightBackStyle || item.backAnimStyle
+          ? {
+            back: {
+              style: item.backStyle,
+              ...(item.highlightBackStyle ? { pressed: item.highlightBackStyle } : {}),
+              ...(item.backAnimStyle ? { anim: item.backAnimStyle } : {}),
+            },
+          }
+          : {}),
+        fore: item.foreStyles.map((styleName, index) => ({
+          style: styleName,
+          ...(item.foreOffsets[index] ? { offset: { x: item.foreOffsets[index]![0], y: item.foreOffsets[index]![1] } } : {}),
+          ...(item.foreAnimStyles[index] ? { anim: item.foreAnimStyles[index] } : {}),
+        })),
+        ...(item.show || item.positionTypes.length
+          ? {
+            text: {
+              ...(item.show ? { content: item.show } : {}),
+              ...(item.positionTypes.length ? { placement: item.positionTypes.map((value) => Number(value)) } : {}),
+            },
+          }
+          : {}),
+        ...(item.animStyle ? { press: item.animStyle } : {}),
+        ...(item.pressStyle ? { press: item.pressStyle } : {}),
       },
       ...(refs.length ? { stateRefs: refs } : {}),
       },

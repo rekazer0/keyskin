@@ -3,7 +3,7 @@
 // 编辑器最终要改模型而不是直接改 INI。这一层只做「输入旧模型与改动，输出新模型」，
 // 不碰归档、不碰撤销栈，便于测试，也让每种格式共用同一套编辑语义。
 import type { SkinBoard } from "./board.ts"
-import type { SkinKey, KeyStyleRefs } from "./key.ts"
+import type { KeyContainer, SkinKey } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
 import type { KeyEvent, SkinAction, SkinMeta } from "./types.ts"
@@ -40,11 +40,13 @@ export function findKey(model: SkinModel, boardId: string, keyId: string): { boa
 }
 
 export type KeyPatch = {
+  /** 几何补丁；几何只落在布局树上，按键本身不带矩形。 */
   rect?: LayoutBox
   touchRect?: LayoutBox | null
   /** 内边距；传 null 表示清掉。 */
   padding?: Rect<number> | null
-  style?: Partial<KeyStyleRefs>
+  /** 层定义补丁；传整个容器表示整层替换。 */
+  container?: KeyContainer
   actions?: Partial<Record<KeyEvent, SkinAction | null>>
 }
 
@@ -60,20 +62,14 @@ export function patchKey(model: SkinModel, boardId: string, keyId: string, patch
     else actions[event] = action
   }
 
-  const style: KeyStyleRefs = {
-    ...key.style,
-    ...(patch.style ?? {}),
-    // 前景层是数组，整体替换而不是合并，避免残留旧层。
-    ...(patch.style?.fore ? { fore: [...patch.style.fore] } : {}),
-  }
+  const container: KeyContainer = patch.container ?? key.container
 
   const next: SkinKey = {
     ...key,
-    ...(patch.rect ? { rect: patch.rect } : {}),
     ...(patch.touchRect === null ? { touchRect: undefined } : patch.touchRect ? { touchRect: patch.touchRect } : {}),
     ...(patch.padding === null ? { padding: undefined } : patch.padding ? { padding: patch.padding } : {}),
     actions,
-    style,
+    container,
   }
   // 几何有两份：按键上的矩形与布局树里的节点。只改一份的话，写回时用的是旧节点算出的位置。
   const layout = patch.rect ? setNodeRect(board.layout, keyId, patch.rect) : board.layout
@@ -106,19 +102,12 @@ export function moveKey(model: SkinModel, boardId: string, keyId: string, rect: 
   }
 }
 
-/** 改按键的样式引用；传 null 表示清掉该槽位。 */
-export function setKeyStyle(model: SkinModel, boardId: string, keyId: string, style: Partial<Record<keyof KeyStyleRefs, string | null>>): SkinModel {
-  const patch: Partial<KeyStyleRefs> = {}
-  for (const [slot, value] of Object.entries(style)) {
-    if (slot === "fore") {
-      // 清空前景就是给一个空列表；非空时由调用方直接传整个数组。
-      if (value === null) patch.fore = []
-      continue
-    }
-    // 传 null 表示清掉这个槽位，必须真的写成 undefined，否则旧引用会留下。
-    ;(patch as Record<string, string | undefined>)[slot] = value === null ? undefined : value
-  }
-  return patchKey(model, boardId, keyId, { style: patch })
+/**
+ * 改按键容器里的层引用；传 null 表示清掉该层。
+ * 这是对容器各槽位的编辑入口，不再暴露扁平的样式键。
+ */
+export function setKeyContainer(model: SkinModel, boardId: string, keyId: string, next: KeyContainer): SkinModel {
+  return patchKey(model, boardId, keyId, { container: next })
 }
 
 /** 给按键绑定一个事件的动作；传 null 解除。 */
@@ -156,19 +145,26 @@ export function removeStyle(model: SkinModel, styleId: string): SkinModel {
   const boards = model.boards.map((board) => ({
     ...board,
     keys: board.keys.map((key) => {
-      const style = key.style
-      const fore = style.fore.filter((item) => item !== styleId)
-      if (style.back !== styleId && style.pressedBack !== styleId && style.text !== styleId && style.icon !== styleId && fore.length === style.fore.length) {
+      const container = key.container
+      const fore = container.fore.filter((layer) => layer.style !== styleId && layer.anim !== styleId)
+      const back = container.back && (container.back.style === styleId || container.back.pressed === styleId || container.back.anim === styleId)
+        ? undefined
+        : container.back
+      const text = container.text?.style === styleId ? undefined : container.text
+      const icon = container.icon === styleId ? undefined : container.icon
+      const press = container.press === styleId ? undefined : container.press
+      // 这个样式没被这一层引用，保持原样。
+      if (back === container.back && text === container.text && icon === container.icon && press === container.press && fore.length === container.fore.length) {
         return key
       }
       return {
         ...key,
-        style: {
+        container: {
+          ...(back ? { back } : {}),
           fore,
-          ...(style.back === styleId ? {} : { back: style.back }),
-          ...(style.pressedBack === styleId ? {} : { pressedBack: style.pressedBack }),
-          ...(style.text === styleId ? {} : { text: style.text }),
-          ...(style.icon === styleId ? {} : { icon: style.icon }),
+          ...(text ? { text } : {}),
+          ...(icon ? { icon } : {}),
+          ...(press ? { press } : {}),
         },
       }
     }),

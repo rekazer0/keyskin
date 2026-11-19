@@ -18,16 +18,16 @@ export type KeyRender = {
   layers: SkinLayer[]
 }
 
-/** 一块板的按键渲染数据；矩形来自布局树，图层来自样式引用。 */
+/** 一块板的按键渲染数据；矩形来自布局树，图层来自按键容器各自的层。 */
 export async function buildBoard(model: SkinModel, board: SkinBoard): Promise<KeyRender[]> {
   const rects = await computeLayout(board.layout, board.size)
   return board.keys.flatMap((key) => {
     const rect = rects.get(key.id)
     // 布局树里没有这个键就没有几何；不给兜底值，缺了就是缺了。
     if (!rect) return []
-    const back = resolveStyle(model.styles, key.style.back)
-    const fore = key.style.fore.flatMap((ref) => {
-      const style = resolveStyle(model.styles, ref)
+    const back = resolveStyle(model.styles, key.container.back?.style)
+    const fore = key.container.fore.flatMap((layer) => {
+      const style = resolveStyle(model.styles, layer.style)
       return style ? [style] : []
     })
     const layers = [...(back?.normal ?? []), ...fore.flatMap((style) => style.normal)]

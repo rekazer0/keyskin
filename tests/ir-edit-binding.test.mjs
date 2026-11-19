@@ -61,15 +61,15 @@ test("手势字段绑定动作，空值解除", async () => {
 test("样式字段改引用，空值清掉", async () => {
   const before = await model()
   const changed = applyFieldChange(before, { boardId: BOARD, keyId: "KEY1", field: "style.back", value: "7" })
-  assert.equal(findKey(changed, BOARD, "KEY1").key.style.back, "7")
+  assert.equal(findKey(changed, BOARD, "KEY1").key.container.back?.style, "7")
   const cleared = applyFieldChange(changed, { boardId: BOARD, keyId: "KEY1", field: "style.back", value: "" })
-  assert.equal(findKey(cleared, BOARD, "KEY1").key.style.back, undefined)
+  assert.equal(findKey(cleared, BOARD, "KEY1").key.container.back?.style, undefined)
 })
 
 test("前景槽位整体替换", async () => {
   const before = await model()
   const after = applyFieldChange(before, { boardId: BOARD, keyId: "KEY1", field: "style.fore.0", value: "9" })
-  assert.deepEqual(findKey(after, BOARD, "KEY1").key.style.fore, ["9"])
+  assert.deepEqual(findKey(after, BOARD, "KEY1").key.container.fore.map((layer) => layer.style), ["9"])
 })
 
 test("非法值不改模型", async () => {
@@ -130,7 +130,7 @@ test("改过的样式引用写回归档后能读回", async () => {
   assert.ok(opened.ok)
   const boardId = opened.model.boards[0].id
   const keyId = opened.model.boards[0].keys[0].id
-  const original = findKey(opened.model, boardId, keyId).key.style.back
+  const original = findKey(opened.model, boardId, keyId).key.container.back?.style
   const other = [...opened.model.styles.keys()].find((id) => id !== original)
   assert.ok(other, "夹具里应当有第二个样式")
   const edited = applyFieldChange(opened.model, { boardId, keyId, field: "style.back", value: other })
@@ -138,5 +138,5 @@ test("改过的样式引用写回归档后能读回", async () => {
   assert.ok(saved.ok)
   const again = await openSession(SkinArchive.open(saved.bytes, "bds"))
   assert.ok(again.ok)
-  assert.equal(findKey(again.model, boardId, keyId).key.style.back, other, "样式引用改动没有落盘")
+  assert.equal(findKey(again.model, boardId, keyId).key.container.back?.style, other, "样式引用改动没有落盘")
 })

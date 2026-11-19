@@ -71,11 +71,10 @@ export function tipBodyOf(document: IniDocument, section: number, options: TipRe
     ...(Object.keys(actions).length ? { actions } : {}),
     ...(back || pressed || fore || text
       ? {
-        style: {
-          ...(back ? { back } : {}),
-          ...(pressed ? { pressedBack: pressed } : {}),
-          ...(fore ? { fore: fore.split(",").map((item) => item.trim()).filter(Boolean) } : {}),
-          ...(text ? { text } : {}),
+        container: {
+          ...(back || pressed ? { back: { style: back ?? "", ...(pressed ? { pressed } : {}) } } : {}),
+          fore: fore ? fore.split(",").map((item) => item.trim()).filter(Boolean).map((style) => ({ style })) : [],
+          ...(text ? { text: { style: text } } : {}),
         },
       }
       : {}),
@@ -118,11 +117,11 @@ export function tipRefsOf(overrides: readonly KeyStateOverride[] | undefined): T
 /** 一个状态覆盖写成 `[TIPn]` 段的行；没有可写内容时返回空数组。 */
 export function tipLines(override: TipBody, section: number, actionValue: (action: SkinAction | undefined) => string | undefined): string[] {
   const lines = [`[TIP${section}]`]
-  const style = override.style
-  if (style?.back) lines.push(`BACK_STYLE=${style.back}`)
-  if (style?.pressedBack) lines.push(`HL_BACK_STYLE=${style.pressedBack}`)
-  if (style?.fore?.length) lines.push(`FORE_STYLE=${style.fore.join(",")}`)
-  if (style?.text) lines.push(`SHOW=${style.text}`)
+  const container = override.container
+  if (container?.back?.style) lines.push(`BACK_STYLE=${container.back.style}`)
+  if (container?.back?.pressed) lines.push(`HL_BACK_STYLE=${container.back.pressed}`)
+  if (container?.fore?.length) lines.push(`FORE_STYLE=${container.fore.map((layer) => layer.style).join(",")}`)
+  if (container?.text?.style) lines.push(`SHOW=${container.text.style}`)
   if (override.labelPosition?.length) lines.push(`POS_TYPE=${override.labelPosition.join(",")}`)
   if (override.holdSymbol) lines.push(`HOLDSYM=${override.holdSymbol}`)
   if (override.info) lines.push(`INFO=${override.info}`)

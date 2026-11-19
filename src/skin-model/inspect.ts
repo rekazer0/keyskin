@@ -109,15 +109,15 @@ export function keyActions(model: SkinModel, boardId: string, keyId: string): Pr
 export function keyStyleRefs(model: SkinModel, boardId: string, keyId: string): PropertyView[] {
   const found = findKey(model, boardId, keyId)
   if (!found) return []
-  const style = found.key.style
+  const container = found.key.container
   const views = [
-    styleView("style.back", "背景", style.back),
-    styleView("style.pressedBack", "按下背景", style.pressedBack),
+    styleView("style.back", "背景", container.back?.style),
+    styleView("style.pressedBack", "按下背景", container.back?.pressed),
   ]
-  style.fore.forEach((item, index) => views.push(styleView(`style.fore.${index}`, `前景 ${index + 1}`, item)))
-  if (!style.fore.length) views.push({ key: "style.fore", label: "前景", kind: "style" })
-  if (style.text) views.push(styleView("style.text", "文字", style.text))
-  if (style.icon) views.push(styleView("style.icon", "图标", style.icon))
+  container.fore.forEach((layer, index) => views.push(styleView(`style.fore.${index}`, `前景 ${index + 1}`, layer.style)))
+  if (!container.fore.length) views.push({ key: "style.fore", label: "前景", kind: "style" })
+  if (container.text?.style) views.push(styleView("style.text", "文字", container.text.style))
+  if (container.icon) views.push(styleView("style.icon", "图标", container.icon))
   return views
 }
 
@@ -136,7 +136,7 @@ export function keyStates(model: SkinModel, boardId: string, keyId: string): Pro
       label: `状态 ${ref.state}`,
       kind: "readonly" as const,
       value: [
-        override.style?.back ? `背景 ${override.style.back}` : "",
+        override.container?.back?.style ? `背景 ${override.container.back.style}` : "",
         actionText(override.actions?.press) ?? "",
       ].filter(Boolean).join(" · "),
       note: "皮肤状态下的另一套样式",

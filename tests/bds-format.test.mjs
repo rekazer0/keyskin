@@ -28,8 +28,8 @@ test("BDS 转换器读出完整模型", async () => {
   const key = board.keys[0]
   assert.deepEqual(rectOf(await rectOfKey(model, board.id, key.id)), { x: 10, y: 0, width: 100, height: 120 })
   assert.deepEqual(key.actions.press, { kind: "text", value: "q" })
-  assert.equal(key.style.back, "2")
-  assert.deepEqual(key.style.fore, ["3", "4"])
+  assert.equal(key.container.back?.style, "2")
+  assert.deepEqual(key.container.fore.map((layer) => layer.style), ["3", "4"])
   assert.ok(model.styles.size > 0)
   assert.equal(model.resources.get("click.wav")?.kind, "audio")
   assert.equal(model.motions.get("ANIM1").root.kind, "track")
@@ -46,7 +46,7 @@ test("重建后重新读出保持一致", async () => {
   const key = again.boards[0].keys.find((item) => item.id === "KEY2")
   assert.ok(key)
   assert.deepEqual(rectOf(await rectOfKey(again, again.boards[0].id, "KEY2")), { x: 300, y: 5, width: 100, height: 120 })
-  assert.equal(again.boards[0].keys[0].style.back, "2")
+  assert.equal(again.boards[0].keys[0].container.back?.style, "2")
 })
 
 test("重建把用到的图片重新打包成一张图集", async () => {

@@ -1,11 +1,10 @@
 // 字段改动 → 模型操作。
 //
 // 检查器把改后的值交回来时，要按字段归属分派到对应的编辑操作：几何走 `moveKey`，
-// 样式引用走 `setKeyStyle`，动作走 `setKeyAction`。分派规则只在这里定义一次，
+// 容器各层走 `setKeyContainer`，动作走 `setKeyAction`。分派规则只在这里定义一次，
 // 界面不必知道每种字段该怎么改模型。
-import { setKeyAction, setKeyStyle, patchKey } from "./edit.ts"
+import { setKeyAction, setKeyContainer, patchKey, findKey } from "./edit.ts"
 import { actionText } from "./inspect.ts"
-import type { SkinKey } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinAction, KeyEvent } from "./types.ts"
 import type { LayoutBox } from "./layout.ts"
@@ -22,8 +21,8 @@ const EVENTS: Readonly<Record<string, KeyEvent>> = {
   "action.swipe-right": "swipe-right",
 }
 
-/** 样式槽位字段名到引用槽位。 */
-const STYLE_SLOTS: Readonly<Record<string, keyof SkinKey["style"]>> = {
+/** 样式槽位字段名到容器里的槽位。 */
+const STYLE_SLOTS: Readonly<Record<string, "back" | "pressedBack" | "text" | "icon" | "fore">> = {
   "style.back": "back",
   "style.pressedBack": "pressedBack",
   "style.text": "text",
@@ -80,9 +79,38 @@ export function applyFieldChange(model: SkinModel, change: FieldChange): SkinMod
 
   const slot = STYLE_SLOTS[field]
   if (slot) {
+    const found = findKey(model, boardId, keyId)
+    if (!found) return model
     const text = typeof value === "string" ? value.trim() : value === undefined ? "" : String(value)
-    if (slot === "fore") return patchKey(model, boardId, keyId, { style: { fore: text ? [text] : [] } })
-    return setKeyStyle(model, boardId, keyId, { [slot]: text || null })
+    const container = found.key.container
+    if (slot === "fore") {
+      // 前景是层栈；改它就是把整个栈换掉，不保留旧层。
+      return setKeyContainer(model, boardId, keyId, {
+        ...container,
+        fore: text ? [{ style: text }] : [],
+      })
+    }
+    if (slot === "back") {
+      return setKeyContainer(model, boardId, keyId, {
+        ...container,
+        back: text ? { ...container.back, style: text } : undefined,
+      })
+    }
+    if (slot === "pressedBack") {
+      return setKeyContainer(model, boardId, keyId, {
+        ...container,
+        back: text ? { ...container.back, style: container.back?.style ?? text, pressed: text } : { ...container.back, style: container.back?.style ?? "", pressed: undefined },
+      })
+    }
+    if (slot === "icon") {
+      return setKeyContainer(model, boardId, keyId, { ...container, ...(text ? { icon: text } : { icon: undefined }) })
+    }
+    return setKeyContainer(model, boardId, keyId, {
+      ...container,
+      text: text
+        ? { ...container.text, style: text }
+        : container.text ? { ...container.text, style: undefined } : undefined,
+    })
   }
 
   return moveGeometry(model, boardId, keyId, field, value)

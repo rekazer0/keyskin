@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard, setKeyAction, setKeyStyle, setBoardBackdrop, setMeta, setStyle } from "../src/skin-model/edit.ts"
+import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard, setKeyAction, setKeyContainer, setBoardBackdrop, setMeta, setStyle } from "../src/skin-model/edit.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { validateModel } from "../src/skin-model/validate.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
@@ -23,10 +23,11 @@ test("改按键矩形返回新模型，原模型不动", async () => {
   assert.deepEqual(await rectOfKey(before, BOARD, "KEY1"), original, "原模型被改了")
 })
 
-test("改样式引用与动作", async () => {
+test("改容器各层引用与动作", async () => {
   const before = await model()
-  const styled = setKeyStyle(before, BOARD, "KEY1", { back: "7", pressedBack: null })
-  assert.equal(findKey(styled, BOARD, "KEY1").key.style.back, "7")
+  const base = findKey(before, BOARD, "KEY1").key.container
+  const styled = setKeyContainer(before, BOARD, "KEY1", { ...base, back: { style: "7" } })
+  assert.equal(findKey(styled, BOARD, "KEY1").key.container.back?.style, "7")
   const actioned = setKeyAction(styled, BOARD, "KEY1", "long-press", { kind: "delete" })
   assert.deepEqual(findKey(actioned, BOARD, "KEY1").key.actions["long-press"], { kind: "delete" })
   const cleared = setKeyAction(actioned, BOARD, "KEY1", "long-press", null)
@@ -35,8 +36,9 @@ test("改样式引用与动作", async () => {
 
 test("前景层整体替换，不残留旧层", async () => {
   const before = await model()
-  const after = patchKey(before, BOARD, "KEY1", { style: { fore: ["9"] } })
-  assert.deepEqual(findKey(after, BOARD, "KEY1").key.style.fore, ["9"])
+  const base = findKey(before, BOARD, "KEY1").key.container
+  const after = patchKey(before, BOARD, "KEY1", { container: { ...base, fore: [{ style: "9" }] } })
+  assert.deepEqual(findKey(after, BOARD, "KEY1").key.container.fore.map((layer) => layer.style), ["9"])
 })
 
 test("增删按键", async () => {
@@ -51,11 +53,11 @@ test("增删按键", async () => {
 
 test("删样式会清掉按键与动效上的引用", async () => {
   const before = await model()
-  const styleId = findKey(before, BOARD, "KEY1").key.style.back
+  const styleId = findKey(before, BOARD, "KEY1").key.container.back?.style
   assert.ok(styleId)
   const after = removeStyle(before, BOARD === "" ? "" : styleId)
   assert.equal(after.styles.has(styleId), false)
-  assert.notEqual(findKey(after, BOARD, "KEY1").key.style.back, styleId)
+  assert.notEqual(findKey(after, BOARD, "KEY1").key.container.back?.style, styleId)
   const report = validateModel(after)
   assert.ok(!report.issues.some((issue) => issue.code === "missing-style"), "删样式后仍有悬空引用")
 })

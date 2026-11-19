@@ -4,6 +4,7 @@ import { DEFAULT_PANEL_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { snapPointToRects } from "./layout.ts"
 import type { BdaAnimation } from "./bda.ts"
 import { type PreviewItem, type Rect, previewItems, visiblePreviewItems, previewSurfaceHeight, effectivePreviewHitItem, previewHitItem } from "./preview-items.ts"
+import type { SkinBoard } from "./skin-model/board.ts"
 import { type LegacyAnimation } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
@@ -32,6 +33,8 @@ export class Preview {
   readonly toolbarSlots: boolean
   readonly hintCanvas?: HTMLCanvasElement
   document?: IniDocument
+  /** 画布上的按键矩形只能来自这块板的布局树，`VIEW_RECT` 不参与渲染。 */
+  board?: SkinBoard
   private defaults?: IniDocument
   offsets?: IniDocument
   resolver?: VisualResolver

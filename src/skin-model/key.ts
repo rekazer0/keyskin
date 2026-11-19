@@ -2,18 +2,47 @@
 //
 // 按键不携带几何：矩形只由所属板的布局树算出（computeLayout(board.layout)）。
 // 同一份几何只有一处表达，视图、命中、导出都从布局树取。
-import type { Rect } from "taffy-layout"
+import type { Point, Rect } from "taffy-layout"
 import type { BoardKind, KeyEvent, MotionSlot, SkinAction } from "./types.ts"
 import type { LayoutBox } from "./layout.ts"
 import type { SkinStyle } from "./style.ts"
 
 /** 按键的样式引用：背景、按下背景、前景层、文字与图标。 */
-export type KeyStyleRefs = {
-  back?: string
-  pressedBack?: string
-  fore: string[]
-  text?: string
+/**
+ * 按键内部的一层；它自持样式、偏移与动画，渲染时不需要外部再拼。
+ * 前景是层栈，背景与图标各一层。
+ */
+export type KeyLayer = {
+  /** 样式表里的样式名；按下时才画出来的层可以没有常态样式。 */
+  style?: string
+  /** 相对按键的偏移；空位表示这一层不偏移。 */
+  offset?: Point<number>
+  /** 这一层自己的动画样式。 */
+  anim?: string
+  /** 按下时的样式；只有背景层用它。 */
+  pressed?: string
+}
+
+/**
+ * 按键容器：按键是一个终点组件，外部只知道它占哪块矩形，
+ * 内部各层由它自己按顺序画。
+ */
+export type KeyContainer = {
+  /** 背景层（最底）。 */
+  back?: KeyLayer
+  /** 前景层栈，从下到上。 */
+  fore: KeyLayer[]
+  /** 文字层：显示什么、什么样式、放在哪。 */
+  text?: {
+    content?: string
+    style?: string
+    /** 放置类型，原文件给几个就带回几个。 */
+    placement?: readonly number[]
+  }
+  /** 图标层。 */
   icon?: string
+  /** 按下时整键的效果样式。 */
+  press?: string
 }
 
 /** 某个皮肤状态下的按键差异（显示/动作/样式覆盖）。 */
@@ -27,7 +56,8 @@ export type KeyStateOverride = TipBody & {
 export type TipBody = {
   visible?: boolean
   actions?: Partial<Record<KeyEvent, SkinAction>>
-  style?: Partial<KeyStyleRefs>
+  /** 这个状态下的一套层定义；缺的层沿用按键默认。 */
+  container?: Partial<KeyContainer>
   /** 这个状态下的标签放置类型。 */
   labelPosition?: readonly number[]
   /** 这个状态下的长按符号串。 */
@@ -52,7 +82,8 @@ export type SkinKey = {
   padding?: Rect<number>
   /** 默认状态下的动作。 */
   actions: Partial<Record<KeyEvent, SkinAction>>
-  style: KeyStyleRefs
+  /** 按键容器：它自己知道内部有几层、每层怎么画。 */
+  container: KeyContainer
   motions?: Partial<Record<MotionSlot, string>>
   sound?: string
   label?: string
@@ -74,11 +105,19 @@ export function keyEditable(key: SkinKey, boardKind: BoardKind, geometry: "docum
   return boardKind !== "candidate" && boardKind !== "toolbar"
 }
 
-/** 按键样式引用里实际存在的 id，按 id 去重。 */
+/** 按键容器里所有层的样式引用，按 id 去重。 */
 export function styleReferences(key: SkinKey): string[] {
-  return [key.style.back, key.style.pressedBack, key.style.text, key.style.icon, ...key.style.fore]
-    .filter((id): id is string => Boolean(id))
-    .filter((id, index, all) => all.indexOf(id) === index)
+  const ids = [
+    key.container.back?.style,
+    key.container.back?.pressed,
+    key.container.text?.style,
+    key.container.icon,
+    ...key.container.fore.map((layer) => layer.style),
+    ...key.container.fore.map((layer) => layer.anim),
+    key.container.back?.anim,
+    key.container.press,
+  ]
+  return ids.filter((id): id is string => Boolean(id)).filter((id, index, all) => all.indexOf(id) === index)
 }
 
 /** 按键引用的样式在模型样式表里解析；缺失的引用直接省略。 */

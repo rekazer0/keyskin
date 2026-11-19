@@ -273,9 +273,9 @@ function panelsFromModel(model: SkinModel): Map<string, BdaPanel> {
     for (const key of board.keys) {
       const name = panelKeyNameOf(key)
       if (!name) continue
-      const back = refOfStyleName(key.style.back)
-      const pressed = refOfStyleName(key.style.pressedBack)
-      const foreStyles = key.style.fore.map((item) => refOfStyleName(item)).filter((item): item is BdaStyleRef => Boolean(item))
+      const back = refOfStyleName(key.container.back?.style)
+      const pressed = refOfStyleName(key.container.back?.pressed)
+      const foreStyles = key.container.fore.map((layer) => refOfStyleName(layer.style)).filter((item): item is BdaStyleRef => Boolean(item))
       keys.set(name, {
         ...(back ? { backStyle: back } : {}),
         foreStyles,
@@ -354,14 +354,20 @@ export async function bdaToModel(
     for (const key of board.keys) {
       const action = actionValue(key.actions.press)
       const entry = action && panel ? panel.keys.get(bdaPanelKeyName(action)) : undefined
-      // 外观里没有这个按键时清空样式：骨架的 INI 编号在 BDA 里不指向任何外观样式。
-      key.style = entry
+      // 外观里没有这个按键时清空容器：骨架的 INI 编号在 BDA 里不指向任何外观样式。
+      key.container = entry
         ? {
-          ...(entry.backStyle ? { back: bdaStyleName(entry.backStyle) } : {}),
-          ...(entry.backStyleState ? { pressedBack: bdaStyleName(entry.backStyleState) } : {}),
+          ...(entry.backStyle || entry.backStyleState
+            ? {
+              back: {
+                ...(entry.backStyle ? { style: bdaStyleName(entry.backStyle)! } : {}),
+                ...(entry.backStyleState ? { pressed: bdaStyleName(entry.backStyleState) } : {}),
+              },
+            }
+            : {}),
           fore: entry.foreStyles.flatMap((ref) => {
             const name = bdaStyleName(ref)
-            return name ? [name] : []
+            return name ? [{ style: name }] : []
           }),
         }
         : { fore: [] }

@@ -32,7 +32,7 @@ function keySignature(key: SkinKey): string {
     touchRect: key.touchRect ?? null,
     padding: key.padding ?? null,
     actions: key.actions,
-    style: key.style,
+    container: key.container,
     motions: key.motions ?? null,
     sound: key.sound ?? null,
     label: key.label ?? null,

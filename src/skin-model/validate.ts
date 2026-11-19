@@ -83,13 +83,13 @@ export function validateModel(model: SkinModel): ValidationReport {
     for (const key of board.keys) {
       if (seen.has(key.id)) add("error", "duplicate-id", `${board.id}/${key.id}`, "同一块板里键 id 重复")
       seen.add(key.id)
-      for (const [slot, style] of [["back", key.style.back], ["pressedBack", key.style.pressedBack]] as const) {
+      for (const [slot, style] of [["back", key.container.back?.style], ["pressedBack", key.container.back?.pressed]] as const) {
         if (style !== undefined && !knownStyles.has(style)) {
           add("error", "missing-style", `${board.id}/${key.id}`, `${slot} 引用的样式「${style}」不存在`)
         }
       }
-      for (const style of key.style.fore) {
-        if (!knownStyles.has(style)) add("error", "missing-style", `${board.id}/${key.id}`, `前景样式「${style}」不存在`)
+      for (const layer of key.container.fore) {
+        if (layer.style && !knownStyles.has(layer.style)) add("error", "missing-style", `${board.id}/${key.id}`, `前景样式「${layer.style}」不存在`)
       }
       if (!Object.keys(key.actions).length) add("warning", "unknown-action", `${board.id}/${key.id}`, "按键没有任何动作")
     }

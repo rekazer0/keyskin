@@ -56,7 +56,7 @@ test("改动作算按键改动", async () => {
 
 test("删样式记成样式删除，同时按键改动", async () => {
   const before = await model()
-  const styleId = before.boards[0].keys[0].style.back
+  const styleId = before.boards[0].keys[0].container.back?.style
   const after = removeStyle(before, styleId)
   const diff = await diffModels(before, after)
   assert.deepEqual(diff.styles.removed, [styleId])
