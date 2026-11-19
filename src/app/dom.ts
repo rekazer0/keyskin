@@ -330,6 +330,13 @@ export const panelScaleSummary = $("#panel-scale-summary")
 
 export const quickInspector = $("#quick-inspector")
 export const inspectorSourceToggle = $<HTMLButtonElement>("#inspector-source-toggle")
+
+export const inspectorLayoutToggle = $<HTMLButtonElement>("#inspector-layout-toggle")
+
+/** 检查器顶部那条：对象名与往返按钮都在里面。它的显隐由脚本决定，不再由属性表单推断。 */
+export const paneHeading = $<HTMLElement>(".source > .pane-heading")
+
+export const layoutTree = $("#layout-tree")
 export const animationObjectHeading = $("#animation-object-heading")
 
 export const mobileInspectorGroups = $("#mobile-inspector-groups")

@@ -78,7 +78,7 @@ export const appState = {
   unsavedNew: false,
   assetURL: "",
   assetReturnPath: "",
-  inspectorTab: "properties" as "properties" | "source" | "ai",
+  inspectorTab: "properties" as "properties" | "source" | "layout" | "ai",
   sourceFindVisible: false,
   sourceSearchIndex: -1,
   sourceInputHighlightTimer: undefined as number | undefined,
