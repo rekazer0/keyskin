@@ -16,6 +16,7 @@ import { paintMarquee } from "./paint/marquee.ts"
 import { paintHintBubble } from "./paint/hint.ts"
 import { paintKey, type KeyAnimationState, type KeyPaintEnv } from "./paint/key.ts"
 import { paintParticles } from "./paint/particles.ts"
+import { strokeDraft, strokeSelected } from "./paint/selection.ts"
 import { previewSelectionVisible } from "./preview-items.ts"
 import { bdaTransforms } from "./preview-animation.ts"
 import { legacyAnimationScale } from "./preview-animation.ts"
@@ -357,23 +358,9 @@ function beginCanvas(self: Preview): CanvasRenderingContext2D | undefined {
 function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: PreviewItem): void {
   if (previewSelectionVisible(self.mode, !self.joinedSelection && self.itemSelected(key))) {
     const flash = self.mode === "edit" && self.keyPressed(key)
-    context.strokeStyle = getComputedStyle(self.canvas).getPropertyValue(flash || self.toolbarSlots ? "--selection" : "--guide-selected").trim()
-    context.lineWidth = 4
-    context.strokeRect(key.rect.x + 2, key.rect.y + 2, key.rect.width - 4, key.rect.height - 4)
+    strokeSelected(context, key.rect, () => getComputedStyle(self.canvas).getPropertyValue(flash || self.toolbarSlots ? "--selection" : "--guide-selected").trim())
   } else if (self.mode === "edit" && self.itemDrafted(key)) {
-    // Unconfirmed AI draft: dashed orange, distinct from any solid selection.
-    const inset = 3
-    context.save()
-    context.strokeStyle = "#ff6b2c"
-    context.lineWidth = 3
-    context.setLineDash([9, 6])
-    context.strokeRect(
-      key.rect.x + inset,
-      key.rect.y + inset,
-      Math.max(0, key.rect.width - inset * 2),
-      Math.max(0, key.rect.height - inset * 2),
-    )
-    context.restore()
+    strokeDraft(context, key.rect)
   }
 }
 
