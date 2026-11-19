@@ -10,7 +10,7 @@ import type { SkinModel } from "@/skin-model/model.ts"
 import { emptyModel } from "@/skin-model/model.ts"
 import type { SkinAction, KeyEvent } from "@/skin-model/types.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "@/palm/sxi-ini.ts"
-import { encodePng } from "@/raster.ts"
+import { decodePng, encodePng } from "@/raster.ts"
 import { imageFileName, STYLE_PREFIX } from "@/skin-model/formats/sxi-style.ts"
 import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
 import { identifySxi, jsonOf, parseSxi } from "@/skin-model/formats/sxi-pipeline.ts"
@@ -256,6 +256,15 @@ export async function sxiToModel(documents: SkinDocuments, hints: SxiReadHints):
   // 图集里的切片也切出来，与散图一起进资源表。
   const atlas = atlasImagesOf(skin, documents.binaries, "light", "port")
   model.images = new Map([...styles.images, ...atlas.images])
+  // 散图也要进图片表：没被样式引用的图同样要能在导出时写回。
+  for (const [path, data] of documents.binaries) {
+    if (!/\.png$/i.test(path) || model.images.has(path)) continue
+    try {
+      model.images.set(path, decodePng(data))
+    } catch {
+      // 解不出来的不是图片。
+    }
+  }
   // 音效与字体是包里的文件，字节要进模型。
   const resources = new Map(model.resources)
   for (const [path, data] of documents.binaries) {

@@ -132,7 +132,8 @@ function panelNameOf(boardID: string): string {
 /** IR 图层 → 外观图片原子：图片 id 就是资源名，九宫格内边距落在 innerRect。 */
 function imageAtomOf(layer: SkinLayer | undefined): BdaImageAtom | undefined {
   if (!layer || layer.kind !== "image") return
-  const resourceID = layer.image.replace(/^bda:/, "")
+  // 资源名只留叶子：BDS 的图片 id 是包内路径，BDA 的 resourceID 是文件名。
+  const resourceID = layer.image.replace(/^bda:/, "").split("/").pop()!.replace(/\.[^.]+$/, "")
   const inner = layer.nineSlice?.inner
   return {
     resource: { type: 0, resourceID },
@@ -448,8 +449,8 @@ function bdaFromModel(model: SkinModel): SkinDocuments {
   }
   // 图片按资源名写成 PNG，与外观里的 resourceID 对应。
   for (const [id, image] of images) {
-    if (!id.startsWith("bda:")) continue
-    put(`${theme}/skin/res/${id.slice(4)}.png`, encodePng(image), { kind: "image" })
+    const name = id.replace(/^bda:/, "").split("/").pop()!.replace(/\.[^.]+$/, "")
+    put(`${theme}/skin/res/${name}.png`, encodePng(image), { kind: "image" })
   }
   return { roles, texts: new Map(), structs: new Map(), binaries }
 }

@@ -765,6 +765,17 @@ export async function bdsToModel(
   const parsed = stylesOf(access, hints.theme, hints.orientation, styleDocument)
   model.styles = parsed.styles
   model.images = parsed.images
+  // 散图也要进资源表：它们不属于任何图集，但导出时要原样写回。
+  for (const [path, role] of documents.roles) {
+    if (role.kind !== "image" || model.images.has(path)) continue
+    const data = documents.binaries.get(path)
+    if (!data) continue
+    try {
+      model.images.set(path, decodePng(data))
+    } catch {
+      // 不是 PNG 的文件不进图片表；它本来也不该被识别成 image。
+    }
+  }
   const resources = new Map(model.resources)
   // 音效与字体要带字节：模型得能独立写出它们，不能靠导出时回源包捡。
   const locate = (name: string): string | undefined =>
@@ -848,10 +859,12 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
       if (layer.kind === "image" || layer.kind === "icon") used.add(layer.image)
     }
   }
-  const selected = new Map([...model.images].filter(([id]) => used.has(id)))
+  // 包里没有样式表时（样式编号指向输入法内置样式），图片不属于任何图集，原样写回。
+  const atlas = used.size > 0
+  const selected = atlas ? new Map([...model.images].filter(([id]) => used.has(id))) : new Map<string, SkinImage>()
   // 页尺寸跟随板尺寸：小屏皮肤不该产出 2048 的图集，大屏也不该被压到 1024。
   const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.size.width, board.size.height) / 512) * 512))
-  const pages = packAtlasPages(selected, pageSize, pageSize)
+  const pages = atlas ? packAtlasPages(selected, pageSize, pageSize) : []
   const placement = new Map<string, { page: number; index: number }>()
   pages.forEach((page, pageIndex) => {
     page.placements.forEach((entry, index) => placement.set(entry.id, { page: pageIndex, index }))
@@ -908,12 +921,18 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
     const path = each.id.includes("/") ? each.id : `${root}/${orientation}/${each.id}`
     putText(path, layoutText(each, boardRenders, names), { kind: "layout", board: each.kind, theme, orientation: each.orientation })
   }
-  putText(`${root}/res/default.css`, stylesText(model.styles, imageRef, names), { kind: "style", theme })
-  pages.forEach((page, pageIndex) => {
-    const name = atlasName(pageIndex)
-    putText(`${root}/res/${name}.til`, tileDocument(page, inner), { kind: "atlas", theme, orientation })
-    putBytes(`${root}/res/${name}.png`, encodePng(page.image), { kind: "image" })
-  })
+  // 样式表只在模型有样式时写；空样式表会覆盖掉输入法内置的样式。
+  if (model.styles.size) putText(`${root}/res/default.css`, stylesText(model.styles, imageRef, names), { kind: "style", theme })
+  if (atlas) {
+    pages.forEach((page, pageIndex) => {
+      const name = atlasName(pageIndex)
+      putText(`${root}/res/${name}.til`, tileDocument(page, inner), { kind: "atlas", theme, orientation })
+      putBytes(`${root}/res/${name}.png`, encodePng(page.image), { kind: "image" })
+    })
+  } else {
+    // 没有样式表时图片按原路径写回，不改名也不合并。
+    for (const [id, image] of model.images) putBytes(id, encodePng(image), { kind: "image" })
+  }
   if (model.motions.size) putText(`${root}/res/anim.ini`, writeMotions(model.motions), { kind: "motion" })
   // 非按键窗口按原路径写回：候选栏、提示气泡、手写区。
   for (const window of model.windows) {
