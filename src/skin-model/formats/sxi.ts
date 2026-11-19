@@ -13,6 +13,7 @@ import { asObject, rectParts, type Json, type JsonObject } from "@/palm/sxi-ini.
 import { encodePng } from "@/raster.ts"
 import { imageFileName, STYLE_PREFIX } from "@/skin-model/formats/sxi-style.ts"
 import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
+import { identifySxi, jsonOf, parseSxi } from "@/skin-model/formats/sxi-pipeline.ts"
 import { motionsOfSkin, skinAnimationsOf, skinSoundsOf, soundsOfSkin } from "@/skin-model/formats/sxi-motion.ts"
 import { skinStylesOf, stylesOfSkin, sxiStyleKey, sxiStyleName } from "@/skin-model/formats/sxi-style.ts"
 import { atlasImagesOf } from "@/skin-model/formats/sxi-atlas.ts"
@@ -207,10 +208,14 @@ export const sxiFormat = {
   capabilities: capabilities(),
   derive: { tolerance: 1 },
   async read(source: SxiSource): Promise<SkinModel> {
-    const skin = parseSkinJson(textOf(source.files, SXI_SKIN_PATH) ?? "")
+    // 先拆包、识别、解析；下面的转换只用解析产物。
+    const pkg = { format: "sxi" as const, files: source.files }
+    const structure = identifySxi(pkg)
+    const documents = parseSxi(pkg, structure)
+    const skin = jsonOf(documents, SXI_SKIN_PATH) ?? parseSkinJson("")
     const keyboard = keyboardOf(skin)
     if (!keyboard) throw new Error("手心皮肤缺少 keyboard 段")
-    const info = asObject(parseSkinJson(textOf(source.files, SXI_INFO_PATH) ?? "{}"))
+    const info = asObject(jsonOf(documents, SXI_INFO_PATH) ?? parseSkinJson("{}"))
     const model = emptyModel({
       ...(typeof info?.name === "string" ? { name: info.name } : {}),
       ...(typeof info?.author === "string" ? { author: info.author } : {}),
@@ -238,10 +243,10 @@ export const sxiFormat = {
     model.motions = motionsOfSkin(skin, "light", "port")
     model.sounds = soundsOfSkin(skin, "light", "port")
     // 样式表在 `ss_1`，图片同时切进资源表；按键的样式引用换成 `sxi:编号`。
-    const styles = stylesOfSkin(skin, source.files, "light", "port")
+    const styles = stylesOfSkin(skin, documents.binaries, "light", "port")
     model.styles = styles.styles
     // 图集里的切片也切出来，与散图一起进资源表。
-    const atlas = atlasImagesOf(skin, source.files, "light", "port")
+    const atlas = atlasImagesOf(skin, documents.binaries, "light", "port")
     model.images = new Map([...styles.images, ...atlas.images])
     // 音效与字体是包里的文件，字节要进模型。
     const resources = new Map(model.resources)

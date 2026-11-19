@@ -2,7 +2,7 @@
 //
 // BDA 包只描述外观：样式表按数字编号索引图片、颜色与文字，形状与位置在布局文件里。
 // 因此读取分两步：先从布局骨架拿到板与按键几何，再用外观覆盖样式与图片。
-import { bdaAppearancePath, bdaConfigPath, bdaPanelKeyName, type BdaAppearance, type BdaColorStyle, type BdaImageAtom, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle } from "@/bda.ts"
+import { bdaPanelKeyName, type BdaAppearance, type BdaColorStyle, type BdaImageAtom, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle } from "@/bda.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaSoundConfig } from "@/bda-decode.ts"
 import { colorValue } from "@/bda-encode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
@@ -14,6 +14,7 @@ import { parseBds } from "@/skin-model/formats/bds-parse.ts"
 import { actionValue, layoutBoards } from "@/skin-model/formats/bds.ts"
 import { packageOf } from "@/skin-model/pipeline.ts"
 import { encodeAnimation, encodeAppearance, encodeSoundConfig } from "@/skin-model/formats/bda-appearance.ts"
+import { configBytes, identifyBda, parseBda, pathsOfRole } from "@/skin-model/formats/bda-pipeline.ts"
 import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig } from "@/skin-model/formats/bda-motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
@@ -40,22 +41,23 @@ export function bdaStyleName(ref: BdaStyleRef | undefined): string | undefined {
 }
 
 /** 图片资源在包里的文件名；资源 ID 不带扩展名，帧序列会在后面加 `_N`。 */
-function imagePathOf(archive: SkinArchive, resourceID: string): string | undefined {
-  const leaf = resourceID.replace(/\.png$/i, "")
-  const candidates = new Set([leaf, leaf.replace(/_\d+$/, "")])
-  return archive.names().find((name) => {
-    if (!/\.png$/i.test(name)) return
-    return candidates.has((name.split("/").pop() ?? "").replace(/\.png$/i, ""))
-  })
+/** 转换阶段取图片的方式：给资源名，返回路径与字节。 */
+type ImageSource = {
+  pathOf(resourceID: string): string | undefined
+  bytesOf(path: string): Uint8Array | undefined
+}
+
+function imagePathOf(source: ImageSource, resourceID: string): string | undefined {
+  return source.pathOf(resourceID)
 }
 
 /** 把一张图片资源读进资源表；同一资源只解码一次。 */
-function imageOf(archive: SkinArchive, images: Map<string, SkinImage>, resourceID: string): string | undefined {
-  const path = imagePathOf(archive, resourceID)
+function imageOf(source: ImageSource, images: Map<string, SkinImage>, resourceID: string): string | undefined {
+  const path = imagePathOf(source, resourceID)
   if (!path) return
   const id = `bda:${resourceID}`
   if (!images.has(id)) {
-    const bytes = archive.getBytes(path)
+    const bytes = source.bytesOf(path)
     if (!bytes) return
     try {
       images.set(id, decodePng(bytes))
@@ -67,13 +69,13 @@ function imageOf(archive: SkinArchive, images: Map<string, SkinImage>, resourceI
 }
 
 /** 外观里的一个样式 → IR 图层；图片与颜色都可能出现。 */
-function layersOf(appearance: BdaAppearance, archive: SkinArchive, images: Map<string, SkinImage>, ref: BdaStyleRef): SkinLayer[] {
+function layersOf(appearance: BdaAppearance, source: ImageSource, images: Map<string, SkinImage>, ref: BdaStyleRef): SkinLayer[] {
   if (ref.type === "image") {
     const style = appearance.imageStyles.get(ref.key)
     const normal = style?.normalImage
     const highlighted = style?.highlightImage
-    const id = normal?.resource ? imageOf(archive, images, normal.resource.resourceID) : undefined
-    const pressed = highlighted?.resource ? imageOf(archive, images, highlighted.resource.resourceID) : undefined
+    const id = normal?.resource ? imageOf(source, images, normal.resource.resourceID) : undefined
+    const pressed = highlighted?.resource ? imageOf(source, images, highlighted.resource.resourceID) : undefined
     const inner = normal?.innerRect
     return [
       ...(id
@@ -205,8 +207,9 @@ export function bdaSource(
   theme: Appearance = "light",
   orientation: Orientation = "port",
 ): BdaSource | undefined {
-  const appearance = bdaAppearancePath(archive, theme, orientation)
-  if (!appearance) return
+  const mine = packageOf(archive, "bda")
+  const structure = identifyBda(mine)
+  if (!pathsOfRole({ roles: structure.roles, texts: new Map(), structs: new Map(), binaries: mine.files }, "appearance").length) return
   return { archive, ...(base ? { base } : {}), theme, orientation }
 }
 
@@ -302,15 +305,29 @@ export const bdaFormat: SkinFormat<BdaSource> = {
       resolution: boards.boards[0]?.size ?? { width: 1080, height: 600 },
     }, "bda")
     model.boards.push(...boards.boards)
-    const appearancePath = bdaAppearancePath(source.archive, source.theme, source.orientation)
-    if (!appearancePath) throw new Error("BDA 包里没有外观配置")
-    const bytes = source.archive.getBytes(appearancePath)
-    if (!bytes) throw new Error("外观配置读不出来")
+    // 先拆包、识别、解析；下面的转换只用解析产物。
+    const pkg = packageOf(source.archive, "bda")
+    const structure = identifyBda(pkg)
+    const documents = parseBda(pkg, structure)
+    const bytes = configBytes(documents, "appearance")
+    if (!bytes) throw new Error("BDA 包里没有外观配置")
     const appearance = decodeBdaAppearance(bytes)
     const parsed = stylesOf(appearance)
     const images = new Map<string, SkinImage>(model.images)
+    // 图片按资源名从解析产物里取，不再回看归档。
+    const imageSource: ImageSource = {
+      pathOf: (resourceID: string) => {
+        const leaf = resourceID.replace(/\.png$/i, "")
+        const candidates = new Set([leaf, leaf.replace(/_\d+$/, "")])
+        return pathsOfRole(documents, "image").find((path) => {
+          const name = (path.split("/").pop() ?? "").replace(/\.png$/i, "")
+          return candidates.has(name)
+        })
+      },
+      bytesOf: (path: string) => documents.binaries.get(path),
+    }
     for (const [name, ref] of parsed.refs) {
-      const layers = layersOf(appearance, source.archive, images, ref)
+      const layers = layersOf(appearance, imageSource, images, ref)
       if (!layers.length) continue
       parsed.styles.set(name, { ...parsed.styles.get(name), normal: layers })
     }
@@ -338,9 +355,9 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     model.images = images
     // 音效与字体是包里的文件，字节要进模型；BDA 的音效配置另有一份，见下。
     const resources = new Map(model.resources)
-    for (const path of source.archive.names()) {
+    for (const path of documents.binaries.keys()) {
       if (!/\.(?:mp3|ogg|wav|m4a|ttf|otf|ttc)$/i.test(path)) continue
-      const data = source.archive.getBytes(path)
+      const data = documents.binaries.get(path)
       if (!data) continue
       resources.set(path, /\.(?:ttf|otf|ttc)$/i.test(path)
         ? { kind: "font", path, data }
@@ -348,8 +365,7 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     }
     model.resources = resources
     // 动画与音效各有一份配置，读出来放进模型；读不到就留空，不编造默认值。
-    const animationPath = bdaConfigPath(source.archive, source.theme, source.orientation, "animation")
-    const animationBytes = animationPath ? source.archive.getBytes(animationPath) : undefined
+    const animationBytes = configBytes(documents, "animation")
     if (animationBytes) {
       try {
         model.motions = motionsOfAnimation(decodeBdaAnimation(animationBytes))
@@ -357,8 +373,7 @@ export const bdaFormat: SkinFormat<BdaSource> = {
         // 动画配置损坏时不影响皮肤本身的读取，留给调用方判断。
       }
     }
-    const soundPath = bdaConfigPath(source.archive, source.theme, source.orientation, "sound")
-    const soundBytes = soundPath ? source.archive.getBytes(soundPath) : undefined
+    const soundBytes = configBytes(documents, "sound")
     if (soundBytes) {
       try {
         model.sounds = soundsOfConfig(decodeBdaSoundConfig(soundBytes))
@@ -368,7 +383,7 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     }
     model.provenance = {
       format: "bda",
-      nodes: new Map(model.boards.flatMap((board: SkinBoard) => board.keys.map((key: SkinKey) => [key.id, { path: appearancePath }] as const))),
+      nodes: new Map(model.boards.flatMap((board: SkinBoard) => board.keys.map((key: SkinKey) => [key.id, { path: `${source.theme}/skin/${source.orientation}/appearanceConfig` }] as const))),
     }
     return model
   },

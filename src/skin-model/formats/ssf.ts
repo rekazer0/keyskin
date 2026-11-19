@@ -7,6 +7,7 @@ import { decodePng, encodePng } from "@/raster.ts"
 import { ssfKeyBinding } from "@/ssf/ssf-keymap.ts"
 import { SsfPackage, parseSsfImage, ssfColor, type SsfImageRef, type SsfTheme } from "@/ssf/ssf-package.ts"
 import { ssfSkeleton } from "@/ssf/ssf-convert.ts"
+import { documentNamed, identifySsf, parseSsf } from "@/skin-model/formats/ssf-pipeline.ts"
 import type { SkinArchive } from "@/skin.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { bdsFormat, bdsSource, layoutText } from "@/skin-model/formats/bds.ts"
@@ -240,22 +241,28 @@ export const ssfFormat: SkinFormat<SsfSource> = {
   derive: { tolerance: 1 },
   async read(source, options?: ImportOptions) {
     if (!source.skeleton) throw new Error("读取搜狗皮肤需要官方骨架")
+    // 先拆包、识别、解析；下面的转换只用解析产物。
+    const skinPackage = { format: "ssf" as const, files: source.files }
+    const structure = identifySsf(skinPackage)
+    const documents = parseSsf(skinPackage, structure)
     const pkg = SsfPackage.fromFiles(source.files)
     const skeleton = ssfSkeleton(pkg, source.skeleton)
     const base = bdsSource(skeleton, { theme: source.theme, orientation: source.orientation })
     if (!base) throw new Error("搜狗骨架里没有主键盘布局")
     const model = await bdsFormat.read(base, options)
-    model.meta.name = pkg.info.name || model.meta.name
-    model.meta.author = pkg.info.author || model.meta.author
-    model.meta.version = pkg.info.version || model.meta.version
+    const infoDocument = documentNamed(documents, "phoneTheme.ini")
+    const info = infoDocument ? { name: infoDocument.get("General", "skin_name"), author: infoDocument.get("General", "skin_author"), version: infoDocument.get("General", "skin_version") } : {}
+    model.meta.name = info.name || model.meta.name
+    model.meta.author = info.author || model.meta.author
+    model.meta.version = info.version || model.meta.version
     model.provenance = { format: "ssf", nodes: new Map() }
     const images = new Map(model.images)
     applyLook(
       model,
       pkg,
       images,
-      pkg.skin(source.theme),
-      pkg.keys(source.theme),
+      documentNamed(documents, "phoneSkin.ini") ?? IniDocument.parse(""),
+      documentNamed(documents, "keys.ini") ?? IniDocument.parse(""),
       skeletonSections(skeleton, base.layout),
       source.orientation === "land",
       source.theme,
@@ -263,7 +270,7 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     model.images = images
     // 音效与字体是包里的文件，字节要进模型，导出才能脱离源包。
     const resources = new Map(model.resources)
-    for (const [path, data] of source.files) {
+    for (const [path, data] of documents.binaries) {
       if (/\.(?:mp3|ogg|wav|m4a)$/i.test(path)) resources.set(path, { kind: "audio", path, data })
       else if (/\.(?:ttf|otf|ttc)$/i.test(path)) resources.set(path, { kind: "font", path, data })
     }
