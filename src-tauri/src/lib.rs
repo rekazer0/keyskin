@@ -13,9 +13,9 @@ mod binary_ipc;
 use adb::{pair_adb_device, share_skin_adb, test_adb_connection};
 mod model_oauth;
 #[cfg(target_os = "macos")]
-mod window_material;
-#[cfg(target_os = "macos")]
 mod resource_drag;
+#[cfg(target_os = "macos")]
+mod window_material;
 use model_oauth::{
     model_oauth_accounts, model_oauth_cancel, model_oauth_login, model_oauth_logout,
     model_oauth_token,
@@ -847,9 +847,11 @@ async fn read_skin_file(
 
 #[tauri::command]
 async fn write_file(path: String, data: Vec<u8>) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || fs::write(path, data).map_err(|error| error.to_string()))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        fs::write(path, data).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1394,8 +1396,8 @@ async fn test_model_connection(
             Some(zhipu_connection_probe_body(configuration.model.trim())),
         )
         .await?;
-        let response: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|_| "模型测试响应不是有效 JSON".to_string())?;
+        let response: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|_| "模型测试响应不是有效 JSON".to_string())?;
         if response
             .get("choices")
             .and_then(serde_json::Value::as_array)
@@ -1646,7 +1648,9 @@ mod tests {
             let mut body = vec![0; length];
             reader.read_exact(&mut body).expect("read body");
             request.push_str(&String::from_utf8(body).expect("UTF-8 body"));
-            socket.write_all(response.as_bytes()).expect("write response");
+            socket
+                .write_all(response.as_bytes())
+                .expect("write response");
             request
         });
         let mut configuration = test_model_configuration("openai-chat");
@@ -1674,9 +1678,7 @@ mod tests {
             );
             let result = result.expect("connection success");
             assert_eq!(result.message, "连接成功，模型 chosen-model 可用");
-            assert!(request.starts_with(&format!(
-                "POST {base_path}/chat/completions HTTP/1.1\r\n"
-            )));
+            assert!(request.starts_with(&format!("POST {base_path}/chat/completions HTTP/1.1\r\n")));
             let headers = request
                 .split("\r\n\r\n")
                 .next()
@@ -1747,12 +1749,14 @@ mod tests {
 
     #[test]
     fn zhipu_connection_rejects_missing_key_or_model_before_sending() {
-        for (key, model, expected) in [("", "glm-4.7", "密钥"), ("secret", " ", "选择一个模型")] {
+        for (key, model, expected) in [("", "glm-4.7", "密钥"), ("secret", " ", "选择一个模型")]
+        {
             let mut configuration = test_model_configuration("openai-chat");
             configuration.provider = "zhipu-ai".into();
             configuration.api_key = key.into();
             configuration.model = model.into();
-            let result = tauri::async_runtime::block_on(super::test_model_connection(configuration));
+            let result =
+                tauri::async_runtime::block_on(super::test_model_connection(configuration));
             assert!(result.err().expect("must fail").contains(expected));
         }
     }
