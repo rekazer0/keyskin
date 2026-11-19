@@ -167,14 +167,19 @@ export class SsfLook {
       const [x, y, right, bottom] = rect
       const width = right - x
       const height = bottom - y
-      if (!(width > 0 && height > 0 && width <= 1 && height <= 1)) return this.fitted({ id: name, bytes }, target)
+      if (![x, y, right, bottom].every(Number.isFinite) || !(width > 0 && height > 0)) return this.fitted({ id: name, bytes }, target)
       if (target) return this.derive(`rect:${rect.join(",")}:target:${target.join(",")}`, [bytes], () => {
         const source = this.decode(name, bytes)
-        const boxWidth = target[0] * width
-        const boxHeight = target[1] * height
+        if (!source) return
+        const [w, h] = target
+        const boxWidth = w * width, boxHeight = h * height
         const scale = Math.min(boxWidth / sourceWidth, boxHeight / sourceHeight)
-        const glyph = source && resizeImage(source, Math.max(1, Math.round(sourceWidth * scale)), Math.max(1, Math.round(sourceHeight * scale)))
-        return glyph && placeImage(glyph, target[0], target[1], Math.round(x * target[0] + (boxWidth - glyph.width) / 2), Math.round(y * target[1] + (boxHeight - glyph.height) / 2))
+        const gw = Math.max(1, Math.round(sourceWidth * scale)), gh = Math.max(1, Math.round(sourceHeight * scale))
+        const left = Math.round(x * w + (boxWidth - gw) / 2), top = Math.round(y * h + (boxHeight - gh) / 2)
+        // Symmetric padding lets Baidu centre this image without cropping an authored FG_RECT at the key edge.
+        const px = Math.max(0, -left, left + gw - w), py = Math.max(0, -top, top + gh - h)
+        if ((w + 2 * px) * (h + 2 * py) > MAX_PIXELS) return
+        return placeImage(resizeImage(source, gw, gh), w + 2 * px, h + 2 * py, left + px, top + py)
       })
       if (!x && !y && width === 1 && height === 1) return { id: name, bytes }
       const canvasWidth = Math.round(sourceWidth / width)
@@ -288,7 +293,7 @@ export class SsfLook {
       const original = { id: name, bytes }
       if (source?.rect && size) return this.foregroundImage(original, source.rect, canvas, size)
       const image = this.foregroundImage(original, source?.rect, canvas, iconRect && source?.rect === iconRect ? canvas : undefined)
-      return image && (sourceSection && size ? this.resized(image, Math.round(size[0]), Math.round(size[1])) : this.fitted(image, size))
+      return image && (sourceSection && size ? this.resized(image, Math.round(size[0]), Math.round(size[1])) : this.fitted(image, source?.rect ? size : undefined))
     }
     const normal = source && foreground(source.normal)
     const fore = source && normal ? { normal, pressed: foreground(source.pressed) ?? normal } : undefined

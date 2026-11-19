@@ -332,3 +332,40 @@ test('SSF input backgrounds survive transparent VPA artwork and templates withou
     assert.equal(css.get(`STYLE${gen.get('INPUT', 'BACK_STYLE')}`, 'NM_COLOR'), 'FFE9E9E9')
   }
 })
+
+test('SSF crossing FG_RECT stays extended on BDI and reaches the adjacent key on BDS', async () => {
+  const files = unzipSync(ssfFixture({ single: true }))
+  const keys = parse(files, '1080/keys.ini')
+  keys.set('Key_Q', 'FG_RECT', '0,0,2,1')
+  files['1080/keys.ini'] = strToU8(keys.toString())
+  files['1080/26q_x.png'] = encodePng(solid(200, 100, [123, 45, 67], 192))
+  const pkg = await SsfPackage.open(zipSync(files))
+  for (const format of ['bdi', 'bds']) {
+    const { archive, warnings } = convertSsfToBaidu(pkg, template, 1080, format)
+    const layout = IniDocument.parse(archive.getText('light/skin/port/py_26.ini'))
+    const q = keySection(layout, 'q'), w = keySection(layout, 'w')
+    const [, , width] = layout.get(q, 'VIEW_RECT').split(',').map(Number)
+    assert.ok(styleImage(archive, layout.get(q, 'FORE_STYLE')).width > width)
+    const last = layout.get(w, 'FORE_STYLE').split(',').at(-1)
+    const css = IniDocument.parse(archive.getText('light/skin/res/default.css'))
+    assert.equal(css.get(`STYLE${last}`, 'NM_IMG')?.startsWith('keyskin_overlay') ?? false, format === 'bds')
+    assert.equal(warnings.some(note => note.includes('跨键前景')), format === 'bds')
+    if (format === 'bds') assert.ok(styleImage(archive, last).data.some((byte, i) => i % 4 === 3 && byte === 192))
+  }
+})
+
+test('Baidu to SSF preserves cross-key pixels on a neighbour without its own background', async () => {
+  const source = SkinArchive.open(templateBytes)
+  const bdi = SkinArchive.open(await source.platformBytesAsync('bdi'), 'bdi')
+  const root = 'light/skin/'
+  const path = `${root}port/py_26.ini`
+  bdi.setText(path, '[PANEL]\nSIZE=1080,600\n[KEY1]\nVIEW_RECT=0,0,50,50\nCENTER=q\nFORE_STYLE=29999\n[KEY2]\nVIEW_RECT=50,0,50,50\nCENTER=w\n')
+  bdi.setText(`${root}res/default.css`, `${bdi.getText(`${root}res/default.css`)}\n[STYLE29999]\nNM_IMG=cross_key,1\n`)
+  bdi.setBytes(`${root}res/cross_key.png`, encodePng(solid(80, 50, [123, 45, 67], 192)))
+  bdi.setText(`${root}res/cross_key.til`, '[IMG1]\nSOURCE_RECT=0,0,80,50\n')
+  const result = await SsfPackage.open((await convertBaiduToSsf(bdi, { animations: false })).bytes)
+  const keys = result.keys('light')
+  const normal = keys.get(keys.get('Key_W', 'FG_IMAGES'), 'NORMAL')
+  const image = decodePng(result.file('light', normal))
+  assert.deepEqual(pixel(image, 0, 0), [123, 45, 67, 192])
+})

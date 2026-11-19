@@ -88,6 +88,40 @@ test('BDI → BDS writes point-calibrated heights and complete edge artwork into
   assert.deepEqual(await converted.toBytesAsync('bds'), converted.toBytes(), 'saving a BDS does not scale it again')
 })
 
+test('BDI → BDS keeps oversized toolbar hit boxes aligned on the Android center row', async () => {
+  const source = fixture()
+  const dir = 'light/skin/port/'
+  const path = `${dir}cand1.cnd`
+  const gen = IniDocument.parse(source.getText(`${dir}gen.ini`))
+  gen.set('CAND', 'VIEW_RECT', '0,0,1080,105')
+  source.setText(`${dir}gen.ini`, gen.toString())
+  const cand = IniDocument.parse(source.getText(path))
+  for (const [i, action, width, anchor, x, persist] of [
+    [1, 'F31', 128, 4, 30, 1], [2, 'F14', 824, 4, 128, 1],
+    [3, 'F8', 128, 6, -158, 1], [4, 'F9', 128, 6, -158, 2],
+  ]) {
+    const section = `ICON${i}`
+    for (const [key, value] of Object.entries({ KEY: action, SIZE: `${width},128`, ANCHOR_TYPE: anchor,
+      POS: `${x},-65`, PERSIST: persist, FORE_STYLE: 2 })) cand.set(section, key, String(value))
+    if (action !== 'F14') cand.set(section, 'FIX_SIZE', '30,30')
+  }
+  cand.remove('ICON2', 'FIX_SIZE')
+  source.setText(path, cand.toString())
+  const result = SkinArchive.open(await source.toBytesAsync('bds'), 'bds')
+  const exported = IniDocument.parse(result.getText(path))
+  for (const [section, anchor, x, width, height, persist] of [
+    ['ICON1', '4', 57, 74, 74, '1'], ['ICON2', '4', 128, 824, 65, '1'],
+    ['ICON3', '6', -131, 74, 74, '1'], ['ICON4', '6', -131, 74, 74, '2'],
+  ]) {
+    assert.equal(exported.get(section, 'ANCHOR_TYPE'), anchor, `${section}: anchor on the Android center row`)
+    assert.equal(exported.get(section, 'SIZE'), `${width},${height}`)
+    const [px, py] = exported.get(section, 'POS').split(',').map(Number)
+    assert.equal(px, x, `${section}: preserves the original horizontal center`)
+    assert.ok(Math.abs(py + height / 2) <= 0.5, `${section}: vertically centered without fractional coordinates`)
+    assert.equal(exported.get(section, 'PERSIST'), persist)
+  }
+})
+
 test('BDI → SXI uses the same exported height, including its background and function images', () => {
   const source = fixture()
   const before = source.toBytes()

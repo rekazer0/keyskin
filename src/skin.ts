@@ -4,6 +4,7 @@ import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
 import { adaptAndroidToolbar, adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
 import { adaptIosToolbarGeometry } from "./ios-toolbar-geometry.ts"
+import { adaptBdiPanels } from "./bdi-panel-export.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, patchZip, zipArchiveAsync, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, addZipEntry } from "./skin-zip.ts"
 
@@ -520,7 +521,7 @@ export class SkinArchive {
     return Object.fromEntries(files)
   }
 
-  private packagedFiles(format: ExportFormat): Record<string, Uint8Array> {
+  private packagedFiles(format: ExportFormat, notes?: string[]): Record<string, Uint8Array> {
     const output = new Map<string, Uint8Array>()
     const promoted = this.needsThemeRepack()
     const single = this.layout.endsWith("single") && !promoted
@@ -561,7 +562,10 @@ export class SkinArchive {
       }
     }
 
-    if (format === "bds" && this.format === "bdi") adaptIosToolbarGeometry(output)
+    if (format === "bds" && this.format === "bdi") {
+      adaptIosToolbarGeometry(output)
+      adaptBdiPanels(output, notes)
+    }
     return Object.fromEntries(output)
   }
 
@@ -590,7 +594,7 @@ export class SkinArchive {
   /** Packages for a BDI/BDS platform, pointing key sounds at a format that platform plays (AIFF / OGG). */
   async platformBytesAsync(format: "bdi" | "bds", warnings?: string[], fromAndroid = false, notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
-    const files = new Map(Object.entries(this.packagedFiles(format)))
+    const files = new Map(Object.entries(this.packagedFiles(format, notes)))
     // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons.
     if (fromAndroid) {
       adaptIosToolbar(files, notes)

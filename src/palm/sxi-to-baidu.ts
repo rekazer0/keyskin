@@ -6,12 +6,15 @@
 // the Sogou converters that already paint a Baidu INI skin onto the official BDA template.
 
 import { strToU8, zipSync } from "fflate"
+import { adaptBdiPanels } from "../bdi-panel-export.ts"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
-import { adaptAndroidToolbar, fillIosToolbarEdgeSizes } from "../ios-toolbar.ts"
+import { adaptAndroidToolbar, fillIosToolbarEdgeSizes, logoLayout } from "../ios-toolbar.ts"
+import { adaptIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
 import { convertLegacyToBda } from "../ssf/ssf-convert.ts"
-import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
+import { asObject, numberText, rectParts, type Json, type JsonObject } from "./sxi-ini.ts"
 import { adaptBaiduCandidateBackgrounds } from "./palm-candidate-background.ts"
+import { candidateDimensions } from "./palm-export-layout.ts"
 import { parseSkinJson, same } from "./sxi-json.ts"
 import { boardFileName, boardIni, bubbleIni, candidateIni } from "./sxi-layout.ts"
 import { ANIMATION_FIELDS, FLOATER_FIELDS, animationsIni, infoIni, stylesIni, tilesIni } from "./sxi-style.ts"
@@ -77,16 +80,38 @@ export function sxiBaiduFiles(skin: JsonObject): Map<string, string> {
   for (const [themeKey, theme] of THEMES_BY_KEY) {
     const struct = asObject(skin[themeKey])
     if (!struct) continue
+    const menuFiles = [struct.menu, struct.a_m].some((value) => Array.isArray(value) && value.length > 0)
     for (const orientation of ORIENTATIONS) {
       const layoutKey = `${orientation}_layout`
       const layout = asObject(struct[layoutKey])
       if (!layout) continue
       const directory = `${theme}/skin/${orientation}`
-      for (const [type, board] of Object.entries(asObject(layout.b) ?? {})) {
-        add(`${directory}/${boardFileName(type)}`, boardIni(board))
+      const boards = asObject(layout.b) ?? {}
+      const global = asObject(boards.defaultGlobal)
+      const defaultCand = asObject(global?.cand)
+      for (const [type, value] of Object.entries(boards)) {
+        const board = asObject(value)
+        const cand = asObject(board?.cand)
+        const insets = asObject(cand?.insets ?? defaultCand?.insets)
+        const top = insets?.top
+        const rect = rectParts(cand?.rect ?? defaultCand?.rect)
+        // Palm includes the input-code row in VIEW_RECT; Baidu renders that row separately.
+        const separate = rect && typeof top === "number" && top > 0
+        const output: JsonObject = separate ? { ...board, cand: { ...cand, insets: { ...insets, top: 0 },
+          rect: [rect.slice(0, 2), [rect[2], Math.max(1, rect[3] - top)]] } } : { ...board }
+        if (type === "defaultGlobal" && menuFiles) {
+          const logo = asObject(global?.logo)
+          output.logo = { ...logo, file: "logo" }
+          files.set(`${directory}/logo.ini`, logoLayout(numberText(logo?.b_b) ?? "", numberText(logo?.b_t ?? logo?.b_f) ?? ""))
+        }
+        add(`${directory}/${boardFileName(type)}`, boardIni(output))
       }
-      for (const [name, cand] of Object.entries(asObject(layout.c) ?? {})) {
-        add(`${directory}/${name}.cnd`, candidateIni(cand))
+      for (const [name, value] of Object.entries(asObject(layout.c) ?? {})) {
+        const cand = asObject(value)
+        const rect = rectParts(cand?.rect)
+        const dimensions = cand && rect && candidateDimensions(boards, cand, name)
+        add(`${directory}/${name}.cnd`, candidateIni(dimensions && rect && dimensions.height !== rect[3]
+          ? { ...cand, rect: [rect.slice(0, 2), [rect[2], dimensions.height]] } : value))
       }
       for (const [name, hint] of Object.entries(asObject(layout.h) ?? {})) {
         add(`${directory}/${name}.pop`, bubbleIni(hint))
@@ -120,8 +145,8 @@ export function sxiBaiduFiles(skin: JsonObject): Map<string, string> {
     const menus = Array.isArray(struct.menu) ? struct.menu.filter(Array.isArray) : []
     const menu = menus.find((items) => items.some((item) => asObject(item)?.Position === "toolbar")) ?? menus[0]
     if (menu) files.set(`${logo}/com.baidu.inputmethod.toolbarMenuItems.plist`, toolbarPlist(menu))
-    if (Array.isArray(struct.a_m)) add(`${logo}/pop_menu_icons.til`, tilesIni(struct.a_m))
-    if (Array.isArray(struct.a_i)) add(`${logo}/pop_input_icons.til`, tilesIni(struct.a_i))
+    if (Array.isArray(struct.a_m)) add(`${logo}/pop_menu_icons.til`, tilesIni(struct.a_m, true))
+    if (Array.isArray(struct.a_i)) add(`${logo}/pop_input_icons.til`, tilesIni(struct.a_i, true))
   }
   return files
 }
@@ -177,6 +202,8 @@ export function sxiToBaiduArchive(archive: SkinArchive, target: "bdi" | "bds" = 
   const output = new Map(Object.entries(files))
   if (target === "bds") {
     adaptBaiduCandidateBackgrounds(output)
+    adaptIosToolbarGeometry(output, "sxi")
+    adaptBdiPanels(output, warnings)
     adaptAndroidToolbar(output, warnings)
   } else fillIosToolbarEdgeSizes(output)
   return SkinArchive.open(zipSync(Object.fromEntries(output), { level: 6 }))
@@ -243,6 +270,7 @@ function palmMotionWarnings(archive: SkinArchive, target: "baidu" | "bda" = "bda
  * through Sogou; motion is read directly from the intermediate Baidu archive, including resources.
  */
 export async function convertSxiToBda(archive: SkinArchive, template: SkinArchive): Promise<Converted> {
-  const bda = await convertLegacyToBda(sxiToBaiduArchive(archive), template)
-  return { ...bda, warnings: [...new Set([...bda.warnings, ...palmMotionWarnings(archive)])] }
+  const warnings: string[] = []
+  const bda = await convertLegacyToBda(sxiToBaiduArchive(archive, "bds", warnings), template)
+  return { ...bda, warnings: [...new Set([...warnings, ...bda.warnings, ...palmMotionWarnings(archive)])] }
 }

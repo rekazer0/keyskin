@@ -5,7 +5,10 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import { SkinArchive } from "../src/skin.ts"
 import { buildSxiZip } from "../src/palm/palm-export.ts"
 import { convertSxiToBaidu, convertSxiToBda, sxiToBaiduArchive } from "../src/palm/sxi-to-baidu.ts"
+import { resolveCandidateRect } from "../src/candidate-style.ts"
+import { previewItems } from "../src/preview-items.ts"
 import { IniDocument } from "../src/ini.ts"
+import { PalmBoard } from '../src/palm/palm-board.ts'
 import { parseXmlPlist } from "../src/palm/palm-plist.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
 import { nativeToolbarFixture } from "./helpers/native-toolbar-fixture.mjs"
@@ -121,7 +124,9 @@ test("an .sxi keeps the toolbar plist and menu atlas the export folds into skin.
   assert.equal(item.Position, "toolbar")
   assert.equal(item.Titles.Normal.Normal, "语音&输入")
   assert.equal(item.Images.Normal.Normal, "lg/yuyin")
-  assert.equal(IniDocument.parse(baidu.getText("light/skin/res/logo/pop_menu_icons.til")).get("IMG26", "SOURCE_RECT"), "0,0,2,2")
+  const tiles = IniDocument.parse(baidu.getText("light/skin/res/logo/pop_menu_icons.til"))
+  assert.equal(tiles.get("IMG26", "SOURCE_RECT"), "0,0,2,2")
+  assert.equal(tiles.get("GLOBAL", "TILE_NUM"), "27", "Android counts up to the highest sparse tile index")
 })
 
 test("an .sxi → BDS conversion adds the Android toolbar atlas an iOS package lacks", async () => {
@@ -144,4 +149,55 @@ test("an .sxi → BDS conversion adds the Android toolbar atlas an iOS package l
   // The iOS target keeps the plists and 1.0 artwork only; no Android atlas is invented for it.
   const ios = await convertSxiToBaidu(sxi, "bdi")
   assert.ok(!Object.keys(unzipSync(ios.bytes)).some((path) => path.endsWith("res/logo/pop_menu_icons.png") || path.endsWith("res/logo/pop_menu_icons.til")))
+})
+
+test('SXI → BDS preserves visible toolbar centres and materialises fixed icon artwork at Palm size', async () => {
+  const source = nativeToolbarFixture('bds')
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    const root = `${theme}/skin/${orientation}/`
+    source.setText(`${root}gen.ini`, source.getText(`${root}gen.ini`).replace('1125,124', '1125,153')
+      .replace('LAYOUT_NAME=cand1', 'LAYOUT_NAME=cand1\nPADDING=0,29,0,0'))
+    source.setText(`${root}cand1.cnd`, [
+      '[CAND]', 'CELL_W=62', 'BACK_STYLE=1',
+      '[ICON1]', 'KEY=F31', 'ANCHOR_TYPE=4', 'POS=30,-65', 'SIZE=130,130', 'FIX_SIZE=30,30', 'FORE_STYLE=2',
+      '[ICON2]', 'KEY=F14', 'ANCHOR_TYPE=5', 'POS=-390,-29', 'SIZE=780,58',
+      '[ICON3]', 'KEY=F8', 'ANCHOR_TYPE=6', 'POS=-160,-65', 'SIZE=130,130', 'FIX_SIZE=30,30', 'FORE_STYLE=2',
+      '[ICON4]', 'KEY=F9', 'ANCHOR_TYPE=6', 'POS=-160,-65', 'SIZE=130,130', 'FIX_SIZE=30,30', 'FORE_STYLE=2', 'PERSIST=2',
+      '[ICON5]', 'KEY=F14', 'ANCHOR_TYPE=5', 'POS=-1500,-30', 'SIZE=700,60',
+    ].join('\n'))
+  }
+  const palm = SkinArchive.open(buildSxiZip(source).bytes, 'sxi')
+  const skin = JSON.parse(palm.getText('skin.json'))
+  const { bytes } = await convertSxiToBaidu(palm, 'bds')
+  const bds = SkinArchive.open(bytes, 'bds')
+  for (const [theme, model] of [['light', 'default'], ['dark', 'night']]) for (const orientation of ['port', 'land']) {
+    const prefix = `${theme}/skin/`
+    const parse = (file) => IniDocument.parse(bds.getText(`${prefix}${file}`))
+    const gen = parse(`${orientation}/gen.ini`)
+    const cand = parse(`${orientation}/cand1.cnd`)
+    const board = new PalmBoard(skin, model, orientation, 'defaultGlobal')
+    const { width, height } = resolveCandidateRect(cand, gen)
+    assert.deepEqual({ width, height }, board.candidateSize, 'exclude the input-code row, without re-scaling Palm geometry')
+    assert.equal(cand.get('CAND', 'ICON_NUM'), '5')
+    assert.equal(parse(`${orientation}/logo.ini`).get('GLOBAL', 'VERSION'), '1')
+    const css = parse('res/default.css')
+    const icons = previewItems(cand, width, height).filter(({ section }) => section.startsWith('ICON'))
+    for (const [index, { section, center, rect }] of icons.entries()) {
+      const palmIcon = board.icons()[index]
+      if (center === 'F14') {
+        assert.deepEqual(rect, palmIcon.rect, 'do not re-scale F14 or move the deliberately hidden F14')
+        continue
+      }
+      assert.equal(cand.get(section, 'FIX_SIZE'), undefined)
+      assert.equal(rect.x + rect.width / 2, palmIcon.rect.x + palmIcon.rect.width / 2)
+      assert.equal(rect.y + rect.height / 2, palmIcon.rect.y + palmIcon.rect.height / 2)
+      assert.deepEqual([rect.width, rect.height], palmIcon.fixed)
+      for (const field of ['NM_IMG', 'HL_IMG']) {
+        const [name] = css.get(`STYLE${cand.get(section, 'FORE_STYLE')}`, field).split(',')
+        const image = decodePng(bds.getBytes(`${prefix}res/${name}.png`))
+        assert.ok(image.width <= rect.width && image.height <= rect.height)
+      }
+      if (center === 'F9') assert.equal(cand.get(section, 'PERSIST'), '2')
+    }
+  }
 })

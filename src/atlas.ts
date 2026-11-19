@@ -43,6 +43,7 @@ export type ToolbarVisual = Visual & {
 }
 
 export type VisualResolver = {
+  readonly androidKeyLayers?: boolean
   ready?(): Promise<void>
   resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined>
   imagePath?(styleID: string, highlighted: boolean): string | undefined
@@ -376,6 +377,8 @@ export class AtlasResolver {
   private readonly tiles = new Map<string, IniDocument>()
   private readonly embeddedFontFamily?: string
   private readonly embeddedFontReady: Promise<void>
+
+  get androidKeyLayers(): boolean { return this.archive.format === "bds" }
 
   constructor(archive: SkinArchive, theme: string, orientation: string) {
     this.archive = archive

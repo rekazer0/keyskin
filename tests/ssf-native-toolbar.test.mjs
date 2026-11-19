@@ -7,9 +7,11 @@ import { IniDocument } from '../src/ini.ts'
 import { parseXmlPlist } from '../src/palm/palm-plist.ts'
 import { decodeBdaAppearance } from '../src/bda-decode.ts'
 import { strFromU8 } from 'fflate'
-import { convertSsfDocument, documentPackage, ssfDocumentBytes } from '../src/ssf/ssf-convert.ts'
+import { convertSsfDocument, documentPackage, exportSsf, ssfDocumentBytes } from '../src/ssf/ssf-convert.ts'
 import { ssfToBaiduFiles } from '../src/ssf/ssf-to-baidu.ts'
 import { decodePng, cropImage, encodePng, resizeImage } from '../src/ssf/ssf-png.ts'
+import { previewItems } from '../src/preview-items.ts'
+import { resolveCandidateRect } from '../src/candidate-style.ts'
 import { toolbarImageRect } from '../src/preview-draw.ts'
 import { ssfFixture, solid } from './helpers/ssf-fixture.mjs'
 
@@ -122,6 +124,12 @@ test('SSF → BDS gives Android the native F14 toolbar and the Sogou icons in th
     for (const orientation of ['port', 'land']) {
       const cand = IniDocument.parse(bds.getText(`${prefix}${orientation}/cand1.cnd`))
       assert.deepEqual([1, 2, 3, 4].map((id) => cand.get(`ICON${id}`, 'KEY')), ['F31', 'F14', 'F8', 'F9'])
+      const gen = IniDocument.parse(bds.getText(`${prefix}${orientation}/gen.ini`))
+      const { width, height } = resolveCandidateRect(cand, gen)
+      assert.deepEqual([1, 2, 3, 4].map((id) => cand.get(`ICON${id}`, 'ANCHOR_TYPE')), ['4', '5', '6', '6'])
+      for (const { rect, section } of previewItems(cand, width, height + 20)) {
+        if (section.startsWith('ICON')) assert.equal(rect.y + rect.height / 2, (height + 20) / 2, 'icons follow a taller candidate bar')
+      }
       assert.ok(!cand.entries().some(({ key }) => key === 'FIX_SIZE'), 'FIX_SIZE is iOS only')
       assert.equal(bds.getText(`${prefix}${orientation}/res/default.css`), bds.getText(`${prefix}res/default.css`), 'Android direction-local styles include the final toolbar styles')
       // LogoLoader reads [GLOBAL] VERSION; only 1 loads the skin's pop_menu_icons.
@@ -170,6 +178,21 @@ test('SSF → BDS keeps middle toolbar icons at the SSF size after Android nativ
       assert.equal(rect.x, (128 - width) / 2)
       assert.equal(rect.y, (126 - height) / 2)
     }
+  }
+})
+
+test('SSF → BDS → SSF keeps Android atlas artwork at its drawn size in both themes', async () => {
+  const source = SkinArchive.open(await ssfDocumentBytes(ssfFixture()), 'ssf')
+  for (const [folder, color] of [['status1', [210, 34, 82]], ['status2', [36, 218, 75]]]) {
+    source.setBytes(`1080/${folder}/ime_function_voice.png`, encodePng(solid(37, 55, color)))
+  }
+  const bds = SkinArchive.open((await convertSsfDocument(source, 'bds', templates)).bytes, 'bds')
+  const ssf = SkinArchive.open(await ssfDocumentBytes((await exportSsf(bds, undefined)).bytes), 'ssf')
+  for (const folder of ['status1', 'status2']) {
+    const path = `1080/${folder}/ime_function_voice.png`
+    const expected = decodePng(source.getBytes(path))
+    const actual = decodePng(ssf.getBytes(path))
+    assert.deepEqual(actual, expected)
   }
 })
 

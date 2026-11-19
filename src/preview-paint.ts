@@ -124,9 +124,10 @@ export async function paintPreview(self: Preview): Promise<void> {
   const hintCellSize = hintIcon?.cellSize ?? hintConfig?.cellSize
   const visible = visiblePreviewItems(self.keys, self.skinState)
   const stateDocument = self.stateDocument
+  const android = self.resolver?.androidKeyLayers
   const keys = previewDrawOrder(
     stateDocument ? visible.map((key) => effectivePreviewItem(stateDocument, key, self.skinState ?? 0)) : visible,
-    self.panelWidth, self.panelHeight, self.legacyAnimationState?.key.section,
+    self.panelWidth, self.panelHeight, self.legacyAnimationState?.key.section, android,
   )
 
   // 拖拽时优先使用缓存的视觉数据，避免重复异步解析
@@ -300,10 +301,20 @@ export async function paintPreview(self: Preview): Promise<void> {
         `OFFSET${key.positionTypes[layer] ?? ""}`,
         area,
       )
-      const destination = key.foreRect ?? foregroundLayerRect(area, fore?.source, offset)
+      const destination = key.foreRect ?? foregroundLayerRect(area, fore?.source, offset ?? [0, 0])
+      const clipKey = android && /^KEY\d+$/.test(key.section) && fore?.source && animationElapsed < 0 && (
+        destination.x < key.rect.x || destination.y < key.rect.y || destination.x + destination.width > key.rect.x + key.rect.width ||
+        destination.y + destination.height > key.rect.y + key.rect.height)
+      if (clipKey) {
+        context.save()
+        context.beginPath()
+        context.rect(key.rect.x, key.rect.y, key.rect.width, key.rect.height)
+        context.clip()
+      }
       withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
         drawVisual(context, fore, destination, false)
       })
+      if (clipKey) context.restore()
     }
 
     for (const [layer, styleText] of styleTexts.entries()) {

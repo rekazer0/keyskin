@@ -1,5 +1,6 @@
 // 手心导出的文件清单与打包。同步导出和异步导出必须写出同一份清单，所以都走这里。
 import { zipSync } from "fflate"
+import { adaptIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
 import { SkinArchive } from "../skin.ts"
 import { adaptPackageSounds } from "../sounds.ts"
 import { prepareToolbarIcons } from "./palm-export-toolbar.ts"
@@ -33,13 +34,13 @@ function previewPath(path: string): string | undefined {
 }
 
 export function collectConverterEntries(archive: SkinArchive): ConverterEntry[] {
-  if (archive.format === "bdi") archive = SkinArchive.open(archive.toBytes("bds"), "bds")
+  const ios = archive.format === "bdi"
   if (archive.format === "bda") throw new Error("BDA 皮肤需要先转换为 BDI/BDS 布局再导出手心皮肤（.sxi）")
   const raws = archive.names().map((canonical) => {
-    const raw = archive.sourcePath(canonical)
+    const raw = ios ? canonical : archive.sourcePath(canonical)
     return { canonical, raw, normalized: normalizePalmPath(raw), directory: raw.endsWith("/") }
   })
-  const usesSkinRoot = raws.some(({ normalized }) => normalized === "skin" || normalized.startsWith("skin/"))
+  const usesSkinRoot = !ios && raws.some(({ normalized }) => normalized === "skin" || normalized.startsWith("skin/"))
   const entries: ConverterEntry[] = []
   for (const item of raws) {
     let path = item.normalized
@@ -57,6 +58,16 @@ export function collectConverterEntries(archive: SkinArchive): ConverterEntry[] 
       directory: item.directory,
       bytes: item.directory ? undefined : archive.getBytes(item.canonical),
     })
+  }
+  if (ios) {
+    // Palm can draw the original foreground across keys; only convert the toolbar's geometry.
+    const files = new Map(entries.flatMap(({ path, bytes }) => bytes ? [[path, bytes] as const] : []))
+    adaptIosToolbarGeometry(files)
+    for (const entry of entries) if (entry.bytes) {
+      entry.bytes = files.get(entry.path)
+      files.delete(entry.path)
+    }
+    for (const [path, bytes] of files) entries.push({ path, bytes, directory: false })
   }
   if (archive.format === "bdi" || archive.format === "bds") prepareToolbarIcons(entries)
   return entries

@@ -197,7 +197,13 @@ export function previewDrawOrder(
   panelWidth: number,
   panelHeight: number,
   topSection?: string,
+  android = false,
 ): PreviewItem[] {
+  if (android) {
+    const layer = (item: PreviewItem) => item.section === topSection ? Infinity
+      : Number(item.section.match(/^KEY(\d+)$/i)?.[1] ?? Number.MAX_SAFE_INTEGER)
+    return [...items].sort((left, right) => layer(left) - layer(right))
+  }
   const layer = (item: PreviewItem) => item.section === topSection
     ? 2
     : isFullPanelPreviewItem(item, panelWidth, panelHeight) ? 0 : 1

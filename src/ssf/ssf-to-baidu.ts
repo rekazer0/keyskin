@@ -5,6 +5,7 @@
 // the template glyph, recoloured to the Sogou label colour. Day/night statuses become light/dark themes.
 
 import { strToU8 } from "fflate"
+import { adaptBdiPanels } from "../bdi-panel-export.ts"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
 import { SsfBaiduMotion } from "./ssf-anim-to-baidu.ts"
@@ -462,6 +463,7 @@ export function ssfToBaiduFiles(pkg: SsfPackage, base: SkinArchive, panelWidth?:
 /** Converts a Sogou skin to a Baidu BDS archive laid out on `base` (the Sogou BDS skeleton); `bdi` lays it out for iOS. */
 export function convertSsfToBaidu(pkg: SsfPackage, base: SkinArchive, panelWidth?: number, format: "bdi" | "bds" = "bds"): SsfConversion {
   const { files, warnings } = ssfToBaiduFiles(pkg, base, panelWidth, format)
+  if (format === "bds") adaptBdiPanels(files, warnings)
   const dual = pkg.themes.size > 1
   const raw = Object.fromEntries([...files].map(([path, bytes]) => {
     if (path === "Info.txt" || path === "demo.png") return [path, bytes]

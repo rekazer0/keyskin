@@ -99,6 +99,18 @@ export function fitCandidateIcons(boards: JsonObject, candidates: JsonObject, wa
     if (!dimensions) continue
     const { width, height } = dimensions
     const oversized = candidate.icon_list.some((value) => (numbers(asObject(value)?.s)?.[1] ?? 0) > height)
+    // Palm Android repeats logo width + CELL_W/2 for every toolbar slot; F14's width is ignored.
+    const icons = candidate.icon_list.map(asObject)
+    const container = icons.find((icon) => icon?.k === "switchContainer")
+    const [cx, cy] = numbers(container?.p) ?? [0, 0]
+    const [cw, ch] = numbers(container?.s) ?? [0, 0]
+    const anchor = typeof container?.anchor === "number" ? container.anchor : 1
+    const left = (anchor - 1) % 3 * width / 2 + cx
+    const top = (Math.ceil(anchor / 3) - 1) * height / 2 + cy
+    const gap = typeof candidate.gap === "number" ? Math.max(0, candidate.gap) : 0
+    const slot = cw > 0 && ch > 0 && left + cw > 0 && left < width && top + ch > 0 && top < height
+      && icons.some((icon) => icon?.k === "logoMenu") && icons.some((icon) => icon?.k === "hideBoard")
+      ? Math.max(1, Math.floor(width / 7 - gap / 2)) : width
     for (const value of candidate.icon_list) {
       const icon = asObject(value)
       const size = numbers(icon?.s)
@@ -107,11 +119,11 @@ export function fitCandidateIcons(boards: JsonObject, candidates: JsonObject, wa
       const anchor = typeof icon.anchor === "number" ? icon.anchor : 1
       const ax = (anchor - 1) % 3 * width / 2
       const ay = (Math.ceil(anchor / 3) - 1) * height / 2
-      const w = Math.min(size[0], width)
+      const w = Math.min(size[0], icon.k === "logoMenu" || icon.k === "hideBoard" ? slot : width)
       // Off-screen icons deliberately hide Baidu's native row behind a custom toolbar.
       if (ax + x + size[0] <= 0 || ax + x >= width || ay + y + size[1] <= 0 || ay + y >= height) continue
       const h = Math.min(size[1], height)
-      const px = Math.max(0, Math.min(ax + x, width - w)) - ax
+      const px = Math.max(0, Math.min(ax + x + (size[0] - w) / 2, width - w)) - ax
       // An iOS toolbar with oversized edge hit boxes needs its native function row centred in the Palm bar.
       const py = oversized && icon.k === "switchContainer"
         ? (height - h) / 2 - ay
@@ -123,28 +135,6 @@ export function fitCandidateIcons(boards: JsonObject, candidates: JsonObject, wa
       // FIX_SIZE is in points; candidate geometry is in @3x pixels.
       const scale = Math.min(1, w / (fixed[0] * 3), h / (fixed[1] * 3))
       if (scale < 1) icon.f_size = fixed.map((side) => side * scale)
-    }
-    // Palm Android repeats logo width + CELL_W/2 for every toolbar slot; F14's width is ignored.
-    const logo = candidate.icon_list.map(asObject).find((icon) => icon?.k === "logoMenu")
-    const hide = candidate.icon_list.map(asObject).find((icon) => icon?.k === "hideBoard")
-    const container = candidate.icon_list.map(asObject).find((icon) => icon?.k === "switchContainer")
-    const containerSize = numbers(container?.s)
-    const containerPos = numbers(container?.p) ?? [0, 0]
-    const containerAnchor = typeof container?.anchor === "number" ? container.anchor : 1
-    const containerX = (containerAnchor - 1) % 3 * width / 2 + containerPos[0]
-    if (logo && hide && containerSize && containerX + containerSize[0] > 0 && containerX < width) {
-      const gap = typeof candidate.gap === "number" ? Math.max(0, candidate.gap) : 0
-      const slot = Math.max(1, Math.floor(width / 7 - gap / 2))
-      if ((numbers(logo.s)?.[0] ?? 0) > slot) {
-        logo.anchor = 1
-        logo.p = [0, 0]
-        logo.s = [slot, height]
-      }
-      if ((numbers(hide.s)?.[0] ?? 0) > slot) {
-        hide.anchor = 3
-        hide.p = [-slot, 0]
-        hide.s = [slot, height]
-      }
     }
   }
 }

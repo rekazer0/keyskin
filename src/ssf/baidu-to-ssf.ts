@@ -8,10 +8,12 @@
 // Light/dark themes become day/night statuses.
 
 import { strToU8, zipSync } from "fflate"
-import { skinPlatform } from "../bda-platform.ts"
 import { IniDocument } from "../ini.ts"
+import { skinPlatform } from "../bda-platform.ts"
 import { resolveCandidateRect } from "../candidate-style.ts"
+import { TOOLBAR_FUNCTIONS } from "../ios-toolbar.ts"
 import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
+import { toolbarImageRect } from "../preview-draw.ts"
 import { parseXmlPlist } from "../palm/palm-plist.ts"
 import { offsetFromSection, previewItems } from "../preview-items.ts"
 import { SkinArchive } from "../skin.ts"
@@ -121,7 +123,7 @@ class BaiduStyles {
     this.styles = IniDocument.parse(css ? archive.getText(css) : "")
   }
 
-  private slice(value: string | undefined): SliceImage | undefined {
+  slice(value: string | undefined): SliceImage | undefined {
     const [name, tileValue] = value?.split(",").map((part) => part.trim()) ?? []
     if (!name) return
     const key = `${name},${tileValue}`
@@ -324,8 +326,7 @@ function sampleKeys(archive: SkinArchive, theme: Theme, warnings: string[]): Map
         const binding = ssfKeyBinding(layout, action, orientation === "land")
         const name = binding.sections[0] ?? `${binding.defaults[0]}`
         if (samples.has(name)) continue
-        const back = styles.resolve(document.get(section, "BACK_STYLE"))
-        if (!back) continue
+        const back = styles.resolve(document.get(section, "BACK_STYLE")) ?? { color: "0x00000000" }
         const foreIDs = document.get(section, "FORE_STYLE")?.split(",").map((value) => value.trim()).filter(Boolean) ?? []
         const offsets = document.get(section, "FORE_OFFSET")?.split(";") ?? []
         const positions = document.get(section, "POS_TYPE")?.split(",") ?? []
@@ -454,7 +455,6 @@ function toolbarImages(archive: SkinArchive, theme: Theme, styles: BaiduStyles, 
   const root = `${theme}/skin/res/logo/`
   const plist = archive.getBytes(`${root}com.baidu.inputmethod.toolbarMenuItems.plist`)
   const menu = plist && parseXmlPlist(plist)
-  if (!Array.isArray(menu)) return
   const nativeNames: Record<string, string> = {
     '19': names.F7, '17': names.F13, '23': names.F72, '26': names.F82,
     '18': "ime_function_textedit.png", '35': "ime_function_clipboard.png", '45': names.F68,
@@ -464,9 +464,24 @@ function toolbarImages(archive: SkinArchive, theme: Theme, styles: BaiduStyles, 
     const { width, height } = resolveCandidateRect(document, sources.panel[0])
     return previewItems(document, width, height).filter(({ center, rect }) => center === "F14"
       && rect.x < width && rect.x + rect.width > 0 && rect.y < height && rect.y + rect.height > 0)
-      .map(({ rect }) => rect.height)
+      .map(({ rect }) => rect)
   })
-  for (const value of menu) {
+  const atlas = "logo/pop_menu_icons"
+  if (archive.format !== "bdi" && containers.length && archive.isText(`${root}pop_menu_icons.til`)) {
+    const tiles = IniDocument.parse(archive.getText(`${root}pop_menu_icons.til`))
+    for (const [index, , id] of TOOLBAR_FUNCTIONS) {
+      if (id === "45" || !tiles.get(`IMG${index}`, "SOURCE_RECT")) continue // Android 62 is 次遇, not AI侃侃.
+      const image = styles.slice(`${atlas},${index}`)?.image
+      if (!image) continue
+      const slot = { x: 0, y: 0, width: Math.min(...containers.map(({ width }) => width)), height: Math.min(...containers.map(({ height }) => height)) }
+      const drawn = toolbarImageRect({ source: [0, 0, image.width, image.height], imagePath: `${root}pop_menu_icons.png` }, slot, 0)
+      const artwork = resizeImage(image, Math.max(1, Math.round(drawn.width * styles.scale)), Math.max(1, Math.round(drawn.height * styles.scale)))
+      writer.file(artwork, nativeNames[id])
+      writer.file(artwork, nativeNames[id].replace(/\.png$/, "_p.png"))
+      delete nativeNames[id]
+    }
+  }
+  for (const value of Array.isArray(menu) ? menu : []) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue
     const filename = nativeNames[String(value.Name)]
     const states = (value.Images as { Normal?: { Normal?: string; Highlight?: string } } | undefined)?.Normal
@@ -475,7 +490,7 @@ function toolbarImages(archive: SkinArchive, theme: Theme, styles: BaiduStyles, 
       const bytes = [name, `${name}_iphone@3x.png`, `${name}.png`].map((name) => archive.getBytes(`${root}${name}`)).find(Boolean)
       if (!bytes) continue
       const image = decodePng(bytes)
-      const scale = Math.min(1, Math.min(...containers) / image.height) * styles.scale
+      const scale = Math.min(1, Math.min(...containers.map(({ height }) => height)) / image.height) * styles.scale
       writer.file(resizeImage(image, Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale))), output)
     }
   }

@@ -132,6 +132,29 @@ test('Baidu toolbar preserves its authored region while fitting oversized edge h
   }
 })
 
+test('limiting Palm toolbar slots keeps their authored centres and does not reveal off-screen buttons', () => {
+  const { skin } = convert({
+    'light/port/gen.ini': '[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1080,105\n',
+    'light/port/cand1.cnd': [
+      '[CAND]', 'CELL_W=62',
+      '[ICON1]', 'KEY=F31', 'ANCHOR_TYPE=4', 'POS=30,-64', 'SIZE=128,128', 'FIX_SIZE=30,30',
+      '[ICON2]', 'KEY=F14', 'ANCHOR_TYPE=5', 'POS=-412,-64', 'SIZE=824,128',
+      '[ICON3]', 'KEY=F8', 'ANCHOR_TYPE=6', 'POS=-158,-64', 'SIZE=128,128', 'FIX_SIZE=30,30',
+      '[ICON4]', 'KEY=F9', 'ANCHOR_TYPE=6', 'POS=-158,-64', 'SIZE=128,128', 'PERSIST=2',
+    ].join('\n'),
+    'light/land/gen.ini': '[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1080,105\n',
+    'light/land/cand1.cnd': '[CAND]\nCELL_W=62\n[ICON1]\nKEY=F31\nPOS=-500,0\nSIZE=128,100\n[ICON2]\nKEY=F14\nPOS=130,0\nSIZE=800,90\n[ICON3]\nKEY=F8\nPOS=930,0\nSIZE=128,100\n',
+  }, 'bds')
+  const icons = new PalmBoard(skin, 'default', 'port', 'defaultGlobal').icons()
+  for (const [index, centre] of [[0, 94], [2, 986], [3, 986]]) {
+    const { rect } = icons[index]
+    assert.equal(rect.x + rect.width / 2, centre)
+    assert.equal(rect.y + rect.height / 2, 52.5)
+    if (index !== 3) assert.ok(7 * (rect.width + 31) <= 1080)
+  }
+  assert.equal(new PalmBoard(skin, 'default', 'land', 'defaultGlobal').icons()[0].rect.x, -500)
+})
+
 test('BDS atlas becomes Palm menu images in both themes without moving or resizing the toolbar', () => {
   const tiles = [26, 27, 29, 31, 25, 50]
   const files = {}

@@ -1,5 +1,6 @@
 // Baidu draws the candidate bar's function icons in a native F14 container, not in arbitrary CND ICON slots.
 // iOS (BDI) reads their images from res/logo plists; Android (BDS) from the res/logo/pop_menu_icons atlas.
+import { resolveCandidateRect } from "../candidate-style.ts"
 import { IniDocument } from "../ini.ts"
 import { logoImageConfig, logoLayout, plist, solidColorStyle, toolbarMenuItem } from "../ios-toolbar.ts"
 import type { SkinArchive } from "../skin.ts"
@@ -73,15 +74,19 @@ export function adaptSsfNativeToolbar(archive: SkinArchive, source: SsfPackage, 
       // V6 p160: logo.ini declares the LOGO menu's colours.
       // Android reads [GLOBAL] VERSION (LogoLoader) and loads the skin's pop_menu_icons only when it is 1.
       archive.setText(`${prefix}${orientation}/logo.ini`, logoLayout(logoMenu.back, logoMenu.text))
-      const [,, width, height] = gen.get("CAND", "VIEW_RECT")!.split(",").map(Number)
+      const { width, height } = resolveCandidateRect(document, gen)
       const side = Math.round(width / 7)
       const logoEntries = document.entries(icon(document, "F31"))
       const hideEntries = document.entries(icon(document, "F8"))
       document.removeSections(document.sections().filter((name) => /^ICON\d+$/.test(name)))
       const add = (name: string, entries: Array<{ key: string; value: string }>, x: number, w: number, action: string, persist: string, anchor = 1) => {
         document.appendSection(name, entries.filter(({ key }) => !["VIEW_RECT", "SIZE", "POS", "ANCHOR_TYPE", "KEY", "PERSIST"].includes(key)))
-        const position = anchor === 5 ? `${-w / 2},${-height / 2}` : `${anchor === 3 ? x - width : x},0`
-        for (const [key, value] of Object.entries({ SIZE: `${w},${height}`, POS: position, ANCHOR_TYPE: String(anchor), KEY: action, PERSIST: persist })) document.set(name, key, value)
+        const anchorX = (anchor - 1) % 3 * width / 2
+        const android = format === "bds"
+        const position = android ? `${Math.round(x - anchorX)},${Math.round(-height / 2)}`
+          : `${x - anchorX},${anchor === 5 ? -height / 2 : 0}`
+        const targetAnchor = android && anchor < 4 ? anchor + 3 : anchor
+        for (const [key, value] of Object.entries({ SIZE: `${w},${height}`, POS: position, ANCHOR_TYPE: String(targetAnchor), KEY: action, PERSIST: persist })) document.set(name, key, value)
       }
       add("ICON1", logoEntries, 0, side, "F31", "1")
       add("ICON2", [], side, width - side * 2, "F14", "1", 5)

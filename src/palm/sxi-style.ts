@@ -48,11 +48,16 @@ export function stylesIni(value: Json): IniWriter {
 }
 
 // `tileModel` (`.til`).
-export function tilesIni(value: Json): IniWriter {
+export function tilesIni(value: Json, nativeMenu = false): IniWriter {
   const writer = new IniWriter()
+  const global = nativeMenu ? writer.section("GLOBAL") : undefined
+  let upperBound = 0
   for (const [index, tile] of (Array.isArray(value) ? value : []).entries()) {
     const model = asObject(tile) ?? {}
-    const entries = writer.section(typeof model.id === "string" ? model.id : `IMG${index}`)
+    const name = typeof model.id === "string" ? model.id : `IMG${index}`
+    const id = Number(name.match(/^IMG(\d+)$/)?.[1])
+    if (Number.isSafeInteger(id)) upperBound = Math.max(upperBound, id + 1)
+    const entries = writer.section(name)
     putFields(entries, model, [
       ["info", "SCALABLE", "bool"],
       ["alpha", "USE_ALPHA", "number"],
@@ -63,6 +68,10 @@ export function tilesIni(value: Json): IniWriter {
       ["insets", "PADDING", "insets"],
     ])
     if (Array.isArray(model.scales) && model.scales.length) put(entries, "SCALE", listText(model.scales))
+  }
+  if (global) {
+    global.set("TILE_NUM", String(upperBound))
+    global.set("USE_ALPHA", "1")
   }
   return writer
 }

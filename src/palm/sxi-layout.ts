@@ -159,10 +159,11 @@ export function boardIni(value: Json): IniWriter {
     ])
   }
 
-  // shortcut: `logoModel` inlines the PANEL/ICON of a separate logo layout; that file name
-  // is not in skin.json, so only the LOGO base is written.
   const logo = sectionOf("LOGO", "logo")
-  if (logo) putBase(logo[0], logo[1])
+  if (logo) {
+    putBase(logo[0], logo[1])
+    putFields(logo[0], logo[1], [["file", "LAYOUT_NAME", "string"]])
+  }
 
   const emoji = sectionOf("EMOJI", "emoji")
   if (emoji) {
@@ -234,7 +235,12 @@ export function boardIni(value: Json): IniWriter {
 export function candidateIni(value: Json): IniWriter {
   const model = asObject(value) ?? {}
   const writer = new IniWriter()
-  if (model.b !== undefined) putCandidate(writer.section("CAND"), model)
+  const icons = Array.isArray(model.icon_list) ? model.icon_list : []
+  if (model.b !== undefined || icons.length) {
+    const entries = writer.section("CAND")
+    putCandidate(entries, model)
+    if (icons.length) put(entries, "ICON_NUM", String(icons.length))
+  }
   const switchModel = asObject(model.switch)
   if (switchModel) {
     const entries = writer.section("SWITCH")
@@ -247,7 +253,7 @@ export function candidateIni(value: Json): IniWriter {
       ["insets", "PADDING", "number"],
     ])
   }
-  for (const [index, icon] of (Array.isArray(model.icon_list) ? model.icon_list : []).entries()) {
+  for (const [index, icon] of icons.entries()) {
     const record = asObject(icon) ?? {}
     // Baidu candidate/cell icons are numbered from 1, the way real `.cnd` files spell them.
     const entries = writer.section(`ICON${index + 1}`)
