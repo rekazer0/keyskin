@@ -621,8 +621,73 @@ function parsePanelSize(document: IniDocument): Size<number> {
 }
 
 /**
- * 一份布局文档的渲染投影：几何是 `VIEW_RECT`，样式引用在按键容器里，
- * 具体样式由调用方的解析器去取。同一位置同一动作的段合成一个键。
+ * 板上除按键外的组件：候选栏、列表、更多菜单、输入栏、扫描面板、气泡。
+ * 几何优先取 `VIEW_RECT`，没有就按 `SIZE` + `ANCHOR_TYPE` + `POS` 摆到面板上。
+ */
+function componentRenders(document: IniDocument, panel: Size<number>): KeyRender[] {
+  const read = (section: string, name: string): string | undefined => document.get(section, name)?.trim() || undefined
+  const panelWidth = panel.width
+  const panelHeight = panel.height
+  return document.sections().flatMap((section) => {
+    if (/^(?:KEY|TIP)\d+$/i.test(section)) return []
+    const viewRect = numbersOf(read(section, "VIEW_RECT"))
+    const size = numbersOf(read(section, "SIZE"))
+    // 候选栏铺满整板；其余组件没给尺寸就不画。
+    const spansPanel = section === "PANEL" || section === "CAND"
+    const width = viewRect.length === 4 ? viewRect[2] : spansPanel ? panelWidth : size[0] ?? 0
+    const height = viewRect.length === 4 ? viewRect[3] : spansPanel ? panelHeight : size[1] ?? 0
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return []
+    let x = 0
+    let y = 0
+    if (viewRect.length === 4) {
+      x = viewRect[0]
+      y = viewRect[1]
+    } else if (section !== "PANEL") {
+      const position = numbersOf(read(section, "POS"))
+      const anchor = Number(read(section, "ANCHOR_TYPE"))
+      const offsetX = Number.isFinite(position[0]) ? position[0] : 0
+      const offsetY = Number.isFinite(position[1]) ? position[1] : 0
+      const xAnchor = ((anchor - 1) % 3) + 1
+      const yAnchor = Math.ceil(anchor / 3)
+      x = xAnchor === 2 ? panelWidth / 2 + offsetX : xAnchor === 3 ? panelWidth + offsetX : offsetX
+      y = yAnchor === 2 ? panelHeight / 2 + offsetY : yAnchor === 3 ? panelHeight + offsetY : offsetY
+    }
+    // CAND.FORE_STYLE 是候选词的运行时样式，不是整条候选栏的静态前景。
+    const fore = section === "CAND"
+      ? []
+      : read(section, "FORE_STYLE")?.split(",").map((token) => token.trim()).filter(Boolean) ?? []
+    const back = read(section, "BACK_STYLE")?.split(",")[0]
+    const press = read(section, "KEY") ?? read(section, "CENTER")
+    const show = read(section, "SHOW")
+    return [{
+      key: {
+        id: section,
+        actions: press ? { press: { kind: "text", value: press } } : {},
+        container: { ...(back ? { back: { style: back } } : {}), fore: fore.map((style) => ({ style })) },
+      },
+      section,
+      sections: [section],
+      rect: { x, y, width, height },
+      container: {
+        ...(back ? { back: { style: back } } : {}),
+        fore: fore.map((style) => ({ style })),
+        ...(show ? { text: { content: show } } : {}),
+      },
+      ...(back ? { backStyle: back } : {}),
+      foreStyles: fore,
+      ...(show ? { text: show } : {}),
+      animStyles: [],
+      editable: false,
+      visible: true,
+      fore: [],
+      layers: [],
+    }]
+  })
+}
+
+/**
+ * 一份布局文档的渲染投影：几何是 `VIEW_RECT`，样式引用在容器里，
+ * 具体样式由调用方的解析器去取。同一位置同一动作的按键段合成一个。
  */
 export function bdsRenders(document: IniDocument, state?: number): KeyRender[] {
   const groups = new Map<string, ReturnType<typeof keysOf>>()
@@ -631,7 +696,7 @@ export function bdsRenders(document: IniDocument, state?: number): KeyRender[] {
     const signature = [position.x, position.y, size.width, size.height, actionValue(entry.key.actions.press) ?? ""].join("|")
     groups.set(signature, [...(groups.get(signature) ?? []), entry])
   }
-  return [...groups.values()].map((entries) => {
+  const keys: KeyRender[] = [...groups.values()].map((entries) => {
     const key = entries[entries.length - 1].key
     const { position, size } = entries[entries.length - 1].rect
     // 状态覆盖写在 `[TIPn]` 里；按键只记状态名与段号。
@@ -663,6 +728,8 @@ export function bdsRenders(document: IniDocument, state?: number): KeyRender[] {
       layers: [],
     }
   })
+  // 板上其余组件一起进渲染列表：它们在画布上同样是可画的一块。
+  return [...keys, ...componentRenders(document, parsePanelSize(document))]
 }
 
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
