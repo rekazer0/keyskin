@@ -817,7 +817,9 @@ export async function bdsToModel(
     for (const section of document.sections()) {
       sections.set(section, new Map(document.entries(section).map((entry) => [entry.key, entry.value])))
     }
-    model.windows.push({ kind, path, appearance: hints.theme, orientation: hints.orientation, sections })
+    // 方向从路径取：同一份皮肤的两套窗口各在自己的方向目录里。
+    const windowOrientation: Orientation = /\/land\//i.test(path) ? "land" : /\/port\//i.test(path) ? "port" : hints.orientation
+    model.windows.push({ kind, path, appearance: hints.theme, orientation: windowOrientation, sections })
   }
   const provenance = new Map(model.boards.flatMap((board) => board.keys.map((key) => [key.id, { path: board.id }] as const)))
   // 面板文件的原路径也要记住，导出时沿用原名，避免重建后出现两份面板文件。
@@ -889,7 +891,12 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
     const main = model.boards.find((each) => each.orientation === eachOrientation && each.kind === "main")
       ?? model.boards.find((each) => each.orientation === eachOrientation)
     if (!main) continue
-    const paths = eachOrientation === orientation ? panelPaths : {}
+    // 非主方向沿用该方向窗口的原文件名，否则会与原包的面板文件重名两次。
+    const windows = model.windows.filter((each) => each.orientation === eachOrientation)
+    const paths = eachOrientation === orientation ? panelPaths : {
+      ...(windows.find((each) => each.kind === "candidate") ? { candidate: windows.find((each) => each.kind === "candidate")!.path } : {}),
+      ...(windows.find((each) => each.kind === "hint") ? { hint: windows.find((each) => each.kind === "hint")!.path } : {}),
+    }
     for (const file of panelFiles(main, `${root}/${eachOrientation}/`, main.size, actionValue, paths)) {
       putText(file.path, new TextDecoder().decode(file.data), { kind: "panel-config" })
     }
