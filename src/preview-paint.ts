@@ -6,13 +6,15 @@ import { scheduleNativeFrame } from "./preview-native.ts"
 import { bdaAnimationBindingsForKey } from "./preview-animation.ts"
 import { bdaBindingEffects } from "./preview-animation.ts"
 import { bdaParticleEmitter } from "./preview-animation.ts"
-import { hintKeyOf, legacyHintCandidates, legacyHintSelectedIndex } from "./preview-hints.ts"
+import { hintKeyOf, legacyHintCandidates } from "./preview-hints.ts"
 import { legacyHintIconID } from "./preview-hints.ts"
 import { type Visual } from "./atlas.ts"
 import { type TextVisual } from "./atlas.ts"
 import { previewSurfaceColor, isFullPanelPreviewItem } from "./preview-items.ts"
 import { actionText } from "./skin-model/inspect.ts"
 import { drawVisual } from "./preview-draw.ts"
+import { paintMarquee } from "./paint/marquee.ts"
+import { paintHintBubble } from "./paint/hint.ts"
 import { previewSelectionVisible } from "./preview-items.ts"
 import { bdaTransforms } from "./preview-animation.ts"
 import { legacyAnimationScale } from "./preview-animation.ts"
@@ -31,13 +33,11 @@ import { previewFallbackText } from "./preview-items.ts"
 import { drawListText } from "./preview-draw.ts"
 import { isLegacyHintInputKey } from "./preview-hints.ts"
 import { setCanvasSize } from "./preview-draw.ts"
-import { phoneForegroundVisual } from "./preview-draw.ts"
-import { legacyHintText } from "./preview-hints.ts"
 import { keyAnimationStyles } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { drawSceneLayer, type SceneLayer } from "./native-scene.ts"
-import { toolbarImageRect } from "./preview-draw.ts"
+import { paintToolbarStrip } from "./paint/toolbar.ts"
 
 export async function paintPreview(self: Preview): Promise<void> {
   const drawID = ++self.drawID
@@ -403,46 +403,23 @@ export async function paintPreview(self: Preview): Promise<void> {
     for (const layer of popup) drawSceneLayer(hintContext, layer)
   } else if (shouldDrawHint && self.active && hintIcon) {
     self.hintVisible = true
-    const [baseWidth, height] = hintIcon.size
-    const [offsetX, offsetY] = hintIcon.position
-    const key = self.active.key
-    const [left, top, right, bottom] = hintIcon.padding
-    const desiredCellWidth = hintCellSize?.[0] && hintCellSize[0] > 0 ? hintCellSize[0] : Math.max(
-      self.panelWidth / (self.stateDocument || self.bdaHints ? 14 : 24), hintTextVisual?.fontSize ?? 0, hintCellVisuals[1]?.source?.[2] ?? 0,
-    )
-    const width = hintBar ? Math.min(self.panelWidth, Math.max(baseWidth, left + right + hintCandidates.length * desiredCellWidth)) : baseWidth
-    const cellWidth = hintBar ? (width - left - right) / hintCandidates.length : desiredCellWidth
-    const x = Math.max(0, Math.min(self.panelWidth - width, key.rect.x + (key.rect.width - width) / 2 + offsetX))
-    const bdaNineKeyBar = self.bdaHints && hintDirection === "hold" && /^\d$/.test(actionText(key.key.actions["swipe-up"]) ?? "") && hintCandidates.length > 3
-    const rect = { x, y: bdaNineKeyBar ? -height + offsetY : key.rect.y - height + offsetY, width, height }
-    drawVisual(hintContext, hintVisuals[0], rect, true)
-    drawVisual(hintContext, phoneForegroundVisual(hintVisuals[1]), rect, false)
-    if (hintBar) {
-      const selected = hintDirection === "up"
-        ? 0
-        : self.active.hintIndex ?? legacyHintSelectedIndex(hintKeyOf(key), hintCandidates)
-      self.active.hintCellWidth = cellWidth
-      const cellHeight = hintCellSize?.[1] && hintCellSize[1] > 0 ? Math.min(hintCellSize[1], height - top - bottom) : height - top - bottom
-      hintCandidates.forEach((action, index) => {
-        const cell = { x: rect.x + left + index * cellWidth, y: rect.y + top, width: cellWidth, height: cellHeight }
-        drawVisual(hintContext, hintCellVisuals[index === selected ? 1 : 0], cell, true)
-        const text = index === selected ? hintSelectedTextVisual ?? hintTextVisual : hintTextVisual
-        hintContext.fillStyle = text?.color ?? (self.theme === "dark" ? "#f5f5f7" : "#17191c")
-        hintContext.font = canvasFont(text?.fontSize ?? Math.max(18, Math.min(42, height * 0.25)), text)
-        hintContext.textAlign = "center"
-        hintContext.textBaseline = "middle"
-        hintContext.fillText(action, cell.x + cell.width / 2, cell.y + cell.height / 2)
-      })
-    } else {
-      const action = legacyHintText(hintKeyOf(key), hintDirection)
-      if (action) {
-        hintContext.fillStyle = hintTextVisual?.color ?? (self.theme === "dark" ? "#f5f5f7" : "#17191c")
-        hintContext.font = canvasFont(hintTextVisual?.fontSize ?? Math.max(18, Math.min(42, height * 0.25)), hintTextVisual)
-        hintContext.textAlign = "center"
-        hintContext.textBaseline = "middle"
-        hintContext.fillText(action, rect.x + left + (width - left - right) / 2, rect.y + top + (height - top - bottom) / 2)
-      }
-    }
+    paintHintBubble(hintContext, hintKeyOf(self.active.key), self.active.key.rect, {
+      size: hintIcon.size,
+      position: hintIcon.position,
+      padding: hintIcon.padding,
+      background: hintVisuals[0],
+      foreground: hintVisuals[1],
+      candidates: hintCandidates,
+      cellVisuals: hintCellVisuals,
+      textVisual: hintTextVisual,
+      selectedTextVisual: hintSelectedTextVisual,
+      cellSize: hintCellSize,
+      direction: hintDirection,
+      bar: hintBar,
+      panelWidth: self.panelWidth,
+      dark: self.theme === "dark",
+      onCellWidth: (width) => { if (self.active) self.active.hintCellWidth = width },
+    })
   } else {
     self.hintVisible = false
   }
@@ -467,31 +444,11 @@ export async function paintPreview(self: Preview): Promise<void> {
     drawVisual(context, self.animationVisual.visual, self.animationVisual.key.rect, false)
   }
 
-  // 工具栏条的位置由 IR 的工具栏组件给出；没给就不画这一条。
-  const toolbarRect = toolbarImages.length ? self.toolbarRect : undefined
-  if (toolbarRect && (!scene || scene.partial && !keys.some((key) => actionText(key.key.actions.press) === "F14" && sceneKeys.has(key.section)))) {
-    const slotWidth = toolbarRect.width / toolbarImages.length
-    toolbarImages.forEach((visual, index) => {
-      const destination = toolbarImageRect(visual, {
-        x: toolbarRect.x + index * slotWidth,
-        y: toolbarRect.y,
-        width: slotWidth,
-        height: toolbarRect.height,
-      }, self.panelWidth, self.devicePointWidth)
-      drawVisual(context, visual, destination, true)
-    })
-  }
+  // 原生场景已经画了 F14 那条时不重复画。
+  const sceneOwnsToolbar = Boolean(scene && (!scene.partial || keys.some((key) => actionText(key.key.actions.press) === "F14" && sceneKeys.has(key.section))))
+  if (!sceneOwnsToolbar) paintToolbarStrip(context, toolbarImages, self.toolbarRect, self.panelWidth, self.devicePointWidth)
 
-  if (self.marquee?.rect) {
-    const { x, y, width, height } = self.marquee.rect
-    context.save()
-    context.strokeStyle = context.fillStyle = getComputedStyle(self.canvas).getPropertyValue("--selection").trim()
-    context.globalAlpha = 0.15
-    context.fillRect(x, y, width, height)
-    context.globalAlpha = 1
-    context.strokeRect(x, y, width, height)
-    context.restore()
-  }
+  paintMarquee(context, self.marquee?.rect, () => getComputedStyle(self.canvas).getPropertyValue("--selection").trim())
   drawGuides(self, visible)
   self.lastDrawnID = drawID
 }
