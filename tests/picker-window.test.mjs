@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
-import { appSource } from "./helpers/app-source.mjs"
+import { appSource, declarations, run } from "./helpers/app-source.mjs"
 
 const html = readFileSync(new URL("../picker.html", import.meta.url), "utf8")
 const script = readFileSync(new URL("../src/picker-window.ts", import.meta.url), "utf8")
@@ -44,7 +44,27 @@ test("切片窗口不再提供右侧的选择图片资源按钮", () => {
 })
 
 test("样式库在切片窗口内作为视图打开，切片返回直接切到全部样式", () => {
-  assert.match(main, /appState\.styleLibrarySelected = undefined\s*void showPickerWindow\("styles", "全部样式"/)
+  for (const kind of ["style", "animation"]) {
+    const pickerDialog = { dataset: {} }
+    const input = { dataset: {} }
+    const opens = []
+    const context = run(declarations("openStylePicker"), {
+      pickerDialog,
+      mobilePortraitQuery: { matches: false },
+      layoutAnimationFields: new Set(["ANIM_STYLE"]),
+      styleReferenceKey: () => kind === "animation" ? "ANIM_STYLE" : "BACK_STYLE",
+      styleLibrarySelected: "old-style",
+      pickerTarget: "old-image",
+      showPickerWindow: (view, title) => {
+        assert.equal(context.styleLibrarySelected, undefined)
+        assert.equal(context.pickerTarget, undefined)
+        assert.equal(context.stylePickerTarget, input)
+        opens.push([view, title, pickerDialog.dataset.kind])
+      },
+    })
+    context.openStylePicker(input)
+    assert.deepEqual(opens, [["styles", "全部样式", kind]])
+  }
   assert.match(main, /onPickerEvent\("image-picker-back-styles", \(\) => void emitStyleLibrary\(true\)\)/)
   assert.match(main, /styleLibrary: Boolean\(appState\.stylePickerTarget\),/)
   assert.match(script, /onMain<StyleLibraryPayload>\("style-library-data"/)

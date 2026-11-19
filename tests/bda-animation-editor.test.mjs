@@ -52,6 +52,13 @@ class FakeNode {
     }
   }
 
+  before(node) {
+    const parent = this.parentElement
+    if (!parent) return
+    node.parentElement = parent
+    parent.children.splice(parent.children.indexOf(this), 0, node)
+  }
+
   appendChild(node) {
     this.append(node)
     return node
@@ -141,8 +148,10 @@ class FakeNode {
   }
 }
 
+class FakeInput extends FakeNode {}
+globalThis.HTMLInputElement = FakeInput
 globalThis.document = {
-  createElement: (tag) => new FakeNode(tag),
+  createElement: (tag) => tag === "input" ? new FakeInput(tag) : new FakeNode(tag),
   createElementNS: (_namespace, tag) => new FakeNode(tag),
 }
 globalThis.Option = function Option(text, value) {
@@ -401,7 +410,10 @@ test("图片序列帧：图片卡片选资源、资源编号与每帧时长写�
   const frames = byClass(container, "bda-animation-frame-card")
   assert.equal(frames.length, 2)
   assert.deepEqual(frames.map((node) => firstByTag(node, "span").textContent), ["第 1 帧", "第 2 帧"])
-  buttonByLabel(container, "选择第 1 帧").dispatch("click")
+  const preview = byClass(frames[0], "ui-style-state")[0]
+  assert.equal(preview.getAttribute("aria-label"), "更换第 1 帧")
+  assert.equal(preview.getAttribute("role"), "button")
+  preview.dispatch("click")
   assert.deepEqual(events.resources, [["seq", 0]])
   change(inputByLabel(frames[1], "第 2 帧"), "b2.png")
   change(inputByLabel(frames[1], "时长"), 240)
@@ -427,7 +439,12 @@ test("不可编辑时所有字段禁用，预览播放不需要编辑权限", as
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.equal(buttonByLabel(container, "播放预览").disabled, false)
   // 不可编辑时图片卡的预览格不响应点击，也不进 Tab 顺序（styleReferenceCard）。
-  assert.equal(buttonByLabel(render({ selected: "image:seq", editable: false }).container, "选择第 1 帧").tabIndex, -1)
+  const readOnly = render({ selected: "image:seq", editable: false })
+  const preview = byClass(readOnly.container, "ui-style-state")[0]
+  assert.equal(preview.getAttribute("role"), null)
+  assert.notEqual(preview.tabIndex, 0)
+  preview.dispatch("click")
+  assert.deepEqual(readOnly.events.resources, [])
 })
 
 test("没有效果时列表显示空状态，不渲染预览与参数", () => {

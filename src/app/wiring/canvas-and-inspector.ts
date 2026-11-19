@@ -6,21 +6,22 @@ import { wheelZoomFactor } from "../../wheel-zoom.ts"
 import { mixedCoordinateDelta } from "../../mixed-input.ts"
 import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
-import { renderSourceValueThumbnail, updateSourceFindVisibility } from "../source-panel"
+import { renderSourceValueThumbnail, updateSourceFindVisibility, syncInspectorSourceToggle, toggleInspectorSource, updateSourceHighlight } from "../source-panel"
 import { settingsWorkspace, sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
 import { syncSinglePageInspectorGroup, setMobilePane, syncMobileInspectorHeader } from "../mobile-layout"
-import { fitCandidateInputBar } from "../config-context"
+import { fitCandidateInputBar, scrollSelectedSource } from "../config-context"
 import { measureCanvasWrapInnerSize, scheduleFitCanvasPreview, applyPreviewZoom, setPreviewPan, finishPreviewPan, schedulePreviewPan } from "../preview-render"
 import { canvasEditable, isEditing } from "../edit-history"
 import { chooseStyleImageSlice, clearImagePreviewError, showImagePreviewError } from "../resource-inspector"
 import { replacedSourceStyle } from "../../source-value-ranges.ts"
 import { decorateStyleReferenceInput } from "../style-references"
+import { bindAnimationInspectorShell } from "../../animation-inspector.ts"
 import { bindFieldServices } from "../property-rows"
 import { pickAnimationKeys } from "../animation-resource"
-import { renameDocumentTitle } from "../key-inspector"
+import { populateKeyInspector, renameDocumentTitle } from "../key-inspector"
 import { runFileOperation } from "../file-operations"
 import { sourceTargetFolder, commitSourceUploads, sourceSelection, setSourceTransfer } from "../source-files"
 import { writeToChosenFile } from "../archive-io"
@@ -29,7 +30,7 @@ import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 import { syncMobileKeyPreview } from "../mobile-key-preview"
 import { wireMobileInspector } from "../mobile-inspector"
-import { mobileKeyPreview, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel, mobileFilesClose } from "../dom"
+import { mobileKeyPreview, mobileAppMore, mobileMoreActions, mobileModeLabel, mobileSkinThemeLabel, mobileFilesClose, animationObjectHeading } from "../dom"
 
 /** 启动环境、全局指针、画布预览、检查器与缩放。只在启动时由 main.ts 按顺序调用一次。 */
 import { wireAnimationDrop } from "../animation-drop"
@@ -37,6 +38,15 @@ import { wireAnimationDrop } from "../animation-drop"
 export function wireCanvasAndInspector(): void {
   wireAnimationDrop()
   bindFieldServices({ editing: isEditing, decorateStyle: decorateStyleReferenceInput })
+  bindAnimationInspectorShell({
+    heading: animationObjectHeading,
+    format: () => appState.archive?.format,
+    editingStyle: () => appState.animationStyleEditing && appState.archive?.format !== "bda",
+    showingSource: () => appState.inspectorTab === "source",
+    syncSourceToggle: syncInspectorSourceToggle,
+    toggleSource: () => toggleInspectorSource(populateKeyInspector),
+    revealSource: () => { updateSourceHighlight(); scrollSelectedSource() },
+  })
   installClientLogging(document.querySelector<HTMLElement>("#about-update")?.dataset.currentVersion ?? "unknown")
   installSafeAreaLock()
   document.documentElement.classList.toggle("macos", isTauri() && navigator.userAgent.includes("Macintosh"))

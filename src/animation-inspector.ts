@@ -1,9 +1,4 @@
-import { syncInspectorSourceToggle, toggleInspectorSource, updateSourceHighlight } from "./app/source-panel"
-import { scrollSelectedSource } from "./app/config-context"
-import { populateKeyInspector } from "./app/key-inspector"
-import { appState } from "./app/state"
-import { animationObjectHeading } from "./app/dom"
-import { confirmDeletion } from "./app/ask"
+import { confirmDeletion } from "./app/ask.ts"
 /*
  * 动画资源检查器的公共骨架（DESIGN.md §10「动画资源」）：手心 skin.json、百度 anim.ini 与 BDA animationConfig
  * 共用同一套分组——列表（选一个动画）→ 预览（播放器）→ 参数分组。桌面宽度下列表放进左侧栏、
@@ -104,6 +99,22 @@ type AnimationResourceView = {
   sections: HTMLElement[]
 }
 
+type AnimationInspectorShell = {
+  heading: HTMLElement
+  format(): string | undefined
+  editingStyle(): boolean
+  showingSource(): boolean
+  syncSourceToggle(button: HTMLButtonElement): void
+  toggleSource(): void
+  revealSource(): void
+}
+
+let shell: AnimationInspectorShell | undefined
+
+export function bindAnimationInspectorShell(next: AnimationInspectorShell): void {
+  shell = next
+}
+
 const MODE_NOUN: Record<AnimationMode, string> = { all: "动画", motion: "动效", particle: "粒子" }
 
 /** Keyboard selection rebuilds the inspector; the new list takes the focus back. */
@@ -135,8 +146,9 @@ function listOption(view: AnimationResourceView, item: AnimationListItem, select
   card.setAttribute("aria-selected", String(selected))
   card.tabIndex = selected ? 0 : -1
   card.title = `${item.title} · ${item.kind} · ${item.uses ? `${item.uses} 处引用` : "未使用"}\n${item.problem ?? item.detail}`
-  const dragID = appState.archive?.format === "sxi" ? item.id.match(/^\d+$/)?.[0]
-    : (appState.archive?.format === "bdi" || appState.archive?.format === "bds") ? item.id.match(/^ANIM(\d+)$/)?.[1] : undefined
+  const format = shell?.format()
+  const dragID = format === "sxi" ? item.id.match(/^\d+$/)?.[0]
+    : (format === "bdi" || format === "bds") ? item.id.match(/^ANIM(\d+)$/)?.[1] : undefined
   if (view.mode !== "all" && dragID) {
     card.dataset.animationDraggable = dragID
     card.title += "\n拖到画布应用；已有选择时也可按 Alt + Enter"
@@ -404,14 +416,16 @@ function animationBadge(item: AnimationListItem): HTMLElement {
 }
 
 function renderObjectHeader(context: string, item: AnimationListItem | undefined, mode: AnimationMode): void {
+  if (!shell) return
+  const { heading, toggleSource, syncSourceToggle } = shell
   const toggle = iconButton("code-xml", "查看源代码", () => {
-    toggleInspectorSource(populateKeyInspector)
-    animationObjectHeading.querySelector("button")?.focus({ preventScroll: true })
+    toggleSource()
+    heading.querySelector("button")?.focus({ preventScroll: true })
   })
   toggle.classList.add("ui-inspector-source-toggle")
   toggle.dataset.variant = "filled"
   toggle.dataset.size = "lg"
-  syncInspectorSourceToggle(toggle)
+  syncSourceToggle(toggle)
   const icon = element("span", "ui-inspector-object-icon")
   icon.append(createIcon((item ? item.particle : mode === "particle") ? "wand-sparkles" : "film", 16))
   const copy = element("div", "ui-inspector-object-copy")
@@ -422,7 +436,7 @@ function renderObjectHeader(context: string, item: AnimationListItem | undefined
   const path = element("span", "ui-inspector-object-context animation-object-path")
   path.textContent = path.title = context
   copy.append(name, path)
-  animationObjectHeading.replaceChildren(icon, copy, toggle)
+  heading.replaceChildren(icon, copy, toggle)
 }
 
 function previewSection(view: AnimationResourceView, item: AnimationListItem): HTMLElement {
@@ -450,8 +464,8 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
   const hosts = animationWorkspaceHosts()
   view.listOwner = container
   view.listContext = JSON.stringify([view.mode, hosts?.allTypes, view.context])
-  const editingStyle = appState.animationStyleEditing && appState.archive?.format !== "bda"
-  if (view.mode !== "all" && (!editingStyle || appState.inspectorTab === "source")) renderObjectHeader(view.context, item, view.mode)
+  const showingSource = shell?.showingSource()
+  if (view.mode !== "all" && (!shell?.editingStyle() || showingSource)) renderObjectHeader(view.context, item, view.mode)
   if (hosts && view.mode !== "all") {
     hosts.setMode(view.mode === "particle", countLabel(view), [view.totalCount - view.particleCount, view.particleCount])
     hosts.setStyles(view.styles?.noun, view.styles?.items.length ?? 0)
@@ -465,10 +479,9 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
     syncChildren(hosts.styles, styles ? [styles, ...styleToolbar ? [styleToolbar] : []] : [])
     hosts.filter()
     hosts.stage.replaceChildren(...stageContent(view, item))
-    if (appState.inspectorTab === "source") {
+    if (showingSource) {
       container.replaceChildren()
-      updateSourceHighlight()
-      scrollSelectedSource()
+      shell?.revealSource()
       return
     }
     container.replaceChildren(...view.listRows?.length ? [section("配置", view.listRows, { className: view.sectionClass })] : [])

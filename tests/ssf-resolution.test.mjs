@@ -4,6 +4,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { strFromU8, strToU8 } from 'fflate'
 import { IniDocument } from '../src/ini.ts'
+import { resolveCandidateRect } from '../src/candidate-style.ts'
+import { previewItems } from '../src/preview-items.ts'
 import { adaptPackageSounds } from '../src/sounds.ts'
 import { SkinArchive } from '../src/skin.ts'
 import { convertSsfDocument, documentPackage, ssfDocumentBytes } from '../src/ssf/ssf-convert.ts'
@@ -98,7 +100,7 @@ test('SSF → BDI and BDS reopen with every preview layout, toolbar, image and f
   }
 })
 
-test('SSF → BDI and BDS share keys and resources and differ only in each platform\'s toolbar artwork', async () => {
+test('SSF → BDI and BDS share keys and resources and preserve toolbar placement across platform-specific anchors and artwork', async () => {
   const fixture = await open(ssfFixture())
   const trees = {}
   for (const format of ['bdi', 'bds']) {
@@ -120,10 +122,27 @@ test('SSF → BDI and BDS share keys and resources and differ only in each platf
     const converted = trees.bdi.get(name)
     if (!converted) continue
     if (name.endsWith('.cnd')) {
-      // FIX_SIZE is the iOS-only icon size patch (V6 p158).
       const ios = IniDocument.parse(strFromU8(converted))
-      for (const { section, key } of ios.entries()) if (key === 'FIX_SIZE') ios.remove(section, key)
-      assert.equal(ios.toString(), strFromU8(bytes), name)
+      const android = IniDocument.parse(strFromU8(bytes))
+      const generalPath = name.replace(/[^/]+$/, 'gen.ini')
+      const icons = (candidate, format, composing) => {
+        const general = IniDocument.parse(strFromU8(trees[format].get(generalPath)))
+        const { width, height } = resolveCandidateRect(candidate, general)
+        return previewItems(candidate, width, height, undefined, composing)
+          .filter(({ section }) => /^ICON\d+$/.test(section))
+          .map(({ section, center, rect }) => ({ section, center, rect }))
+      }
+      // BDS uses a center-row anchor so icons follow panel overrides; at the
+      // default height it must still hit the same area as the BDI export.
+      for (const composing of [false, true]) {
+        assert.deepEqual(icons(android, 'bds', composing), icons(ios, 'bdi', composing), `${name}: composing=${composing}`)
+      }
+      for (const candidate of [ios, android]) for (const section of candidate.sections().filter(name => /^ICON\d+$/.test(name))) {
+        candidate.remove(section, 'POS')
+        candidate.remove(section, 'ANCHOR_TYPE')
+        if (candidate === ios) candidate.remove(section, 'FIX_SIZE')
+      }
+      assert.equal(ios.toString(), android.toString(), name)
     } else if (name.endsWith('.css')) {
       const normalise = value => strFromU8(value).replace(/(_SOUND_PATH=.+)\.(?:aiff|ogg)$/gm, '$1.native')
       assert.equal(normalise(converted), normalise(bytes), name)

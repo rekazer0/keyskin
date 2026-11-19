@@ -436,7 +436,6 @@ function sameIniValue(left: string, right: string): boolean {
     part !== "" && rightParts[index] !== "" && Number.isFinite(Number(part)) && Number(part) === Number(rightParts[index]))
 }
 
-/* ------------------------------------------------------------------ toolbar */
 
 function toolbarItem(value: PalmPlistValue): Json | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined

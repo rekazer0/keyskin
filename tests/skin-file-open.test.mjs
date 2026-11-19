@@ -52,12 +52,13 @@ test('opening another skin offers export for saved and unsaved skins and preserv
       flushNumberInputWheel: () => calls.push('flush-input'),
       flushSourceAutosave: async () => calls.push('flush-source'),
       ask: async (options) => { assert.match(options.title, /导出当前皮肤/); calls.push('ask'); return decision },
-      openSharePage: () => calls.push('share'),
+      canvasWrap: { classList: { remove: (value) => { assert.equal(value, 'empty'); calls.push('reveal-current') } } },
+      openShareDialog: (focusExport) => { assert.equal(focusExport, true); calls.push('share') },
       saveArchive: () => assert.fail('the user exports from the share page'),
     })
     assert.equal(await context.prepareDocumentReplacement('open'), decision === 'discard')
     assert.equal(context.archive, archive)
-    assert.deepEqual(calls, ['flush-input', 'flush-source', 'ask', ...(decision === 'export' ? ['share'] : [])])
+    assert.deepEqual(calls, ['flush-input', 'flush-source', 'ask', ...(decision === 'export' ? ['reveal-current', 'share'] : [])])
   }
   const context = run(declarations('prepareDocumentReplacement', 'hasUnsavedChanges'), {
     flushNumberInputWheel: () => {}, flushSourceAutosave: async () => {},
