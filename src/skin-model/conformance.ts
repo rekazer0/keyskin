@@ -37,7 +37,7 @@ export function countsOf(model: SkinModel): ModelCounts {
     styles: [...model.styles.values()].filter((style) => hasLayers(style)).length,
     images: model.images.size,
     motions: model.motions.size,
-    sounds: model.sounds.size,
+    sounds: model.sounds.length,
     errors: validateModel(model).errors,
   }
 }

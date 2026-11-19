@@ -2,6 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
+import { boardPanels } from "../src/skin-model/panel.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds/index.ts"
 import { setNodeRect } from "../src/skin-model/layout.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
@@ -32,7 +33,7 @@ test("BDS 转换器读出完整模型", async () => {
   assert.deepEqual(key.container.fore.map((layer) => layer.style), ["3", "4"])
   assert.ok(model.styles.size > 0)
   assert.equal(model.resources.get("click.wav")?.kind, "audio")
-  assert.equal(model.motions.get("ANIM1").root.kind, "track")
+  assert.equal(model.motions.get("ANIM1").kind, "track")
 })
 
 test("重建后重新读出保持一致", async () => {
@@ -70,15 +71,16 @@ test("读出面板的候选栏、气泡、列表与工具栏", async () => {
   const source = bdsSource(archive)
   assert.ok(source)
   const board = (await readWith(bdsFormat, source)).boards[0]
-  assert.equal(board.backdrop?.style, "1")
-  assert.equal(board.candidates?.[0]?.style, "6")
-  assert.equal(board.candidates?.[0]?.cellStyle, "120")
-  assert.equal(board.candidates?.[0]?.icons?.[0]?.action?.kind, "system")
-  assert.equal(board.hint?.style, "0")
-  assert.deepEqual(board.hint?.offset, { x: 1, y: 2 })
-  assert.equal(board.list?.cellStyle, "120")
-  assert.deepEqual(board.list?.cellSize, { width: 100, height: 50 })
-  assert.equal(board.list?.count, 3)
+  const panels = boardPanels(board)
+  assert.equal(panels?.backdrop?.style, "1")
+  assert.equal(panels?.candidates?.[0]?.style, "6")
+  assert.equal(panels?.candidates?.[0]?.cellStyle, "120")
+  assert.equal(panels?.candidates?.[0]?.icons?.[0]?.action?.kind, "system")
+  assert.equal(panels?.hint?.style, "0")
+  assert.deepEqual(panels?.hint?.offset, { x: 1, y: 2 })
+  assert.equal(panels?.list?.cellStyle, "120")
+  assert.deepEqual(panels?.list?.cellSize, { width: 100, height: 50 })
+  assert.equal(panels?.list?.count, 3)
 })
 
 test("重建后仍能读回面板组件", async () => {
@@ -87,12 +89,12 @@ test("重建后仍能读回面板组件", async () => {
   assert.ok(source)
   const model = await readWith(bdsFormat, source)
   const rebuilt = await writeWith(bdsFormat, model, source)
-  const again = (await readWith(bdsFormat, rebuilt)).boards[0]
-  assert.ok(again.backdrop?.style)
-  assert.ok(again.candidates?.length)
-  assert.ok(again.hint)
-  assert.ok(again.list)
-  assert.equal(again.list?.cellSize?.width, 100)
+  const again = boardPanels((await readWith(bdsFormat, rebuilt)).boards[0])
+  assert.ok(again?.backdrop?.style)
+  assert.ok(again?.candidates?.length)
+  assert.ok(again?.hint)
+  assert.ok(again?.list)
+  assert.equal(again?.list?.cellSize?.width, 100)
 })
 
 test("图集超过一页时按页切分", async () => {

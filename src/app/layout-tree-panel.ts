@@ -128,7 +128,7 @@ export async function renderLayoutTree(container: HTMLElement): Promise<void> {
     return
   }
   // 矩形由布局树算出来，和画布、导出用的是同一份。
-  const rects = await computeLayout(board.layout, board.size)
+  const rects = await computeLayout(board.layout, board.container)
   const keyIds = new Set(board.keys.map((key) => key.id))
   container.replaceChildren(renderNode(board.layout, board.layout, keyIds, true, container, state, rects))
   syncSelection(container)

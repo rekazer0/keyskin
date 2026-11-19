@@ -2,11 +2,11 @@
 //
 // 编辑器最终要改模型而不是直接改 INI。这一层只做「输入旧模型与改动，输出新模型」，
 // 不碰归档、不碰撤销栈，便于测试，也让每种格式共用同一套编辑语义。
-import type { SkinBoard } from "./board.ts"
-import type { KeyContainer, SkinKey } from "./key.ts"
+import type { Board } from "./board.ts"
+import type { HitArea, KeyContainer, Key } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
-import type { KeyEvent, SkinAction, SkinMeta } from "./types.ts"
+import type { KeyEvent, KeyAction, SkinMeta } from "./types.ts"
 import type { Rect } from "taffy-layout"
 import { setNodeRect, type LayoutBox } from "./layout.ts"
 import { cachedLayout } from "./layout-cache.ts"
@@ -16,7 +16,7 @@ function unchanged(model: SkinModel): SkinModel {
   return model
 }
 
-function replaceBoard(model: SkinModel, boardId: string, next: SkinBoard): SkinModel {
+function replaceBoard(model: SkinModel, boardId: string, next: Board): SkinModel {
   const index = model.boards.findIndex((board) => board.id === boardId)
   if (index < 0) return unchanged(model)
   const boards = model.boards.slice()
@@ -24,7 +24,7 @@ function replaceBoard(model: SkinModel, boardId: string, next: SkinBoard): SkinM
   return { ...model, boards }
 }
 
-function replaceKey(board: SkinBoard, keyId: string, next: SkinKey): SkinBoard | undefined {
+function replaceKey(board: Board, keyId: string, next: Key): Board | undefined {
   const index = board.keys.findIndex((key) => key.id === keyId)
   if (index < 0) return
   const keys = board.keys.slice()
@@ -33,7 +33,7 @@ function replaceKey(board: SkinBoard, keyId: string, next: SkinKey): SkinBoard |
 }
 
 /** 找到按键与它所在的板；找不到返回 undefined。 */
-export function findKey(model: SkinModel, boardId: string, keyId: string): { board: SkinBoard; key: SkinKey } | undefined {
+export function findKey(model: SkinModel, boardId: string, keyId: string): { board: Board; key: Key } | undefined {
   const board = model.boards.find((item) => item.id === boardId)
   const key = board?.keys.find((item) => item.id === keyId)
   return board && key ? { board, key } : undefined
@@ -42,12 +42,12 @@ export function findKey(model: SkinModel, boardId: string, keyId: string): { boa
 export type KeyPatch = {
   /** 几何补丁；几何只落在布局树上，按键本身不带矩形。 */
   rect?: LayoutBox
-  touchRect?: LayoutBox | null
+  hitArea?: HitArea
   /** 内边距；传 null 表示清掉。 */
   padding?: Rect<number> | null
   /** 层定义补丁；传整个容器表示整层替换。 */
   container?: KeyContainer
-  actions?: Partial<Record<KeyEvent, SkinAction | null>>
+  actions?: Partial<Record<KeyEvent, KeyAction | null>>
 }
 
 /** 改一个按键；返回新模型，原模型不动。 */
@@ -56,17 +56,17 @@ export function patchKey(model: SkinModel, boardId: string, keyId: string, patch
   if (!found) return unchanged(model)
   const { board, key } = found
 
-  const actions: Partial<Record<KeyEvent, SkinAction>> = { ...key.actions }
-  for (const [event, action] of Object.entries(patch.actions ?? {}) as Array<[KeyEvent, SkinAction | null]>) {
+  const actions: Partial<Record<KeyEvent, KeyAction>> = { ...key.actions }
+  for (const [event, action] of Object.entries(patch.actions ?? {}) as Array<[KeyEvent, KeyAction | null]>) {
     if (action === null) delete actions[event]
     else actions[event] = action
   }
 
   const container: KeyContainer = patch.container ?? key.container
 
-  const next: SkinKey = {
+  const next: Key = {
     ...key,
-    ...(patch.touchRect === null ? { touchRect: undefined } : patch.touchRect ? { touchRect: patch.touchRect } : {}),
+    ...(patch.hitArea ? { hitArea: patch.hitArea } : {}),
     ...(patch.padding === null ? { padding: undefined } : patch.padding ? { padding: patch.padding } : {}),
     actions,
     container,
@@ -111,12 +111,12 @@ export function setKeyContainer(model: SkinModel, boardId: string, keyId: string
 }
 
 /** 给按键绑定一个事件的动作；传 null 解除。 */
-export function setKeyAction(model: SkinModel, boardId: string, keyId: string, event: KeyEvent, action: SkinAction | null): SkinModel {
+export function setKeyAction(model: SkinModel, boardId: string, keyId: string, event: KeyEvent, action: KeyAction | null): SkinModel {
   return patchKey(model, boardId, keyId, { actions: { [event]: action } })
 }
 
 /** 新增按键；id 已存在时不改动。 */
-export function addKey(model: SkinModel, boardId: string, key: SkinKey): SkinModel {
+export function addKey(model: SkinModel, boardId: string, key: Key): SkinModel {
   const board = model.boards.find((item) => item.id === boardId)
   if (!board || board.keys.some((item) => item.id === key.id)) return unchanged(model)
   return replaceBoard(model, boardId, { ...board, keys: [...board.keys, key] })
@@ -172,8 +172,9 @@ export function removeStyle(model: SkinModel, styleId: string): SkinModel {
 
   const motions = new Map(model.motions)
   for (const [id, motion] of motions) {
-    const bindings = motion.bindings.filter((binding) => binding.target !== `style:${styleId}`)
-    if (bindings.length !== motion.bindings.length) motions.set(id, { ...motion, bindings })
+    const existing = motion.bindings ?? []
+    const bindings = existing.filter((binding) => binding.target !== `style:${styleId}`)
+    if (bindings.length !== existing.length) motions.set(id, { ...motion, bindings })
   }
 
   return { ...model, styles, boards, motions }
@@ -183,10 +184,8 @@ export function removeStyle(model: SkinModel, styleId: string): SkinModel {
 export function setBoardBackdrop(model: SkinModel, boardId: string, style: string | null): SkinModel {
   const board = model.boards.find((item) => item.id === boardId)
   if (!board) return model
-  const backdrop = style === null
-    ? (({ style: _removed, ...rest }) => rest)(board.backdrop ?? {})
-    : { ...board.backdrop, style }
-  return replaceBoard(model, boardId, { ...board, backdrop })
+  const { backdrop: _removed, ...rest } = board
+  return replaceBoard(model, boardId, style === null ? rest : { ...rest, backdrop: style })
 }
 
 /** 改皮肤元信息；未给出的字段保持不变。 */
@@ -203,6 +202,6 @@ export function setMeta(model: SkinModel, patch: Partial<SkinMeta>): SkinModel {
 export function resizeBoard(model: SkinModel, boardId: string, size: { width: number; height: number }): SkinModel {
   const board = model.boards.find((item) => item.id === boardId)
   if (!board) return unchanged(model)
-  const next = replaceBoard(model, boardId, { ...board, size })
+  const next = replaceBoard(model, boardId, { ...board, container: size })
   return board.kind === "main" ? { ...next, meta: { ...next.meta, resolution: size } } : next
 }

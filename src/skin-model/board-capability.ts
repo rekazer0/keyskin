@@ -2,7 +2,7 @@
 //
 // 这些判断以前散在各处按格式写（`!bdaSelected && !ssfSelected`）。格式只决定大方向，
 // 真正的事实是这块板的几何来源与它所属格式的能力。这里是纯函数，界面负责提供当前板。
-import type { SkinBoard } from "./board.ts"
+import type { Board } from "./board.ts"
 
 /** 一块板在编辑器里允许做什么。 */
 export type BoardTraits = {
@@ -36,10 +36,10 @@ export function fallbackTraits(format: string | undefined): BoardTraits {
 }
 
 /** 已知板时按它自己的属性判断。 */
-export function traitsOf(board: SkinBoard, format: string | undefined): BoardTraits {
-  const geometryEditable = board.geometry === "document"
+export function traitsOf(board: Board, format: string | undefined): BoardTraits {
+  const geometryEditable = board.geometry.kind === "document"
   return {
-    geometry: board.geometry,
+    geometry: board.geometry.kind,
     geometryEditable,
     // 客户端排布的板不能增删键；工具栏板也不在这里增删。
     keyAdjustable: geometryEditable && board.kind !== "toolbar",

@@ -2,14 +2,15 @@
 //
 // 检查器以前按格式各自决定显示什么字段。现在统一从模型派生：字段名、值、类型都由模型给出，
 // 格式差异只体现在「这个格式有没有这个能力」，不再体现在字段表上。
-import type { SkinBoard } from "./board.ts"
-import type { SkinKey } from "./key.ts"
+import type { Board } from "./board.ts"
+import type { Key } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
-import type { SkinMotion } from "./motion.ts"
+import type { MotionNode } from "./motion.ts"
 import { motionNodeKinds } from "./motion.ts"
 import { cachedLayout } from "./layout-cache.ts"
 import { findKey } from "./edit.ts"
+import { boardPanels } from "./panel.ts"
 
 export type PropertyKind =
   | "number"
@@ -49,22 +50,35 @@ export function keyGeometry(model: SkinModel, boardId: string, keyId: string): P
   const found = findKey(model, boardId, keyId)
   if (!found) return []
   const { board, key } = found
-  const editable = board.geometry === "document"
+  const editable = board.geometry.kind === "document"
   const note = editable ? undefined : "几何由客户端决定，不能在这里改"
-  const rect = cachedLayout(board)?.get(key.id)
+  const rect = cachedLayout(board)?.get(key.layoutId)
+  // 触摸区按显示区还原成像素；same 就是显示区本身，none 是零面积。
+  const touch = key.hitArea?.kind === "inset" && rect
+    ? {
+      x: rect.position.x + key.hitArea.edges.left,
+      y: rect.position.y + key.hitArea.edges.top,
+      width: rect.size.width - key.hitArea.edges.left - key.hitArea.edges.right,
+      height: rect.size.height - key.hitArea.edges.top - key.hitArea.edges.bottom,
+    }
+    : key.hitArea?.kind === "none"
+      ? { x: 0, y: 0, width: 0, height: 0 }
+      : rect
+        ? { x: rect.position.x, y: rect.position.y, width: rect.size.width, height: rect.size.height }
+        : undefined
   return [
     { ...numberView("x", "X", rect?.position.x, note), readOnly: !editable },
     { ...numberView("y", "Y", rect?.position.y, note), readOnly: !editable },
     { ...numberView("width", "宽", rect?.size.width, note), readOnly: !editable },
     { ...numberView("height", "高", rect?.size.height, note), readOnly: !editable },
-    { ...numberView("touch.x", "触摸 X", key.touchRect?.position.x, note), readOnly: !editable },
-    { ...numberView("touch.y", "触摸 Y", key.touchRect?.position.y, note), readOnly: !editable },
-    { ...numberView("touch.width", "触摸宽", key.touchRect?.size.width, note), readOnly: !editable },
-    { ...numberView("touch.height", "触摸高", key.touchRect?.size.height, note), readOnly: !editable },
+    { ...numberView("touch.x", "触摸 X", touch?.x, note), readOnly: !editable },
+    { ...numberView("touch.y", "触摸 Y", touch?.y, note), readOnly: !editable },
+    { ...numberView("touch.width", "触摸宽", touch?.width, note), readOnly: !editable },
+    { ...numberView("touch.height", "触摸高", touch?.height, note), readOnly: !editable },
   ]
 }
 
-const ACTION_LABELS: ReadonlyArray<[keyof SkinKey["actions"], string]> = [
+const ACTION_LABELS: ReadonlyArray<[keyof Key["actions"], string]> = [
   ["press", "点击"],
   ["long-press", "长按"],
   ["swipe-up", "上滑"],
@@ -74,7 +88,7 @@ const ACTION_LABELS: ReadonlyArray<[keyof SkinKey["actions"], string]> = [
 ]
 
 /** 动作码：模型里的动作是语义对象，这里换成可读的短写。 */
-export function actionText(action: SkinKey["actions"][keyof SkinKey["actions"]]): string | undefined {
+export function actionText(action: Key["actions"][keyof Key["actions"]]): string | undefined {
   if (!action) return
   switch (action.kind) {
     case "text": return action.value === " " ? "空格" : action.value
@@ -84,6 +98,7 @@ export function actionText(action: SkinKey["actions"][keyof SkinKey["actions"]])
     case "case": return action.mode === "title" ? "首字母大写" : "大写锁定"
     case "switch": return action.board === "symbol" ? "符号" : action.board === "number" ? "数字" : "切换"
     case "open-app": return "打开应用"
+    case "trigger": return action.event === "up" ? "短按动作" : "长按动作"
     case "system": return action.code
   }
 }
@@ -129,7 +144,7 @@ export function keyStates(model: SkinModel, boardId: string, keyId: string): Pro
   const refs = key.stateRefs
   if (!refs?.length) return []
   const states = refs.flatMap((ref, index) => {
-    const override = board.tips?.get(ref.section)
+    const override = boardPanels(board)?.tips?.get(ref.section)
     if (!override) return []
     return [{
       key: `state.${index}`,
@@ -157,14 +172,14 @@ export function keyProperties(model: SkinModel, boardId: string, keyId: string):
 
 /** 板的字段：尺寸、种类、几何来源与按键数。 */
 export function boardProperties(model: SkinModel, boardId: string): PropertyView[] {
-  const board: SkinBoard | undefined = model.boards.find((item) => item.id === boardId)
+  const board: Board | undefined = model.boards.find((item) => item.id === boardId)
   if (!board) return []
-  const geometryNote = board.geometry === "document" ? "由文档决定" : board.geometry === "client" ? "由客户端决定" : "由骨架决定"
+  const geometryNote = board.geometry.kind === "document" ? "由文档决定" : board.geometry.kind === "client" ? "由客户端决定" : "由骨架决定"
   return [
-    numberView("size.width", "宽", board.size.width, geometryNote),
-    numberView("size.height", "高", board.size.height, geometryNote),
+    numberView("size.width", "宽", board.container.width, geometryNote),
+    numberView("size.height", "高", board.container.height, geometryNote),
     { key: "kind", label: "板种类", kind: "readonly", value: board.kind },
-    { key: "geometry", label: "几何来源", kind: "readonly", value: board.geometry },
+    { key: "geometry", label: "几何来源", kind: "readonly", value: board.geometry.kind },
     { key: "keys", label: "按键数", kind: "readonly", value: board.keys.length },
     { key: "orientation", label: "方向", kind: "readonly", value: board.orientation },
   ]
@@ -175,24 +190,27 @@ export function panelProperties(model: SkinModel, boardId: string): PropertyView
   const board = model.boards.find((item) => item.id === boardId)
   if (!board) return []
   const views: PropertyView[] = []
-  if (board.backdrop?.style) views.push(styleView("panel.backdrop", "面板背景", board.backdrop.style))
+  const panels = boardPanels(board)
+  // 面板背景可能来自板的 StyleRef，也可能只写在面板组件里。
+  const backdropStyle = board.backdrop ?? panels?.backdrop?.style
+  if (backdropStyle) views.push(styleView("panel.backdrop", "面板背景", backdropStyle))
   // 候选栏可以有多个，逐个列出。
-  for (const [index, candidate] of (board.candidates ?? []).entries()) {
+  for (const [index, candidate] of (panels?.candidates ?? []).entries()) {
     const suffix = index === 0 ? "" : `.${index + 1}`
     views.push(styleView(`panel.candidate${suffix}`, `候选栏背景${suffix}`, candidate.style))
     if (candidate.cellStyle) views.push(styleView(`panel.candidate${suffix}.cell`, "候选格", candidate.cellStyle))
     views.push({ key: `panel.candidate${suffix}.icons`, label: "候选栏图标", kind: "readonly", value: candidate.icons?.length ?? 0 })
   }
-  if (board.hint) views.push(styleView("panel.hint", "气泡背景", board.hint.style))
-  if (board.list) {
-    views.push(styleView("panel.list", "列表背景", board.list.style))
-    if (board.list.cellSize) {
-      views.push(numberView("panel.list.cell.width", "格子宽", board.list.cellSize.width))
-      views.push(numberView("panel.list.cell.height", "格子高", board.list.cellSize.height))
+  if (panels?.hint) views.push(styleView("panel.hint", "气泡背景", panels.hint.style))
+  if (panels?.list) {
+    views.push(styleView("panel.list", "列表背景", panels.list.style))
+    if (panels.list.cellSize) {
+      views.push(numberView("panel.list.cell.width", "格子宽", panels.list.cellSize.width))
+      views.push(numberView("panel.list.cell.height", "格子高", panels.list.cellSize.height))
     }
   }
-  if (board.toolbar) views.push({ key: "panel.toolbar", label: "工具栏按钮", kind: "readonly", value: board.toolbar.items.length })
-  if (board.input) views.push(styleView("panel.input", "输入条背景", board.input.style))
+  if (panels?.toolbar) views.push({ key: "panel.toolbar", label: "工具栏按钮", kind: "readonly", value: panels.toolbar.items.length })
+  if (panels?.input) views.push(styleView("panel.input", "输入条背景", panels.input.style))
   return views
 }
 
@@ -208,7 +226,7 @@ export function styleProperties(model: SkinModel, styleId: string): PropertyView
         : layer.kind === "color"
           ? `颜色 ${layer.value}`
           : layer.kind === "sound"
-            ? `音效 ${layer.file}`
+            ? `音效 ${layer.binding.sound}`
             : layer.kind === "text"
               ? `文字 ${layer.text ?? ""}`
               : layer.kind === "border"
@@ -225,16 +243,16 @@ export function styleProperties(model: SkinModel, styleId: string): PropertyView
 
 /** 动效的字段：节点类型、时长、绑定数。 */
 export function motionProperties(model: SkinModel, motionId: string): PropertyView[] {
-  const motion: SkinMotion | undefined = model.motions.get(motionId)
+  const motion: MotionNode | undefined = model.motions.get(motionId)
   if (!motion) return []
-  const kinds = [...new Set(motionNodeKinds(motion.root))]
+  const kinds = [...new Set(motionNodeKinds(motion))]
   return [
-    { key: "motion.id", label: "编号", kind: "readonly", value: motion.id },
+    { key: "motion.id", label: "编号", kind: "readonly", value: motionId },
     { key: "motion.kind", label: "类型", kind: "readonly", value: kinds.join("、") },
-    numberView("motion.duration", "时长", motion.timeline.duration, "秒"),
-    numberView("motion.delay", "延迟", motion.timeline.delay, "秒"),
-    numberView("motion.repeat", "重复", motion.timeline.repeat),
-    { key: "motion.bindings", label: "绑定数", kind: "readonly", value: motion.bindings.length },
+    numberView("motion.duration", "时长", motion.timeline?.duration, "秒"),
+    numberView("motion.delay", "延迟", motion.timeline?.delay, "秒"),
+    numberView("motion.repeat", "重复", motion.timeline?.repeat),
+    { key: "motion.bindings", label: "绑定数", kind: "readonly", value: motion.bindings?.length ?? 0 },
   ]
 }
 
@@ -257,7 +275,7 @@ export function summarizeModel(model: SkinModel): ModelSummary {
     styles: model.styles.size,
     images: model.images.size,
     motions: model.motions.size,
-    sounds: model.sounds.size,
-    main: main ? { width: main.size.width, height: main.size.height } : undefined,
+    sounds: model.sounds.length,
+    main: main ? { width: main.container.width, height: main.container.height } : undefined,
   }
 }

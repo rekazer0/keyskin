@@ -14,7 +14,7 @@ async function model() {
 
 test("模型里的文档板：几何可改、可增删键", async () => {
   const skin = await model()
-  const board = skin.boards.find((item) => item.geometry === "document")
+  const board = skin.boards.find((item) => item.geometry.kind === "document")
   assert.ok(board, "夹具里应当有文档排布的板")
   const traits = traitsOf(board, "bds")
   assert.equal(traits.geometry, "document")

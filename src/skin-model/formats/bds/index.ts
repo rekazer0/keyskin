@@ -12,13 +12,16 @@ import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
 import { tileSlices } from "@/tiles.ts"
 import type { Size } from "taffy-layout"
-import type { Appearance, BoardKind, KeyEvent, Orientation, SkinAction, SkinWindow } from "@/skin-model/types.ts"
+import type { Theme, BoardKind, KeyEvent, Orientation, KeyAction } from "@/skin-model/types.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { absoluteBoard, type LayoutBox } from "@/skin-model/layout.ts"
-import type { SkinKey } from "@/skin-model/key.ts"
+import type { Key } from "@/skin-model/key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
-import type { HintBubble, ListPanel, MoreMenu, SkinBoard } from "@/skin-model/board.ts"
-import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
+import type { Board } from "@/skin-model/board.ts"
+import type { BoardPanels, HintBubble, ListPanel, MoreMenu } from "@/skin-model/panel.ts"
+import { boardPanels, withPanels } from "@/skin-model/panel.ts"
+import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, SkinMotions } from "@/skin-model/motion.ts"
+import { keyframesOf, motionPropertyOf } from "@/skin-model/motion.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
 import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds/panels.ts"
@@ -33,7 +36,7 @@ export type BdsSource = {
   /** 样式文件；官方基础布局没有样式，此时为空。 */
   styles?: string
   animation?: string
-  theme: Appearance
+  theme: Theme
   orientation: Orientation
   kind: BoardKind
 }
@@ -69,7 +72,7 @@ export function bdsSource(
 
 /* —— 动作 —— */
 
-export function actionOf(value: string | undefined): SkinAction | undefined {
+export function actionOf(value: string | undefined): KeyAction | undefined {
   const text = value?.trim()
   if (!text) return
   if (text === "F36") return { kind: "delete" }
@@ -86,7 +89,7 @@ export function actionOf(value: string | undefined): SkinAction | undefined {
   return { kind: "text", value: text }
 }
 
-export function actionValue(action: SkinAction | undefined): string | undefined {
+export function actionValue(action: KeyAction | undefined): string | undefined {
   if (!action) return
   switch (action.kind) {
     case "text":
@@ -127,7 +130,7 @@ function imageRef(value: string | undefined): { file: string; slice?: number } |
   return slice !== undefined && Number.isFinite(slice) ? { file, slice } : { file }
 }
 
-function tilePath(access: DocumentAccess, theme: Appearance, orientation: Orientation, file: string): string | undefined {
+function tilePath(access: DocumentAccess, theme: Theme, orientation: Orientation, file: string): string | undefined {
   return [
     `${theme}/skin/${orientation}/res/${file}.til`,
     `${theme}/skin/res/${file}.til`,
@@ -162,7 +165,7 @@ function cutAtlas(images: Map<string, SkinImage>, access: DocumentAccess, path: 
 function imageLayer(
   access: DocumentAccess,
   images: Map<string, SkinImage>,
-  theme: Appearance,
+  theme: Theme,
   orientation: Orientation,
   document: IniDocument,
   section: string,
@@ -198,7 +201,7 @@ function imageLayer(
 function styleLayers(
   access: DocumentAccess,
   images: Map<string, SkinImage>,
-  theme: Appearance,
+  theme: Theme,
   orientation: Orientation,
   document: IniDocument,
   section: string,
@@ -218,14 +221,14 @@ function styleLayers(
   }
   if (!pressed) {
     const sound = document.get(section, "PRESS_SOUND_PATH")
-    if (sound) layers.push({ kind: "sound", file: sound })
+    if (sound) layers.push({ kind: "sound", binding: { subject: section, sound } })
   }
   return layers
 }
 
 function stylesOf(
   access: DocumentAccess,
-  theme: Appearance,
+  theme: Theme,
   orientation: Orientation,
   document: IniDocument,
 ): { styles: SkinStyles; images: Map<string, SkinImage> } {
@@ -288,7 +291,7 @@ function stylesText(styles: SkinStyles, imageRef: (id: string) => string | undef
     if (textColor) lines.push(`NM_COLOR=${textColor}`)
     if (text?.text !== undefined) lines.push(`SHOW=${text.text}`)
     if (text?.style.fontSize !== undefined) lines.push(`FONT_SIZE=${text.style.fontSize}`)
-    if (sound) lines.push(`PRESS_SOUND_PATH=${sound.file}`)
+    if (sound) lines.push(`PRESS_SOUND_PATH=${sound.binding.sound}`)
     lines.push("")
   }
   return `${lines.join("\n")}\n`
@@ -303,9 +306,16 @@ function infoText(model: SkinModel): string {
   return `${lines.join("\n")}\n`
 }
 
-/** 布局文件文本；`VIEW_RECT` 用构建后的矩形，其余字段从按键模型原样写回。 */
+/** 非按键窗口：候选栏、提示气泡、手写区；原样保留在 opaque 里，导出时按路径写回。 */
+type WindowDocument = {
+  kind: "candidate" | "hint" | "handwriting"
+  theme: Theme
+  orientation: Orientation
+  sections: ReadonlyMap<string, ReadonlyMap<string, string>>
+}
+
 /** 把窗口的分段结构拼回 INI 文本；段与字段顺序按模型里的顺序。 */
-function windowText(window: SkinWindow): string {
+function windowText(window: WindowDocument): string {
   const document = IniDocument.parse("")
   for (const [section, fields] of window.sections) {
     document.appendSection(section, [...fields].map(([key, value]) => ({ key, value })))
@@ -313,22 +323,23 @@ function windowText(window: SkinWindow): string {
   return document.toString()
 }
 
-export function layoutText(board: SkinBoard, renders: readonly KeyRender[], names?: ReadonlyMap<string, string>): string {
+export function layoutText(board: Board, renders: readonly KeyRender[], names?: ReadonlyMap<string, string>): string {
   const lines: string[] = []
+  const panels = boardPanels(board) ?? {}
   // 空段按原顺序声明；它们的配置在 gen.ini 与面板文件里，段本身只表明存在这个面板。
-  for (const section of board.emptySections ?? []) lines.push(`[${section}]`, "")
+  for (const section of panels.emptySections ?? []) lines.push(`[${section}]`, "")
   lines.push("[PANEL]")
-  if (board.backdrop?.blur !== undefined) lines.push(`NO_BLUR=${board.backdrop.blur ? 0 : 1}`)
-  if (board.handwritingStyle) lines.push(`HW_FORE_STYLE=${board.handwritingStyle}`)
-  if (board.panelStyle) lines.push(`BACK_STYLE=${board.panelStyle}`)
-  lines.push(`SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keyCount ?? board.keys.length}`)
+  if (panels.backdrop?.blur !== undefined) lines.push(`NO_BLUR=${panels.backdrop.blur ? 0 : 1}`)
+  if (panels.handwritingStyle) lines.push(`HW_FORE_STYLE=${panels.handwritingStyle}`)
+  if (board.backdrop) lines.push(`BACK_STYLE=${board.backdrop}`)
+  lines.push(`SIZE=${board.container.width},${board.container.height}`, `KEY_NUM=${panels.keyCount ?? board.keys.length}`)
   // TIP_NUM 是原文件声明的槽位数，可能与实际定义数不同；没有声明时按写出的 TIP 段计。
-  const tipCount = board.tipCount ?? board.tips?.size ?? 0
+  const tipCount = panels.tipCount ?? panels.tips?.size ?? 0
   if (tipCount) lines.push(`TIP_NUM=${tipCount}`)
   lines.push("")
   // 列表段：尺寸、条目、位置与取值都按 IR 里的字段写回。
-  if (board.list && Object.keys(board.list).length) {
-    const list = board.list
+  if (panels.list && Object.keys(panels.list).length) {
+    const list = panels.list
     lines.push("[LIST]")
     if (list.style) lines.push(`BACK_STYLE=${list.style}`)
     if (list.foreStyle) lines.push(`FORE_STYLE=${list.foreStyle}`)
@@ -343,15 +354,15 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[], name
     if (list.values?.length) lines.push(`VALUES=${list.values.join(" ")}`)
     lines.push("")
   }
-  if (board.hint?.layoutName || board.hint?.type !== undefined) {
+  if (panels.hint?.layoutName || panels.hint?.type !== undefined) {
     lines.push("[HINT]")
-    if (board.hint.layoutName) lines.push(`LAYOUT_NAME=${board.hint.layoutName}`)
-    if (board.hint.type !== undefined) lines.push(`TYPE=${board.hint.type}`)
+    if (panels.hint.layoutName) lines.push(`LAYOUT_NAME=${panels.hint.layoutName}`)
+    if (panels.hint.type !== undefined) lines.push(`TYPE=${panels.hint.type}`)
     lines.push("")
   }
   // 符号键盘菜单：类别引用原样写回，顺序按布局名排，稳定可复现。
-  if (board.more && (board.more.layouts.size || board.more.cellStyle || board.more.foreStyle || board.more.grid || board.more.layoutName)) {
-    const menu = board.more
+  if (panels.more && (panels.more.layouts.size || panels.more.cellStyle || panels.more.foreStyle || panels.more.grid || panels.more.layoutName)) {
+    const menu = panels.more
     lines.push("[MORE]")
     if (menu.cellStyle) lines.push(`CELL_STYLE=${menu.cellStyle}`)
     if (menu.foreStyle) lines.push(`FORE_STYLE=${menu.foreStyle}`)
@@ -364,12 +375,12 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[], name
   }
   const tipBlocks: string[] = []
   // 板上的状态段全写：有引用的和没引用的都写，孤儿段同样是文件的一部分。
-  for (const [section, override] of board.tips ?? []) {
+  for (const [section, override] of panels.tips ?? []) {
     tipBlocks.push(...tipLines(override, section, actionValue))
   }
   // 没有 VIEW_RECT 的模板键不进布局树，但段本身要写回。
-  const unplaced = new Set((board.unplacedKeys ?? []).map((key) => key.id))
-  for (const key of [...board.keys, ...(board.unplacedKeys ?? [])]) {
+  const unplaced = new Set((panels.unplacedKeys ?? []).map((key) => key.id))
+  for (const key of [...board.keys, ...(panels.unplacedKeys ?? [])]) {
     // 几何只有布局树这一个来源：taffy 算出矩形，写回的就是它。
     const rect = renders.find((render) => render.key.id === key.id)?.rect
     // 树里没有这个键、它也不是模板段，就没有几何，不写半截的 VIEW_RECT。
@@ -378,13 +389,17 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[], name
     if (rect) {
       lines.push(`VIEW_RECT=${rect.x},${rect.y},${rect.width},${rect.height}`)
     }
-    if (key.touchRect === null) {
+    if (key.hitArea?.kind === "none") {
       lines.push("TOUCH_RECT=0,0,0,0")
-    } else if (key.touchRect) {
-      lines.push(`TOUCH_RECT=${key.touchRect.position.x},${key.touchRect.position.y},${key.touchRect.size.width},${key.touchRect.size.height}`)
+    } else if (key.hitArea?.kind === "inset" && rect) {
+      const edges = key.hitArea.edges
+      lines.push(`TOUCH_RECT=${Math.round(rect.x + edges.left)},${Math.round(rect.y + edges.top)},${Math.round(rect.width - edges.left - edges.right)},${Math.round(rect.height - edges.top - edges.bottom)}`)
     }
     if (key.padding) lines.push(`PADDING=${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
-    if (key.foreRect) lines.push(`FOREGROUND_RECT=${key.foreRect.position.x},${key.foreRect.position.y},${key.foreRect.size.width},${key.foreRect.size.height}`)
+    if (key.foreground && rect) {
+      const area = key.foreground
+      lines.push(`FOREGROUND_RECT=${Math.round(rect.x + area.left * rect.width)},${Math.round(rect.y + area.top * rect.height)},${Math.round((1 - area.left - area.right) * rect.width)},${Math.round((1 - area.top - area.bottom) * rect.height)}`)
+    }
     if (key.labelPosition) lines.push(`POS_TYPE=${key.labelPosition.join(",")}`)
     if (key.label) lines.push(`SHOW=${key.label}`)
     if (key.holdSymbol) lines.push(`HOLDSYM=${key.holdSymbol}`)
@@ -502,12 +517,33 @@ function emitterOf(entry: LegacyAnimationEntry): MotionEmitter {
   }
 }
 
+const DEFAULT_TIMELINE: MotionTimeline = { delay: 0, duration: 0, repeat: 1, reverse: false, clear: false }
+
+/** 一个动画段的时长与循环信息；设计稿的节点没有这两项，写回按它还原。 */
+function timelineOf(entry: LegacyAnimationEntry): MotionTimeline {
+  return {
+    delay: numberField(entry, "DELAY") ?? 0,
+    duration: numberField(entry, "DURATION") ?? 0,
+    repeat: field(entry, "REPEAT_CNT")?.toLowerCase() === "inf" ? -1 : numberField(entry, "REPEAT_CNT") ?? 1,
+    reverse: field(entry, "REPEAT_MODE") === "1",
+    clear: field(entry, "REMOVE") === "1",
+  }
+}
+
 function nodeOf(entries: Map<string, LegacyAnimationEntry>, entry: LegacyAnimationEntry, seen: Set<string>): MotionNode {
+  const timeline = timelineOf(entry)
   if (entry.kind === "basic") {
     const track = trackOf(entry)
-    return track
-      ? { kind: "track", delay: numberField(entry, "DELAY") ?? 0, duration: numberField(entry, "DURATION") ?? 0, track }
-      : { kind: "track", delay: 0, duration: 0, track: { property: "alpha", from: [[0, 0], [0, 0]], to: [[0, 0], [0, 0]], relative: false, easing: { kind: "linear" } } }
+    // 读不出起点终点的基本动画没有可归一的内容，按不透明节点原样保留。
+    if (!track) return { kind: "opaque", format: "bds.basic", blob: entry, timeline }
+    return {
+      kind: "track",
+      target: { subject: "unknown", property: motionPropertyOf(track.property) },
+      keyframes: keyframesOf(track, timeline.duration),
+      easing: track.easing,
+      ...(track.pivot ? { pivot: track.pivot } : {}),
+      timeline,
+    }
   }
   if (entry.kind === "combination") {
     const ids = field(entry, "BUILD_LIST")?.split(",").map((part) => part.trim()).filter(Boolean) ?? []
@@ -516,43 +552,28 @@ function nodeOf(entries: Map<string, LegacyAnimationEntry>, entry: LegacyAnimati
       const child = entries.get(section)
       return child && !seen.has(section) ? [nodeOf(entries, child, new Set([...seen, section]))] : []
     })
-    const method = field(entry, "BUILD_METHOD") === "2" ? "random" : field(entry, "BUILD_METHOD") === "1" ? "sequential" : "parallel"
-    return { kind: "sequence", children, method, delay: numberField(entry, "DELAY") ?? 0, duration: 0 }
+    const method = field(entry, "BUILD_METHOD") === "2" ? "random" : field(entry, "BUILD_METHOD") === "1" ? "sequential" : "simultaneous"
+    return { kind: "group", children, method, timeline }
   }
   if (entry.kind === "frame") {
     const file = field(entry, "ANIM_PATH")
-    return { kind: "frames", frames: file ? [{ file }] : [], loop: 1, delay: 0, duration: 0 }
+    return { kind: "frames", frames: file ? [{ image: file }] : [], timeline }
   }
-  return { kind: "particles", emitter: emitterOf(entry), delay: numberField(entry, "DELAY") ?? 0, duration: numberField(entry, "DURATION") ?? 0 }
+  return { kind: "opaque", format: "bds.particles", blob: emitterOf(entry), timeline }
 }
 
 function motionsOf(text: string): SkinMotions {
   const document = parseLegacyAnimationFile(text)
   const entries = new Map(document.entries.map((entry) => [entry.section, entry]))
-  const motions = new Map<string, SkinMotion>()
+  const motions = new Map<string, MotionNode>()
   for (const entry of document.entries) {
-    motions.set(entry.section, {
-      id: entry.section,
-      root: nodeOf(entries, entry, new Set([entry.section])),
-      timeline: {
-        delay: numberField(entry, "DELAY") ?? 0,
-        duration: numberField(entry, "DURATION") ?? 0,
-        repeat: field(entry, "REPEAT_CNT")?.toLowerCase() === "inf" ? -1 : numberField(entry, "REPEAT_CNT") ?? 1,
-        reverse: field(entry, "REPEAT_MODE") === "1",
-        clear: field(entry, "REMOVE") === "1",
-      },
-      bindings: [],
-    })
+    motions.set(entry.section, nodeOf(entries, entry, new Set([entry.section])))
   }
   return motions
 }
 
 function rangeText(value: MotionRange): string {
   return value[0] === value[1] ? String(value[0]) : `rand(${value[0]},${value[1]})`
-}
-
-function vectorText(value: MotionVector): string {
-  return `${rangeText(value[0])},${rangeText(value[1])}`
 }
 
 function animationIndex(id: string): string {
@@ -562,25 +583,29 @@ function animationIndex(id: string): string {
 export function writeMotions(motions: SkinMotions): string {
   const lines: string[] = []
   let counter = Math.max(0, ...[...motions.keys()].map((id) => Number(id.match(/^ANIM(\d+)$/)?.[1] ?? 0))) + 1
-  const write = (node: MotionNode, id: string, timeline: MotionTimeline): void => {
+  const write = (node: MotionNode, id: string): void => {
+    // 只能写回 BDS 自己的不透明节点；别的格式的没有对应段，跳过而不是写出空段。
+    if (node.kind === "opaque" && node.format !== "bds.particles" && !Array.isArray((node.blob as LegacyAnimationEntry).fields)) return
+    const timeline = node.timeline ?? DEFAULT_TIMELINE
     lines.push(`[${id}]`)
     if (node.kind === "track") {
-      const type = node.track.property === "alpha" ? 0 : node.track.property === "rotate" ? 1 : node.track.property === "translate" ? 2 : node.track.property === "scale" ? 3 : 5
-      lines.push("CATEGORY=0", `TYPE=${type}`, `DELAY=${Math.round(node.delay)}`, `DURATION=${Math.round(node.duration)}`)
-      if (type === 2) lines.push(`FROM_PX=${vectorText(node.track.from)}`, `TO_PX=${vectorText(node.track.to)}`)
-      else lines.push(`FROM=${rangeText(node.track.from[0])}`, `TO=${rangeText(node.track.to[0])}`)
-      if (node.track.pivot) lines.push(`PIVOT=${node.track.pivot.x},${node.track.pivot.y}`)
-    } else if (node.kind === "sequence") {
+      const property = node.target.property
+      const type = property === "alpha" ? 0 : property === "rotation" ? 1 : property === "x" || property === "y" ? 2 : property === "scale" ? 3 : 5
+      lines.push("CATEGORY=0", `TYPE=${type}`, `DELAY=${Math.round(timeline.delay)}`, `DURATION=${Math.round(timeline.duration)}`)
+      const from = node.keyframes[0]?.value ?? 0
+      const to = node.keyframes[node.keyframes.length - 1]?.value ?? 0
+      if (type === 2) lines.push(`FROM_PX=${from},${from}`, `TO_PX=${to},${to}`)
+      else lines.push(`FROM=${from}`, `TO=${to}`)
+      if (node.pivot) lines.push(`PIVOT=${node.pivot.x},${node.pivot.y}`)
+    } else if (node.kind === "group") {
       const childIds = node.children.map(() => `ANIM${counter++}`)
       const method = node.method === "random" ? 2 : node.method === "sequential" ? 1 : 0
-      lines.push("CATEGORY=1", `BUILD_LIST=${childIds.map(animationIndex).join(",")}`, `BUILD_METHOD=${method}`, `DELAY=${Math.round(node.delay)}`)
-      for (const [index, child] of node.children.entries()) {
-        write(child, childIds[index], { delay: 0, duration: 0, repeat: 1, reverse: false, clear: false })
-      }
+      lines.push("CATEGORY=1", `BUILD_LIST=${childIds.map(animationIndex).join(",")}`, `BUILD_METHOD=${method}`, `DELAY=${Math.round(timeline.delay)}`)
+      for (const [index, child] of node.children.entries()) write(child, childIds[index])
     } else if (node.kind === "frames") {
-      lines.push("CATEGORY=2", `ANIM_PATH=${node.frames[0]?.file ?? ""}`)
-    } else if (node.kind === "particles") {
-      const emitter = node.emitter
+      lines.push("CATEGORY=2", `ANIM_PATH=${node.frames[0]?.image ?? ""}`)
+    } else if (node.kind === "opaque" && node.format === "bds.particles") {
+      const emitter = node.blob as MotionEmitter
       lines.push("CATEGORY=3", `TYPE=${emitter.type === "complex" ? 1 : 0}`, `PARTICLE_IMAGE=${emitter.images.join("|")}`)
       lines.push(`TOTAL_NUMBER=${emitter.count}`, `BIRTH_RATE=${emitter.birthRate}`, `EMIT_REGION=${emitter.region.position.x},${emitter.region.position.y},${emitter.region.size.width},${emitter.region.size.height}`)
       lines.push(`LIFE=${rangeText(emitter.life)}`, `VELOCITY=${rangeText(emitter.velocity)}`, `VELOCITY_DIRECTION=${rangeText(emitter.velocityDirection)}`)
@@ -588,7 +613,10 @@ export function writeMotions(motions: SkinMotions): string {
       lines.push(`INIT_SCALE=${rangeText(emitter.scale)}`, `SCALE_SPEED=${rangeText(emitter.scaleSpeed)}`)
       lines.push(`INIT_ROTATE=${rangeText(emitter.rotation)}`, `ROTATE_SPEED=${rangeText(emitter.rotationSpeed)}`)
       lines.push(`INIT_ALPHA=${rangeText(emitter.alpha)}`, `ALPHA_SPEED=${rangeText(emitter.alphaSpeed)}`)
-      lines.push(`DURATION=${Math.round(node.duration)}`, `DELAY=${Math.round(node.delay)}`)
+      lines.push(`DURATION=${Math.round(timeline.duration)}`, `DELAY=${Math.round(timeline.delay)}`)
+    } else if (node.kind === "opaque") {
+      // 不认识的动画段：按原字段写回，不重新解释。
+      for (const [name, value] of (node.blob as LegacyAnimationEntry).fields) lines.push(`${name}=${value}`)
     }
     lines.push(
       `REPEAT_CNT=${timeline.repeat < 0 ? "inf" : timeline.repeat}`,
@@ -597,7 +625,7 @@ export function writeMotions(motions: SkinMotions): string {
       "",
     )
   }
-  for (const motion of motions.values()) write(motion.root, motion.id, motion.timeline)
+  for (const [id, node] of motions) write(node, id)
   return `${lines.join("\n")}\n`
 }
 
@@ -666,8 +694,8 @@ function componentStyles(document: IniDocument, section: string): { back?: strin
  */
 export function bdsBoardOf(
   document: IniDocument,
-  options: { id: string; orientation: Orientation },
-): SkinBoard {
+  options: { id: string; orientation: Orientation; theme: Theme },
+): Board {
   const entries = keysOf(document)
   const placed = entries.filter((entry) => entry.placed)
   const panel = parsePanelSize(document)
@@ -682,13 +710,7 @@ export function bdsBoardOf(
   const moreRect = componentRect(document, "MORE", panel)
   const hintRect = componentRect(document, "HINT", panel)
   const candidateStyles = componentStyles(document, "CAND")
-  return {
-    id: options.id,
-    kind: "main",
-    geometry: "document",
-    orientation: options.orientation,
-    size: panel,
-    layout: absoluteBoard(placed.map((entry) => ({ id: entry.key.id, ...entry.rect }))),
+  const panels: BoardPanels = {
     ...(panelStyle || panelFore || backdropRect
       ? {
         backdrop: {
@@ -699,7 +721,6 @@ export function bdsBoardOf(
         },
       }
       : {}),
-    ...(panelStyle ? { panelStyle } : {}),
     ...(candidateRect
       ? {
         candidates: [{
@@ -712,15 +733,26 @@ export function bdsBoardOf(
     ...(listRect ? { list: { viewRect: listRect } } : {}),
     ...(moreRect ? { more: { layouts: new Map(), viewRect: moreRect } } : {}),
     ...(hintRect ? { hint: { viewRect: hintRect } } : {}),
-    keys: entries.map((entry) => entry.key),
     ...(keyCount !== undefined ? { keyCount } : {}),
     ...(tipCount !== undefined ? { tipCount } : {}),
     tips: tipPoolOf(document, { actionOf }),
   }
+  return {
+    id: options.id,
+    kind: "main",
+    theme: options.theme,
+    orientation: options.orientation,
+    geometry: { kind: "document" },
+    container: panel,
+    layout: absoluteBoard(placed.map((entry) => ({ id: entry.key.id, ...entry.rect }))),
+    ...(panelStyle ? { backdrop: panelStyle } : {}),
+    keys: entries.map((entry) => entry.key),
+    extra: withPanels(undefined, panels),
+  }
 }
 
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
-function layoutFiles(access: DocumentAccess, theme: Appearance, orientation: Orientation): string[] {
+function layoutFiles(access: DocumentAccess, theme: Theme, orientation: Orientation): string[] {
   // 这几类与手写区同目录，即便带按键段也不是键盘布局。
   return access.paths().filter((name) => {
     // 先按路径规则判断是不是布局，再按内容确认有没有按键段。
@@ -781,7 +813,7 @@ function keyFieldsOf(document: IniDocument, section: string): KeyFields {
  * 一份布局文档里的按键：动作按事件拆分，样式从按键容器上取。
  * 几何单独返回：它只喂布局推导，不进按键。
  */
-function keysOf(document: IniDocument): Array<{ key: SkinKey; rect: LayoutBox; placed: boolean }> {
+function keysOf(document: IniDocument): Array<{ key: Key; rect: LayoutBox; placed: boolean }> {
   return document.sections().flatMap((section) => {
     if (!/^KEY\d+$/i.test(section)) return []
     const item = keyFieldsOf(document, section)
@@ -795,7 +827,7 @@ function keysOf(document: IniDocument): Array<{ key: SkinKey; rect: LayoutBox; p
       return parts.length === 2 ? { x: parts[0], y: parts[1] } : undefined
     }) ?? []
     const foreAnims = read("FORE_ANIM_STYLE")?.split(",").map((token) => token.trim()) ?? []
-    const actions: SkinKey["actions"] = {}
+    const actions: Key["actions"] = {}
     const press = actionOf(item.center || item.show)
     if (press) actions.press = press
     const label = item.show
@@ -817,18 +849,39 @@ function keysOf(document: IniDocument): Array<{ key: SkinKey; rect: LayoutBox; p
     const backAnim = read("BACK_ANIM_STYLE")
     const showing = read("SHOW")
     const foreRect = numbersOf(read("FOREGROUND_RECT"))
-    const key: SkinKey = {
+    const rect = item.rect ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+    const placed = rect.size.width > 0
+    // TOUCH_RECT 是绝对像素，归一到显示区的四边内缩；全零表示显式没有触摸区。
+    const hitArea: Key["hitArea"] = touchRect.length === 4
+      ? touchRect.every((each) => each === 0)
+        ? { kind: "none" }
+        : placed
+          ? {
+            kind: "inset",
+            edges: {
+              left: touchRect[0] - rect.position.x,
+              top: touchRect[1] - rect.position.y,
+              right: rect.position.x + rect.size.width - (touchRect[0] + touchRect[2]),
+              bottom: rect.position.y + rect.size.height - (touchRect[1] + touchRect[3]),
+            },
+          }
+          : undefined
+      : undefined
+    // FOREGROUND_RECT 是绝对像素，归一到显示区内的比例；只有知道显示区才算得出。
+    const foreground: Key["foreground"] = placed && foreRect.length === 4 && rect.size.width > 0 && rect.size.height > 0
+      ? {
+        left: (foreRect[0] - rect.position.x) / rect.size.width,
+        top: (foreRect[1] - rect.position.y) / rect.size.height,
+        right: (rect.position.x + rect.size.width - (foreRect[0] + foreRect[2])) / rect.size.width,
+        bottom: (rect.position.y + rect.size.height - (foreRect[1] + foreRect[3])) / rect.size.height,
+      }
+      : undefined
+    const key: Key = {
       id: section,
-      // TOUCH_RECT 写了全零表示显式没有触摸区，与没写是两种状态。
-      ...(touchRect.length === 4
-        ? touchRect.every((each) => each === 0)
-          ? { touchRect: null }
-          : { touchRect: { position: { x: touchRect[0], y: touchRect[1] }, size: { width: touchRect[2], height: touchRect[3] } } }
-        : {}),
+      layoutId: section,
+      ...(hitArea ? { hitArea } : {}),
       ...(padding.length === 4 ? { padding: { left: padding[0], top: padding[1], right: padding[2], bottom: padding[3] } } : {}),
-      ...(foreRect.length === 4
-        ? { foreRect: { position: { x: foreRect[0], y: foreRect[1] }, size: { width: foreRect[2], height: foreRect[3] } } }
-        : {}),
+      ...(foreground ? { foreground } : {}),
       ...(label ? { label } : {}),
       // 长按弹出的符号串，原文件给什么就带回什么。
       ...(read("HOLDSYM") ? { holdSymbol: read("HOLDSYM") } : {}),
@@ -864,8 +917,7 @@ function keysOf(document: IniDocument): Array<{ key: SkinKey; rect: LayoutBox; p
       },
       ...(refs.length ? { stateRefs: refs } : {}),
     }
-    const rect = item.rect ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
-    return [{ key, rect, placed: rect.size.width > 0 }]
+    return [{ key, rect, placed }]
   })
 }
 
@@ -875,7 +927,7 @@ function atlasName(page: number): string {
 }
 
 export type LayoutBoards = {
-  boards: SkinBoard[]
+  boards: Board[]
   /** 面板文件的原路径，导出时沿用。 */
   paths: PanelPaths
 }
@@ -893,7 +945,7 @@ function emptySectionsOf(document: IniDocument): string[] {
 }
 
 /** 布局文件里只被输入法自己读的字段，逐个建模。 */
-function boardExtrasOf(document: IniDocument): Pick<SkinBoard, "handwritingStyle"> {
+function boardExtrasOf(document: IniDocument): Pick<BoardPanels, "handwritingStyle"> {
   const handwritingStyle = document.get("PANEL", "HW_FORE_STYLE")?.trim()
   return {
     ...(handwritingStyle ? { handwritingStyle } : {}),
@@ -995,7 +1047,7 @@ function keyCountOf(document: IniDocument): number | undefined {
 
 export async function layoutBoards(
   access: DocumentAccess,
-  theme: Appearance,
+  theme: Theme,
   orientation: Orientation,
   primaryLayout: string,
   primaryKind: BoardKind,
@@ -1018,30 +1070,21 @@ export async function layoutBoards(
   const genDocument = access.text(`${directory}gen.ini`)
   const parsedPanels = genDocument
     ? panelsOf(access, directory, genDocument, actionOf)
-    : { panels: {}, paths: {} }
-  const boards: SkinBoard[] = [{
-    ...parsedPanels.panels,
-    // 布局文件的 `[HINT]` 段指明用哪个气泡面板，gen.ini 那边只有样式，两边合并。
-    ...(Object.keys(hintExtrasOf(document)).length
-      ? { hint: { ...parsedPanels.panels.hint, ...hintExtrasOf(document) } }
-      : {}),
-    ...(listExtrasOf(document) ? { list: { ...parsedPanels.panels.list, ...listExtrasOf(document) } } : {}),
-    ...(blurOf(document) !== undefined ? { backdrop: { ...parsedPanels.panels.backdrop, blur: blurOf(document) } } : {}),
+    : { panels: {} as BoardPanels, paths: {} }
+  const boards: Board[] = [{
     id: primaryLayout,
     kind: primaryKind,
-    geometry: "document",
+    theme,
     orientation,
-    size,
+    geometry: { kind: "document" },
+    container: size,
     layout: derived.layout,
+    ...(panelStyleOf(document) ? { backdrop: panelStyleOf(document) } : {}),
     keys: keys.map((each) => each.key),
-    ...(unplacedKeys.length ? { unplacedKeys } : {}),
-    emptySections: emptySectionsOf(document),
-    tips: tipPoolOf(document, { actionOf }),
-    ...(mergeMore(parsedPanels.panels.more, moreMenuOf(document)) ? { more: mergeMore(parsedPanels.panels.more, moreMenuOf(document)) } : {}),
-    ...boardExtrasOf(document),
-    ...(tipCountOf(document) !== undefined ? { tipCount: tipCountOf(document) } : {}),
-    ...(keyCountOf(document) !== undefined ? { keyCount: keyCountOf(document) } : {}),
-    ...(panelStyleOf(document) ? { panelStyle: panelStyleOf(document) } : {}),
+    extra: withPanels(undefined, {
+      ...panelsMerged(parsedPanels.panels, document),
+      ...(unplacedKeys.length ? { unplacedKeys } : {}),
+    }),
   }]
   // 同一主题方向下其余布局文件也是板：九宫格、符号、候选等，一并读进来。
   for (const layoutPath of layoutFiles(access, theme, orientation)) {
@@ -1057,29 +1100,44 @@ export async function layoutBoards(
     boards.push({
       id: layoutPath,
       kind: boardKindOf(layoutPath),
-      geometry: "document",
+      theme,
       orientation,
-      size: boardSize,
+      geometry: { kind: "document" },
+      container: boardSize,
       layout: boardDerived.layout,
+      ...(panelStyleOf(other) ? { backdrop: panelStyleOf(other) } : {}),
       keys: boardKeys.map((each) => each.key),
-      ...(boardUnplaced.length ? { unplacedKeys: boardUnplaced } : {}),
-      emptySections: emptySectionsOf(other),
-      tips: tipPoolOf(other, { actionOf }),
-      ...(mergeMore(undefined, moreMenuOf(other)) ? { more: mergeMore(undefined, moreMenuOf(other)) } : {}),
-      ...(Object.keys(hintExtrasOf(other)).length ? { hint: hintExtrasOf(other) } : {}),
-      ...(listExtrasOf(other) ? { list: listExtrasOf(other) } : {}),
-      ...(blurOf(other) !== undefined ? { backdrop: { blur: blurOf(other) } } : {}),
-      ...boardExtrasOf(other),
-      ...(tipCountOf(other) !== undefined ? { tipCount: tipCountOf(other) } : {}),
-      ...(keyCountOf(other) !== undefined ? { keyCount: keyCountOf(other) } : {}),
-      ...(panelStyleOf(other) ? { panelStyle: panelStyleOf(other) } : {}),
+      extra: withPanels(undefined, {
+        ...panelsMerged(undefined, other),
+        ...(boardUnplaced.length ? { unplacedKeys: boardUnplaced } : {}),
+      }),
     })
   }
   return { boards, paths: parsedPanels.paths }
 }
 
+/** 布局文件自身声明的面板字段与 `gen.ini` 的面板组件合并；布局文件优先。 */
+function panelsMerged(base: BoardPanels | undefined, document: IniDocument): BoardPanels {
+  const merged: BoardPanels = {
+    ...base,
+    // 布局文件的 `[HINT]` 段指明用哪个气泡面板，gen.ini 那边只有样式，两边合并。
+    ...(Object.keys(hintExtrasOf(document)).length
+      ? { hint: { ...base?.hint, ...hintExtrasOf(document) } }
+      : {}),
+    ...(listExtrasOf(document) ? { list: { ...base?.list, ...listExtrasOf(document) } } : {}),
+    ...(blurOf(document) !== undefined ? { backdrop: { ...base?.backdrop, blur: blurOf(document) } } : {}),
+    emptySections: emptySectionsOf(document),
+    tips: tipPoolOf(document, { actionOf }),
+    ...(mergeMore(base?.more, moreMenuOf(document)) ? { more: mergeMore(base?.more, moreMenuOf(document)) } : {}),
+    ...boardExtrasOf(document),
+    ...(tipCountOf(document) !== undefined ? { tipCount: tipCountOf(document) } : {}),
+    ...(keyCountOf(document) !== undefined ? { keyCount: keyCountOf(document) } : {}),
+  }
+  return merged
+}
+
 /** 某主题方向下的主布局：优先 26 键拼音，其次任意 26 键，最后第一个有按键段的布局。 */
-function primaryLayoutOf(access: DocumentAccess, theme: Appearance, orientation: Orientation): string | undefined {
+function primaryLayoutOf(access: DocumentAccess, theme: Theme, orientation: Orientation): string | undefined {
   const prefix = bdsDirectory(theme, orientation)
   const candidates = access.paths().filter((path) => {
     if (!path.startsWith(prefix) || !path.endsWith(".ini") || /gen\.ini$/i.test(path)) return false
@@ -1096,7 +1154,7 @@ export type BdsReadHints = {
   layout: string
   styles?: string
   animation?: string
-  theme: Appearance
+  theme: Theme
   orientation: Orientation
   kind: BoardKind
 }
@@ -1132,13 +1190,13 @@ export async function bdsToModel(
   const size = parsePanelSize(layout)
   const model = emptyModel({
     ...infoOf(access),
-    appearance: hints.theme,
+    theme: hints.theme,
     orientation: hints.orientation,
     resolution: size,
   }, "bds")
   // 同一皮肤可能有竖屏与横屏两套完整键盘，两套都是事实，都要进模型。
   const orientations = [...new Set<Orientation>([hints.orientation, ...packagedOrientations])]
-  const boards: SkinBoard[] = []
+  const boards: Board[] = []
   let panelPaths: PanelPaths = {}
   for (const orientation of orientations) {
     const primary = orientation === hints.orientation
@@ -1185,9 +1243,9 @@ export async function bdsToModel(
   for (const style of parsed.styles.values()) {
     for (const layer of [...style.normal, ...(style.pressed ?? [])]) {
       if (layer.kind !== "sound") continue
-      const path = locate(layer.file) ?? layer.file
-      const data = bytesOf(layer.file)
-      resources.set(layer.file, { kind: "audio", path, ...(data ? { data } : {}) })
+      const path = locate(layer.binding.sound) ?? layer.binding.sound
+      const data = bytesOf(layer.binding.sound)
+      resources.set(layer.binding.sound, { kind: "audio", path, ...(data ? { data } : {}) })
     }
   }
   // 样式文档里声明的字体也算资源，导出时按名称找回。
@@ -1207,13 +1265,14 @@ export async function bdsToModel(
       return [{ trigger: "press" as const, target: action.board }]
     })
     const unique = transitions.filter((entry, index) => transitions.findIndex((other) => other.target === entry.target) === index)
-    if (unique.length) board.transitions = unique
+    if (unique.length) board.extra = withPanels(board.extra, { ...(boardPanels(board) ?? {}), transitions: unique })
   }
   if (hints.animation) {
     const animationText = textContent(access, hints.animation)
     if (animationText) model.motions = motionsOf(animationText)
   }
-  // 非按键窗口：候选栏、提示气泡、手写区。它们不是键盘布局，但导出时要原样写回。
+  // 非按键窗口：候选栏、提示气泡、手写区。它们不属于键盘布局，原样保留在 opaque 里。
+  const opaque = new Map(model.opaque)
   for (const [path, role] of roles) {
     const kind = role.kind === "candidate-window" ? "candidate" as const
       : role.kind === "hint-window" ? "hint" as const
@@ -1228,12 +1287,11 @@ export async function bdsToModel(
     }
     // 方向从路径取：同一份皮肤的两套窗口各在自己的方向目录里。
     const windowOrientation: Orientation = /\/land\//i.test(path) ? "land" : /\/port\//i.test(path) ? "port" : hints.orientation
-    model.windows.push({ kind, path, appearance: hints.theme, orientation: windowOrientation, sections })
+    opaque.set(`window:${path}`, { kind, theme: hints.theme, orientation: windowOrientation, sections })
   }
-  const provenance = new Map(model.boards.flatMap((board) => board.keys.map((key) => [key.id, { path: board.id }] as const)))
   // 面板文件的原路径也要记住，导出时沿用原名，避免重建后出现两份面板文件。
-  for (const [kind, path] of Object.entries(panelPaths)) provenance.set(`panel:${kind}`, { path })
-  model.provenance = { format: "bds", nodes: provenance }
+  if (Object.keys(panelPaths).length) opaque.set("panelPaths", panelPaths)
+  model.opaque = opaque
   return model
 }
 
@@ -1245,7 +1303,7 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   // 主键盘决定方向目录；模型里板多起来之后，第一块不一定是主键盘。
   const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
   if (!board) throw new Error("模型里没有板")
-  const theme = model.meta.appearance
+  const theme = model.meta.theme
   const renders = await buildBoard(model, board)
   const orientation = board.orientation
   const root = `${theme}/skin`
@@ -1260,7 +1318,7 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   const atlas = used.size > 0
   const selected = atlas ? new Map([...model.images].filter(([id]) => used.has(id))) : new Map<string, SkinImage>()
   // 页尺寸跟随板尺寸：小屏皮肤不该产出 2048 的图集，大屏也不该被压到 1024。
-  const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.size.width, board.size.height) / 512) * 512))
+  const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.container.width, board.container.height) / 512) * 512))
   const pages = atlas ? packAtlasPages(selected, pageSize, pageSize) : []
   const placement = new Map<string, { page: number; index: number }>()
   pages.forEach((page, pageIndex) => {
@@ -1269,8 +1327,18 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   const inner = new Map<string, readonly [number, number, number, number]>()
   for (const style of model.styles.values()) {
     for (const layer of style.normal) {
-      const nine = layer.kind === "image" ? layer.nineSlice?.inner : undefined
-      if (nine) inner.set(layer.kind === "image" ? layer.image : "", [nine.left, nine.top, nine.right, nine.bottom])
+      if (layer.kind !== "image" || !layer.stretch) continue
+      const stretch = layer.stretch
+      if (stretch.kind === "nine-slice") {
+        inner.set(layer.image, [stretch.edges.left, stretch.edges.top, stretch.edges.right, stretch.edges.bottom])
+      } else if (stretch.kind === "region") {
+        // region 的 inner 是绝对矩形，写回 BDA 的 INNER_RECT 需要图片尺寸也算得出内缩。
+        const image = model.images.get(layer.image)
+        const box = stretch.inner
+        const width = image?.width ?? box.x + box.width
+        const height = image?.height ?? box.y + box.height
+        inner.set(layer.image, [box.x, box.y, width - box.x - box.width, height - box.y - box.height])
+      }
     }
   }
   const imageRef = (id: string): string | undefined => {
@@ -1291,24 +1359,23 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   // 样式段名对所有板共用一份，按键引用与样式表必须用同一张表。
   const names = styleNames(model.styles)
   putText("Info.txt", infoText(model), { kind: "info" })
-  // 面板文件与 gen.ini 属于主键盘所在的方向目录。
-  const panelPaths = {
-    ...(model.provenance.nodes.get("panel:candidate") ? { candidate: model.provenance.nodes.get("panel:candidate")!.path } : {}),
-    ...(model.provenance.nodes.get("panel:hint") ? { hint: model.provenance.nodes.get("panel:hint")!.path } : {}),
-    ...(model.provenance.nodes.get("panel:more") ? { more: model.provenance.nodes.get("panel:more")!.path } : {}),
-  }
+  // 面板文件与 gen.ini 属于主键盘所在的方向目录；原路径记在 opaque 里。
+  const recordedPaths = model.opaque.get("panelPaths") as PanelPaths | undefined
+  const allWindows = [...model.opaque].flatMap(([key, value]) => key.startsWith("window:")
+    ? [{ path: key.slice("window:".length), ...(value as Omit<WindowDocument, "path">) }]
+    : [])
   // 每个方向各有一份面板文件；面板原路径只属于主方向，其余方向按目录重建。
   for (const eachOrientation of new Set(model.boards.map((each) => each.orientation))) {
     const main = model.boards.find((each) => each.orientation === eachOrientation && each.kind === "main")
       ?? model.boards.find((each) => each.orientation === eachOrientation)
     if (!main) continue
     // 非主方向沿用该方向窗口的原文件名，否则会与原包的面板文件重名两次。
-    const windows = model.windows.filter((each) => each.orientation === eachOrientation)
-    const paths = eachOrientation === orientation ? panelPaths : {
+    const windows = allWindows.filter((each) => each.orientation === eachOrientation)
+    const paths = eachOrientation === orientation ? recordedPaths ?? {} : {
       ...(windows.find((each) => each.kind === "candidate") ? { candidate: windows.find((each) => each.kind === "candidate")!.path } : {}),
       ...(windows.find((each) => each.kind === "hint") ? { hint: windows.find((each) => each.kind === "hint")!.path } : {}),
     }
-    for (const file of panelFiles(main, `${root}/${eachOrientation}/`, main.size, actionValue, paths)) {
+    for (const file of panelFiles(main, `${root}/${eachOrientation}/`, main.container, actionValue, paths)) {
       putText(file.path, new TextDecoder().decode(file.data), { kind: "panel-config" })
     }
   }
@@ -1332,11 +1399,12 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   }
   if (model.motions.size) putText(`${root}/res/anim.ini`, writeMotions(model.motions), { kind: "motion" })
   // 非按键窗口按原路径写回：候选栏、提示气泡、手写区。
-  for (const window of model.windows) {
+  for (const window of allWindows) {
     const kind = window.kind === "candidate" ? "candidate-window" as const
       : window.kind === "hint" ? "hint-window" as const
         : "handwriting" as const
-    putText(window.path, windowText(window), { kind })
+    const { path, ...content } = window
+    putText(path, windowText(content), { kind })
   }
   // 音效与字体按模型里的路径写回；没有字节的说明源包里就没这个文件，不凭空造。
   for (const resource of model.resources.values()) {
@@ -1348,7 +1416,7 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
 
 /** 从文档里出现的路径取主题与方向；写出物本来就按目录分好了。 */
 function bdsStructureOf(documents: SkinDocuments): SkinStructure {
-  const themes = new Set<Appearance>()
+  const themes = new Set<Theme>()
   const orientations = new Set<Orientation>()
   for (const path of documents.roles.keys()) {
     const theme = appearanceOf(path)

@@ -6,7 +6,7 @@
 import { setKeyAction, setKeyContainer, patchKey, findKey } from "./edit.ts"
 import { actionText } from "./inspect.ts"
 import type { SkinModel } from "./model.ts"
-import type { SkinAction, KeyEvent } from "./types.ts"
+import type { KeyAction, KeyEvent } from "./types.ts"
 import type { LayoutBox } from "./layout.ts"
 import { setNodeRect } from "./layout.ts"
 import { cachedLayout } from "./layout-cache.ts"
@@ -32,7 +32,7 @@ const STYLE_SLOTS: Readonly<Record<string, "back" | "pressedBack" | "text" | "ic
 }
 
 /** 动作文本 → 动作。空串表示解除绑定。 */
-export function actionOfText(text: string): SkinAction | undefined {
+export function actionOfText(text: string): KeyAction | undefined {
   const trimmed = text.trim()
   if (!trimmed) return
   if (trimmed === "空格") return { kind: "text", value: " " }
@@ -122,8 +122,20 @@ function moveGeometry(model: SkinModel, boardId: string, keyId: string, field: s
   const board = model.boards.find((item) => item.id === boardId)
   const key = board?.keys.find((item) => item.id === keyId)
   if (!board || !key) return model
-  // 触摸区仍挂在按键上；绘制几何从布局树取。
-  const current: LayoutBox = key.touchRect && field.startsWith("touch.") ? key.touchRect : cachedLayout(board)?.get(keyId) ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+  // 显示区由布局树给出；触摸区相对显示区内缩，编辑时先还原成像素再改回。
+  const display = cachedLayout(board)?.get(key.layoutId) ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+  const touchArea: LayoutBox = key.hitArea?.kind === "inset"
+    ? {
+      position: { x: display.position.x + key.hitArea.edges.left, y: display.position.y + key.hitArea.edges.top },
+      size: {
+        width: display.size.width - key.hitArea.edges.left - key.hitArea.edges.right,
+        height: display.size.height - key.hitArea.edges.top - key.hitArea.edges.bottom,
+      },
+    }
+    : key.hitArea?.kind === "none"
+      ? { position: { ...display.position }, size: { width: 0, height: 0 } }
+      : { position: { ...display.position }, size: { ...display.size } }
+  const current: LayoutBox = field.startsWith("touch.") ? touchArea : display
   const next: LayoutBox = {
     position: { ...current.position },
     size: { ...current.size },
@@ -135,7 +147,17 @@ function moveGeometry(model: SkinModel, boardId: string, keyId: string, field: s
   else if (target === "height") next.size.height = value
   else return model
   return field.startsWith("touch.")
-    ? patchKey(model, boardId, keyId, { touchRect: next })
+    ? patchKey(model, boardId, keyId, {
+      hitArea: {
+        kind: "inset",
+        edges: {
+          left: next.position.x - display.position.x,
+          top: next.position.y - display.position.y,
+          right: display.position.x + display.size.width - (next.position.x + next.size.width),
+          bottom: display.position.y + display.size.height - (next.position.y + next.size.height),
+        },
+      },
+    })
     // 绘制几何写进布局树，按键上没有几何可写。
     : { ...model, boards: model.boards.map((item) => item.id === boardId ? { ...item, layout: setNodeRect(item.layout, keyId, next) } : item) }
 }

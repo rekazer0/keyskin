@@ -7,21 +7,23 @@ import { emptyModel } from "../src/skin-model/model.ts"
 import { box, rectOf } from "./helpers/boxes.mjs"
 
 function model() {
-  const result = emptyModel({ appearance: "light", orientation: "port" })
+  const result = emptyModel({ theme: "light", orientation: "port" })
   result.boards.push({
     id: "board",
     kind: "main",
-    geometry: "document",
+    theme: "light",
+    geometry: { kind: "document" },
     orientation: "port",
-    size: { width: 300, height: 100 },
+    container: { width: 300, height: 100 },
     layout: absoluteBoard([{ id: "k", ...box(10, 10, 100, 50) }]),
     keys: [{
       id: "k",
+      layoutId: "k",
       actions: { press: { kind: "text", value: "a" } },
       container: { back: { style: "1" }, fore: [{ style: "2" }] },
     }],
   })
-  result.styles.set("1", { normal: [{ kind: "image", file: "bg" }] })
+  result.styles.set("1", { normal: [{ kind: "image", image: "bg" }] })
   result.styles.set("2", { normal: [{ kind: "text", text: "a", style: { fontSize: 12 } }] })
   return result
 }

@@ -18,18 +18,17 @@ import { configBytes, identifyBda, parseBda, pathsOfRole } from "@/skin-model/fo
 import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig } from "@/skin-model/formats/bda/motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
-import type { SkinKey } from "@/skin-model/key.ts"
+import type { Key } from "@/skin-model/key.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import type { SkinLayer, SkinStyle } from "@/skin-model/style.ts"
-import type { SkinBoard } from "@/skin-model/board.ts"
-import type { Appearance, Orientation } from "@/skin-model/types.ts"
+import type { Theme, Orientation } from "@/skin-model/types.ts"
 
 export type BdaSource = {
   /** BDA 包：外观、动画、音效与图片。 */
   archive: SkinArchive
   /** 布局骨架：提供板与按键几何；BDA 包自己不带。 */
   base?: SkinArchive
-  theme: Appearance
+  theme: Theme
   orientation: Orientation
 }
 
@@ -119,7 +118,7 @@ function refOfStyleName(name: string | undefined): BdaStyleRef | undefined {
 }
 
 /** IR 按键动作换成 BDA 面板里的按键名，如 `q` → `KEY_Q`。 */
-function panelKeyNameOf(key: SkinKey): string | undefined {
+function panelKeyNameOf(key: Key): string | undefined {
   const action = actionValue(key.actions.press)
   return action ? bdaPanelKeyName(action) : undefined
 }
@@ -134,10 +133,11 @@ function imageAtomOf(layer: SkinLayer | undefined): BdaImageAtom | undefined {
   if (!layer || layer.kind !== "image") return
   // 资源名只留叶子：BDS 的图片 id 是包内路径，BDA 的 resourceID 是文件名。
   const resourceID = layer.image.replace(/^bda:/, "").split("/").pop()!.replace(/\.[^.]+$/, "")
-  const inner = layer.nineSlice?.inner
+  // BDA 的 innerRect 是「允许拉伸的内矩形」，正好对应 region；nine-slice 需要图片尺寸才能换算。
+  const inner = layer.stretch?.kind === "region" ? layer.stretch.inner : undefined
   return {
     resource: { type: 0, resourceID },
-    ...(inner ? { innerRect: { x: inner.left, y: inner.top, width: inner.right, height: inner.bottom } } : {}),
+    ...(inner ? { innerRect: inner } : {}),
     ...(layer.alpha !== undefined ? { alpha: layer.alpha } : {}),
   }
 }
@@ -205,7 +205,7 @@ function capabilities(): ReadonlyMap<Capability, CapabilityLevel> {
 export function bdaSource(
   archive: SkinArchive,
   base?: SkinArchive,
-  theme: Appearance = "light",
+  theme: Theme = "light",
   orientation: Orientation = "port",
 ): BdaSource | undefined {
   const mine = packageOf(archive, "bda")
@@ -259,7 +259,7 @@ function stylesOf(appearance: BdaAppearance): { styles: Map<string, SkinStyle>; 
 }
 
 /** 骨架里的主板布局：优先 26 键，找不到就取该方向的第一份布局。 */
-function layoutOf(access: DocumentAccess, theme: Appearance, orientation: Orientation): string | undefined {
+function layoutOf(access: DocumentAccess, theme: Theme, orientation: Orientation): string | undefined {
   const prefix = `${theme}/skin/${orientation}/`
   const names = access.paths().filter((name) => name.startsWith(prefix) && name.endsWith(".ini") && !/gen\.ini$/i.test(name))
   return names.find((name) => /(?:def|py|en)_26\.ini$/i.test(name)) ?? names[0]
@@ -283,7 +283,7 @@ function panelsFromModel(model: SkinModel): Map<string, BdaPanel> {
         ...(pressed ? { backStyleState: pressed } : {}),
       })
     }
-    const backStyle = refOfStyleName(board.backdrop?.style)
+    const backStyle = refOfStyleName(board.backdrop)
     panels.set(panelNameOf(board.id), { hints: new Map(), lists: new Map(), keys, ...(backStyle ? { backStyle } : {}) })
   }
   return panels
@@ -291,7 +291,7 @@ function panelsFromModel(model: SkinModel): Map<string, BdaPanel> {
 
 /** 读取时决定方向的外部输入；骨架已经解析成文档访问器，不是包。 */
 export type BdaReadHints = {
-  theme: Appearance
+  theme: Theme
   orientation: Orientation
   /** 布局骨架的解析产物。骨架是外部输入，不属于这个包。 */
   base: DocumentAccess
@@ -320,9 +320,9 @@ export async function bdaToModel(
   if (!layout) throw new Error("布局骨架里没有该主题方向的布局")
   const boards = await layoutBoards(hints.base, hints.theme, hints.orientation, layout, "main", options)
   const model = emptyModel({
-    appearance: hints.theme,
+    theme: hints.theme,
     orientation: hints.orientation,
-    resolution: boards.boards[0]?.size ?? { width: 1080, height: 600 },
+    resolution: boards.boards[0]?.container ?? { width: 1080, height: 600 },
   }, "bda")
   model.boards.push(...boards.boards)
   const bytes = configBytes(documents, "appearance")
@@ -403,16 +403,12 @@ export async function bdaToModel(
       // 音效配置损坏同理。
     }
   }
-  model.provenance = {
-    format: "bda",
-    nodes: new Map(model.boards.flatMap((board: SkinBoard) => board.keys.map((key: SkinKey) => [key.id, { path: `${hints.theme}/skin/${hints.orientation}/appearanceConfig` }] as const))),
-  }
   return model
 }
 
 /** 模型 → 文档。BDA 写出物全是二进制配置与图片，没有 INI。 */
 function bdaFromModel(model: SkinModel): SkinDocuments {
-  const theme: Appearance = model.meta.appearance
+  const theme: Theme = model.meta.theme
   const orientation: Orientation = model.boards[0]?.orientation ?? model.meta.orientation
   const appearancePath = `${theme}/skin/${orientation}/appearanceConfig`
   // 外观完全从模型重建：不再以源包里的外观为底做增量覆盖。
@@ -450,7 +446,7 @@ function bdaFromModel(model: SkinModel): SkinDocuments {
   }
   put(appearancePath, encodeAppearance(next), { kind: "appearance" })
   // 音效配置单独一份文件；模型里有音效才写，避免产出空配置。
-  if (model.sounds.size) {
+  if (model.sounds.length) {
     put(`${theme}/skin/${orientation}/soundConfig`, encodeSoundConfig(soundConfigOf(model.sounds)), { kind: "sound-config" })
   }
   // 图片按资源名写成 PNG，与外观里的 resourceID 对应。
@@ -463,12 +459,12 @@ function bdaFromModel(model: SkinModel): SkinDocuments {
 
 /** 从路径取主题与方向；BDA 的目录就是 `<主题>/skin/<方向>/`。 */
 function bdaStructureOf(documents: SkinDocuments): SkinStructure {
-  const themes = new Set<Appearance>()
+  const themes = new Set<Theme>()
   const orientations = new Set<Orientation>()
   for (const path of documents.roles.keys()) {
     const match = /^(light|dark)\/skin\/(port|land)\//i.exec(path)
     if (!match) continue
-    themes.add(match[1].toLowerCase() as Appearance)
+    themes.add(match[1].toLowerCase() as Theme)
     orientations.add(match[2].toLowerCase() as Orientation)
   }
   return { roles: documents.roles, themes: [...themes], orientations: [...orientations] }

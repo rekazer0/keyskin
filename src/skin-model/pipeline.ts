@@ -4,7 +4,7 @@
 // 转换阶段在类型上拿不到原始包，因此不存在「回源包补内容」这条路。
 // 导出反向三步：从模型取文档 → 定角色 → 打包。
 import type { IniDocument } from "@/ini.ts"
-import type { Appearance, BoardKind, Orientation } from "./types.ts"
+import type { Theme, BoardKind, Orientation } from "./types.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinFormatId } from "./formats/index.ts"
 
@@ -23,13 +23,13 @@ export type SkinPackage = {
  * 不允许用它当兜底掩盖缺口。
  */
 export type FileRole =
-  | { kind: "layout"; board: BoardKind; theme: Appearance; orientation: Orientation }
-  | { kind: "style"; theme: Appearance }
+  | { kind: "layout"; board: BoardKind; theme: Theme; orientation: Orientation }
+  | { kind: "style"; theme: Theme }
   | { kind: "info" }
   | { kind: "appearance" }
   | { kind: "motion" }
   | { kind: "sound-config" }
-  | { kind: "atlas"; theme: Appearance; orientation: Orientation }
+  | { kind: "atlas"; theme: Theme; orientation: Orientation }
   | { kind: "image" }
   | { kind: "audio"; format?: string }
   | { kind: "font"; family?: string }
@@ -42,7 +42,7 @@ export type FileRole =
 /** 识别产物：每个文件的角色，以及包里出现的主题与方向。 */
 export type SkinStructure = {
   readonly roles: ReadonlyMap<string, FileRole>
-  readonly themes: readonly Appearance[]
+  readonly themes: readonly Theme[]
   readonly orientations: readonly Orientation[]
 }
 

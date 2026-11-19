@@ -4,7 +4,7 @@
 // 它存在的理由：识别逻辑原先散在各处路径谓词里，用完就丢，写出时只能回源包补。
 import { appearanceOf, bdsBoardName, orientationOf } from "@/skin-model/board-paths.ts"
 import type { FileRole, SkinPackage, SkinStructure } from "@/skin-model/pipeline.ts"
-import type { Appearance, BoardKind, Orientation } from "@/skin-model/types.ts"
+import type { Theme, BoardKind, Orientation } from "@/skin-model/types.ts"
 
 /** 布局文件名里能看出板种类的特征名。 */
 function boardKindOf(path: string): BoardKind {
@@ -32,7 +32,7 @@ function panelRole(path: string): FileRole | undefined {
 function roleOf(path: string, files: ReadonlyMap<string, Uint8Array>): FileRole {
   const lower = path.toLowerCase()
   const leaf = lower.split("/").pop() ?? lower
-  const theme: Appearance = appearanceOf(path) ?? "light"
+  const theme: Theme = appearanceOf(path) ?? "light"
   const orientation: Orientation | undefined = orientationOf(path)
 
   if (lower.endsWith(".png")) return { kind: "image" }
@@ -63,7 +63,7 @@ function roleOf(path: string, files: ReadonlyMap<string, Uint8Array>): FileRole 
 /** 识别整个包：每个文件一个角色，并汇总出现过的主题与方向。 */
 export function identifyBds(pkg: SkinPackage): SkinStructure {
   const roles = new Map<string, FileRole>()
-  const themes = new Set<Appearance>()
+  const themes = new Set<Theme>()
   const orientations = new Set<Orientation>()
   for (const path of pkg.files.keys()) {
     const role = roleOf(path, pkg.files)

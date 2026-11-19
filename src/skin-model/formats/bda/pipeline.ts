@@ -4,14 +4,14 @@
 // 键盘布局不在包里，来自外部的布局骨架，所以这里不产生布局角色。
 import { IniDocument } from "@/ini.ts"
 import type { FileRole, SkinDocuments, SkinPackage, SkinStructure } from "@/skin-model/pipeline.ts"
-import type { Appearance, Orientation } from "@/skin-model/types.ts"
+import type { Theme, Orientation } from "@/skin-model/types.ts"
 
 /** 从路径里取主题与方向；BDA 的目录就是 `<主题>/skin/<方向>/`。 */
-function placeOf(path: string): { theme: Appearance; orientation: Orientation } | undefined {
+function placeOf(path: string): { theme: Theme; orientation: Orientation } | undefined {
   const match = /^(light|dark)\/skin\/(port|land)\//i.exec(path)
   if (!match) return
   return {
-    theme: match[1].toLowerCase() as Appearance,
+    theme: match[1].toLowerCase() as Theme,
     orientation: match[2].toLowerCase() as Orientation,
   }
 }
@@ -47,7 +47,7 @@ function roleOf(path: string): FileRole {
 
 export function identifyBda(pkg: SkinPackage): SkinStructure {
   const roles = new Map<string, FileRole>()
-  const themes = new Set<Appearance>()
+  const themes = new Set<Theme>()
   const orientations = new Set<Orientation>()
   for (const path of pkg.files.keys()) {
     const role = roleOf(path)

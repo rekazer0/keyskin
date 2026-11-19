@@ -81,6 +81,7 @@ function item(section: string, rect: Rect, base: PalmBase, owner: JsonObject, ac
   return {
     key: {
       id: section,
+      layoutId: section,
       actions: { press: { kind: "text", value: center } },
       container: {
         ...(backStyle ? { back: { style: backStyle, ...(text(b.base_ba) ? { anim: text(b.base_ba) } : {}) } } : {}),

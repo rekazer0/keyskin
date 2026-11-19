@@ -105,11 +105,11 @@ test("带动画配置的包能读出动效", async () => {
   const base = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/bda-base.bds", import.meta.url))))
   const model = await readWith(bdaFormat, bdaSource(animated, base))
   assert.ok(model.motions.size > 0, "动画配置没读成动效")
-  const kinds = new Set([...model.motions.values()].map((motion) => motion.root.kind))
+  const kinds = new Set([...model.motions.values()].map((motion) => motion.kind))
   assert.ok(kinds.has("track"), "位移类动效应读成轨道")
-  const track = [...model.motions.values()].find((motion) => motion.root.kind === "track")
-  assert.ok(track.timeline.duration >= 0)
-  assert.equal(track.root.kind, "track")
+  const track = [...model.motions.values()].find((motion) => motion.kind === "track")
+  assert.ok((track.timeline?.duration ?? 0) >= 0)
+  assert.equal(track.kind, "track")
 })
 
 test("动效写回后能再读出来，类型不变", async () => {
@@ -120,6 +120,6 @@ test("动效写回后能再读出来，类型不变", async () => {
   const again = await readWith(bdaFormat, bdaSource((await writeWith(bdaFormat, model)).archive, base))
   assert.equal(again.motions.size, model.motions.size)
   for (const [id, motion] of model.motions) {
-    assert.equal(again.motions.get(id)?.root.kind, motion.root.kind, `${id} 的动效类型变了`)
+    assert.equal(again.motions.get(id)?.kind, motion.kind, `${id} 的动效类型变了`)
   }
 })

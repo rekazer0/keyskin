@@ -47,7 +47,7 @@ function styleReferences(model: SkinModel): { images: string[]; sounds: string[]
   for (const style of model.styles.values()) {
     for (const layer of [...style.normal, ...(style.pressed ?? []), ...(style.disabled ?? [])]) {
       if (layer.kind === "image" || layer.kind === "icon") images.push(layer.image)
-      if (layer.kind === "sound") sounds.push(layer.file)
+      if (layer.kind === "sound") sounds.push(layer.binding.sound)
     }
   }
   return { images, sounds }
@@ -98,7 +98,7 @@ export function validateModel(model: SkinModel): ValidationReport {
     const nodes = collectNodes(board.layout)
     const layoutIds = new Set(nodes.map((node) => node.id))
     for (const key of board.keys) {
-      if (!layoutIds.has(key.id)) {
+      if (!layoutIds.has(key.layoutId)) {
         add("error", "layout-key-mismatch", `${board.id}/${key.id}`, "布局树里没有这个按键的节点")
       }
     }
@@ -106,7 +106,7 @@ export function validateModel(model: SkinModel): ValidationReport {
 
   // 动效绑定的目标必须还在，否则导出后动画不触发。
   for (const [id, motion] of model.motions) {
-    for (const binding of motion.bindings) {
+    for (const binding of motion.bindings ?? []) {
       if (binding.target.startsWith("style:")) {
         const style = binding.target.slice(6)
         if (!knownStyles.has(style)) add("warning", "missing-style", id, `动效绑定的样式「${style}」不存在`)
@@ -120,8 +120,8 @@ export function validateModel(model: SkinModel): ValidationReport {
   const primary = model.boards.find((board) => board.kind === "main") ?? model.boards[0]
   if (primary && model.meta.resolution) {
     const { width, height } = model.meta.resolution
-    if (primary.size.width !== width || primary.size.height !== height) {
-      add("warning", "size-mismatch", primary.id, `主板尺寸 ${primary.size.width}×${primary.size.height} 与分辨率 ${width}×${height} 不一致`)
+    if (primary.container.width !== width || primary.container.height !== height) {
+      add("warning", "size-mismatch", primary.id, `主板尺寸 ${primary.container.width}×${primary.container.height} 与分辨率 ${width}×${height} 不一致`)
     }
   }
 

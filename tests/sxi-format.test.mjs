@@ -2,6 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { unzipSync } from "fflate"
+import { boardPanels } from "../src/skin-model/panel.ts"
 import { sxiFormat, sxiSource } from "../src/skin-model/formats/sxi/index.ts"
 import { sxiFixture } from "./helpers/sxi-fixture.mjs"
 import { rectOf } from "./helpers/boxes.mjs"
@@ -24,10 +25,11 @@ test("手心皮肤读出按键、动作与面板", async () => {
   assert.deepEqual(board.keys[0].actions["swipe-up"], { kind: "text", value: "1" })
   assert.deepEqual(board.keys[1].actions.press, { kind: "system", code: "F31" })
   assert.equal(board.keys[0].container.back?.style, "sxi:10")
-  assert.equal(board.backdrop?.style, "3")
-  assert.equal(board.candidates?.[0]?.style, "20")
-  assert.equal(board.hint?.style, "30")
-  assert.deepEqual(board.hint?.offset, { x: 10, y: 20 })
+  const panels = boardPanels(board)
+  assert.equal(panels?.backdrop?.style, "3")
+  assert.equal(panels?.candidates?.[0]?.style, "20")
+  assert.equal(panels?.hint?.style, "30")
+  assert.deepEqual(panels?.hint?.offset, { x: 10, y: 20 })
 })
 
 test("手心皮肤写回后仍能读出同样的按键", async () => {

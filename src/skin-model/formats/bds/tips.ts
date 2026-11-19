@@ -5,7 +5,7 @@
 // IR 里把它记成按键的状态覆盖，`state` 保留 `S11` 这样的组名，便于原样写回。
 import { numbersOf } from "@/ini.ts"
 import type { IniDocument } from "@/ini.ts"
-import type { KeyEvent, SkinAction } from "@/skin-model/types.ts"
+import type { KeyEvent, KeyAction } from "@/skin-model/types.ts"
 import type { KeyStateOverride, TipBody } from "@/skin-model/key.ts"
 
 /** 一条 `STAT_STYLE` 条目：状态组与提示段编号。 */
@@ -29,7 +29,7 @@ export function statStyleOf(refs: readonly TipRef[]): string | undefined {
 
 export type TipReadOptions = {
   /** 把位置类型与前景偏移换算成布局字段，由调用方决定是否需要。 */
-  actionOf: (value: string | undefined) => SkinAction | undefined
+  actionOf: (value: string | undefined) => KeyAction | undefined
 }
 
 /** `[TIPn]` 段里的动作字段，事件与字段一一对应。 */
@@ -115,7 +115,7 @@ export function tipRefsOf(overrides: readonly KeyStateOverride[] | undefined): T
 }
 
 /** 一个状态覆盖写成 `[TIPn]` 段的行；没有可写内容时返回空数组。 */
-export function tipLines(override: TipBody, section: number, actionValue: (action: SkinAction | undefined) => string | undefined): string[] {
+export function tipLines(override: TipBody, section: number, actionValue: (action: KeyAction | undefined) => string | undefined): string[] {
   const lines = [`[TIP${section}]`]
   const container = override.container
   if (container?.back?.style) lines.push(`BACK_STYLE=${container.back.style}`)

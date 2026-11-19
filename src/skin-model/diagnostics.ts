@@ -9,7 +9,7 @@ import { identifySsf } from "@/skin-model/formats/ssf/pipeline.ts"
 import { identifySxi } from "@/skin-model/formats/sxi/pipeline.ts"
 import type { SkinFormatId } from "@/skin-model/formats/index.ts"
 import { packageOf, roleCounts, unknownFiles, type FileRole, type SkinStructure } from "@/skin-model/pipeline.ts"
-import type { Appearance, Orientation } from "@/skin-model/types.ts"
+import type { Theme, Orientation } from "@/skin-model/types.ts"
 
 export type SkinDiagnostics = {
   format: SkinFormatId
@@ -19,7 +19,7 @@ export type SkinDiagnostics = {
   roles: Array<{ kind: FileRole["kind"]; count: number }>
   /** 认不出来的文件；空数组表示整包都认得出。 */
   unknown: Array<{ path: string; reason: string }>
-  themes: Appearance[]
+  themes: Theme[]
   orientations: Orientation[]
 }
 

@@ -2,10 +2,11 @@
 //
 // 布局树用 taffy 计算每个按键的矩形；样式引用在模型样式表里解析成图层。
 // 这是预览与导出共用的“板 → 可绘制按键”的路径。
-import type { SkinBoard } from "./board.ts"
-import type { KeyContainer, SkinKey } from "./key.ts"
+import type { Board } from "./board.ts"
+import type { KeyContainer, Key } from "./key.ts"
 import { actionText } from "./inspect.ts"
 import type { LayoutBox } from "./layout.ts"
+import { boardPanels } from "./panel.ts"
 import { computeLayout } from "./layout.ts"
 import type { SkinModel } from "./model.ts"
 import { resolveStyle, type SkinLayer, type SkinStyle } from "./style.ts"
@@ -15,7 +16,7 @@ import { resolveStyle, type SkinLayer, type SkinStyle } from "./style.ts"
  * 矩形由布局树算出，样式引用由容器给出，没有一处来自原文。
  */
 export type KeyRender = {
-  key: SkinKey
+  key: Key
   /** 段名；普通键就是 key.id。 */
   section: string
   /** 这个按键覆盖的段；列表单元格这类合成项会指向多个段。 */
@@ -47,11 +48,11 @@ function rectOf(box: LayoutBox): { x: number; y: number; width: number; height: 
 }
 
 /** 按键在某个皮肤状态下的容器：状态覆盖只替换它声明的那几层。 */
-function containerIn(container: KeyContainer, state: number | undefined, key: SkinKey, board: SkinBoard): KeyContainer {
+function containerIn(container: KeyContainer, state: number | undefined, key: Key, board: Board): KeyContainer {
   if (state === undefined || !key.stateRefs?.length) return container
   // 状态覆盖按段号从板的池里取，不回到原文。
   const section = key.stateRefs.find((ref) => stateMatches(ref.state, state))?.section
-  const override = section === undefined ? undefined : board.tips?.get(section)
+  const override = section === undefined ? undefined : boardPanels(board)?.tips?.get(section)
   if (!override?.container) return container
   const patch = override.container
   return {
@@ -84,11 +85,11 @@ export function containerWithState(container: KeyContainer, override: Partial<Ke
 }
 
 /** 一块板的按键渲染数据；矩形来自布局树，图层来自按键容器各自的层。 */
-export async function buildBoard(model: SkinModel, board: SkinBoard, state?: number): Promise<KeyRender[]> {
-  const rects = await computeLayout(board.layout, board.size)
+export async function buildBoard(model: SkinModel, board: Board, state?: number): Promise<KeyRender[]> {
+  const rects = await computeLayout(board.layout, board.container)
   // 同位置、同动作的几个段在真机上是一个键：只画一次，段名都留着。
   // 后者覆盖前者的样式，与同一按键在多个状态下重复定义时一致。
-  const groups = new Map<string, SkinKey[]>()
+  const groups = new Map<string, Key[]>()
   for (const key of board.keys) {
     const rect = rects.get(key.id)
     // 布局树里没有这个键就没有几何；不给兜底值，缺了就是缺了。
@@ -112,7 +113,14 @@ export async function buildBoard(model: SkinModel, board: SkinBoard, state?: num
       sections: keys.flatMap((each) => each.sections ?? [each.id]),
       rect: rectOf(rect),
       container,
-      ...(key.foreRect ? { foreRect: rectOf(key.foreRect) } : {}),
+      ...(key.foreground ? {
+        foreRect: {
+          x: rect.position.x + key.foreground.left * rect.size.width,
+          y: rect.position.y + key.foreground.top * rect.size.height,
+          width: (1 - key.foreground.left - key.foreground.right) * rect.size.width,
+          height: (1 - key.foreground.top - key.foreground.bottom) * rect.size.height,
+        },
+      } : {}),
       ...(container.back?.style ? { backStyle: container.back.style } : {}),
       ...(container.back?.pressed ? { highlightBackStyle: container.back.pressed } : {}),
       foreStyles: container.fore.flatMap((layer) => (layer.style ? [layer.style] : [])),

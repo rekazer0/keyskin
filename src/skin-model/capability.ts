@@ -2,6 +2,7 @@
 import type { SkinModel } from "./model.ts"
 import type { SkinLayer } from "./style.ts"
 import { motionNodeKinds } from "./motion.ts"
+import { boardPanels } from "./panel.ts"
 
 export type Capability =
   | "board.geometry"
@@ -58,18 +59,19 @@ export function requiredCapabilities(model: SkinModel): CapabilitySet {
     if (current === undefined || level === "full") needed.set(capability, level)
   }
   for (const board of model.boards) {
-    need("board.geometry", board.geometry === "document" ? "full" : "partial")
+    need("board.geometry", board.geometry.kind === "document" ? "full" : "partial")
     if (board.keys.length) need("board.keys")
     if (board.keys.some((key) => Object.keys(key.actions).length)) need("key.actions")
     if (board.keys.some((key) => (key.stateRefs?.length ?? 0) > 0)) need("key.states")
-    if (board.keys.some((key) => key.touchRect)) need("key.touch")
-    if (board.transitions?.length) need("board.transitions")
+    if (board.keys.some((key) => key.hitArea !== undefined)) need("key.touch")
+    const panels = boardPanels(board)
+    if (panels?.transitions?.length) need("board.transitions")
     if (board.backdrop) need("panel.backdrop")
-    if (board.candidates?.length) need("panel.candidate")
-    if (board.hint) need("panel.hint")
-    if (board.list) need("panel.list")
-    if (board.toolbar) need("panel.toolbar")
-    if (board.input) need("panel.input")
+    if (panels?.candidates?.length) need("panel.candidate")
+    if (panels?.hint) need("panel.hint")
+    if (panels?.list) need("panel.list")
+    if (panels?.toolbar) need("panel.toolbar")
+    if (panels?.input) need("panel.input")
   }
   const layers: SkinLayer[] = []
   for (const style of model.styles.values()) {
@@ -79,7 +81,7 @@ export function requiredCapabilities(model: SkinModel): CapabilitySet {
     switch (layer.kind) {
       case "image":
         need("style.image")
-        if (layer.nineSlice) need("style.nine-slice")
+        if (layer.stretch && layer.stretch.kind !== "none") need("style.nine-slice")
         break
       case "color":
         need("style.color")
@@ -102,34 +104,25 @@ export function requiredCapabilities(model: SkinModel): CapabilitySet {
     }
   }
   for (const motion of model.motions.values()) {
-    for (const kind of motionNodeKinds(motion.root)) {
+    for (const kind of motionNodeKinds(motion)) {
       switch (kind) {
         case "track":
           need("motion.track")
           break
-        case "sequence":
+        case "group":
           need("motion.sequence")
           break
         case "frames":
           need("motion.frames")
           break
-        case "particles":
-          need("motion.particles")
-          break
-        case "path":
-          need("motion.path")
-          break
-        case "physics":
-          need("motion.physics")
-          break
-        case "custom":
+        case "opaque":
           need("motion.custom")
           break
       }
     }
-    if (motion.bindings.length) need("motion.binding")
+    if (motion.bindings?.length) need("motion.binding")
   }
-  if (model.sounds.size) need("sound")
+  if (model.sounds.length) need("sound")
   for (const resource of model.resources.values()) if (resource.kind === "font") need("font")
   return needed
 }

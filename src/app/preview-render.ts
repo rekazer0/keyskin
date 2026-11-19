@@ -340,7 +340,7 @@ export function refreshPreview(): void {
   preview.setDocument(appState.layoutDocument)
   // 文档解析成板，板的渲染投影就是画布上的键；板是派生，不另存一份。
   const board = appState.layoutDocument
-    ? bdsBoardOf(appState.layoutDocument, { id: "layout", orientation: orientation.value === "land" ? "land" : "port" })
+    ? bdsBoardOf(appState.layoutDocument, { id: "layout", orientation: orientation.value === "land" ? "land" : "port", theme: "light" })
     : undefined
   preview.setRenderSource(board ? (state) => boardRenders(board, state) : undefined)
   refreshNativeScenes()

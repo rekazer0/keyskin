@@ -2,15 +2,16 @@
 //
 // 撤销栈现在存的是文件内容快照。模型化之后可以直接比较模型，得到「改了什么」，
 // 用于改动标记、AI 设计预览与更细的撤销粒度。
-import type { SkinBoard } from "./board.ts"
+import type { Board } from "./board.ts"
 import type { LayoutBox, LayoutNode } from "./layout.ts"
 import { layoutOf } from "./layout-cache.ts"
 import { DEFAULT_DERIVE_OPTIONS } from "./derive/options.ts"
-import type { SkinKey } from "./key.ts"
+import type { Key } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
 import type { SkinImage } from "./image.ts"
-import type { SkinMotion } from "./motion.ts"
+import { boardPanels } from "./panel.ts"
+import type { MotionNode } from "./motion.ts"
 
 /** 一类对象的差异：新增、删除、改动。 */
 export type DiffSet = {
@@ -28,9 +29,9 @@ function isEmpty(set: DiffSet): boolean {
 }
 
 /** 按键的可比较投影：动作码与样式引用。几何由布局树比对，不在按键上。 */
-function keySignature(key: SkinKey): string {
+function keySignature(key: Key): string {
   return JSON.stringify({
-    touchRect: key.touchRect ?? null,
+    hitArea: key.hitArea ?? null,
     padding: key.padding ?? null,
     actions: key.actions,
     container: key.container,
@@ -55,18 +56,17 @@ function layoutSignature(node: LayoutNode, rects: ReadonlyMap<string, LayoutBox>
   return children ? `${structure}[${children}]` : structure
 }
 
-function boardSignature(board: SkinBoard, rects: ReadonlyMap<string, LayoutBox>, tolerance: number): string {
+function boardSignature(board: Board, rects: ReadonlyMap<string, LayoutBox>, tolerance: number): string {
+  const panels = boardPanels(board)
   return JSON.stringify({
     kind: board.kind,
+    theme: board.theme,
     geometry: board.geometry,
-    size: board.size,
+    orientation: board.orientation,
+    container: board.container,
     layout: layoutSignature(board.layout, rects, tolerance),
     backdrop: board.backdrop ?? null,
-    candidates: board.candidates ?? null,
-    hint: board.hint ?? null,
-    list: board.list ?? null,
-    toolbar: board.toolbar ?? null,
-    input: board.input ?? null,
+    panels: panels ?? null,
   })
 }
 
@@ -86,12 +86,13 @@ function imageSignature(image: SkinImage): string {
   return `${image.width}x${image.height}:${(hash >>> 0).toString(16)}`
 }
 
-function motionSignature(motion: SkinMotion): string {
-  return JSON.stringify({
-    root: motion.root,
-    timeline: motion.timeline,
-    bindings: motion.bindings,
-  })
+function motionSignature(motion: MotionNode): string {
+  return JSON.stringify(motion)
+}
+
+/** 音效按平台与主体成键；数组里的顺序不参与比较。 */
+function soundMap(sounds: SkinModel["sounds"]): ReadonlyMap<string, unknown> {
+  return new Map(sounds.map((sound) => [`${sound.platform ?? ""}:${sound.subject}`, sound]))
 }
 
 /** 两个键相同的映射 → 差异；值用签名比较，避免大对象深层比较的开销。 */
@@ -110,8 +111,8 @@ function diffMap<K, V>(before: ReadonlyMap<K, V>, after: ReadonlyMap<K, V>, sign
 
 /** 按 id 比较的列表（板）；板内的按键改动记在 `keys` 里。 */
 function diffBoards(
-  before: readonly SkinBoard[],
-  after: readonly SkinBoard[],
+  before: readonly Board[],
+  after: readonly Board[],
   rectsBefore: ReadonlyMap<string, ReadonlyMap<string, LayoutBox>>,
   rectsAfter: ReadonlyMap<string, ReadonlyMap<string, LayoutBox>>,
   tolerance: number,
@@ -173,7 +174,7 @@ export async function diffModels(before: SkinModel, after: SkinModel, tolerance 
     styles: diffMap(before.styles, after.styles, styleSignature),
     images: diffMap(before.images, after.images, imageSignature),
     motions: diffMap(before.motions, after.motions, motionSignature),
-    sounds: diffMap(before.sounds, after.sounds, (sound) => JSON.stringify(sound)),
+    sounds: diffMap(soundMap(before.sounds), soundMap(after.sounds), (sound) => JSON.stringify(sound)),
     meta: JSON.stringify(before.meta) !== JSON.stringify(after.meta),
   }
 }

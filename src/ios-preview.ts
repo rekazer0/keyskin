@@ -53,6 +53,7 @@ export function iosToolbarItems(
     return [{
       key: {
         id: section,
+        layoutId: section,
         actions: pressText ? { press: { kind: "text", value: pressText } } : {},
         container: { fore: foreStyles.map((style) => ({ style })) },
       },

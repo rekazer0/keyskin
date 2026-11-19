@@ -1,4 +1,6 @@
-// 非按键窗口：候选栏、提示气泡、手写区要能进模型并原路写回。
+// 非按键窗口：候选栏、提示气泡、手写区原样保留在 opaque 里，按原路径写回。
+//
+// 设计稿把这些窗口视为格式专有内容，不进顶层字段；路径作键、分段结构作值。
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
@@ -6,11 +8,19 @@ import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds/index.ts"
 import { emptyModel } from "../src/skin-model/model.ts"
 import { readWith, writeWith } from "./support/driver.mjs"
 
+/** 模型里的窗口文档：opaque 中 `window:<路径>` 的条目。 */
+function windowsOf(model) {
+  return [...model.opaque]
+    .filter(([key]) => key.startsWith("window:"))
+    .map(([key, value]) => ({ path: key.slice("window:".length), ...value }))
+}
+
 test("候选窗与提示窗进模型，带原路径与分段", async () => {
   const base = bdsFixtureArchive()
   const model = await readWith(bdsFormat, bdsSource(base))
-  const candidates = model.windows.filter((window) => window.kind === "candidate")
-  const hints = model.windows.filter((window) => window.kind === "hint")
+  const windows = windowsOf(model)
+  const candidates = windows.filter((window) => window.kind === "candidate")
+  const hints = windows.filter((window) => window.kind === "hint")
   assert.ok(candidates.length > 0, "候选窗没有被读进模型")
   assert.ok(hints.length > 0, "提示窗没有被读进模型")
   for (const window of [...candidates, ...hints]) {
@@ -23,7 +33,7 @@ test("窗口按原路径写回，内容与读出时一致", async () => {
   const base = bdsFixtureArchive()
   const model = await readWith(bdsFormat, bdsSource(base))
   const out = await writeWith(bdsFormat, model)
-  for (const window of model.windows) {
+  for (const window of windowsOf(model)) {
     assert.ok(out.archive.names().includes(window.path), `${window.path} 没有写回`)
     const text = out.archive.getText(window.path)
     assert.ok(text, `${window.path} 写回后读不出文本`)
@@ -36,9 +46,9 @@ test("窗口按原路径写回，内容与读出时一致", async () => {
   }
 })
 
-test("空模型的窗口列表是空数组，不是缺字段", () => {
-  const model = emptyModel({ appearance: "light", orientation: "port" }, "bds")
-  assert.deepEqual(model.windows, [])
+test("空模型的 opaque 是空集合，不是缺字段", () => {
+  const model = emptyModel({ theme: "light", orientation: "port" }, "bds")
+  assert.equal(model.opaque.size, 0)
 })
 
 function bdsFixtureArchive() {

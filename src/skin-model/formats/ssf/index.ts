@@ -20,7 +20,7 @@ import type { SkinModel } from "@/skin-model/model.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
 import type { FileRole, SkinDocuments, SkinStructure } from "@/skin-model/pipeline.ts"
 import { filesOf, packageOf } from "@/skin-model/pipeline.ts"
-import type { NineSlice, SkinLayer, SkinStyle } from "@/skin-model/style.ts"
+import type { SkinLayer, SkinStyle, Stretch } from "@/skin-model/style.ts"
 import type { Orientation } from "@/skin-model/types.ts"
 
 export type SsfSource = {
@@ -37,13 +37,13 @@ export type SsfRebuilt = Omit<SsfSource, "files"> & { files: Map<string, Uint8Ar
 /** 皮肤自己的段（样式、前景）在 IR 样式表里的名字，与骨架样式区分。 */
 const LOOK_PREFIX = "ssf:"
 
-/** 搜狗的 stretch 是像素区间 `left,right,top,bottom`；换成九宫格的四个内边距。 */
-function nineSliceOf(ref: SsfImageRef, width: number, height: number): NineSlice | undefined {
+/** 搜狗的 stretch 是像素区间 `left,right,top,bottom`；换成九宫格四边的固定宽度。 */
+function stretchOf(ref: SsfImageRef, width: number, height: number): Stretch | undefined {
   const stretch = ref.stretch
-  if (!stretch) return
+  if (!stretch) return undefined
   const [left, right, top, bottom] = stretch
-  if (!(left < right && top < bottom) || right > width || bottom > height) return
-  return { inner: { left, right: width - right, top, bottom: height - bottom } }
+  if (!(left < right && top < bottom) || right > width || bottom > height) return undefined
+  return { kind: "nine-slice", edges: { left, top, right: width - right, bottom: height - bottom } }
 }
 
 /** 一张搜狗图片引用 → IR 图片图层；像素同时切进图片资源表。 */
@@ -74,8 +74,8 @@ function imageLayer(
   }
   const image = images.get(path)
   if (!image) return
-  const nineSlice = nineSliceOf(ref, image.width, image.height)
-  return { kind: "image", image: path, ...(nineSlice ? { fit: "nine-slice", nineSlice } : {}) }
+  const stretch = stretchOf(ref, image.width, image.height)
+  return { kind: "image", image: path, ...(stretch ? { stretch } : {}) }
 }
 
 /** 段里的字段：皮肤包的两份 INI 各写一半（phoneSkin.ini 管背景，keys.ini 管前景）。 */
@@ -295,7 +295,6 @@ export async function ssfToModel(
   model.meta.name = info.name || model.meta.name
   model.meta.author = info.author || model.meta.author
   model.meta.version = info.version || model.meta.version
-  model.provenance = { format: "ssf", nodes: new Map() }
   const images = new Map(model.images)
   applyLook(
     model,

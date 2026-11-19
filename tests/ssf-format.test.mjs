@@ -20,11 +20,11 @@ test("搜狗皮肤读出骨架几何与皮肤样式", async () => {
   const { model: skin } = await model()
   assert.equal(skin.meta.name, "测试皮肤")
   assert.equal(skin.meta.author, "测试作者")
-  assert.equal(skin.meta.appearance, "light")
+  assert.equal(skin.meta.theme, "light")
   const board = skin.boards[0]
   assert.equal(board.keys.length, 3)
-  assert.equal(board.geometry, "document")
-  assert.ok(board.size.width > 0)
+  assert.equal(board.geometry.kind, "document")
+  assert.ok(board.container.width > 0)
   // 几何来自布局树；按 x 排序后与骨架的三列对齐。
   const rects = await Promise.all(board.keys.map((key) => rectOfKey(skin, board.id, key.id)))
   const keys = rects.map((rect) => rect.position.x).sort((left, right) => left - right)

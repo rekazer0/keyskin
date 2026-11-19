@@ -15,17 +15,17 @@ const template = (name) => SkinArchive.open(new Uint8Array(readFileSync(new URL(
 
 /** 一块板：按键几何进布局树，样式与动作进容器。 */
 function renderKey(id, rect, actions, container) {
-  return { id, rect, actions, container }
+  return { id, layoutId: id, rect, actions, container }
 }
 
 async function rendersOf(keys, size = { width: 300, height: 100 }) {
-  const model = emptyModel({ appearance: 'light', orientation: 'port' })
+  const model = emptyModel({ theme: 'light', orientation: 'port' })
   model.boards.push({
     id: 'board',
     kind: 'main',
-    geometry: 'document',
+    geometry: { kind: 'document' },
     orientation: 'port',
-    size,
+    container: size,
     layout: absoluteBoard(keys.map((key) => ({ id: key.id, ...box(key.rect[0], key.rect[1], key.rect[2], key.rect[3]) }))),
     keys,
   })

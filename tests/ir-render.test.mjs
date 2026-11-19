@@ -4,15 +4,17 @@ import test from "node:test"
 import { boardRenders } from "../src/paint/board.ts"
 import { absoluteBoard } from "../src/skin-model/layout.ts"
 import { box } from "./helpers/boxes.mjs"
+import { withPanels } from "../src/skin-model/panel.ts"
 
 /** 一块板：两个键 + 五种组件，几何都给全。 */
 function board() {
   return {
     id: "board",
     kind: "main",
-    geometry: "document",
+    theme: "light",
+    geometry: { kind: "document" },
     orientation: "port",
-    size: { width: 300, height: 100 },
+    container: { width: 300, height: 100 },
     layout: absoluteBoard([
       { id: "KEY1", ...box(0, 0, 100, 50) },
       { id: "KEY2", ...box(100, 0, 100, 50) },
@@ -20,21 +22,26 @@ function board() {
     keys: [
       {
         id: "KEY1",
+        layoutId: "KEY1",
         actions: { press: { kind: "text", value: "a" } },
         container: { back: { style: "101" }, fore: [{ style: "102" }] },
       },
       {
         id: "KEY2",
+        layoutId: "KEY2",
         actions: { press: { kind: "text", value: "b" } },
         container: { back: { style: "103" }, fore: [] },
       },
     ],
-    backdrop: { style: "1", foreStyle: "2", viewRect: box(0, 0, 300, 100) },
-    candidates: [{ style: "3", viewRect: box(0, 0, 300, 40) }],
-    list: { style: "4", foreStyle: "5", viewRect: box(0, 50, 300, 50) },
-    more: { foreStyle: "6", viewRect: box(200, 0, 100, 40) },
-    hint: { style: "7", foreStyle: "8", viewRect: box(0, 0, 120, 40) },
-    tips: new Map(),
+    backdrop: "1",
+    extra: withPanels(undefined, {
+      backdrop: { style: "1", foreStyle: "2", viewRect: box(0, 0, 300, 100) },
+      candidates: [{ style: "3", viewRect: box(0, 0, 300, 40) }],
+      list: { style: "4", foreStyle: "5", viewRect: box(0, 50, 300, 50) },
+      more: { foreStyle: "6", viewRect: box(200, 0, 100, 40) },
+      hint: { style: "7", foreStyle: "8", viewRect: box(0, 0, 120, 40) },
+      tips: new Map(),
+    }),
   }
 }
 
@@ -64,7 +71,7 @@ test("面板、候选栏、列表、更多菜单、气泡各出一项", async ()
 })
 
 test("没有几何的组件不出现", async () => {
-  const empty = { ...board(), candidates: [], list: undefined, more: undefined, hint: undefined }
+  const empty = { ...board(), extra: withPanels(undefined, { backdrop: { style: "1", viewRect: box(0, 0, 300, 100) } }) }
   const renders = await boardRenders(empty)
   const components = renders.filter((render) => !render.section.startsWith("KEY"))
   assert.deepEqual(components.map((render) => render.section), ["PANEL"])
@@ -74,6 +81,7 @@ test("按键种类随容器一起透传", async () => {
   const withCell = board()
   withCell.keys = [...withCell.keys, {
     id: "LIST:1",
+    layoutId: "LIST:1",
     kind: "list-cell",
     actions: {},
     container: { fore: [{ style: "9" }] },

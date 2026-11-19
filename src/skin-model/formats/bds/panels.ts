@@ -4,19 +4,20 @@
 // 读侧把它们整理成板的面板组件；写侧重新生成这几份文件。
 import { IniDocument, blocksOf, numbersOf } from "@/ini.ts"
 import type { DocumentAccess } from "@/skin-model/formats/public/access.ts"
-import type { CandidateBar, HintBubble, InputBar, ListPanel, MoreMenu, PanelBackdrop, ScanPanel, SkinBoard, Toolbar, ToolbarItem } from "@/skin-model/board.ts"
-import type { Offsets } from "@/skin-model/board.ts"
-import type { SkinAction } from "@/skin-model/types.ts"
+import type { Board } from "@/skin-model/board.ts"
+import type { BoardPanels, CandidateBar, HintBubble, InputBar, ListPanel, MoreMenu, Offsets, PanelBackdrop, ScanPanel, Toolbar, ToolbarItem } from "@/skin-model/panel.ts"
+import { boardPanels } from "@/skin-model/panel.ts"
+import type { KeyAction } from "@/skin-model/types.ts"
 
-export type BoardPanels = Pick<SkinBoard, "backdrop" | "candidates" | "hint" | "list" | "toolbar" | "input" | "scan" | "more" | "offsets">
+export type { BoardPanels }
 
 /** 面板文件的原路径；导出时沿用，避免重建把文件名换掉。 */
 export type PanelPaths = { candidate?: string; hint?: string; more?: string }
 
 export type ParsedPanels = { panels: BoardPanels; paths: PanelPaths }
 
-type ActionReader = (value: string | undefined) => SkinAction | undefined
-type ActionWriter = (action: SkinAction | undefined) => string | undefined
+type ActionReader = (value: string | undefined) => KeyAction | undefined
+type ActionWriter = (action: KeyAction | undefined) => string | undefined
 
 /** 面板文件与 `gen.ini` 在同一目录，用段里的 `LAYOUT_NAME` 找。 */
 function panelPath(access: DocumentAccess, directory: string, name: string | undefined, extension: string): string | undefined {
@@ -245,7 +246,7 @@ function iconSection(items: readonly ToolbarItem[], actionValue: ActionWriter): 
 
 /** 重新生成面板文件：`gen.ini`、候选栏 `.cnd`、气泡 `.pop`；`paths` 给了就沿用原文件名。 */
 export function panelFiles(
-  board: SkinBoard,
+  board: Board,
   directory: string,
   size: { width: number; height: number },
   actionValue: ActionWriter,
@@ -254,13 +255,14 @@ export function panelFiles(
   const text = (value: string) => new TextEncoder().encode(value)
   const files: Array<{ path: string; data: Uint8Array }> = []
   const background: string[] = []
-  const items = board.toolbar?.items ?? []
+  const panels = boardPanels(board) ?? {}
+  const items = panels.toolbar?.items ?? []
   const iconItems = items.filter((item) => item.icon)
   const nameOf = (path: string | undefined, fallback: string) => (path ?? `${directory}${fallback}`).split("/").pop()!.replace(/\.[^.]+$/, "")
 
   // 候选栏与气泡各自一个文件，`gen.ini` 用 LAYOUT_NAME 指向它们。
   // 原包已有 `.cnd` 时它由窗口原样写回，面板生成不覆盖它自己的 VIEW_RECT。
-  for (const candidate of board.candidates ?? []) {
+  for (const candidate of panels.candidates ?? []) {
     if (paths.candidate) continue
     const lines = [
       "[CAND]",
@@ -274,7 +276,7 @@ export function panelFiles(
     files.push({ path: `${directory}cand.cnd`, data: text(lines.join("\n")) })
   }
   // 候选栏的位置与类型写在 gen.ini 的 `[CAND]` 里，与 `.cnd` 是否存在无关；每段各写一份。
-  for (const candidate of board.candidates ?? []) {
+  for (const candidate of panels.candidates ?? []) {
     background.push(
       "[CAND]",
       `LAYOUT_NAME=${candidate.layoutName ?? nameOf(paths.candidate, "cand.cnd")}`,
@@ -285,30 +287,30 @@ export function panelFiles(
       "",
     )
   }
-  if (board.hint) {
+  if (panels.hint) {
     const lines = [
       "[HINT]",
-      ...(board.hint.style ? [`BACK_ICON=${board.hint.style}`] : []),
-      ...(board.hint.offset ? [`OFFSET=${board.hint.offset.x},${board.hint.offset.y}`] : []),
-      ...(board.hint.corner !== undefined ? [`CORNER=${board.hint.corner}`] : []),
+      ...(panels.hint.style ? [`BACK_ICON=${panels.hint.style}`] : []),
+      ...(panels.hint.offset ? [`OFFSET=${panels.hint.offset.x},${panels.hint.offset.y}`] : []),
+      ...(panels.hint.corner !== undefined ? [`CORNER=${panels.hint.corner}`] : []),
       "",
     ]
     files.push({ path: paths.hint ?? `${directory}hint.pop`, data: text(lines.join("\n")) })
     background.push(
       "[HINT]",
-      `LAYOUT_NAME=${board.hint.layoutName ?? nameOf(paths.hint, "hint.pop")}`,
-      ...(board.hint.type !== undefined ? [`TYPE=${board.hint.type}`] : []),
+      `LAYOUT_NAME=${panels.hint.layoutName ?? nameOf(paths.hint, "hint.pop")}`,
+      ...(panels.hint.type !== undefined ? [`TYPE=${panels.hint.type}`] : []),
       "",
     )
   }
   if (iconItems.length) {
     const lines = ["[PANEL]", `SIZE=${size.width},${size.height}`, "", ...iconSection(iconItems, actionValue)]
     files.push({ path: paths.more ?? `${directory}more.ini`, data: text(lines.join("\n")) })
-    background.push("[MORE]", `LAYOUT_NAME=${board.more?.layoutName ?? nameOf(paths.more, "more.ini")}`, "")
+    background.push("[MORE]", `LAYOUT_NAME=${panels.more?.layoutName ?? nameOf(paths.more, "more.ini")}`, "")
   }
   // gen.ini 的 `[MORE]` 是符号键盘菜单，除了被引用的面板文件还有网格与各类别布局。
-  if (board.more && (board.more.layouts.size || board.more.grid || board.more.cellStyle || board.more.foreStyle)) {
-    const menu = board.more
+  if (panels.more && (panels.more.layouts.size || panels.more.grid || panels.more.cellStyle || panels.more.foreStyle)) {
+    const menu = panels.more
     const section: string[] = ["[MORE]"]
     if (menu.grid) section.push(`GRID=${menu.grid.width},${menu.grid.height}`)
     if (menu.layoutName) section.push(`LAYOUT_NAME=${menu.layoutName}`)
@@ -324,53 +326,53 @@ export function panelFiles(
   const panel: string[] = [
     "[PANEL]",
     // 面板尺寸与键盘板尺寸是两个概念，带了面板尺寸就写它自己的。
-    `SIZE=${board.backdrop?.size?.width ?? size.width},${board.backdrop?.size?.height ?? size.height}`,
-    ...(board.backdrop?.style ? [`BACK_STYLE=${board.backdrop.style}`] : []),
-    ...(board.backdrop?.foreStyle ? [`FORE_STYLE=${board.backdrop.foreStyle}`] : []),
-    ...(board.backdrop?.offsetCount !== undefined ? [`OFFSET_NUM=${board.backdrop.offsetCount}`] : []),
-    ...(board.backdrop?.hasPadIni ? ["HAS_PAD_INI=1"] : []),
-    ...(board.backdrop?.blur === false ? ["NO_BLUR=1"] : []),
+    `SIZE=${panels.backdrop?.size?.width ?? size.width},${panels.backdrop?.size?.height ?? size.height}`,
+    ...(panels.backdrop?.style ? [`BACK_STYLE=${panels.backdrop.style}`] : []),
+    ...(panels.backdrop?.foreStyle ? [`FORE_STYLE=${panels.backdrop.foreStyle}`] : []),
+    ...(panels.backdrop?.offsetCount !== undefined ? [`OFFSET_NUM=${panels.backdrop.offsetCount}`] : []),
+    ...(panels.backdrop?.hasPadIni ? ["HAS_PAD_INI=1"] : []),
+    ...(panels.backdrop?.blur === false ? ["NO_BLUR=1"] : []),
     "",
-    ...(board.scan
+    ...(panels.scan
       ? [
         "[SCAND]",
-        ...(board.scan.style ? [`BACK_STYLE=${board.scan.style}`] : []),
-        ...(board.scan.foreStyle ? [`FORE_STYLE=${board.scan.foreStyle}`] : []),
-        ...(board.scan.inputStyle ? [`INPUT_STYLE=${board.scan.inputStyle}`] : []),
-        ...(board.scan.scanStyle ? [`SCAND_STYLE=${board.scan.scanStyle}`] : []),
-        ...(board.scan.padding
-          ? [`PADDING=${board.scan.padding.left},${board.scan.padding.top},${board.scan.padding.right},${board.scan.padding.bottom}`]
+        ...(panels.scan.style ? [`BACK_STYLE=${panels.scan.style}`] : []),
+        ...(panels.scan.foreStyle ? [`FORE_STYLE=${panels.scan.foreStyle}`] : []),
+        ...(panels.scan.inputStyle ? [`INPUT_STYLE=${panels.scan.inputStyle}`] : []),
+        ...(panels.scan.scanStyle ? [`SCAND_STYLE=${panels.scan.scanStyle}`] : []),
+        ...(panels.scan.padding
+          ? [`PADDING=${panels.scan.padding.left},${panels.scan.padding.top},${panels.scan.padding.right},${panels.scan.padding.bottom}`]
           : []),
         "",
       ]
       : []),
-    ...(board.list
+    ...(panels.list
       ? [
         "[LIST]",
-        ...(board.list.style ? [`BACK_STYLE=${board.list.style}`] : []),
-        ...(board.list.foreStyle ? [`FORE_STYLE=${board.list.foreStyle}`] : []),
-        ...(board.list.cellStyle ? [`CELL_STYLE=${board.list.cellStyle}`] : []),
-        ...(board.list.cellSize ? [`CELL_SIZE=${board.list.cellSize.width},${board.list.cellSize.height}`] : []),
-        ...(board.list.padding
-          ? [`PADDING=${board.list.padding.left},${board.list.padding.top},${board.list.padding.right},${board.list.padding.bottom}`]
+        ...(panels.list.style ? [`BACK_STYLE=${panels.list.style}`] : []),
+        ...(panels.list.foreStyle ? [`FORE_STYLE=${panels.list.foreStyle}`] : []),
+        ...(panels.list.cellStyle ? [`CELL_STYLE=${panels.list.cellStyle}`] : []),
+        ...(panels.list.cellSize ? [`CELL_SIZE=${panels.list.cellSize.width},${panels.list.cellSize.height}`] : []),
+        ...(panels.list.padding
+          ? [`PADDING=${panels.list.padding.left},${panels.list.padding.top},${panels.list.padding.right},${panels.list.padding.bottom}`]
           : []),
-        ...(board.list.offset ? [`POS=${board.list.offset.x},${board.list.offset.y}`] : []),
+        ...(panels.list.offset ? [`POS=${panels.list.offset.x},${panels.list.offset.y}`] : []),
         "",
       ]
       : []),
-    ...(board.input
+    ...(panels.input
       ? [
         "[INPUT]",
-        ...(board.input.style ? [`BACK_STYLE=${board.input.style}`] : []),
-        ...(board.input.foreStyle ? [`FORE_STYLE=${board.input.foreStyle}`] : []),
-        ...(board.input.height !== undefined ? [`HEIGHT=${board.input.height}`] : []),
+        ...(panels.input.style ? [`BACK_STYLE=${panels.input.style}`] : []),
+        ...(panels.input.foreStyle ? [`FORE_STYLE=${panels.input.foreStyle}`] : []),
+        ...(panels.input.height !== undefined ? [`HEIGHT=${panels.input.height}`] : []),
         "",
       ]
       : []),
     // 图标偏移表：段号就是图标序号；声明了总数就逐个写，没有偏移的写成空段。
-    ...Array.from({ length: board.backdrop?.offsetCount ?? 0 }, (_, index) => index + 1)
+    ...Array.from({ length: panels.backdrop?.offsetCount ?? 0 }, (_, index) => index + 1)
       .flatMap((each) => {
-        const offset = board.offsets?.get(each)
+        const offset = panels.offsets?.get(each)
         return [
           `[OFFSET${each}]`,
           ...(offset?.pos ? [`POS=${offset.pos.x},${offset.pos.y}`] : []),
@@ -378,7 +380,7 @@ export function panelFiles(
           "",
         ]
       }),
-    ...(board.backdrop?.offsetCount ? [] : [...(board.offsets ?? [])]
+    ...(panels.backdrop?.offsetCount ? [] : [...(panels.offsets ?? [])]
       .sort(([left], [right]) => left - right)
       .flatMap(([index, offset]) => [
         `[OFFSET${index}]`,

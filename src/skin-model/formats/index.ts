@@ -80,6 +80,8 @@ export async function openSkin(archive: SkinArchive, options: OpenSkinOptions = 
   })
   if (!source) return
   const model = await importArchive(archiveOfNative(source), format, entry.importer(source, options))
+  // 能力声明属于格式注册表：导入时填进模型，导出与损失报告按它判定。
+  model.profiles = [{ format, capabilities: entry.capabilities }]
   return { format, model, source }
 }
 

@@ -7,31 +7,33 @@ import { absoluteBoard, computeLayout } from "../src/skin-model/layout.ts"
 import { box, rectOf } from "./helpers/boxes.mjs"
 
 function model() {
-  const result = emptyModel({ appearance: "light", orientation: "port" })
+  const result = emptyModel({ theme: "light", orientation: "port" })
   result.boards.push({
     id: "main",
     kind: "main",
-    geometry: "document",
+    theme: "light",
+    geometry: { kind: "document" },
     orientation: "port",
-    size: { width: 1080, height: 600 },
+    container: { width: 1080, height: 600 },
     layout: absoluteBoard([{ id: "k1", ...box(10, 10, 100, 50) }]),
     keys: [
       {
         id: "k1",
-        rect: box(10, 10, 100, 50),
+        layoutId: "k1",
         actions: { press: { kind: "text", value: "a" } },
-        style: { back: "1", fore: [] },
+        container: { back: { style: "1" }, fore: [] },
       },
     ],
   })
-  result.styles.set("1", { normal: [{ kind: "image", file: "bg" }], pressed: [{ kind: "color", value: "FF000000" }] })
+  result.styles.set("1", { normal: [{ kind: "image", image: "bg" }], pressed: [{ kind: "color", value: "FF000000" }] })
   result.motions.set("m1", {
-    id: "m1",
-    root: { kind: "track", delay: 0, duration: 200, track: { property: "alpha", from: [[255, 255], [255, 255]], to: [[0, 0], [0, 0]], relative: false, easing: { kind: "linear" } } },
+    kind: "track",
+    target: { subject: "key", name: "k1", property: "alpha" },
+    keyframes: [{ time: 0, value: 255 }, { time: 200, value: 0 }],
     timeline: { delay: 0, duration: 200, repeat: 1, reverse: false, clear: false },
     bindings: [{ target: "k1", slot: "press", scope: "back" }],
   })
-  result.sounds.set("key", { slot: "key", resource: "click" })
+  result.sounds.push({ subject: "KEY_A", sound: "click" })
   return result
 }
 
@@ -40,12 +42,12 @@ test("模型可容纳板、样式、动效与音效", () => {
   assert.equal(boardsOfKind(skin, "main").length, 1)
   assert.equal(skin.styles.size, 1)
   assert.equal(skin.motions.size, 1)
-  assert.equal(skin.sounds.size, 1)
+  assert.equal(skin.sounds.length, 1)
 })
 
 test("板的布局树可用于计算按键矩形", async () => {
   const skin = model()
-  const layout = await computeLayout(skin.boards[0].layout, skin.boards[0].size)
+  const layout = await computeLayout(skin.boards[0].layout, skin.boards[0].container)
   assert.deepEqual(rectOf(layout.get("k1")), { x: 10, y: 10, width: 100, height: 50 })
 })
 

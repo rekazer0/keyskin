@@ -8,11 +8,11 @@ import { cropImage, type RgbaImage } from "@/raster.ts"
 export type SkinImage = RgbaImage
 export type SkinImages = ReadonlyMap<string, SkinImage>
 
-/** 图集里一条切片的源区域，与 `.til` 的 `SOURCE_RECT` 同义。 */
-export type AtlasSlice = { index: number; source: readonly [number, number, number, number] }
+/** 图集里一条切片的源区域，与 `.til` 的 `SOURCE_RECT` 同义；与模型的 `Atlas` 切片是不同概念。 */
+export type TileSlice = { index: number; source: readonly [number, number, number, number] }
 
 /** 一张图集里所有可用的切片，键为 `<前缀>#<序号>`。 */
-export function cutTiles(atlas: SkinImage, slices: readonly AtlasSlice[], prefix: string): Array<[string, SkinImage]> {
+export function cutTiles(atlas: SkinImage, slices: readonly TileSlice[], prefix: string): Array<[string, SkinImage]> {
   return slices.flatMap((slice) => {
     const [x, y, width, height] = slice.source
     if (width <= 0 || height <= 0 || x < 0 || y < 0 || x + width > atlas.width || y + height > atlas.height) return []

@@ -40,10 +40,10 @@ test("BDA 动效的种类在写回后保留", async () => {
   const base = bdsBase()
   const source = bdaSource(bdaAnimated(), base)
   const model = await readWith(bdaFormat, source)
-  const kinds = new Map([...model.motions].map(([id, motion]) => [id, motion.root.kind]))
+  const kinds = new Map([...model.motions].map(([id, motion]) => [id, motion.kind]))
   const rewritten = await readWith(bdaFormat, bdaSource((await writeWith(bdaFormat, model)).archive, base))
   for (const [id, kind] of kinds) {
-    assert.equal(rewritten.motions.get(id)?.root.kind, kind, `${id} 的动效类型变了`)
+    assert.equal(rewritten.motions.get(id)?.kind, kind, `${id} 的动效类型变了`)
   }
 })
 
@@ -62,8 +62,9 @@ test("跨格式往返后动效键与类型都不变", async () => {
     "往返后动效键变了",
   )
   const rebuild = await readWith(bdaFormat, bdaSource((await writeWith(bdaFormat, await readWith(bdaFormat, source))).archive, base))
+  const origin = await readWith(bdaFormat, source)
   for (const [id, motion] of rebuild.motions) {
-    assert.equal(motion.root.kind, (await readWith(bdaFormat, source)).motions.get(id)?.root.kind, `${id} 的类型变了`)
+    assert.equal(motion.kind, origin.motions.get(id)?.kind, `${id} 的类型变了`)
   }
 })
 
@@ -71,15 +72,18 @@ test("Lottie 与视频动效保留媒体类型，不被写成普通帧图", asyn
   const base = bdsBase()
   const source = bdaSource(bdaAnimated(), base)
   const model = await readWith(bdaFormat, source)
+  // Lottie 与视频在 IR 里是不透明节点，媒体类型由 format 保留。
   const media = [...model.motions].flatMap(([id, motion]) => (
-    motion.root.kind === "frames" && motion.root.media ? [[id, motion.root.media]] : []
+    motion.kind === "opaque" && (motion.format === "bda.lottie" || motion.format === "bda.video")
+      ? [[id, motion.format.slice(4)]]
+      : []
   ))
   assert.ok(media.some(([, kind]) => kind === "lottie"), "夹具里应有 Lottie 动效")
   assert.ok(media.some(([, kind]) => kind === "video"), "夹具里应有视频动效")
   const back = await readWith(bdaFormat, bdaSource((await writeWith(bdaFormat, model)).archive, base))
   for (const [id, kind] of media) {
-    const root = back.motions.get(id)?.root
-    assert.equal(root?.kind === "frames" ? root.media : undefined, kind, `${id} 的媒体类型丢了`)
+    const root = back.motions.get(id)
+    assert.equal(root?.kind === "opaque" ? root.format.slice(4) : undefined, kind, `${id} 的媒体类型丢了`)
   }
 })
 
@@ -87,7 +91,7 @@ test("动效绑定在写回后保留", async () => {
   const base = bdsBase()
   const source = bdaSource(bdaAnimated(), base)
   const model = await readWith(bdaFormat, source)
-  const before = [...model.motions.values()].reduce((total, motion) => total + motion.bindings.length, 0)
+  const before = [...model.motions.values()].reduce((total, motion) => total + (motion.bindings?.length ?? 0), 0)
   assert.ok(before > 0, "夹具应当带动效绑定")
   const back = await readWith(bdaFormat, bdaSource((await writeWith(bdaFormat, model)).archive, base))
   const after = [...back.motions.values()].reduce((total, motion) => total + motion.bindings.length, 0)

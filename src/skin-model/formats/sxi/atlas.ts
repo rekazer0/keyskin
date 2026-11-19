@@ -4,7 +4,7 @@
 // 导出时再重新打包，和百度皮肤的图集处理保持一致。
 import type { Json, JsonObject } from "@/palm/sxi-ini.ts"
 import { asObject } from "@/palm/sxi-ini.ts"
-import { cutTiles, type AtlasSlice, type SkinImage } from "@/skin-model/image.ts"
+import { cutTiles, type TileSlice, type SkinImage } from "@/skin-model/image.ts"
 import { decodePng } from "@/raster.ts"
 
 /** 切片表里一片的矩形与内边距。 */
@@ -15,7 +15,7 @@ function rectOf(value: Json): readonly [number, number, number, number] | undefi
 }
 
 /** 一个图集的切片列表 → 切图描述；没有矩形信息的切片跳过。 */
-function slicesOf(tiles: Json): AtlasSlice[] {
+function slicesOf(tiles: Json): TileSlice[] {
   if (!Array.isArray(tiles)) return []
   return tiles.flatMap((tile, index) => {
     const record = asObject(tile)

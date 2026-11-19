@@ -65,7 +65,7 @@ test("删样式会清掉按键与动效上的引用", async () => {
 test("改板尺寸会同步主板分辨率", async () => {
   const before = await model()
   const after = resizeBoard(before, BOARD, { width: 1200, height: 700 })
-  assert.deepEqual(after.boards[0].size, { width: 1200, height: 700 })
+  assert.deepEqual(after.boards[0].container, { width: 1200, height: 700 })
   assert.deepEqual(after.meta.resolution, { width: 1200, height: 700 })
 })
 
@@ -99,11 +99,8 @@ test("板的面板背景样式可换可清，其余属性保留", async () => {
   const before = await model()
   const board = before.boards[0]
   const styled = setBoardBackdrop(before, board.id, "9")
-  assert.equal(styled.boards[0].backdrop.style, "9")
-  const withBlur = { ...styled, boards: styled.boards.map((item, index) => index === 0
-    ? { ...item, backdrop: { ...item.backdrop, blur: true } }
-    : item) }
-  const cleared = setBoardBackdrop(withBlur, board.id, null)
-  assert.equal(cleared.boards[0].backdrop.style, undefined)
-  assert.equal(cleared.boards[0].backdrop.blur, true, "其它属性应当保留")
+  assert.equal(styled.boards[0].backdrop, "9")
+  const cleared = setBoardBackdrop(styled, board.id, null)
+  assert.equal(cleared.boards[0].backdrop, undefined)
+  assert.equal(cleared.boards[0].keys.length, before.boards[0].keys.length, "其余属性应当保留")
 })

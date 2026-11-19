@@ -6,7 +6,7 @@
 import { IniDocument } from "@/ini.ts"
 import { BaiduSsfMotion } from "@/ssf/baidu-anim-to-ssf.ts"
 import { writeMotions } from "@/skin-model/formats/bds/index.ts"
-import type { SkinBoard } from "@/skin-model/board.ts"
+import type { Board } from "@/skin-model/board.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { cachedLayout } from "@/skin-model/layout-cache.ts"
@@ -17,7 +17,7 @@ import { cachedLayout } from "@/skin-model/layout-cache.ts"
  */
 export async function ssfAnimationOf(
   model: SkinModel,
-  board: SkinBoard,
+  board: Board,
   images: ReadonlyMap<string, SkinImage>,
 ): Promise<{ animation: IniDocument | undefined; warnings: string[] }> {
   const warnings: string[] = []
@@ -37,11 +37,11 @@ export async function ssfAnimationOf(
     })?.id
   }
   const byKey = new Map<string, string>()
-  for (const motion of model.motions.values()) {
-    for (const binding of motion.bindings) {
+  for (const [motionId, motion] of model.motions) {
+    for (const binding of motion.bindings ?? []) {
       if (binding.slot !== "press") continue
       const keyId = keyOfTarget(binding.target)
-      if (keyId !== undefined && !byKey.has(keyId)) byKey.set(keyId, motion.id)
+      if (keyId !== undefined && !byKey.has(keyId)) byKey.set(keyId, motionId)
     }
   }
   if (!byKey.size) return { animation: undefined, warnings }
@@ -55,7 +55,7 @@ export async function ssfAnimationOf(
   const styles = IniDocument.parse(styleLines.join("\n"))
   const layout = IniDocument.parse([
     "[PANEL]",
-    `SIZE=${board.size.width},${board.size.height}`,
+    `SIZE=${board.container.width},${board.container.height}`,
     "",
     ...board.keys.flatMap((key) => {
       const styleId = styleOf.get(key.id)
@@ -73,7 +73,7 @@ export async function ssfAnimationOf(
   for (const key of board.keys) {
     const rect = cachedLayout(board)?.get(key.id)
     if (!rect) continue
-    motion.press(layout, key.id, { width: rect.size.width, height: rect.size.height }, { width: board.size.width, height: board.size.height })
+    motion.press(layout, key.id, { width: rect.size.width, height: rect.size.height }, { width: board.container.width, height: board.container.height })
   }
   return { animation, warnings }
 }

@@ -9,17 +9,18 @@ import { box, rectOf } from './helpers/boxes.mjs'
 
 /** 一块板，按键几何都落在布局树里。 */
 async function boardOf(keys) {
-  const model = emptyModel({ appearance: 'light', orientation: 'port' })
+  const model = emptyModel({ theme: 'light', orientation: 'port' })
   const size = { width: 1080, height: 585 }
   model.boards.push({
     id: 'board',
     kind: 'main',
-    geometry: 'document',
+    geometry: { kind: 'document' },
     orientation: 'port',
-    size,
+    container: size,
     layout: absoluteBoard(keys.map((key) => ({ id: key.id, ...box(key.rect[0], key.rect[1], key.rect[2], key.rect[3]) }))),
     keys: keys.map((key) => ({
       id: key.id,
+      layoutId: key.id,
       actions: {},
       ...(key.padding ? { padding: { left: key.padding[0], top: key.padding[1], right: key.padding[2], bottom: key.padding[3] } } : {}),
       container: {

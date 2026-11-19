@@ -4,9 +4,9 @@
 // 若干键盘布局与图片；根目录的 phoneTheme.ini 是皮肤信息。
 import { IniDocument } from "@/ini.ts"
 import type { FileRole, SkinDocuments, SkinPackage, SkinStructure } from "@/skin-model/pipeline.ts"
-import type { Appearance, Orientation } from "@/skin-model/types.ts"
+import type { Theme, Orientation } from "@/skin-model/types.ts"
 
-const THEME: Appearance = "light"
+const THEME: Theme = "light"
 const ORIENTATION: Orientation = "port"
 
 function roleOf(path: string): FileRole {

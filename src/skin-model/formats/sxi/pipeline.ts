@@ -5,10 +5,10 @@
 import type { JsonObject } from "@/palm/sxi-ini.ts"
 import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
 import type { FileRole, SkinDocuments, SkinPackage, SkinStructure } from "@/skin-model/pipeline.ts"
-import type { Appearance, Orientation } from "@/skin-model/types.ts"
+import type { Theme, Orientation } from "@/skin-model/types.ts"
 
 /** 手心包的主题与方向是固定的：包内路径不带这两维。 */
-const THEME: Appearance = "light"
+const THEME: Theme = "light"
 const ORIENTATION: Orientation = "port"
 
 function roleOf(path: string): FileRole {

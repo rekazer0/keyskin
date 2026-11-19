@@ -46,7 +46,10 @@ test("触摸区字段写进触摸矩形，不动主矩形", async () => {
   const before = await model()
   const after = applyFieldChange(before, { boardId: BOARD, keyId: "KEY1", field: "touch.x", value: 3 })
   const key = findKey(after, BOARD, "KEY1").key
-  assert.equal(key.touchRect?.position.x, 3)
+  const display = await rectOf(after, "KEY1")
+  assert.equal(key.hitArea?.kind, "inset")
+  // 触摸区相对显示区，绝对位置 = 显示区原点 + 内缩。
+  assert.equal(display.position.x + key.hitArea.edges.left, 3)
   assert.deepEqual(await rectOf(after, "KEY1"), await rectOf(before, "KEY1"))
 })
 
