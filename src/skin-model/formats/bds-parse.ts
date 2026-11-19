@@ -5,11 +5,11 @@
 import { IniDocument } from "@/ini.ts"
 import type { FileRole, SkinDocuments, SkinPackage, SkinStructure } from "@/skin-model/pipeline.ts"
 
-/** 文本类是 INI 的格式，解析成文档对象。 */
-const INI_ROLES = new Set<FileRole["kind"]>(["layout", "panel-config", "info", "atlas", "handwriting"])
+/** 文本类是 INI 的格式，解析成文档对象。百度样式表虽叫 .css，内容仍是 INI。 */
+const INI_ROLES = new Set<FileRole["kind"]>(["layout", "panel-config", "info", "atlas", "handwriting", "style", "motion", "candidate-window", "hint-window"])
 
 /** 有角色但没有结构化解析规则、需要原样保留的格式。 */
-const RAW_ROLES = new Set<FileRole["kind"]>(["image", "audio", "font", "candidate-window", "hint-window"])
+const RAW_ROLES = new Set<FileRole["kind"]>(["image", "audio", "font"])
 
 /**
  * 按角色解析整个包。
@@ -25,11 +25,6 @@ export function parseBds(pkg: SkinPackage, structure: SkinStructure): SkinDocume
     const data = pkg.files.get(path)
     if (!data) throw new Error(`识别出角色但包里没有文件：${path}`)
     if (INI_ROLES.has(role.kind)) {
-      texts.set(path, IniDocument.parse(decoder.decode(data)))
-    } else if (role.kind === "style") {
-      // 样式表是 CSS，不是 INI；保留原文本，由转换阶段决定怎么读。
-      structs.set(path, decoder.decode(data))
-    } else if (role.kind === "motion") {
       texts.set(path, IniDocument.parse(decoder.decode(data)))
     } else if (RAW_ROLES.has(role.kind)) {
       binaries.set(path, data)

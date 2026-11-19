@@ -29,11 +29,13 @@ test("布局与面板配置解析成文档，图片与音效进二进制桶", ()
   assert.ok(documents.texts.get("light/skin/port/py_26.ini").sections().includes("KEY1"))
 })
 
-test("样式表是文本但不是 INI，单独存放", () => {
+test("样式表虽叫 css，内容仍是 INI", () => {
   const pkg = pkgOf([["light/skin/res/default.css", "[STYLE1]\nBG_COLOR=#fff\n"]])
   const documents = parseBds(pkg, identifyBds(pkg))
-  assert.equal(documents.structs.get("light/skin/res/default.css").includes("STYLE1"), true)
-  assert.equal(documents.texts.size, 0)
+  const style = documents.texts.get("light/skin/res/default.css")
+  assert.ok(style, "样式表应当解析成文档")
+  assert.deepEqual(style.sections(), ["STYLE1"])
+  assert.equal(style.get("STYLE1", "BG_COLOR"), "#fff")
 })
 
 test("每个文件都要落进某个桶", () => {

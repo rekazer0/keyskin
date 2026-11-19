@@ -3,7 +3,7 @@
 // 这些面板的字段在 `gen.ini` 里声明，具体布局在独立的 `.cnd` / `.pop` 文件里。
 // 读侧把它们整理成板的面板组件；写侧重新生成这几份文件。
 import { IniDocument } from "@/ini.ts"
-import type { SkinArchive } from "@/skin.ts"
+import type { DocumentAccess } from "@/skin-model/formats/bds-access.ts"
 import type { CandidateBar, HintBubble, InputBar, ListPanel, PanelBackdrop, SkinBoard, Toolbar, ToolbarItem } from "@/skin-model/board.ts"
 import type { SkinAction } from "@/skin-model/types.ts"
 
@@ -18,9 +18,9 @@ type ActionReader = (value: string | undefined) => SkinAction | undefined
 type ActionWriter = (action: SkinAction | undefined) => string | undefined
 
 /** 面板文件与 `gen.ini` 在同一目录，用段里的 `LAYOUT_NAME` 找。 */
-function panelPath(archive: SkinArchive, directory: string, name: string | undefined, extension: string): string | undefined {
+function panelPath(access: DocumentAccess, directory: string, name: string | undefined, extension: string): string | undefined {
   if (!name) return
-  return archive.names().find((path) => path === `${directory}${name}${extension}`)
+  return access.paths().find((path) => path === `${directory}${name}${extension}`)
 }
 
 function numbers(value: string | undefined): number[] {
@@ -46,7 +46,7 @@ function toolbarItems(document: IniDocument, actionOf: ActionReader): ToolbarIte
 }
 
 /** 从 `gen.ini` 与它引用的面板文件里读出面板组件。 */
-export function panelsOf(archive: SkinArchive, directory: string, gen: IniDocument, actionOf: ActionReader): ParsedPanels {
+export function panelsOf(access: DocumentAccess, directory: string, gen: IniDocument, actionOf: ActionReader): ParsedPanels {
   const backdropStyle = gen.get("PANEL", "BACK_STYLE")?.trim()
   const noBlur = gen.get("PANEL", "NO_BLUR")?.trim() === "1"
   const backdrop: PanelBackdrop | undefined = backdropStyle || noBlur
@@ -54,8 +54,8 @@ export function panelsOf(archive: SkinArchive, directory: string, gen: IniDocume
     : undefined
 
   const candidateName = gen.get("CAND", "LAYOUT_NAME")?.trim()
-  const candidatePath = panelPath(archive, directory, candidateName, ".cnd")
-  const candidateDocument = candidatePath ? IniDocument.parse(archive.getText(candidatePath)) : undefined
+  const candidatePath = panelPath(access, directory, candidateName, ".cnd")
+  const candidateDocument = candidatePath ? access.text(candidatePath) : undefined
   const candidateStyle = candidateDocument?.get("CAND", "BACK_STYLE")?.trim()
   const candidateCell = candidateDocument?.get("CAND", "CELL_STYLE")?.trim()
   const candidateSections = candidateDocument ? toolbarItems(candidateDocument, actionOf) : []
@@ -69,8 +69,8 @@ export function panelsOf(archive: SkinArchive, directory: string, gen: IniDocume
     : undefined
 
   const hintName = gen.get("HINT", "LAYOUT_NAME")?.trim()
-  const hintPath = panelPath(archive, directory, hintName, ".pop")
-  const hintDocument = hintPath ? IniDocument.parse(archive.getText(hintPath)) : undefined
+  const hintPath = panelPath(access, directory, hintName, ".pop")
+  const hintDocument = hintPath ? access.text(hintPath) : undefined
   const hintIcon = hintDocument?.get("HINT", "BACK_ICON")?.trim()
   // 气泡位置写在它引用的图标段里（`[ICON0] POS=x,y`），`[HINT]` 只有背景与角标。
   const hintIconSection = hintDocument?.sections().find((section) => /^ICON\d+$/i.test(section))
@@ -97,8 +97,8 @@ export function panelsOf(archive: SkinArchive, directory: string, gen: IniDocume
     : undefined
 
   const moreName = gen.get("MORE", "LAYOUT_NAME")?.trim()
-  const morePath = panelPath(archive, directory, moreName, ".ini")
-  const moreDocument = morePath ? IniDocument.parse(archive.getText(morePath)) : undefined
+  const morePath = panelPath(access, directory, moreName, ".ini")
+  const moreDocument = morePath ? access.text(morePath) : undefined
   const items: ToolbarItem[] = []
   if (gen.get("LOGO", "ICON")?.trim()) items.push({ id: "logo", icon: gen.get("LOGO", "ICON")!.trim() })
   if (gen.get("EMOJI", "ICON")?.trim()) items.push({ id: "emoji", icon: gen.get("EMOJI", "ICON")!.trim() })

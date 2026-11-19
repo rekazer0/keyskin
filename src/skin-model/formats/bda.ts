@@ -8,7 +8,11 @@ import { colorValue } from "@/bda-encode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
+import { accessOf } from "@/skin-model/formats/bds-access.ts"
+import { identifyBds } from "@/skin-model/formats/bds-identify.ts"
+import { parseBds } from "@/skin-model/formats/bds-parse.ts"
 import { actionValue, layoutBoards } from "@/skin-model/formats/bds.ts"
+import { packageOf } from "@/skin-model/pipeline.ts"
 import { encodeAnimation, encodeAppearance, encodeSoundConfig } from "@/skin-model/formats/bda-appearance.ts"
 import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig } from "@/skin-model/formats/bda-motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
@@ -288,7 +292,10 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     if (!source.base) throw new Error("读取 BDA 皮肤需要布局骨架")
     const layout = layoutOf(source.base, source.theme, source.orientation)
     if (!layout) throw new Error("布局骨架里没有该主题方向的布局")
-    const boards = await layoutBoards(source.base, source.theme, source.orientation, layout, "main", options)
+    // 骨架也是一份包，同样走拆包、识别、解析，再交给同一个布局函数。
+    const basePackage = packageOf(source.base, "bds")
+    const baseAccess = accessOf(parseBds(basePackage, identifyBds(basePackage)))
+    const boards = await layoutBoards(baseAccess, source.theme, source.orientation, layout, "main", options)
     const model = emptyModel({
       appearance: source.theme,
       orientation: source.orientation,

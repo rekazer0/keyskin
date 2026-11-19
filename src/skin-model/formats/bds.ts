@@ -3,6 +3,10 @@
 // 格式原生数据是归档加路径；read 解析成 IR，write 从 IR 重新生成全部文件（含重新打包的图集）。
 import { appearanceOf, bdsBoardName, bdsDirectory, isBdsLayoutPath, orientationOf } from "@/skin-model/board-paths.ts"
 import { IniDocument } from "@/ini.ts"
+import { accessOf, textContent, type DocumentAccess } from "@/skin-model/formats/bds-access.ts"
+import { identifyBds } from "@/skin-model/formats/bds-identify.ts"
+import { parseBds } from "@/skin-model/formats/bds-parse.ts"
+import { packageOf } from "@/skin-model/pipeline.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
 import { previewItems } from "@/preview-items.ts"
 import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
@@ -124,23 +128,23 @@ function imageRef(value: string | undefined): { file: string; slice?: number } |
   return slice !== undefined && Number.isFinite(slice) ? { file, slice } : { file }
 }
 
-function tilePath(archive: SkinArchive, theme: Appearance, orientation: Orientation, file: string): string | undefined {
+function tilePath(access: DocumentAccess, theme: Appearance, orientation: Orientation, file: string): string | undefined {
   return [
     `${theme}/skin/${orientation}/res/${file}.til`,
     `${theme}/skin/res/${file}.til`,
     `${theme}/res/${file}.til`,
-  ].find((candidate) => archive.getBytes(candidate))
+  ].find((candidate) => access.text(candidate) !== undefined)
 }
 
 /** 图集文件与它的 PNG；切图需要像素，所以两者都要在。 */
-function atlasBytes(archive: SkinArchive, path: string): Uint8Array | undefined {
-  return archive.getBytes(path.replace(/\.til$/i, ".png"))
+function atlasBytes(access: DocumentAccess, path: string): Uint8Array | undefined {
+  return access.bytes(path.replace(/\.til$/i, ".png"))
 }
 
 /** 把一张图集切进图片资源表，返回 `<图集>#<序号>` 键。 */
-function cutAtlas(images: Map<string, SkinImage>, archive: SkinArchive, path: string): void {
+function cutAtlas(images: Map<string, SkinImage>, access: DocumentAccess, path: string): void {
   if ([...images.keys()].some((key) => key.startsWith(`${path}#`))) return
-  const bytes = atlasBytes(archive, path)
+  const bytes = atlasBytes(access, path)
   if (!bytes) return
   let atlas: RgbaImage
   try {
@@ -148,14 +152,16 @@ function cutAtlas(images: Map<string, SkinImage>, archive: SkinArchive, path: st
   } catch {
     return
   }
-  const slices = tileSlices(IniDocument.parse(archive.getText(path)))
+  const document = access.text(path)
+  if (!document) return
+  const slices = tileSlices(document)
   for (const [id, image] of cutTiles(atlas, slices.map((slice) => ({ index: slice.index, source: slice.source })), path)) {
     images.set(id, image)
   }
 }
 
 function imageLayer(
-  archive: SkinArchive,
+  access: DocumentAccess,
   images: Map<string, SkinImage>,
   theme: Appearance,
   orientation: Orientation,
@@ -165,10 +171,12 @@ function imageLayer(
 ): SkinLayer | undefined {
   const ref = imageRef(document.get(section, field))
   if (!ref) return
-  const path = tilePath(archive, theme, orientation, ref.file)
+  const path = tilePath(access, theme, orientation, ref.file)
   if (!path) return
-  cutAtlas(images, archive, path)
-  const slices = tileSlices(IniDocument.parse(archive.getText(path)))
+  cutAtlas(images, access, path)
+  const tileDocument = access.text(path)
+  if (!tileDocument) return
+  const slices = tileSlices(tileDocument)
   const tile = ref.slice === undefined ? slices[0] : slices.find((candidate) => candidate.index === ref.slice)
   if (!tile) return
   const [, , sw, sh] = tile.source
@@ -189,7 +197,7 @@ function imageLayer(
 }
 
 function styleLayers(
-  archive: SkinArchive,
+  access: DocumentAccess,
   images: Map<string, SkinImage>,
   theme: Appearance,
   orientation: Orientation,
@@ -199,7 +207,7 @@ function styleLayers(
 ): SkinLayer[] {
   const layers: SkinLayer[] = []
   const suffix = pressed ? "HL" : "NM"
-  const image = imageLayer(archive, images, theme, orientation, document, section, `${suffix}_IMG`)
+  const image = imageLayer(access, images, theme, orientation, document, section, `${suffix}_IMG`)
   if (image) layers.push(image)
   const color = document.get(section, `${suffix}_COLOR`)
   if (color) {
@@ -217,7 +225,7 @@ function styleLayers(
 }
 
 function stylesOf(
-  archive: SkinArchive,
+  access: DocumentAccess,
   theme: Appearance,
   orientation: Orientation,
   document: IniDocument,
@@ -227,8 +235,8 @@ function stylesOf(
   for (const section of document.sections()) {
     const match = /^STYLE(\d+)$/i.exec(section)
     if (!match) continue
-    const normal = styleLayers(archive, images, theme, orientation, document, section, false)
-    const pressed = styleLayers(archive, images, theme, orientation, document, section, true)
+    const normal = styleLayers(access, images, theme, orientation, document, section, false)
+    const pressed = styleLayers(access, images, theme, orientation, document, section, true)
     if (normal.length || pressed.length) styles.set(match[1], { normal, ...(pressed.length ? { pressed } : {}) })
   }
   return { styles, images }
@@ -517,9 +525,8 @@ export function writeMotions(motions: SkinMotions): string {
 
 /* —— 模型 —— */
 
-function infoOf(archive: SkinArchive): { name?: string; author?: string; version?: string } {
-  if (!archive.isText("Info.txt")) return {}
-  const text = archive.getText("Info.txt")
+function infoOf(access: DocumentAccess): { name?: string; author?: string; version?: string } {
+  const text = textContent(access, "Info.txt")
   if (!text) return {}
   const value = (key: string) => text.match(new RegExp(`^${key}=(.+)$`, "mi"))?.[1]?.trim()
   return {
@@ -536,15 +543,15 @@ function parsePanelSize(document: IniDocument): Size<number> {
 }
 
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
-function layoutFiles(archive: SkinArchive, theme: Appearance, orientation: Orientation): string[] {
+function layoutFiles(access: DocumentAccess, theme: Appearance, orientation: Orientation): string[] {
   const panels = new Set(["gen.ini", "more.ini", "toolbar.ini"])
-  return archive.names().filter((name) => {
+  return access.paths().filter((name) => {
     // 先按路径规则判断是不是布局，再按内容确认有没有按键段。
     if (!isBdsLayoutPath(name)) return false
     if (appearanceOf(name) !== theme || orientationOf(name) !== orientation) return false
     const leaf = `${bdsBoardName(name)?.toLowerCase() ?? ""}.ini`
     if (panels.has(leaf)) return false
-    return archive.getText(name).includes("[KEY")
+    return (textContent(access, name) ?? "").includes("[KEY")
   })
 }
 
@@ -612,14 +619,15 @@ export type LayoutBoards = {
  * BDS 的样式在 `default.css`，BDA 的样式在外观配置里，两者共用这份布局解析。
  */
 export async function layoutBoards(
-  archive: SkinArchive,
+  access: DocumentAccess,
   theme: Appearance,
   orientation: Orientation,
   primaryLayout: string,
   primaryKind: BoardKind,
   options?: ImportOptions,
 ): Promise<LayoutBoards> {
-  const document = IniDocument.parse(archive.getText(primaryLayout))
+  const document = access.text(primaryLayout)
+  if (!document) throw new Error(`包里没有这个布局：${primaryLayout}`)
   const size = parsePanelSize(document)
   const deriveOptions = {
     ...bdsFormat.derive,
@@ -629,9 +637,9 @@ export async function layoutBoards(
   const keys = keysOf(document, size)
   const derived = await deriveBoard("board", keys.map((key) => ({ id: key.id, ...key.rect })), size, deriveOptions)
   const directory = bdsDirectory(theme, orientation)
-  const genPath = archive.names().find((name) => name === `${directory}gen.ini`)
-  const parsedPanels = genPath
-    ? panelsOf(archive, directory, IniDocument.parse(archive.getText(genPath)), actionOf)
+  const genDocument = access.text(`${directory}gen.ini`)
+  const parsedPanels = genDocument
+    ? panelsOf(access, directory, genDocument, actionOf)
     : { panels: {}, paths: {} }
   const boards: SkinBoard[] = [{
     ...parsedPanels.panels,
@@ -644,9 +652,10 @@ export async function layoutBoards(
     keys,
   }]
   // 同一主题方向下其余布局文件也是板：九宫格、符号、候选等，一并读进来。
-  for (const layoutPath of layoutFiles(archive, theme, orientation)) {
+  for (const layoutPath of layoutFiles(access, theme, orientation)) {
     if (layoutPath === primaryLayout) continue
-    const other = IniDocument.parse(archive.getText(layoutPath))
+    const other = access.text(layoutPath)
+    if (!other) continue
     const boardSize = parsePanelSize(other)
     const boardKeys = keysOf(other, boardSize)
     if (!boardKeys.length) continue
@@ -693,19 +702,25 @@ export const bdsFormat: SkinFormat<BdsSource> = {
   ]),
   derive: { tolerance: 1 },
   async read(source, options?: ImportOptions) {
-    const layout = IniDocument.parse(source.archive.getText(source.layout))
+    // 先拆包、识别、解析；下面的转换只看得见解析产物，看不见包。
+    const pkg = packageOf(source.archive, "bds")
+    const structure = identifyBds(pkg)
+    const documents = parseBds(pkg, structure)
+    const access = accessOf(documents)
+    const layout = access.text(source.layout)
+    if (!layout) throw new Error(`包里没有这个布局：${source.layout}`)
     // 没有样式表的布局（官方基础布局）按空样式读，样式由后续的外观覆盖。
-    const styleDocument = source.styles ? IniDocument.parse(source.archive.getText(source.styles)) : IniDocument.parse("")
+    const styleDocument = (source.styles ? access.text(source.styles) : undefined) ?? IniDocument.parse("")
     const size = parsePanelSize(layout)
     const model = emptyModel({
-      ...infoOf(source.archive),
+      ...infoOf(access),
       appearance: source.theme,
       orientation: source.orientation,
       resolution: size,
     }, "bds")
-    const layouts = await layoutBoards(source.archive, source.theme, source.orientation, source.layout, source.kind, options)
+    const layouts = await layoutBoards(access, source.theme, source.orientation, source.layout, source.kind, options)
     model.boards.push(...layouts.boards)
-    const parsed = stylesOf(source.archive, source.theme, source.orientation, styleDocument)
+    const parsed = stylesOf(access, source.theme, source.orientation, styleDocument)
     model.styles = parsed.styles
     model.images = parsed.images
     const resources = new Map(model.resources)
