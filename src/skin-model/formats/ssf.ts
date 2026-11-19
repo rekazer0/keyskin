@@ -268,6 +268,10 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     const text = (value: string) => new TextEncoder().encode(value)
     // 只写模型里有的东西：图片按资源表重写，布局与动效按板与动效重建。
     const files = new Map<string, Uint8Array>()
+    // 音效与字体从模型写回；没有字节的说明源包里就没有。
+    for (const resource of model.resources.values()) {
+      if (resource.data) files.set(resource.path, resource.data)
+    }
     const name = (image: string) => image.split("/").pop() ?? image
     const themeLines = ["[General]", "skin_type=1", `skin_name=${model.meta.name ?? "皮肤"}`, `skin_author=${model.meta.author ?? ""}`, `skin_version=${model.meta.version ?? ""}`, ""]
     files.set("phoneTheme.ini", text(themeLines.join("\n")))

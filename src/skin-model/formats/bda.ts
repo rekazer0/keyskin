@@ -384,6 +384,10 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     const next: BdaAppearance = { ...current, imageStyles, textStyles, colorStyles, panels }
     // 只写模型里有的东西：外观、动画配置、音效配置、图片。
     const files: Array<{ path: string; data: Uint8Array }> = []
+    // 音效与字体从模型写回；没有字节的说明源包里就没有。
+    for (const resource of model.resources.values()) {
+      if (resource.data) files.push({ path: resource.path, data: resource.data })
+    }
     // 动画配置单独一份文件；模型里有动效时从 IR 重建，否则保留原配置。
     if (model.motions.size) {
       const rebuilt = animationOfMotions(model.motions, model.meta.resolution?.width)

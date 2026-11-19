@@ -258,6 +258,10 @@ export const sxiFormat = {
     if (!board) throw new Error("模型里没有板")
     // 只写模型里有的东西：图片、skin.json、info.json。
     const files = new Map<string, Uint8Array>()
+    // 音效与字体从模型写回。
+    for (const resource of model.resources.values()) {
+      if (resource.data) files.set(resource.path, resource.data)
+    }
     // 图片按样式引用写出；手心包内按文件名引用，不带命名空间前缀。
     for (const [id, image] of model.images) {
       if (id.startsWith(STYLE_PREFIX)) continue

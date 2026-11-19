@@ -682,6 +682,19 @@ export async function layoutBoards(
   return { boards, paths: parsedPanels.paths }
 }
 
+/** 某主题方向下的主布局：优先 26 键拼音，其次任意 26 键，最后第一个有按键段的布局。 */
+function primaryLayoutOf(access: DocumentAccess, theme: Appearance, orientation: Orientation): string | undefined {
+  const prefix = bdsDirectory(theme, orientation)
+  const candidates = access.paths().filter((path) => {
+    if (!path.startsWith(prefix) || !path.endsWith(".ini") || /gen\.ini$/i.test(path)) return false
+    const document = access.text(path)
+    return document !== undefined && document.sections().some((section) => /^KEY/i.test(section))
+  })
+  return candidates.find((path) => /\/py_26\.ini$/i.test(path))
+    ?? candidates.find((path) => /_26\.ini$/i.test(path))
+    ?? candidates[0]
+}
+
 export const bdsFormat: SkinFormat<BdsSource> = {
   name: "bds",
   capabilities: new Map<Capability, CapabilityLevel>([
@@ -727,21 +740,54 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       orientation: source.orientation,
       resolution: size,
     }, "bds")
-    const layouts = await layoutBoards(access, source.theme, source.orientation, source.layout, source.kind, options)
-    model.boards.push(...layouts.boards)
+    // 同一皮肤可能有竖屏与横屏两套完整键盘，两套都是事实，都要进模型。
+    const orientations = [...new Set<Orientation>([source.orientation, ...structure.orientations])]
+    const boards: SkinBoard[] = []
+    let panelPaths: PanelPaths = {}
+    for (const orientation of orientations) {
+      const primary = orientation === source.orientation
+        ? source.layout
+        : primaryLayoutOf(access, source.theme, orientation)
+      if (!primary) continue
+      const parsedLayouts = await layoutBoards(
+        access,
+        source.theme,
+        orientation,
+        primary,
+        orientation === source.orientation ? source.kind : "main",
+        options,
+      )
+      boards.push(...parsedLayouts.boards)
+      if (orientation === source.orientation) panelPaths = parsedLayouts.paths
+    }
+    model.boards.push(...boards)
     const parsed = stylesOf(access, source.theme, source.orientation, styleDocument)
     model.styles = parsed.styles
     model.images = parsed.images
     const resources = new Map(model.resources)
+    // 音效与字体要带字节：模型得能独立写出它们，不能靠导出时回源包捡。
+    const locate = (name: string): string | undefined =>
+      access.paths().find((path) => path === name || path.endsWith(`/${name}`))
+    const bytesOf = (name: string): Uint8Array | undefined => {
+      const path = locate(name)
+      if (!path) return
+      return access.bytes(path) ?? (textContent(access, path) ? new TextEncoder().encode(textContent(access, path)) : undefined)
+    }
     for (const style of parsed.styles.values()) {
       for (const layer of [...style.normal, ...(style.pressed ?? [])]) {
-        if (layer.kind === "sound") resources.set(layer.file, { kind: "audio", path: layer.file })
+        if (layer.kind !== "sound") continue
+        const path = locate(layer.file) ?? layer.file
+        const data = bytesOf(layer.file)
+        resources.set(layer.file, { kind: "audio", path, ...(data ? { data } : {}) })
       }
     }
     // 样式文档里声明的字体也算资源，导出时按名称找回。
     for (const section of styleDocument.sections()) {
       const font = styleDocument.get(section, "FONT_FILE")?.trim() || styleDocument.get(section, "FONT_NAME")?.trim()
-      if (font) resources.set(font, { kind: "font", path: font, family: font })
+      if (!font) continue
+      const path = locate(font) ?? font
+      const data = bytesOf(font)
+      resources.set(font, { kind: "font", path, family: font, ...(data ? { data } : {}) })
     }
     model.resources = resources
     // 按键动作里指向另一块板的，就是板间跳转。
@@ -775,7 +821,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     }
     const provenance = new Map(model.boards.flatMap((board) => board.keys.map((key) => [key.id, { path: board.id }] as const)))
     // 面板文件的原路径也要记住，导出时沿用原名，避免重建后出现两份面板文件。
-    for (const [kind, path] of Object.entries(layouts.paths)) provenance.set(`panel:${kind}`, { path })
+    for (const [kind, path] of Object.entries(panelPaths)) provenance.set(`panel:${kind}`, { path })
     model.provenance = { format: "bds", nodes: provenance }
     return model
   },
@@ -825,7 +871,14 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       ...(model.provenance.nodes.get("panel:hint") ? { hint: model.provenance.nodes.get("panel:hint")!.path } : {}),
       ...(model.provenance.nodes.get("panel:more") ? { more: model.provenance.nodes.get("panel:more")!.path } : {}),
     }
-    files.push(...panelFiles(board, `${root}/${orientation}/`, board.size, actionValue, panelPaths))
+    // 每个方向各有一份面板文件；面板原路径只属于主方向，其余方向按目录重建。
+    for (const eachOrientation of new Set(model.boards.map((each) => each.orientation))) {
+      const main = model.boards.find((each) => each.orientation === eachOrientation && each.kind === "main")
+        ?? model.boards.find((each) => each.orientation === eachOrientation)
+      if (!main) continue
+      const paths = eachOrientation === orientation ? panelPaths : {}
+      files.push(...panelFiles(main, `${root}/${eachOrientation}/`, main.size, actionValue, paths))
+    }
     // 每块板各自一份布局文件；板 id 已带目录时沿用，其它格式转来的板放到方向目录下。
     for (const each of model.boards) {
       const boardRenders = each === board ? renders : await buildBoard(model, each)
@@ -841,6 +894,10 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     if (model.motions.size) files.push({ path: `${root}/res/anim.ini`, data: text(writeMotions(model.motions)) })
     // 非按键窗口按原路径写回：候选栏、提示气泡、手写区。
     for (const window of model.windows) files.push({ path: window.path, data: text(windowText(window)) })
+    // 音效与字体按模型里的路径写回；没有字节的说明源包里就没这个文件，不凭空造。
+    for (const resource of model.resources.values()) {
+      if (resource.data) files.push({ path: resource.path, data: resource.data })
+    }
     const archive = SkinArchive.fromSourceFiles([...files])
     return {
       archive,
