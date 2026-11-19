@@ -136,6 +136,7 @@ export async function loadArchive(
   if (mobilePortraitQuery.matches) mode.value = "preview"
   canvasWrap.classList.remove("empty")
   appState.currentPath = path
+  appState.currentTemplateId = ""
   appState.unsavedNew = isNew
   appState.undoStack = []
   appState.redoStack = []
@@ -532,6 +533,10 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
     // The written file's baked images are not part of the document; the next save starts from the document again.
     exported.archive.markSaved(exported.document, format, exported.revision)
     documentName.textContent = documentNameForPath(path, exported.archive)
+    if (appState.currentTemplateId) {
+      recordRecentFile(path, documentName.textContent, appState.sourceWorkspacePath, appState.currentTemplateId)
+      appState.currentTemplateId = ""
+    }
     updateDirty()
   }
   return true

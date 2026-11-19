@@ -333,6 +333,44 @@ test('SSF input backgrounds survive transparent VPA artwork and templates withou
   }
 })
 
+
+test('BDS → SSF → BDS preserves the active board’s pinyin background image and general color fallback', async () => {
+  const source = SkinArchive.open(templateBytes)
+  const root = 'light/skin/'
+  const styles = IniDocument.parse(source.getText(`${root}res/default.css`))
+  styles.appendSection('STYLE99991', [{ key: 'NM_IMG', value: 'input-band,1' }])
+  styles.appendSection('STYLE99992', [{ key: 'NM_COLOR', value: 'AA112233' }])
+  source.setText(`${root}res/default.css`, styles.toString())
+  source.setBytes(`${root}res/input-band.png`, encodePng(solid(40, 20, [190, 80, 35])))
+  source.setText(`${root}res/input-band.til`, '[IMG1]\nSOURCE_RECT=0,0,40,20\n')
+  const genPath = `${root}port/gen.ini`
+  const gen = IniDocument.parse(source.getText(genPath))
+  gen.set('INPUT', 'BACK_STYLE', '99992')
+  source.setText(genPath, gen.toString())
+  const layoutPath = `${root}port/py_26.ini`
+  const layout = IniDocument.parse(source.getText(layoutPath))
+  layout.appendSection('INPUT', [{ key: 'BACK_STYLE', value: '99991' }])
+  source.setText(layoutPath, layout.toString())
+
+  const pkg = await SsfPackage.open((await convertBaiduToSsf(source)).bytes)
+  assert.ok(pkg.skin('light').get('VPA_Bar', 'BG_IMAGE'))
+  const { archive } = convertSsfToBaidu(pkg, template, 1080, 'bds')
+  const result = IniDocument.parse(archive.getText(genPath))
+  const image = styleImage(archive, result.get('INPUT', 'BACK_STYLE'))
+  assert.deepEqual(pixel(image, 10, 10), [190, 80, 35, 255])
+  assert.equal(result.get('SCAND', 'BACK_STYLE'), undefined, 'Android keeps a separate popup')
+
+  const bda = SkinArchive.open(readFileSync(new URL('../public/default-template.bda', import.meta.url)), 'bda')
+  const bdaOutput = convertSsfToBda(pkg, bda).archive
+  const appearance = decodeBdaAppearance(bdaOutput.getBytes(`${root}port/appearanceConfig`))
+  assert.equal(appearance.panels.get('py_26').input.backStyle.type, 'image')
+
+  layout.remove('INPUT', 'BACK_STYLE')
+  source.setText(layoutPath, layout.toString())
+  const colorPkg = await SsfPackage.open((await convertBaiduToSsf(source)).bytes)
+  assert.equal(colorPkg.skin('light').get('ComposingView', 'BG_COLOR'), '0xAA112233')
+})
+
 test('SSF crossing FG_RECT stays extended on BDI and reaches the adjacent key on BDS', async () => {
   const files = unzipSync(ssfFixture({ single: true }))
   const keys = parse(files, '1080/keys.ini')

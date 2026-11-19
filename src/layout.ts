@@ -134,6 +134,14 @@ export function moveRects(rects: LayoutRect[], deltaX: number, deltaY: number): 
   return rects.map((rect) => ({ ...rect, x: rect.x + deltaX, y: rect.y + deltaY }))
 }
 
+/** Whole-key moves preserve an explicit touch area's offset from its artwork. */
+export function translatedTouchRect(value: string | undefined, dx: number, dy: number): string | undefined {
+  if (!value || !Number.isFinite(dx) || !Number.isFinite(dy) || (!dx && !dy)) return
+  const parts = value.split(",")
+  if (parts.length !== 4 || parts.some(part => !part.trim() || !Number.isFinite(Number(part)))) return
+  return [Number(parts[0]) + dx, Number(parts[1]) + dy, parts[2], parts[3]].join(",")
+}
+
 function keyPoints(start: number, size: number): number[] {
   return [start, Math.round(start + size / 2), start + size]
 }

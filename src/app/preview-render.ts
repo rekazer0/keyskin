@@ -13,7 +13,7 @@ import { bdaConfigPath, bdaLayoutDocument, bdaStyleID } from "../bda.ts"
 import { decodeBdaAnimation } from "../bda-decode.ts"
 import { parseLegacyAnimation } from "../preview-animation.ts"
 import { parseLegacyHint } from "../preview-hints.ts"
-import { previewItems, previewSurfaceHeight, previewContentVerticalBounds, type PreviewItem } from "../preview-items.ts"
+import { bdiPinyinListSymbols, previewItems, previewSurfaceHeight, previewContentVerticalBounds, type PreviewItem } from "../preview-items.ts"
 import { IniDocument } from "../ini.ts"
 import { resolvePanelConfig, DEFAULT_BDA_PANEL_WIDTH, DEFAULT_BDA_PANEL_HEIGHT } from "../keyboard.ts"
 import { resolveCandidateInputTextVisual, resolveCandidateTextVisuals } from "../candidate-style.ts"
@@ -222,7 +222,15 @@ export function refreshPreview(): void {
     ? IniDocument.parse(appState.bdaBase.getText(bdaGenPath))
     : undefined
   preview.setOffsets(context?.gen ?? bdaGen)
-  preview.setDefaults(context?.gen ?? bdaGen)
+  const defaults = context?.gen ?? bdaGen
+  const symbols = currentArchive.format === "bdi" && appState.layoutDocument
+    && bdiPinyinListSymbols(appState.layoutPath, appState.layoutDocument, defaults)
+  const previewDefaults = symbols ? IniDocument.parse(defaults?.toString() ?? "") : defaults
+  if (symbols && previewDefaults) {
+    if (!previewDefaults.hasSection("LIST")) previewDefaults.appendSection("LIST", [])
+    previewDefaults.set("LIST", "NAMES", symbols)
+  }
+  preview.setDefaults(previewDefaults)
   preview.setTheme(theme.value === "dark" ? "dark" : "light")
   preview.setTransparent(devicePreviewTransparent())
   if (context && appState.layoutDocument && resolver) {

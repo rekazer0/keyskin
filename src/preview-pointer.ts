@@ -1,10 +1,6 @@
 import type { Preview } from "./preview.ts"
-import { effectivePreviewItem, isFullPanelPreviewItem, visiblePreviewItems } from "./preview-items.ts"
-import { gestureDirection } from "./layout.ts"
-import { isTouchLongPress } from "./preview-items.ts"
-import { type PreviewItem } from "./preview-items.ts"
-import { isAdditiveSelection } from "./preview-items.ts"
-import { snapRectDelta } from "./layout.ts"
+import { effectivePreviewItem, isAdditiveSelection, isFullPanelPreviewItem, isTouchLongPress, previewHitRect, visiblePreviewItems, type PreviewItem } from "./preview-items.ts"
+import { gestureDirection, snapRectDelta } from "./layout.ts"
 import { legacyHintCandidates, legacyHintHasHold, legacyHintSelectedIndex } from "./preview-hints.ts"
 
 function nativeHold(self: Preview, key: PreviewItem) {
@@ -194,10 +190,12 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     const box = updateMarquee(self, event)
     self.marquee = undefined
     if (box) {
-      const hits = visiblePreviewItems(self.keys, self.skinState).filter(({ editable, rect }) => editable &&
-        rect.x <= box.x + box.width && rect.x + rect.width >= box.x &&
-        rect.y <= box.y + box.height && rect.y + rect.height >= box.y &&
-        !isFullPanelPreviewItem({ rect }, self.panelWidth, self.panelHeight))
+      const hits = visiblePreviewItems(self.keys, self.skinState).filter(item => {
+        if (!item.editable || isFullPanelPreviewItem(item, self.panelWidth, self.panelHeight)) return false
+        const rect = previewHitRect(item, "edit") ?? item.rect
+        return rect.x < box.x + box.width && rect.x + rect.width > box.x &&
+          rect.y < box.y + box.height && rect.y + rect.height > box.y
+      })
       self.selected = new Set([...(isAdditiveSelection(event) ? self.selected : []), ...hits.map(item => item.section)])
       self.selectionAnchor = hits.at(-1)?.section
     } else if (key) pickKey(self, key, event)

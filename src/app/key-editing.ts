@@ -7,7 +7,7 @@ import { setSourceValue, scrollSelectedSource } from "./config-context"
 import { populateKeyInspector } from "./key-inspector"
 import { updateSourceHighlight, updateInspectorView } from "./source-panel"
 import { refreshPreview, syncCandidateSelection } from "./preview-render"
-import { type LayoutRect, isListCell, listCellRect, applyLayoutAction as transformLayout, type LayoutAction, mergeLayoutRects, setExactGap, moveRects } from "../layout.ts"
+import { type LayoutRect, isListCell, listCellRect, applyLayoutAction as transformLayout, type LayoutAction, mergeLayoutRects, setExactGap, moveRects, translatedTouchRect } from "../layout.ts"
 import { mixedCoordinateDelta } from "../mixed-input.ts"
 import { copyPalmKeys, deletePalmKeys, mergePalmKeys, palmKeyRects, writePalmKeyRects } from "./sxi-keys"
 
@@ -38,6 +38,7 @@ export function copySelectedKeys(): void {
     while (occupied.has(`KEY${number}`)) number += 1
     const target = `KEY${number++}`
     const entries = appState.layoutDocument.entries(section).map(({ key, value }) => {
+      if (key === "TOUCH_RECT") return { key, value: translatedTouchRect(value, 18, 0) ?? value }
       if (key !== "VIEW_RECT") return { key, value }
       const rect = value.split(",").map(Number)
       if (rect.length === 4 && rect.every(Number.isFinite)) rect[0] += 18
@@ -121,17 +122,30 @@ export function selectedRects(): LayoutRect[] {
   })
 }
 
-/** 几何预览的一次缩放作为一步撤销提交。 */
-export function resizeSelectedKeys(rects: LayoutRect[]): void {
+/** A geometry edit, including both rectangles for a whole-key move, is one undo step. */
+export function resizeSelectedKeys(rects: LayoutRect[], move = false, coalesce = false): void {
   if (!canvasEditable() || ["bda", "ssf"].includes(appState.archive?.format ?? "")) return
-  if (palmBoard()) return writePalmKeyRects(rects)
-  if (!appState.layoutDocument) return
-  const before = appState.layoutDocument.toString()
-  for (const rect of rects) appState.layoutDocument.set(rect.section, "VIEW_RECT", [rect.x, rect.y, rect.width, rect.height].join(","))
-  const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
+  if (palmBoard()) return writePalmKeyRects(rects, coalesce)
+  const document = appState.layoutDocument
+  if (!document) return
+  const before = document.toString()
+  for (const { section, x, y, width, height } of rects) {
+    if (move) {
+      const [oldX, oldY] = (document.get(section, "VIEW_RECT") ?? "").split(",").map(Number)
+      const touch = translatedTouchRect(document.get(section, "TOUCH_RECT"), Math.round(x) - oldX, Math.round(y) - oldY)
+      if (touch !== undefined) document.set(section, "TOUCH_RECT", touch)
+    }
+    document.set(section, "VIEW_RECT", [x, y, width, height].map(Math.round).join(","))
+  }
+  commitKeyGeometry(before, coalesce)
+}
+
+export function commitKeyGeometry(before: string, coalesce = false): void {
+  const document = appState.layoutDocument!
+  const text = document.toString()
+  commitText(appState.layoutPath, before, text, coalesce)
   if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
-  preview.setDocument(appState.layoutDocument)
+  preview.setDocument(document)
   populateKeyInspector()
   updateDirty()
 }
@@ -146,22 +160,7 @@ export function applyLayoutAction(action: string): void {
   const real = selectedRects().filter((rect) => !isListCell(rect.section))
   const rects = transformLayout(real, action as LayoutAction)
   if (rects.length < 2) return
-  if (palmBoard()) return writePalmKeyRects(rects)
-  if (!appState.layoutDocument) return
-  const before = appState.layoutDocument.toString()
-  for (const rect of rects) {
-    appState.layoutDocument.set(
-      rect.section,
-      "VIEW_RECT",
-      [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(","),
-    )
-  }
-  const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
-  if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
-  preview.setDocument(appState.layoutDocument)
-  populateKeyInspector()
-  updateDirty()
+  resizeSelectedKeys(rects, !["same-width", "same-height"].includes(action))
 }
 
 function mergeSelectedKeys(): void {
@@ -198,22 +197,7 @@ export function applyExactGap(field: HTMLInputElement): void {
     gap,
   )
   if (rects.length < 2) return
-  if (palmBoard()) return writePalmKeyRects(rects)
-  if (!appState.layoutDocument) return
-  const before = appState.layoutDocument.toString()
-  for (const rect of rects) {
-    appState.layoutDocument.set(
-      rect.section,
-      "VIEW_RECT",
-      [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(","),
-    )
-  }
-  const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
-  if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
-  preview.setDocument(appState.layoutDocument)
-  populateKeyInspector()
-  updateDirty()
+  resizeSelectedKeys(rects, true)
 }
 
 export function moveSelectedKeys(
@@ -235,21 +219,7 @@ export function moveSelectedKeys(
     const [x, y, width, height] = values
     return [{ section, x, y, width, height }]
   }), deltaX, deltaY)
-  if (!rects.length) return
-  const before = appState.layoutDocument.toString()
-  for (const rect of rects) {
-    appState.layoutDocument.set(
-      rect.section,
-      "VIEW_RECT",
-      [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(","),
-    )
-  }
-  const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text, coalesce)
-  if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
-  preview.setDocument(appState.layoutDocument)
-  populateKeyInspector()
-  updateDirty()
+  if (rects.length) resizeSelectedKeys(rects, true, coalesce)
 }
 
 /**

@@ -264,13 +264,14 @@ export class PalmBoard {
     const { own, global, cand } = this.candidateModel()
     const top = this.part("top_cand")
     const input = this.part("input")
-    const inputFore = list(asObject(input?.b ?? null)?.base_f)[0]
+    const globalInput = asObject(asObject(this.global.input)?.b)
+    const inputFore = list(asObject(input?.b)?.base_f ?? globalInput?.base_f)[0]
     return {
       words: cand?.i_cand ?? own.i_cand ?? global.i_cand ?? top?.s_i,
       first: cand?.i_f_f ?? own.i_f_f ?? global.i_f_f,
       input: top?.i_i ?? inputFore ?? list(asObject(top?.b ?? null)?.base_f)[0],
       inputSize: inputFore,
-      inputBack: asObject(input?.b ?? null)?.base_b,
+      inputBack: asObject(input?.b)?.base_b ?? globalInput?.base_b,
       inlineBack: asObject(top?.b ?? null)?.base_b,
     }
   }

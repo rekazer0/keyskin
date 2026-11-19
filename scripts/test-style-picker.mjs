@@ -112,12 +112,30 @@ try {
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
     assert.equal((await snapshot(page, format)).id, before.id, '移除可以撤销')
     const pressed = () => page.locator(referenceInput(format)).locator('..').locator('.ui-style-state[data-state="pressed"]')
+    assert.equal(await pressed().evaluate(state => {
+      const preview = state.closest('.ui-style-ref-states')
+      const canvases = [...preview.querySelectorAll('canvas')]
+      return getComputedStyle(preview).backgroundImage !== 'none'
+        && canvases.length === 2
+        && canvases[0].getBoundingClientRect().right === canvases[1].getBoundingClientRect().left
+        && canvases.every(canvas => getComputedStyle(canvas).backgroundImage === 'none')
+    }), true, '正常和按下两格紧贴，共用同一块棋盘格')
     const changeStyle = background.locator('.ui-style-ref-action')
-    await changeStyle.hover({ position: { x: 4, y: 4 } })
-    assert.equal(await changeStyle.evaluate(button => button.matches(':hover')), true, '左侧悬停命中更换样式区')
+    const meta = changeStyle.locator('..')
+    const number = meta.locator('input')
+    await number.click()
+    assert.equal(await number.evaluate(input => input === document.activeElement && getComputedStyle(input).outlineStyle === 'none'), true, '编号仍可编辑，聚焦无描边')
+    assert.equal(await page.locator('#picker-dialog').isVisible(), false, '点击编号不打开选择器')
+    const { width, height } = await meta.boundingBox()
+    for (const position of [{ x: 6, y: 5 }, { x: width - 2, y: height - 5 }]) {
+      await meta.click({ position })
+      await picker(page).locator(`.ui-style-card[data-style-id="${before.id}"][aria-selected="true"]`).waitFor()
+      await picker(page).locator('#picker-close').click()
+      await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+    }
     await pressed().hover()
     assert.equal(await pressed().evaluate(state => getComputedStyle(state).cursor), 'pointer')
-    assert.equal(await changeStyle.evaluate(button => button.matches(':hover')), false, '预览悬停不高亮引用')
+    assert.equal(await meta.evaluate(column => column.matches(':hover')), false, '预览悬停不高亮引用')
     await changeStyle.press('Enter')
     await picker(page).locator(`.ui-style-card[data-style-id="${before.id}"][aria-selected="true"]`).waitFor()
     await chooseImage(page, false)
@@ -140,12 +158,18 @@ try {
     await picker(page).locator('.ui-image-card[data-path$="/bg.png"]').click()
     await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
     await picker(page).locator('#picker-apply').click()
+    await page.locator('#picker-dialog').waitFor({ state: 'hidden', timeout: 3000 })
     const edited = await snapshot(page, format)
     assert.equal(edited.id, before.id, '应用至样式保留引用')
     assert.equal(edited.image.normal, before.image.normal)
     assert.equal(edited.image.hl, 'bg,0')
-    await picker(page).locator('#picker-close').click()
+    await pressed().click()
+    await picker(page).locator('.ui-image-card[data-path$="/bg.png"]').click()
+    const canvas = picker(page).locator('#picker-canvas')
+    await canvas.click({ position: { x: 1, y: 1 } })
+    await canvas.press('Enter')
     await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+    assert.deepEqual(await snapshot(page, format), edited, '再次应用相同切片只关闭窗口')
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
     assert.equal((await snapshot(page, format)).text, before.text)
     console.log(`${format}: new style / edit style, pressed image and single-step undo passed`)
@@ -208,10 +232,7 @@ try {
         await changeStyle.click()
         await chooseImage(page, false, 'unsliced')
       }
-      await page.waitForFunction(async () => {
-        const { appState } = await import('/src/app/state.ts')
-        return appState.pickerSelectedIndex === 1 || !appState.pickerTarget
-      })
+      await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
       const after = await snapshot(page, format)
       const afterSlices = await imageSlices()
       assert.deepEqual(afterSlices.slices, [{ index: 1, source: [0, 0, 2, 2] }], '无切片时自动创建整图切片')
@@ -223,16 +244,8 @@ try {
         return (await visualResolver().resolve(id, state === 'pressed')).source
       }, { id: after.id, state }), [0, 0, 2, 2], '应用后的样式能解析到真实切片')
       assert.equal(after.image[state === 'pressed' ? 'normal' : 'hl'], before.image[state === 'pressed' ? 'normal' : 'hl'])
-      if (toStyle) {
-        assert.equal(after.id, before.id)
-        // 应用至样式后窗口仍在，整张图已变为真正的切片，再次应用不重复创建。
-        await picker(page).locator('#picker-canvas').waitFor()
-        assert.equal(await picker(page).locator('#picker-slice').inputValue(), '1')
-        await picker(page).locator('#picker-canvas').press('Enter')
-        assert.deepEqual(await imageSlices(), afterSlices)
-        await picker(page).locator('#picker-close').click()
-      } else assert.notEqual(after.id, before.id)
-      await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+      if (toStyle) assert.equal(after.id, before.id)
+      else assert.notEqual(after.id, before.id)
       await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
       assert.equal((await snapshot(page, format)).text, before.text)
       assert.equal((await snapshot(page, format)).id, before.id)

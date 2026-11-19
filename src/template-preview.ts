@@ -122,16 +122,16 @@ async function hydrateTemplateCard(card: HTMLButtonElement): Promise<void> {
   const id = card.dataset.template
   const host = card.querySelector<HTMLElement>(".template-preview")
   if (!id || !host || host.dataset.preview === "rendered") return
+  await renderBuiltInTemplatePreview(id, host)
+}
+
+export async function renderBuiltInTemplatePreview(id: string, host: HTMLElement): Promise<HTMLImageElement | undefined> {
   const staticURL = builtInProjectTemplatePreviewURL(id)
   for (let attempt = 0; attempt < 2; attempt++) {
     await yieldPreviewTask()
     try {
-      if (staticURL) await showPreviewImage(host, previewImageElement(staticURL))
-      else {
-        const bytes = await loadBuiltInProjectTemplate(id)
-        await renderBlobPreview(await archiveDemoImage(bytes), host)
-      }
-      return
+      if (staticURL) return await showPreviewImage(host, previewImageElement(staticURL))
+      return await renderBlobPreview(await archiveDemoImage(await loadBuiltInProjectTemplate(id)), host)
     } catch {
       if (!staticURL) break
     }

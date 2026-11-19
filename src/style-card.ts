@@ -304,13 +304,16 @@ export function styleReferenceCard(options: {
   }
   if (options.reference && !options.disabled) {
     const { label, run } = options.reference
-    const button = iconButton("layers", label, event => {
+    const activate = (event: MouseEvent) => {
+      event.preventDefault()
       event.stopPropagation()
       run(event.metaKey || event.ctrlKey)
-    })
+    }
+    const button = iconButton("layers", label, activate)
     button.className = "ui-style-ref-action"
     if (options.kind) button.replaceChildren(options.kind)
     meta.append(button)
+    meta.addEventListener("click", event => { if (event.target === meta) activate(event) })
   } else if (options.kind) meta.append(options.kind)
   const states = element("span", "ui-style-ref-states")
   const action = (item: HTMLElement, run: ((edit: boolean) => void) | undefined) => {
@@ -348,6 +351,10 @@ export function styleReferenceCard(options: {
     } else states.append(state)
   }
   if (options.states.length === 1) states.dataset.variant = "single"
+  else if (options.states.length === 2 && canvases.length === 2) {
+    states.dataset.variant = "joined"
+    states.classList.add("ui-checker")
+  }
   if (canvases.length) lazyDraw(card, states, canvases, (canvas, index) => draws[index](canvas))
   const soundInfo = options.states.length === 1 && states.querySelector(".ui-style-sound-info")
   if (soundInfo) {

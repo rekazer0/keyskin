@@ -3,6 +3,8 @@ import { appState } from "./state"
 import { runFileOperation } from "./file-operations"
 import { prepareDocumentReplacement } from "./edit-history"
 import { loadNativePath, loadSourceWorkspace } from "./archive-io"
+import { newDocument } from "./new-document"
+import { builtInProjectTemplateExtension } from "../operations"
 import { symbolSpan, createIcon } from "../icons"
 import { isTauri, sourceDirectoryEnabledBySettings, mobilePortraitQuery } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
@@ -11,9 +13,15 @@ import { selectChoice } from "./mobile-layout"
 import { selectFile } from "./navigation"
 import { bindListboxKeys } from "../dom-element"
 import { playPageSlide } from "../motion"
-import { renderBlobPreview, archiveDemoImage, MissingPreviewImageError, releaseArchivePreview, showMissingPreview } from "../template-preview"
+import { renderBlobPreview, archiveDemoImage, MissingPreviewImageError, renderBuiltInTemplatePreview, releaseArchivePreview, showMissingPreview } from "../template-preview"
 
 export const recentFilesKey = "recent-files"
+
+const templatePrefix = "template:"
+
+function recentTemplateId(path: string): string | undefined {
+  return path.startsWith(templatePrefix) ? path.slice(templatePrefix.length) : undefined
+}
 
 const mobileRecentPageSize = 9
 const desktopRecentRows = 3
@@ -48,9 +56,15 @@ function readRecentFiles(): RecentFile[] {
   }
 }
 
-export function recordRecentFile(path: string, name: string, source = ""): void {
+export function recordRecentTemplate(id: string, name: string): void {
+  recordRecentFile(templatePrefix + id, name)
+}
+
+export function recordRecentFile(path: string, name: string, source = "", replacedTemplateId = ""): void {
   if (!path || path.startsWith("content://")) return
-  const next = [{ path, name, at: Date.now(), source: source || undefined }, ...readRecentFiles().filter((item) => item.path !== path)]
+  const next = [{ path, name, at: Date.now(), source: source || undefined }, ...readRecentFiles().filter(
+    (item) => item.path !== path && item.path !== templatePrefix + replacedTemplateId,
+  )]
   const limit = recentHistoryLimit()
   localStorage.setItem(recentFilesKey, JSON.stringify(limit ? next.slice(0, limit) : next))
   appState.recentPage = 0
@@ -72,8 +86,11 @@ function formatRecentTime(at: number): string {
 
 function openRecentFile(item: RecentFile): void {
   if (appState.fileOperationRunning) return
-  // 当前皮肤直接重用内存中的文档，不重新读盘、不丢未保存修改。
-  if (appState.archive && !appState.unsavedNew && item.path === appState.currentPath) {
+  const template = recentTemplateId(item.path)
+  // 当前皮肤直接重用内存中的文档，不重新加载、不丢未保存修改。
+  if (appState.archive && (template !== undefined
+    ? template === appState.currentTemplateId
+    : !appState.unsavedNew && item.path === appState.currentPath)) {
     canvasWrap.classList.remove("empty")
     if (mobilePortraitQuery.matches) {
       if (appState.layoutPath && (appState.selectedPath !== appState.layoutPath || appState.resourceConfigActive)) selectFile(appState.layoutPath)
@@ -82,6 +99,7 @@ function openRecentFile(item: RecentFile): void {
     return
   }
   void runFileOperation("打开", async () => {
+    if (template !== undefined) return newDocument(template)
     if (!(await prepareDocumentReplacement("open"))) return false
     if (!item.source || !sourceDirectoryEnabledBySettings()) return loadNativePath(item.path)
     try {
@@ -110,7 +128,8 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   card.className = "ui-project-card template-card recent-card ui-skin-entry"
   card.dataset.variant = "recent"
   card.dataset.recent = item.path
-  card.title = `打开 ${item.name}\n${item.path}`
+  const template = recentTemplateId(item.path)
+  if (template === undefined) card.title = `打开 ${item.name}\n${item.path}`
   const preview = document.createElement("span")
   preview.className = "template-preview"
   preview.ariaHidden = "true"
@@ -127,11 +146,11 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   const meta = document.createElement("span")
   meta.className = "template-meta"
   const format = document.createElement("em")
-  format.textContent = recentFormatLabel(item.path)
+  format.textContent = template === undefined ? recentFormatLabel(item.path) : builtInProjectTemplateExtension(template)
   const time = document.createElement("span")
   time.textContent = formatRecentTime(item.at)
   meta.append(time)
-  const folder = recentFolderLabel(item.path)
+  const folder = template === undefined ? recentFolderLabel(item.path) : "内置模板"
   if (folder) {
     const place = document.createElement("span")
     place.className = "recent-card-folder"
@@ -142,8 +161,8 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   foot.append(nameRow, meta)
   const mobileMeta = document.createElement("span")
   mobileMeta.className = "ui-skin-entry-meta"
-  const extension = recentFormatLabel(item.path).replace(/^\./, "").toUpperCase()
-  mobileMeta.textContent = `${formatRecentTime(item.at)} · ${extension}`
+  const extension = format.textContent.replace(/^\./, "").toUpperCase()
+  mobileMeta.textContent = `${formatRecentTime(item.at)} · ${extension}${template === undefined ? "" : " · 内置模板"}`
   foot.append(mobileMeta)
   card.append(preview, foot)
   const chevron = createIcon("chevron-right", 20)
@@ -196,8 +215,7 @@ export function recentThumbRequest<T>(
   }))
 }
 
-async function renderRecentPreview(path: string, host: HTMLElement): Promise<HTMLImageElement> {
-  const stamp = (await invoke<number[]>("skin_file_stamp", { path })).join(":")
+async function renderRecentPreview(path: string, stamp: string, host: HTMLElement): Promise<HTMLImageElement> {
   const stored = await recentThumbRequest<RecentThumb | undefined>("readonly", (store) => store.get(path))
     .catch(() => undefined)
   if (stored?.stamp === stamp && stored.bytes) {
@@ -250,11 +268,15 @@ async function drainRecentPreviews(): Promise<void> {
       const host = card.querySelector<HTMLElement>(".template-preview")
       // data-preview：rendered 已画好，failed 已放弃，两种都不再重画。
       if (!path || !host || host.dataset.preview) continue
+      const template = recentTemplateId(path)
       try {
-        const fileStamp = await invoke<number[]>("skin_file_stamp", { path })
-        const stamp = fileStamp.join(":")
-        const meta = card.querySelector<HTMLElement>(".ui-skin-entry-meta")
-        if (meta) meta.textContent += ` · ${(fileStamp[0] / 1024 / 1024).toFixed(1)} MB`
+        let stamp = ""
+        if (template === undefined) {
+          const fileStamp = await invoke<number[]>("skin_file_stamp", { path })
+          stamp = fileStamp.join(":")
+          const meta = card.querySelector<HTMLElement>(".ui-skin-entry-meta")
+          if (meta) meta.textContent += ` · ${(fileStamp[0] / 1024 / 1024).toFixed(1)} MB`
+        }
         const cached = recentPreviewCache.get(path)
         if (cached?.stamp === stamp) {
           host.replaceChildren(cached.image.cloneNode(true))
@@ -262,7 +284,10 @@ async function drainRecentPreviews(): Promise<void> {
           continue
         }
         if (cached) releaseArchivePreview(cached.image)
-        const image = await renderRecentPreview(path, host)
+        const image = template === undefined
+          ? await renderRecentPreview(path, stamp, host)
+          : await renderBuiltInTemplatePreview(template, host)
+        if (!image) continue
         if (readRecentFiles().some((item) => item.path === path)) recentPreviewCache.set(path, { stamp, image })
         else releaseArchivePreview(image)
       } catch {

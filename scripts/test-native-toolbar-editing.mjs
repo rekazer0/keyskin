@@ -26,7 +26,12 @@ for (const format of ['bdi', 'bds']) {
   archive.setBytes('light/skin/res/replacement.png', replacement)
   if (format === 'bds') {
     const css = 'light/skin/res/default.css'
-    archive.setText(css, archive.getText(css).replace('NM_IMG=bar,1', 'NM_IMG=bar,1\nHL_IMG=edge,1'))
+    archive.setText(css, archive.getText(css).replace('NM_IMG=bar,1', 'NM_IMG=bar,1\nHL_IMG=overlay,1'))
+    const originalOverlayColor = [80, 150, 100, 255]
+    archive.setBytes('light/skin/res/overlay.png', encodePng({ width: 8, height: 4,
+      data: Uint8Array.from({ length: 128 }, (_, i) => i % 32 < 8 || i % 32 >= 24 ? 0 : originalOverlayColor[i % 4]),
+    }))
+    archive.setText('light/skin/res/overlay.til', '[IMG1]\nSOURCE_RECT=0,0,8,4\n')
     archive.setBytes('light/skin/res/logo/pop_menu_icons.png', original)
     archive.setText('light/skin/res/logo/pop_menu_icons.til', '[IMG26]\nSOURCE_RECT=0,0,4,4\n[IMG27]\nSOURCE_RECT=4,0,4,4\n')
     archive.delete('light/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist')
@@ -48,7 +53,7 @@ fixtures.unshift({ format: 'bdi', bytes: insetEdges.toBytes(), selectionOnly: tr
 const palm = unzipSync(readFileSync(new URL('../public/templates/palm-harmony.sxi', import.meta.url)))
 palm['light/skin/res/replacement.png'] = replacement
 fixtures.push({ format: 'sxi', bytes: zipSync(palm), label: '键盘类型', target: 'light/skin/res/logo/1.0/toolbarMenuItem_KBSwitch_Normal_iphone@3x.png', source: 'light/skin/res/replacement.png', count: 5, builtIn: true })
-const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0 } })
+const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0, hmr: false } })
 await server.listen()
 const browser = await chromium.launch()
 try {
@@ -137,12 +142,23 @@ try {
       return { revision: appState.archive.revision, undo: appState.undoStack.length }
     }), archiveBeforeSelection, 'selecting the bar never edits the skin')
     if (fixture.format === 'bds') {
-      const sampleBackground = (device, color) => page.waitForFunction(async color => {
+      const sampleBackground = (label, color, x = 0.5) => page.waitForFunction(async ({ color, x }) => {
         const { candidateBackgroundPreview: p } = await import('/src/app/canvas-interaction.ts')
         const { canvas } = p
-        return [...canvas.getContext('2d').getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data].join(',') === color
-      }, color, { timeout: 3000 }).catch(error => { throw new Error(`${device}: candidate background did not match ${color}`, { cause: error }) })
+        return [...canvas.getContext('2d').getImageData(Math.floor(canvas.width * x), canvas.height >> 1, 1, 1).data].join(',') === color
+      }, { color, x }, { timeout: 3000 }).catch(error => { throw new Error(`${label}: candidate background did not match ${color}`, { cause: error }) })
       await sampleBackground('Android with HL_IMG', '80,150,100,255')
+      await sampleBackground('Android shows NM_IMG through transparent HL_IMG edges', '255,255,255,255', 0.125)
+      await page.locator('#quick-inspector input[data-toolbar-field="BACK_STYLE"]').locator('..')
+        .locator('.ui-style-state[data-state="normal"]').click()
+      const picker = page.frameLocator('#picker-frame')
+      await picker.locator('.ui-image-card[data-path$="/replacement.png"]').click()
+      await picker.locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
+      await picker.locator('#picker-apply').click()
+      await sampleBackground('Replacing NM_IMG updates the full-width background', '240,50,60,255', 0.125)
+      await sampleBackground('Replacing NM_IMG preserves HL_IMG', '80,150,100,255')
+      await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+      await sampleBackground('Undo restores NM_IMG', '255,255,255,255', 0.125)
       await page.locator('#device').selectOption('iphone-17-pro-max')
       await sampleBackground('iPhone uses NM_IMG', '255,255,255,255')
       await page.locator('#device').selectOption('canvas-checkerboard')

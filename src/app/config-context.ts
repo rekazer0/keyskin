@@ -391,9 +391,10 @@ export function refreshToolbarPreview(
   candidateBackgroundPreview.setDocument(undefined)
   const inputBackgroundStyle = bdaPanel?.input
     ? bdaStyleID(bdaPanel.input.backStyle)
-    : candidateInputBackgroundStyle(gen, document, inputBarInKeyboard())
+    : candidateInputBackgroundStyle(gen, document, inputBarInKeyboard(),
+      appState.archive.format === "bds" ? appState.layoutDocument : undefined)
   showCandidateInputBar(resolver, { ...inputStyle, height: inputHeight, fullWidth: Boolean(ssfInput) }, width,
-    ssfLook ? { color: parseColor(ssfLook.color("ComposingView", "BG_COLOR")) } : inputBackgroundStyle)
+    ssfLook ? { color: parseColor(ssfLook.color("ComposingView", "BG_COLOR") ?? ssfLook.color("VPA_Bar", "BG_COLOR")) } : inputBackgroundStyle)
   const inputBar = appState.candidateInputBar
   if (ssfInput) void pngBitmap(ssfInput.bytes).then((image) => {
     if (!inputBar || appState.candidateInputBar !== inputBar || !image) return

@@ -25,7 +25,7 @@ type SsfInfo = { name: string; author: string; version: string }
 
 const PC_SKIN_ERROR = "这是电脑版搜狗皮肤（候选窗皮肤），没有手机键盘，不能转换"
 
-function decodeSsfText(bytes: Uint8Array): string {
+export function decodeSsfText(bytes: Uint8Array): string {
   if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes.subarray(2))
   if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes.subarray(2))
   try {

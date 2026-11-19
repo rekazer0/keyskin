@@ -91,7 +91,8 @@ export class PalmStyles implements VisualResolver {
   /** A text style's look; `for_back` styles are fills, not text. */
   private text(id: Json, pressed: boolean): Text | undefined {
     const textStyle = asObject(this.style(id)?.s_1 ?? null)
-    const color = argbColor((pressed ? textStyle?.c_hl : undefined) ?? textStyle?.c_normal)
+    const value = (pressed ? textStyle?.c_hl : undefined) ?? textStyle?.c_normal
+    const color = argbColor(value === "0" ? "000000" : value)
     if (!textStyle || textStyle.for_back === true || !color || typeof textStyle.f_s !== "number") return
     return {
       ...typeof textStyle.text === "string" ? { text: textStyle.text } : {},

@@ -289,6 +289,7 @@ function layoutJson(context: ExportContext, paths: string[] | undefined): Json {
   if (paths === undefined) return undefined
   const maps: Record<string, Json> = {}
   const cands: Record<string, Json> = {}
+  const inputBacks = new Map<string, number>()
   const hints: Record<string, Json> = {}
   for (const path of paths) {
     if (path.endsWith(".ini")) {
@@ -296,7 +297,10 @@ function layoutJson(context: ExportContext, paths: string[] | undefined): Json {
       const type = boardTypeFromIniFileName(name) ?? name.replace(/\.ini/g, "")
       maps[type] = keyboardModel(context, path, type)
     } else if (path.endsWith(".cnd")) {
-      cands[stripExtension(path)] = candidateModelFromFile(context, path)
+      const name = stripExtension(path)
+      cands[name] = candidateModelFromFile(context, path)
+      const back = toInt(sectionsOf(context, path)?.find((section) => section.name === "INPUT")?.entries.BACK_STYLE)
+      if (back !== undefined) inputBacks.set(name, back)
     } else if (path.endsWith(".pop")) {
       hints[stripExtension(path)] = bubbleModelFromFile(context, path)
     }
@@ -315,12 +319,12 @@ function layoutJson(context: ExportContext, paths: string[] | undefined): Json {
   if (customJump && !context.warnings.includes(warning)) context.warnings.push(warning)
   fixTouchRects(maps)
   fitCandidateIcons(maps, cands, context.warnings)
-  mergeGlobalBoardModels(maps)
+  mergeGlobalBoardModels(maps, inputBacks)
   return { b: maps, c: cands, h: hints }
 }
 
 /** Baidu keeps the shared bars and list-cell style in `gen.ini`; Palm expects them on every board. */
-function mergeGlobalBoardModels(maps: Record<string, Json>): void {
+function mergeGlobalBoardModels(maps: Record<string, Json>, inputBacks: Map<string, number>): void {
   const global = asBoard(maps.defaultGlobal)
   if (!global) return
   const boards = Object.entries(maps)
@@ -329,7 +333,18 @@ function mergeGlobalBoardModels(maps: Record<string, Json>): void {
     .filter((board): board is Record<string, Json> => board !== undefined)
   // Palm only loads a skin when the global board has the list-cell model Baidu never writes there.
   if (global.list === undefined) global.list = boards.find((board) => board.list !== undefined)?.list
-  for (const board of boards) {
+  const globalInput = asObject(global.input)
+  const globalBase = asObject(globalInput?.b)
+  for (const board of [global, ...boards]) {
+    const candidate = asObject(board.cand)?.file ?? asObject(global.cand)?.file
+    const input = asObject(board.input)
+    const base = asObject(input?.b)
+    const back = base?.base_b ?? inputBacks.get(String(candidate)) ?? globalBase?.base_b
+    const fore = base?.base_f ?? globalBase?.base_f
+    if (back !== base?.base_b || fore !== base?.base_f) {
+      board.input = { ...globalInput, ...input, b: { ...globalBase, ...base, base_b: back, base_f: fore } }
+    }
+    if (board === global) continue
     for (const key of ["cand", "input", "more", "hint", "top_cand", "list"]) {
       if (board[key] === undefined && global[key] !== undefined) board[key] = global[key]
     }
@@ -672,8 +687,7 @@ function prepareExport(archive: SkinArchive, entries: ConverterEntry[], warnings
     root: new PalmVirtualRoot(entries.map((entry) => ({ path: entry.path, bytes: entry.bytes }))),
     warnings,
     entries,
-    sections: new Map(),
-    android: skinPlatform(archive) === "android",
+    sections: new Map(), android: skinPlatform(archive) === "android",
   }
   const skinDir = context.root.isDirectory("skin") ? "skin" : ""
   const hasLight = context.root.isDirectory(palmJoinPath(skinDir, "light"))

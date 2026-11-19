@@ -228,6 +228,7 @@ export function previewHitItem(
   state?: number,
 ): PreviewItem | undefined {
   let best: PreviewItem | undefined
+  let bestArea = Infinity
   let fallback: PreviewItem | undefined
   for (const item of [...visiblePreviewItems(items, state)].reverse()) {
     if (!item.editable) continue
@@ -243,9 +244,12 @@ export function previewHitItem(
       fallback ??= item
       continue
     }
-    const area = item.rect.width * item.rect.height
-    const bestArea = best ? best.rect.width * best.rect.height : Infinity
-    if (area < bestArea) best = item
+    const { width, height } = mode === "edit" ? target : item.rect
+    const area = width * height
+    if (area < bestArea) {
+      best = item
+      bestArea = area
+    }
   }
   return best ?? fallback
 }
@@ -285,9 +289,9 @@ export function isTouchLongPress(pointerType: string, duration: number, distance
   return pointerType === "touch" && duration >= 450 && distance <= 12
 }
 
-function previewHitRect(item: PreviewItem, mode: "edit" | "preview"): Rect | undefined {
-  if (mode === "edit") return item.rect
-  return item.touchRect === null ? undefined : item.touchRect ?? item.rect
+export function previewHitRect(item: PreviewItem, mode: "edit" | "preview"): Rect | undefined {
+  // A non-interactive key can still be edited.
+  return item.touchRect === null && mode === "preview" ? undefined : item.touchRect ?? item.rect
 }
 
 export function parseRect(value: string | undefined): Rect | undefined {
@@ -388,6 +392,13 @@ function itemFromSection(document: IniDocument, section: string): PreviewItem | 
   }
 }
 
+/** The iOS client supplies the three fixed punctuation entries of the nine-key Pinyin layout. */
+export function bdiPinyinListSymbols(path: string, layout: IniDocument, defaults?: IniDocument): string | undefined {
+  const value = (key: string) => layout.get("LIST", key) ?? defaults?.get("LIST", key)
+  if (/(?:^|\/)py_9\.ini$/i.test(path) && layout.hasSection("LIST") && value("TYPE")?.trim() === "0"
+    && Number(value("LIST_NUM")) === 3 && value("NAMES") === undefined && value("VALUES") === undefined) return "， 。 ？"
+}
+
 function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[] {
   const value = (name: string) => document.get("LIST", name) ?? defaults?.get("LIST", name)
   const type = value("TYPE")?.trim()
@@ -399,7 +410,7 @@ function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[]
   const cell = value("CELL_SIZE")?.split(",").map(Number)
   const position = value("POS")?.split(",").map(Number)
   const count = Number(value("LIST_NUM"))
-  const names = value("NAMES")?.trim().split(/\s+/) ?? []
+  const names = value("NAMES")?.trim().split(/\s+/).filter(Boolean) ?? []
   if (
     !cell || cell.length !== 2 || cell.some((value) => !Number.isFinite(value) || value <= 0) ||
     !position || position.length !== 2 || position.some((value) => !Number.isFinite(value)) ||
@@ -407,8 +418,9 @@ function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[]
   ) return []
   const horizontal = value("LIST_ORDER")?.trim() === "1"
   const foreStyles = value("FORE_STYLE")?.split(",").map((token) => token.trim()).filter(Boolean) ?? []
-  // 每个标点只负责文字渲染，不可单独选中
-  const cells: PreviewItem[] = names.slice(0, count).map((show, index) => ({
+  // 固定列表即使没有文字也画出格子；整个 LIST 仍是唯一可选中对象。
+  const visibleCount = Math.min(count, type === "0" ? 256 : names.length)
+  const cells: PreviewItem[] = Array.from({ length: visibleCount }, (_, index) => ({
     section: `LIST:${index + 1}`,
     sections: [`LIST:${index + 1}`],
     rect: {
@@ -418,7 +430,7 @@ function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[]
       height: cell[1],
     },
     editable: false,
-    show,
+    show: names[index] ?? "",
     center: "",
     up: "",
     down: "",

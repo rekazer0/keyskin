@@ -13,6 +13,15 @@ test('input code background comes from the candidate layout, then the general co
   assert.equal(candidateInputBackgroundStyle(undefined), '')
 })
 
+test('Android input background uses the current BDS panel override, without changing iOS inheritance', () => {
+  const general = IniDocument.parse('[INPUT]\nBACK_STYLE=1\n[SCAND]\nBACK_STYLE=2\n')
+  const candidate = IniDocument.parse('[INPUT]\nBACK_STYLE=3\n')
+  const layout = IniDocument.parse('[INPUT]\nBACK_STYLE=4,5\n')
+  assert.equal(candidateInputBackgroundStyle(general, candidate, false, layout), '4')
+  assert.equal(candidateInputBackgroundStyle(general, candidate, false, IniDocument.parse('[INPUT]\n')), '3')
+  assert.equal(candidateInputBackgroundStyle(general, undefined, true, layout), '2')
+})
+
 // Baidu Android InputBarView: L = trunc(2.5dp), the code starts 6dp in and ends two Ls before the edge.
 test('input code bar wraps the code and fills the panel when the code is wider', () => {
   const resolver = { resolveText: () => ({ fontSize: 28 }) }

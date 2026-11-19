@@ -327,8 +327,8 @@ class ThemeConverter {
       const barHeight = numbers(gen.get("CAND", "VIEW_RECT"))[3]
       const { panel, cand, panelColor } = this.look.keyboard(this.panelWidth && height > 0 && barHeight > 0
         ? barHeight / (height + barHeight) : undefined)
-      const input = this.inlineInput ? this.look.inputBar() : undefined
-      const bar = input && cand ? this.look.stackedCandidate(input, cand) ?? cand : cand
+      const input = this.inlineInput || !this.look.color("ComposingView", "BG_COLOR") ? this.look.inputBar() : undefined
+      const bar = this.inlineInput && input && cand ? this.look.stackedCandidate(input, cand) ?? cand : cand
       this.keyboardStyles = {
         panel: panel ? this.resources.imageStyle({ normal: panel, pressed: panel }) : panelColor ? this.resources.colorStyle(panelColor) : undefined,
         cand: bar ? this.resources.imageStyle({ normal: bar, pressed: bar }) : undefined,
@@ -342,15 +342,19 @@ class ThemeConverter {
     const { panel, cand, input } = this.keyboard()
     this.panelStyle = panel
     if (panel) gen.set("PANEL", "BACK_STYLE", panel)
-    if (input && gen.sections().includes("SCAND")) gen.set("SCAND", "BACK_STYLE", input)
-    else if (input) gen.appendSection("SCAND", [{ key: "BACK_STYLE", value: input }])
+    if (this.inlineInput && input) {
+      if (!gen.hasSection("SCAND")) gen.appendSection("SCAND", [])
+      gen.set("SCAND", "BACK_STYLE", input)
+    }
     const defaultSound = this.soundStyle(this.look.sound(undefined))
     if (defaultSound) gen.set("PANEL", "SOUND_STYLE", defaultSound)
 
     const composing = this.look.color("ComposingView", "BG_COLOR")
-    if (composing) {
+    const vpaColor = this.look.color("VPA_Bar", "BG_COLOR")
+    const inputBack = composing ? this.resources.colorStyle(composing) : input ?? (vpaColor ? this.resources.colorStyle(vpaColor) : undefined)
+    if (inputBack) {
       if (!gen.hasSection("INPUT")) gen.appendSection("INPUT", [])
-      gen.set("INPUT", "BACK_STYLE", this.resources.colorStyle(composing))
+      gen.set("INPUT", "BACK_STYLE", inputBack)
     }
     // Sogou colours the code it shows in the pinyin bar with the bar's own colour.
     const composingText = (this.inlineInput ? this.look.color("VPA_Bar", "COMPOSING_TEXT_COLOR") : undefined) ?? this.look.color("TextStyle_Composing")

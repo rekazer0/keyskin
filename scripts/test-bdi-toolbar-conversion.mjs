@@ -17,7 +17,10 @@ try {
   await acceptAskDialogs(page)
   await page.addInitScript(() => {
     window.showSaveFilePicker = undefined
-    new MutationObserver(() => document.querySelector('dialog[open]:not([id]):has(button[value="restore"]) button[value="cancel"]')?.click())
+    new MutationObserver(() => {
+      document.querySelector('dialog[open]:not([id]):has(button[value="restore"]) button[value="cancel"]')?.click()
+      document.querySelector('dialog[open]:not([id]):has(button[value="export"]) button[value="discard"]')?.click()
+    })
       .observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] })
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
@@ -52,10 +55,9 @@ try {
     await open('bdi', bytes)
     const original = await geometry('light')
     assert.ok(Math.abs(original.height - 124 * 1125 / 1320) < 0.000001)
-    await page.locator('.pen-file-menu > summary').click()
     const pending = page.waitForEvent('download', { timeout: 120000 })
     pending.catch(() => {})
-    await exportSkin(page, page.locator(`#mobile-export-dialog [data-export-format="${format}"]`))
+    await exportSkin(page, page.locator(`#share-dialog [data-export-format="${format}"]`))
     const tap = page.locator('#file-operation-dialog[open] button[data-variant="primary"]', { hasText: '下载' })
     const ready = tap.waitFor({ state: 'visible', timeout: 120000 }).then(() => 'tap')
     ready.catch(() => {})

@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { iosCandidateBackground, iosToolbarImageScene } from '../src/ios-preview.ts'
-import { hasIosToolbarGeometry, iosToolbarScale } from '../src/ios-toolbar-geometry.ts'
+import { hasIosToolbarGeometry, implicitIosToolbarRect, iosToolbarScale } from '../src/ios-toolbar-geometry.ts'
 import { IniDocument } from '../src/ini.ts'
-import { previewItems } from '../src/preview-items.ts'
+import { bdiPinyinListSymbols, previewItems } from '../src/preview-items.ts'
 
 test('iOS point geometry comes from layout declarations, independently of menu artwork', () => {
   assert.equal(hasIosToolbarGeometry(undefined, undefined), false)
@@ -77,4 +77,32 @@ test('a solid panel fill stays below the candidate bar', async () => {
   const scene = await iosCandidateBackground({ resolve: async id => id === 'candidate' ? { color: '#000000' } : { color: '#ffffff' } }, 'panel', 'candidate', 360, 258, 50, 0)
   assert.equal(scene.background.length, 1, 'solid panel fills stay in the main canvas')
   assert.deepEqual(scene.background[0].rect, { x: 0, y: 0, width: 360, height: 50 })
+})
+
+test('fixed nine-key lists render cells without labels and use iOS punctuation only when not authored', () => {
+  const layout = IniDocument.parse('[LIST]\nTYPE=0\nLIST_NUM=3\nPOS=3,8\nCELL_SIZE=217,163\nCELL_STYLE=401\n')
+  const symbols = bdiPinyinListSymbols('light/skin/port/py_9.ini', layout)
+  const defaults = IniDocument.parse(`[LIST]\nNAMES=${symbols}\n`)
+  assert.deepEqual(previewItems(layout).slice(1).map(cell => cell.show), ['', '', ''])
+  const cells = previewItems(layout, 1271, 652, defaults).slice(1)
+  assert.deepEqual(cells.map(cell => [cell.show, cell.backStyle, cell.rect.y]), [['，', '401', 8], ['。', '401', 171], ['？', '401', 334]])
+  assert.equal(bdiPinyinListSymbols('symbol.ini', layout), undefined)
+  layout.set('LIST', 'VALUES', 'A B C')
+  assert.equal(bdiPinyinListSymbols('py_9.ini', layout), undefined)
+})
+
+test('implicit iOS toolbar uses the authored edge hit boxes and draws native function artwork', async () => {
+  const general = IniDocument.parse('[CAND]\nTYPE=4\n')
+  const candidate = IniDocument.parse('[CAND]\nICON_NUM=4\n[ICON1]\nSIZE=201,201\nPOS=0,-59\nANCHOR_TYPE=4\nKEY=F31\n[ICON2]\nSIZE=201,201\nPOS=-201,-59\nANCHOR_TYPE=6\nKEY=F8\n')
+  const rect = implicitIosToolbarRect(general, candidate, 1271, 113)
+  assert.deepEqual(rect, { x: 201, y: 0, width: 869, height: 113 })
+  const image = { image: {}, source: [0, 0, 67, 67] }
+  const scene = await iosToolbarImageScene({ resolveToolbarImages: async (_, ids) => {
+    assert.deepEqual(ids, ['17', '18', '35'])
+    return ids.map(() => image)
+  } }, [], 1271, 113, 440, 'currentColor', rect)
+  assert.equal(scene.background.length, 3)
+  assert.ok(scene.background.every((layer) => layer.visual === image && layer.rect.x > rect.x && layer.rect.x + layer.rect.width < rect.x + rect.width))
+  candidate.appendSection('ICON3', [{ key: 'KEY', value: 'F14' }])
+  assert.equal(implicitIosToolbarRect(general, candidate, 1271, 113), undefined)
 })

@@ -10,10 +10,10 @@
 import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { skinPlatform } from "../bda-platform.ts"
-import { resolveCandidateRect } from "../candidate-style.ts"
+import { candidateInputBackgroundStyle, resolveCandidateRect } from "../candidate-style.ts"
 import { TOOLBAR_FUNCTIONS } from "../ios-toolbar.ts"
-import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
 import { toolbarImageRect } from "../preview-draw.ts"
+import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
 import { parseXmlPlist } from "../palm/palm-plist.ts"
 import { offsetFromSection, previewItems } from "../preview-items.ts"
 import { SkinArchive } from "../skin.ts"
@@ -23,7 +23,7 @@ import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-ke
 import type { SogouKeySize } from "./ssf-key-sizes.ts"
 import { ssfClassTextStyles } from "./ssf-parts.ts"
 import { BaiduSsfMotion } from "./baidu-anim-to-ssf.ts"
-import { compositeImage, cropImage, decodePng, encodePng, nineSliceImage, placeImage, resizeImage, type RgbaImage } from "./ssf-png.ts"
+import { compositeImage, cropImage, decodePng, encodePng, nineSliceImage, placeImage, resizeImage, MAX_PIXELS, type RgbaImage } from "./ssf-png.ts"
 
 type Theme = "light" | "dark"
 type SliceImage = { image: RgbaImage; stretch?: [number, number, number, number] }
@@ -384,13 +384,14 @@ function backgroundFit(samples: Map<string, KeySample & { layout: string }>, key
  * Where a theme keeps its keyboard and candidate bar styles: INI skins in gen.ini and its `.cnd`,
  * skins converted from BDA in each layout's own [PANEL] / [CAND].
  */
-function styleSources(archive: SkinArchive, theme: Theme): { panel: IniDocument[]; cand: IniDocument[] } {
+function styleSources(archive: SkinArchive, theme: Theme) {
   const parse = (path: string) => archive.isText(path) ? [IniDocument.parse(archive.getText(path))] : []
   const root = `${theme}/skin/port/`
   const gen = parse(`${root}gen.ini`)
   const candName = gen[0]?.get("CAND", "LAYOUT_NAME")?.trim()
   const layouts = [...parse(`${root}py_26.ini`), ...parse(`${root}py_9.ini`)]
-  return { panel: [...gen, ...layouts], cand: [...(candName ? parse(`${root}${candName}.cnd`) : []), ...layouts] }
+  const candidate = candName ? parse(`${root}${candName}.cnd`) : []
+  return { general: gen[0], candidate: candidate[0], layouts, panel: [...gen, ...layouts], cand: [...candidate, ...layouts] }
 }
 
 /** The first style among `documents` that actually resolves (a copied base gen.ini may name a missing one). */
@@ -432,6 +433,23 @@ function keyboardBackground(styles: BaiduStyles, archive: SkinArchive, theme: Th
 
 function candidateColors(archive: SkinArchive, theme: Theme, styles: BaiduStyles): StylePair | undefined {
   return firstStyle(styles, styleSources(archive, theme).cand, "CAND", "FORE_STYLE")
+}
+
+function writeInputBackground(archive: SkinArchive, theme: Theme, styles: BaiduStyles, writer: StatusWriter): void {
+  const { general, candidate, layouts } = styleSources(archive, theme)
+  const inline = archive.format === "bdi"
+  const id = candidateInputBackgroundStyle(general, candidate, inline, layouts[0])
+  const style = styles.resolve(id) ?? styles.resolve(general?.get("SCAND", "BACK_STYLE"))
+  // The popup fills with a nonzero configured color before considering its image.
+  if (style?.color && (style.color !== "0x00000000" || !style.normal)) {
+    writer.skin.appendSection("ComposingView", [{ key: "BG_STYLE", value: "2" }, { key: "BG_COLOR", value: style.color }])
+  } else if (style?.normal) {
+    const { image } = style.normal
+    const height = Math.max(1, Math.round(image.height * (style.normal.stretch ? 1 : styles.scale)))
+    if (SOGOU_WIDTH * height > MAX_PIXELS) return
+    const row = resizeImage(image, SOGOU_WIDTH, height)
+    writer.skin.appendSection("VPA_Bar", [{ key: "BG_IMAGE", value: writer.file(row) }])
+  }
 }
 
 /** Match toolbar actions, not slot numbers: Baidu skins can reorder their icons. */
@@ -612,6 +630,7 @@ function convertTheme(archive: SkinArchive, theme: Theme, folder: string, output
     writer.skin.appendSection("TextStyle_Candidate", [{ key: "TEXT_COLOR", value: candidate.color }])
     writer.skin.appendSection("TextStyle_Candidate_Highlight", [{ key: "TEXT_COLOR", value: candidate.pressedColor ?? candidate.color }])
   }
+  writeInputBackground(archive, theme, styles, writer)
   toolbarImages(archive, theme, styles, writer)
   // The 9-key symbol column is Sogou's candidate code view.
   const nine = `${theme}/skin/port/py_9.ini`

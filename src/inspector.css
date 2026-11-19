@@ -482,6 +482,7 @@
   .source .key-layout-fields { display: flex; flex-direction: column; }
   .source .key-layout-fields > .geometry-fields { order: 1; }
   .source .key-layout-fields > .mobile-geometry-detail { order: 2; }
+  .source .key-layout-fields > [data-key-touch] { order: 3; }
   .source .mobile-geometry-detail > summary { display: flex; color: var(--secondary); font-size: var(--font-size-xs); }
   .source .mobile-geometry-detail > .inspector-padding-section { padding: var(--space-sm) 0; }
   .source .key-layout-fields .geometry-fields > .ui-field:nth-child(-n+2) > span { display: none; }
@@ -571,11 +572,14 @@
   .source .mobile-background-states span { display: flex; justify-content: space-between; gap: var(--space-xs); width: 100%; color: var(--secondary); font-size: var(--font-size-xs); }
   .source .mobile-background-states small { min-width: 0; overflow: hidden; color: var(--tertiary); font: var(--font-size-xs) var(--font-mono); text-overflow: ellipsis; }
   .source .mobile-appearance-heading { display: flex; align-items: center; justify-content: space-between; min-height: var(--icon-size-lg); margin: 0; font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); }
-  .source .mobile-appearance-heading .ui-button { margin-inline-start: auto; }
   .source .mobile-appearance-heading button, .source .mobile-appearance-layers > button { min-height: var(--mobile-control-height); }
   .source .mobile-appearance-layers { height: auto; flex-wrap: wrap; }
   .source .mobile-appearance-reference { display: flex; align-items: center; gap: var(--space-xs); }
-  .source .mobile-appearance-reference .ui-input { flex: 1; min-width: 0; min-height: var(--mobile-control-height); }
+  .source .mobile-appearance-control { display: flex; flex: 1; min-width: 0; border-radius: var(--radius-md); background: var(--content); }
+  .source .mobile-appearance-control :is(.ui-input, .ui-button) { height: var(--mobile-control-height); }
+  .source .mobile-appearance-control .ui-input { flex: 0 0 calc(var(--mobile-control-height) + var(--space-xl)); background: transparent; }
+  .source .mobile-appearance-control .ui-icon { color: var(--secondary); }
+  .source .mobile-appearance-control .ui-button { flex: 1; justify-content: space-between; padding-inline: var(--space-sm); color: var(--text); border-inline-start-color: var(--line); border-start-start-radius: 0; border-end-start-radius: 0; }
   .source .mobile-appearance .ui-icon-button { width: var(--mobile-control-height); height: var(--mobile-control-height); }
   :root[data-mobile-panel="collapsed"] .source > :not(.source-heading),
   :root[data-mobile-panel="collapsed"] .source .source-heading :not(.key-inspector-title, .ui-inspector-object-copy, .ui-inspector-object-name, #selected-key, .inspector-view-controls) { display: none; }

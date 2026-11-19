@@ -316,7 +316,6 @@ export class Preview {
     this.appearancePressed = section
     void this.draw()
   }
-
   setDraftVisual(draft?: Preview["draftVisual"]): void {
     if (!draft && !this.draftVisual) return
     this.draftVisual = draft
@@ -574,7 +573,6 @@ export class Preview {
     this.fitCanvas()
     void this.draw()
   }
-
   point(event: Pick<MouseEvent, "clientX" | "clientY">): { x: number; y: number } {
     const bounds = this.canvas.getBoundingClientRect()
     return {

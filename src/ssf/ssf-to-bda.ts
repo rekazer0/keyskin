@@ -252,7 +252,9 @@ class BdaThemeConverter {
     const candidateColors = candidateText ? { normal: candidateText, pressed: this.look.color("TextStyle_Candidate_Highlight") ?? candidateText } : undefined
     // The pinyin row above the bar: Sogou's ComposingView background and composing text colour.
     const composing = this.look.color("ComposingView", "BG_COLOR")
-    const inputBack = composing ? writer.colorStyle(composing) : undefined
+    const input = composing ? undefined : this.look.inputBar()
+    const inputColor = composing ?? this.look.color("VPA_Bar", "BG_COLOR")
+    const inputBack = input ? writer.imageStyle({ normal: input, pressed: input }) : inputColor ? writer.colorStyle(inputColor) : undefined
     const composingText = this.look.color("TextStyle_Composing")
     const list = this.look.list()
     const listBack = list.back && writer.imageStyle(list.back)

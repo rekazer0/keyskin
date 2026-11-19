@@ -158,3 +158,34 @@ test('BDI → SSF fits the calibrated background inside the native bar instead o
   assert.ok(result.warnings.some((warning) => warning.includes('搜狗工具栏高度')))
   assert.deepEqual(source.toBytes(), before)
 })
+
+test('BDI → BDS materializes native nine-key symbols and an implicit iOS toolbar', async () => {
+  const source = fixture()
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    const root = `${theme}/skin/${orientation}/`
+    const gen = IniDocument.parse(source.getText(`${root}gen.ini`))
+    gen.set('CAND', 'TYPE', '4')
+    source.setText(`${root}gen.ini`, gen.toString())
+    source.setText(`${root}py_9.ini`, '[PANEL]\n[LIST]\nTYPE=0\nLIST_NUM=3\nCELL_SIZE=150,100\nPOS=3,8\nCELL_STYLE=2\nFORE_STYLE=3\n' +
+      (theme === 'dark' ? 'NAMES=甲 乙 丙\nVALUES=一 二 三\n' : ''))
+    const cand = IniDocument.parse(source.getText(`${root}cand1.cnd`))
+    cand.removeSections(['ICON3', 'ICON4'])
+    cand.set('CAND', 'ICON_NUM', '4')
+    source.setText(`${root}cand1.cnd`, cand.toString())
+  }
+  const before = source.toBytes()
+  const converted = SkinArchive.open(await source.toBytesAsync('bds'), 'bds')
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    const root = `${theme}/skin/${orientation}/`
+    const layout = IniDocument.parse(converted.getText(`${root}py_9.ini`))
+    assert.equal(layout.get('LIST', 'NAMES'), theme === 'light' ? '， 。 ？' : '甲 乙 丙')
+    assert.equal(layout.get('LIST', 'VALUES'), theme === 'light' ? '， 。 ？' : '一 二 三')
+    assert.equal(layout.get('LIST', 'CELL_STYLE'), '2')
+    const cand = IniDocument.parse(converted.getText(`${root}cand1.cnd`))
+    assert.equal(cand.get('ICON3', 'KEY'), 'F14')
+    assert.equal(cand.get('ICON3', 'PERSIST'), '1')
+    assert.equal(cand.get('ICON3', 'POS').split(',')[0], '229')
+    assert.equal(cand.get('ICON3', 'SIZE').split(',')[0], '667')
+  }
+  assert.deepEqual(source.toBytes(), before)
+})

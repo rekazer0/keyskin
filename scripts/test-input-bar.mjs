@@ -107,6 +107,7 @@ try {
     fixture.setText(path, document.toString())
   }
   await page.locator('#browser-open').setInputFiles({ name: 'input-scand.bds', mimeType: 'application/octet-stream', buffer: Buffer.from(fixture.toBytes('bds')) })
+  await page.getByRole('button', { name: '不导出', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('#document-name').textContent === 'input-scand.bds' && !document.querySelector('#open').disabled)
   if (await close.isVisible()) await close.click()
   for (const [device, color, size] of [['pixel-10-pro', [18, 52, 86, 255], 90], ['iphone-17-pro', [69, 103, 137, 255], 45]]) {
@@ -148,7 +149,7 @@ try {
     await page.locator('#candidate-input').click({ position: { x: inputBox.width - 4, y: inputBox.height / 2 } })
     await page.waitForFunction(() => document.getElementById('candidate-input').getAttribute('aria-selected') === 'true')
     assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), 'false', `${device}: selects the input row separately`)
-    assert.equal(await page.locator('#selected-key').textContent(), '拼音栏')
+    await page.waitForFunction(() => document.querySelector('#selected-key').textContent === '拼音栏')
     const selected = await page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
       return {
@@ -184,6 +185,32 @@ try {
     assert.equal(await page.locator('#candidate-input').getAttribute('aria-selected'), 'true', 'keyboard can select the input row')
   }
   await page.screenshot({ path: '/tmp/bdi-input-selected.png' })
+  for (const path of fixture.names().filter(path => /\/(?:py_9|py_26)\.ini$/.test(path))) {
+    const document = IniDocument.parse(fixture.getText(path))
+    if (!document.hasSection('INPUT')) document.appendSection('INPUT', [])
+    document.set('INPUT', 'BACK_STYLE', '9002')
+    fixture.setText(path, document.toString())
+  }
+  await page.locator('#browser-open').setInputFiles({ name: 'input-panel-override.bds', mimeType: 'application/octet-stream', buffer: Buffer.from(fixture.toBytes('bds')) })
+  await page.getByRole('button', { name: '不导出', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('#document-name').textContent === 'input-panel-override.bds' && !document.querySelector('#open').disabled)
+  if (await close.isVisible()) await close.click()
+  await page.locator('#device').selectOption('pixel-10-pro')
+  await compose('ni')
+  await page.waitForFunction(() => {
+    const canvas = document.getElementById('candidate-input-background')
+    return [...canvas.getContext('2d').getImageData(1, 1, 1, 1).data].join(',') === '69,103,137,255'
+  })
+  if (await page.getByRole('button', { name: '编辑模式', exact: true }).getAttribute('aria-pressed') !== 'true') {
+    await page.getByRole('button', { name: '编辑模式', exact: true }).click()
+  }
+  await page.locator('#candidate-input').click()
+  const local = page.locator('#document-fields > section').filter({ has: page.locator('.document-section-code:text-is("INPUT")') })
+    .locator('[data-document-key="BACK_STYLE"] .ui-style-ref-number').first()
+  assert.equal(await local.inputValue(), '9002', 'inspector reads the background from the active keyboard layout')
+  await local.fill('9001')
+  await local.press('Tab')
+  assert.equal(await page.evaluate(() => globalThis.inputBarTestState.layoutDocument.get('INPUT', 'BACK_STYLE')), '9001', 'editing writes back to the owning layout')
   assert.deepEqual(errors, [])
   console.log('Input bar phone geometry and background checks passed')
 } finally {

@@ -120,6 +120,7 @@
   --ai-chat-send-size: 28px;
 
   /* 图标：只用 Lucide（src/icons.ts），描边 1.5 */
+  --icon-size-xs: 12px;
   --icon-size-sm: 14px;
   --icon-size-md: 16px;
   --icon-size-lg: 20px;

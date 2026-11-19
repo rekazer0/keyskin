@@ -16,6 +16,7 @@ const TOOLBAR_ITEMS = [
   ['toolbar', '17', '键盘类型', '1.0/toolbarMenuItem_KBSwitch_Normal', 6, 4],
   ['toolbar', '26', '搜索', '1.0/toolbarMenuItem_Search_Normal', 8, 8],
   ['menu', '3', '建议反馈', '1.0/menu_suggestion_normal.png', 8, 8],
+  ['menu', '35', '剪贴板', '1.0/toolbarMenuItem_pasteBoard_Normal', 8, 8],
 ]
 
 function itemXml([position, name, title, file]) {
@@ -42,20 +43,21 @@ test('BDI → BDS re-cuts the iOS toolbar artwork into the Android pop_menu_icon
   const warnings = []
   const bds = unzipSync(await iosSkin().toBytesAsync('bds', warnings))
   const til = IniDocument.parse(new TextDecoder().decode(bds['light/res/logo/pop_menu_icons.til']))
-  // Android bitmap indexes for the same functions: 表情 26, 键盘类型 27, 搜索 31; the plist's menu entries are skipped.
-  assert.deepEqual(til.sections().filter((name) => name.startsWith('IMG')), ['IMG26', 'IMG27', 'IMG31'])
+  // Android bitmap indexes for the same functions: 表情 26, 键盘类型 27, 搜索 31, 剪贴板 50; only mapped functions have Android tiles.
+  assert.deepEqual(til.sections().filter((name) => name.startsWith('IMG')), ['IMG26', 'IMG27', 'IMG31', 'IMG50'])
   const atlas = decodePng(bds['light/res/logo/pop_menu_icons.png'])
   const tile = (index) => til.get(`IMG${index}`, 'SOURCE_RECT').split(',').map(Number)
   assert.deepEqual(tile(26), [0, 0, 8, 8])
   assert.deepEqual(tile(27), [0, 8, 6, 4])
   assert.deepEqual(tile(31), [0, 12, 8, 8])
+  assert.deepEqual(tile(50), [0, 20, 8, 8])
   // Each tile is the original iOS picture at the rect the .til names.
   const emoji = decodePng(bds['light/res/logo/1.0/toolbarMenuItem_Emoji_Normal_iphone@3x.png'])
   assert.deepEqual(cropImage(atlas, ...tile(26)), emoji)
   assert.equal(warnings.length, 1)
   assert.match(warnings[0], /pop_menu_icons/)
   // TILE_NUM has to exceed the highest index or the client stops reading there.
-  assert.equal(til.get('GLOBAL', 'TILE_NUM'), '32')
+  assert.equal(til.get('GLOBAL', 'TILE_NUM'), '51')
   // The skin keeps its iOS artwork and gains the Android package fields.
   assert.ok(bds['light/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist'])
   assert.ok(bds['light/res/logo/1.0/toolbarMenuItem_Emoji_Normal_iphone@3x.png'])
@@ -85,9 +87,9 @@ test('the toolbar preview follows the format: BDS reads the Android atlas, BDI t
     assert.equal(android.length, 6, 'missing custom artwork retains default function slots')
     const custom = android.filter(visual => visual.image)
     assert.deepEqual([...new Set(custom.map((visual) => visual.imagePath?.split('/').pop()))], ['pop_menu_icons.png'])
-    assert.deepEqual(custom.map((visual) => visual.source), [[0, 0, 8, 8], [0, 0, 6, 4], [0, 0, 8, 8]])
-    assert.deepEqual(custom.map((visual) => visual.label), ['表情', '键盘类型', '搜索'])
-    assert.deepEqual(custom.map((visual) => visual.imageSource), [[0, 0, 8, 8], [0, 8, 6, 4], [0, 12, 8, 8]])
+    assert.deepEqual(custom.map((visual) => visual.source), [[0, 0, 8, 8], [0, 0, 6, 4], [0, 0, 8, 8], [0, 0, 8, 8]])
+    assert.deepEqual(custom.map((visual) => visual.label), ['表情', '键盘类型', '搜索', '剪贴板'])
+    assert.deepEqual(custom.map((visual) => visual.imageSource), [[0, 0, 8, 8], [0, 8, 6, 4], [0, 12, 8, 8], [0, 20, 8, 8]])
 
     const bdi = iosSkin()
     const ios = await new AtlasResolver(bdi, 'light', 'port').resolveToolbarImages()
@@ -128,11 +130,11 @@ test('the inspector includes every native Android function, including missing ar
   }
   try {
     const resolver = new AtlasResolver(SkinArchive.open(zipSync(files), 'bds'), 'light', 'port')
-    assert.equal((await resolver.resolveToolbarImages()).filter(icon => icon.image).length, 3)
+    assert.equal((await resolver.resolveToolbarImages()).filter(icon => icon.image).length, 4)
     const icons = await resolver.resolveToolbarImages(Number.POSITIVE_INFINITY)
     assert.equal(icons.length, 70)
     assert.equal(new Set(icons.map(icon => icon.atlas.index)).size, 70)
-    assert.equal(icons.filter(icon => icon.image).length, 4)
+    assert.equal(icons.filter(icon => icon.image).length, 5)
     assert.deepEqual(icons.find(icon => icon.atlas.index === 62).imageSource, [0, 0, 8, 8])
     assert.equal(icons.find(icon => icon.atlas.index === 62).label, '次遇')
     assert.equal(icons.find(icon => icon.atlas.index === 70).label, '超会写')

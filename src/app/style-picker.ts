@@ -256,9 +256,7 @@ export function applyStyleLibrarySelection(toStyle = false): void {
       const image = styleWriteTarget(styleReferenceForeground(styleReferenceKey(target)) ? "FORE_STYLE" : "BACK_STYLE", highlighted ? "HL_IMG" : "NM_IMG", [styleID])
       openImageSlicePicker(selected.imagePath, image)
       if (directImage && appState.pickerTarget === image && appState.pickerSlices.length <= 1) {
-        void applyImageSliceSelection(appState.pickerSlices[0]?.index ?? WHOLE_IMAGE_INDEX).then(() => {
-          if (appState.pickerTarget === image) clearImageSlicePicker()
-        })
+        void applyImageSliceSelection(appState.pickerSlices[0]?.index ?? WHOLE_IMAGE_INDEX)
       }
     }
   }

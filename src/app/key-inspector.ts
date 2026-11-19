@@ -13,7 +13,7 @@ import { commitBytes, updateDirty, isEditing, commitText } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
-import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes, mobilePortraitQuery } from "./canvas-interaction"
+import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes } from "./canvas-interaction"
 import { actionDescription } from "../actions.ts"
 import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, animationObjectHeading, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
@@ -24,7 +24,7 @@ import { setInspectorKind, syncInspectorRows } from "../inspector-shell.ts"
 import { syncMobileInspectorHeader, syncMobileInspectorGroups, revealSinglePageInspectorGroup, applyModeState } from "./mobile-layout"
 import { keyboardConfig, setKeyboardHeight } from "../keyboard.ts"
 import { soundStyleForKey } from "../sounds.ts"
-import { selectedRects, resizeSelectedKeys } from "./key-editing"
+import { selectedRects } from "./key-editing"
 import { updateStylePreviews } from "./style-picker"
 import { ssfInspectorTitle } from "./ssf-inspector"
 import { sxiInspectorTitle } from "./sxi-inspector"
@@ -37,9 +37,7 @@ import { canCreateBdaKeyText, renderBdaTextLayerSwitch } from "./bda-key-text"
 import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
 import { syncSkinConfigControl } from "./config-value-control"
-import { geometryPreview } from "./geometry-preview"
-import { element } from "../dom-element"
-import { releaseOnRemove } from "../dom-lifecycle"
+import { renderKeyGeometry } from "./key-geometry"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
 
 export function selectedBdaRefs(
@@ -422,40 +420,7 @@ export function populateKeyInspector(): void {
     field.value = common
     if (!common && new Set(values).size > 1) field.placeholder = "混合"
   }
-  const paddingSection = quickInspector.querySelector<HTMLElement>(".inspector-padding-section")
-  keyLayoutFieldsGroup.querySelector(".mobile-geometry-detail")?.remove()
-  keyLayoutFieldsGroup.querySelector(".ui-geometry-preview")?.remove()
-  const previewRects = preview.keys.filter(key => sections.includes(key.section)).map(key => key.rect)
-  const showPadding = hasSelection && !bdaSelected && !ssfSelected && !listSelected
-  if (paddingSection && (!showPadding || !previewRects.length)) {
-    const fields = keyLayoutFieldsGroup.querySelector(".geometry-fields")!
-    if (paddingSection.parentElement !== fields) fields.append(paddingSection)
-  }
-  if (hasSelection && previewRects.length) {
-    const editableRects = selectedRects()
-    const editable = isEditing() && !bdaSelected && !ssfSelected && !sections.some(isListCell) && editableRects.length === previewRects.length
-    const geometry = geometryPreview(editable ? editableRects : previewRects, editable ? rects => resizeSelectedKeys(rects.map((rect, index) => ({ ...rect, section: editableRects[index].section }))) : undefined)
-    const detail = element("details", "ui-disclosure mobile-geometry-detail")
-    const summary = Object.assign(element("summary", "ui-button"), { textContent: "内边距与缩放" })
-    detail.append(summary)
-    // 在脱离文档的片段中摆好控件，避免 WebKit 为中间布局重复计算样式。
-    const fragment = detail.ownerDocument.createDocumentFragment()
-    fragment.append(detail)
-    const sync = () => {
-      const mobile = mobilePortraitQuery.matches
-      if (mobile) detail.append(geometry)
-      else detail.after(geometry)
-      if (paddingSection && showPadding) {
-        (mobile ? detail : geometry.querySelector(".ui-geometry-box")!).append(paddingSection)
-      }
-      detail.hidden = !mobile
-      detail.open = false
-    }
-    sync()
-    keyLayoutFieldsGroup.querySelector("h3")!.after(fragment)
-    mobilePortraitQuery.addEventListener("change", sync)
-    releaseOnRemove(detail, () => mobilePortraitQuery.removeEventListener("change", sync))
-  }
+  renderKeyGeometry(hasSelection, !bdaSelected && !ssfSelected && !listSelected, populateKeyInspector)
   populatePrimaryCssFields(hasSelection, sections)
   populateTextStyleGroup()
   // BDA 按键的外观只有前景偏移（renderForeLayerFields），其余百度字段隐藏。
@@ -473,8 +438,6 @@ export function populateKeyInspector(): void {
     : bdaSelected && !bdaTextCreatable ? "前景没有文字样式，只能修改显示内容" : "前景没有文字层，修改文字会新建一个"
   textNote.setAttribute("aria-label", textNote.title)
   textNote.hidden = !textNote.title
-  // Unset padding reads as 0,0,0,0 (see the PADDING field values above); a LIST cell has none.
-  if (paddingSection) paddingSection.hidden = !showPadding
   const multiLayout = $("#inspector-multi-layout")
   const multiAvailable = sections.length > 1 && !bdaSelected && !ssfSelected && !sections.some(isListCell)
   multiLayout.dataset.available = String(multiAvailable)

@@ -7,7 +7,7 @@ import { AtlasResolver, type TextVisual } from "../atlas.ts"
 import { candidateWordsForeground, inputBarMetrics } from "../candidate-style.ts"
 import { IniDocument } from "../ini.ts"
 import { iosCandidateBackground, iosDefaultToolbarScene, iosToolbarImageScene } from "../ios-preview.ts"
-import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
+import { hasIosToolbarGeometry, implicitIosToolbarRect } from "../ios-toolbar-geometry.ts"
 import { previewItems } from "../preview-items.ts"
 import type { NativeScene, SceneLayer } from "../native-scene.ts"
 import { PalmBoard, type PalmOrientation, type PalmTheme } from "../palm/palm-board.ts"
@@ -22,7 +22,7 @@ import { SsfStyles, ssfBoardScene, ssfCandidateScene } from "../ssf/ssf-scene.ts
 import { textDocument, visualResolver } from "./bda-documents"
 import { candidateBackgroundPreview, preview, previewScreenWidth, toolbarPreview } from "./canvas-interaction"
 import { applyCandidateSpacing, genConfigPath, hideCandidateInputBar, showCandidateInputBar, toolbarConfigPath } from "./config-context"
-import { candidateArea, candidateBackgroundCanvas, candidateInput, candidateWords, hintPreviewEnabled, theme as themeInput, toolbarCanvas, toolbarStrip } from "./dom"
+import { candidateArea, candidateBackgroundCanvas, candidateComposition, candidateInput, candidateWords, hintPreviewEnabled, theme as themeInput, toolbarCanvas, toolbarStrip } from "./dom"
 import { canvasEditable } from "./edit-history"
 import { applyCandidateTextVisual, applyDeviceKeyboardGeometry, devicePreviewTransparent, inputBarInKeyboard, updatePanelTools } from "./preview-render"
 import { ssfDocumentPackage } from "./ssf-preview"
@@ -214,11 +214,18 @@ export function refreshNativeScenes(draft?: SsfPackage): void {
   const resolver = visualResolver()
   if (!resolver) return
   if (!inputBarInKeyboard()) {
-    // 百度 Android 13.3.18.31：无候选和有候选时均优先绘制 CAND 的 HL_IMG。
     candidateBackgroundPreview.setScene(async () => {
       const { panelStyle, panelWidth: width, panelHeight: height } = candidateBackgroundPreview
-      const visual = await resolver.resolve(panelStyle, true)
-      return { background: visual ? [{ kind: "image", visual, rect: { x: 0, y: 0, width, height } }] : [], keys: [] }
+      const rect = { x: 0, y: 0, width, height }
+      const [normal, highlight] = await Promise.all([resolver.resolve(panelStyle, false), resolver.resolve(panelStyle, true)])
+      const background: SceneLayer[] = []
+      // Android layers distinct CAND images in the same bounds; don't paint the NM_IMG fallback twice.
+      if (normal?.image && highlight?.image &&
+        (normal.image !== highlight.image || normal.source?.join() !== highlight.source?.join())) {
+        background.push({ kind: "image", rect, visual: { ...normal, color: highlight.color, borderColor: undefined } })
+        background.push({ kind: "image", rect, visual: { ...highlight, color: undefined } })
+      } else if (highlight) background.push({ kind: "image", rect, visual: highlight })
+      return { background, keys: [] }
     })
     return
   }
@@ -239,9 +246,10 @@ export function refreshNativeScenes(draft?: SsfPackage): void {
   if (nativeFunctions && !hasIosToolbarGeometry(general, candidate)) {
     toolbarPreview.setScene(() => iosDefaultToolbarScene(general, candidate, resolver, items, width, height))
   } else {
+    const implicit = candidateComposition.hidden ? implicitIosToolbarRect(general, candidate, width, height) : undefined
     toolbarPreview.setScene(() => iosToolbarImageScene(
       resolver, items, width, height, toolbarPreview.devicePointWidth,
-      resolver.resolveText(candidateWordsForeground(candidate, general), false)?.color ?? getComputedStyle(toolbarPreview.canvas).color,
+      resolver.resolveText(candidateWordsForeground(candidate, general), false)?.color ?? getComputedStyle(toolbarPreview.canvas).color, implicit,
     ))
   }
   candidateBackgroundPreview.setScene(() => iosCandidateBackground(

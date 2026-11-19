@@ -82,3 +82,14 @@ test('official phone defaults enable fusion layout S67, but not Cangjie mode S35
   assert.equal(stateTipSection('S35_1|S67_3', 35), 1)
   assert.equal(stateTipSection('S99_2|S67_3', 99), 2)
 })
+
+test('edit-mode keys hit the touch rectangle, not artwork overflow', () => {
+  const document = IniDocument.parse('[KEY1]\nVIEW_RECT=0,0,100,100\nTOUCH_RECT=25,25,40,40\nCENTER=k\n[KEY2]\nVIEW_RECT=100,0,100,100\nCENTER=q\n[KEY3]\nVIEW_RECT=200,0,100,100\nTOUCH_RECT=200,0,0,0\n')
+  const items = previewItems(document)
+  const hit = (x, mode = 'edit') => effectivePreviewHitItem(document, items, { x, y: 50 }, mode, 300, 100)?.section
+  assert.equal(hit(20), undefined, 'artwork overflow is not selectable')
+  assert.equal(hit(40), 'KEY1')
+  assert.equal(hit(150), 'KEY2', 'inherits view rectangle when omitted')
+  assert.equal(hit(250), 'KEY3', 'a disabled touch region is still editable')
+  assert.equal(hit(250, 'preview'), undefined)
+})

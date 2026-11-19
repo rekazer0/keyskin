@@ -151,6 +151,29 @@ test("an .sxi → BDS conversion adds the Android toolbar atlas an iOS package l
   assert.ok(!Object.keys(unzipSync(ios.bytes)).some((path) => path.endsWith("res/logo/pop_menu_icons.png") || path.endsWith("res/logo/pop_menu_icons.til")))
 })
 
+
+test('BDS → SXI → BDS keeps board overrides and inherits the candidate pinyin background', async () => {
+  const source = SkinArchive.open(bdsFixture())
+  const root = 'light/skin/port/'
+  source.setText(`${root}gen.ini`, `${source.getText(`${root}gen.ini`)}\n[INPUT]\nBACK_STYLE=3\nFORE_STYLE=4\n`)
+  source.setText(`${root}cand1.cnd`, `${source.getText(`${root}cand1.cnd`)}\n[INPUT]\nBACK_STYLE=2\n`)
+  source.setText(`${root}py_26.ini`, `${source.getText(`${root}py_26.ini`)}\n[INPUT]\nSIZE=70,40\n`)
+  source.setText(`${root}py_9.ini`, '[PANEL]\nSIZE=480,440\n[INPUT]\nBACK_STYLE=1\n')
+  const palm = SkinArchive.open(buildSxiZip(source).bytes, 'sxi')
+  const skin = JSON.parse(palm.getText('skin.json'))
+  const boards = skin.default.port_layout.b
+  assert.equal(boards.full26Pinyin.input.b.base_b, 2)
+  assert.deepEqual(boards.full26Pinyin.input.size, [70, 40])
+  assert.equal(new PalmBoard(skin, 'default', 'port', 'full26Pinyin').candidateTextStyles.input, 4)
+  delete boards.full26Pinyin.input.b.base_f
+  assert.equal(new PalmBoard(skin, 'default', 'port', 'full26Pinyin').candidateTextStyles.input, 4, 'native Palm previews also inherit the font')
+  const restored = SkinArchive.open((await convertSxiToBaidu(palm, 'bds')).bytes)
+  for (const [name, id] of [['py_26', '2'], ['py_9', '1'], ['gen', '3']]) {
+    assert.equal(IniDocument.parse(restored.getText(`${root}${name}.ini`)).get('INPUT', 'BACK_STYLE'), id)
+  }
+})
+
+
 test('SXI → BDS preserves visible toolbar centres and materialises fixed icon artwork at Palm size', async () => {
   const source = nativeToolbarFixture('bds')
   for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {

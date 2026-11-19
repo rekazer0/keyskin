@@ -124,8 +124,10 @@ export function candidateInputBackgroundStyle(
   general: IniDocument | undefined,
   candidate?: IniDocument,
   inKeyboard = false,
+  layout?: IniDocument,
 ): string {
   return [
+    !inKeyboard ? layout?.get("INPUT", "BACK_STYLE") : undefined,
     inKeyboard ? candidate?.get("SCAND", "BACK_STYLE") : undefined,
     candidate?.get("INPUT", "BACK_STYLE"),
     inKeyboard ? general?.get("SCAND", "BACK_STYLE") : undefined,

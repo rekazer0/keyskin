@@ -163,12 +163,12 @@
               <div id="share-adb-action" class="ui-share-action"><span data-icon="plug" aria-hidden="true"></span><div class="ui-list-item-text"><strong>分享到 ADB</strong><small>连接 Android 设备，推送并安装</small></div><button id="adb-share" data-toolbar-icon="plug" class="ui-button" type="button" hidden disabled aria-label="分享到 ADB"><span>发送</span></button></div>
             </div>
           </section>
-          <section id="share-resource-check" class="ui-share-resource-check" aria-label="资源检查"></section>
+          <section id="share-resource-check" class="ui-share-resource-check" aria-labelledby="share-format-check-title"></section>
         </div>
         <footer class="ui-share-export-footer">
           <div id="share-export-details" hidden><p id="share-export-name" class="ui-field-note"></p><p class="ui-field-note">有兼容性差异时，确认后再选择保存位置</p></div>
+          <button id="share-export" class="ui-button" type="button" hidden disabled><span data-icon="file-down" aria-hidden="true"></span>另存为</button>
           <button id="save" class="ui-button" data-variant="primary" type="button" disabled><span data-icon="hard-drive" aria-hidden="true"></span>保存</button>
-          <button id="share-export" class="ui-button" data-variant="primary" type="button" hidden disabled><span data-icon="file-down" aria-hidden="true"></span>另存为</button>
         </footer>
       </div>
     </dialog>
@@ -510,6 +510,7 @@
           </section>
           <section class="ui-section key-only key-layout-fields" data-inspector-group-label="布局">
             <h3><span>布局</span><span class="inspector-heading-note" role="img" aria-label="仅供查看，样式和文字在对应分组中修改" title="仅供查看，样式和文字在对应分组中修改" hidden><span class="system-symbol" data-icon="lock" aria-hidden="true"></span></span></h3>
+            <h4 class="inspector-block-heading" data-display-geometry hidden>显示区域</h4>
             <div class="inspector-grid geometry-fields">
               <div class="ui-field"><span>位置</span><div class="ui-field-pair">
                 <label class="ui-input"><span class="ui-input-affix">X</span><input data-key-field="x" type="number" aria-label="X 位置" /></label>

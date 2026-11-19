@@ -5,7 +5,7 @@ import { appendStyle } from "./ios-toolbar.ts"
 import { adaptIosPanelBackgrounds, separateBdsBackgroundSlices } from "./ios-toolbar-background.ts"
 import { resolveCandidateRect } from "./candidate-style.ts"
 import { parseXmlPlist } from "./palm/palm-plist.ts"
-import type { Rect } from "./preview-items.ts"
+import { previewItems, type Rect } from "./preview-items.ts"
 import { cropImage, decodePng, encodePng, MAX_PIXELS, nineSliceImage, pngSize, resizeImage } from "./ssf/ssf-png.ts"
 
 /** iOS toolbar sizes are @3x pixels, independent of the keyboard's layout width. */
@@ -27,6 +27,20 @@ export function fixedToolbarIconRect(hit: Rect, bitmap: Pick<Rect, "width" | "he
 export function hasIosToolbarGeometry(general: IniDocument | undefined, candidate: IniDocument | undefined): boolean {
   return Boolean(general?.get("LOGO", "LAYOUT_NAME")?.trim() || candidate?.sections().some((section) =>
     /^ICON\d+$/.test(section) && candidate.get(section, "FIX_SIZE")?.trim()))
+}
+
+/** Type 4 can leave the middle of the toolbar to the iOS client rather than declaring F14. */
+export function implicitIosToolbarRect(general: IniDocument | undefined, candidate: IniDocument, width: number, height: number): Rect | undefined {
+  if ((candidate.get("CAND", "TYPE") ?? general?.get("CAND", "TYPE"))?.trim() !== "4"
+    || !(Number(candidate.get("CAND", "ICON_NUM")) > 0)
+    || candidate.sections().some((section) => /^ICON\d+$/.test(section) && candidate.get(section, "KEY")?.trim() === "F14")) return
+  const items = previewItems(candidate, width, height, general)
+  const logo = items.find((item) => item.center.trim() === "F31")?.rect
+  const hide = items.find((item) => item.center.trim() === "F8")?.rect
+  if (!logo || !hide) return
+  const x = Math.max(0, logo.x + logo.width)
+  const end = Math.min(width, hide.x)
+  if (end > x) return { x, y: 0, width: end - x, height }
 }
 
 /** Materialise iOS point sizes in exported layout units before another keyboard reads them. */
@@ -59,6 +73,7 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
     // shortcut: exports use the same reference iPhone as canvas mode; recalibrate with other native layouts.
     const scale = source === "sxi" ? 1 : iosToolbarScale(width, orientation === "port" ? frame.viewportWidth : frame.viewportHeight)
     const height = Math.max(1, Math.round(originalHeight * scale))
+    const implicit = source === "bdi" && implicitIosToolbarRect(gen, cand, width, originalHeight)
     if (source === "bdi") {
       const rect = [x, y, width, height].join(",")
       gen.set("CAND", "VIEW_RECT", rect)
@@ -151,6 +166,15 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
       const placement = fixedToolbarIconRect({ x: left, y: row * height / 2 + pos[1], width: size[0], height: size[1] },
         { width: w, height: h }, width, height)
       centerIcon(placement.x - anchorX, w, h, placement.y - height / 2)
+    }
+    if (implicit) {
+      let index = 1
+      while (cand.hasSection(`ICON${index}`)) index++
+      cand.appendSection(`ICON${index}`, Object.entries({
+        KEY: "F14", PERSIST: "1", ANCHOR_TYPE: "4",
+        POS: `${Math.round(implicit.x)},${Math.round(-height / 2)}`,
+        SIZE: `${Math.round(implicit.width)},${height}`,
+      }).map(([key, value]) => ({ key, value })))
     }
     const back = cand.get("CAND", "BACK_STYLE")?.split(",")[0]
     const entries = css.entries(`STYLE${back}`).map(({ key, value }) => ({ key, value }))

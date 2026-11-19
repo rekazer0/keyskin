@@ -534,13 +534,29 @@ function beginCanvas(self: Preview): CanvasRenderingContext2D | undefined {
 
 function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: PreviewItem, scene?: NativeScene): void {
   if (previewSelectionVisible(self.mode, !self.joinedSelection && self.itemSelected(key))) {
-    const flash = self.mode === "edit" && self.keyPressed(key)
-    context.strokeStyle = getComputedStyle(self.canvas).getPropertyValue(flash || self.toolbarSlots ? "--selection" : "--guide-selected").trim()
-    context.lineWidth = 4
     const { x, y, width, height } = self.editRect(key, scene ?? null)
+    const touch = self.toolbarSlots ? undefined : key.touchRect
+    const style = getComputedStyle(self.canvas)
     if (width <= 0 || height <= 0) return
+    const displayColor = touch ? "--accent" : self.toolbarSlots || self.keyPressed(key) ? "--selection" : "--guide-selected"
+    context.strokeStyle = style.getPropertyValue(displayColor).trim()
+    context.lineWidth = 4
     const inset = Math.min(2, width / 2, height / 2)
     context.strokeRect(x + inset, y + inset, width - inset * 2, height - inset * 2)
+    if (touch) {
+      const original = self.editDrag?.original.get(key.section)
+      const tx = touch.x + (original ? key.rect.x - original.x : 0)
+      const ty = touch.y + (original ? key.rect.y - original.y : 0)
+      // Keep coincident rectangles readable without changing either hit area.
+      const inner = Math.min(tx === x && ty === y && touch.width === width && touch.height === height ? 6 : 2,
+        touch.width / 4, touch.height / 4)
+      context.save()
+      context.strokeStyle = style.getPropertyValue("--selection").trim()
+      context.lineWidth = 2
+      context.setLineDash([8, 5])
+      context.strokeRect(tx + inner, ty + inner, touch.width - inner * 2, touch.height - inner * 2)
+      context.restore()
+    }
   } else if (self.mode === "edit" && self.itemDrafted(key)) {
     // Unconfirmed AI draft: dashed orange, distinct from any solid selection.
     const inset = 3

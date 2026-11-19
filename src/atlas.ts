@@ -52,7 +52,7 @@ export type VisualResolver = {
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined
   resolveListText?(foreground: string, highlighted: boolean): TextVisual | undefined
   resolveStyleText?(styleID: string, highlighted: boolean): StyleTextVisual | undefined
-  resolveToolbarImages(limit?: number): Promise<ToolbarVisual[]>
+  resolveToolbarImages(limit?: number, iosFunctionIds?: readonly string[]): Promise<ToolbarVisual[]>
 }
 
 type VisualSpec = {
@@ -516,11 +516,13 @@ export class AtlasResolver {
     return { image: bitmap, imagePath, source, inner, scale, color: spec.color, borderColor: spec.borderColor }
   }
 
-  async resolveToolbarImages(limit?: number): Promise<ToolbarVisual[]> {
+  async resolveToolbarImages(limit?: number, iosFunctionIds?: readonly string[]): Promise<ToolbarVisual[]> {
     const plistPath = `${this.theme}/skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`
     if (this.archive.format === "bdi") {
-      const items = limit === Number.POSITIVE_INFINITY ? bdiMenuIcons(this.archive.getBytes(plistPath))
-        : bdiToolbarIcons(this.archive.getBytes(plistPath)).slice(0, Math.max(0, limit ?? 4))
+      const plist = this.archive.getBytes(plistPath)
+      const all = iosFunctionIds || limit === Number.POSITIVE_INFINITY ? bdiMenuIcons(plist) : undefined
+      const items = iosFunctionIds ? iosFunctionIds.flatMap((id) => all?.find((item) => item.id === id) ?? [])
+        : all ?? bdiToolbarIcons(plist).slice(0, Math.max(0, limit ?? 4))
       return Promise.all(items.map(async (item) => {
         const prefix = `${this.theme}/skin/res/logo/${item.path}`
         const candidates = /@3x$/i.test(item.path) ? [`${prefix}.png`] : [`${prefix}_iphone@3x.png`, `${prefix}@3x.png`, `${prefix}.png`]

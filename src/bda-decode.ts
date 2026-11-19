@@ -31,7 +31,7 @@ export function fields(bytes: Uint8Array): ProtoField[] {
       result.push({ number, wire })
     } else if (wire === 2) {
       const length = varint()
-      if (offset + length > bytes.length) throw new Error("不完整的 protobuf 字段")
+      if (length < 0 || length > bytes.length - offset) throw new Error("无效的 protobuf 字段长度")
       result.push({ number, wire, bytes: bytes.slice(offset, offset + length) })
       offset += length
     } else if (wire === 5) {

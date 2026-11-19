@@ -56,6 +56,7 @@ export const appState = {
   /** The open SSF document's own files as a package, for the archive revision it was read at. */
   ssfPackage: undefined as { archive: SkinArchive; revision: number; pkg: SsfPackage } | undefined,
   currentPath: "",
+  currentTemplateId: "",
   sourceWorkspacePath: "",
   sourceWorkspacePrefix: "",
   sourceWorkspacePendingArchive: undefined as SkinArchive | undefined,

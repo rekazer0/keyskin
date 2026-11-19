@@ -279,16 +279,19 @@ export async function applyImageSliceSelection(index: number): Promise<void> {
         appState.nativeImagePickerPayload.slices = appState.pickerSlices
         appState.nativeImagePickerPayload.selectedIndex = index
       }
-      updateSelectedImageReference(target, pickerImageReference(index))
+      const applied = updateSelectedImageReference(target, pickerImageReference(index))
       // 自动补切片与应用图片是一笔操作，撤销时同时恢复。
       const changes = appState.undoStack.splice(previous ? appState.undoStack.indexOf(previous) + 1 : 0)
       if (changes.length) appState.undoStack.push(changes.length === 1 ? changes[0] : { kind: "batch", changes })
       updateHistoryButtons()
-      if (appState.pickerTarget === target) await emitPickerView("image")
+      if (appState.pickerTarget === target) {
+        if (applied) clearImageSlicePicker()
+        else await emitPickerView("image")
+      }
       return
     }
     appState.pickerSelectedIndex = index
-    updateSelectedImageReference(target, pickerImageReference(index))
+    if (updateSelectedImageReference(target, pickerImageReference(index)) && appState.pickerTarget === target) clearImageSlicePicker()
   } catch (error) {
     showError(error, "应用图片")
   }

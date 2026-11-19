@@ -14,26 +14,32 @@ export async function iosToolbarImageScene(
   height: number,
   devicePointWidth: number | undefined,
   color = "currentColor",
+  implicit?: Rect,
 ): Promise<NativeScene> {
   const scale = iosToolbarScale(width, devicePointWidth)
+  const functions = async (rect: Rect, ids?: readonly string[]): Promise<SceneLayer[]> => {
+    const images = await Promise.all((await resolver.resolveToolbarImages(undefined, ids)).map(async (visual) => {
+      if (visual.image || !visual.defaultIcon) return visual
+      const size = Math.min(width / 18, height * 0.45)
+      const fallback = await defaultToolbarIcon(visual.defaultIcon, size, color)
+      return { ...visual, ...fallback, imagePath: undefined }
+    }))
+    return images.map((visual, index) => ({
+      kind: "image", visual,
+      rect: toolbarImageRect(visual, {
+        x: rect.x + index * rect.width / images.length, y: 0,
+        width: rect.width / images.length, height,
+      }, width, devicePointWidth),
+    }))
+  }
+  // shortcut: sample iOS's keyboard, cursor and clipboard slots until device toolbar preferences can be read.
+  const background = implicit ? await functions(implicit, ["17", "18", "35"]) : []
   const keys = await Promise.all(items.filter((item) => item.center.trim() === "F14" || item.foreRect && ["F31", "F8", "F9"].includes(item.center.trim())).map(async (item) => {
     const rect = item.rect
     if (rect.x + rect.width <= 0 || rect.x >= width || rect.y + rect.height <= 0 || rect.y >= height) return
     if (item.center.trim() === "F14") {
-      const images = await Promise.all((await resolver.resolveToolbarImages()).map(async (visual) => {
-        if (visual.image || !visual.defaultIcon) return visual
-        const size = Math.min(width / 18, height * 0.45)
-        const fallback = await defaultToolbarIcon(visual.defaultIcon, size, color)
-        return { ...visual, ...fallback, imagePath: undefined }
-      }))
-      if (!images.length) return
-      const fore: SceneLayer[] = images.map((visual, index) => ({
-        kind: "image", visual,
-        rect: toolbarImageRect(visual, {
-          x: rect.x + index * rect.width / images.length, y: 0,
-          width: rect.width / images.length, height,
-        }, width, devicePointWidth),
-      }))
+      const fore = await functions(rect)
+      if (!fore.length) return
       return sceneKey(item.section, rect, async (pressed) => {
         const back = await resolver.resolve(pressed ? item.highlightBackStyle ?? item.backStyle : item.backStyle, pressed)
         return { back: back ? [{ kind: "image", visual: back, rect }] : [], fore }
@@ -60,7 +66,7 @@ export async function iosToolbarImageScene(
     })
     return { ...key, selectionRect: icon }
   }))
-  return { background: [], partial: true, keys: keys.filter((key) => key !== undefined) }
+  return { background, partial: true, keys: keys.filter((key) => key !== undefined) }
 }
 
 /** iOS paints native toolbar controls; CND's text logo and hide labels belong to Android. */

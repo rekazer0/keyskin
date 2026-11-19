@@ -1,4 +1,4 @@
-import { isAndroidTauri, mobileLayoutQuery } from "./canvas-interaction"
+import { isAndroidTauri, isTauri, mobileLayoutQuery } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { appState } from "./state"
 import { initializeProjectChooser, projectChoice } from "../project-chooser"
@@ -8,6 +8,7 @@ import { newProjectForm, newProjectDialog, openButton, $ } from "./dom"
 import { prepareDocumentReplacement } from "./edit-history"
 import { loadArchive } from "./archive-io"
 import { loadBuiltInProjectTemplate } from "../operations.ts"
+import { recordRecentTemplate } from "./recent-files"
 import { showStatus, runFileOperation } from "./file-operations"
 
 async function chooseProjectTemplate(): Promise<string | undefined> {
@@ -63,9 +64,14 @@ export function wireNewProjectChooser(): void {
   })
 }
 
-async function newDocument(templateID: string): Promise<boolean> {
+export async function newDocument(templateID: string): Promise<boolean> {
   if (!(await prepareDocumentReplacement("open"))) return false
   await loadArchive(await loadBuiltInProjectTemplate(templateID), "", true)
+  if (isTauri()) {
+    appState.currentTemplateId = templateID
+    const name = newProjectForm.querySelector(`[data-template="${CSS.escape(templateID)}"] strong`)?.textContent
+    recordRecentTemplate(templateID, name || "内置模板")
+  }
   return true
 }
 

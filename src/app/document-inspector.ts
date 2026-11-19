@@ -11,7 +11,7 @@ import { isListCell } from "../layout.ts"
 import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue, effectiveKeySection, currentSkinState, genConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
-import { refreshPreview } from "./preview-render"
+import { inputBarInKeyboard, refreshPreview } from "./preview-render"
 import { isStyleReferenceKey, openStyleReferenceEditor, openBdaStyleReferencePicker, layoutAnimationFields } from "./style-references"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
 import { updateBdaDesignWidth, updateBdaAnimationFrame, updateBdaAnimationEffect, updateBdaKeySound, bdaSoundResourceType } from "../bda-encode.ts"
@@ -308,12 +308,18 @@ export function populateDocumentInspector(): void {
   const inputSelected = appState.selectedCandidate === "input"
   const wholeToolbarSelected = isToolbarPath(appState.selectedPath) && !toolbarSections.size && !inputSelected
   const general = inputSelected ? textDocument(genConfigPath()) : undefined
-  // 候选栏覆盖全局配置；继承的字段仍写回 gen.ini。
+  const panelInputBackground = inputSelected && appState.archive?.format === "bds" && !inputBarInKeyboard()
+    ? appState.layoutDocument?.get("INPUT", "BACK_STYLE")?.trim() : undefined
+  // 候选栏覆盖全局配置；安卓布局定义的拼音栏背景优先。
   const inputDocument = inputSelected ? IniDocument.parse(general?.toString() ?? "") : appState.selectedDocument
   if (inputSelected) for (const entry of appState.selectedDocument.entries()) {
     if (!entry.value.trim()) continue
     if (!inputDocument.hasSection(entry.section)) inputDocument.appendSection(entry.section, [])
     inputDocument.set(entry.section, entry.key, entry.value)
+  }
+  if (panelInputBackground) {
+    if (!inputDocument.hasSection("INPUT")) inputDocument.appendSection("INPUT", [])
+    inputDocument.set("INPUT", "BACK_STYLE", panelInputBackground)
   }
   const entries = baiduInspectorEntries(inputDocument, inputSelected ? genConfigPath() : appState.selectedPath, overallLayout).filter((entry) =>
     (!inputSelected || ["INPUT", "SCAND"].includes(entry.section) || entry.section === "CAND" && entry.key === "INPUT_STYLE") &&
@@ -349,13 +355,14 @@ export function populateDocumentInspector(): void {
     const text = document.toString()
     commitText(path, before, text)
     if (path === appState.selectedPath) setSourceValue(text)
-    if (appState.selectedPath === appState.layoutPath) appState.layoutDocument = appState.selectedDocument
+    if (path === appState.layoutPath) appState.layoutDocument = document
     refreshPreview()
     updateDirty()
   }
   const renderEntry = (entry: typeof entries[number]): HTMLElement[] => {
     const label = translatedConfigLabel(entry.key)
-    const path = inputSelected && entry.section !== "CAND" && general && !appState.selectedDocument?.get(entry.section, entry.key)?.trim() ? genConfigPath() : appState.selectedPath
+    const path = panelInputBackground && entry.section === "INPUT" && entry.key === "BACK_STYLE" ? appState.layoutPath
+      : inputSelected && entry.section !== "CAND" && general && !appState.selectedDocument?.get(entry.section, entry.key)?.trim() ? genConfigPath() : appState.selectedPath
     const commit = (value: string) => update(entry.section, entry.key, value, path)
     const rowKey = [path, entry.section, entry.key]
     const row = (spec: FieldSpec, commitValue: (value: never) => void, extra: { label?: string; key?: unknown } = {}) => field({

@@ -134,13 +134,7 @@ export function commitTextChanges(changes: ReadonlyArray<{ path: string; before?
   else commitBatch(edited.map(change => change.before === undefined
     ? { kind: "bytes" as const, path: change.path, before: undefined, after: new TextEncoder().encode(change.after) }
     : { kind: "text" as const, ...change, before: change.before }))
-  const selected = edited.find((change) => change.path === appState.selectedPath)
-  if (selected && appState.archive.getText(selected.path) === selected.after) {
-    appState.selectedDocument = IniDocument.parse(selected.after)
-    setSourceValue(selected.after)
-  }
-  const layout = edited.find((change) => change.path === appState.layoutPath)
-  if (layout && appState.archive.getText(layout.path) === layout.after) appState.layoutDocument = IniDocument.parse(layout.after)
+  for (const { path, after } of edited) refreshTextViews(path, after)
   refreshPreview()
   populateKeyInspector()
   updateDirty()
@@ -151,6 +145,11 @@ function applyTextSnapshot(path: string, text: string, refresh = true): void {
   if (path === appState.selectedPath) appState.sourceHistoryHighlight = insertedTextRange(appState.archive.getText(path), text)
   appState.archive.setText(path, text)
   scheduleSourceAutosave([path])
+  refreshTextViews(path, text)
+  if (refresh) refreshSnapshotViews()
+}
+
+function refreshTextViews(path: string, text: string): void {
   if (path === appState.layoutPath) appState.layoutDocument = IniDocument.parse(text)
   if (path === appState.selectedPath) {
     appState.selectedDocument = IniDocument.parse(text)
@@ -166,7 +165,6 @@ function applyTextSnapshot(path: string, text: string, refresh = true): void {
     populateTileInspector()
     drawAtlas()
   }
-  if (refresh) refreshSnapshotViews()
 }
 
 /** The canvas, the inspector and the unsaved mark after a history step has been written into the archive. */

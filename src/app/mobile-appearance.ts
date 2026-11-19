@@ -52,14 +52,6 @@ export function syncMobileAppearance(): void {
   }
   const heading = element("h3", "mobile-appearance-heading")
   heading.append("样式")
-  const replace = element("button", "ui-button")
-  replace.type = "button"
-  replace.dataset.variant = "quiet"
-  replace.textContent = id ? "更换样式" : "选择样式"
-  replace.disabled = disabled
-  replace.append(createIcon("chevron-right"))
-  replace.addEventListener("click", () => choose(appState.mobileAppearancePressed))
-  heading.append(replace)
   const layers = element("div", "ui-segmented mobile-appearance-layers")
   layers.setAttribute("role", "group")
   layers.setAttribute("aria-label", "样式图层")
@@ -82,17 +74,27 @@ export function syncMobileAppearance(): void {
   heading.append(add)
   root.append(heading, layers)
   const reference = element("div", "mobile-appearance-reference")
+  const control = element("div", "mobile-appearance-control")
   const field = element("label", "ui-input")
-  field.append("样式编号")
+  field.dataset.mono = ""
+  field.append(createIcon("hash"))
   const number = element("input")
   number.value = id
-  number.placeholder = "未设置"
+  number.placeholder = "—"
   number.inputMode = "numeric"
   number.disabled = disabled
   number.setAttribute("aria-label", `${label}样式编号`)
   number.addEventListener("change", () => write(number.value.trim()))
   field.append(number)
-  reference.append(field)
+  const replace = element("button", "ui-button")
+  replace.type = "button"
+  replace.dataset.variant = "quiet"
+  replace.disabled = disabled
+  replace.setAttribute("aria-haspopup", "dialog")
+  replace.append(id ? "更换样式" : "选择样式", createIcon("chevron-right"))
+  replace.addEventListener("click", () => choose(appState.mobileAppearancePressed))
+  control.append(field, replace)
+  reference.append(control)
   const styles = styleConfigDocument()
   const defined = !!id && !!styles?.hasSection(`STYLE${id}`)
   if (id) {

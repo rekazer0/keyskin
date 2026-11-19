@@ -5,6 +5,7 @@ import { adaptPackageSounds } from "./sounds.ts"
 import { adaptAndroidToolbar, adaptIosToolbar, refreshIosLogo } from "./ios-toolbar.ts"
 import { adaptIosToolbarGeometry } from "./ios-toolbar-geometry.ts"
 import { adaptBdiPanels } from "./bdi-panel-export.ts"
+import { bdiPinyinListSymbols } from "./preview-items.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
 import { parseZip, patchZip, zipArchiveAsync, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, addZipEntry } from "./skin-zip.ts"
 
@@ -533,6 +534,16 @@ export class SkinArchive {
       const source = this.getBytes(path)
       if (!destination || !source) continue
       let data = source
+      if (format === "bds" && this.format === "bdi" && /\/py_9\.ini$/i.test(path)) {
+        const layout = IniDocument.parse(strFromU8(data))
+        const general = this.getBytes(path.replace(/py_9\.ini$/i, "gen.ini"))
+        const symbols = bdiPinyinListSymbols(path, layout, general && IniDocument.parse(strFromU8(general)))
+        if (symbols) {
+          layout.set("LIST", "NAMES", symbols)
+          layout.set("LIST", "VALUES", symbols)
+          data = strToU8(layout.toString())
+        }
+      }
       if (format === "bdi" && this.format === "bds" && /\/(?:port|land)\/[^/]+\.(?:ini|cnd|pop)$/.test(path)) {
         const document = IniDocument.parse(strFromU8(data))
         let changed = false
