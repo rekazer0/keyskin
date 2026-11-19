@@ -122,6 +122,29 @@ test('BDI → BDS keeps oversized toolbar hit boxes aligned on the Android cente
   }
 })
 
+test('BDI → BDS writes integer positions for edge icons without FIX_SIZE', async () => {
+  const source = fixture()
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    const dir = `${theme}/skin/${orientation}/`
+    const gen = IniDocument.parse(source.getText(`${dir}gen.ini`))
+    gen.set('CAND', 'VIEW_RECT', '0,0,1080,110')
+    source.setText(`${dir}gen.ini`, gen.toString())
+    source.setText(`${dir}cand1.cnd`, '[CAND]\nBACK_STYLE=1\nICON_NUM=3\n' +
+      [['F31', 4, 30, 1], ['F8', 6, -129, 1], ['F9', 6, -129, 2]].map(([key, anchor, x, persist], i) =>
+        `[ICON${i + 1}]\nKEY=${key}\nANCHOR_TYPE=${anchor}\nPOS=${x},-54\nSIZE=100,100\nFORE_STYLE=2\nPERSIST=${persist}\n`).join(''))
+  }
+  const converted = SkinArchive.open(await source.toBytesAsync('bds'), 'bds')
+  for (const theme of ['light', 'dark']) for (const [orientation, y, height] of [['port', -44, 82], ['land', -20, 38]]) {
+    const path = `${theme}/skin/${orientation}/cand1.cnd`
+    const cand = IniDocument.parse(converted.getText(path))
+    for (const [section, x] of [['ICON1', 30], ['ICON2', -129], ['ICON3', -129]]) {
+      assert.equal(cand.get(section, 'POS'), `${x},${y}`, `${path}/${section}: Android rejects fractional POS`)
+      assert.equal(cand.get(section, 'SIZE'), `100,${height}`)
+      assert.equal(cand.get(section, 'FORE_STYLE'), '2')
+    }
+  }
+})
+
 test('BDI → SXI uses the same exported height, including its background and function images', () => {
   const source = fixture()
   const before = source.toBytes()

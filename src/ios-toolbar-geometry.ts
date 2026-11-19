@@ -135,7 +135,8 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
       const fixed = numbers(cand.get(section, "FIX_SIZE"))
       if (!fixed || fixed.length !== 2 || fixed.some((side) => !Number.isFinite(side) || side <= 0) || !["F31", "F8", "F9"].includes(action ?? "")) {
         if (source === "bdi") {
-          cand.set(section, "POS", [pos[0], pos[1] * scale].join(","))
+          // Android skips icons with a fractional POS, even when the bitmap and SIZE are valid.
+          cand.set(section, "POS", [Math.round(pos[0]), Math.round(pos[1] * scale)].join(","))
           cand.set(section, "SIZE", [size[0], Math.max(1, Math.round(size[1] * scale))].join(","))
         }
         continue
