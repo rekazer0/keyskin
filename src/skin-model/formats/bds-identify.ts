@@ -48,12 +48,12 @@ function roleOf(path: string, files: ReadonlyMap<string, Uint8Array>): FileRole 
     if (!orientation) {
       return { kind: "unknown", reason: "ini 不在主题方向目录下，无法判断用途" }
     }
-    const text = new TextDecoder().decode(files.get(path) ?? new Uint8Array())
-    // 有按键段就是布局，哪怕文件名看着像手写板（bh.ini 也可能带按键）。
-    if (/\[KEY/i.test(text)) return { kind: "layout", board: boardKindOf(path), theme, orientation }
-    // 没有按键段时再看名字：面板配置或手写区。
+    // 文件名已经说明用途的先按名字定性：手写区与面板配置即使带按键段也不是键盘布局。
     const panel = panelRole(path)
     if (panel) return panel
+    const text = new TextDecoder().decode(files.get(path) ?? new Uint8Array())
+    // 名字看不出用途时，有按键段的就是键盘布局。
+    if (/\[KEY/i.test(text)) return { kind: "layout", board: boardKindOf(path), theme, orientation }
     return { kind: "panel-config" }
   }
   return { kind: "unknown", reason: `没有对应规则的后缀 ${leaf.includes(".") ? leaf.slice(leaf.lastIndexOf(".")) : leaf}` }

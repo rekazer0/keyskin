@@ -553,7 +553,8 @@ function parsePanelSize(document: IniDocument): Size<number> {
 
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
 function layoutFiles(access: DocumentAccess, theme: Appearance, orientation: Orientation): string[] {
-  const panels = new Set(["gen.ini", "more.ini", "toolbar.ini"])
+  // 这三类与手写区同目录，即便带按键段也不是键盘布局。
+  const panels = new Set(["gen.ini", "more.ini", "toolbar.ini", "bh.ini"])
   return access.paths().filter((name) => {
     // 先按路径规则判断是不是布局，再按内容确认有没有按键段。
     if (!isBdsLayoutPath(name)) return false

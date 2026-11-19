@@ -69,5 +69,6 @@ test("非图片文件在往返后不减少", async () => {
   const after = new Set(out.archive.names())
   const lost = base.names().filter((name) => !after.has(name) && !/\.png$/i.test(name))
   assert.deepEqual(lost, [], `丢了非图片文件：${lost.join("、")}`)
-  assert.equal(model.boards.length, 66, "两个方向的板数应当是 66")
+  // 64 块键盘布局；两套各 32 键的布局按方向计，手写区的 bh.ini 不算布局。
+  assert.equal(model.boards.length, 64, "两个方向的键盘布局应当是 64")
 })
