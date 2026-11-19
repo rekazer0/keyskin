@@ -1,9 +1,8 @@
-// iOS Baidu draws the candidate bar's logo, F14 functions and hide key natively instead of the CND icons Android
-// skins style them with. It tints them from logo.ini (V6 p160); with no [LOGO] the icons fall back to a faint default.
+// iOS Baidu needs FIX_SIZE to draw custom CND toolbar edge images. Native fallback icons are tinted from logo.ini (V6 p160).
 import { strFromU8, strToU8 } from "fflate"
 import { IniDocument } from "./ini.ts"
 import { parseXmlPlist, type PalmPlistValue } from "./palm/palm-plist.ts"
-import { cropImage, decodePng, encodePng, placeImage, type RgbaImage } from "./ssf/ssf-png.ts"
+import { cropImage, decodePng, encodePng, placeImage, pngSize, type RgbaImage } from "./ssf/ssf-png.ts"
 import { addZipEntry } from "./skin-zip.ts"
 import type { SkinArchive } from "./skin.ts"
 
@@ -131,11 +130,44 @@ export function toolbarMenuItem(id: string, title: string, position: string, nor
   return `<dict><key>Position</key><string>${position}</string><key>Name</key><string>${id}</string><key>Titles</key><dict><key>Normal</key><dict><key>Normal</key><string>${title}</string><key>Selected</key><string>${title}</string></dict></dict><key>Images</key><dict><key>Normal</key>${states}<key>Theme</key>${states}</dict></dict>`
 }
 
+/** Fill missing iOS sizes from the actual edge slices, leaving authored hit boxes and sizes alone. */
+export function fillIosToolbarEdgeSizes(files: Map<string, Uint8Array>): void {
+  for (const [path, bytes] of files) {
+    const match = path.match(/^((?:.*\/)?)(port|land)\/[^/]+\.cnd$/i)
+    if (!match) continue
+    const [, root, orientation] = match
+    const local = `${root}${orientation}/`
+    const cssBytes = files.get(`${local}res/default.css`) ?? files.get(`${root}res/default.css`)
+    if (!cssBytes) continue
+    const css = IniDocument.parse(strFromU8(cssBytes))
+    const cand = IniDocument.parse(strFromU8(bytes))
+    const read = (name: string) => files.get(name)
+    const sharedSlice = sliceReader(root, read)
+    const localSlice = sliceReader(local, read)
+    let changed = false
+    for (const section of cand.sections()) {
+      if (!/^ICON\d+$/.test(section) || !["F31", "F8", "F9"].includes(cand.get(section, "KEY")?.trim() ?? "")
+        || cand.get(section, "FIX_SIZE")?.trim()) continue
+      const style = cand.get(section, "FORE_STYLE")?.split(",")[0].trim()
+      const [resource, tile] = css.get(`STYLE${style}`, "NM_IMG")?.split(",").map((part) => part.trim()) ?? []
+      const found = resource && (localSlice(resource, tile) ?? sharedSlice(resource, tile))
+      if (!found || !found.rect.every(Number.isInteger)) continue
+      const [x, y, w, h] = found.rect
+      const size = pngSize(found.bytes)
+      if (!size || x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > size[0] || y + h > size[1]) continue
+      // V6 p158: FIX_SIZE is in points (@3x pixels / 3), independent of the CND hit rectangle.
+      changed = cand.set(section, "FIX_SIZE", [w, h].map((side) => Math.max(1, Math.round(side / 3))).join(",")) || changed
+    }
+    if (changed) files.set(path, strToU8(cand.toString()))
+  }
+}
+
 /**
  * Gives an Android-authored package the iOS toolbar entry points: [LOGO] with logo.ini coloured like the CND logo key,
  * and native function artwork from the Android menu atlas. Existing iOS values and plists are preserved.
  */
 export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: string[]): void {
+  fillIosToolbarEdgeSizes(files)
   const text = (path: string) => {
     const bytes = files.get(path)
     return bytes && strFromU8(bytes)

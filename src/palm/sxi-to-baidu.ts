@@ -8,7 +8,7 @@
 import { strToU8, zipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
-import { adaptAndroidToolbar } from "../ios-toolbar.ts"
+import { adaptAndroidToolbar, fillIosToolbarEdgeSizes } from "../ios-toolbar.ts"
 import { convertLegacyToBda } from "../ssf/ssf-convert.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 import { parseSkinJson, same } from "./sxi-json.ts"
@@ -176,6 +176,7 @@ export function sxiToBaiduArchive(archive: SkinArchive, target: "bdi" | "bds" = 
   if (preview) files["demo.png"] = preview
   const output = new Map(Object.entries(files))
   if (target === "bds") adaptAndroidToolbar(output, warnings)
+  else fillIosToolbarEdgeSizes(output)
   return SkinArchive.open(zipSync(Object.fromEntries(output), { level: 6 }))
 }
 

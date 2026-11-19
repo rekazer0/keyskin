@@ -10,6 +10,25 @@ import { SsfPackage } from '../src/ssf/ssf-package.ts'
 import { decodePng } from '../src/ssf/ssf-png.ts'
 import { plist, toolbarMenuItem } from '../src/ios-toolbar.ts'
 
+test('BDI → SSF sizes both edge PNGs by FIX_SIZE instead of the raw slice dimensions', async () => {
+  const source = fixture()
+  for (const theme of ['light', 'dark']) {
+    const path = `${theme}/skin/port/cand1.cnd`
+    const cand = IniDocument.parse(source.getText(path))
+    cand.set('ICON1', 'FIX_SIZE', '20,20')
+    cand.set('ICON2', 'FIX_SIZE', '25,15')
+    source.setText(path, cand.toString())
+  }
+  const ssf = await SsfPackage.open((await convertBaiduToSsf(source, { animations: false })).bytes)
+  // The shared BDI → BDS step converts points to layout pixels before SSF scales to 1080-wide artwork.
+  for (const theme of ['light', 'dark']) for (const [name, expected] of [['logo', [49, 39]], ['close', [45, 36]]]) {
+    for (const suffix of ['', '_p']) {
+      const { width, height } = decodePng(ssf.file(theme, `${name}${suffix}.png`))
+      assert.deepEqual([width, height], expected, `${theme}/${name}${suffix}`)
+    }
+  }
+})
+
 test('adding toolbar artwork to a legacy BDI preserves layout dimensions across exports', async () => {
   const source = legacyToolbarFixture()
   const before = await convertBaiduToSsf(source, { animations: false })

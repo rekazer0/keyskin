@@ -63,6 +63,32 @@ test('BDS → BDI hands iOS an image logo key through customImageConfig', async 
   assert.equal(IniDocument.parse(converted.getText('light/skin/port/logo.ini')).get('ICON1', 'TEXT_STYLE'), '129')
 })
 
+test('BDS → BDI writes point sizes for both toolbar edges without changing their hit boxes', async () => {
+  const source = androidSkin()
+  const layout = `[CAND]\nBACK_STYLE=524\nFORE_STYLE=129\nICON_NUM=4\n
+[ICON1]\nKEY=F31\nFORE_STYLE=530\nSIZE=100,100\nANCHOR_TYPE=4\nPOS=30,-54\nPERSIST=1\n
+[ICON2]\nKEY=F14\nFORE_STYLE=530\nSIZE=750,79\nANCHOR_TYPE=5\nPOS=-375,-43\nPERSIST=1\n
+[ICON3]\nKEY=F8\nFORE_STYLE=532\nSIZE=100,100\nANCHOR_TYPE=6\nPOS=-129,-54\nPERSIST=1\n
+[ICON4]\nKEY=F9\nFORE_STYLE=532\nSIZE=100,100\nANCHOR_TYPE=6\nPOS=-129,-54\nPERSIST=2\n`
+  source.setText('light/skin/port/cand1.cnd', layout)
+  source.setText('light/skin/land/cand1.cnd', layout + 'FIX_SIZE=24,24\n')
+  const css = 'light/skin/res/default.css'
+  source.setText(css, `${source.getText(css)}\n[STYLE532]\nNM_IMG=logo,2\n`)
+  source.setBytes('light/skin/res/logo.png', image(196, 100, [255, 0, 0, 255]))
+  source.setText('light/skin/res/logo.til', '[GLOBAL]\nTILE_NUM=2\n[IMG1]\nSOURCE_RECT=0,0,100,100\n[IMG2]\nSOURCE_RECT=100,0,96,90\n')
+  const before = source.toBytes()
+  const bdi = SkinArchive.open(await source.toBytesAsync('bdi'), 'bdi')
+  for (const orientation of ['port', 'land']) {
+    const path = `light/skin/${orientation}/cand1.cnd`
+    const expected = IniDocument.parse(source.getText(path))
+    expected.set('ICON1', 'FIX_SIZE', '33,33')
+    expected.set('ICON3', 'FIX_SIZE', '32,30')
+    if (orientation === 'port') expected.set('ICON4', 'FIX_SIZE', '32,30')
+    assert.equal(bdi.getText(path), expected.toString())
+  }
+  assert.deepEqual(source.toBytes(), before)
+})
+
 test('saving a converted BDI re-cuts the logo artwork from the restyled logo key', async () => {
   const source = androidSkin()
   for (const orientation of ['port', 'land']) {

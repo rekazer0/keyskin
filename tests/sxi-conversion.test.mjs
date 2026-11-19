@@ -16,6 +16,32 @@ function sxi() {
   return SkinArchive.open(buildSxiZip(SkinArchive.open(bdsFixture())).bytes, "sxi")
 }
 
+test('SXI → BDI fills missing edge sizes without replacing authored sizes or editing the SXI', async () => {
+  const archive = SkinArchive.open(buildSxiZip(nativeToolbarFixture()).bytes, 'sxi')
+  const skin = JSON.parse(archive.getText('skin.json'))
+  for (const look of [skin.default, skin.night]) {
+    for (const orientation of ['port', 'land']) {
+      const icons = look[`${orientation}_layout`].c.cand1.icon_list
+      icons.find(icon => icon.k === 'logoMenu').f_size = [24, 25]
+      icons.push({ ...icons.find(icon => icon.k === 'hideBoard'), k: 'moreCandidates', keep: 2 })
+    }
+  }
+  archive.setText('skin.json', JSON.stringify(skin))
+  const before = archive.getText('skin.json')
+  const bdi = SkinArchive.open((await convertSxiToBaidu(archive, 'bdi')).bytes, 'bdi')
+  for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) {
+    const cand = IniDocument.parse(bdi.getText(`${theme}/skin/${orientation}/cand1.cnd`))
+    for (const [action, model] of [['F31', 'logoMenu'], ['F8', 'hideBoard'], ['F9', 'moreCandidates']]) {
+      const original = skin[theme === 'light' ? 'default' : 'night'][`${orientation}_layout`].c.cand1.icon_list.find(icon => icon.k === model)
+      const section = cand.sections().find(section => cand.get(section, 'KEY') === action)
+      assert.equal(cand.get(section, 'FIX_SIZE'), original.f_size?.join(',') ?? (orientation === 'port' ? '43,35' : '20,16'))
+      assert.equal(cand.get(section, 'SIZE'), original.s.join(','))
+      assert.equal(cand.get(section, 'POS'), original.p.join(','))
+    }
+  }
+  assert.equal(archive.getText('skin.json'), before)
+})
+
 test("an .sxi conversion nests the theme under skin/ and fills the global board models", () => {
   const archive = sxi()
   assert.ok(archive.names().includes("light/skin/res/btn.png"), "Baidu theme artwork lands under light/skin")
