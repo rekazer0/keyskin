@@ -338,7 +338,7 @@ export function refreshPreview(): void {
     for (const property of deviceGeometryProperties) deviceShell.style.removeProperty(property)
   }
   preview.setDocument(appState.layoutDocument)
-  // 画布读的是板：文档先解析成板，渲染投影再从板出。
+  // 文档解析成板，板的渲染投影就是画布上的键；板是派生，不另存一份。
   const board = appState.layoutDocument
     ? bdsBoardOf(appState.layoutDocument, { id: "layout", orientation: orientation.value === "land" ? "land" : "port" })
     : undefined

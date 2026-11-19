@@ -15,6 +15,7 @@ import { drawVisual } from "./preview-draw.ts"
 import { paintMarquee } from "./paint/marquee.ts"
 import { paintHintBubble } from "./paint/hint.ts"
 import { paintKey, type KeyAnimationState, type KeyPaintEnv } from "./paint/key.ts"
+import { paintParticles } from "./paint/particles.ts"
 import { previewSelectionVisible } from "./preview-items.ts"
 import { bdaTransforms } from "./preview-animation.ts"
 import { legacyAnimationScale } from "./preview-animation.ts"
@@ -322,18 +323,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   const particleVisualByStyle = new Map(
     particleStyleIDs.map((styleID, index) => [styleID, particleVisuals[index]]),
   )
-  for (const frame of allParticleFrames) {
-    const visual = particleVisualByStyle.get(frame.styleID)
-    if (!visual?.image || !visual.source || frame.scale <= 0 || frame.opacity <= 0) continue
-    const [sx, sy, width, height] = visual.source
-    context.save()
-    context.globalAlpha *= frame.opacity
-    context.translate(frame.x, frame.y)
-    context.rotate(frame.rotation * Math.PI / 180)
-    context.scale(frame.scale, frame.scale)
-    context.drawImage(visual.image, sx, sy, width, height, -width / 2, -height / 2, width, height)
-    context.restore()
-  }
+  paintParticles(context, allParticleFrames, (styleID) => particleVisualByStyle.get(styleID))
 
   if (self.animationVisual) {
     drawVisual(context, self.animationVisual.visual, self.animationVisual.key.rect, false)
