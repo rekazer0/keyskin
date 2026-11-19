@@ -3,9 +3,9 @@
 // 格式原生数据是归档加路径；read 解析成 IR，write 从 IR 重新生成全部文件（含重新打包的图集）。
 import { appearanceOf, bdsBoardName, bdsDirectory, isBdsLayoutPath, orientationOf } from "@/skin-model/board-paths.ts"
 import { IniDocument, numbersOf } from "@/ini.ts"
-import { accessOf, textContent, type DocumentAccess } from "@/skin-model/formats/bds/access.ts"
+import { accessOf, textContent, type DocumentAccess } from "@/skin-model/formats/public/access.ts"
 import { identifyBds } from "@/skin-model/formats/bds/identify.ts"
-import { parseBds } from "@/skin-model/formats/bds/parse.ts"
+import { parseBds } from "@/skin-model/formats/public/parse.ts"
 import type { FileRole, SkinDocuments, SkinStructure } from "@/skin-model/pipeline.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
 import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"

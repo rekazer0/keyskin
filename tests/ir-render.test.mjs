@@ -1,7 +1,7 @@
 // 板的渲染投影：每个键与每种组件都出一项，几何来自布局树，样式只给引用。
 import assert from "node:assert/strict"
 import test from "node:test"
-import { bdsRenders } from "../src/skin-model/formats/bds/render.ts"
+import { boardRenders } from "../src/paint/board.ts"
 import { absoluteBoard } from "../src/skin-model/layout.ts"
 import { box } from "./helpers/boxes.mjs"
 
@@ -39,7 +39,7 @@ function board() {
 }
 
 test("每个键都出一项，几何来自布局树", async () => {
-  const renders = await bdsRenders(board())
+  const renders = await boardRenders(board())
   const keys = renders.filter((render) => render.section.startsWith("KEY"))
   assert.equal(keys.length, 2)
   assert.deepEqual(keys[0].rect, { x: 0, y: 0, width: 100, height: 50 })
@@ -47,7 +47,7 @@ test("每个键都出一项，几何来自布局树", async () => {
 })
 
 test("样式只给引用，解析留给绘制阶段", async () => {
-  const renders = await bdsRenders(board())
+  const renders = await boardRenders(board())
   const first = renders.find((render) => render.section === "KEY1")
   assert.equal(first.backStyle, "101")
   assert.deepEqual(first.foreStyles, ["102"])
@@ -55,7 +55,7 @@ test("样式只给引用，解析留给绘制阶段", async () => {
 })
 
 test("面板、候选栏、列表、更多菜单、气泡各出一项", async () => {
-  const renders = await bdsRenders(board())
+  const renders = await boardRenders(board())
   const components = renders.filter((render) => !render.section.startsWith("KEY"))
   assert.deepEqual(components.map((render) => render.section).sort(), ["CAND", "HINT", "LIST", "MORE", "PANEL"])
   const panel = components.find((render) => render.section === "PANEL")
@@ -65,7 +65,7 @@ test("面板、候选栏、列表、更多菜单、气泡各出一项", async ()
 
 test("没有几何的组件不出现", async () => {
   const empty = { ...board(), candidates: [], list: undefined, more: undefined, hint: undefined }
-  const renders = await bdsRenders(empty)
+  const renders = await boardRenders(empty)
   const components = renders.filter((render) => !render.section.startsWith("KEY"))
   assert.deepEqual(components.map((render) => render.section), ["PANEL"])
 })
@@ -83,7 +83,7 @@ test("按键种类随容器一起透传", async () => {
     { id: "KEY2", ...box(100, 0, 100, 50) },
     { id: "LIST:1", ...box(0, 60, 100, 40) },
   ])
-  const renders = await bdsRenders(withCell)
+  const renders = await boardRenders(withCell)
   const cell = renders.find((render) => render.section === "LIST:1")
   assert.equal(cell.key.kind, "list-cell")
 })

@@ -7,7 +7,7 @@ import { containerWithState, stateMatches, type KeyRender } from "@/skin-model/b
 import { computeLayout } from "@/skin-model/layout.ts"
 
 /** 一块板的渲染投影；同一位置同一动作的按键段在真机上是一个键。 */
-export async function bdsRenders(board: SkinBoard, state?: number): Promise<KeyRender[]> {
+export async function boardRenders(board: SkinBoard, state?: number): Promise<KeyRender[]> {
   const rects = await computeLayout(board.layout, board.size)
   const groups = new Map<string, typeof board.keys>()
   for (const key of board.keys) {

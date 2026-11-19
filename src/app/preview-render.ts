@@ -1,6 +1,6 @@
 import { appState } from "./state"
 import { bdsBoardOf } from "../skin-model/formats/bds/index.ts"
-import { bdsRenders } from "../skin-model/formats/bds/render.ts"
+import { boardRenders } from "../paint/board.ts"
 import { syncLayoutChoices } from "./layout-switch"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
@@ -342,7 +342,7 @@ export function refreshPreview(): void {
   const board = appState.layoutDocument
     ? bdsBoardOf(appState.layoutDocument, { id: "layout", orientation: orientation.value === "land" ? "land" : "port" })
     : undefined
-  preview.setRenderSource(board ? (state) => bdsRenders(board, state) : undefined)
+  preview.setRenderSource(board ? (state) => boardRenders(board, state) : undefined)
   refreshNativeScenes()
 }
 

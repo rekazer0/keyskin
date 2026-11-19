@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { identifyBds } from "../src/skin-model/formats/bds/identify.ts"
-import { parseBds } from "../src/skin-model/formats/bds/parse.ts"
+import { parseBds } from "../src/skin-model/formats/public/parse.ts"
 import { packageOf } from "../src/skin-model/pipeline.ts"
 
 function pkgOf(entries) {
