@@ -6,9 +6,8 @@
 import { AtlasResolver, type TextVisual } from "../atlas.ts"
 import { candidateWordsForeground, inputBarMetrics } from "../candidate-style.ts"
 import { IniDocument } from "../ini.ts"
-import { iosCandidateBackground, iosDefaultToolbarScene, iosToolbarImageScene } from "../ios-preview.ts"
+import { iosCandidateBackground, iosDefaultToolbarScene, iosToolbarImageScene, iosToolbarItems } from "../ios-preview.ts"
 import { hasIosToolbarGeometry } from "../ios-toolbar-geometry.ts"
-import { previewItems } from "../preview-items.ts"
 import type { NativeScene, SceneLayer } from "../native-scene.ts"
 import { PalmBoard, type PalmOrientation, type PalmTheme } from "../palm/palm-board.ts"
 import { palmBoardScene, palmCandidateScene, palmHint } from "../palm/palm-scene.ts"
@@ -221,10 +220,7 @@ export function refreshNativeScenes(draft?: SsfPackage): void {
   const inputHeight = appState.candidateInputBar?.metrics.height ?? 0
   preview.setPanelTopInset(height + inputHeight)
   const nativeFunctions = candidate.sections().some((section) => candidate.get(section, "KEY")?.trim() === "F14")
-  const items = [...new Map([
-    ...previewItems(candidate, width, height, general),
-    ...previewItems(candidate, width, height, general, true),
-  ].map((item) => [item.section, item])).values()]
+  const items = iosToolbarItems(candidate, width, height)
   if (nativeFunctions && !hasIosToolbarGeometry(general, candidate)) {
     toolbarPreview.setScene(() => iosDefaultToolbarScene(general, candidate, resolver, items, width, height))
   } else {

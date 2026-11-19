@@ -5,7 +5,15 @@ import { deviceSpec } from "../devices.ts"
 import { type SourceWriteSnapshot } from "../source-tree.ts"
 import { createGestureHistory } from "../gesture-history"
 import { Preview, type PreviewEvent } from "../preview.ts"
-import { previewStateImpact } from "../preview-items.ts"
+/** 某个皮肤状态在这个布局里有没有按键换层与 TIP 内容。 */
+function stateImpact(document: IniDocument | undefined, state: number): { resolved: boolean; mapped: boolean } {
+  if (!document) return { resolved: false, mapped: false }
+  const mapped = document.sections().some((section) =>
+    /^KEY\d+$/i.test(section) && stateTipSection(document.get(section, "STAT_STYLE") ?? "", state) !== undefined
+  )
+  const hasTips = document.sections().some((section) => /^TIP\d+$/i.test(section))
+  return { resolved: mapped && hasTips, mapped }
+}
 import { appState } from "./state"
 import { syncCandidateSelection, setPreviewPan, refreshSimulationPreview, simulationLanguage } from "./preview-render"
 import { selectFile } from "./navigation"
@@ -21,6 +29,7 @@ import { bdaConfigPath, bdaPanelKeyName } from "../bda.ts"
 import { decodeBdaSoundConfig } from "../bda-decode.ts"
 import { bdaPlatform } from "../bda-platform.ts"
 import { IniDocument } from "../ini.ts"
+import { stateTipSection } from "../panel-tools.ts"
 import { previewStateFromAction, previewToggleStateFromAction, previewStateTransitionFromAction, previewPageTransition } from "../actions.ts"
 import { bdaAvailableLayoutPaths, isBdaLayoutPath } from "./bda-documents"
 import { palmKeySound } from "./sxi-styles"
@@ -310,7 +319,7 @@ export function setSimulatedComposition(value: string): void {
 }
 
 function skinStatePreviewMessage(state: number): string {
-  const impact = previewStateImpact(appState.layoutDocument, state)
+  const impact = stateImpact(appState.layoutDocument, state)
   if (impact.resolved) return `皮肤状态：S${state}`
   if (impact.mapped) return `皮肤状态：S${state} · 当前布局的状态定义缺少 TIP 内容`
   if (state === 4) return `皮肤状态：S4 · 已进入输入编码预览，当前布局未配置按键换层`

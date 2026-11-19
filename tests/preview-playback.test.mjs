@@ -2,15 +2,33 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Preview } from '../src/preview.ts'
 import { IniDocument } from '../src/ini.ts'
-import { keyAnimationStyles, previewItems } from '../src/preview-items.ts'
+import { keyAnimationStyles } from '../src/preview-items.ts'
 import { legacyParticleFrames, parseLegacyAnimation, parseLegacyParticleEmitter } from '../src/preview-animation.ts'
 import { playAnimation } from '../src/preview-playback.ts'
 import { pointerDown, pointerUp } from '../src/preview-pointer.ts'
 
 const animations = IniDocument.parse('[ANIM1]\nPARTICLE_IMAGE=2\nTOTAL_NUMBER=3\nBIRTH_RATE=1\nLIFE=500,500\n[ANIM2]\nTYPE=3\nFROM=100,100\nTO=80,80\nDURATION=300')
 const styles = IniDocument.parse('[STYLE7]\nPRESS_ANIM=1\n[STYLE8]\nSHOW_ANIM=1\n[STYLE9]\nPRESS_ANIM=2')
-const layout = IniDocument.parse('[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=q\nBACK_ANIM_STYLE=7\n[KEY2]\nVIEW_RECT=100,0,100,100\nCENTER=w\nBACK_ANIM_STYLE=9')
-const keys = previewItems(layout)
+
+/** 一个可播动画的键：动画样式挂在容器各层上。 */
+function render(section, x, backAnim, press) {
+  return {
+    key: { id: section, actions: { press: { kind: "text", value: section === "KEY1" ? "q" : "w" } }, container: { back: { style: "1", anim: backAnim } } },
+    section,
+    sections: [section],
+    rect: { x, y: 0, width: 100, height: 100 },
+    container: { back: { style: "1", anim: backAnim }, ...(press ? { press } : {}), fore: [] },
+    backStyle: "1",
+    foreStyles: [],
+    animStyles: [backAnim, ...(press ? [press] : [])],
+    editable: true,
+    visible: true,
+    fore: [],
+    layers: [],
+  }
+}
+
+const keys = [render('KEY1', 0, '7'), render('KEY2', 100, '9')]
 const emitter = parseLegacyParticleEmitter(animations, 'ANIM1')
 
 function harness(t) {
@@ -55,8 +73,8 @@ test('particle press begins immediately, observes birth rate and ends after the 
 test('press bindings do not fall back to show; duplicate key styles emit only once', () => {
   assert.equal(parseLegacyAnimation(styles, animations).has('8'), false)
   assert.equal(parseLegacyAnimation(styles, animations, 'SHOW_ANIM').has('8'), true)
-  assert.deepEqual(keyAnimationStyles({ ...keys[0], animStyle: '7', foreAnimStyle: '7', foreAnimStyles: ['7', '9'], pressStyle: '7' }), ['7', '9'])
-  assert.deepEqual(keyAnimationStyles({ ...keys[0], pressStyle: '7' }, '7'), ['7'])
+  assert.deepEqual(keyAnimationStyles({ ...keys[0], animStyles: ['7', '9', '7'] }), ['7', '9'])
+  assert.deepEqual(keyAnimationStyles({ ...keys[0], animStyles: ['7'] }, '7'), ['7'])
 })
 
 test('loading configuration stays idle; presses play panel and independent keys, replay and expire', async (t) => {
@@ -81,7 +99,7 @@ test('loading configuration stays idle; presses play panel and independent keys,
   assert.equal(preview.legacyPanelAnimationStartedAt, 0)
   assert.equal(frames.size, 0)
   await playAnimation(preview, keys[0])
-  preview.setDocument(layout)
+  preview.setDocument(IniDocument.parse('[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=q'))
   assert.equal(preview.legacyAnimationStates.size, 0)
   assert.equal(preview.legacyPanelAnimationStartedAt, 0)
   assert.equal(frames.size, 0)
@@ -90,7 +108,7 @@ test('loading configuration stays idle; presses play panel and independent keys,
 test('a key without particle bindings inherits panel particles at its own rectangle', async (t) => {
   const { preview } = harness(t)
   preview.setLegacyAnimation(parseLegacyAnimation(styles, animations))
-  const key = { ...keys[1], backAnimStyle: undefined }
+  const key = { ...keys[1], container: { ...keys[1].container, back: { style: '1' } }, animStyles: [] }
   await playAnimation(preview, key)
   assert.equal(preview.legacyPanelAnimationStartedAt, 0)
   assert.equal(preview.legacyAnimationStates.get('KEY2').key, key)
@@ -168,21 +186,20 @@ test('late image decoding cannot replace a newer press or revive a reset animati
 
 test('canvas clicks release paused player particles and play the active TIP binding in edit mode', (t) => {
   const { preview } = harness(t)
-  const document = IniDocument.parse(`${layout.toString()}\n[TIP4]\nBACK_ANIM_STYLE=9`)
-  document.set('KEY1', 'STAT_STYLE', 'S11_4')
-  const base = previewItems(document)[0]
-  preview.document = document
+  // 状态覆盖已经由 IR 合进渲染项：基础态播 7，S11 状态下播 9。
+  const base = render('KEY1', 0, '7')
+  const stated = render('KEY1', 0, '9')
   preview.skinState = 11
   preview.mode = 'edit'
   preview.editTool = 'select'
-  preview.hit = () => base
+  preview.hit = () => stated
   preview.playerParticles = { particles: [{ emitter, start: 0, duration: 2500 }], elapsed: 100, key: base }
   let played
   preview.playAnimation = (key) => { played = key }
   pointerDown(preview, { button: 0, pointerType: 'mouse' })
   assert.equal(preview.playerParticles, undefined)
-  assert.equal(played.backAnimStyle, '9')
-  assert.equal(base.backAnimStyle, '7', 'selection keeps the base item unchanged')
+  assert.equal(played.container.back?.anim, '9')
+  assert.equal(base.container.back?.anim, '7', 'selection keeps the base item unchanged')
 })
 
 test('native layout identity clears old press only when changing boards', (t) => {

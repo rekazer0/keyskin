@@ -29,6 +29,7 @@ import { ssfMediaField } from "./ssf-media-fields"
 import { openSsfImageEditor } from "./ssf-image-editor"
 import { refreshNativeScenes } from "./native-preview"
 import { preview, previewScreenWidth } from "./canvas-interaction"
+import { actionText } from "../skin-model/inspect.ts"
 
 type SsfEntry = { key: string; value: string }
 
@@ -653,7 +654,7 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
   }))
   const size = ssfDocument(block.path).get(block.section, "TEXT_SIZE") ?? ""
   grid.append(...typographyRows({ fields: textFields, fonts: skinFontChoices(), fontActions: Object.hasOwn(textFields, "font") ? [ssfFontImportButton(targets)] : [], editable: isEditing(), codec: "0xargb",
-    sample: appState.selectedKeySections.length === 1 ? preview.keys.find(key => key.section === appState.selectedKeySections[0])?.center : undefined,
+    sample: appState.selectedKeySections.length === 1 ? actionText(preview.keys.find(key => key.section === appState.selectedKeySections[0])?.key.actions.press) : undefined,
     size: { unit: Number(size) <= 1 ? "屏宽" : "px", step: Number(size) <= 1 ? 0.001 : 1, range: undefined },
     track: () => {},
     write: (key, value, merge) => editTargets(targets, (document, target) => {

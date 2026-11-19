@@ -1,12 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { IniDocument } from '../src/ini.ts'
-import { previewItems } from '../src/preview-items.ts'
 import { PalmBoard } from '../src/palm/palm-board.ts'
 import { palmHint } from '../src/palm/palm-scene.ts'
 import { isLegacyHintInputKey, legacyHintCandidates, legacyHintHasHold, legacyHintIconID, legacyHintSelectedIndex, legacyHintText, parseLegacyHint } from '../src/preview-hints.ts'
 
-const key = previewItems(IniDocument.parse('[KEY1]\nVIEW_RECT=0,0,214,148\nLEFT=j\nCENTER=k\nRIGHT=l\nUP=5\nDOWN=F44\n'))[0]
+/** 提示只看方向动作与长按符号，按键其余部分与它无关。 */
+const key = { section: 'KEY1', center: 'k', up: '5', down: 'F44', left: 'j', right: 'l', hold: '', holdSymbols: '' }
 const hint = parseLegacyHint(IniDocument.parse('[BAR]\nBACK_ICON=1\nCELL_STYLE=24\nCELL_SIZE=90,115\n[ICON1]\nSIZE=120,180\nPOS=0,-20\nPADDING=30,32,30,32\n'))
 
 test('Baidu keys without HOLD or HOLDSYM expose their implicit long-press characters', () => {
@@ -83,6 +83,6 @@ test('Palm reads global referenced bubbles and board-local inline bubbles withou
 })
 
 test('four-letter nine-key groups keep all upper and lower case long-press characters', () => {
-  const key = { center: 'q', left: 'p', right: 'r', down: 's', up: '7', hold: '', holdSymbols: '' }
+  const key = { section: 'KEY9', center: 'q', left: 'p', right: 'r', down: 's', up: '7', hold: '', holdSymbols: '' }
   assert.deepEqual(legacyHintCandidates(key, 'hold', true), ['P', 'Q', 'R', 'S', '7', 'p', 'q', 'r', 's'])
 })

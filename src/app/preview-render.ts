@@ -1,4 +1,5 @@
 import { appState } from "./state"
+import { bdsRenders } from "../skin-model/formats/bds.ts"
 import { syncLayoutChoices } from "./layout-switch"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
@@ -14,7 +15,15 @@ import { bdaConfigPath, bdaLayoutDocument, bdaStyleID } from "../bda.ts"
 import { decodeBdaAnimation } from "../bda-decode.ts"
 import { parseLegacyAnimation } from "../preview-animation.ts"
 import { parseLegacyHint } from "../preview-hints.ts"
-import { previewItems, previewSurfaceHeight, previewContentVerticalBounds, type PreviewItem } from "../preview-items.ts"
+import { type PreviewItem } from "../preview-items.ts"
+
+/** 内容在竖直方向占的范围：按键矩形的上边到下边。 */
+function contentBounds(items: readonly PreviewItem[], surfaceHeight: number): { top: number; height: number } {
+  if (!items.length) return { top: 0, height: surfaceHeight }
+  const top = Math.max(0, Math.min(...items.map((item) => item.rect.y)))
+  const bottom = Math.min(surfaceHeight, Math.max(...items.map((item) => item.rect.y + item.rect.height)))
+  return { top, height: Math.max(0, bottom - top) }
+}
 import { IniDocument } from "../ini.ts"
 import { resolvePanelConfig, DEFAULT_BDA_PANEL_WIDTH, DEFAULT_BDA_PANEL_HEIGHT } from "../keyboard.ts"
 import { resolveCandidateInputTextVisual, resolveCandidateTextVisuals } from "../candidate-style.ts"
@@ -328,6 +337,8 @@ export function refreshPreview(): void {
     for (const property of deviceGeometryProperties) deviceShell.style.removeProperty(property)
   }
   preview.setDocument(appState.layoutDocument)
+  // 画布上的键由布局文档的渲染投影给出：几何是 VIEW_RECT，样式引用在按键容器里。
+  preview.setRenders(appState.layoutDocument ? bdsRenders(appState.layoutDocument) : [])
   refreshNativeScenes()
 }
 
@@ -526,10 +537,11 @@ export function updatePanelTools(
   candidateHeight = 0,
   native?: { items: PreviewItem[]; states: number[] },
 ): number {
-  const items = native?.items ?? (appState.layoutDocument ? previewItems(appState.layoutDocument, width, height) : [])
+  // 原生板与 IR 都直接给出渲染项，不再回文档装配。
+  const items = native?.items ?? preview.keys
   sidebarLayoutSize.textContent = `${Math.round(width)} × ${Math.round(height)}`
-  const surfaceHeight = previewSurfaceHeight(items, height)
-  const content = previewContentVerticalBounds(items, width, surfaceHeight)
+  const surfaceHeight = Math.max(height, ...items.map((item) => item.rect.y + item.rect.height))
+  const content = contentBounds(items, surfaceHeight)
   deviceShell.style.setProperty("--canvas-width", `${width}px`)
   deviceShell.style.setProperty("--canvas-ratio-width", String(width))
   deviceShell.style.setProperty("--panel-visible-height", String(content.height))

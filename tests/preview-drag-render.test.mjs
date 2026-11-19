@@ -1,16 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Preview } from '../src/preview.ts'
-import { IniDocument } from '../src/ini.ts'
-import { previewItems } from '../src/preview-items.ts'
 import { paintPreview } from '../src/preview-paint.ts'
 
+/** 一个直接可画的键：几何、容器里的样式引用与动作都给齐，不经过任何文档装配。 */
+function render(section, x, back, fore) {
+  return {
+    key: { id: section, actions: {}, container: { back: { style: back }, fore: [{ style: fore }] } },
+    section,
+    sections: [section],
+    rect: { x, y: 0, width: 100, height: 100 },
+    container: { back: { style: back }, fore: [{ style: fore }] },
+    backStyle: back,
+    foreStyles: [fore],
+    animStyles: [],
+    editable: true,
+    visible: true,
+    fore: [],
+    layers: [],
+  }
+}
+
 test('drag frames keep each key background and foreground when press animations reorder keys', async () => {
-  const keys = previewItems(IniDocument.parse([
-    '[KEY1]', 'VIEW_RECT=0,0,100,100', 'BACK_STYLE=1', 'FORE_STYLE=11',
-    '[KEY2]', 'VIEW_RECT=120,0,100,100', 'BACK_STYLE=2', 'FORE_STYLE=12',
-    '[KEY3]', 'VIEW_RECT=240,0,100,100', 'BACK_STYLE=3', 'FORE_STYLE=13',
-  ].join('\n')))
+  const keys = [render('KEY1', 0, '1', '11'), render('KEY2', 120, '2', '12'), render('KEY3', 240, '3', '13')]
   const backgrounds = [], foregrounds = []
   const context = {
     setTransform() {}, clearRect() {},

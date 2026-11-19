@@ -6,14 +6,12 @@ import { scheduleNativeFrame } from "./preview-native.ts"
 import { bdaAnimationBindingsForKey } from "./preview-animation.ts"
 import { bdaBindingEffects } from "./preview-animation.ts"
 import { bdaParticleEmitter } from "./preview-animation.ts"
-import { legacyHintCandidates, legacyHintSelectedIndex } from "./preview-hints.ts"
+import { hintKeyOf, legacyHintCandidates, legacyHintSelectedIndex } from "./preview-hints.ts"
 import { legacyHintIconID } from "./preview-hints.ts"
-import { previewDrawOrder } from "./preview-items.ts"
-import { visiblePreviewItems } from "./preview-items.ts"
-import { effectivePreviewItem } from "./preview-items.ts"
 import { type Visual } from "./atlas.ts"
 import { type TextVisual } from "./atlas.ts"
-import { previewSurfaceColor } from "./preview-items.ts"
+import { previewSurfaceColor, isFullPanelPreviewItem } from "./preview-items.ts"
+import { actionText } from "./skin-model/inspect.ts"
 import { drawVisual } from "./preview-draw.ts"
 import { previewSelectionVisible } from "./preview-items.ts"
 import { bdaTransforms } from "./preview-animation.ts"
@@ -24,7 +22,6 @@ import { legacyAnimationOpacity } from "./preview-animation.ts"
 import { phoneForegroundLayers } from "./preview-draw.ts"
 import { shouldDrawItemBackground } from "./preview-items.ts"
 import { withTransform } from "./preview-draw.ts"
-import { offsetFromSection } from "./preview-items.ts"
 import { paddedRect } from "./preview-items.ts"
 import { foregroundLayerRect } from "./preview-draw.ts"
 import { foregroundTextPoint } from "./preview-draw.ts"
@@ -36,7 +33,7 @@ import { isLegacyHintInputKey } from "./preview-hints.ts"
 import { setCanvasSize } from "./preview-draw.ts"
 import { phoneForegroundVisual } from "./preview-draw.ts"
 import { legacyHintText } from "./preview-hints.ts"
-import { dynamicToolbarRect, keyAnimationStyles } from "./preview-items.ts"
+import { keyAnimationStyles } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { drawSceneLayer, type SceneLayer } from "./native-scene.ts"
@@ -115,19 +112,21 @@ export async function paintPreview(self: Preview): Promise<void> {
   const hintCandidates = self.active && (
     hintDirection === "hold" || hintDirection === "up" && hintConfig?.upIcon
   )
-    ? legacyHintCandidates(self.active.key, hintDirection, Boolean(self.stateDocument) || self.bdaHints || Boolean(hintConfig?.defaultCandidates))
+    ? legacyHintCandidates(hintKeyOf(self.active.key), hintDirection, Boolean(self.stateDocument) || self.bdaHints || Boolean(hintConfig?.defaultCandidates))
     : []
   const hintBar = hintCandidates.length > 0 && Boolean(hintConfig?.barIcon)
   const hintIconID = hintBar ? hintConfig?.barIcon : legacyHintIconID(hintConfig, hintDirection)
   const hintIcon = hintIconID ? hintConfig?.icons.get(hintIconID) : undefined
   const hintCellStyle = hintIcon?.cellStyle ?? hintConfig?.cellStyle
   const hintCellSize = hintIcon?.cellSize ?? hintConfig?.cellSize
-  const visible = visiblePreviewItems(self.keys, self.skinState)
-  const stateDocument = self.stateDocument
-  const keys = previewDrawOrder(
-    stateDocument ? visible.map((key) => effectivePreviewItem(stateDocument, key, self.skinState ?? 0)) : visible,
-    self.panelWidth, self.panelHeight, self.legacyAnimationState?.key.section,
-  )
+  // 可见性与状态覆盖都已经在 IR 里定好，画的时候只排序：整板的键在底，普通键在上。
+  const visible = self.keys.filter((key) => key.visible)
+  const keys = [...visible].sort((left, right) => {
+    const layerOf = (key: PreviewItem) => key.section === self.legacyAnimationState?.key.section
+      ? 2
+      : isFullPanelPreviewItem(key, self.panelWidth, self.panelHeight) ? 0 : 1
+    return layerOf(left) - layerOf(right)
+  })
 
   // 拖拽时优先使用缓存的视觉数据，避免重复异步解析
   let panel: Visual | undefined
@@ -160,7 +159,7 @@ export async function paintPreview(self: Preview): Promise<void> {
           try {
             return {
               back: draft && !draft.foreground ? draft.visual : await self.resolveVisual(
-                highlighted ? key.highlightBackStyle ?? key.backStyle : key.backStyle,
+                highlighted ? key.highlightBackStyle ?? key.backStyle ?? "" : key.backStyle ?? "",
                 highlighted,
               ).catch(() => undefined),
               fore: await Promise.all(
@@ -235,7 +234,7 @@ export async function paintPreview(self: Preview): Promise<void> {
     const activeBdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
     const bdaBack = bdaTransforms(self.animation, key, activeBdaElapsed, "back")
     const bdaFore = bdaTransforms(self.animation, key, activeBdaElapsed, "fore")
-    const backAnimationStyle = key.backAnimStyle || key.animStyle
+    const backAnimationStyle = key.container.back?.anim
     const backScale = animationElapsed >= 0
       ? legacyAnimationScale(self.legacyAnimation, backAnimationStyle, animationElapsed)
       : bdaBack.scale
@@ -282,7 +281,7 @@ export async function paintPreview(self: Preview): Promise<void> {
       })
     }
     for (const [layer, fore] of foregrounds.entries()) {
-      const animationStyle = key.foreAnimStyles[layer] || key.foreAnimStyle || key.animStyle
+      const animationStyle = key.container.fore[layer]?.anim || key.container.press
       const foreScale = animationElapsed >= 0
         ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.scale
@@ -295,12 +294,9 @@ export async function paintPreview(self: Preview): Promise<void> {
       const foreOpacity = animationElapsed >= 0
         ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.opacity
-      const offset = key.foreOffsets[layer] ?? offsetFromSection(
-        self.offsets,
-        `OFFSET${key.positionTypes[layer] ?? ""}`,
-        area,
-      )
-      const destination = key.foreRect ?? foregroundLayerRect(area, fore?.source, offset)
+      // 前景偏移只来自按键容器自己那一层，不再回文档查 OFFSET 段。
+      const offset = key.container.fore[layer]?.offset
+      const destination = foregroundLayerRect(area, fore?.source, offset ? [offset.x, offset.y] : undefined)
       withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
         drawVisual(context, fore, destination, false)
       })
@@ -308,7 +304,7 @@ export async function paintPreview(self: Preview): Promise<void> {
 
     for (const [layer, styleText] of styleTexts.entries()) {
       if (!styleText || foregrounds[layer]) continue
-      const animationStyle = key.foreAnimStyles[layer] || key.foreAnimStyle || key.animStyle
+      const animationStyle = key.container.fore[layer]?.anim || key.container.press
       const foreScale = animationElapsed >= 0
         ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.scale
@@ -321,12 +317,8 @@ export async function paintPreview(self: Preview): Promise<void> {
       const foreOpacity = animationElapsed >= 0
         ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.opacity
-      const offset = key.foreOffsets[layer] ?? offsetFromSection(
-        self.offsets,
-        `OFFSET${key.positionTypes[layer] ?? ""}`,
-        area,
-      )
-      const point = foregroundTextPoint(key.foreRect ?? area, offset)
+      const offset = key.container.fore[layer]?.offset
+      const point = foregroundTextPoint(area, offset ? [offset.x, offset.y] : undefined)
       withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
         drawStyleText(context, styleText, point, self.theme)
       })
@@ -342,7 +334,7 @@ export async function paintPreview(self: Preview): Promise<void> {
     context.textBaseline = "middle"
     const fallbackText = previewFallbackText(key, hasForeground)
     if (fallbackText) {
-      const animationStyle = key.foreAnimStyle || key.animStyle
+      const animationStyle = key.container.press
       const foreScale = animationElapsed >= 0
         ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
         : bdaFore.scale
@@ -380,7 +372,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   const popup = holdPopup && self.active
     ? holdPopup.layers(self.active.hintIndex ?? holdPopup.selected)
     : undefined
-  const shouldDrawHint = Boolean(popup?.length || self.active && (isLegacyHintInputKey(self.active.key) || hintCandidates.length) && hintIcon)
+  const shouldDrawHint = Boolean(popup?.length || self.active && (isLegacyHintInputKey(hintKeyOf(self.active.key)) || hintCandidates.length) && hintIcon)
   let hintContext = context
   if (self.hintCanvas && (shouldDrawHint || self.hintVisible || overlaySprites.length || self.nativeOverlayVisible)) {
     const overlayBounds = self.hintCanvas.getBoundingClientRect()
@@ -421,14 +413,14 @@ export async function paintPreview(self: Preview): Promise<void> {
     const width = hintBar ? Math.min(self.panelWidth, Math.max(baseWidth, left + right + hintCandidates.length * desiredCellWidth)) : baseWidth
     const cellWidth = hintBar ? (width - left - right) / hintCandidates.length : desiredCellWidth
     const x = Math.max(0, Math.min(self.panelWidth - width, key.rect.x + (key.rect.width - width) / 2 + offsetX))
-    const bdaNineKeyBar = self.bdaHints && hintDirection === "hold" && /^\d$/.test(key.up) && hintCandidates.length > 3
+    const bdaNineKeyBar = self.bdaHints && hintDirection === "hold" && /^\d$/.test(actionText(key.key.actions["swipe-up"]) ?? "") && hintCandidates.length > 3
     const rect = { x, y: bdaNineKeyBar ? -height + offsetY : key.rect.y - height + offsetY, width, height }
     drawVisual(hintContext, hintVisuals[0], rect, true)
     drawVisual(hintContext, phoneForegroundVisual(hintVisuals[1]), rect, false)
     if (hintBar) {
       const selected = hintDirection === "up"
         ? 0
-        : self.active.hintIndex ?? legacyHintSelectedIndex(key, hintCandidates)
+        : self.active.hintIndex ?? legacyHintSelectedIndex(hintKeyOf(key), hintCandidates)
       self.active.hintCellWidth = cellWidth
       const cellHeight = hintCellSize?.[1] && hintCellSize[1] > 0 ? Math.min(hintCellSize[1], height - top - bottom) : height - top - bottom
       hintCandidates.forEach((action, index) => {
@@ -442,7 +434,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         hintContext.fillText(action, cell.x + cell.width / 2, cell.y + cell.height / 2)
       })
     } else {
-      const action = legacyHintText(key, hintDirection)
+      const action = legacyHintText(hintKeyOf(key), hintDirection)
       if (action) {
         hintContext.fillStyle = hintTextVisual?.color ?? (self.theme === "dark" ? "#f5f5f7" : "#17191c")
         hintContext.font = canvasFont(hintTextVisual?.fontSize ?? Math.max(18, Math.min(42, height * 0.25)), hintTextVisual)
@@ -475,10 +467,9 @@ export async function paintPreview(self: Preview): Promise<void> {
     drawVisual(context, self.animationVisual.visual, self.animationVisual.key.rect, false)
   }
 
-  const toolbarRect = toolbarImages.length && self.document
-    ? dynamicToolbarRect(self.document, self.panelWidth, self.panelHeight)
-    : undefined
-  if (toolbarRect && (!scene || scene.partial && !keys.some((key) => key.center.trim() === "F14" && sceneKeys.has(key.section)))) {
+  // 工具栏条的位置由 IR 的工具栏组件给出；没给就不画这一条。
+  const toolbarRect = toolbarImages.length ? self.toolbarRect : undefined
+  if (toolbarRect && (!scene || scene.partial && !keys.some((key) => actionText(key.key.actions.press) === "F14" && sceneKeys.has(key.section)))) {
     const slotWidth = toolbarRect.width / toolbarImages.length
     toolbarImages.forEach((visual, index) => {
       const destination = toolbarImageRect(visual, {

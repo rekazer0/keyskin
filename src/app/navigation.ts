@@ -6,7 +6,11 @@ import { bdaAppearancePart, currentBdaAppearance, bdaBasePath, refreshBdaLayout,
 import { clearResourceWindow } from "./resource-grid-window"
 import { hideImageWorkspace, renderResourceInspector } from "./resource-inspector"
 import { IniDocument } from "../ini.ts"
-import { previewItems } from "../preview-items.ts"
+
+/** 文档里有没有按键段；这是文档级判断，不需要装配预览项。 */
+function hasKeys(document: IniDocument): boolean {
+  return document.sections().some((section) => /^KEY\d+$/i.test(section))
+}
 import { setSourceValue, showsLayoutProperties } from "./config-context"
 import { decodedBdaAppearancePart, decodedBdaSource, decodedBdaEditorSource, bdaDecodedSourceEditable } from "../bda-source.ts"
 import { showImage } from "./file-operations"
@@ -96,7 +100,7 @@ export function selectFile(
     const base = appearancePart.kind === "panel" && appState.bdaBase?.isText(basePath)
       ? IniDocument.parse(appState.bdaBase.getText(basePath))
       : undefined
-    const previewLayout = Boolean(base && previewItems(base).some((item) => item.editable))
+    const previewLayout = Boolean(base && hasKeys(base))
     if (previewLayout && !refreshBdaLayout(path)) return
     appState.selectedDocument = previewLayout ? appState.layoutDocument : undefined
     if (previewLayout) {
@@ -113,7 +117,7 @@ export function selectFile(
     hideImageWorkspace()
     const panelName = path.split("/").pop()?.replace(/\.ini$/i, "") ?? path
     const base = IniDocument.parse(appState.bdaBase!.getText(bdaBasePath(path)))
-    const previewLayout = isBdaLayoutPath(path) && previewItems(base).some((item) => item.editable)
+    const previewLayout = isBdaLayoutPath(path) && hasKeys(base)
     if (previewLayout && !refreshBdaLayout(path)) return
     if (previewLayout) appState.layoutPath = path
     appState.selectedDocument = previewLayout ? appState.layoutDocument : base
@@ -157,7 +161,7 @@ export function selectFile(
     const previewLayout =
       /\.ini$/i.test(path) &&
       !/(^|\/)gen\.ini$/i.test(path) &&
-      previewItems(appState.selectedDocument).some((item) => item.editable)
+      hasKeys(appState.selectedDocument)
     if (previewLayout) {
       // 撤销 / 重做会重新选中同一个布局：保留仍然存在的按键选择，检查器不跳回面板。
       const existing = new Set(appState.selectedDocument.sections())

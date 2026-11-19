@@ -2,6 +2,7 @@ import { mobileKeyPreview, mobileKeyCanvas, mobileKeySize, layout, selectedKeyNa
 import { mobilePortraitQuery, preview } from "./canvas-interaction"
 import { appState } from "./state"
 import { layoutLabel } from "./file-tree"
+import { actionText } from "../skin-model/inspect.ts"
 
 /** 复用画布的真实渲染，保持原生格式、文字、图片和按下态一致。 */
 export function syncMobileKeyPreview(pressed = false): void {
@@ -21,7 +22,7 @@ export function syncMobileKeyPreview(pressed = false): void {
     || !key || appState.selectedPath !== appState.layoutPath
   if (mobileKeyPreview.hidden || !key) return
   selectedKeyContext.textContent = `${layoutName} · ${section}`
-  const label = key.show || key.center
+  const label = key.text ?? actionText(key.key.actions.press) ?? ""
   if (/^[\p{L}\p{N}]$/u.test(label)) selectedKeyName.textContent = `按键 ${label}`
   if (pressed) preview.flashPress(key)
   else preview.cancelPointerInteraction()

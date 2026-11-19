@@ -76,6 +76,10 @@ export type TipRef = {
 
 export type SkinKey = {
   id: string
+  /** 这个按键覆盖的段；列表单元格这类合成项会指向多个段。 */
+  sections?: readonly string[]
+  /** 默认状态下是否可见；状态覆盖里的 `visible` 优先。 */
+  visible?: boolean
   /** 触摸命中区域；它是命中语义，不是绘制几何，不与布局树重复。 */
   /** 触摸区；`null` 表示显式声明没有触摸区，`undefined` 表示沿用按键矩形。 */
   touchRect?: LayoutBox | null
@@ -93,6 +97,8 @@ export type SkinKey = {
   info?: string
   /** 标签在按键内的放置类型；布局文件里写成 `POS_TYPE=`，一个到四个值不等。 */
   labelPosition?: readonly number[]
+  /** 前景图标的固定绘制区域；布局文件里写成 `FOREGROUND_RECT`。 */
+  foreRect?: LayoutBox
   editable?: boolean
   /** 引用板上哪些状态样式段，以及各自对应哪个状态；定义在 `board.tips` 里。 */
   stateRefs?: readonly TipRef[]

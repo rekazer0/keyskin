@@ -1,5 +1,7 @@
 import { IniDocument } from "./ini.ts"
 import { type PreviewItem } from "./preview-items.ts"
+import { actionText } from "./skin-model/inspect.ts"
+import type { KeyEvent } from "./skin-model/types.ts"
 
 export type LegacyHintIcon = {
   backStyle: string
@@ -78,8 +80,36 @@ export function legacyHintIconID(
   }[direction]
 }
 
+/** 提示要用到的按键信息：段名、各方向的动作文本、长按符号集。 */
+export type HintKey = {
+  section: string
+  center: string
+  up: string
+  down: string
+  left: string
+  right: string
+  hold: string
+  holdSymbols: string
+}
+
+/** 从一个渲染项取出提示需要的那几个动作。 */
+export function hintKeyOf(key: PreviewItem): HintKey {
+  const text = (event: KeyEvent): string => actionText(key.key.actions[event]) ?? ""
+  return {
+    section: key.section,
+    center: text("press"),
+    up: text("swipe-up"),
+    down: text("swipe-down"),
+    left: text("swipe-left"),
+    right: text("swipe-right"),
+    hold: text("long-press"),
+    holdSymbols: key.key.holdSymbol ?? "",
+  }
+}
+
+/** 状态键在某个方向上的文本：动作从 IR 的动作表取，长按符号从按键上取。 */
 export function legacyHintText(
-  key: Pick<PreviewItem, "up" | "down" | "left" | "right" | "center" | "hold" | "holdSymbols">,
+  key: HintKey,
   direction: "center" | "up" | "down" | "left" | "right" | "hold",
 ): string {
   if (direction === "hold") {
@@ -92,18 +122,17 @@ function hintActionText(value: string): string {
   return /^(?:F\d+|S\d+(?:_\d+)?|Z\+.+)$/i.test(value.trim()) ? "" : value
 }
 
-export function isLegacyHintInputKey(key: Pick<PreviewItem, "section" | "center">): boolean {
+export function isLegacyHintInputKey(key: HintKey): boolean {
   return /^KEY\d+$/i.test(key.section) && Boolean(hintActionText(key.center).trim())
 }
 
 export function legacyHintCandidates(
-  key: Pick<PreviewItem, "up" | "down" | "left" | "right" | "center" | "hold" | "holdSymbols">,
+  key: HintKey,
   direction: "up" | "hold",
   defaults = false,
 ): string[] {
   if (defaults && direction === "hold" && !key.holdSymbols && !key.hold) {
-    const letters = [key.left, key.center, key.right, key.down]
-      .filter((value) => /^[a-z]$/i.test(value))
+    const letters = [key.left, key.center, key.right, key.down].filter((value) => /^[a-z]$/i.test(value))
     return letters.length > 1 && /^\d$/.test(key.up)
       ? [...new Set([...letters.map((value) => value.toUpperCase()), key.up, ...letters.map((value) => value.toLowerCase())])]
       : [...new Set([key.center.toUpperCase(), key.up, key.left, key.center, key.right, key.down].filter((value) => hintActionText(value)))]
@@ -115,12 +144,13 @@ export function legacyHintCandidates(
   return [...new Set(values.filter((value) => hintActionText(value)))]
 }
 
-export function legacyHintHasHold(key: PreviewItem, hint: LegacyHint | undefined, defaults: boolean): boolean {
+export function legacyHintHasHold(key: HintKey, hint: LegacyHint | undefined, defaults: boolean): boolean {
   return Boolean(key.hold || key.holdSymbols || hint?.barIcon && isLegacyHintInputKey(key) && legacyHintCandidates(key, "hold", defaults).length)
 }
 
-export function legacyHintSelectedIndex(key: Pick<PreviewItem, "center" | "up" | "hold" | "holdSymbols">, candidates: readonly string[]): number {
-  return !key.hold && !key.holdSymbols && /^\d$/.test(key.up) && candidates.includes(key.up)
+export function legacyHintSelectedIndex(key: HintKey, candidates: readonly string[]): number {
+  const hasHold = Boolean(key.hold || key.holdSymbols)
+  return !hasHold && /^\d$/.test(key.up) && candidates.includes(key.up)
     ? candidates.indexOf(key.up)
     : Math.max(0, candidates.lastIndexOf(key.center))
 }

@@ -245,7 +245,7 @@ export class SsfMotion {
 function holdPopup(styles: SsfStyles, key: SceneKey, layout: IniDocument, layoutName: string, qwerty: boolean, unit: number, panelWidth: number): SceneKey["holdPopup"] {
   const defaults = ssfKeyActions(layoutName, layout.get(key.section, "CENTER") ?? "", layout.get(key.section, "SSF_SECTION"))
   const action = (name: string) => layout.get(key.section, name) ?? defaults[name] ?? ""
-  const actions = { center: action("CENTER"), up: action("UP"), down: action("DOWN"), left: action("LEFT"), right: action("RIGHT"), hold: action("HOLD"), holdSymbols: action("HOLDSYM") }
+  const actions = { section: key.section, center: action("CENTER"), up: action("UP"), down: action("DOWN"), left: action("LEFT"), right: action("RIGHT"), hold: action("HOLD"), holdSymbols: action("HOLDSYM") }
   const candidates = legacyHintCandidates(actions, "hold", true)
   if (!candidates.length) return
   const width = Math.min(panelWidth, (candidates.length * 90 + 54) * unit)

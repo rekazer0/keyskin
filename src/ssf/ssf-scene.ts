@@ -13,7 +13,7 @@
 import { AtlasResolver, canvasFontFamily, loadEmbeddedFont, pngBitmap, type Visual, type ToolbarVisual } from "../atlas.ts"
 import type { IniDocument } from "../ini.ts"
 import { argbColor, imageAt, sceneKey, tintedVisual, type NativeScene, type SceneKey, type SceneLayer, type SceneText } from "../native-scene.ts"
-import { offsetFromSection, parseOffset, parseRect, type Rect } from "../preview-items.ts"
+import { parseOffset, parseRect, type Rect } from "../preview-items.ts"
 import type { SkinArchive } from "../skin.ts"
 import { ssfBoard, ssfKeyBinding, ssfQwerty, type SsfKeyBinding } from "./ssf-keymap.ts"
 import { parseSsfImage, ssfColor, type SsfPackage, type SsfTheme } from "./ssf-package.ts"
@@ -22,6 +22,18 @@ import { firstValue, ssfBackground, ssfForeground, ssfForegroundLayout, ssfIconP
 /** The nine-key letter groups' digits, the minor label Sogou shows when the skin turns it on. */
 const NINE_KEY_DIGITS: Record<string, string> = {
   Key_ABC: "2", Key_DEF: "3", Key_GHI: "4", Key_JKL: "5", Key_MNO: "6", Key_PQRS: "7", Key_TUV: "8", Key_WXYZ: "9",
+}
+
+/** `[OFFSETn]` 段的偏移：`POS` 是像素，`R_POS` 是相对按键尺寸的比例。 */
+function offsetFromSection(
+  document: IniDocument | undefined,
+  section: string,
+  rect: { width: number; height: number },
+): [number, number] | undefined {
+  const absolute = parseOffset(document?.get(section, "POS"))
+  if (absolute) return absolute
+  const relative = parseOffset(document?.get(section, "R_POS"))
+  return relative ? [relative[0] * rect.width, relative[1] * rect.height] : undefined
 }
 
 type Label = Omit<SceneText, "text" | "x" | "y">

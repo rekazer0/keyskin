@@ -1,16 +1,16 @@
 import type { Visual } from "../atlas.ts"
 import { drawStyleText, drawVisual, foregroundLayerRect, foregroundTextPoint } from "../preview-draw.ts"
-import { effectivePreviewItem, offsetFromSection, paddedRect, visiblePreviewItems, type PreviewItem } from "../preview-items.ts"
+import { paddedRect, type PreviewItem } from "../preview-items.ts"
 import { preview } from "./canvas-interaction"
 import { appState } from "./state"
 
-/** The same key artwork and offsets as the layout canvas, separated so a background binding cannot scale its foreground. */
+/** 与画布同一套按键图与偏移；单独取出来，免得背景绑定把前景一起缩放。 */
 export async function animationKeySample(plays: (key: PreviewItem) => boolean, styles: ReadonlySet<string>): Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined> {
-  const keys = visiblePreviewItems(preview.keys, preview.skinState)
+  // 可见性与状态覆盖都已经在 IR 里定好，这里直接用当前画出的那些键。
+  const keys = preview.keys.filter((key) => key.visible)
   const selected = keys.find((key) => appState.animationKeys.includes(key.section))
-  let key = selected ?? keys.find(plays) ?? keys.find((key) => /^KEY\d+$/i.test(key.section) && key.editable)
+  const key = selected ?? keys.find(plays) ?? keys.find((each) => /^KEY\d+$/i.test(each.section) && each.editable)
   if (!key || !preview.resolver) return
-  if (preview.stateDocument) key = effectivePreviewItem(preview.stateDocument, key, preview.skinState)
   const area = paddedRect(key), rect = { ...area, x: 0, y: 0 }, resolver = preview.resolver
   const layers: Array<{ visual: Visual; animate: boolean }> = []
   const trial = !plays(key)
@@ -20,16 +20,16 @@ export async function animationKeySample(plays: (key: PreviewItem) => boolean, s
     draw(canvas.getContext("2d")!)
     layers.push({ visual: { image: await createImageBitmap(canvas), source: [0, 0, canvas.width, canvas.height] }, animate })
   }
-  const back = await resolver.resolve(key.backStyle, false)
-  await paint((context) => drawVisual(context, back, rect, true), trial || styles.has(key.backAnimStyle || key.animStyle || ""))
+  const back = await resolver.resolve(key.backStyle ?? "", false)
+  await paint((context) => drawVisual(context, back, rect, true), trial || styles.has(key.container.back?.anim ?? ""))
   for (const [index, id] of key.foreStyles.entries()) {
     const visual = await resolver.resolve(id, false)
     const styleText = resolver.resolveStyleText?.(id, false)
-    const offset = key.foreOffsets[index] ?? offsetFromSection(preview.offsets, `OFFSET${key.positionTypes[index] ?? ""}`, rect)
+    const offset = key.container.fore[index]?.offset
     await paint((context) => {
-      if (visual?.image) drawVisual(context, visual, foregroundLayerRect(rect, visual.source, offset), false)
-      else if (styleText) drawStyleText(context, styleText, foregroundTextPoint(rect, offset), preview.theme)
-    }, trial || styles.has(key.foreAnimStyles[index] || key.foreAnimStyle || key.animStyle || ""))
+      if (visual?.image) drawVisual(context, visual, foregroundLayerRect(rect, visual.source, offset ? [offset.x, offset.y] : undefined), false)
+      else if (styleText) drawStyleText(context, styleText, foregroundTextPoint(rect, offset ? [offset.x, offset.y] : undefined), preview.theme)
+    }, trial || styles.has(key.container.fore[index]?.anim ?? ""))
   }
   return { width: area.width, height: area.height, trial, layers }
 }

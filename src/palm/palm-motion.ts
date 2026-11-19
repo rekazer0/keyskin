@@ -6,6 +6,7 @@
 // own `base_pa` shows with it and plays on presses of keys without one.
 
 import type { Visual } from "../atlas.ts"
+import type { KeyRender } from "../skin-model/build.ts"
 import type { PreviewClip } from "../animation-preview-model.ts"
 import { animationEasing, legacyParticleFrames } from "../preview-animation.ts"
 import { decodeFrames, frameAt, motionAt, seededShare, trackEnd, type Frame, type KeyMotion, type Pair, type SceneEffects, type SceneSprite, type Track } from "../native-motion.ts"
@@ -189,14 +190,17 @@ export class PalmMotion {
   }
 
   /** The animations of `keys` (one keyboard state). */
-  effects(keys: Array<PalmKey & { item: { animStyle?: string; backAnimStyle?: string; foreAnimStyles: string[] } }>): SceneEffects | undefined {
+  effects(keys: Array<PalmKey & { item: KeyRender }>): SceneEffects | undefined {
     const bySection = new Map(keys.map((key) => [key.section, key]))
     const { style: panelStyle, region } = this.board.panelClip
     const clips = (section: string, seed: number) => {
       const key = bySection.get(section)
       if (!key) return
       const size = { width: key.rect.width, height: key.rect.height }
-      const { animStyle, backAnimStyle, foreAnimStyles } = key.item
+      const { animStyles } = key.item
+      const animStyle = animStyles[0]
+      const backAnimStyle = key.item.container.back?.anim
+      const foreAnimStyles = key.item.container.fore.map((layer) => layer.anim ?? "")
       const back = this.clip(this.styleAnimation(backAnimStyle || animStyle, PRESS), seed, size)
       const fores = key.base.fores.map((_, index) => this.clip(this.styleAnimation(foreAnimStyles[index] || foreAnimStyles[0] || animStyle, PRESS), seed, size))
       // A key's own panel animation replaces the board's.

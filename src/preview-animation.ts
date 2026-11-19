@@ -1,5 +1,6 @@
 import { IniDocument } from "./ini.ts"
 import { type Rect, type PreviewItem } from "./preview-items.ts"
+import { actionText } from "./skin-model/inspect.ts"
 import { type BdaAnimation, type BdaAnimationSequence, type BdaAnimationBinding, type BdaAnimationEffect, type BdaTransformAnimation, type BdaEmitterAnimation } from "./bda.ts"
 
 type LegacyAnimationFrame = {
@@ -371,11 +372,13 @@ export function animationSequenceForKey(
 }
 
 function bdaTargetForKey(animation: BdaAnimation, item: PreviewItem): string | undefined {
-  const candidates = [item.section, item.center, item.down, `KEY_${item.center}`]
+  const press = actionText(item.key.actions.press) ?? ""
+  const down = actionText(item.key.actions["swipe-down"]) ?? ""
+  const candidates = [item.section, press, down, `KEY_${press}`]
     .map((value) => value.trim().toUpperCase()).filter(Boolean)
   const exact = animation.targets.find((value) => candidates.includes(value.toUpperCase()))
   if (exact) return exact
-  const main = /^[A-Z]$/i.test(item.center.trim())
+  const main = /^[A-Z]$/i.test(press.trim())
   const semantic = main ? "MAIN_KEY" : "FUNCTION_KEY"
   return animation.targets.find((value) => value.toUpperCase() === semantic)
 }

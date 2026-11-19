@@ -31,7 +31,7 @@ test("构建后的按键矩形来自布局树", async () => {
   const renders = await buildBoard(skin, skin.boards[0])
   const render = renders.find((item) => item.key.id === "k")
   assert.ok(render)
-  assert.deepEqual(rectOf(render.rect), { x: 10, y: 10, width: 100, height: 50 })
+  assert.deepEqual(render.rect, { x: 10, y: 10, width: 100, height: 50 })
 })
 
 test("构建后的图层来自样式引用", async () => {

@@ -3,8 +3,9 @@ import { IniDocument } from "./ini.ts"
 import { DEFAULT_PANEL_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { snapPointToRects } from "./layout.ts"
 import type { BdaAnimation } from "./bda.ts"
-import { type PreviewItem, type Rect, previewItems, visiblePreviewItems, previewSurfaceHeight, effectivePreviewHitItem, previewHitItem } from "./preview-items.ts"
+import { type PreviewItem, type Rect } from "./preview-items.ts"
 import type { SkinBoard } from "./skin-model/board.ts"
+import type { KeyRender } from "./skin-model/build.ts"
 import { type LegacyAnimation } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
@@ -35,15 +36,16 @@ export class Preview {
   document?: IniDocument
   /** 画布上的按键矩形只能来自这块板的布局树，`VIEW_RECT` 不参与渲染。 */
   board?: SkinBoard
-  private defaults?: IniDocument
+  /** 工具栏条的位置，由 IR 的工具栏组件给出；缺省表示这条不画。 */
+  toolbarRect?: { x: number; y: number; width: number; height: number }
   offsets?: IniDocument
   resolver?: VisualResolver
   private documentIdentity?: unknown
   /** Palm and Sogou skins paint a scene read from their own files instead of resolving styles. */
   scene?: (state: number | undefined) => Promise<NativeScene | undefined>
   private readonly scenes = new Map<number | undefined, Promise<NativeScene | undefined>>()
-  /** Palm documents list their keys themselves, per keyboard state and composition. */
-  private nativeItems?: (state: number | undefined, persistentOnly: boolean) => PreviewItem[]
+  /** Palm 文档自己列出按键：按状态与组词给出渲染项，形状与 IR 一致。 */
+  private nativeItems?: (state: number | undefined, persistentOnly: boolean) => KeyRender[]
   // Resolver lookups are asynchronous and can involve stylesheet/tile parsing
   // and image decoding. Keep the resolved values for the lifetime of a
   // resolver; drag frames then only redraw geometry instead of repeating the
@@ -55,11 +57,12 @@ export class Preview {
   panelWidth = DEFAULT_PANEL_WIDTH
   panelHeight = DEFAULT_PANEL_HEIGHT
   panelTopInset = 0
-  private surfaceKeys?: PreviewItem[]
+  private surfaceKeys?: KeyRender[]
   private surfaceHeightValue = DEFAULT_PANEL_HEIGHT
   theme: "light" | "dark" = "light"
   transparent = false
-  keys: PreviewItem[] = []
+  /** 画布上的按键：几何来自布局树，图层来自 IR 的容器，不读原文。 */
+  keys: KeyRender[] = []
   mode: "edit" | "preview" = "edit"
   editTool: "select" | "move" | "multi" = "select"
   crosshair = false
@@ -432,13 +435,8 @@ export class Preview {
     void this.draw()
   }
 
-  setDefaults(defaults?: IniDocument): void {
-    this.defaults = defaults
-    this.visualCache.clear()
-    this.lastRenderCache = undefined
-    this.keys = this.layoutItems()
-    this.fitCanvas()
-    void this.draw()
+  setDefaults(_defaults?: IniDocument): void {
+    // 面板默认值不再参与绘制：按键各层由 IR 的容器给出。
   }
 
   setTheme(theme: "light" | "dark"): void {
@@ -477,16 +475,28 @@ export class Preview {
     void this.draw()
   }
 
-  /** The keys the canvas shows: the native list, else the layout document's. */
-  private layoutItems(persistentOnly = this.persistentOnly): PreviewItem[] {
-    if (this.nativeItems) return this.nativeItems(this.skinState, persistentOnly)
-    return this.document ? previewItems(this.document, this.panelWidth, this.panelHeight, this.defaults, persistentOnly) : []
+  /** 画布显示哪些按键：原生场景列表，或外部按 IR 算好后注入的渲染项。 */
+  private layoutItems(persistentOnly = this.persistentOnly): KeyRender[] {
+    return this.nativeItems ? this.nativeItems(this.skinState, persistentOnly) : this.keys
+  }
+
+  /**
+   * 注入渲染项。
+   * 画布不自己解析文件：矩形来自布局树、图层来自 IR 容器，算好再交进来。
+   */
+  setRenders(renders: readonly KeyRender[]): void {
+    this.keys = [...renders]
+    this.visualCache.clear()
+    this.toolbarImagesCache = undefined
+    this.lastRenderCache = undefined
+    void this.draw()
   }
 
   expandSections(sections: readonly string[]): string[] {
     const requested = new Set(sections)
-    return visiblePreviewItems(this.keys, this.skinState).flatMap((item) =>
-      item.sections.some((section) => requested.has(section)) ? item.sections : []
+    // 可见性由 IR 给，按键自己在渲染项里带 `visible`。
+    return this.keys.flatMap((render) =>
+      render.key.visible === false ? [] : render.sections.some((section) => requested.has(section)) ? render.sections : []
     )
   }
 
@@ -547,8 +557,8 @@ export class Preview {
     void this.draw()
   }
 
-  /** Lists the canvas keys from the skin's own data instead of the layout document. */
-  setNativeItems(items?: (state: number | undefined, persistentOnly: boolean) => PreviewItem[]): void {
+  /** 按键来自皮肤自己的数据（Palm 场景），形状与 IR 渲染项一致。 */
+  setNativeItems(items?: (state: number | undefined, persistentOnly: boolean) => KeyRender[]): void {
     if (!items && !this.nativeItems) return
     this.nativeItems = items
     this.setDocument(this.document, this.documentIdentity)
@@ -572,7 +582,7 @@ export class Preview {
     this.visualCache.clear()
     this.lastRenderCache = undefined
     this.keys = this.layoutItems()
-    const available = new Set(this.keys.map((key) => key.section))
+    const available = new Set(this.keys.map((render) => render.key.id))
     this.selected = new Set([...this.selected].filter((section) => available.has(section)))
     this.fitCanvas()
     void this.draw()
@@ -596,12 +606,10 @@ export class Preview {
   get surfaceHeight(): number {
     if (this.surfaceKeys !== this.keys) {
       this.surfaceKeys = this.keys
-      // Measure every layout key, not only the persistent subset, so the canvas
-      // keeps the same aspect as the viewport the editor sizes around it.
-      this.surfaceHeightValue = previewSurfaceHeight(
-        this.persistentOnly ? this.layoutItems(false) : this.keys,
-        this.panelHeight,
-      )
+      // 画布高度按所有布局键量，矩形来自布局树。
+      const keys = this.persistentOnly ? this.layoutItems(false) : this.keys
+      const bottom = keys.reduce((max, render) => Math.max(max, render.rect.y + render.rect.height), 0)
+      this.surfaceHeightValue = Math.max(this.panelHeight, bottom)
     }
     return this.surfaceHeightValue
   }
@@ -613,9 +621,9 @@ export class Preview {
   snapPoint(point: { x: number; y: number }, bounds?: Pick<DOMRect, "width" | "height">): { x: number; y: number } {
     return snapPointToRects(
       point,
-      visiblePreviewItems(this.keys, this.skinState)
-        .filter((key) => key.editable || this.toolbarSlots)
-        .map((key) => key.rect),
+      this.keys
+        .filter((render) => render.key.visible !== false && (render.key.editable !== false || this.toolbarSlots))
+        .map((render) => render.rect),
       this.snapThreshold(bounds),
     )
   }
@@ -625,32 +633,29 @@ export class Preview {
     return this.nativeItems ? undefined : this.document
   }
 
-  hit(point: { x: number; y: number }): PreviewItem | undefined {
-    return this.stateDocument
-      ? effectivePreviewHitItem(
-        this.stateDocument,
-        this.keys,
-        point,
-        this.mode,
-        this.panelWidth,
-        this.panelHeight,
-        this.skinState,
-      )
-      : previewHitItem(
-        this.keys,
-        point,
-        this.mode,
-        this.panelWidth,
-        this.panelHeight,
-        this.skinState,
-      )
+  /** 一个点是否落在布局树给的矩形里。 */
+  private insideBox(rect: { x: number; y: number; width: number; height: number }, point: { x: number; y: number }): boolean {
+    return point.x >= rect.x && point.x <= rect.x + rect.width
+      && point.y >= rect.y && point.y <= rect.y + rect.height
   }
 
-  itemSelected(item: PreviewItem): boolean {
+  /** 命中测试：矩形来自布局树，可见性来自 IR。 */
+  hit(point: { x: number; y: number }): KeyRender | undefined {
+    // 后画的在上层，命中从后往前找。
+    for (let index = this.keys.length - 1; index >= 0; index -= 1) {
+      const render = this.keys[index]
+      if (render.key.visible === false) continue
+      if (!this.insideBox(render.rect, point)) continue
+      return render
+    }
+    return undefined
+  }
+
+  itemSelected(item: KeyRender): boolean {
     return item.sections.some((section) => this.selected.has(section))
   }
 
-  playAnimation(key: PreviewItem): Promise<void> {
+  playAnimation(key: KeyRender): Promise<void> {
     return playAnimation(this, key)
   }
 

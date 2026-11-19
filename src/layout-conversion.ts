@@ -5,11 +5,23 @@ import { BUTTON_KEYS } from "./palm/sxi-layout.ts"
 import { parseSkinJson, sxiAddressPointer, sxiFragment, sxiFragmentPath } from "./palm/sxi-json.ts"
 import { convertIniLayout } from "./layout-conversion-ini.ts"
 import { convertSxiLayout } from "./palm/sxi-layout-conversion.ts"
-import { offsetFromSection } from "./preview-items.ts"
+import { parseOffset } from "./preview-items.ts"
 import { stateTipSection } from "./panel-tools.ts"
 import { iniConversionText } from "./layout-conversion-text.ts"
 
 type Pair = [number, number]
+
+/** `[OFFSETn]` 段的偏移：`POS` 是像素，`R_POS` 是相对按键尺寸的比例。 */
+function offsetOfSection(
+  document: IniDocument | undefined,
+  section: string,
+  rect: { width: number; height: number },
+): Pair | undefined {
+  const absolute = parseOffset(document?.get(section, "POS"))
+  if (absolute) return absolute
+  const relative = parseOffset(document?.get(section, "R_POS"))
+  return relative ? [relative[0] * rect.width, relative[1] * rect.height] : undefined
+}
 export type LayoutRect = [number, number, number, number]
 type ConversionKey = { section: string; actions: Record<string, string>; rect: LayoutRect; touch?: LayoutRect; letters?: string }
 export type ConversionMatch = { layout: ConversionLayout; key: ConversionKey; letters?: ConversionMatch[]; glyph?: number; fallback?: ConversionKey }
@@ -176,7 +188,9 @@ export function conversionLetterForeground({ layout, key, glyph, fallback }: Con
     const point = base ? asObject(offsets[String(positions[index])])?.p : undefined
     const doc = layout.document?.hasSection(`OFFSET${positions[index]}`) ? layout.document : layout.defaults
     const explicit = layout.document?.get(key.section, "FORE_OFFSET")?.split(";")[index]?.split(",").map(Number)
-    const offset = Array.isArray(point) ? point.map(Number) : explicit ?? offsetFromSection(doc, `OFFSET${positions[index]}`, { width: key.rect[2], height: key.rect[3] }) ?? [0, 0]
+    const offset = Array.isArray(point)
+      ? point.map(Number)
+      : explicit ?? offsetOfSection(doc, `OFFSET${positions[index]}`, { width: key.rect[2], height: key.rect[3] }) ?? [0, 0]
     return Math.hypot(offset[0], offset[1])
   }
   const index = glyph ?? (paired && /^[a-z]{2}$/.test(paired) && paired.includes(key.actions.CENTER)

@@ -4,11 +4,33 @@ import { readFileSync } from 'node:fs'
 import { IniDocument } from '../src/ini.ts'
 import { SkinArchive } from '../src/skin.ts'
 import { effectivePanelSection, stateTipSection } from '../src/panel-tools.ts'
-import { effectivePreviewHitItem, effectivePreviewItem, previewItems, previewStateImpact, visiblePreviewItems } from '../src/preview-items.ts'
+import { buildBoard } from '../src/skin-model/build.ts'
+import { absoluteBoard } from '../src/skin-model/layout.ts'
+import { emptyModel } from '../src/skin-model/model.ts'
 import { bdaLayoutDocument } from '../src/bda.ts'
 import { decodeBdaAppearance } from '../src/bda-decode.ts'
+import { box } from './helpers/boxes.mjs'
 
 const template = (name) => SkinArchive.open(new Uint8Array(readFileSync(new URL(`../public/${name}`, import.meta.url))))
+
+/** 一块板：按键几何进布局树，样式与动作进容器。 */
+function renderKey(id, rect, actions, container) {
+  return { id, rect, actions, container }
+}
+
+async function rendersOf(keys, size = { width: 300, height: 100 }) {
+  const model = emptyModel({ appearance: 'light', orientation: 'port' })
+  model.boards.push({
+    id: 'board',
+    kind: 'main',
+    geometry: 'document',
+    orientation: 'port',
+    size,
+    layout: absoluteBoard(keys.map((key) => ({ id: key.id, ...box(key.rect[0], key.rect[1], key.rect[2], key.rect[3]) }))),
+    keys,
+  })
+  return buildBoard(model, model.boards[0])
+}
 
 test('S0 layering never activates its TIP, while voice, layout and explicit states still resolve', () => {
   for (const state of [undefined, 0, 4, 27]) assert.equal(stateTipSection('S0_1', state), undefined)
@@ -18,29 +40,25 @@ test('S0 layering never activates its TIP, while voice, layout and explicit stat
   assert.equal(stateTipSection('S34_7|S0_1', 34), 7)
 })
 
-test('S0 duplicate keys retain their original artwork, actions and animation bindings', () => {
-  const document = IniDocument.parse('[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=q\nFORE_STYLE=1\nSTAT_STYLE=S0_1\n[KEY2]\nVIEW_RECT=0,0,100,100\nCENTER=q\nFORE_STYLE=1\nBACK_ANIM_STYLE=8\n[KEY3]\nVIEW_RECT=100,0,100,100\nCENTER=F39\nFORE_STYLE=2\nSTAT_STYLE=S27_2|S0_1\n[KEY4]\nVIEW_RECT=100,0,100,100\nCENTER=F39\nFORE_STYLE=2\n[KEY5]\nVIEW_RECT=200,0,100,100\nCENTER=w\nFORE_STYLE=3\nSTAT_STYLE=S0_1\n[TIP1]\nFORE_STYLE=99\nCENTER=F39\nBACK_ANIM_STYLE=99\n[TIP2]\nFORE_STYLE=4\nSHOW=发送\n')
-  const before = document.toString()
-  const items = previewItems(document)
-  for (const state of [undefined, 0]) {
-    const visible = visiblePreviewItems(items, state).map(item => effectivePreviewItem(document, item, state))
-    assert.deepEqual(visible.map(item => item.section), ['KEY2', 'KEY4', 'KEY5'])
-    assert.deepEqual(visible.map(item => item.center), ['q', 'F39', 'w'])
-    assert.deepEqual(visible.map(item => item.foreStyle), ['1', '2', '3'])
-    assert.equal(visible[0].backAnimStyle, '8')
-    assert.deepEqual(visible[0].sections, ['KEY1', 'KEY2'])
-    assert.equal(effectivePanelSection(document, 'KEY1', state), 'KEY1')
-    const hit = effectivePreviewHitItem(document, items, { x: 50, y: 50 }, 'preview', 300, 100, state)
-    assert.equal(hit.center, 'q')
-    assert.equal(hit.foreStyle, '1')
-  }
-  const sending = visiblePreviewItems(items, 27).map(item => effectivePreviewItem(document, item, 27))
-  assert.deepEqual(sending.map(item => item.foreStyle), ['1', '4', '3'])
-  assert.equal(sending[1].show, '发送')
-  assert.equal(effectivePanelSection(document, 'KEY3', 27), 'TIP2')
-  assert.deepEqual(previewStateImpact(document, 0), { mapped: false, resolved: false })
-  assert.deepEqual(previewStateImpact(document, 27), { mapped: true, resolved: true })
-  assert.equal(document.toString(), before)
+test('S0 duplicate keys retain their original artwork, actions and animation bindings', async () => {
+  // 同位置、同动作的段在真机上是一个键：KEY1/KEY2 合并，KEY3/KEY4 合并。
+  const keys = [
+    renderKey('KEY1', [0, 0, 100, 100], { press: { kind: 'text', value: 'q' } }, { fore: [{ style: '1' }] }),
+    renderKey('KEY2', [0, 0, 100, 100], { press: { kind: 'text', value: 'q' } }, { back: { style: '1', anim: '8' }, fore: [{ style: '1' }] }),
+    renderKey('KEY3', [100, 0, 100, 100], { press: { kind: 'text', value: 'F39' } }, { fore: [{ style: '2' }] }),
+    renderKey('KEY4', [100, 0, 100, 100], { press: { kind: 'text', value: 'F39' } }, { fore: [{ style: '2' }] }),
+    renderKey('KEY5', [200, 0, 100, 100], { press: { kind: 'text', value: 'w' } }, { fore: [{ style: '3' }] }),
+  ]
+  const renders = await rendersOf(keys)
+  assert.equal(renders.length, 3, '五个段合成三个键')
+  assert.deepEqual(renders.map((render) => render.sections), [['KEY1', 'KEY2'], ['KEY3', 'KEY4'], ['KEY5']])
+  assert.deepEqual(renders.map((render) => render.foreStyles), [['1'], ['2'], ['3']])
+  assert.equal(renders[0].container.back?.anim, '8', '后写的段决定动画')
+  assert.deepEqual(renders.map((render) => render.rect), [
+    { x: 0, y: 0, width: 100, height: 100 },
+    { x: 100, y: 0, width: 100, height: 100 },
+    { x: 200, y: 0, width: 100, height: 100 },
+  ])
 })
 
 test('the space key shows its S36 variant (Baidu default: long-press voice on) unless a voice state is chosen', () => {

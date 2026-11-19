@@ -3,7 +3,6 @@ import assert from "node:assert/strict"
 import { globSync, readFileSync } from "node:fs"
 import test from "node:test"
 import { IniDocument } from "@/ini.ts"
-import { previewItems } from "@/preview-items.ts"
 import { SkinArchive } from "@/skin.ts"
 import { computeLayout } from "@/skin-model/layout.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
@@ -26,9 +25,15 @@ function samples() {
       if (!/\/(?:port|land)\/[^/]+\.ini$/i.test(name)) continue
       const document = IniDocument.parse(archive.getText(name))
       const size = sizeOf(document)
-      const keys = previewItems(document, size.width, size.height, undefined, false)
-        .filter((item) => /^KEY\d+$/i.test(item.section) && item.rect.width > 0 && item.rect.height > 0)
-        .map((item) => ({ id: item.section, ...box(item.rect.x, item.rect.y, item.rect.width, item.rect.height) }))
+      // 按键几何就是 `VIEW_RECT`：这是布局文档自己的事实，不经过渲染层。
+      const keys = document.sections()
+        .filter((section) => /^KEY\d+$/i.test(section))
+        .flatMap((section) => {
+          const parts = document.get(section, "VIEW_RECT")?.split(",").map((part) => Number(part.trim()))
+          return parts?.length === 4 && parts.every(Number.isFinite) && parts[2] > 0 && parts[3] > 0
+            ? [{ id: section, ...box(parts[0], parts[1], parts[2], parts[3]) }]
+            : []
+        })
       if (keys.length >= 4) found.push({ path, name, size, keys })
     }
   }

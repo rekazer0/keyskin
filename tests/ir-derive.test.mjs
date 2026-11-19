@@ -88,15 +88,20 @@ test("真实模板按键可被推导并按 taffy 复现", async () => {
   const { readFileSync } = await import("node:fs")
   const { SkinArchive } = await import("../src/skin.ts")
   const { IniDocument } = await import("../src/ini.ts")
-  const { previewItems } = await import("../src/preview-items.ts")
   const archive = SkinArchive.open(new Uint8Array(readFileSync("public/layout-templates/pinyin18.bds")), "bds")
   const path = archive.names().find((name) => /port\/py_18\.ini$/.test(name))
   assert.ok(path)
   const document = IniDocument.parse(archive.getText(path))
   const size = { width: 1125, height: 592 }
-  const keys = previewItems(document, size.width, size.height, undefined, false)
-    .filter((item) => /^KEY\d+$/i.test(item.section) && item.rect.width > 0)
-    .map((item) => ({ id: item.section, ...box(item.rect.x, item.rect.y, item.rect.width, item.rect.height) }))
+  // 按键几何就是 `VIEW_RECT`：布局文档自己的事实，不经过渲染层。
+  const keys = document.sections()
+    .filter((section) => /^KEY\d+$/i.test(section))
+    .flatMap((section) => {
+      const parts = document.get(section, "VIEW_RECT")?.split(",").map((part) => Number(part.trim()))
+      return parts?.length === 4 && parts.every(Number.isFinite) && parts[2] > 0
+        ? [{ id: section, ...box(parts[0], parts[1], parts[2], parts[3]) }]
+        : []
+    })
   const result = await deriveBoard("board", keys, size)
   const stats = layoutStats(result.layout)
   assert.ok(stats.absolute / keys.length < 0.2, `绝对节点占比 ${stats.absolute}/${keys.length}`)

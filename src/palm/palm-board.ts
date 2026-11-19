@@ -75,30 +75,37 @@ function item(section: string, rect: Rect, base: PalmBase, owner: JsonObject, ac
   const b = asObject(owner.b ?? null) ?? {}
   const foreAnimStyles = list(b.base_fa ?? b.base_a).map(text)
   const center = act.CENTER ?? ""
+  const foreStyles = base.fores.map(text)
+  const backStyle = text(base.back)
+  const animStyles = [text(b.asi), text(b.base_ba), ...foreAnimStyles].filter((style): style is string => Boolean(style))
   return {
+    key: {
+      id: section,
+      actions: { press: { kind: "text", value: center } },
+      container: {
+        ...(backStyle ? { back: { style: backStyle, ...(text(b.base_ba) ? { anim: text(b.base_ba) } : {}) } } : {}),
+        fore: foreStyles.map((style, index) => ({
+          style,
+          ...(foreAnimStyles[index] ? { anim: foreAnimStyles[index] } : {}),
+        })),
+        ...(act.SHOW ? { text: { content: act.SHOW } } : {}),
+      },
+    },
     section,
     sections: [section],
     rect,
+    container: {
+      ...(backStyle ? { back: { style: backStyle } } : {}),
+      fore: foreStyles.map((style) => ({ style })),
+      ...(act.SHOW ? { text: { content: act.SHOW } } : {}),
+    },
+    ...(backStyle ? { backStyle } : {}),
+    foreStyles,
+    animStyles,
     editable: true,
-    show: act.SHOW ?? "",
-    center,
-    up: act.UP ?? "",
-    down: act.DOWN || center,
-    left: act.LEFT ?? "",
-    right: act.RIGHT ?? "",
-    hold: act.HOLD ?? "",
-    holdSymbols: act.HOLDSYM ?? "",
-    info: act.INFO ?? "",
-    backStyle: text(base.back),
-    foreStyle: text(base.fores[0]),
-    foreStyles: base.fores.map(text),
-    foreOffsets: [],
-    positionTypes: base.offsets.map(text),
-    statStyle: tipsText(owner.fix_a ?? owner.t ?? null) ?? "",
-    animStyle: text(b.asi),
-    backAnimStyle: text(b.base_ba),
-    foreAnimStyle: foreAnimStyles[0] ?? "",
-    foreAnimStyles,
+    visible: true,
+    fore: [],
+    layers: [],
     ...extra,
   }
 }
@@ -176,7 +183,7 @@ export class PalmBoard {
       const hit = rectParts(key.hit_rect ?? null)
       const touchRect = hit ? hit[2] > 0 && hit[3] > 0 ? { x: hit[0], y: hit[1], width: hit[2], height: hit[3] } : null : undefined
       const act = { ...actions(key.values), ...fix ? actions(fix.v) : {} }
-      return [{ section, rect, base, panelAnimation: asObject(key.b ?? null)?.base_pa, item: item(section, rect, base, key, act, { touchRect }) }]
+      return [{ section, rect, base, panelAnimation: asObject(key.b ?? null)?.base_pa, item: item(section, rect, base, key, act, touchRect === undefined ? {} : { key: { ...item(section, rect, base, key, act).key, ...(touchRect === null ? { touchRect: null } : { touchRect: { position: { x: touchRect.x, y: touchRect.y }, size: { width: touchRect.width, height: touchRect.height } } }) } }) }]
     })
     return keys.sort((left, right) => Number(!isFullPanelPreviewItem(left, this.width, this.height)) - Number(!isFullPanelPreviewItem(right, this.width, this.height)))
   }
@@ -222,7 +229,14 @@ export class PalmBoard {
     const symbols = this.list()
     if (!symbols) return keys
     const bar = item("LIST", symbols.bar, { ...symbols.base, fores: [] }, {}, {})
-    const cells = symbols.cells.map((cell) => item(cell.section, cell.rect, { back: symbols.cell, fores: symbols.base.fores, offsets: [] }, {}, {}, { editable: false, show: cell.title }))
+    const cells = symbols.cells.map((cell) => {
+      const cellItem = item(cell.section, cell.rect, { back: symbols.cell, fores: symbols.base.fores, offsets: [] }, {}, {})
+      return {
+        ...cellItem,
+        editable: false,
+        container: { ...cellItem.container, text: { content: cell.title } },
+      }
+    })
     return [...keys, bar, ...cells]
   }
 

@@ -8,7 +8,6 @@ import { identifyBds } from "@/skin-model/formats/bds-identify.ts"
 import { parseBds } from "@/skin-model/formats/bds-parse.ts"
 import type { FileRole, SkinDocuments, SkinStructure } from "@/skin-model/pipeline.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
-import { previewItems } from "@/preview-items.ts"
 import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
 import { tileSlices } from "@/tiles.ts"
@@ -377,7 +376,7 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[], name
     if (!rect && !unplaced.has(key.id)) continue
     lines.push(`[${key.id}]`)
     if (rect) {
-      lines.push(`VIEW_RECT=${rect.position.x},${rect.position.y},${rect.size.width},${rect.size.height}`)
+      lines.push(`VIEW_RECT=${rect.x},${rect.y},${rect.width},${rect.height}`)
     }
     if (key.touchRect === null) {
       lines.push("TOUCH_RECT=0,0,0,0")
@@ -385,6 +384,7 @@ export function layoutText(board: SkinBoard, renders: readonly KeyRender[], name
       lines.push(`TOUCH_RECT=${key.touchRect.position.x},${key.touchRect.position.y},${key.touchRect.size.width},${key.touchRect.size.height}`)
     }
     if (key.padding) lines.push(`PADDING=${key.padding.left},${key.padding.top},${key.padding.right},${key.padding.bottom}`)
+    if (key.foreRect) lines.push(`FOREGROUND_RECT=${key.foreRect.position.x},${key.foreRect.position.y},${key.foreRect.size.width},${key.foreRect.size.height}`)
     if (key.labelPosition) lines.push(`POS_TYPE=${key.labelPosition.join(",")}`)
     if (key.label) lines.push(`SHOW=${key.label}`)
     if (key.holdSymbol) lines.push(`HOLDSYM=${key.holdSymbol}`)
@@ -620,6 +620,48 @@ function parsePanelSize(document: IniDocument): Size<number> {
   return { width: 1080, height: 600 }
 }
 
+/**
+ * 一份布局文档的渲染投影：几何是 `VIEW_RECT`，样式引用在按键容器里，
+ * 具体样式由调用方的解析器去取。同一位置同一动作的段合成一个键。
+ */
+export function bdsRenders(document: IniDocument): KeyRender[] {
+  const groups = new Map<string, ReturnType<typeof keysOf>>()
+  for (const entry of keysOf(document)) {
+    const { position, size } = entry.rect
+    const signature = [position.x, position.y, size.width, size.height, actionValue(entry.key.actions.press) ?? ""].join("|")
+    groups.set(signature, [...(groups.get(signature) ?? []), entry])
+  }
+  return [...groups.values()].map((entries) => {
+    const key = entries[entries.length - 1].key
+    const { position, size } = entries[entries.length - 1].rect
+    const container = key.container
+    const foreStyles = container.fore.flatMap((layer) => (layer.style ? [layer.style] : []))
+    return {
+      key,
+      section: key.id,
+      sections: entries.flatMap((entry) => entry.key.sections ?? [entry.key.id]),
+      rect: { x: position.x, y: position.y, width: size.width, height: size.height },
+      ...(key.foreRect ? { foreRect: { x: key.foreRect.position.x, y: key.foreRect.position.y, width: key.foreRect.size.width, height: key.foreRect.size.height } } : {}),
+      container,
+      ...(container.back?.style ? { backStyle: container.back.style } : {}),
+      ...(container.back?.pressed ? { highlightBackStyle: container.back.pressed } : {}),
+      foreStyles,
+      ...(container.text?.content ? { text: container.text.content } : {}),
+      animStyles: [
+        ...new Set([
+          ...container.fore.flatMap((layer) => (layer.anim ? [layer.anim] : [])),
+          ...(container.back?.anim ? [container.back.anim] : []),
+          ...(container.press ? [container.press] : []),
+        ]),
+      ],
+      editable: key.editable ?? true,
+      visible: key.visible !== false,
+      fore: [],
+      layers: [],
+    }
+  })
+}
+
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */
 function layoutFiles(access: DocumentAccess, theme: Appearance, orientation: Orientation): string[] {
   // 这几类与手写区同目录，即便带按键段也不是键盘布局。
@@ -646,20 +688,60 @@ function boardKindOf(layout: string): BoardKind {
   return "other"
 }
 
+/** 一个 `[KEYn]` 段的原始字段，按 BDS 自己的写法逐个读；缺失就是缺失。 */
+type KeyFields = {
+  rect?: LayoutBox
+  show?: string
+  center?: string
+  up?: string
+  down?: string
+  left?: string
+  right?: string
+  hold?: string
+}
+
+/** 读一个按键段的字段表；`DOWN` 缺省时与 `CENTER` 同动作，这是格式本身的定义。 */
+function keyFieldsOf(document: IniDocument, section: string): KeyFields {
+  const read = (name: string): string | undefined => document.get(section, name)?.trim() || undefined
+  const rect = numbersOf(read("VIEW_RECT"))
+  const center = read("CENTER")
+  const down = read("DOWN") ?? center
+  return {
+    ...(rect.length === 4
+      ? { rect: { position: { x: rect[0], y: rect[1] }, size: { width: rect[2], height: rect[3] } } }
+      : {}),
+    ...(read("SHOW") ? { show: read("SHOW") } : {}),
+    ...(center ? { center } : {}),
+    ...(read("UP") ? { up: read("UP") } : {}),
+    ...(down ? { down } : {}),
+    ...(read("LEFT") ? { left: read("LEFT") } : {}),
+    ...(read("RIGHT") ? { right: read("RIGHT") } : {}),
+    ...(read("HOLD") ? { hold: read("HOLD") } : {}),
+  }
+}
+
 /**
- * 一份布局文档里的按键：动作按事件拆分，样式从预览项上取。
+ * 一份布局文档里的按键：动作按事件拆分，样式从按键容器上取。
  * 几何单独返回：它只喂布局推导，不进按键。
  */
-function keysOf(document: IniDocument, size: Size<number>): Array<{ key: SkinKey; rect: LayoutBox; placed: boolean }> {
-  // 第六个参数放行没有 VIEW_RECT 的按键段，它们只有定义没有几何。
-  return previewItems(document, size.width, size.height, undefined, false, true).flatMap((item) => {
-    // 没有 VIEW_RECT 的键不进布局树，它们是模板/示例段，另走 unplacedKeys。
-    if (!/^KEY\d+$/i.test(item.section)) return []
+function keysOf(document: IniDocument): Array<{ key: SkinKey; rect: LayoutBox; placed: boolean }> {
+  return document.sections().flatMap((section) => {
+    if (!/^KEY\d+$/i.test(section)) return []
+    const item = keyFieldsOf(document, section)
+    const read = (name: string): string | undefined => document.get(section, name)?.trim() || undefined
+    const touchRect = numbersOf(read("TOUCH_RECT"))
+    const padding = numbersOf(read("PADDING"))
+    const positionTypes = read("POS_TYPE")?.split(",").map((token) => Number(token.trim())).filter((each) => Number.isFinite(each)) ?? []
+    const foreStyles = read("FORE_STYLE")?.split(",").map((token) => token.trim()).filter(Boolean) ?? []
+    const foreOffsets = read("FORE_OFFSET")?.split(";").map((token) => {
+      const parts = numbersOf(token)
+      return parts.length === 2 ? { x: parts[0], y: parts[1] } : undefined
+    }) ?? []
+    const foreAnims = read("FORE_ANIM_STYLE")?.split(",").map((token) => token.trim()) ?? []
     const actions: SkinKey["actions"] = {}
     const press = actionOf(item.center || item.show)
     if (press) actions.press = press
-    // SHOW 是键上显示的字符；没有 CENTER 时它才兼作动作，两件事分开记。
-    const label = item.show || undefined
+    const label = item.show
     const hold = actionOf(item.hold)
     if (hold) actions["long-press"] = hold
     const up = actionOf(item.up)
@@ -672,58 +754,61 @@ function keysOf(document: IniDocument, size: Size<number>): Array<{ key: SkinKey
     const right = actionOf(item.right)
     if (right) actions["swipe-right"] = right
     // 皮肤状态下的另一套样式与动作写在 `[TIPn]` 里；按键只记状态名与段号。
-    const refs = tipsOf(item.statStyle)
-    return [{
-      key: {
-      id: item.section,
+    const refs = tipsOf(read("STAT_STYLE"))
+    const back = read("BACK_STYLE")
+    const pressed = read("HL_BACK_STYLE")
+    const backAnim = read("BACK_ANIM_STYLE")
+    const showing = read("SHOW")
+    const foreRect = numbersOf(read("FOREGROUND_RECT"))
+    const key: SkinKey = {
+      id: section,
       // TOUCH_RECT 写了全零表示显式没有触摸区，与没写是两种状态。
-      ...(item.touchRect === null
-        ? { touchRect: null }
-        : item.touchRect
-          ? { touchRect: { position: { x: item.touchRect.x, y: item.touchRect.y }, size: { width: item.touchRect.width, height: item.touchRect.height } } }
-          : {}),
-      ...(item.padding ? { padding: { left: item.padding[0], top: item.padding[1], right: item.padding[2], bottom: item.padding[3] } } : {}),
+      ...(touchRect.length === 4
+        ? touchRect.every((each) => each === 0)
+          ? { touchRect: null }
+          : { touchRect: { position: { x: touchRect[0], y: touchRect[1] }, size: { width: touchRect[2], height: touchRect[3] } } }
+        : {}),
+      ...(padding.length === 4 ? { padding: { left: padding[0], top: padding[1], right: padding[2], bottom: padding[3] } } : {}),
+      ...(foreRect.length === 4
+        ? { foreRect: { position: { x: foreRect[0], y: foreRect[1] }, size: { width: foreRect[2], height: foreRect[3] } } }
+        : {}),
       ...(label ? { label } : {}),
       // 长按弹出的符号串，原文件给什么就带回什么。
-      ...(item.holdSymbols ? { holdSymbol: item.holdSymbols } : {}),
-      ...(item.info ? { info: item.info } : {}),
-      // POS_TYPE 是放置类型，原文件给几个就带回几个。
-      ...(item.positionTypes.length
-        ? { labelPosition: item.positionTypes.map((value) => Number(value)) }
-        : {}),
+      ...(read("HOLDSYM") ? { holdSymbol: read("HOLDSYM") } : {}),
+      ...(read("INFO") ? { info: read("INFO") } : {}),
+      ...(positionTypes.length ? { labelPosition: positionTypes } : {}),
       actions,
       // 按键自己的容器：背景一层、前景若干层（各带偏移与动画）、文字层。
       container: {
-        ...(item.backStyle || item.highlightBackStyle || item.backAnimStyle
+        ...(back || pressed || backAnim
           ? {
             back: {
-              style: item.backStyle,
-              ...(item.highlightBackStyle ? { pressed: item.highlightBackStyle } : {}),
-              ...(item.backAnimStyle ? { anim: item.backAnimStyle } : {}),
+              ...(back ? { style: back } : {}),
+              ...(pressed ? { pressed } : {}),
+              ...(backAnim ? { anim: backAnim } : {}),
             },
           }
           : {}),
-        fore: item.foreStyles.map((styleName, index) => ({
+        fore: foreStyles.map((styleName, index) => ({
           style: styleName,
-          ...(item.foreOffsets[index] ? { offset: { x: item.foreOffsets[index]![0], y: item.foreOffsets[index]![1] } } : {}),
-          ...(item.foreAnimStyles[index] ? { anim: item.foreAnimStyles[index] } : {}),
+          ...(foreOffsets[index] ? { offset: foreOffsets[index] } : {}),
+          ...(foreAnims[index] ? { anim: foreAnims[index] } : {}),
         })),
-        ...(item.show || item.positionTypes.length
+        ...(showing || positionTypes.length
           ? {
             text: {
-              ...(item.show ? { content: item.show } : {}),
-              ...(item.positionTypes.length ? { placement: item.positionTypes.map((value) => Number(value)) } : {}),
+              ...(showing ? { content: showing } : {}),
+              ...(positionTypes.length ? { placement: positionTypes } : {}),
             },
           }
           : {}),
-        ...(item.animStyle ? { press: item.animStyle } : {}),
-        ...(item.pressStyle ? { press: item.pressStyle } : {}),
+        ...(read("ANIM_STYLE") ? { press: read("ANIM_STYLE") } : {}),
+        ...(read("PRESS_STYLE") ? { press: read("PRESS_STYLE") } : {}),
       },
       ...(refs.length ? { stateRefs: refs } : {}),
-      },
-      rect: { position: { x: item.rect.x, y: item.rect.y }, size: { width: item.rect.width, height: item.rect.height } },
-      placed: item.rect.width > 0,
-    }]
+    }
+    const rect = item.rect ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+    return [{ key, rect, placed: rect.size.width > 0 }]
   })
 }
 
@@ -867,7 +952,7 @@ export async function layoutBoards(
     ...options?.derive,
     weights: { ...bdsFormat.derive?.weights, ...options?.derive?.weights },
   }
-  const allKeys = keysOf(document, size)
+  const allKeys = keysOf(document)
   // 只有带 VIEW_RECT 的键参与布局推导；模板段另存，写回时附在末尾。
   const keys = allKeys.filter((each) => each.placed)
   const unplacedKeys = allKeys.filter((each) => !each.placed).map((each) => each.key)
@@ -907,7 +992,7 @@ export async function layoutBoards(
     const other = access.text(layoutPath)
     if (!other) continue
     const boardSize = parsePanelSize(other)
-    const boardAll = keysOf(other, boardSize)
+    const boardAll = keysOf(other)
     const boardKeys = boardAll.filter((each) => each.placed)
     const boardUnplaced = boardAll.filter((each) => !each.placed).map((each) => each.key)
     if (!boardAll.length) continue

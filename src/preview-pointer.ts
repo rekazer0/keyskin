@@ -1,23 +1,46 @@
 import type { Preview } from "./preview.ts"
-import { effectivePreviewItem, isFullPanelPreviewItem, visiblePreviewItems } from "./preview-items.ts"
+import { isFullPanelPreviewItem } from "./preview-items.ts"
 import { gestureDirection } from "./layout.ts"
 import { isTouchLongPress } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { isAdditiveSelection } from "./preview-items.ts"
+import { actionText } from "./skin-model/inspect.ts"
+import type { KeyEvent } from "./skin-model/types.ts"
+
+/** 方向到按键事件。 */
+const DIRECTION_EVENTS: Readonly<Record<string, KeyEvent>> = {
+  center: "press",
+  up: "swipe-up",
+  down: "swipe-down",
+  left: "swipe-left",
+  right: "swipe-right",
+  hold: "long-press",
+}
+
+/** 某个方向的动作文本；没有动作就是空串。 */
+function actionAt(key: PreviewItem, direction: string): string {
+  const event = DIRECTION_EVENTS[direction]
+  return event ? actionText(key.key.actions[event]) ?? "" : ""
+}
+
+/** 可见的按键：可见性由 IR 给。 */
+function visibleKeys(keys: readonly PreviewItem[]): PreviewItem[] {
+  return keys.filter((render) => render.visible)
+}
 import { snapRectDelta } from "./layout.ts"
-import { legacyHintCandidates, legacyHintHasHold, legacyHintSelectedIndex } from "./preview-hints.ts"
+import { hintKeyOf, legacyHintCandidates, legacyHintHasHold, legacyHintSelectedIndex } from "./preview-hints.ts"
 
 function nativeHold(self: Preview, key: PreviewItem) {
   return self.drawnScene?.keys.find((item) => item.section === key.section)?.holdPopup
 }
 
 function hasHold(self: Preview, key: PreviewItem): boolean {
-  return Boolean(nativeHold(self, key)) || legacyHintHasHold(key, self.longHint ?? self.shortHint,
+  return Boolean(nativeHold(self, key)) || legacyHintHasHold(hintKeyOf(key), self.longHint ?? self.shortHint,
     Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))
 }
 
 function holdCandidates(self: Preview, key: PreviewItem): string[] {
-  return nativeHold(self, key)?.candidates ?? legacyHintCandidates(key, "hold",
+  return nativeHold(self, key)?.candidates ?? legacyHintCandidates(hintKeyOf(key), "hold",
     Boolean(self.stateDocument) || self.bdaHints || Boolean((self.longHint ?? self.shortHint)?.defaultCandidates))
 }
 
@@ -82,7 +105,7 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
     playPressedKey(self, key)
     if (self.editTool === "move" && !key.section.startsWith("LIST")) {
       const selectedSections = new Set(
-        visiblePreviewItems(self.keys, self.skinState)
+        visibleKeys(self.keys)
           .filter((item) => self.itemSelected(item) && !item.section.startsWith("LIST"))
           .flatMap((item) => item.sections),
       )
@@ -107,7 +130,7 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
     startX: point.x,
     startY: point.y,
     startedAt: Date.now(),
-    clearOnHold: key.center.trim() === "F36",
+    clearOnHold: actionAt(key, "center").trim() === "F36",
     holdTriggered: false,
     direction: "center",
   }
@@ -144,7 +167,7 @@ export function pointerMove(self: Preview, event: PointerEvent): void {
     const point = self.point(event)
     if (self.active.direction === "hold" && self.active.hintCellWidth && !self.active.clearOnHold) {
       const candidates = holdCandidates(self, self.active.key)
-      const index = Math.max(0, Math.min(candidates.length - 1, (nativeHold(self, self.active.key)?.selected ?? legacyHintSelectedIndex(self.active.key, candidates))
+      const index = Math.max(0, Math.min(candidates.length - 1, (nativeHold(self, self.active.key)?.selected ?? legacyHintSelectedIndex(hintKeyOf(self.active.key), candidates))
         + Math.round((point.x - self.active.startX) / self.active.hintCellWidth)))
       if (self.active.hintIndex !== index) {
         self.active.hintIndex = index
@@ -195,7 +218,7 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     const box = updateMarquee(self, event)
     self.marquee = undefined
     if (box) {
-      const hits = visiblePreviewItems(self.keys, self.skinState).filter(({ editable, rect }) => editable &&
+      const hits = visibleKeys(self.keys).filter(({ editable, rect }) => editable &&
         rect.x <= box.x + box.width && rect.x + rect.width >= box.x &&
         rect.y <= box.y + box.height && rect.y + rect.height >= box.y &&
         !isFullPanelPreviewItem({ rect }, self.panelWidth, self.panelHeight))
@@ -270,7 +293,7 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
   }
   const dx = point.x - startX
   const dy = point.y - startY
-  const clearOnHold = key.center.trim() === "F36"
+  const clearOnHold = actionAt(key, "center").trim() === "F36"
   const direction = active.direction === "hold" && active.hintCellWidth ? "hold" : gestureDirection(
     dx,
     dy,
@@ -278,13 +301,13 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     hasHold(self, key) || clearOnHold,
   )
   const candidates = direction === "hold" ? holdCandidates(self, key) : []
-  const index = active.hintIndex ?? nativeHold(self, key)?.selected ?? legacyHintSelectedIndex(key, candidates)
-  const code = direction === "hold" && clearOnHold ? "F48" : direction === "hold" && candidates.length ? candidates[index] : key[direction]
+  const index = active.hintIndex ?? nativeHold(self, key)?.selected ?? legacyHintSelectedIndex(hintKeyOf(key), candidates)
+  const code = direction === "hold" && clearOnHold ? "F48" : direction === "hold" && candidates.length ? candidates[index] : actionAt(key, direction)
   self.onEvent({
     section: key.section,
     direction,
     code,
-    holdSymbols: direction === "hold" && !active.hintCellWidth ? key.holdSymbols : undefined,
+    holdSymbols: direction === "hold" && !active.hintCellWidth ? key.key.holdSymbol : undefined,
   })
   const release = () => {
     if (self.active !== active) return
@@ -297,9 +320,8 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
 /** A canvas press takes over from the paused player and uses the state currently drawn. */
 function playPressedKey(self: Preview, key: PreviewItem): void {
   self.setPlayerParticles()
-  void self.playAnimation(self.stateDocument
-    ? effectivePreviewItem(self.stateDocument, key, self.skinState ?? 0)
-    : key)
+  // 状态覆盖已经在 IR 里合进渲染项，这里直接用当前画出的那个键。
+  void self.playAnimation(key)
 }
 
 function notifySelection(self: Preview): void {
@@ -318,7 +340,7 @@ function holdSelection(self: Preview, key: PreviewItem): void {
 /** 点按键改选择：Shift 连选、Cmd/Ctrl 加减选；不通知。 */
 function pickKey(self: Preview, key: PreviewItem, event: Pick<PointerEvent, "metaKey" | "ctrlKey" | "shiftKey">): void {
   if (self.mode === "edit" && event.shiftKey && self.selectionAnchor) {
-    const sections = visiblePreviewItems(self.keys, self.skinState)
+    const sections = visibleKeys(self.keys)
       .filter((item) => item.editable).map((item) => item.section)
     const from = sections.indexOf(self.selectionAnchor)
     const to = sections.indexOf(key.section)
@@ -341,7 +363,7 @@ function dragDelta(self: Preview, point: { x: number; y: number }): { x: number;
   if (!self.editDrag) return { x: 0, y: 0 }
   return snapRectDelta(
     [...self.editDrag.original.values()],
-    visiblePreviewItems(self.keys, self.skinState)
+    visibleKeys(self.keys)
       .filter((key) => key.editable && !self.editDrag?.original.has(key.section))
       .map((key) => key.rect),
     {

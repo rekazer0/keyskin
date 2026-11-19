@@ -4,7 +4,7 @@ import { animationWorkspaceHosts } from "../animation-workspace.ts"
 import type { AnimationKeyFilter, AnimationListItem, AnimationStyleFilter, AnimationStyleItem } from "../animation-inspector.ts"
 import { strToU8 } from "fflate"
 import type { KeyboardPlayback } from "../animation-player.ts"
-import { keyAnimationStyles, visiblePreviewItems, type PreviewItem } from "../preview-items.ts"
+import { keyAnimationStyles, type PreviewItem } from "../preview-items.ts"
 import { preview } from "./canvas-interaction"
 import { asObject } from "../palm/sxi-ini.ts"
 import { legacyAnimationConfigPath } from "./config-context"
@@ -95,7 +95,7 @@ const keysLabel = (keys: readonly PreviewItem[]) => keys.length === 1 ? keyLabel
 
 function pickedKeys(): PreviewItem[] {
   const sections = new Set(appState.animationKeys)
-  return sections.size ? visiblePreviewItems(preview.keys, preview.skinState).filter((key) => sections.has(key.section)) : []
+  return sections.size ? preview.keys.filter((key) => key.visible && sections.has(key.section)) : []
 }
 
 /** The list for the picked keys: only the animations `plays` says one of them plays on press, or all of them. */
@@ -137,7 +137,7 @@ export function selectAnimation(id: string): void {
 
 /** The player's keyboard: the first key on the canvas that `plays` matches plays its press animation and emits the particles; without one they cover the panel. */
 export function keyboardPlayback(plays: (key: PreviewItem) => boolean): KeyboardPlayback {
-  const target = () => visiblePreviewItems(preview.keys, preview.skinState).find(plays)
+  const target = () => preview.keys.filter((key) => key.visible).find(plays)
   return {
     play() {
       const key = target()
@@ -153,7 +153,7 @@ export function keyboardPlayback(plays: (key: PreviewItem) => boolean): Keyboard
 export function previewStyleAnimation(styleIDs: readonly string[]): void {
   const styles = new Set(styleIDs.filter(Boolean))
   if (!styles.size) return
-  const keys = visiblePreviewItems(preview.keys, preview.skinState).filter((key) => keyPlaysStyle(key, styles))
+  const keys = preview.keys.filter((key) => key.visible).filter((key) => keyPlaysStyle(key, styles))
   const key = keys.find((candidate) => appState.selectedKeySections.includes(candidate.section)) ?? keys[0]
   if (key) void preview.playAnimation(key)
   else if (styles.has(preview.panelAnimationStyle)) preview.restartLegacyPanelAnimation()

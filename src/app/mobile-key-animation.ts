@@ -34,7 +34,8 @@ export function syncMobileKeyAnimation(): void {
   if (!path || !document || !styles) { current?.remove(); return }
   const key = preview.keys.find(key => key.sections.includes(appState.selectedKeySections[0]))
   if (!key) { current?.remove(); return }
-  const ids = [...new Set([key.animStyle, key.backAnimStyle, ...key.foreAnimStyles, key.pressStyle].filter((id): id is string => Boolean(id && id !== "0")))]
+  // 动画样式集合由 IR 的容器汇总好，这里不逐个字段拼。
+  const ids = [...new Set(key.animStyles.filter((id) => id !== "0"))]
   const entries = parseLegacyAnimationFile(document.toString()).entries
   const sources = ids.flatMap(id => (styleAnimationSources(id, styles)?.sections ?? []).map(section => ({ id, section })))
   const unique = [...new Map(sources.map(source => [source.section, source])).values()]

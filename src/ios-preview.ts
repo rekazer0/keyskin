@@ -2,9 +2,84 @@ import type { Visual, VisualResolver } from "./atlas.ts"
 import { candidateWordsForeground } from "./candidate-style.ts"
 import type { IniDocument } from "./ini.ts"
 import { sceneKey, type NativeScene, type SceneLayer } from "./native-scene.ts"
-import type { PreviewItem, Rect } from "./preview-items.ts"
+import { persistVisible, type PreviewItem, type Rect } from "./preview-items.ts"
 import { defaultToolbarIcon, toolbarImageRect } from "./preview-draw.ts"
 import { iosToolbarScale } from "./ios-toolbar-geometry.ts"
+import { actionText } from "./skin-model/inspect.ts"
+
+/**
+ * iOS 工具栏的按键：候选栏布局文档里带 `SIZE` 的面板与图标段。
+ * 这一块没有对应的 IR 板，几何由 `ANCHOR_TYPE` 的九宫格锚点加 `POS` 摆位。
+ */
+export function iosToolbarItems(
+  document: IniDocument,
+  panelWidth: number,
+  panelHeight: number,
+  persistentOnly = false,
+): PreviewItem[] {
+  const sections = document.sections().filter((section) =>
+    /^(CAND|SWITCH|PANEL|LIST|MORE|ICON\d+|TIP\d+)$/.test(section)
+  )
+  const read = (section: string, name: string): string => document.get(section, name) ?? ""
+  return sections.flatMap((section) => {
+    if (/^TIP\d+$/.test(section) || !persistVisible(document.get(section, "PERSIST"), persistentOnly)) return []
+    const backStyle = read(section, "BACK_STYLE").split(",")[0] ?? ""
+    // CAND.FORE_STYLE 是候选词的运行时样式，不是整条候选栏的静态前景。
+    const foreStyles = section === "CAND"
+      ? []
+      : read(section, "FORE_STYLE").split(",").map((token) => token.trim()).filter(Boolean)
+    if (section !== "CAND" && (!read(section, "SIZE") || (!/^ICON\d+$/i.test(section) && !backStyle && !foreStyles[0]))) return []
+    const size = read(section, "SIZE").split(",").map(Number)
+    const width = section === "CAND" ? panelWidth : size[0] ?? 0
+    const height = section === "CAND" ? panelHeight : size[1] ?? 0
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return []
+    const position = read(section, "POS").split(",").map(Number)
+    const anchor = Number(read(section, "ANCHOR_TYPE"))
+    const xAnchor = ((anchor - 1) % 3) + 1
+    const yAnchor = Math.ceil(anchor / 3)
+    const offsetX = Number.isFinite(position[0]) ? position[0] : 0
+    const offsetY = Number.isFinite(position[1]) ? position[1] : 0
+    const x = section === "CAND" ? 0 : xAnchor === 2 ? panelWidth / 2 + offsetX : xAnchor === 3 ? panelWidth + offsetX : offsetX
+    const y = section === "CAND" ? 0 : yAnchor === 2 ? panelHeight / 2 + offsetY : yAnchor === 3 ? panelHeight + offsetY : offsetY
+    // iOS 的 FIX_SIZE 是点；皮肤几何与 @3x 素材都是像素（工具书 V6 p158）。
+    const fixed = read(section, "FIX_SIZE").split(",").map((value) => Number(value) * 3)
+    const foreRect = fixed.length === 2 && fixed.every(Number.isFinite)
+      ? { x: x + (width - fixed[0]) / 2, y: y + (height - fixed[1]) / 2, width: fixed[0], height: fixed[1] }
+      : undefined
+    const animStyles = [read(section, "ANIM_STYLE"), read(section, "PRESS_STYLE"), read(section, "BACK_ANIM_STYLE")].filter(Boolean)
+    const highlight = read(section, "HL_BACK_STYLE").split(",")[0] || undefined
+    // `KEY` 是图标按下时执行的功能键，工具栏按它筛要画的图标。
+    const pressText = read(section, "KEY") || read(section, "CENTER")
+    return [{
+      key: {
+        id: section,
+        actions: pressText ? { press: { kind: "text", value: pressText } } : {},
+        container: { fore: foreStyles.map((style) => ({ style })) },
+      },
+      section,
+      sections: [section],
+      rect: { x, y, width, height },
+      ...(foreRect ? { foreRect } : {}),
+      container: {
+        ...(backStyle ? { back: { style: backStyle, ...(highlight ? { pressed: highlight } : {}) } } : {}),
+        fore: foreStyles.map((style) => ({ style })),
+      },
+      ...(backStyle ? { backStyle } : {}),
+      ...(highlight ? { highlightBackStyle: highlight } : {}),
+      foreStyles,
+      animStyles,
+      editable: /^ICON\d+$/i.test(section),
+      visible: true,
+      fore: [],
+      layers: [],
+    }]
+  })
+}
+
+/** 键在按下时执行的动作文本；工具栏用它区分系统功能键。 */
+function pressText(item: PreviewItem): string {
+  return actionText(item.key.actions.press) ?? ""
+}
 
 /** Oversized CND hit boxes must not drag the fixed-size artwork below the visible native bar. */
 export async function iosToolbarImageScene(
@@ -16,10 +91,10 @@ export async function iosToolbarImageScene(
   color = "currentColor",
 ): Promise<NativeScene> {
   const scale = iosToolbarScale(width, devicePointWidth)
-  const keys = await Promise.all(items.filter((item) => item.center.trim() === "F14" || item.foreRect && ["F31", "F8", "F9"].includes(item.center.trim())).map(async (item) => {
+  const keys = await Promise.all(items.filter((item) => pressText(item) === "F14" || item.foreRect && ["F31", "F8", "F9"].includes(pressText(item))).map(async (item) => {
     const rect = item.rect
     if (rect.x + rect.width <= 0 || rect.x >= width || rect.y + rect.height <= 0 || rect.y >= height) return
-    if (item.center.trim() === "F14") {
+    if (pressText(item) === "F14") {
       const images = await Promise.all((await resolver.resolveToolbarImages()).map(async (visual) => {
         if (visual.image || !visual.defaultIcon) return visual
         const size = Math.min(width / 18, height * 0.45)
@@ -35,7 +110,7 @@ export async function iosToolbarImageScene(
         }, width, devicePointWidth),
       }))
       return sceneKey(item.section, rect, async (pressed) => {
-        const back = await resolver.resolve(pressed ? item.highlightBackStyle ?? item.backStyle : item.backStyle, pressed)
+        const back = await resolver.resolve(pressed ? item.highlightBackStyle ?? item.backStyle ?? "" : item.backStyle ?? "", pressed)
         return { back: back ? [{ kind: "image", visual: back, rect }] : [], fore }
       })
     }
@@ -43,15 +118,15 @@ export async function iosToolbarImageScene(
     const oversized = rect.y < 0 || rect.y + rect.height > height
     const w = fixed.width * scale
     const h = Math.min(fixed.height * scale, height)
-    const x = oversized && item.center.trim() === "F31" ? 0
-      : oversized && item.center.trim() === "F8" ? width - w
+    const x = oversized && pressText(item) === "F31" ? 0
+      : oversized && pressText(item) === "F8" ? width - w
       : rect.x + (rect.width - w) / 2
     const y = oversized ? (height - h) / 2 : rect.y + (rect.height - h) / 2
     const normal = await Promise.all(item.foreStyles.map((id) => resolver.resolve(id, false)))
     if (!normal.some((visual) => visual?.image && visual.source)) return
     return sceneKey(item.section, rect, async (pressed) => {
       const visuals = pressed ? await Promise.all(item.foreStyles.map((id) => resolver.resolve(id, true))) : normal
-      const back = await resolver.resolve(pressed ? item.highlightBackStyle ?? item.backStyle : item.backStyle, pressed)
+      const back = await resolver.resolve(pressed ? item.highlightBackStyle ?? item.backStyle ?? "" : item.backStyle ?? "", pressed)
       const fore: SceneLayer[] = visuals.flatMap((visual) => {
         if (!visual?.image || !visual.source) return []
         const [, , sw, sh] = visual.source
@@ -92,9 +167,9 @@ export async function iosDefaultToolbarScene(
       width: w * scale, height: h * scale,
     } }
   }
-  return { background: [], partial: true, keys: items.filter((item) => ["F14", "F31", "F8", "F9"].includes(item.center.trim())).map((item) => {
+  return { background: [], partial: true, keys: items.filter((item) => ["F14", "F31", "F8", "F9"].includes(pressText(item))).map((item) => {
     const rect = item.rect
-    const action = item.center.trim()
+    const action = pressText(item)
     const fore = action === "F14"
       ? functions.map((visual, i) => layer(visual, { ...rect, x: rect.x + i * rect.width / functions.length, width: rect.width / functions.length }))
       : action === "F31" ? [layer(logo, rect)]

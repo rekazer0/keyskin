@@ -306,7 +306,12 @@ async function sxiFromModel(model: SkinModel): Promise<SkinDocuments> {
   if (!board) throw new Error("模型里没有板")
   // 几何由布局树算出来，手心这边同样不绕开布局系统。
   const renders = await buildBoard(model, board)
-  const rectOf = (key: SkinKey): LayoutBox => renders.find((render) => render.key.id === key.id)?.rect ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+  const rectOf = (key: SkinKey): LayoutBox => {
+    const rect = renders.find((render) => render.key.id === key.id)?.rect
+    return rect
+      ? { position: { x: rect.x, y: rect.y }, size: { width: rect.width, height: rect.height } }
+      : { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+  }
   const binaries = new Map<string, Uint8Array>()
   const roles = new Map<string, FileRole>()
   // 音效与字体从模型写回。

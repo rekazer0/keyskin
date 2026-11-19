@@ -8,7 +8,7 @@ import { dynamicToolbarRect, persistVisible } from "../src/preview-items.ts"
 // 依据《百度手机输入法皮肤工具书 V6》属性表。
 
 test('HOLDSYM is a separator-free character set', () => {
-  const key = { up: '', down: '', left: '', right: '', center: 'a', hold: '', holdSymbols: ',?' }
+  const key = { section: 'KEY1', up: '', down: '', left: '', right: '', center: 'a', hold: '', holdSymbols: ',?' }
   assert.deepEqual(legacyHintCandidates(key, 'hold'), [',', '?'])
   assert.equal(legacyHintText(key, 'hold'), ',?')
   assert.deepEqual(legacyHintCandidates({ ...key, holdSymbols: '|｜' }, 'hold'), ['|', '｜'])
