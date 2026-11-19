@@ -17,7 +17,6 @@ export type SkinPackage = {
 }
 
 /* —— 2. 识别 —— */
-
 /**
  * 一个文件在格式里的角色。
  * `unknown` 是显式状态：识别不出来就说识别不出来，由导出方决定报损还是拒绝，
@@ -127,4 +126,17 @@ export function roleCounts(structure: SkinStructure): Map<FileRole["kind"], numb
 /** 从包里取某个角色的所有文件路径。 */
 export function pathsWith(structure: SkinStructure, kind: FileRole["kind"]): string[] {
   return [...structure.roles].filter(([, role]) => role.kind === kind).map(([path]) => path)
+}
+
+/**
+ * 把归档拆成包：只取文件名与字节，不带任何格式解释。
+ * 各格式的拆包规则一致，因此放在管线里，不各写一份。
+ */
+export function packageOf(archive: { names(): string[]; getBytes(path: string): Uint8Array | undefined }, format: SkinFormatId): SkinPackage {
+  const files = new Map<string, Uint8Array>()
+  for (const path of archive.names()) {
+    const data = archive.getBytes(path)
+    if (data) files.set(path, data)
+  }
+  return { format, files }
 }

@@ -44,16 +44,16 @@ function roleOf(path: string, files: ReadonlyMap<string, Uint8Array>): FileRole 
   if (leaf === "info.txt") return { kind: "info" }
   if (leaf === "anim.ini") return { kind: "motion" }
 
-  const panel = panelRole(path)
-  if (panel) return panel
-
   if (lower.endsWith(".ini")) {
     if (!orientation) {
       return { kind: "unknown", reason: "ini 不在主题方向目录下，无法判断用途" }
     }
     const text = new TextDecoder().decode(files.get(path) ?? new Uint8Array())
+    // 有按键段就是布局，哪怕文件名看着像手写板（bh.ini 也可能带按键）。
     if (/\[KEY/i.test(text)) return { kind: "layout", board: boardKindOf(path), theme, orientation }
-    // 有方向目录但没有按键段：属于面板或模板，不在按键布局里。
+    // 没有按键段时再看名字：面板配置或手写区。
+    const panel = panelRole(path)
+    if (panel) return panel
     return { kind: "panel-config" }
   }
   return { kind: "unknown", reason: `没有对应规则的后缀 ${leaf.includes(".") ? leaf.slice(leaf.lastIndexOf(".")) : leaf}` }
