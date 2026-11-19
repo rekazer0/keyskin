@@ -695,7 +695,7 @@ export function bdsBoardOf(
           ...(panelStyle ? { style: panelStyle } : {}),
           ...(panelFore ? { foreStyle: panelFore } : {}),
           size: panel,
-          ...(backdropRect ? { rect: backdropRect } : {}),
+          ...(backdropRect ? { viewRect: backdropRect } : {}),
         },
       }
       : {}),

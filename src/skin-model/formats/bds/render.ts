@@ -44,30 +44,71 @@ export async function bdsRenders(board: SkinBoard, state?: number): Promise<KeyR
   return [...keys, ...componentRenders(board)]
 }
 
-/** 组件：面板、候选栏、列表、更多菜单、气泡。几何都在板上。 */
+/** 组件：面板、候选栏、列表、更多菜单、气泡。每种自己决定要画几块、画在哪。 */
 function componentRenders(board: SkinBoard): KeyRender[] {
-  const components: KeyRender[] = []
-  const push = (id: string, box: { position: { x: number; y: number }; size: { width: number; height: number } } | undefined, style: string | undefined, fore: string | undefined, text?: string) => {
-    if (!box) return
-    const container = {
-      ...(style ? { back: { style } } : {}),
-      fore: fore ? [{ style: fore }] : [],
-      ...(text ? { text: { content: text } } : {}),
-    }
-    components.push(renderOf(id, { x: box.position.x, y: box.position.y, width: box.size.width, height: box.size.height }, container, {
-      sections: [id],
-      editable: false,
-      visible: true,
-    }))
+  return [
+    ...panelRenders(board),
+    ...candidateRenders(board),
+    ...listRenders(board),
+    ...moreRenders(board),
+    ...hintRenders(board),
+  ]
+}
+
+/** 面板背景：整板的底。 */
+function panelRenders(board: SkinBoard): KeyRender[] {
+  const backdrop = board.backdrop
+  if (!backdrop?.viewRect) return []
+  return [componentOf("PANEL", backdrop.viewRect, backdrop.style, backdrop.foreStyle)]
+}
+
+/** 候选栏；一份布局里可以有多个 `[CAND]`，只有一个时沿用段名。 */
+function candidateRenders(board: SkinBoard): KeyRender[] {
+  const bars = board.candidates ?? []
+  return bars.flatMap((bar, index) => {
+    if (!bar.viewRect) return []
+    const name = bars.length === 1 ? "CAND" : `CAND${index + 1}`
+    return [componentOf(name, bar.viewRect, bar.style, undefined)]
+  })
+}
+
+/** 列表容器；单元格由候选栏的格子样式决定，不单独成项。 */
+function listRenders(board: SkinBoard): KeyRender[] {
+  const list = board.list
+  if (!list?.viewRect) return []
+  return [componentOf("LIST", list.viewRect, list.style, list.foreStyle)]
+}
+
+/** 更多菜单：只有一个前景样式，没有背景层。 */
+function moreRenders(board: SkinBoard): KeyRender[] {
+  const more = board.more
+  if (!more?.viewRect) return []
+  return [componentOf("MORE", more.viewRect, undefined, more.foreStyle)]
+}
+
+/** 提示气泡的外框；气泡里的字由 `paint/hint.ts` 按候选现画。 */
+function hintRenders(board: SkinBoard): KeyRender[] {
+  const hint = board.hint
+  if (!hint?.viewRect) return []
+  return [componentOf("HINT", hint.viewRect, hint.style, hint.foreStyle)]
+}
+
+/** 一个组件块的渲染项：几何、背景引用、前景引用，没有别的东西。 */
+function componentOf(
+  id: string,
+  box: { position: { x: number; y: number }; size: { width: number; height: number } },
+  style: string | undefined,
+  fore: string | undefined,
+): KeyRender {
+  const container = {
+    ...(style ? { back: { style } } : {}),
+    fore: fore ? [{ style: fore }] : [],
   }
-  push("PANEL", board.backdrop?.viewRect, board.backdrop?.style, board.backdrop?.foreStyle)
-  for (const [index, bar] of (board.candidates ?? []).entries()) {
-    push(board.candidates?.length === 1 ? "CAND" : `CAND${index + 1}`, bar.viewRect, bar.style, undefined)
-  }
-  push("LIST", board.list?.viewRect, board.list?.style, board.list?.foreStyle)
-  push("MORE", board.more?.viewRect, undefined, board.more?.foreStyle)
-  push("HINT", board.hint?.viewRect, board.hint?.style, board.hint?.foreStyle)
-  return components
+  return renderOf(id, { x: box.position.x, y: box.position.y, width: box.size.width, height: box.size.height }, container, {
+    sections: [id],
+    editable: false,
+    visible: true,
+  })
 }
 
 /** 一个渲染项；样式引用由容器给，样式本身不在这里解析。 */
