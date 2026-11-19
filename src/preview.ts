@@ -46,6 +46,8 @@ export class Preview {
   private readonly scenes = new Map<number | undefined, Promise<NativeScene | undefined>>()
   /** Palm 文档自己列出按键：按状态与组词给出渲染项，形状与 IR 一致。 */
   private nativeItems?: (state: number | undefined, persistentOnly: boolean) => KeyRender[]
+  /** 按皮肤状态算出画布上的键；由编辑器注入，换状态时重算。 */
+  private renderSource?: (state?: number) => KeyRender[]
   // Resolver lookups are asynchronous and can involve stylesheet/tile parsing
   // and image decoding. Keep the resolved values for the lifetime of a
   // resolver; drag frames then only redraw geometry instead of repeating the
@@ -463,6 +465,8 @@ export class Preview {
   setSkinState(state?: number): void {
     this.skinState = state
     if (this.nativeItems) this.keys = this.layoutItems()
+    // 状态覆盖改变的是按键各层，换状态就得按新状态重算一遍渲染项。
+    else if (this.renderSource) this.keys = this.renderSource(state)
     void this.draw()
   }
 
@@ -481,13 +485,13 @@ export class Preview {
   }
 
   /**
-   * 注入渲染项。
-   * 画布不自己解析文件：矩形来自布局树、图层来自 IR 容器，算好再交进来。
+   * 注入渲染源：画布不自己解析文件，按状态算好的渲染项由外部交进来。
+   * 换皮肤状态时会再用同一个源重算。
    */
-  setRenders(renders: readonly KeyRender[]): void {
-    this.keys = [...renders]
+  setRenderSource(source?: (state?: number) => KeyRender[]): void {
+    this.renderSource = source
+    this.keys = source?.(this.skinState) ?? []
     this.visualCache.clear()
-    this.toolbarImagesCache = undefined
     this.lastRenderCache = undefined
     void this.draw()
   }

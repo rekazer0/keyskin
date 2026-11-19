@@ -338,7 +338,9 @@ export function refreshPreview(): void {
   }
   preview.setDocument(appState.layoutDocument)
   // 画布上的键由布局文档的渲染投影给出：几何是 VIEW_RECT，样式引用在按键容器里。
-  preview.setRenders(appState.layoutDocument ? bdsRenders(appState.layoutDocument) : [])
+  preview.setRenderSource(appState.layoutDocument
+    ? (state) => bdsRenders(appState.layoutDocument!, state)
+    : undefined)
   refreshNativeScenes()
 }
 

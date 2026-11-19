@@ -65,9 +65,22 @@ function containerIn(container: KeyContainer, state: number | undefined, key: Sk
 }
 
 /** `S12` 这种状态名里的数字与当前状态比对。 */
-function stateMatches(name: string, state: number): boolean {
+export function stateMatches(name: string, state: number): boolean {
   const digits = /(\d+)$/.exec(name)
   return digits ? Number(digits[1]) === state : false
+}
+
+/** 把状态覆盖合进容器：覆盖只替换它声明的那几层。 */
+export function containerWithState(container: KeyContainer, override: Partial<KeyContainer> | undefined): KeyContainer {
+  if (!override) return container
+  return {
+    ...container,
+    ...(override.back ? { back: { ...container.back, ...override.back } } : {}),
+    ...(override.fore ? { fore: override.fore } : {}),
+    ...(override.text ? { text: { ...container.text, ...override.text } } : {}),
+    ...(override.icon ? { icon: override.icon } : {}),
+    ...(override.press ? { press: override.press } : {}),
+  }
 }
 
 /** 一块板的按键渲染数据；矩形来自布局树，图层来自按键容器各自的层。 */

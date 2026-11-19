@@ -22,8 +22,8 @@ import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrac
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
 import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds-panels.ts"
-import { tipLines, tipPoolOf, tipsOf } from "@/skin-model/formats/bds-tips.ts"
-import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
+import { tipBodyOf, tipLines, tipPoolOf, tipsOf } from "@/skin-model/formats/bds-tips.ts"
+import { buildBoard, containerWithState, stateMatches, type KeyRender } from "@/skin-model/build.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 
@@ -624,7 +624,7 @@ function parsePanelSize(document: IniDocument): Size<number> {
  * 一份布局文档的渲染投影：几何是 `VIEW_RECT`，样式引用在按键容器里，
  * 具体样式由调用方的解析器去取。同一位置同一动作的段合成一个键。
  */
-export function bdsRenders(document: IniDocument): KeyRender[] {
+export function bdsRenders(document: IniDocument, state?: number): KeyRender[] {
   const groups = new Map<string, ReturnType<typeof keysOf>>()
   for (const entry of keysOf(document)) {
     const { position, size } = entry.rect
@@ -634,7 +634,10 @@ export function bdsRenders(document: IniDocument): KeyRender[] {
   return [...groups.values()].map((entries) => {
     const key = entries[entries.length - 1].key
     const { position, size } = entries[entries.length - 1].rect
-    const container = key.container
+    // 状态覆盖写在 `[TIPn]` 里；按键只记状态名与段号。
+    const ref = state === undefined ? undefined : key.stateRefs?.find((each) => stateMatches(each.state, state))
+    const override = ref ? tipBodyOf(document, ref.section, { actionOf })?.container : undefined
+    const container = containerWithState(key.container, override)
     const foreStyles = container.fore.flatMap((layer) => (layer.style ? [layer.style] : []))
     return {
       key,
