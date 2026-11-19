@@ -31,7 +31,7 @@ test("BDA 动效在原包基础上写回后数量不变", async () => {
   const model = await bdaFormat.read(source)
   const before = model.motions.size
   assert.ok(before > 0)
-  const rewritten = await bdaFormat.read(bdaFormat.write(model, source))
+  const rewritten = await bdaFormat.read(bdaSource(bdaFormat.write(model).archive, base))
   assert.equal(rewritten.motions.size, before, "动效数量不该在写回后变化")
 })
 
@@ -40,7 +40,7 @@ test("BDA 动效的种类在写回后保留", async () => {
   const source = bdaSource(bdaAnimated(), base)
   const model = await bdaFormat.read(source)
   const kinds = new Map([...model.motions].map(([id, motion]) => [id, motion.root.kind]))
-  const rewritten = await bdaFormat.read(bdaFormat.write(model, source))
+  const rewritten = await bdaFormat.read(bdaSource(bdaFormat.write(model).archive, base))
   for (const [id, kind] of kinds) {
     assert.equal(rewritten.motions.get(id)?.root.kind, kind, `${id} 的动效类型变了`)
   }
@@ -60,7 +60,7 @@ test("跨格式往返后动效键与类型都不变", async () => {
     [...before.model.motions.keys()].sort(),
     "往返后动效键变了",
   )
-  const rebuild = await bdaFormat.read(bdaFormat.write(await bdaFormat.read(source), source))
+  const rebuild = await bdaFormat.read(bdaSource(bdaFormat.write(await bdaFormat.read(source)).archive, base))
   for (const [id, motion] of rebuild.motions) {
     assert.equal(motion.root.kind, (await bdaFormat.read(source)).motions.get(id)?.root.kind, `${id} 的类型变了`)
   }
@@ -75,7 +75,7 @@ test("Lottie 与视频动效保留媒体类型，不被写成普通帧图", asyn
   ))
   assert.ok(media.some(([, kind]) => kind === "lottie"), "夹具里应有 Lottie 动效")
   assert.ok(media.some(([, kind]) => kind === "video"), "夹具里应有视频动效")
-  const back = await bdaFormat.read(bdaFormat.write(model, source))
+  const back = await bdaFormat.read(bdaSource(bdaFormat.write(model).archive, base))
   for (const [id, kind] of media) {
     const root = back.motions.get(id)?.root
     assert.equal(root?.kind === "frames" ? root.media : undefined, kind, `${id} 的媒体类型丢了`)
@@ -88,7 +88,7 @@ test("动效绑定在写回后保留", async () => {
   const model = await bdaFormat.read(source)
   const before = [...model.motions.values()].reduce((total, motion) => total + motion.bindings.length, 0)
   assert.ok(before > 0, "夹具应当带动效绑定")
-  const back = await bdaFormat.read(bdaFormat.write(model, source))
+  const back = await bdaFormat.read(bdaSource(bdaFormat.write(model).archive, base))
   const after = [...back.motions.values()].reduce((total, motion) => total + motion.bindings.length, 0)
   assert.equal(after, before, "绑定数在写回后变了")
   const sample = [...back.motions.values()].find((motion) => motion.bindings.length)

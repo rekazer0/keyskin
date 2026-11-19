@@ -31,10 +31,15 @@ export type SkinAction =
   | { kind: "open-app"; app?: string }
   | { kind: "system"; code: string }
 
+/**
+ * 非图片资源。
+ * `data` 是文件内容：模型要能独立写出完整包，音效与字体的字节就得在模型里，
+ * 不能靠导出时回源包捡。
+ */
 export type SkinResource =
-  | { kind: "audio"; path: string; format?: string; duration?: number }
-  | { kind: "font"; path: string; family?: string; weight?: number }
-  | { kind: "frame"; path: string; duration?: number }
+  | { kind: "audio"; path: string; format?: string; duration?: number; data?: Uint8Array }
+  | { kind: "font"; path: string; family?: string; weight?: number; data?: Uint8Array }
+  | { kind: "frame"; path: string; duration?: number; data?: Uint8Array }
 
 /** 皮肤元信息；`scale` 是设计宽到目标分辨率的换算比例。 */
 export type SkinMeta = {

@@ -263,15 +263,11 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     model.images = images
     return model
   },
-  async write(model, source) {
+  async write(model) {
     const resolution = String(model.meta.resolution?.width || 1080)
     const text = (value: string) => new TextEncoder().encode(value)
-    // 未建模的文件（音效、字体、菜单、其它配置）原样带上；旧图片丢弃，下面会按资源表重写。
+    // 只写模型里有的东西：图片按资源表重写，布局与动效按板与动效重建。
     const files = new Map<string, Uint8Array>()
-    for (const [path, data] of source?.files ?? []) {
-      if (/\.(?:png|webp|gif|jpe?g)$/i.test(path)) continue
-      files.set(path, data)
-    }
     const name = (image: string) => image.split("/").pop() ?? image
     const themeLines = ["[General]", "skin_type=1", `skin_name=${model.meta.name ?? "皮肤"}`, `skin_author=${model.meta.author ?? ""}`, `skin_version=${model.meta.version ?? ""}`, ""]
     files.set("phoneTheme.ini", text(themeLines.join("\n")))
@@ -311,9 +307,8 @@ export const ssfFormat: SkinFormat<SsfSource> = {
     const kept = [...files].map(([path, data]) => ({ path, data }))
     return {
       files: new Map(kept.map((file) => [file.path, file.data])),
-      theme: source?.theme ?? (model.meta.appearance === "dark" ? "dark" : "light"),
-      orientation: source?.orientation ?? model.boards[0]?.orientation ?? "port",
-      ...(source?.skeleton ? { skeleton: source.skeleton } : {}),
+      theme: model.meta.appearance === "dark" ? "dark" : "light",
+      orientation: model.boards[0]?.orientation ?? model.meta.orientation ?? "port",
     }
   },
 }

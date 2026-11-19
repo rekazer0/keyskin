@@ -82,7 +82,7 @@ test("写回后在原包上重读，样式与图片数量不变", async () => {
   const { bda, base } = archives()
   const source = bdaSource(bda, base)
   const model = await bdaFormat.read(source)
-  const again = await bdaFormat.read(bdaFormat.write(model, source))
+  const again = await bdaFormat.read(bdaSource(bdaFormat.write(model).archive, base))
   assert.equal(again.styles.size, model.styles.size)
   assert.equal(again.images.size, model.images.size)
   assert.equal(again.boards.length, model.boards.length)
@@ -116,7 +116,7 @@ test("动效写回后能再读出来，类型不变", async () => {
   const base = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/bda-base.bds", import.meta.url))))
   const source = bdaSource(animated, base)
   const model = await bdaFormat.read(source)
-  const again = await bdaFormat.read(bdaFormat.write(model, source))
+  const again = await bdaFormat.read(bdaSource(bdaFormat.write(model).archive, base))
   assert.equal(again.motions.size, model.motions.size)
   for (const [id, motion] of model.motions) {
     assert.equal(again.motions.get(id)?.root.kind, motion.root.kind, `${id} 的动效类型变了`)

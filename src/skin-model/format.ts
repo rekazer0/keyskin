@@ -18,6 +18,6 @@ export interface SkinFormat<T> {
   readonly derive?: DeriveOverrides
   /** 格式原生数据 → IR。 */
   read(source: T, options?: ImportOptions): SkinModel | Promise<SkinModel>
-  /** IR → 格式原生数据；给了 `source` 时在原数据上写回，保留未建模的内容。 */
-  write(model: SkinModel, source?: T): T | Promise<T>
+  /** IR → 格式原生数据。只从模型生成，不回看源包。 */
+  write(model: SkinModel): T | Promise<T>
 }

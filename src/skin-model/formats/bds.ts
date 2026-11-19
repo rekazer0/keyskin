@@ -20,7 +20,6 @@ import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
 import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds-panels.ts"
 import { statStyleOf, tipLines, tipRefsOf, tipOverridesOf } from "@/skin-model/formats/bds-tips.ts"
-import { planExport } from "@/skin-model/export-plan.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
@@ -738,7 +737,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     model.provenance = { format: "bds", nodes: provenance }
     return model
   },
-  async write(model, source?: BdsSource) {
+  async write(model) {
     // 主键盘决定方向目录；模型里板多起来之后，第一块不一定是主键盘。
     const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
     if (!board) throw new Error("模型里没有板")
@@ -798,12 +797,7 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       files.push({ path: `${root}/res/${name}.png`, data: encodePng(page.image) })
     })
     if (model.motions.size) files.push({ path: `${root}/res/anim.ini`, data: text(writeMotions(model.motions)) })
-    // 建模之外的文件（音效、字体、其它主题目录）原样带上，否则导出会丢掉它们。
-    const plan = planExport(source?.archive, new Map(files.map((file) => [file.path, file.data])), {
-      // 图集取代了散图与旧切片表；音效、字体这些资源仍要原样带上。
-      dropPath: (path) => path.startsWith(`${root}/res/`) && /\.(?:png|til)$/i.test(path),
-    })
-    const archive = SkinArchive.fromSourceFiles([...plan.files])
+    const archive = SkinArchive.fromSourceFiles([...files])
     return {
       archive,
       layout: board.id,

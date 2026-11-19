@@ -354,14 +354,12 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     }
     return model
   },
-  write(model: SkinModel, source?: BdaSource): BdaSource {
-    const theme: Appearance = source?.theme ?? "light"
-    const orientation: Orientation = source?.orientation ?? "port"
+  write(model: SkinModel): BdaSource {
+    const theme: Appearance = model.meta.appearance
+    const orientation: Orientation = model.boards[0]?.orientation ?? model.meta.orientation
     const appearancePath = `${theme}/skin/${orientation}/appearanceConfig`
-    const bytes = source?.archive.getBytes(appearancePath)
-    const current: BdaAppearance = bytes
-      ? decodeBdaAppearance(bytes)
-      : { imageStyles: new Map(), textStyles: new Map(), colorStyles: new Map(), panels: new Map() }
+    // 外观完全从模型重建：不再以源包里的外观为底做增量覆盖。
+    const current: BdaAppearance = { imageStyles: new Map(), textStyles: new Map(), colorStyles: new Map(), panels: new Map() }
     const images = model.images
     // 三类样式表按 IR 里的样式名重建；编号就是外观里的键。
     const imageStyles = new Map<number, BdaImageStyle>()
@@ -374,39 +372,11 @@ export const bdaFormat: SkinFormat<BdaSource> = {
       else if (ref.type === "text") textStyles.set(ref.key, textStyleOf(style))
       else colorStyles.set(ref.key, colorStyleOf(style))
     }
-    // 有原包时在原面板上换样式引用，没有时从模型生成整套面板。
-    const panels = source ? new Map(current.panels) : panelsFromModel(model)
-    if (source) {
-      for (const board of model.boards) {
-        const name = panelNameOf(board.id)
-        const panel = panels.get(name)
-        if (!panel) continue
-        const keys = new Map(panel.keys)
-        for (const key of board.keys) {
-          const keyName = panelKeyNameOf(key)
-          if (!keyName) continue
-          const target = keys.get(keyName)
-          if (!target) continue
-          const back = refOfStyleName(key.style.back)
-          const pressed = refOfStyleName(key.style.pressedBack)
-          const foreStyles = key.style.fore.map((item) => refOfStyleName(item)).filter((item): item is BdaStyleRef => Boolean(item))
-          keys.set(keyName, {
-            ...target,
-            ...(back ? { backStyle: back } : {}),
-            ...(pressed ? { backStyleState: pressed } : {}),
-            foreStyles,
-          })
-        }
-        panels.set(name, { ...panel, keys })
-      }
-    }
+    // 面板整套从模型生成，不再在源包的面板上做增量替换。
+    const panels = panelsFromModel(model)
     const next: BdaAppearance = { ...current, imageStyles, textStyles, colorStyles, panels }
-    const files = source
-      ? source.archive.names().flatMap((path) => {
-        const data = source.archive.getBytes(path)
-        return data ? [{ path, data }] : []
-      }).filter((file) => file.path !== appearancePath)
-      : []
+    // 只写模型里有的东西：外观、动画配置、音效配置、图片。
+    const files: Array<{ path: string; data: Uint8Array }> = []
     // 动画配置单独一份文件；模型里有动效时从 IR 重建，否则保留原配置。
     if (model.motions.size) {
       const rebuilt = animationOfMotions(model.motions, model.meta.resolution?.width)
@@ -428,6 +398,6 @@ export const bdaFormat: SkinFormat<BdaSource> = {
       if (!id.startsWith("bda:")) continue
       files.push({ path: `${theme}/skin/res/${id.slice(4)}.png`, data: encodePng(image) })
     }
-    return { ...(source ?? {}), archive: SkinArchive.fromSourceFiles(files), theme, orientation }
+    return { archive: SkinArchive.fromSourceFiles(files), theme, orientation }
   },
 }

@@ -253,18 +253,20 @@ export const sxiFormat = {
     model.provenance = { format: "sxi", nodes: new Map(keys.map((key) => [key.id, { path: SXI_SKIN_PATH }])) }
     return model
   },
-  write(model: SkinModel, source?: SxiSource): SxiSource {
+  write(model: SkinModel): SxiSource {
     const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
     if (!board) throw new Error("模型里没有板")
-    const files = new Map(source?.files ?? [])
+    // 只写模型里有的东西：图片、skin.json、info.json。
+    const files = new Map<string, Uint8Array>()
     // 图片按样式引用写出；手心包内按文件名引用，不带命名空间前缀。
     for (const [id, image] of model.images) {
       if (id.startsWith(STYLE_PREFIX)) continue
       files.set(imageFileName(id), encodePng(image))
     }
-    const skin = parseSkinJson(textOf(files, SXI_SKIN_PATH) ?? "{}")
-    const root = asObject(skin.default) ?? {}
-    const keyboard = keyboardOf(skin) ?? {}
+    // skin.json 从零构造，不再在源包的旧文件上做增量覆盖。
+    const skin = {} as JsonObject
+    const root: JsonObject = {}
+    const keyboard: JsonObject = {}
     keyboard.board = { ...(asObject(keyboard.board) ?? {}), size: [0, 0, board.size.width, board.size.height] }
     keyboard.keys = board.keys.map((key) => ({
       id: Number(key.id.replace(/^KEY/i, "")) || 0,
@@ -325,7 +327,7 @@ export const sxiFormat = {
       author: model.meta.author ?? "",
       version: model.meta.version ?? "",
     })))
-    return { files, boardType: source?.boardType ?? board.id.replace(/\.ini$/i, "") }
+    return { files, boardType: board.id.replace(/\.ini$/i, "") }
   },
 }
 

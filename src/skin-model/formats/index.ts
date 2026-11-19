@@ -39,7 +39,7 @@ function entryOf(id: SkinFormatId): SkinFormatEntry {
       id,
       open: (archive) => bdsSource(archive),
       read: (source, options) => bdsFormat.read(source as BdsSource, options),
-      write: (model, source) => bdsFormat.write(model, source as BdsSource | undefined),
+      write: (model) => bdsFormat.write(model),
       capabilities: bdsFormat.capabilities,
       ...(bdsFormat.derive ? { derive: bdsFormat.derive } : {}),
     }
@@ -49,7 +49,7 @@ function entryOf(id: SkinFormatId): SkinFormatEntry {
       id,
       open: (archive, context) => context.skeleton ? ssfSource(filesOf(archive), context.skeleton) : undefined,
       read: (source, options) => ssfFormat.read(source as SsfSource, options),
-      write: (model, source) => ssfFormat.write(model, source as SsfSource | undefined),
+      write: (model) => ssfFormat.write(model),
       capabilities: ssfFormat.capabilities,
       ...(ssfFormat.derive ? { derive: ssfFormat.derive } : {}),
     }
@@ -59,7 +59,7 @@ function entryOf(id: SkinFormatId): SkinFormatEntry {
       id,
       open: (archive, context) => bdaSource(archive, context.base),
       read: (source, options) => bdaFormat.read(source as BdaSource, options),
-      write: (model, source) => bdaFormat.write(model, source as BdaSource | undefined),
+      write: (model) => bdaFormat.write(model),
       capabilities: bdaFormat.capabilities,
     }
   }
@@ -67,7 +67,7 @@ function entryOf(id: SkinFormatId): SkinFormatEntry {
     id,
     open: (archive) => sxiSource(filesOf(archive)),
     read: (source) => sxiFormat.read(source as SxiSource),
-    write: (model, source) => sxiFormat.write(model, source as SxiSource | undefined),
+    write: (model) => sxiFormat.write(model),
     capabilities: sxiFormat.capabilities,
     ...(sxiFormat.derive ? { derive: sxiFormat.derive } : {}),
   }
