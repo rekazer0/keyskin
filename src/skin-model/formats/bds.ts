@@ -13,7 +13,7 @@ import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
 import { tileSlices } from "@/tiles.ts"
 import type { Size } from "taffy-layout"
-import type { Appearance, BoardKind, KeyEvent, Orientation, SkinAction } from "@/skin-model/types.ts"
+import type { Appearance, BoardKind, KeyEvent, Orientation, SkinAction, SkinWindow } from "@/skin-model/types.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import type { LayoutBox } from "@/skin-model/layout.ts"
 import type { SkinKey } from "@/skin-model/key.ts"
@@ -305,6 +305,15 @@ function infoText(model: SkinModel): string {
 }
 
 /** 布局文件文本；`VIEW_RECT` 用构建后的矩形，其余字段从按键模型原样写回。 */
+/** 把窗口的分段结构拼回 INI 文本；段与字段顺序按模型里的顺序。 */
+function windowText(window: SkinWindow): string {
+  const document = IniDocument.parse("")
+  for (const [section, fields] of window.sections) {
+    document.appendSection(section, [...fields].map(([key, value]) => ({ key, value })))
+  }
+  return document.toString()
+}
+
 export function layoutText(board: SkinBoard, renders: readonly KeyRender[], names?: ReadonlyMap<string, string>): string {
   const lines = ["[PANEL]", `SIZE=${board.size.width},${board.size.height}`, `KEY_NUM=${board.keys.length}`, ""]
   const tipBlocks: string[] = []
@@ -745,7 +754,25 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       const unique = transitions.filter((entry, index) => transitions.findIndex((other) => other.target === entry.target) === index)
       if (unique.length) board.transitions = unique
     }
-    if (source.animation) model.motions = motionsOf(source.archive.getText(source.animation))
+    if (source.animation) {
+      const animationText = textContent(access, source.animation)
+      if (animationText) model.motions = motionsOf(animationText)
+    }
+    // 非按键窗口：候选栏、提示气泡、手写区。它们不是键盘布局，但导出时要原样写回。
+    for (const [path, role] of structure.roles) {
+      const kind = role.kind === "candidate-window" ? "candidate" as const
+        : role.kind === "hint-window" ? "hint" as const
+          : role.kind === "handwriting" ? "handwriting" as const
+            : undefined
+      if (!kind) continue
+      const document = documents.texts.get(path)
+      if (!document) continue
+      const sections = new Map<string, ReadonlyMap<string, string>>()
+      for (const section of document.sections()) {
+        sections.set(section, new Map(document.entries(section).map((entry) => [entry.key, entry.value])))
+      }
+      model.windows.push({ kind, path, appearance: source.theme, orientation: source.orientation, sections })
+    }
     const provenance = new Map(model.boards.flatMap((board) => board.keys.map((key) => [key.id, { path: board.id }] as const)))
     // 面板文件的原路径也要记住，导出时沿用原名，避免重建后出现两份面板文件。
     for (const [kind, path] of Object.entries(layouts.paths)) provenance.set(`panel:${kind}`, { path })
@@ -812,6 +839,8 @@ export const bdsFormat: SkinFormat<BdsSource> = {
       files.push({ path: `${root}/res/${name}.png`, data: encodePng(page.image) })
     })
     if (model.motions.size) files.push({ path: `${root}/res/anim.ini`, data: text(writeMotions(model.motions)) })
+    // 非按键窗口按原路径写回：候选栏、提示气泡、手写区。
+    for (const window of model.windows) files.push({ path: window.path, data: text(windowText(window)) })
     const archive = SkinArchive.fromSourceFiles([...files])
     return {
       archive,

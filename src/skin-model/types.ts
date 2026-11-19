@@ -41,9 +41,25 @@ export type SkinResource =
   | { kind: "font"; path: string; family?: string; weight?: number; data?: Uint8Array }
   | { kind: "frame"; path: string; duration?: number; data?: Uint8Array }
 
+/**
+ * 非按键的窗口：候选栏、提示气泡、手写区。
+ *
+ * 它们不是键盘布局，但属于皮肤的一部分，导出时必须写回。
+ * 这里保留的是分段结构而不是原始字节：字节留在解析阶段，模型只留能写回去的内容。
+ * 各字段的语义还没有逐个建模，结构保真是当前的底线。
+ */
+export type SkinWindow = {
+  kind: "candidate" | "hint" | "handwriting"
+  /** 原文件路径；写回时按它还原文件名与目录。 */
+  path: string
+  appearance: Appearance
+  orientation: Orientation
+  /** 段名 → 字段名 → 值。 */
+  sections: ReadonlyMap<string, ReadonlyMap<string, string>>
+}
+
 /** 皮肤元信息；`scale` 是设计宽到目标分辨率的换算比例。 */
-export type SkinMeta = {
-  name?: string
+export type SkinMeta = {  name?: string
   author?: string
   version?: string
   platform?: string

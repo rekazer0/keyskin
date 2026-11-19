@@ -4,7 +4,7 @@
 // 格式只在 import/export 边界出现，转换是模型之间的运算。
 import type { BoardKind } from "./types.ts"
 import type { SkinBoard } from "./board.ts"
-import type { SkinMeta, SkinResource } from "./types.ts"
+import type { SkinMeta, SkinResource, SkinWindow } from "./types.ts"
 import type { SkinImages } from "./image.ts"
 import type { SkinStyles } from "./style.ts"
 import type { SkinMotions } from "./motion.ts"
@@ -18,6 +18,8 @@ export type SkinModel = {
   /** 图片资源：导入时切出的像素，导出时重新打包。 */
   images: SkinImages
   boards: SkinBoard[]
+  /** 非按键窗口：候选栏、提示气泡、手写区。 */
+  windows: SkinWindow[]
   styles: SkinStyles
   motions: SkinMotions
   sounds: SkinSounds
@@ -31,6 +33,7 @@ export function emptyModel(meta: SkinMeta, format = ""): SkinModel {
     resources: new Map(),
     images: new Map(),
     boards: [],
+    windows: [],
     styles: new Map(),
     motions: new Map(),
     sounds: new Map(),
