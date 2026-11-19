@@ -1,4 +1,5 @@
 import { appState } from "./state"
+import { syncLayoutChoices } from "./layout-switch"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
 import { setSimulatedComposition, toolbarPreview, currentDeviceValue, deviceGeometryProperties, preview, resizeKeyboardPreviews, schedulePreviewInteractionFrame, paintPreviewInteraction, applySkinState, REFERENCE_PHONE_WIDTH_SCALE, deviceFrameProperties } from "./canvas-interaction"
@@ -156,6 +157,7 @@ const previewAnimations = new WeakMap<Uint8Array, ReturnType<typeof decodeBdaAni
 
 export function refreshPreview(): void {
   if (!appState.archive) return
+  syncLayoutChoices(layout, appState.archive, appState.layoutPath)
   rebuildSsfPreview()
   const currentArchive = appState.archive
   const composing = refreshSimulationState()

@@ -1,0 +1,72 @@
+// IR 的基础语义类型。这里不出现任何输入法格式的字段名。
+//
+// 覆盖的信息维度：外观/方向/平台、分辨率与缩放、按键动作、按键事件、动效槽位、资源与元信息。
+// 位置、尺寸与距离一律使用 taffy 的类型，不另建同名结构。
+import type { Size } from "taffy-layout"
+
+export type Appearance = "light" | "dark"
+export type Orientation = "port" | "land"
+
+/** 统一颜色表示：8 位十六进制 ARGB，如 `FF112233`。 */
+export type Color = string
+
+export type BoardKind = "main" | "number" | "symbol" | "candidate" | "hint" | "list" | "toolbar" | "input" | "popup" | "other"
+
+/** 按键位置从哪里来：文档自带、客户端内置、或官方基础布局。 */
+export type BoardGeometry = "document" | "client" | "basis"
+
+export type KeyEvent = "press" | "long-press" | "swipe-up" | "swipe-down" | "swipe-left" | "swipe-right"
+
+/** 动效槽位：按键按下、松开、面板显示、隐藏与长按。 */
+export type MotionSlot = "press" | "release" | "show" | "hide" | "hold"
+
+/** 按键动作的语义；格式独有的码放在 `system`。 */
+export type SkinAction =
+  | { kind: "text"; value: string }
+  | { kind: "delete"; forward?: boolean }
+  | { kind: "enter" }
+  | { kind: "candidate-page"; direction: "up" | "down" }
+  | { kind: "case"; mode: "title" | "lock" }
+  | { kind: "switch"; board: BoardKind }
+  | { kind: "open-app"; app?: string }
+  | { kind: "system"; code: string }
+
+/**
+ * 非图片资源。
+ * `data` 是文件内容：模型要能独立写出完整包，音效与字体的字节就得在模型里，
+ * 不能靠导出时回源包捡。
+ */
+export type SkinResource =
+  | { kind: "audio"; path: string; format?: string; duration?: number; data?: Uint8Array }
+  | { kind: "font"; path: string; family?: string; weight?: number; data?: Uint8Array }
+  | { kind: "frame"; path: string; duration?: number; data?: Uint8Array }
+
+/**
+ * 非按键的窗口：候选栏、提示气泡、手写区。
+ *
+ * 它们不是键盘布局，但属于皮肤的一部分，导出时必须写回。
+ * 这里保留的是分段结构而不是原始字节：字节留在解析阶段，模型只留能写回去的内容。
+ * 各字段的语义还没有逐个建模，结构保真是当前的底线。
+ */
+export type SkinWindow = {
+  kind: "candidate" | "hint" | "handwriting"
+  /** 原文件路径；写回时按它还原文件名与目录。 */
+  path: string
+  appearance: Appearance
+  orientation: Orientation
+  /** 段名 → 字段名 → 值。 */
+  sections: ReadonlyMap<string, ReadonlyMap<string, string>>
+}
+
+/** 皮肤元信息；`scale` 是设计宽到目标分辨率的换算比例。 */
+export type SkinMeta = {  name?: string
+  author?: string
+  version?: string
+  platform?: string
+  appearance: Appearance
+  orientation: Orientation
+  resolution?: Size<number>
+  designWidth?: number
+  scale?: number
+  description?: string
+}

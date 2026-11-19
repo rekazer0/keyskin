@@ -38,6 +38,7 @@ import { animationSelectionContext } from "./animation-resource"
 import { animationModeTitle } from "../animation-inspector.ts"
 import { syncSkinConfigControl } from "./config-value-control"
 import { geometryPreview } from "./geometry-preview"
+import { currentTraits, keyIssue, modelAfterBackdrop, modelAfterFieldEdit, modelAfterSkinInfo, modelRectMap } from "./inspector-model"
 import { element } from "../dom-element"
 import { releaseOnRemove } from "../dom-lifecycle"
 import { populateAnimationStyleInspector } from "./animation-style-inspector"
@@ -237,6 +238,8 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
   }
 }
 
+
+
 export function populateKeyInspector(): void {
   // 全局预览逐个切换布局截图时不重建检查器，截完切回原布局再重建。
   if (appState.layoutOverview?.capturing) return
@@ -268,7 +271,7 @@ export function populateKeyInspector(): void {
   // Native properties have their own inspectors; SSF also shows the skeleton's resolved gestures.
   const ssfSelected = appState.archive?.format === "ssf"
   const sxiSelected = appState.archive?.format === "sxi"
-  preview.measurementEditable = !bdaSelected && !ssfSelected
+  preview.measurementEditable = currentTraits().geometryEditable
   const nativeSelected = ssfSelected || sxiSelected
   const candidateSelected = Boolean(bdaSelected && appState.selectedCandidate && appState.selectedPath === appState.layoutPath)
   skinFieldsGroup.hidden = !skinSelected || bdaSelected || sxiSelected
@@ -300,8 +303,9 @@ export function populateKeyInspector(): void {
   selectedKeyPreview.replaceChildren(createIcon(hasSelection ? bdaSelected ? "component" : sections.length > 1 ? "layers" : "key-round"
     : animationView ? appState.animationDesignMode === "particle" ? "wand-sparkles" : "film" : "layout-panel-top", 16))
   selectedKeyPreview.hidden = false
+  const issue = hasSelection && sections.length === 1 ? keyIssue(sections[0]) : undefined
   selectedKeyContext.textContent = hasSelection
-    ? `${appState.selectedPath.split("/").pop()} · ${sections.length > 1 ? "keys.*" : sections[0]}`
+    ? `${appState.selectedPath.split("/").pop()} · ${sections.length > 1 ? "keys.*" : sections[0]}${issue ? ` · ${issue}` : ""}`
     : appState.selectedPath || "选择文件以查看属性"
   selectedKeyContext.title = appState.selectedPath
   const nativeTitle = ssfSelected
@@ -404,6 +408,7 @@ export function populateKeyInspector(): void {
       continue
     }
     const rectIndex = ["x", "y", "width", "height"].indexOf(name)
+    const modelRects = modelRectMap()
     const values = sections.map((section) => {
       if (rectIndex < 0) {
         if (name.startsWith("PADDING.")) return (effectiveKeyValue(section, "PADDING") ?? "0,0,0,0").split(",")[Number(name.split(".")[1])] ?? "0"
@@ -415,7 +420,8 @@ export function populateKeyInspector(): void {
         }
         return effectiveKeyValue(section, name) ?? ""
       }
-      const rect = document?.get(section, "VIEW_RECT")?.split(",").map(Number)
+      // 几何优先取模型：它与文档同源，但走的是同一套解析，格式之间不再各认一种写法。
+      const rect = modelRects.get(section) ?? document?.get(section, "VIEW_RECT")?.split(",").map(Number)
       return rect?.length === 4 ? String(Math.round(rect[rectIndex])) : ""
     })
     const common = values.every((value) => value === values[0]) ? values[0] : ""
@@ -426,14 +432,14 @@ export function populateKeyInspector(): void {
   keyLayoutFieldsGroup.querySelector(".mobile-geometry-detail")?.remove()
   keyLayoutFieldsGroup.querySelector(".ui-geometry-preview")?.remove()
   const previewRects = preview.keys.filter(key => sections.includes(key.section)).map(key => key.rect)
-  const showPadding = hasSelection && !bdaSelected && !ssfSelected && !listSelected
+  const showPadding = hasSelection && currentTraits().geometryEditable && !listSelected
   if (paddingSection && (!showPadding || !previewRects.length)) {
     const fields = keyLayoutFieldsGroup.querySelector(".geometry-fields")!
     if (paddingSection.parentElement !== fields) fields.append(paddingSection)
   }
   if (hasSelection && previewRects.length) {
     const editableRects = selectedRects()
-    const editable = isEditing() && !bdaSelected && !ssfSelected && !sections.some(isListCell) && editableRects.length === previewRects.length
+    const editable = isEditing() && currentTraits().geometryEditable && !sections.some(isListCell) && editableRects.length === previewRects.length
     const geometry = geometryPreview(editable ? editableRects : previewRects, editable ? rects => resizeSelectedKeys(rects.map((rect, index) => ({ ...rect, section: editableRects[index].section }))) : undefined)
     const detail = element("details", "ui-disclosure mobile-geometry-detail")
     const summary = Object.assign(element("summary", "ui-button"), { textContent: "内边距与缩放" })
@@ -476,7 +482,7 @@ export function populateKeyInspector(): void {
   // Unset padding reads as 0,0,0,0 (see the PADDING field values above); a LIST cell has none.
   if (paddingSection) paddingSection.hidden = !showPadding
   const multiLayout = $("#inspector-multi-layout")
-  const multiAvailable = sections.length > 1 && !bdaSelected && !ssfSelected && !sections.some(isListCell)
+  const multiAvailable = sections.length > 1 && currentTraits().geometryEditable && !sections.some(isListCell)
   multiLayout.dataset.available = String(multiAvailable)
   multiLayout.hidden = !multiAvailable
   canvasMultiToolbar.dataset.available = String(multiAvailable)
@@ -489,7 +495,7 @@ export function populateKeyInspector(): void {
   layoutNote.hidden = !bdaSelected && !ssfSelected
   layoutNote.title = "此格式的按键几何由输入法定义，仅供查看"
   layoutNote.setAttribute("aria-label", layoutNote.title)
-  const keyToolsAvailable = hasSelection && isEditing() && !bdaSelected && !ssfSelected && !listSelected
+  const keyToolsAvailable = hasSelection && isEditing() && currentTraits().geometryEditable && !listSelected
   // Sogou skins carry no key geometry, so there is nothing to move, copy or delete.
   for (const button of [...keyModeButtons, ...keyActionButtons]) button.hidden = ssfSelected
   for (const button of keyModeButtons) button.disabled = !keyToolsAvailable
@@ -502,7 +508,8 @@ export function populateKeyInspector(): void {
     item.hidden = target?.hidden ?? true
     item.disabled = target?.disabled ?? true
   }
-  if (!keyToolsAvailable && appState.keyMode === "move") {
+  // 按键工具不可用时，拖动与框选都没有意义，退回选择模式。
+  if (!keyToolsAvailable && (appState.keyMode === "move" || appState.keyMode === "multi")) {
     appState.keyMode = "select"
     keyModeButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.keyMode === appState.keyMode)))
     preview.setEditTool(appState.keyMode)
@@ -564,12 +571,14 @@ export function populateKeyInspector(): void {
 export function updateSkinInfo(field: HTMLInputElement): void {
   if (!appState.archive || !appState.selectedDocument || !isSkinInfoPath(appState.selectedPath)) return
   const before = appState.selectedDocument.toString()
-  appState.selectedDocument.set("", field.dataset.skinField ?? "", field.value)
+  const name = field.dataset.skinField ?? ""
+  appState.selectedDocument.set("", name, field.value)
   const text = appState.selectedDocument.toString()
-  commitText(appState.selectedPath, before, text)
+  commitText(appState.selectedPath, before, text, false, modelAfterSkinInfo(name, field.value))
   setSourceValue(text)
   updateDirty()
 }
+
 
 export function renameDocumentTitle(): void {
   const currentNode = $("#document-name")
@@ -642,7 +651,7 @@ export function updateKeyboard(field: HTMLInputElement): void {
   } else if (name === "styleID") {
     const before = context.gen.toString()
     context.gen.set("PANEL", "BACK_STYLE", field.value)
-    commitText(context.genPath, before, context.gen.toString())
+    commitText(context.genPath, before, context.gen.toString(), false, modelAfterBackdrop(field.value))
   } else {
     const styleID = context.gen.get("PANEL", "BACK_STYLE")?.split(",")[0].trim()
     if (!styleID) return
@@ -741,7 +750,7 @@ export function updateSelectedKey(field: HTMLInputElement): void {
     }
   }
   const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
+  commitText(appState.layoutPath, before, text, false, modelAfterFieldEdit(appState.selectedKeySections, name, field.value))
   if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
   preview.setDocument(appState.layoutDocument)
   populateKeyInspector()

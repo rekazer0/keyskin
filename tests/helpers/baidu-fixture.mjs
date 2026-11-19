@@ -2,7 +2,7 @@
 import { strToU8, zipSync } from "fflate"
 import { encodePng } from "../../src/ssf/ssf-png.ts"
 
-const PNG = encodePng({ width: 2, height: 2, data: new Uint8Array(16).fill(0x80) })
+const PNG = (width, height) => encodePng({ width, height, data: new Uint8Array(width * height * 4).fill(0x80) })
 
 function fixtureFiles() {
   return {
@@ -21,12 +21,17 @@ function fixtureFiles() {
       "[KEY2]", "BACK_STYLE=2", "VIEW_RECT=120,0,100,120", "CENTER=F1",
       "[TIP4]", "BACK_STYLE=2", "CENTER=F38",
     ].join("\n")),
+    "light/port/py_9.ini": strToU8([
+      "[PANEL]", "SIZE=1080,600", "KEY_NUM=2",
+      "[KEY1]", "BACK_STYLE=2", "VIEW_RECT=0,0,300,200", "CENTER=F36",
+      "[KEY2]", "BACK_STYLE=2", "VIEW_RECT=300,0,300,200", "CENTER=F37",
+    ].join("\n")),
     "light/port/cand1.cnd": strToU8("[CAND]\nBACK_STYLE=6\nVIEW_RECT=0,0,1080,120\nPADDING=1,2,3,4\nCELL_STYLE=120\n[ICON1]\nPOS=0,0\nSIZE=10,10\nKEY=F31\n"),
     "light/port/hint1.pop": strToU8("[HINT]\nBACK_ICON=0\n[ICON0]\nPOS=1,2\nSIZE=3,4\n"),
     "light/port/sel_ch.ini": strToU8("[PANEL]\nSIZE=1080,600\n[KEY1]\nBACK_STYLE=2\nVIEW_RECT=0,0,100,100\nCENTER=F36\n"),
     "light/res/default.css": strToU8([
       "[STYLE1]", "NM_COLOR=FF000000",
-      "[STYLE2]", "NM_IMG=btn,0", "HL_IMG=btn,1",
+      "[STYLE2]", "NM_IMG=btn,0", "HL_IMG=btn,1", "PRESS_SOUND_PATH=click.wav",
       "[STYLE3]", "SHOW=中", "FONT_SIZE=40", "NM_COLOR=FF000000",
       "[STYLE4]", "NM_COLOR=FF000000",
       "[STYLE6]", "NM_IMG=bg,0",
@@ -36,9 +41,9 @@ function fixtureFiles() {
     "light/res/btn.til": strToU8("[IMG0]\nSOURCE_RECT=0,0,10,10\nINNER_RECT=2,2,6,6\n[IMG1]\nSOURCE_RECT=10,0,10,10\n"),
     "light/res/bg.til": strToU8("[IMG0]\nSOURCE_RECT=0,0,10,10\n"),
     "light/res/list_cell.til": strToU8("[IMG0]\nSOURCE_RECT=0,0,4,4\n[IMG1]\nSOURCE_RECT=4,0,4,4\n"),
-    "light/res/btn.png": PNG,
-    "light/res/bg.png": PNG,
-    "light/res/list_cell.png": PNG,
+    "light/res/btn.png": PNG(20, 10),
+    "light/res/bg.png": PNG(10, 10),
+    "light/res/list_cell.png": PNG(8, 4),
   }
 }
 

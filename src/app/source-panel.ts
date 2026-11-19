@@ -3,7 +3,7 @@ import { shortcutLabel } from "../dom-element"
 import { sxiFragmentRange, sxiSectionRanges } from "../palm/sxi-edit.ts"
 import { isSsfBoardPath, sourceEditPath } from "./ssf-documents"
 import { syncAtlasWorkspace } from "./tile-editing"
-import { files, sourceName, quickInspector, asset, resourceInspector, resourceDetail, styleResourceDetail, resourceSourceToggle, inspectorSourceToggle, inspectorPane, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
+import { files, sourceName, quickInspector, asset, resourceInspector, resourceDetail, styleResourceDetail, resourceSourceToggle, inspectorSourceToggle, inspectorLayoutToggle, layoutTree, inspectorPane, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
 import { appState } from "./state"
 import { showsLayoutProperties, isSkinInfoPath, selectedSourceSections, selectedBdaSourceRange, scrollSelectedSource, styleConfigPath, sxiSourceRanges } from "./config-context"
 import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, visualResolver, bdaAppearanceStylePath } from "./bda-documents"
@@ -29,6 +29,21 @@ export function syncInspectorSourceToggle(button: HTMLButtonElement): void {
   button.setAttribute("aria-controls", sourceEditor.id)
   button.setAttribute("aria-pressed", String(active))
   button.title = button.ariaLabel = active ? "返回属性" : "查看源代码"
+}
+
+/** 布局树与源代码同形：在当前视图与属性之间翻转，只改一个字段。 */
+export function toggleInspectorLayout(refresh: () => void): void {
+  appState.inspectorTab = appState.inspectorTab === "layout" ? "properties" : "layout"
+  updateInspectorView()
+  refresh()
+}
+
+/** 布局树按钮与源代码按钮同形，只是指向另一份内容。 */
+export function syncInspectorLayoutToggle(): void {
+  const active = appState.inspectorTab === "layout"
+  inspectorLayoutToggle.setAttribute("aria-controls", layoutTree.id)
+  inspectorLayoutToggle.setAttribute("aria-pressed", String(active))
+  inspectorLayoutToggle.title = inspectorLayoutToggle.ariaLabel = active ? "返回属性" : "查看布局树"
 }
 
 export function toggleInspectorSource(refresh: () => void): void {
@@ -84,8 +99,13 @@ export function updateInspectorView(): void {
     button.disabled = !available
     button.setAttribute("aria-selected", String(tab === appState.inspectorTab && available))
   }
-  inspectorSourceToggle.hidden = appState.resourceConfigActive || !propertiesAvailable || appState.inspectorTab === "ai" || appState.animationDesignMode !== "all" || appState.sidebarView !== "overview"
+  // 按钮在当前视图里永不自隐藏：它同时是返回属性的入口。
+  const viewUnavailable = appState.resourceConfigActive || !propertiesAvailable || appState.inspectorTab === "ai"
+    || appState.animationDesignMode !== "all" || appState.sidebarView !== "overview"
+  inspectorSourceToggle.hidden = appState.inspectorTab !== "source" && viewUnavailable
   syncInspectorSourceToggle(inspectorSourceToggle)
+  inspectorLayoutToggle.hidden = appState.inspectorTab !== "layout" && viewUnavailable
+  syncInspectorLayoutToggle()
   if (appState.resourceConfigActive) {
     sourceName.textContent = appState.inspectorTab === "source" && appState.selectedResourcePath
       ? appState.archive?.format === "bda" ? "BDA 切片由 appearanceConfig 管理" : appState.tilePath
@@ -110,9 +130,15 @@ export function updateInspectorView(): void {
     return
   }
   asset.hidden = true
-  const localSource = appState.inspectorTab === "source" && (!inspectorSourceToggle.hidden || appState.animationDesignMode !== "all")
-  quickInspector.hidden = !propertiesAvailable || appState.inspectorTab !== "properties" && !localSource
-  sourceEditor.hidden = appState.inspectorTab !== "source"
+  const inSource = appState.inspectorTab === "source"
+  const inLayout = appState.inspectorTab === "layout"
+  // 就地查看源代码或布局树时，属性表单退出视觉但不算「没有内容」：
+  // 对象头与往返按钮都挂在同一个判断上，这里必须让它成立。
+  const localView = (inSource && (!inspectorSourceToggle.hidden || appState.animationDesignMode !== "all"))
+    || (inLayout && !inspectorLayoutToggle.hidden)
+  quickInspector.hidden = !propertiesAvailable || appState.inspectorTab !== "properties" && !localView
+  sourceEditor.hidden = !inSource
+  layoutTree.hidden = !inLayout
   aiDesignPanel.hidden = appState.inspectorTab !== "ai"
   updateSourceFindVisibility()
   loadVisibleSourceEditor()

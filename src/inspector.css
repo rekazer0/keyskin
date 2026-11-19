@@ -53,7 +53,9 @@
 .source #quick-inspector[hidden] { display: none; }
 
 /* 就地查看源码时保留对象头，编辑器占满剩余空间。 */
+.source:has(> :is(#source-editor, #layout-tree):not([hidden])) #quick-inspector { display: none; }
 .source:has(> #source-editor:not([hidden])) #quick-inspector { display: none; }
+.source:has(> :is(#source-editor, #layout-tree):not([hidden])) .inspector-object-actions { display: none; }
 .source:has(> #source-editor:not([hidden])) .inspector-object-actions { display: none; }
 
 /* —— 右侧分类栏：顶部筛选，中间分组（图标 + 文字，点击滚动到分组），底部「已改 n · 重置」 —— */

@@ -4,7 +4,7 @@ import { renderResourceCatalogSearch } from "../resource-page"
 import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
-import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight, toggleInspectorSource } from "../source-panel"
+import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight, toggleInspectorSource, toggleInspectorLayout } from "../source-panel"
 import { settingsWorkspace, sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, fontImportInput } from "../dom"
 import { appState } from "../state"
 import { resourceSourceToggle } from "../dom"
@@ -35,13 +35,16 @@ import { openPanelCopyDialog, updatePanelCopyForm, copyPanel } from "../panel-co
 import { openLayoutImageDialog, acceptLayoutImageFile, syncLayoutImageConfig, updateLayoutImageForm, applyLayoutImage, layoutImageScopeText } from "../layout-image-replace"
 import { type LayoutImageTarget } from "../../layout-image.ts"
 import { type LayoutImageConfig } from "../types"
-import { inspectorSourceToggle } from "../dom"
+import { inspectorSourceToggle, inspectorLayoutToggle } from "../dom"
 import { layoutConversionButton, mobileLayoutImageTarget, mobileLayoutImageConfig, mobilePanelScaleMode } from "../dom"
 import { openLayoutConversionDialog } from "../layout-conversion"
+import { layout } from "../dom"
+import { layoutPathOf } from "../layout-switch"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
   inspectorSourceToggle.addEventListener("click", () => toggleInspectorSource(populateKeyInspector))
+  inspectorLayoutToggle.addEventListener("click", () => toggleInspectorLayout(populateKeyInspector))
   resourceSourceToggle.addEventListener("click", () => toggleInspectorSource(() => {
     if (appState.inspectorTab === "properties") void renderStyleResourceDetail()
   }))
@@ -134,11 +137,16 @@ export function wireEditingControls(): void {
   }
   for (const button of keyModeButtons) {
     button.addEventListener("click", () => {
-      appState.keyMode = button.dataset.keyMode === "move" ? "move" : "select"
+      appState.keyMode = button.dataset.keyMode === "move" ? "move" : button.dataset.keyMode === "multi" ? "multi" : "select"
       keyModeButtons.forEach((item) => item.setAttribute("aria-pressed", String(item.dataset.keyMode === appState.keyMode)))
       preview.setEditTool(appState.keyMode)
     })
   }
+  // 画布工具栏的布局切换等同于在文件树里点那份布局。
+  layout.addEventListener("change", () => {
+    const path = layoutPathOf(appState.layoutPath, layout.value)
+    if (path && path !== appState.layoutPath) selectFile(path)
+  })
   for (const button of keyActionButtons) {
     button.addEventListener("click", () => {
       if (button.dataset.keyAction === "copy") copySelectedKeys()

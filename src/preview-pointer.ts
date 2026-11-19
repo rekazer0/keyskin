@@ -25,10 +25,11 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
   if (self.pointerInteractionLocked || event.button !== 0) return
   const point = self.point(event)
   const key = self.hit(point)
-  if (self.mode === "edit" && self.editTool === "select" && !self.toolbarSlots && event.pointerType === "mouse") {
+  if (self.mode === "edit" && (self.editTool === "select" || self.editTool === "multi") && !self.toolbarSlots && event.pointerType === "mouse") {
     self.marquee = { pointerId: event.pointerId, start: point, clientX: event.clientX, clientY: event.clientY, key }
     self.canvas.setPointerCapture(event.pointerId)
-    if (key) {
+    // 多选模式只负责框选与加减选，按下按键不播放按下态，避免连续挑键时画面一直闪。
+    if (key && self.editTool === "select") {
       if (!self.animationView) self.flashPress(key)
       playPressedKey(self, key)
     }
@@ -200,8 +201,16 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
         !isFullPanelPreviewItem({ rect }, self.panelWidth, self.panelHeight))
       self.selected = new Set([...(isAdditiveSelection(event) ? self.selected : []), ...hits.map(item => item.section)])
       self.selectionAnchor = hits.at(-1)?.section
-    } else if (key) pickKey(self, key, event)
-    else self.selected.clear()
+    } else if (key) {
+      // 多选模式下点按键是加减选，不是替换当前选择。
+      if (self.editTool === "multi") {
+        const next = new Set(self.selected)
+        if (next.has(key.section)) next.delete(key.section)
+        else next.add(key.section)
+        self.selected = next
+        self.selectionAnchor = key.section
+      } else pickKey(self, key, event)
+    } else self.selected.clear()
     if (!self.selected.size) self.mobileMultiSelect = false
     notifySelection(self)
     void self.draw()

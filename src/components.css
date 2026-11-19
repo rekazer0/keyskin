@@ -1478,3 +1478,13 @@ body {
 .ui-font-picker::before {
   content: ""; position: absolute; left: -1px; inset-block: var(--space-xs); width: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none;
 }
+
+/* —— 布局树：内容区占满检查器剩余空间，自身滚动 —— */
+.ui-tree {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-sm) var(--space-lg) var(--space-lg);
+}
+.ui-tree[hidden] { display: none; }

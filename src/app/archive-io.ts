@@ -1,14 +1,17 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, composeAtlasPng, conversionProgress } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
-import { buildSxiZipAsync } from "../palm/palm-export.ts"
-import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
+import { exportViaIr, isCrossFormatExport } from "./ir-export"
+import { planImport, prepareImport } from "./import-plan"
+import { skinModel } from "./skin-model-state"
+import { diagnose } from "@/skin-model/diagnostics.ts"
+import { validateModel } from "@/skin-model/validate.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
@@ -29,12 +32,10 @@ import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { type SourceFilePayload, type ChosenFileData, type BrowserSaveFileHandle } from "./types"
 import { readFile, writeFile } from "@tauri-apps/plugin-fs"
-import { convertBdaArchive } from "../bda-convert.ts"
 import { flushNumberInputWheel } from "../number-input-wheel.ts"
 import { loadBdaBase } from "../operations.ts"
 import { isSsfPath, looksLikeSsf } from "../ssf/ssf-package.ts"
-import { convertLegacyToBda, convertSsfDocument, exportSsf, ssfDocumentBytes } from "../ssf/ssf-convert.ts"
-import { convertSxiToBaidu, convertSxiToBda } from "../palm/sxi-to-baidu.ts"
+import { ssfDocumentBytes } from "../ssf/ssf-convert.ts"
 import { rebuildSsfPreview, ssfTemplates } from "./ssf-preview"
 import { isSsfBoardPath } from "./ssf-documents"
 import { isSxiBoardAddress, preferredPalmBoard, sxiPointer } from "./sxi-documents"
@@ -79,16 +80,28 @@ export async function loadArchive(
     throw error
   }
   await offerBakedFontRestore(nextArchive)
-  if (nextArchive.format === "bda" && !appState.bdaBase) {
-    updateFileOperationProgress(52, "正在加载 BDA 基础布局…")
-    appState.bdaBase = await SkinArchive.openAsync(await loadBdaBase())
-  }
-  if (nextArchive.format === "ssf") {
-    updateFileOperationProgress(52, "正在生成搜狗皮肤预览…")
-    await ssfTemplates()
-  }
+  // 各格式打开时需要的外部基础统一按计划补齐，不再逐格式分支。
+  const plan = planImport(nextArchive)
+  const preparation = await prepareImport(
+    plan,
+    { hasBdaBase: Boolean(appState.bdaBase), hasSsfTemplates: Boolean(appState.ssfTemplates) },
+    {
+      loadBdaBase: async () => {
+        updateFileOperationProgress(52, "正在加载 BDA 基础布局…")
+        appState.bdaBase = await SkinArchive.openAsync(await loadBdaBase())
+        return appState.bdaBase
+      },
+      loadSsfTemplates: async () => {
+        updateFileOperationProgress(52, "正在生成搜狗皮肤预览…")
+        await ssfTemplates()
+      },
+    },
+  )
+  for (const error of preparation.errors) clientLog.info("archive.prepare.warning", { detail: error })
+  const planWarnings = [...plan.notes]
   const bdaWarnings = bdaCompatibilityWarnings(nextArchive)
   if (bdaWarnings.length) clientLog.info("bda.compatibility.warning", { warnings: bdaWarnings.join("；") })
+  if (planWarnings.length) clientLog.info("archive.plan.notes", { notes: planWarnings.join("；") })
   updateFileOperationProgress(55, "正在建立编辑工作区…")
   let nextSourceWorkspace = existingSourceWorkspace
   let pendingSourceDirectory: string | null | undefined
@@ -104,6 +117,8 @@ export async function loadArchive(
   appState.sourceWorkspacePendingArchive = undefined
   appState.assetURL = releaseImagePreviewURL(appState.assetURL)
   clearImageSlicePicker()
+  // 换文档时清掉上一份模型；新模型的构建放在工作区建立之后，不阻塞打开。
+  skinModel.reset()
   appState.archive = nextArchive
   appState.resourceStyleType = "all"
   appState.resourceUsageFilter = "all"
@@ -112,6 +127,11 @@ export async function loadArchive(
   appState.resourcePageStatistics = undefined
   const ssfWarnings = rebuildSsfPreview()
   if (ssfWarnings.length) clientLog.info("ssf.preview.warning", { warnings: ssfWarnings.join("；") })
+  // 模型供检查器与导出读取；构建失败只是没有模型，界面仍走原有路径。
+  void skinModel.load(nextArchive, {
+    ...(appState.ssfSkeleton ? { skeleton: appState.ssfSkeleton.archive } : {}),
+    ...(appState.bdaBase ? { base: appState.bdaBase } : {}),
+  }).then(() => updateDirty()).catch((error: unknown) => clientLog.info("archive.model.error", { detail: String(error) }))
   appState.aiDesignConversationTarget = nextArchive
   appState.aiSessions = []
   appState.aiSessionId = ""
@@ -373,80 +393,50 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   return { ...result, bytes: await archive.toBytesAsync(format) }
 }
 
+/** 模型自检里值得提醒的问题；模型没建好时不打扰用户。 */
+function modelWarnings(): string[] {
+  const model = skinModel.model
+  if (!model) return []
+  const report = validateModel(model)
+  return report.issues
+    .filter((issue) => issue.code === "missing-style" || issue.code === "missing-image" || issue.code === "missing-sound")
+    .slice(0, 3)
+    .map((issue) => `${issue.subject}：${issue.message}`)
+}
+
+/** 包里有没有认不出来的文件；有就说明这类文件会在保存时丢掉。 */
+function structureWarnings(archive: SkinArchive, format: ExportFormat): string[] {
+  // bdi 与 bds 是同一套文件结构，识别规则也相同。
+  const diagnostics = diagnose(archive, format === "bdi" ? "bds" : format)
+  if (!diagnostics.unknown.length) return []
+  const sample = diagnostics.unknown.slice(0, 3).map((item) => item.path)
+  const more = diagnostics.unknown.length > sample.length ? ` 等 ${diagnostics.unknown.length} 个` : ""
+  return [`有 ${diagnostics.unknown.length} 个文件认不出来，保存后不会保留：${sample.join("、")}${more}`]
+}
+
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<PackagedResult> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
+  // 跨格式转换统一走 IR：读成模型，再写成目标格式；同格式保存仍走原样打包。
+  if (isCrossFormatExport(appState.archive.format, format)) {
+    const report = conversionProgress(22, 80, `正在转换为${exportTargetLabel(format)}…`)
+    const skeleton = appState.ssfSkeleton?.archive
+      ?? (appState.archive.format === "ssf" ? (await ssfTemplates()).sogou : undefined)
+    const exported = await exportViaIr(appState.archive, format, {
+      hints: {
+        ...(skeleton ? { skeleton } : {}),
+        ...(appState.bdaBase ? { base: appState.bdaBase } : {}),
+      },
+      sourceFormat: appState.archive.format,
+      ...(targetBdaPlatform ? { bdaPlatform: targetBdaPlatform } : {}),
+      onProgress: (fraction, detail) => report(fraction, detail),
+    })
+    return { bytes: exported.bytes, converted: exported.converted, warnings: exported.warnings }
+  }
   updateFileOperationProgress(22, `正在生成 ${format.toUpperCase()} 皮肤包…`)
   await waitForInterfacePaint()
-  if (appState.archive.format === "ssf" && format === "sxi" || appState.archive.format === "sxi" && format === "ssf") {
-    const report = conversionProgress(22, 78, `正在转换为${exportTargetLabel(format)}…`)
-    await report(0.2)
-    const result = await convertSsfSxi(
-      appState.archive,
-      appState.archive.format === "ssf" ? await ssfTemplates() : undefined,
-      (fraction, detail) => report(0.2 + fraction * 0.8, detail),
-    )
-    return { bytes: result.bytes, converted: true, warnings: result.warnings }
-  }
-  if (format === "sxi" && appState.archive.format !== "sxi") {
-    const report = conversionProgress(22, 78, "正在导出手心皮肤…")
-    await report(0)
-    let source: SkinArchive = appState.archive
-    const warnings: string[] = []
-    // `.sxi` is INI-based, so a BDA source needs the official INI base layout first.
-    if (appState.archive.format === "bda") {
-      if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
-      await report(0.45, "正在转换 BDA 配置…")
-      const converted = convertBdaArchive(appState.archive, appState.bdaBase)
-      source = converted.archive
-      warnings.push(...converted.warnings)
-    }
-    // 转换已经走过前一段；手心打包自己从 0 报到 1，接在它后面继续推进同一根进度条。
-    // 打包流程本身每隔几毫秒让出主线程，进度更新不必再等两帧，否则大皮肤会多等一两秒。
-    const start = source === appState.archive ? 0.2 : 0.45
-    const update = percentProgress(22, 78, "正在导出手心皮肤…")
-    const result = await buildSxiZipAsync(source, async (fraction, detail) => update(start + fraction * (1 - start), detail))
-    return { bytes: result.bytes, converted: true, warnings: [...warnings, ...result.warnings] }
-  }
-  if (format === "bda" && appState.archive.format !== "bda") {
-    const report = conversionProgress(22, 80, "正在准备 BDA 模板…")
-    await report(0.02)
-    const templates = await ssfTemplates()
-    await report(0.15, "正在转换 BDA 配置…")
-    const result = appState.archive.format === "ssf"
-      ? await convertSsfDocument(appState.archive, format, templates, (fraction, detail) => report(0.15 + fraction * 0.8, detail))
-      : appState.archive.format === "sxi"
-        ? await convertSxiToBda(appState.archive, templates.bda)
-        : await convertLegacyToBda(appState.archive, templates.bda)
-    if (appState.archive.format === "bdi" || appState.archive.format === "bds") {
-      result.warnings.unshift("新版 BDA 使用官方面板布局，原皮肤的按键位置、自定义布局和手势可能无法保留")
-    }
-    if (targetBdaPlatform !== "ios") return { ...result, converted: true }
-    await report(0.97, "正在生成 iOS BDA 皮肤包…")
-    const bytes = await convertBdaPlatform(SkinArchive.open(result.bytes, "bda"), "ios").toBytesAsync()
-    return { ...result, bytes, converted: true }
-  }
-  if (appState.archive.format === "ssf" && (format === "bdi" || format === "bds")) {
-    const report = conversionProgress(22, 80, `正在准备 ${format.toUpperCase()} 模板…`)
-    await report(0.02)
-    const result = await convertSsfDocument(appState.archive, format, await ssfTemplates(), (fraction, detail) => report(0.05 + fraction * 0.9, detail))
-    return { ...result, converted: true }
-  }
-  if (appState.archive.format === "sxi" && (format === "bdi" || format === "bds")) {
-    await conversionProgress(22, 80, `正在转换为 ${format.toUpperCase()}…`)(0.2)
-    return { ...await convertSxiToBaidu(appState.archive, format), converted: true }
-  }
-  if (format === "ssf") {
-    if (appState.archive.format === "ssf") {
-      return { bytes: await appState.archive.toBytesAsync("ssf"), converted: false, warnings: [] }
-    }
-    const report = conversionProgress(22, 78, "正在导出搜狗皮肤…")
-    await report(0.3)
-    // 官方骨架的按键尺寸决定导出图要保留多少像素；模板取不到时退回原尺寸。
-    const sogouTemplate = await ssfTemplates().then((templates) => templates.sogou, () => undefined)
-    const result = await exportSsf(appState.archive, appState.bdaBase, sogouTemplate)
-    return { bytes: result.bytes, converted: true, warnings: result.warnings }
-  }
+  // 搜狗皮肤一律经中间表示写出，走到这里说明前面的分支漏了它。
+  if (format === "ssf") throw new Error("搜狗皮肤应当经中间表示导出")
   if (appState.archive.format === "bda" && format === "bda" && targetBdaPlatform) {
     const report = conversionProgress(22, 78, `正在生成 ${format.toUpperCase()} 皮肤包…`)
     await report(0.3)
@@ -460,17 +450,12 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const adjustments: string[] = []
     const bytes = await appState.archive.toBytesAsync(format, soundWarnings, adjustments)
     reportExportWarnings(soundWarnings, adjustments)
-    return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings] }
+    // 同格式保存不重建包，但模型自检能提前发现悬空引用，值得一并提示。
+    const inspection = [...modelWarnings(), ...structureWarnings(appState.archive, format)]
+    return { bytes, converted: false, warnings: [...adjustments, ...soundWarnings, ...inspection] }
   }
-  if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
-  const report = conversionProgress(22, 80, "正在转换 BDA 配置…")
-  await report(0.2)
-  const result = convertBdaArchive(appState.archive, appState.bdaBase, format)
-  await report(0.6, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
-  const soundWarnings: string[] = []
-  const bytes = await result.archive.platformBytesAsync(format, soundWarnings)
-  reportExportWarnings(soundWarnings)
-  return { bytes, converted: true, warnings: [...result.warnings, ...soundWarnings] }
+  // 源 BDA 转 BDI/BDS 已在前面由中间表示处理，走到这里说明分支漏了它。
+  throw new Error(`暂不支持从 ${appState.archive.format} 导出为 ${format}`)
 }
 
 

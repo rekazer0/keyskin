@@ -1,5 +1,8 @@
 import { confirmDeletion } from "./ask"
 import { appState } from "./state"
+import { skinModel } from "./skin-model-state"
+import { applyFieldChange } from "@/skin-model/edit-binding.ts"
+import type { SkinModel } from "@/skin-model/model.ts"
 import { preview, source, toolbarPreview } from "./canvas-interaction"
 import { normalizeKeySections } from "../ini.ts"
 import { canvasEditable, commitText, updateDirty } from "./edit-history"
@@ -122,6 +125,23 @@ export function selectedRects(): LayoutRect[] {
 }
 
 /** 几何预览的一次缩放作为一步撤销提交。 */
+/**
+ * 几何改动后的模型。
+ * 编辑改的是文档，模型要跟着改，否则检查器与自检会拿到旧几何；
+ * 模型没建好时返回 undefined，让提交入口按老办法作废。
+ */
+function modelAfterRectEdit(rects: LayoutRect[]): SkinModel | undefined {
+  const current = skinModel.model
+  if (!current) return
+  let next = current
+  for (const rect of rects) {
+    for (const [field, value] of [["x", rect.x], ["y", rect.y], ["width", rect.width], ["height", rect.height]] as const) {
+      next = applyFieldChange(next, { boardId: appState.layoutPath, keyId: rect.section, field, value })
+    }
+  }
+  return next === current ? undefined : next
+}
+
 export function resizeSelectedKeys(rects: LayoutRect[]): void {
   if (!canvasEditable() || ["bda", "ssf"].includes(appState.archive?.format ?? "")) return
   if (palmBoard()) return writePalmKeyRects(rects)
@@ -129,7 +149,7 @@ export function resizeSelectedKeys(rects: LayoutRect[]): void {
   const before = appState.layoutDocument.toString()
   for (const rect of rects) appState.layoutDocument.set(rect.section, "VIEW_RECT", [rect.x, rect.y, rect.width, rect.height].join(","))
   const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
+  commitText(appState.layoutPath, before, text, false, modelAfterRectEdit(rects))
   if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
   preview.setDocument(appState.layoutDocument)
   populateKeyInspector()
@@ -157,7 +177,7 @@ export function applyLayoutAction(action: string): void {
     )
   }
   const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
+  commitText(appState.layoutPath, before, text, false, modelAfterRectEdit(rects))
   if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
   preview.setDocument(appState.layoutDocument)
   populateKeyInspector()
@@ -209,7 +229,7 @@ export function applyExactGap(field: HTMLInputElement): void {
     )
   }
   const text = appState.layoutDocument.toString()
-  commitText(appState.layoutPath, before, text)
+  commitText(appState.layoutPath, before, text, false, modelAfterRectEdit(rects))
   if (appState.selectedPath === appState.layoutPath) setSourceValue(text)
   preview.setDocument(appState.layoutDocument)
   populateKeyInspector()

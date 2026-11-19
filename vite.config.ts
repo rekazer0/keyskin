@@ -1,11 +1,16 @@
 import { defineConfig } from "vite"
 import { realpathSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, URL } from "node:url"
 
 export default defineConfig({
   base: "./",
   // worktree 共用 node_modules 时，预构建缓存仍须各自独立。
   cacheDir: ".tmp/vite",
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   build: {
     manifest: true,
     rollupOptions: {

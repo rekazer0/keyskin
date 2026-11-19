@@ -58,7 +58,7 @@ export class Preview {
   transparent = false
   keys: PreviewItem[] = []
   mode: "edit" | "preview" = "edit"
-  editTool: "select" | "move" = "select"
+  editTool: "select" | "move" | "multi" = "select"
   crosshair = false
   pointerInteractionLocked = false
   /** 动效设计 / 粒子设计：点按键只在画布上播放它的动画，不选中、不切换文件。 */
@@ -273,7 +273,7 @@ export class Preview {
     }
   }
 
-  setEditTool(tool: "select" | "move"): void {
+  setEditTool(tool: "select" | "move" | "multi"): void {
     if (this.editTool === tool) return
     this.cancelDragDraw()
     this.editTool = tool
@@ -673,7 +673,7 @@ export class Preview {
 
   updateCursor(): void {
     // 编辑模式开着十字光标时，十字线本身就是指针，系统光标隐藏
-    this.canvas.style.cursor = this.mode === "preview" ? "pointer" : this.crosshair ? "none" : this.editTool === "move" ? "grab" : "default"
+    this.canvas.style.cursor = this.mode === "preview" ? "pointer" : this.crosshair ? "none" : this.editTool === "move" ? "grab" : this.editTool === "multi" ? "crosshair" : "default"
   }
 
   setCrosshair(on: boolean): void {
