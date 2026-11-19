@@ -3,6 +3,7 @@
 // 一个按键在不同「皮肤状态」下可以换成另一套样式与动作，写法是
 // `[KEY1] STAT_STYLE=S11_4|S12_5`：状态组 11 用 TIP4，状态组 12 用 TIP5。
 // IR 里把它记成按键的状态覆盖，`state` 保留 `S11` 这样的组名，便于原样写回。
+import { numbersOf } from "@/ini.ts"
 import type { IniDocument } from "@/ini.ts"
 import type { KeyEvent, SkinAction } from "@/skin-model/types.ts"
 import type { KeyStateOverride, TipBody } from "@/skin-model/key.ts"
@@ -57,8 +58,16 @@ export function tipBodyOf(document: IniDocument, section: number, options: TipRe
   const fore = read("FORE_STYLE")
   const text = read("SHOW")
   const position = read("POS_TYPE")?.split(",").map((token) => Number(token.trim())).filter((each) => Number.isFinite(each))
+  const holdSymbol = read("HOLDSYM")
+  const info = read("INFO")
+  const viewRect = numbersOf(read("VIEW_RECT"))
   const body: TipBody = {
     ...(position?.length ? { labelPosition: position } : {}),
+    ...(holdSymbol ? { holdSymbol } : {}),
+    ...(info ? { info } : {}),
+    ...(viewRect.length === 4
+      ? { viewRect: { position: { x: viewRect[0], y: viewRect[1] }, size: { width: viewRect[2], height: viewRect[3] } } }
+      : {}),
     ...(Object.keys(actions).length ? { actions } : {}),
     ...(back || pressed || fore || text
       ? {
@@ -115,6 +124,12 @@ export function tipLines(override: TipBody, section: number, actionValue: (actio
   if (style?.fore?.length) lines.push(`FORE_STYLE=${style.fore.join(",")}`)
   if (style?.text) lines.push(`SHOW=${style.text}`)
   if (override.labelPosition?.length) lines.push(`POS_TYPE=${override.labelPosition.join(",")}`)
+  if (override.holdSymbol) lines.push(`HOLDSYM=${override.holdSymbol}`)
+  if (override.info) lines.push(`INFO=${override.info}`)
+  if (override.viewRect) {
+    const box = override.viewRect
+    lines.push(`VIEW_RECT=${box.position.x},${box.position.y},${box.size.width},${box.size.height}`)
+  }
   // 状态自己的整套动作也要写回，不只按下。
   for (const { event, field } of ACTION_FIELDS) {
     const value = actionValue(override.actions?.[event])

@@ -71,9 +71,9 @@ test("读出面板的候选栏、气泡、列表与工具栏", async () => {
   assert.ok(source)
   const board = (await readWith(bdsFormat, source)).boards[0]
   assert.equal(board.backdrop?.style, "1")
-  assert.equal(board.candidate?.style, "6")
-  assert.equal(board.candidate?.cellStyle, "120")
-  assert.equal(board.candidate?.icons?.[0]?.action?.kind, "system")
+  assert.equal(board.candidates?.[0]?.style, "6")
+  assert.equal(board.candidates?.[0]?.cellStyle, "120")
+  assert.equal(board.candidates?.[0]?.icons?.[0]?.action?.kind, "system")
   assert.equal(board.hint?.style, "0")
   assert.deepEqual(board.hint?.offset, { x: 1, y: 2 })
   assert.equal(board.list?.cellStyle, "120")
@@ -89,7 +89,7 @@ test("重建后仍能读回面板组件", async () => {
   const rebuilt = await writeWith(bdsFormat, model, source)
   const again = (await readWith(bdsFormat, rebuilt)).boards[0]
   assert.ok(again.backdrop?.style)
-  assert.ok(again.candidate)
+  assert.ok(again.candidates?.length)
   assert.ok(again.hint)
   assert.ok(again.list)
   assert.equal(again.list?.cellSize?.width, 100)

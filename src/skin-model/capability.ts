@@ -65,7 +65,7 @@ export function requiredCapabilities(model: SkinModel): CapabilitySet {
     if (board.keys.some((key) => key.touchRect)) need("key.touch")
     if (board.transitions?.length) need("board.transitions")
     if (board.backdrop) need("panel.backdrop")
-    if (board.candidate) need("panel.candidate")
+    if (board.candidates?.length) need("panel.candidate")
     if (board.hint) need("panel.hint")
     if (board.list) need("panel.list")
     if (board.toolbar) need("panel.toolbar")

@@ -22,6 +22,7 @@ export type PreviewItem = {
   right: string
   hold: string
   holdSymbols: string
+  info: string
   backStyle: string
   highlightBackStyle?: string
   foreStyle: string
@@ -342,8 +343,9 @@ export function offsetFromSection(document: IniDocument | undefined, section: st
 }
 
 function itemFromSection(document: IniDocument, section: string): PreviewItem | undefined {
-  const rect = parseRect(document.get(section, "VIEW_RECT"))
-  if (!rect) return
+  // 没有 VIEW_RECT 的段仍然是一条按键定义（模板、示例），矩形记成零尺寸，
+  // 由调用方按 `rect.width > 0` 区分「有几何」与「只有定义」。
+  const rect = parseRect(document.get(section, "VIEW_RECT")) ?? { x: 0, y: 0, width: 0, height: 0 }
   const value = (name: string) => document.get(section, name) ?? ""
   // CAND.FORE_STYLE styles runtime candidate words; it is not a static
   // foreground for the whole candidate bar.
@@ -367,6 +369,7 @@ function itemFromSection(document: IniDocument, section: string): PreviewItem | 
     right: value("RIGHT"),
     hold: value("HOLD"),
     holdSymbols: value("HOLDSYM"),
+    info: value("INFO"),
     backStyle: value("BACK_STYLE").split(",")[0],
     highlightBackStyle: value("HL_BACK_STYLE").split(",")[0] || undefined,
     foreStyle: foreStyles[0] ?? "",
@@ -420,6 +423,7 @@ function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[]
     right: "",
     hold: "",
     holdSymbols: "",
+    info: "",
     backStyle: value("CELL_STYLE")?.split(",")[0] ?? "",
     foreStyle: foreStyles[0] ?? "",
     foreStyles,
@@ -447,6 +451,7 @@ function listItems(document: IniDocument, defaults?: IniDocument): PreviewItem[]
     right: "",
     hold: "",
     holdSymbols: "",
+    info: "",
     backStyle: value("BACK_STYLE")?.split(",")[0] ?? "",
     foreStyle: "",
     foreStyles: [],
@@ -578,6 +583,7 @@ export function previewItems(
       right: value("RIGHT"),
       hold: value("HOLD"),
       holdSymbols: value("HOLDSYM"),
+      info: value("INFO"),
       backStyle,
       highlightBackStyle: value("HL_BACK_STYLE").split(",")[0] || undefined,
       foreStyle,

@@ -110,7 +110,7 @@ function keysOf(keyboard: JsonObject): Array<{ key: SkinKey; rect: LayoutBox }> 
   })
 }
 
-function panelsOf(keyboard: JsonObject): Pick<SkinBoard, "backdrop" | "candidate" | "hint" | "list" | "toolbar"> {
+function panelsOf(keyboard: JsonObject): Pick<SkinBoard, "backdrop" | "candidates" | "hint" | "list" | "toolbar"> {
   const boardPart = asObject(keyboard.board)
   const backdrop: PanelBackdrop | undefined = boardPart
     ? {
@@ -156,7 +156,7 @@ function panelsOf(keyboard: JsonObject): Pick<SkinBoard, "backdrop" | "candidate
 
   return {
     ...(backdrop ? { backdrop } : {}),
-    ...(candidate ? { candidate } : {}),
+    ...(candidate ? { candidates: [candidate] } : {}),
     ...(hint ? { hint } : {}),
     ...(list ? { list } : {}),
     ...(toolbar ? { toolbar } : {}),

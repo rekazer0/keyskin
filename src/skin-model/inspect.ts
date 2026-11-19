@@ -176,10 +176,12 @@ export function panelProperties(model: SkinModel, boardId: string): PropertyView
   if (!board) return []
   const views: PropertyView[] = []
   if (board.backdrop?.style) views.push(styleView("panel.backdrop", "面板背景", board.backdrop.style))
-  if (board.candidate) {
-    views.push(styleView("panel.candidate", "候选栏背景", board.candidate.style))
-    if (board.candidate.cellStyle) views.push(styleView("panel.candidate.cell", "候选格", board.candidate.cellStyle))
-    views.push({ key: "panel.candidate.icons", label: "候选栏图标", kind: "readonly", value: board.candidate.icons?.length ?? 0 })
+  // 候选栏可以有多个，逐个列出。
+  for (const [index, candidate] of (board.candidates ?? []).entries()) {
+    const suffix = index === 0 ? "" : `.${index + 1}`
+    views.push(styleView(`panel.candidate${suffix}`, `候选栏背景${suffix}`, candidate.style))
+    if (candidate.cellStyle) views.push(styleView(`panel.candidate${suffix}.cell`, "候选格", candidate.cellStyle))
+    views.push({ key: `panel.candidate${suffix}.icons`, label: "候选栏图标", kind: "readonly", value: candidate.icons?.length ?? 0 })
   }
   if (board.hint) views.push(styleView("panel.hint", "气泡背景", board.hint.style))
   if (board.list) {

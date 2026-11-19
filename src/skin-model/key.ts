@@ -30,6 +30,12 @@ export type TipBody = {
   style?: Partial<KeyStyleRefs>
   /** 这个状态下的标签放置类型。 */
   labelPosition?: readonly number[]
+  /** 这个状态下的长按符号串。 */
+  holdSymbol?: string
+  /** 这个状态下的说明文字；`[TIPn]` 的 `INFO`。 */
+  info?: string
+  /** 这个状态下的按键矩形；状态切换时键可能换位置。 */
+  viewRect?: LayoutBox
 }
 
 /** 按键对状态样式的引用：哪个状态配上哪个段。 */
@@ -41,7 +47,8 @@ export type TipRef = {
 export type SkinKey = {
   id: string
   /** 触摸命中区域；它是命中语义，不是绘制几何，不与布局树重复。 */
-  touchRect?: LayoutBox
+  /** 触摸区；`null` 表示显式声明没有触摸区，`undefined` 表示沿用按键矩形。 */
+  touchRect?: LayoutBox | null
   padding?: Rect<number>
   /** 默认状态下的动作。 */
   actions: Partial<Record<KeyEvent, SkinAction>>
@@ -49,6 +56,10 @@ export type SkinKey = {
   motions?: Partial<Record<MotionSlot, string>>
   sound?: string
   label?: string
+  /** 长按弹出的符号串；布局文件里写成 `HOLDSYM`。 */
+  holdSymbol?: string
+  /** 按键的说明文字；布局文件里写成 `INFO`，只给制作者看。 */
+  info?: string
   /** 标签在按键内的放置类型；布局文件里写成 `POS_TYPE=`，一个到四个值不等。 */
   labelPosition?: readonly number[]
   editable?: boolean

@@ -152,6 +152,23 @@ export class IniDocument {
     })
   }
 
+  /** 同名段可以重复出现；按出现顺序返回每一块的字段表。 */
+  sectionBlocks(section: string): Array<Map<string, string>> {
+    const blocks: Array<Map<string, string>> = []
+    let current: Map<string, string> | undefined
+    for (const line of this.lines) {
+      if (line.section === undefined) continue
+      if (line.key === undefined) {
+        // 段头行：段名相同就另起一块。
+        current = line.section === section ? new Map() : undefined
+        if (current) blocks.push(current)
+        continue
+      }
+      if (current && line.value !== undefined) current.set(line.key.toUpperCase(), line.value)
+    }
+    return blocks
+  }
+
   private linesOf(section: string): Line[] {
     if (!this.sectionLines) {
       this.sectionLines = new Map()
@@ -260,6 +277,16 @@ export class IniDocument {
   toString(): string {
     return this.lines.map((line) => line.raw).join("")
   }
+}
+
+/** 逗号分隔的数值字段；非数值的片段直接丢弃。 */
+export function numbersOf(value: string | undefined): number[] {
+  return (value ?? "").split(",").map((token) => Number(token.trim())).filter((each) => Number.isFinite(each))
+}
+
+/** 同名段在文件里可以重复出现；按出现顺序返回每一块的字段表。 */
+export function blocksOf(document: IniDocument, section: string): Array<Map<string, string>> {
+  return document.sectionBlocks(section)
 }
 
 // 工具书 V6「皮肤制作规范」：KEY 段按序号连续排列，并回到 [PANEL] 修正 KEY_NUM。
