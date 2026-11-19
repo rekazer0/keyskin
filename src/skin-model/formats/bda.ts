@@ -336,6 +336,17 @@ export const bdaFormat: SkinFormat<BdaSource> = {
     }
     model.styles = parsed.styles
     model.images = images
+    // 音效与字体是包里的文件，字节要进模型；BDA 的音效配置另有一份，见下。
+    const resources = new Map(model.resources)
+    for (const path of source.archive.names()) {
+      if (!/\.(?:mp3|ogg|wav|m4a|ttf|otf|ttc)$/i.test(path)) continue
+      const data = source.archive.getBytes(path)
+      if (!data) continue
+      resources.set(path, /\.(?:ttf|otf|ttc)$/i.test(path)
+        ? { kind: "font", path, data }
+        : { kind: "audio", path, data })
+    }
+    model.resources = resources
     // 动画与音效各有一份配置，读出来放进模型；读不到就留空，不编造默认值。
     const animationPath = bdaConfigPath(source.archive, source.theme, source.orientation, "animation")
     const animationBytes = animationPath ? source.archive.getBytes(animationPath) : undefined

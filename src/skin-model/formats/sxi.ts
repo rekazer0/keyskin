@@ -243,6 +243,13 @@ export const sxiFormat = {
     // 图集里的切片也切出来，与散图一起进资源表。
     const atlas = atlasImagesOf(skin, source.files, "light", "port")
     model.images = new Map([...styles.images, ...atlas.images])
+    // 音效与字体是包里的文件，字节要进模型。
+    const resources = new Map(model.resources)
+    for (const [path, data] of source.files) {
+      if (/\.(?:mp3|ogg|wav|m4a)$/i.test(path)) resources.set(path, { kind: "audio", path, data })
+      else if (/\.(?:ttf|otf|ttc)$/i.test(path)) resources.set(path, { kind: "font", path, data })
+    }
+    model.resources = resources
     for (const key of keys) {
       key.style = {
         ...(key.style.back !== undefined ? { back: sxiStyleName(key.style.back) } : {}),

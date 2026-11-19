@@ -261,6 +261,13 @@ export const ssfFormat: SkinFormat<SsfSource> = {
       source.theme,
     )
     model.images = images
+    // 音效与字体是包里的文件，字节要进模型，导出才能脱离源包。
+    const resources = new Map(model.resources)
+    for (const [path, data] of source.files) {
+      if (/\.(?:mp3|ogg|wav|m4a)$/i.test(path)) resources.set(path, { kind: "audio", path, data })
+      else if (/\.(?:ttf|otf|ttc)$/i.test(path)) resources.set(path, { kind: "font", path, data })
+    }
+    model.resources = resources
     return model
   },
   async write(model) {
