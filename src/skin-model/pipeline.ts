@@ -26,6 +26,7 @@ export type SkinPackage = {
 export type FileRole =
   | { kind: "layout"; board: BoardKind; theme: Appearance; orientation: Orientation }
   | { kind: "style"; theme: Appearance }
+  | { kind: "info" }
   | { kind: "appearance" }
   | { kind: "motion" }
   | { kind: "sound-config" }
