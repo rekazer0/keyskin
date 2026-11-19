@@ -6,11 +6,12 @@ import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { actionText, boardProperties, keyActions, keyGeometry, keyProperties, keyStates, motionProperties, panelProperties, styleProperties, summarizeModel } from "../src/skin-model/inspect.ts"
 import { setKeyAction } from "../src/skin-model/edit.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { readWith } from "./support/driver.mjs"
 
 const BOARD = "light/skin/port/py_26.ini"
 
 async function model() {
-  return bdsFormat.read(bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
 }
 
 test("按键几何来自模型", async () => {

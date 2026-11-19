@@ -6,9 +6,10 @@ import { addKey, findKey, moveKey, patchKey, removeKey, removeStyle, resizeBoard
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { validateModel } from "../src/skin-model/validate.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { readWith } from "./support/driver.mjs"
 
 async function model() {
-  return bdsFormat.read(bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
 }
 
 const BOARD = "light/skin/port/py_26.ini"

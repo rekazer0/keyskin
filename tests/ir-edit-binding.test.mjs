@@ -6,11 +6,12 @@ import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { findKey } from "../src/skin-model/edit.ts"
 import { actionOfText, applyFieldChange, canApplyField, editableFields } from "../src/skin-model/edit-binding.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { readWith } from "./support/driver.mjs"
 
 const BOARD = "light/skin/port/py_26.ini"
 
 async function model() {
-  return bdsFormat.read(bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
 }
 
 test("几何字段只改一个分量，其余不动", async () => {

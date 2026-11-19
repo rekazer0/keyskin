@@ -8,11 +8,11 @@ import { colorValue } from "@/bda-encode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
-import { accessOf } from "@/skin-model/formats/bds-access.ts"
+import { accessOf, type DocumentAccess } from "@/skin-model/formats/bds-access.ts"
 import { identifyBds } from "@/skin-model/formats/bds-identify.ts"
 import { parseBds } from "@/skin-model/formats/bds-parse.ts"
 import { actionValue, layoutBoards } from "@/skin-model/formats/bds.ts"
-import { packageOf } from "@/skin-model/pipeline.ts"
+import { packageOf, type FileRole, type SkinDocuments, type SkinStructure } from "@/skin-model/pipeline.ts"
 import { encodeAnimation, encodeAppearance, encodeSoundConfig } from "@/skin-model/formats/bda-appearance.ts"
 import { configBytes, identifyBda, parseBda, pathsOfRole } from "@/skin-model/formats/bda-pipeline.ts"
 import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig } from "@/skin-model/formats/bda-motion.ts"
@@ -258,9 +258,9 @@ function stylesOf(appearance: BdaAppearance): { styles: Map<string, SkinStyle>; 
 }
 
 /** 骨架里的主板布局：优先 26 键，找不到就取该方向的第一份布局。 */
-function layoutOf(base: SkinArchive, theme: Appearance, orientation: Orientation): string | undefined {
+function layoutOf(access: DocumentAccess, theme: Appearance, orientation: Orientation): string | undefined {
   const prefix = `${theme}/skin/${orientation}/`
-  const names = base.names().filter((name) => name.startsWith(prefix) && name.endsWith(".ini") && !/gen\.ini$/i.test(name))
+  const names = access.paths().filter((name) => name.startsWith(prefix) && name.endsWith(".ini") && !/gen\.ini$/i.test(name))
   return names.find((name) => /(?:def|py|en)_26\.ini$/i.test(name)) ?? names[0]
 }
 
@@ -288,153 +288,210 @@ function panelsFromModel(model: SkinModel): Map<string, BdaPanel> {
   return panels
 }
 
+/** 读取时决定方向的外部输入；骨架已经解析成文档访问器，不是包。 */
+export type BdaReadHints = {
+  theme: Appearance
+  orientation: Orientation
+  /** 布局骨架的解析产物。骨架是外部输入，不属于这个包。 */
+  base: DocumentAccess
+}
+
+export function bdaHintsOf(source: BdaSource): BdaReadHints {
+  if (!source.base) throw new Error("读取 BDA 皮肤需要布局骨架")
+  const basePackage = packageOf(source.base, "bds")
+  return {
+    theme: source.theme,
+    orientation: source.orientation,
+    base: accessOf(parseBds(basePackage, identifyBds(basePackage))),
+  }
+}
+
+/**
+ * 解析产物 → 模型。
+ * 签名里没有 SkinPackage：外观、动画、音效、图片都从文档取。
+ */
+export async function bdaToModel(
+  documents: SkinDocuments,
+  hints: BdaReadHints,
+  options?: ImportOptions,
+): Promise<SkinModel> {
+  const layout = layoutOf(hints.base, hints.theme, hints.orientation)
+  if (!layout) throw new Error("布局骨架里没有该主题方向的布局")
+  const boards = await layoutBoards(hints.base, hints.theme, hints.orientation, layout, "main", options)
+  const model = emptyModel({
+    appearance: hints.theme,
+    orientation: hints.orientation,
+    resolution: boards.boards[0]?.size ?? { width: 1080, height: 600 },
+  }, "bda")
+  model.boards.push(...boards.boards)
+  const bytes = configBytes(documents, "appearance")
+  if (!bytes) throw new Error("BDA 包里没有外观配置")
+  const appearance = decodeBdaAppearance(bytes)
+  const parsed = stylesOf(appearance)
+  const images = new Map<string, SkinImage>(model.images)
+  // 图片按资源名从解析产物里取，不再回看归档。
+  const imageSource: ImageSource = {
+    pathOf: (resourceID: string) => {
+      const leaf = resourceID.replace(/\.png$/i, "")
+      const candidates = new Set([leaf, leaf.replace(/_\d+$/, "")])
+      return pathsOfRole(documents, "image").find((path) => {
+        const name = (path.split("/").pop() ?? "").replace(/\.png$/i, "")
+        return candidates.has(name)
+      })
+    },
+    bytesOf: (path: string) => documents.binaries.get(path),
+  }
+  for (const [name, ref] of parsed.refs) {
+    const layers = layersOf(appearance, imageSource, images, ref)
+    if (!layers.length) continue
+    parsed.styles.set(name, { ...parsed.styles.get(name), normal: layers })
+  }
+  // 骨架布局里的样式编号是百度 INI 的那一套，BDA 的样式在外观里按面板逐个声明。
+  // 所以按键样式要按「板名 + 按键动作名」到外观的面板定义里取，取不到才退回骨架编号。
+  for (const board of model.boards) {
+    const panel = appearance.panels.get(panelNameOf(board.id))
+    for (const key of board.keys) {
+      const action = actionValue(key.actions.press)
+      const entry = action && panel ? panel.keys.get(bdaPanelKeyName(action)) : undefined
+      // 外观里没有这个按键时清空样式：骨架的 INI 编号在 BDA 里不指向任何外观样式。
+      key.style = entry
+        ? {
+          ...(entry.backStyle ? { back: bdaStyleName(entry.backStyle) } : {}),
+          ...(entry.backStyleState ? { pressedBack: bdaStyleName(entry.backStyleState) } : {}),
+          fore: entry.foreStyles.flatMap((ref) => {
+            const name = bdaStyleName(ref)
+            return name ? [name] : []
+          }),
+        }
+        : { fore: [] }
+    }
+  }
+  model.styles = parsed.styles
+  model.images = images
+  // 音效与字体是包里的文件，字节要进模型；BDA 的音效配置另有一份，见下。
+  const resources = new Map(model.resources)
+  for (const path of documents.binaries.keys()) {
+    if (!/\.(?:mp3|ogg|wav|m4a|ttf|otf|ttc)$/i.test(path)) continue
+    const data = documents.binaries.get(path)
+    if (!data) continue
+    resources.set(path, /\.(?:ttf|otf|ttc)$/i.test(path)
+      ? { kind: "font", path, data }
+      : { kind: "audio", path, data })
+  }
+  model.resources = resources
+  // 动画与音效各有一份配置，读出来放进模型；读不到就留空，不编造默认值。
+  const animationBytes = configBytes(documents, "animation")
+  if (animationBytes) {
+    try {
+      model.motions = motionsOfAnimation(decodeBdaAnimation(animationBytes))
+    } catch {
+      // 动画配置损坏时不影响皮肤本身的读取，留给调用方判断。
+    }
+  }
+  const soundBytes = configBytes(documents, "sound")
+  if (soundBytes) {
+    try {
+      model.sounds = soundsOfConfig(decodeBdaSoundConfig(soundBytes))
+    } catch {
+      // 音效配置损坏同理。
+    }
+  }
+  model.provenance = {
+    format: "bda",
+    nodes: new Map(model.boards.flatMap((board: SkinBoard) => board.keys.map((key: SkinKey) => [key.id, { path: `${hints.theme}/skin/${hints.orientation}/appearanceConfig` }] as const))),
+  }
+  return model
+}
+
+/** 模型 → 文档。BDA 写出物全是二进制配置与图片，没有 INI。 */
+function bdaFromModel(model: SkinModel): SkinDocuments {
+  const theme: Appearance = model.meta.appearance
+  const orientation: Orientation = model.boards[0]?.orientation ?? model.meta.orientation
+  const appearancePath = `${theme}/skin/${orientation}/appearanceConfig`
+  // 外观完全从模型重建：不再以源包里的外观为底做增量覆盖。
+  const current: BdaAppearance = { imageStyles: new Map(), textStyles: new Map(), colorStyles: new Map(), panels: new Map() }
+  const images = model.images
+  // 三类样式表按 IR 里的样式名重建；编号就是外观里的键。
+  const imageStyles = new Map<number, BdaImageStyle>()
+  const textStyles = new Map<number, BdaTextStyle>()
+  const colorStyles = new Map<number, BdaColorStyle>()
+  for (const [name, style] of model.styles) {
+    const ref = refOfStyleName(name)
+    if (!ref) continue
+    if (ref.type === "image") imageStyles.set(ref.key, imageStyleOf(style))
+    else if (ref.type === "text") textStyles.set(ref.key, textStyleOf(style))
+    else colorStyles.set(ref.key, colorStyleOf(style))
+  }
+  // 面板整套从模型生成，不再在源包的面板上做增量替换。
+  const panels = panelsFromModel(model)
+  const next: BdaAppearance = { ...current, imageStyles, textStyles, colorStyles, panels }
+  const binaries = new Map<string, Uint8Array>()
+  const roles = new Map<string, FileRole>()
+  const put = (path: string, data: Uint8Array, role: FileRole): void => {
+    binaries.set(path, data)
+    roles.set(path, role)
+  }
+  // 音效与字体从模型写回；没有字节的说明源包里就没有。
+  for (const resource of model.resources.values()) {
+    if (!resource.data) continue
+    put(resource.path, resource.data, { kind: resource.kind === "font" ? "font" : "audio" })
+  }
+  // 动画配置单独一份文件；模型里有动效时从 IR 重建，否则不写。
+  if (model.motions.size) {
+    const rebuilt = animationOfMotions(model.motions, model.meta.resolution?.width)
+    put(`${theme}/skin/${orientation}/animationConfig`, encodeAnimation(rebuilt.animation), { kind: "motion" })
+  }
+  put(appearancePath, encodeAppearance(next), { kind: "appearance" })
+  // 音效配置单独一份文件；模型里有音效才写，避免产出空配置。
+  if (model.sounds.size) {
+    put(`${theme}/skin/${orientation}/soundConfig`, encodeSoundConfig(soundConfigOf(model.sounds)), { kind: "sound-config" })
+  }
+  // 图片按资源名写成 PNG，与外观里的 resourceID 对应。
+  for (const [id, image] of images) {
+    if (!id.startsWith("bda:")) continue
+    put(`${theme}/skin/res/${id.slice(4)}.png`, encodePng(image), { kind: "image" })
+  }
+  return { roles, texts: new Map(), structs: new Map(), binaries }
+}
+
+/** 从路径取主题与方向；BDA 的目录就是 `<主题>/skin/<方向>/`。 */
+function bdaStructureOf(documents: SkinDocuments): SkinStructure {
+  const themes = new Set<Appearance>()
+  const orientations = new Set<Orientation>()
+  for (const path of documents.roles.keys()) {
+    const match = /^(light|dark)\/skin\/(port|land)\//i.exec(path)
+    if (!match) continue
+    themes.add(match[1].toLowerCase() as Appearance)
+    orientations.add(match[2].toLowerCase() as Orientation)
+  }
+  return { roles: documents.roles, themes: [...themes], orientations: [...orientations] }
+}
+
+/** 文档 → 包。 */
+function bdaPack(documents: SkinDocuments, structure: SkinStructure): BdaSource {
+  const files = [...documents.binaries].map(([path, data]) => ({ path, data }))
+  const theme = structure.themes[0] ?? "light"
+  const orientation = structure.orientations[0] ?? "port"
+  return { archive: SkinArchive.fromSourceFiles(files), theme, orientation }
+}
+
 export const bdaFormat: SkinFormat<BdaSource> = {
   name: "bda",
   capabilities: capabilities(),
-  async read(source: BdaSource, options?: ImportOptions): Promise<SkinModel> {
-    if (!source.base) throw new Error("读取 BDA 皮肤需要布局骨架")
-    const layout = layoutOf(source.base, source.theme, source.orientation)
-    if (!layout) throw new Error("布局骨架里没有该主题方向的布局")
-    // 骨架也是一份包，同样走拆包、识别、解析，再交给同一个布局函数。
-    const basePackage = packageOf(source.base, "bds")
-    const baseAccess = accessOf(parseBds(basePackage, identifyBds(basePackage)))
-    const boards = await layoutBoards(baseAccess, source.theme, source.orientation, layout, "main", options)
-    const model = emptyModel({
-      appearance: source.theme,
-      orientation: source.orientation,
-      resolution: boards.boards[0]?.size ?? { width: 1080, height: 600 },
-    }, "bda")
-    model.boards.push(...boards.boards)
-    // 先拆包、识别、解析；下面的转换只用解析产物。
-    const pkg = packageOf(source.archive, "bda")
-    const structure = identifyBda(pkg)
-    const documents = parseBda(pkg, structure)
-    const bytes = configBytes(documents, "appearance")
-    if (!bytes) throw new Error("BDA 包里没有外观配置")
-    const appearance = decodeBdaAppearance(bytes)
-    const parsed = stylesOf(appearance)
-    const images = new Map<string, SkinImage>(model.images)
-    // 图片按资源名从解析产物里取，不再回看归档。
-    const imageSource: ImageSource = {
-      pathOf: (resourceID: string) => {
-        const leaf = resourceID.replace(/\.png$/i, "")
-        const candidates = new Set([leaf, leaf.replace(/_\d+$/, "")])
-        return pathsOfRole(documents, "image").find((path) => {
-          const name = (path.split("/").pop() ?? "").replace(/\.png$/i, "")
-          return candidates.has(name)
-        })
-      },
-      bytesOf: (path: string) => documents.binaries.get(path),
-    }
-    for (const [name, ref] of parsed.refs) {
-      const layers = layersOf(appearance, imageSource, images, ref)
-      if (!layers.length) continue
-      parsed.styles.set(name, { ...parsed.styles.get(name), normal: layers })
-    }
-    // 骨架布局里的样式编号是百度 INI 的那一套，BDA 的样式在外观里按面板逐个声明。
-    // 所以按键样式要按「板名 + 按键动作名」到外观的面板定义里取，取不到才退回骨架编号。
-    for (const board of model.boards) {
-      const panel = appearance.panels.get(panelNameOf(board.id))
-      for (const key of board.keys) {
-        const action = actionValue(key.actions.press)
-        const entry = action && panel ? panel.keys.get(bdaPanelKeyName(action)) : undefined
-        // 外观里没有这个按键时清空样式：骨架的 INI 编号在 BDA 里不指向任何外观样式。
-        key.style = entry
-          ? {
-            ...(entry.backStyle ? { back: bdaStyleName(entry.backStyle) } : {}),
-            ...(entry.backStyleState ? { pressedBack: bdaStyleName(entry.backStyleState) } : {}),
-            fore: entry.foreStyles.flatMap((ref) => {
-              const name = bdaStyleName(ref)
-              return name ? [name] : []
-            }),
-          }
-          : { fore: [] }
-      }
-    }
-    model.styles = parsed.styles
-    model.images = images
-    // 音效与字体是包里的文件，字节要进模型；BDA 的音效配置另有一份，见下。
-    const resources = new Map(model.resources)
-    for (const path of documents.binaries.keys()) {
-      if (!/\.(?:mp3|ogg|wav|m4a|ttf|otf|ttc)$/i.test(path)) continue
-      const data = documents.binaries.get(path)
-      if (!data) continue
-      resources.set(path, /\.(?:ttf|otf|ttc)$/i.test(path)
-        ? { kind: "font", path, data }
-        : { kind: "audio", path, data })
-    }
-    model.resources = resources
-    // 动画与音效各有一份配置，读出来放进模型；读不到就留空，不编造默认值。
-    const animationBytes = configBytes(documents, "animation")
-    if (animationBytes) {
-      try {
-        model.motions = motionsOfAnimation(decodeBdaAnimation(animationBytes))
-      } catch {
-        // 动画配置损坏时不影响皮肤本身的读取，留给调用方判断。
-      }
-    }
-    const soundBytes = configBytes(documents, "sound")
-    if (soundBytes) {
-      try {
-        model.sounds = soundsOfConfig(decodeBdaSoundConfig(soundBytes))
-      } catch {
-        // 音效配置损坏同理。
-      }
-    }
-    model.provenance = {
-      format: "bda",
-      nodes: new Map(model.boards.flatMap((board: SkinBoard) => board.keys.map((key: SkinKey) => [key.id, { path: `${source.theme}/skin/${source.orientation}/appearanceConfig` }] as const))),
-    }
-    return model
+  open(archive, context) {
+    return bdaSource(archive, context.base)
   },
-  write(model: SkinModel): BdaSource {
-    const theme: Appearance = model.meta.appearance
-    const orientation: Orientation = model.boards[0]?.orientation ?? model.meta.orientation
-    const appearancePath = `${theme}/skin/${orientation}/appearanceConfig`
-    // 外观完全从模型重建：不再以源包里的外观为底做增量覆盖。
-    const current: BdaAppearance = { imageStyles: new Map(), textStyles: new Map(), colorStyles: new Map(), panels: new Map() }
-    const images = model.images
-    // 三类样式表按 IR 里的样式名重建；编号就是外观里的键。
-    const imageStyles = new Map<number, BdaImageStyle>()
-    const textStyles = new Map<number, BdaTextStyle>()
-    const colorStyles = new Map<number, BdaColorStyle>()
-    for (const [name, style] of model.styles) {
-      const ref = refOfStyleName(name)
-      if (!ref) continue
-      if (ref.type === "image") imageStyles.set(ref.key, imageStyleOf(style))
-      else if (ref.type === "text") textStyles.set(ref.key, textStyleOf(style))
-      else colorStyles.set(ref.key, colorStyleOf(style))
+  importer(source, options) {
+    const hints = bdaHintsOf(source)
+    return {
+      identify: identifyBda,
+      parse: parseBda,
+      toModel: (documents) => bdaToModel(documents, hints, options),
     }
-    // 面板整套从模型生成，不再在源包的面板上做增量替换。
-    const panels = panelsFromModel(model)
-    const next: BdaAppearance = { ...current, imageStyles, textStyles, colorStyles, panels }
-    // 只写模型里有的东西：外观、动画配置、音效配置、图片。
-    const files: Array<{ path: string; data: Uint8Array }> = []
-    // 音效与字体从模型写回；没有字节的说明源包里就没有。
-    for (const resource of model.resources.values()) {
-      if (resource.data) files.push({ path: resource.path, data: resource.data })
-    }
-    // 动画配置单独一份文件；模型里有动效时从 IR 重建，否则保留原配置。
-    if (model.motions.size) {
-      const rebuilt = animationOfMotions(model.motions, model.meta.resolution?.width)
-      files.push({
-        path: `${theme}/skin/${orientation}/animationConfig`,
-        data: encodeAnimation(rebuilt.animation),
-      })
-    }
-    files.push({ path: appearancePath, data: encodeAppearance(next) })
-    // 音效配置单独一份文件；模型里有音效才写，避免产出空配置。
-    if (model.sounds.size) {
-      files.push({
-        path: `${theme}/skin/${orientation}/soundConfig`,
-        data: encodeSoundConfig(soundConfigOf(model.sounds)),
-      })
-    }
-    // 图片按资源名写成 PNG，与外观里的 resourceID 对应。
-    for (const [id, image] of images) {
-      if (!id.startsWith("bda:")) continue
-      files.push({ path: `${theme}/skin/res/${id.slice(4)}.png`, data: encodePng(image) })
-    }
-    return { archive: SkinArchive.fromSourceFiles(files), theme, orientation }
+  },
+  exporter: {
+    fromModel: bdaFromModel,
+    structure: bdaStructureOf,
+    pack: bdaPack,
   },
 }

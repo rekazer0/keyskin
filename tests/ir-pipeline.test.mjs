@@ -1,22 +1,23 @@
-// 管线驱动器：四阶段按序执行，转换阶段拿不到原始包。
+// 管线驱动器：识别、解析、转换按序执行，转换阶段拿不到原始包。
 import assert from "node:assert/strict"
 import test from "node:test"
 import { IniDocument } from "../src/ini.ts"
-import { exportSkin, importSkin, pathsWith, roleCounts, unknownFiles } from "../src/skin-model/pipeline.ts"
+import { SkinArchive } from "../src/skin.ts"
+import { exportSkin, importArchive, pathsWith, roleCounts, unknownFiles } from "../src/skin-model/pipeline.ts"
 
-function packFiles(entries) {
-  return new Map(entries.map(([path, text]) => [path, new TextEncoder().encode(text)]))
+function archive() {
+  return SkinArchive.fromSourceFiles([
+    { path: "a.ini", data: new TextEncoder().encode("[KEY1]\nX=1") },
+    { path: "weird.bin", data: new TextEncoder().encode("xx") },
+  ])
 }
 
 /** 一个最小导入器：记录调用顺序，转换阶段只拿到文档。 */
 function importer(log, options = {}) {
   return {
-    unpack(bytes, hints) {
-      log.push("unpack")
-      return { format: "bds", files: packFiles([["a.ini", "[KEY1]\nX=1"], ["weird.bin", "xx"]]) }
-    },
     identify(pkg) {
       log.push("identify")
+      assert.ok(pkg.files.has("a.ini"))
       return {
         roles: new Map([
           ["a.ini", { kind: "layout", board: "main", theme: "light", orientation: "port" }],
@@ -45,24 +46,23 @@ function importer(log, options = {}) {
   }
 }
 
-test("驱动器按拆包、识别、解析、转换的顺序执行", async () => {
+test("驱动器按识别、解析、转换的顺序执行", async () => {
   const log = []
-  await importSkin(new Uint8Array([1, 2]), importer(log))
-  assert.deepEqual(log, ["unpack", "identify", "parse", "toModel"])
+  await importArchive(archive(), "bds", importer(log))
+  assert.deepEqual(log, ["identify", "parse", "toModel"])
 })
 
 test("转换阶段拿不到原始包", async () => {
   const log = []
-  const model = await importSkin(new Uint8Array([1]), importer(log))
+  const model = await importArchive(archive(), "bds", importer(log))
   assert.ok(model)
-  // toModel 的入参里没有 files 字段；上面已断言它只能从文档取内容。
+  // toModel 的入参里没有包；上面已断言它只能从文档取内容。
 })
 
 test("识别不出来的文件如实列出，不当兜底", async () => {
   const log = []
   const impl = importer(log)
-  const pkg = impl.unpack(new Uint8Array([1]))
-  const structure = impl.identify(pkg)
+  const structure = impl.identify({ format: "bds", files: new Map([["a.ini", new Uint8Array()], ["weird.bin", new Uint8Array()]]) })
   const unknown = unknownFiles(structure)
   assert.equal(unknown.length, 1)
   assert.equal(unknown[0].path, "weird.bin")
@@ -74,14 +74,14 @@ test("识别不出来的文件如实列出，不当兜底", async () => {
 test("角色统计覆盖包里的每个文件", async () => {
   const log = []
   const impl = importer(log)
-  const pkg = impl.unpack(new Uint8Array([1]))
-  const structure = impl.identify(pkg)
-  assert.equal(structure.roles.size, pkg.files.size, "每个文件都必须有角色")
+  const files = new Map([["a.ini", new Uint8Array()], ["weird.bin", new Uint8Array()]])
+  const structure = impl.identify({ format: "bds", files })
+  assert.equal(structure.roles.size, files.size, "每个文件都必须有角色")
   const total = [...roleCounts(structure).values()].reduce((sum, count) => sum + count, 0)
-  assert.equal(total, pkg.files.size)
+  assert.equal(total, files.size)
 })
 
-test("导出方向同样分三步，打包阶段拿不到模型", () => {
+test("导出方向同样分三步，打包阶段拿不到模型", async () => {
   const log = []
   const exporter = {
     fromModel(model) {
@@ -95,12 +95,12 @@ test("导出方向同样分三步，打包阶段拿不到模型", () => {
     },
     pack(documents, structure) {
       log.push("pack")
-      // 打包阶段只有文档与结构，没有模型。
-      assert.equal("model" in documents, false)
-      return { format: "bds", files: packFiles([["a.ini", "x"]]) }
+      // 打包阶段拿到的是文档与结构，没有模型。
+      assert.ok(documents.roles.size)
+      assert.deepEqual(structure.themes, ["light"])
+      return { format: "bds", files: new Map() }
     },
   }
-  const result = exportSkin({ boards: [] }, exporter)
+  await exportSkin({ boards: [] }, exporter)
   assert.deepEqual(log, ["fromModel", "structure", "pack"])
-  assert.equal(result.files.size, 1)
 })

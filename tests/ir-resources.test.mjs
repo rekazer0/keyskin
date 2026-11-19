@@ -5,6 +5,7 @@ import { SkinArchive } from "../src/skin.ts"
 import { ssfFormat, ssfSource } from "../src/skin-model/formats/ssf.ts"
 import { SsfPackage } from "../src/ssf/ssf-package.ts"
 import { ssfSkeleton } from "../src/ssf/ssf-convert.ts"
+import { readWith, writeWith } from "./support/driver.mjs"
 
 const bytes = (text) => new TextEncoder().encode(text)
 
@@ -26,7 +27,7 @@ test("搜狗皮肤的音效与字体进模型", async () => {
     { path: "light/skin/port/py_26.ini", data: bytes("[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=F13\n") },
   ])
   const skeleton = ssfSkeleton(pkg, skeletonArchive)
-  const model = await ssfFormat.read(ssfSource(files, skeletonArchive))
+  const model = await readWith(ssfFormat, ssfSource(files, skeletonArchive))
   const audio = [...model.resources.values()].find((resource) => resource.kind === "audio")
   const font = [...model.resources.values()].find((resource) => resource.kind === "font")
   assert.ok(audio, "音效没有进模型")
@@ -41,8 +42,8 @@ test("搜狗导出把资源写回包里", async () => {
   const skeletonArchive = SkinArchive.fromSourceFiles([
     { path: "light/skin/port/py_26.ini", data: bytes("[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=F13\n") },
   ])
-  const model = await ssfFormat.read(ssfSource(files, skeletonArchive))
-  const out = await ssfFormat.write(model)
+  const model = await readWith(ssfFormat, ssfSource(files, skeletonArchive))
+  const out = await writeWith(ssfFormat, model)
   assert.equal(new TextDecoder().decode(out.files.get("1080/click.mp3")), "mp3-bytes")
   assert.equal(new TextDecoder().decode(out.files.get("1080/font.ttf")), "font-bytes")
 })

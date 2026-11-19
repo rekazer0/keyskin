@@ -7,9 +7,10 @@ import { bdaFormat, bdaSource } from "../src/skin-model/formats/bda.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { isExportable, summarize, validateModel } from "../src/skin-model/validate.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { readWith } from "./support/driver.mjs"
 
 async function bdsModel() {
-  return bdsFormat.read(bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
 }
 
 test("读出来的模型通过自检", async () => {
@@ -58,7 +59,7 @@ test("动效绑定的样式不存在时给提示", async () => {
 test("真实 BDA 皮肤自检后没有错误", async () => {
   const bda = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/default-template.bda", import.meta.url))), "bda")
   const base = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/bda-base.bds", import.meta.url))))
-  const model = await bdaFormat.read(bdaSource(bda, base))
+  const model = await readWith(bdaFormat, bdaSource(bda, base))
   const report = validateModel(model)
   assert.equal(report.errors, 0, `${summarize(report)}；${report.issues.slice(0, 3).map((issue) => `${issue.code} ${issue.subject}`).join("，")}`)
 })

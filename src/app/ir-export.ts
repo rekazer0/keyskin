@@ -44,7 +44,7 @@ export async function exportViaIr(archive: SkinArchive, format: ExportFormat, op
 
   const target = formatIdOf(format)
   await options.onProgress?.(0.35, `正在写出 ${format.toUpperCase()}…`)
-  const saved = await saveSession(opened.model, target, opened.source)
+  const saved = await saveSession(opened.model, target)
   if (!saved.ok) throw new Error(saved.error.message)
 
   let bytes = saved.bytes

@@ -4,10 +4,11 @@ import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { emptyModel } from "../src/skin-model/model.ts"
+import { readWith, writeWith } from "./support/driver.mjs"
 
 test("候选窗与提示窗进模型，带原路径与分段", async () => {
   const base = bdsFixtureArchive()
-  const model = await bdsFormat.read(bdsSource(base))
+  const model = await readWith(bdsFormat, bdsSource(base))
   const candidates = model.windows.filter((window) => window.kind === "candidate")
   const hints = model.windows.filter((window) => window.kind === "hint")
   assert.ok(candidates.length > 0, "候选窗没有被读进模型")
@@ -20,8 +21,8 @@ test("候选窗与提示窗进模型，带原路径与分段", async () => {
 
 test("窗口按原路径写回，内容与读出时一致", async () => {
   const base = bdsFixtureArchive()
-  const model = await bdsFormat.read(bdsSource(base))
-  const out = await bdsFormat.write(model)
+  const model = await readWith(bdsFormat, bdsSource(base))
+  const out = await writeWith(bdsFormat, model)
   for (const window of model.windows) {
     assert.ok(out.archive.names().includes(window.path), `${window.path} 没有写回`)
     const text = out.archive.getText(window.path)

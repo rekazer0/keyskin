@@ -67,42 +67,44 @@ export type ImportHints = {
   readonly base?: Uint8Array
 }
 
-/** 一个格式的导入四步。 */
-export type Importer = {
-  unpack(bytes: Uint8Array, hints?: ImportHints): SkinPackage
+/**
+ * 一个格式的导入三步。
+ * 转换阶段的签名里没有 `SkinPackage`：它拿不到原始文件。
+ */
+export interface Importer {
   identify(pkg: SkinPackage): SkinStructure
   parse(pkg: SkinPackage, structure: SkinStructure): SkinDocuments
-  /** 注意签名里没有 `SkinPackage`：转换阶段无法访问原始文件。 */
   toModel(documents: SkinDocuments, hints?: ImportHints): SkinModel | Promise<SkinModel>
 }
 
-/** 一个格式的导出三步。 */
-export type Exporter = {
-  fromModel(model: SkinModel): SkinDocuments
+/** 一个格式的导出三步。`T` 是打包产物，多数格式就是包本身。 */
+export interface Exporter<T = SkinPackage> {
+  fromModel(model: SkinModel): SkinDocuments | Promise<SkinDocuments>
   structure(documents: SkinDocuments): SkinStructure
-  pack(documents: SkinDocuments, structure: SkinStructure): SkinPackage
+  pack(documents: SkinDocuments, structure: SkinStructure): T
 }
 
 /* —— 驱动器 —— */
 
 /**
- * 按顺序驱动四个阶段并返回模型。
- * 中间产物只在本函数栈内存在，返回后除模型外不留任何引用。
+ * 从归档驱动三步并返回模型。
+ * 包只在拆包、识别、解析之间存活；`toModel` 拿到的只有文档。
  */
-export async function importSkin(
-  bytes: Uint8Array,
+export async function importArchive(
+  archive: { names(): string[]; getBytes(path: string): Uint8Array | undefined },
+  format: SkinFormatId,
   importer: Importer,
   hints?: ImportHints,
 ): Promise<SkinModel> {
-  const pkg = importer.unpack(bytes, hints)
+  const pkg = packageOf(archive, format)
   const structure = importer.identify(pkg)
   const documents = importer.parse(pkg, structure)
   return await importer.toModel(documents, hints)
 }
 
-/** 导出方向同理：模型 → 文档 → 结构 → 包。 */
-export function exportSkin(model: SkinModel, exporter: Exporter): SkinPackage {
-  const documents = exporter.fromModel(model)
+/** 导出方向：模型 → 文档 → 结构 → 包。打包阶段只有文档与结构，没有模型。 */
+export async function exportSkin<T>(model: SkinModel, exporter: Exporter<T>): Promise<T> {
+  const documents = await exporter.fromModel(model)
   const structure = exporter.structure(documents)
   return exporter.pack(documents, structure)
 }
@@ -139,4 +141,9 @@ export function packageOf(archive: { names(): string[]; getBytes(path: string): 
     if (data) files.set(path, data)
   }
   return { format, files }
+}
+
+/** 归档的文件表；搜狗与手心这类按文件表组织的格式用它。 */
+export function filesOf(archive: { names(): string[]; getBytes(path: string): Uint8Array | undefined }): Map<string, Uint8Array> {
+  return new Map(packageOf(archive, "bds").files)
 }

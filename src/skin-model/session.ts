@@ -67,9 +67,9 @@ export type SaveResult =
  * 把模型存成目标格式的字节。
  * 能力损失不阻止保存：报告随结果返回，由界面决定是否先提示。
  */
-export async function saveSession(model: SkinModel, format: SkinFormatId, source?: NativeSkin): Promise<SaveResult> {
+export async function saveSession(model: SkinModel, format: SkinFormatId): Promise<SaveResult> {
   try {
-    const written = await writeSkin(model, format, source ? { source } : {})
+    const written = await writeSkin(model, format)
     const bytes = bytesOf(written.source)
     return { ok: true, bytes, loss: written.loss, warnings: describeLoss(written.loss) }
   } catch (error) {

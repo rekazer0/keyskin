@@ -6,6 +6,7 @@ import { SkinArchive } from "../src/skin.ts"
 import { checkRoundTrip, checkTargets, countsOf, summarizeRoundTrip } from "../src/skin-model/conformance.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { readWith } from "./support/driver.mjs"
 
 function baseBds() {
   return SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/bda-base.bds", import.meta.url))), "bds")
@@ -16,7 +17,7 @@ function fixtureBds() {
 }
 
 test("计数快照包含主键盘键数", async () => {
-  const model = await bdsFormat.read(bdsSource(fixtureBds()))
+  const model = await readWith(bdsFormat, bdsSource(fixtureBds()))
   const counts = countsOf(model)
   assert.equal(counts.boards, 3)
   assert.ok(counts.keys > counts.mainKeys, "总键数应大于主板键数")

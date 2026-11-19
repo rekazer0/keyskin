@@ -6,9 +6,10 @@ import { SkinArchive } from "../src/skin.ts"
 import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { fallbackTraits, traitsOf, isNativeFormat } from "../src/skin-model/board-capability.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { readWith } from "./support/driver.mjs"
 
 async function model() {
-  return bdsFormat.read(bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
 }
 
 test("模型里的文档板：几何可改、可增删键", async () => {

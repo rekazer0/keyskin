@@ -6,11 +6,12 @@ import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
 import { keyGeometry, keyActions, keyStyleRefs } from "../src/skin-model/inspect.ts"
 import { fieldOf, fieldsOf, geometryRows, valueOfField } from "../src/app/model-fields.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
+import { readWith } from "./support/driver.mjs"
 
 const BOARD = "light/skin/port/py_26.ini"
 
 async function model() {
-  return bdsFormat.read(bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
+  return readWith(bdsFormat, bdsSource(SkinArchive.open(new Uint8Array(bdsFixture()), "bds")))
 }
 
 test("数值属性变成带范围的数值字段", async () => {

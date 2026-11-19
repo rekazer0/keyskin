@@ -6,7 +6,7 @@ import { IniDocument } from "@/ini.ts"
 import { accessOf, textContent, type DocumentAccess } from "@/skin-model/formats/bds-access.ts"
 import { identifyBds } from "@/skin-model/formats/bds-identify.ts"
 import { parseBds } from "@/skin-model/formats/bds-parse.ts"
-import { packageOf } from "@/skin-model/pipeline.ts"
+import type { FileRole, SkinDocuments, SkinStructure } from "@/skin-model/pipeline.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
 import { previewItems } from "@/preview-items.ts"
 import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
@@ -695,6 +695,275 @@ function primaryLayoutOf(access: DocumentAccess, theme: Appearance, orientation:
     ?? candidates[0]
 }
 
+/** 读取时决定主布局与方向的外部输入；不含包本身。 */
+export type BdsReadHints = {
+  layout: string
+  styles?: string
+  animation?: string
+  theme: Appearance
+  orientation: Orientation
+  kind: BoardKind
+}
+
+/** 从原生数据里取出读取提示；包本身留在外面。 */
+export function bdsHintsOf(source: BdsSource): BdsReadHints {
+  return {
+    layout: source.layout,
+    ...(source.styles ? { styles: source.styles } : {}),
+    ...(source.animation ? { animation: source.animation } : {}),
+    theme: source.theme,
+    orientation: source.orientation,
+    kind: source.kind,
+  }
+}
+
+/**
+ * 解析产物 → 模型。
+ * 签名里没有 SkinPackage：转换阶段只能看文档，拿不到原始文件。
+ */
+export async function bdsToModel(
+  documents: SkinDocuments,
+  hints: BdsReadHints,
+  options?: ImportOptions,
+): Promise<SkinModel> {
+  const access = accessOf(documents)
+  const roles = documents.roles
+  const packagedOrientations = [...new Set<Orientation>([...roles.values()].flatMap((role) => ("orientation" in role ? [role.orientation] : [])))]
+  const layout = access.text(hints.layout)
+  if (!layout) throw new Error(`包里没有这个布局：${hints.layout}`)
+  // 没有样式表的布局（官方基础布局）按空样式读，样式由后续的外观覆盖。
+  const styleDocument = (hints.styles ? access.text(hints.styles) : undefined) ?? IniDocument.parse("")
+  const size = parsePanelSize(layout)
+  const model = emptyModel({
+    ...infoOf(access),
+    appearance: hints.theme,
+    orientation: hints.orientation,
+    resolution: size,
+  }, "bds")
+  // 同一皮肤可能有竖屏与横屏两套完整键盘，两套都是事实，都要进模型。
+  const orientations = [...new Set<Orientation>([hints.orientation, ...packagedOrientations])]
+  const boards: SkinBoard[] = []
+  let panelPaths: PanelPaths = {}
+  for (const orientation of orientations) {
+    const primary = orientation === hints.orientation
+      ? hints.layout
+      : primaryLayoutOf(access, hints.theme, orientation)
+    if (!primary) continue
+    const parsedLayouts = await layoutBoards(
+      access,
+      hints.theme,
+      orientation,
+      primary,
+      orientation === hints.orientation ? hints.kind : "main",
+      options,
+    )
+    boards.push(...parsedLayouts.boards)
+    if (orientation === hints.orientation) panelPaths = parsedLayouts.paths
+  }
+  model.boards.push(...boards)
+  const parsed = stylesOf(access, hints.theme, hints.orientation, styleDocument)
+  model.styles = parsed.styles
+  model.images = parsed.images
+  const resources = new Map(model.resources)
+  // 音效与字体要带字节：模型得能独立写出它们，不能靠导出时回源包捡。
+  const locate = (name: string): string | undefined =>
+    access.paths().find((path) => path === name || path.endsWith(`/${name}`))
+  const bytesOf = (name: string): Uint8Array | undefined => {
+    const path = locate(name)
+    if (!path) return
+    return access.bytes(path) ?? (textContent(access, path) ? new TextEncoder().encode(textContent(access, path)) : undefined)
+  }
+  for (const style of parsed.styles.values()) {
+    for (const layer of [...style.normal, ...(style.pressed ?? [])]) {
+      if (layer.kind !== "sound") continue
+      const path = locate(layer.file) ?? layer.file
+      const data = bytesOf(layer.file)
+      resources.set(layer.file, { kind: "audio", path, ...(data ? { data } : {}) })
+    }
+  }
+  // 样式文档里声明的字体也算资源，导出时按名称找回。
+  for (const section of styleDocument.sections()) {
+    const font = styleDocument.get(section, "FONT_FILE")?.trim() || styleDocument.get(section, "FONT_NAME")?.trim()
+    if (!font) continue
+    const path = locate(font) ?? font
+    const data = bytesOf(font)
+    resources.set(font, { kind: "font", path, family: font, ...(data ? { data } : {}) })
+  }
+  model.resources = resources
+  // 按键动作里指向另一块板的，就是板间跳转。
+  for (const board of model.boards) {
+    const transitions = board.keys.flatMap((key) => {
+      const action = key.actions.press
+      if (action?.kind !== "switch") return []
+      return [{ trigger: "press" as const, target: action.board }]
+    })
+    const unique = transitions.filter((entry, index) => transitions.findIndex((other) => other.target === entry.target) === index)
+    if (unique.length) board.transitions = unique
+  }
+  if (hints.animation) {
+    const animationText = textContent(access, hints.animation)
+    if (animationText) model.motions = motionsOf(animationText)
+  }
+  // 非按键窗口：候选栏、提示气泡、手写区。它们不是键盘布局，但导出时要原样写回。
+  for (const [path, role] of roles) {
+    const kind = role.kind === "candidate-window" ? "candidate" as const
+      : role.kind === "hint-window" ? "hint" as const
+        : role.kind === "handwriting" ? "handwriting" as const
+          : undefined
+    if (!kind) continue
+    const document = documents.texts.get(path)
+    if (!document) continue
+    const sections = new Map<string, ReadonlyMap<string, string>>()
+    for (const section of document.sections()) {
+      sections.set(section, new Map(document.entries(section).map((entry) => [entry.key, entry.value])))
+    }
+    model.windows.push({ kind, path, appearance: hints.theme, orientation: hints.orientation, sections })
+  }
+  const provenance = new Map(model.boards.flatMap((board) => board.keys.map((key) => [key.id, { path: board.id }] as const)))
+  // 面板文件的原路径也要记住，导出时沿用原名，避免重建后出现两份面板文件。
+  for (const [kind, path] of Object.entries(panelPaths)) provenance.set(`panel:${kind}`, { path })
+  model.provenance = { format: "bds", nodes: provenance }
+  return model
+}
+
+/**
+ * 模型 → 文档。
+ * 写出时我们清楚每个文件是什么角色，所以角色在这里直接登记，不靠路径猜。
+ */
+async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
+  // 主键盘决定方向目录；模型里板多起来之后，第一块不一定是主键盘。
+  const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
+  if (!board) throw new Error("模型里没有板")
+  const renders = await buildBoard(model, board)
+  const theme = model.meta.appearance
+  const orientation = board.orientation
+  const root = `${theme}/skin`
+  // 只打包图层真正用到的图片；序号就是新图集里的切片号。
+  const used = new Set<string>()
+  for (const style of model.styles.values()) {
+    for (const layer of [...style.normal, ...(style.pressed ?? []), ...(style.disabled ?? [])]) {
+      if (layer.kind === "image" || layer.kind === "icon") used.add(layer.image)
+    }
+  }
+  const selected = new Map([...model.images].filter(([id]) => used.has(id)))
+  // 页尺寸跟随板尺寸：小屏皮肤不该产出 2048 的图集，大屏也不该被压到 1024。
+  const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.size.width, board.size.height) / 512) * 512))
+  const pages = packAtlasPages(selected, pageSize, pageSize)
+  const placement = new Map<string, { page: number; index: number }>()
+  pages.forEach((page, pageIndex) => {
+    page.placements.forEach((entry, index) => placement.set(entry.id, { page: pageIndex, index }))
+  })
+  const inner = new Map<string, readonly [number, number, number, number]>()
+  for (const style of model.styles.values()) {
+    for (const layer of style.normal) {
+      const nine = layer.kind === "image" ? layer.nineSlice?.inner : undefined
+      if (nine) inner.set(layer.kind === "image" ? layer.image : "", [nine.left, nine.top, nine.right, nine.bottom])
+    }
+  }
+  const imageRef = (id: string): string | undefined => {
+    const hit = placement.get(id)
+    return hit === undefined ? undefined : `${atlasName(hit.page)},${hit.index}`
+  }
+  const texts = new Map<string, IniDocument>()
+  const binaries = new Map<string, Uint8Array>()
+  const roles = new Map<string, FileRole>()
+  const putText = (path: string, text: string, role: FileRole): void => {
+    texts.set(path, IniDocument.parse(text))
+    roles.set(path, role)
+  }
+  const putBytes = (path: string, data: Uint8Array, role: FileRole): void => {
+    binaries.set(path, data)
+    roles.set(path, role)
+  }
+  // 样式段名对所有板共用一份，按键引用与样式表必须用同一张表。
+  const names = styleNames(model.styles)
+  putText("Info.txt", infoText(model), { kind: "info" })
+  // 面板文件与 gen.ini 属于主键盘所在的方向目录。
+  const panelPaths = {
+    ...(model.provenance.nodes.get("panel:candidate") ? { candidate: model.provenance.nodes.get("panel:candidate")!.path } : {}),
+    ...(model.provenance.nodes.get("panel:hint") ? { hint: model.provenance.nodes.get("panel:hint")!.path } : {}),
+    ...(model.provenance.nodes.get("panel:more") ? { more: model.provenance.nodes.get("panel:more")!.path } : {}),
+  }
+  // 每个方向各有一份面板文件；面板原路径只属于主方向，其余方向按目录重建。
+  for (const eachOrientation of new Set(model.boards.map((each) => each.orientation))) {
+    const main = model.boards.find((each) => each.orientation === eachOrientation && each.kind === "main")
+      ?? model.boards.find((each) => each.orientation === eachOrientation)
+    if (!main) continue
+    const paths = eachOrientation === orientation ? panelPaths : {}
+    for (const file of panelFiles(main, `${root}/${eachOrientation}/`, main.size, actionValue, paths)) {
+      putText(file.path, new TextDecoder().decode(file.data), { kind: "panel-config" })
+    }
+  }
+  // 每块板各自一份布局文件；板 id 已带目录时沿用，其它格式转来的板放到方向目录下。
+  for (const each of model.boards) {
+    const boardRenders = each === board ? renders : await buildBoard(model, each)
+    const path = each.id.includes("/") ? each.id : `${root}/${orientation}/${each.id}`
+    putText(path, layoutText(each, boardRenders, names), { kind: "layout", board: each.kind, theme, orientation: each.orientation })
+  }
+  putText(`${root}/res/default.css`, stylesText(model.styles, imageRef, names), { kind: "style", theme })
+  pages.forEach((page, pageIndex) => {
+    const name = atlasName(pageIndex)
+    putText(`${root}/res/${name}.til`, tileDocument(page, inner), { kind: "atlas", theme, orientation })
+    putBytes(`${root}/res/${name}.png`, encodePng(page.image), { kind: "image" })
+  })
+  if (model.motions.size) putText(`${root}/res/anim.ini`, writeMotions(model.motions), { kind: "motion" })
+  // 非按键窗口按原路径写回：候选栏、提示气泡、手写区。
+  for (const window of model.windows) {
+    const kind = window.kind === "candidate" ? "candidate-window" as const
+      : window.kind === "hint" ? "hint-window" as const
+        : "handwriting" as const
+    putText(window.path, windowText(window), { kind })
+  }
+  // 音效与字体按模型里的路径写回；没有字节的说明源包里就没这个文件，不凭空造。
+  for (const resource of model.resources.values()) {
+    if (!resource.data) continue
+    putBytes(resource.path, resource.data, { kind: resource.kind === "font" ? "font" : "audio" })
+  }
+  return { roles, texts, structs: new Map(), binaries }
+}
+
+/** 从文档里出现的路径取主题与方向；写出物本来就按目录分好了。 */
+function bdsStructureOf(documents: SkinDocuments): SkinStructure {
+  const themes = new Set<Appearance>()
+  const orientations = new Set<Orientation>()
+  for (const path of documents.roles.keys()) {
+    const theme = appearanceOf(path)
+    const orientation = orientationOf(path)
+    if (theme) themes.add(theme)
+    if (orientation) orientations.add(orientation)
+  }
+  return { roles: documents.roles, themes: [...themes], orientations: [...orientations] }
+}
+
+/** 文档 → 包。这里只做序列化与「哪个文件是主布局」的定位。 */
+function bdsPack(documents: SkinDocuments, structure: SkinStructure): BdsSource {
+  const files: Array<{ path: string; data: Uint8Array }> = []
+  const encoder = new TextEncoder()
+  for (const [path, document] of documents.texts) files.push({ path, data: encoder.encode(document.toString()) })
+  for (const [path, data] of documents.binaries) files.push({ path, data })
+  // 主布局：带按键段的布局里挑一块，优先 26 键拼音。
+  const layouts = [...structure.roles].filter(([, role]) => role.kind === "layout").map(([path]) => path)
+  const layout = layouts.find((path) => /\/py_26\.ini$/i.test(path))
+    ?? layouts.find((path) => /_26\.ini$/i.test(path))
+    ?? layouts[0]
+  if (!layout) throw new Error("写出的包里没有布局文件")
+  const layoutRole = structure.roles.get(layout)
+  const theme = layoutRole && "theme" in layoutRole ? layoutRole.theme : "light"
+  const orientation = layoutRole && "orientation" in layoutRole ? layoutRole.orientation : "port"
+  const kind = layoutRole && "board" in layoutRole ? layoutRole.board : "main"
+  const styles = [...structure.roles].find(([, role]) => role.kind === "style")?.[0]
+  const animation = [...structure.roles].find(([, role]) => role.kind === "motion")?.[0]
+  return {
+    archive: SkinArchive.fromSourceFiles(files),
+    layout,
+    ...(styles ? { styles } : {}),
+    theme,
+    orientation,
+    kind,
+    ...(animation ? { animation } : {}),
+  }
+}
+
 export const bdsFormat: SkinFormat<BdsSource> = {
   name: "bds",
   capabilities: new Map<Capability, CapabilityLevel>([
@@ -723,190 +992,20 @@ export const bdsFormat: SkinFormat<BdsSource> = {
     ["panel.toolbar", "partial"],
   ]),
   derive: { tolerance: 1 },
-  async read(source, options?: ImportOptions) {
-    // 先拆包、识别、解析；下面的转换只看得见解析产物，看不见包。
-    const pkg = packageOf(source.archive, "bds")
-    const structure = identifyBds(pkg)
-    const documents = parseBds(pkg, structure)
-    const access = accessOf(documents)
-    const layout = access.text(source.layout)
-    if (!layout) throw new Error(`包里没有这个布局：${source.layout}`)
-    // 没有样式表的布局（官方基础布局）按空样式读，样式由后续的外观覆盖。
-    const styleDocument = (source.styles ? access.text(source.styles) : undefined) ?? IniDocument.parse("")
-    const size = parsePanelSize(layout)
-    const model = emptyModel({
-      ...infoOf(access),
-      appearance: source.theme,
-      orientation: source.orientation,
-      resolution: size,
-    }, "bds")
-    // 同一皮肤可能有竖屏与横屏两套完整键盘，两套都是事实，都要进模型。
-    const orientations = [...new Set<Orientation>([source.orientation, ...structure.orientations])]
-    const boards: SkinBoard[] = []
-    let panelPaths: PanelPaths = {}
-    for (const orientation of orientations) {
-      const primary = orientation === source.orientation
-        ? source.layout
-        : primaryLayoutOf(access, source.theme, orientation)
-      if (!primary) continue
-      const parsedLayouts = await layoutBoards(
-        access,
-        source.theme,
-        orientation,
-        primary,
-        orientation === source.orientation ? source.kind : "main",
-        options,
-      )
-      boards.push(...parsedLayouts.boards)
-      if (orientation === source.orientation) panelPaths = parsedLayouts.paths
-    }
-    model.boards.push(...boards)
-    const parsed = stylesOf(access, source.theme, source.orientation, styleDocument)
-    model.styles = parsed.styles
-    model.images = parsed.images
-    const resources = new Map(model.resources)
-    // 音效与字体要带字节：模型得能独立写出它们，不能靠导出时回源包捡。
-    const locate = (name: string): string | undefined =>
-      access.paths().find((path) => path === name || path.endsWith(`/${name}`))
-    const bytesOf = (name: string): Uint8Array | undefined => {
-      const path = locate(name)
-      if (!path) return
-      return access.bytes(path) ?? (textContent(access, path) ? new TextEncoder().encode(textContent(access, path)) : undefined)
-    }
-    for (const style of parsed.styles.values()) {
-      for (const layer of [...style.normal, ...(style.pressed ?? [])]) {
-        if (layer.kind !== "sound") continue
-        const path = locate(layer.file) ?? layer.file
-        const data = bytesOf(layer.file)
-        resources.set(layer.file, { kind: "audio", path, ...(data ? { data } : {}) })
-      }
-    }
-    // 样式文档里声明的字体也算资源，导出时按名称找回。
-    for (const section of styleDocument.sections()) {
-      const font = styleDocument.get(section, "FONT_FILE")?.trim() || styleDocument.get(section, "FONT_NAME")?.trim()
-      if (!font) continue
-      const path = locate(font) ?? font
-      const data = bytesOf(font)
-      resources.set(font, { kind: "font", path, family: font, ...(data ? { data } : {}) })
-    }
-    model.resources = resources
-    // 按键动作里指向另一块板的，就是板间跳转。
-    for (const board of model.boards) {
-      const transitions = board.keys.flatMap((key) => {
-        const action = key.actions.press
-        if (action?.kind !== "switch") return []
-        return [{ trigger: "press" as const, target: action.board }]
-      })
-      const unique = transitions.filter((entry, index) => transitions.findIndex((other) => other.target === entry.target) === index)
-      if (unique.length) board.transitions = unique
-    }
-    if (source.animation) {
-      const animationText = textContent(access, source.animation)
-      if (animationText) model.motions = motionsOf(animationText)
-    }
-    // 非按键窗口：候选栏、提示气泡、手写区。它们不是键盘布局，但导出时要原样写回。
-    for (const [path, role] of structure.roles) {
-      const kind = role.kind === "candidate-window" ? "candidate" as const
-        : role.kind === "hint-window" ? "hint" as const
-          : role.kind === "handwriting" ? "handwriting" as const
-            : undefined
-      if (!kind) continue
-      const document = documents.texts.get(path)
-      if (!document) continue
-      const sections = new Map<string, ReadonlyMap<string, string>>()
-      for (const section of document.sections()) {
-        sections.set(section, new Map(document.entries(section).map((entry) => [entry.key, entry.value])))
-      }
-      model.windows.push({ kind, path, appearance: source.theme, orientation: source.orientation, sections })
-    }
-    const provenance = new Map(model.boards.flatMap((board) => board.keys.map((key) => [key.id, { path: board.id }] as const)))
-    // 面板文件的原路径也要记住，导出时沿用原名，避免重建后出现两份面板文件。
-    for (const [kind, path] of Object.entries(panelPaths)) provenance.set(`panel:${kind}`, { path })
-    model.provenance = { format: "bds", nodes: provenance }
-    return model
+  open(archive) {
+    return bdsSource(archive)
   },
-  async write(model) {
-    // 主键盘决定方向目录；模型里板多起来之后，第一块不一定是主键盘。
-    const board = model.boards.find((each) => each.kind === "main") ?? model.boards[0]
-    if (!board) throw new Error("模型里没有板")
-    const renders = await buildBoard(model, board)
-    const theme = model.meta.appearance
-    const orientation = board.orientation
-    const root = `${theme}/skin`
-    // 只打包图层真正用到的图片；序号就是新图集里的切片号。
-    const used = new Set<string>()
-    for (const style of model.styles.values()) {
-      for (const layer of [...style.normal, ...(style.pressed ?? []), ...(style.disabled ?? [])]) {
-        if (layer.kind === "image" || layer.kind === "icon") used.add(layer.image)
-      }
-    }
-    const selected = new Map([...model.images].filter(([id]) => used.has(id)))
-    // 页尺寸跟随板尺寸：小屏皮肤不该产出 2048 的图集，大屏也不该被压到 1024。
-    const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.size.width, board.size.height) / 512) * 512))
-    const pages = packAtlasPages(selected, pageSize, pageSize)
-    // 每张图落在哪一页的第几个切片；样式的图片引用据此写成 `图集名,序号`。
-    const placement = new Map<string, { page: number; index: number }>()
-    pages.forEach((page, pageIndex) => {
-      page.placements.forEach((entry, index) => placement.set(entry.id, { page: pageIndex, index }))
-    })
-    const inner = new Map<string, readonly [number, number, number, number]>()
-    for (const style of model.styles.values()) {
-      for (const layer of style.normal) {
-        const nine = layer.kind === "image" ? layer.nineSlice?.inner : undefined
-        if (nine) inner.set(layer.kind === "image" ? layer.image : "", [nine.left, nine.top, nine.right, nine.bottom])
-      }
-    }
-    const imageRef = (id: string): string | undefined => {
-      const hit = placement.get(id)
-      return hit === undefined ? undefined : `${atlasName(hit.page)},${hit.index}`
-    }
-    const text = (value: string) => new TextEncoder().encode(value)
-    const files: Array<{ path: string; data: Uint8Array }> = []
-    // 样式段名对所有板共用一份，按键引用与样式表必须用同一张表。
-    const names = styleNames(model.styles)
-    files.push({ path: "Info.txt", data: text(infoText(model)) })
-    // 面板文件与 gen.ini 属于主键盘所在的方向目录。
-    const panelPaths = {
-      ...(model.provenance.nodes.get("panel:candidate") ? { candidate: model.provenance.nodes.get("panel:candidate")!.path } : {}),
-      ...(model.provenance.nodes.get("panel:hint") ? { hint: model.provenance.nodes.get("panel:hint")!.path } : {}),
-      ...(model.provenance.nodes.get("panel:more") ? { more: model.provenance.nodes.get("panel:more")!.path } : {}),
-    }
-    // 每个方向各有一份面板文件；面板原路径只属于主方向，其余方向按目录重建。
-    for (const eachOrientation of new Set(model.boards.map((each) => each.orientation))) {
-      const main = model.boards.find((each) => each.orientation === eachOrientation && each.kind === "main")
-        ?? model.boards.find((each) => each.orientation === eachOrientation)
-      if (!main) continue
-      const paths = eachOrientation === orientation ? panelPaths : {}
-      files.push(...panelFiles(main, `${root}/${eachOrientation}/`, main.size, actionValue, paths))
-    }
-    // 每块板各自一份布局文件；板 id 已带目录时沿用，其它格式转来的板放到方向目录下。
-    for (const each of model.boards) {
-      const boardRenders = each === board ? renders : await buildBoard(model, each)
-      const path = each.id.includes("/") ? each.id : `${root}/${orientation}/${each.id}`
-      files.push({ path, data: text(layoutText(each, boardRenders, names)) })
-    }
-    files.push({ path: `${root}/res/default.css`, data: text(stylesText(model.styles, imageRef, names)) })
-    pages.forEach((page, pageIndex) => {
-      const name = atlasName(pageIndex)
-      files.push({ path: `${root}/res/${name}.til`, data: text(tileDocument(page, inner)) })
-      files.push({ path: `${root}/res/${name}.png`, data: encodePng(page.image) })
-    })
-    if (model.motions.size) files.push({ path: `${root}/res/anim.ini`, data: text(writeMotions(model.motions)) })
-    // 非按键窗口按原路径写回：候选栏、提示气泡、手写区。
-    for (const window of model.windows) files.push({ path: window.path, data: text(windowText(window)) })
-    // 音效与字体按模型里的路径写回；没有字节的说明源包里就没这个文件，不凭空造。
-    for (const resource of model.resources.values()) {
-      if (resource.data) files.push({ path: resource.path, data: resource.data })
-    }
-    const archive = SkinArchive.fromSourceFiles([...files])
+  importer(source, options) {
+    const hints = bdsHintsOf(source)
     return {
-      archive,
-      layout: board.id,
-      styles: `${root}/res/default.css`,
-      theme,
-      orientation,
-      kind: board.kind,
-      ...(model.motions.size ? { animation: `${root}/res/anim.ini` } : {}),
+      identify: identifyBds,
+      parse: parseBds,
+      toModel: (documents) => bdsToModel(documents, hints, options),
     }
+  },
+  exporter: {
+    fromModel: bdsFromModel,
+    structure: bdsStructureOf,
+    pack: bdsPack,
   },
 }

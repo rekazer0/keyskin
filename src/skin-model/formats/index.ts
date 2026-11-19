@@ -1,86 +1,46 @@
-// 格式注册表：按内容识别皮肤格式，统一提供导入与导出入口。
+// 格式注册表：按内容识别皮肤格式，并用驱动器统一完成导入与导出。
 //
-// 各格式的转换器只认自己的原生数据；调用方不该知道这些类型，只在这里进出。
-import type { SkinArchive } from "@/skin.ts"
-import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
-import { lossOf, requiredCapabilities, type LossReport } from "@/skin-model/capability.ts"
-import { bdsFormat, bdsSource, type BdsSource } from "@/skin-model/formats/bds.ts"
-import { bdaFormat, bdaSource, type BdaSource } from "@/skin-model/formats/bda.ts"
-import { ssfFormat, ssfSource, type SsfSource } from "@/skin-model/formats/ssf.ts"
-import { sxiFormat, sxiSource, type SxiSource } from "@/skin-model/formats/sxi.ts"
-import type { ImportOptions } from "@/skin-model/format.ts"
+// 这里只做三件事：探测格式、把归档交给对应格式的 open、把结果交给驱动器。
+// 格式自己不再有 read/write——读写都是驱动器的动作。
+import { SkinArchive } from "@/skin.ts"
+import { lossOf, requiredCapabilities, type Capability, type CapabilityLevel, type LossReport } from "@/skin-model/capability.ts"
+import { bdaFormat, type BdaSource } from "@/skin-model/formats/bda.ts"
+import { bdsFormat, type BdsSource } from "@/skin-model/formats/bds.ts"
+import { ssfFormat, type SsfSource } from "@/skin-model/formats/ssf.ts"
+import { sxiFormat, type SxiSource } from "@/skin-model/formats/sxi.ts"
+import type { ImportOptions, OpenContext, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
+import { exportSkin, importArchive } from "@/skin-model/pipeline.ts"
+
+export type { OpenContext } from "@/skin-model/format.ts"
 
 export type SkinFormatId = "bds" | "bda" | "ssf" | "sxi"
 
 /** 各格式的原生数据；只在格式实现与这里之间流动。 */
 export type NativeSkin = BdsSource | BdaSource | SsfSource | SxiSource
 
-export type OpenContext = {
-  /** 搜狗皮肤自身没有几何，读取时必须有官方骨架。 */
-  skeleton?: SkinArchive
-  /** BDA 包只描述外观，几何来自布局骨架。 */
-  base?: SkinArchive
+/**
+ * 四个格式收在同一种形态里。
+ * 断言成立：每个格式的 T 都是 NativeSkin 的分支，open 只会返回自己那支。
+ */
+const FORMATS: Record<SkinFormatId, SkinFormat<NativeSkin>> = {
+  bds: bdsFormat as SkinFormat<NativeSkin>,
+  bda: bdaFormat as SkinFormat<NativeSkin>,
+  ssf: ssfFormat as SkinFormat<NativeSkin>,
+  sxi: sxiFormat as SkinFormat<NativeSkin>,
 }
 
-export type SkinFormatEntry = {
-  id: SkinFormatId
-  /** 从归档里取出该格式的原生数据；不是这个格式或缺少必需输入时返回 undefined。 */
-  open: (archive: SkinArchive, context: OpenContext) => NativeSkin | undefined
-  read: (source: NativeSkin, options?: ImportOptions) => SkinModel | Promise<SkinModel>
-  write: (model: SkinModel, source?: NativeSkin) => NativeSkin | Promise<NativeSkin>
-  capabilities: ReadonlyMap<Capability, CapabilityLevel>
-  derive?: ImportOptions["derive"]
-}
-
-function entryOf(id: SkinFormatId): SkinFormatEntry {
-  if (id === "bds") {
-    return {
-      id,
-      open: (archive) => bdsSource(archive),
-      read: (source, options) => bdsFormat.read(source as BdsSource, options),
-      write: (model) => bdsFormat.write(model),
-      capabilities: bdsFormat.capabilities,
-      ...(bdsFormat.derive ? { derive: bdsFormat.derive } : {}),
-    }
+/**
+ * 原生数据里的包。
+ * 三个格式自己带着归档；搜狗与手心只有文件表，现场装一个。
+ * 这是格式与驱动器之间唯一的形状知识，集中在这里。
+ */
+function archiveOfNative(source: NativeSkin): SkinArchive {
+  if ("archive" in source && source.archive) return source.archive
+  if ("files" in source) {
+    return SkinArchive.fromSourceFiles([...source.files].map(([path, data]) => ({ path, data })))
   }
-  if (id === "ssf") {
-    return {
-      id,
-      open: (archive, context) => context.skeleton ? ssfSource(filesOf(archive), context.skeleton) : undefined,
-      read: (source, options) => ssfFormat.read(source as SsfSource, options),
-      write: (model) => ssfFormat.write(model),
-      capabilities: ssfFormat.capabilities,
-      ...(ssfFormat.derive ? { derive: ssfFormat.derive } : {}),
-    }
-  }
-  if (id === "bda") {
-    return {
-      id,
-      open: (archive, context) => bdaSource(archive, context.base),
-      read: (source, options) => bdaFormat.read(source as BdaSource, options),
-      write: (model) => bdaFormat.write(model),
-      capabilities: bdaFormat.capabilities,
-    }
-  }
-  return {
-    id,
-    open: (archive) => sxiSource(filesOf(archive)),
-    read: (source) => sxiFormat.read(source as SxiSource),
-    write: (model) => sxiFormat.write(model),
-    capabilities: sxiFormat.capabilities,
-    ...(sxiFormat.derive ? { derive: sxiFormat.derive } : {}),
-  }
-}
-
-/** 归档的文件表；格式自己的构造函数要的正是这张表。 */
-function filesOf(archive: SkinArchive): Map<string, Uint8Array> {
-  const files = new Map<string, Uint8Array>()
-  for (const name of archive.names()) {
-    const bytes = archive.getBytes(name)
-    if (bytes) files.set(name, bytes)
-  }
-  return files
+  throw new Error("原生数据里没有包，无法拆包")
 }
 
 export const SKIN_FORMATS: ReadonlyArray<SkinFormatId> = ["bds", "bda", "ssf", "sxi"]
@@ -107,25 +67,20 @@ export type OpenedSkin = {
 }
 
 /**
- * 打开一个皮肤包：探测格式、取原生数据、读成 IR。
+ * 打开一个皮肤包：探测格式、取原生数据、交给驱动器读成 IR。
  * 探测不到或缺少必需输入时返回 undefined，由调用方决定提示方式。
  */
 export async function openSkin(archive: SkinArchive, options: OpenSkinOptions = {}): Promise<OpenedSkin | undefined> {
   const format = options.format ?? detectFormat(archive)
   if (!format) return
-  const entry = entryOf(format)
+  const entry = FORMATS[format]
   const source = entry.open(archive, {
     ...(options.skeleton ? { skeleton: options.skeleton } : {}),
     ...(options.base ? { base: options.base } : {}),
   })
   if (!source) return
-  const model = await entry.read(source, options)
+  const model = await importArchive(archiveOfNative(source), format, entry.importer(source, options))
   return { format, model, source }
-}
-
-export type WriteSkinOptions = {
-  /** 在原数据上写回时传入；不给就按模型重建。 */
-  source?: NativeSkin
 }
 
 export type WrittenSkin = {
@@ -139,15 +94,15 @@ export type WrittenSkin = {
  * 把 IR 写成目标格式。
  * 损失报告只说明目标格式缺少哪些能力，不改变写出的内容。
  */
-export async function writeSkin(model: SkinModel, format: SkinFormatId, options: WriteSkinOptions = {}): Promise<WrittenSkin> {
-  const entry = entryOf(format)
-  const source = await entry.write(model, options.source)
+export async function writeSkin(model: SkinModel, format: SkinFormatId): Promise<WrittenSkin> {
+  const entry = FORMATS[format]
+  const source = await exportSkin(model, entry.exporter)
   return { format, source, loss: lossOf(model, entry.capabilities) }
 }
 
 /** 目标格式能不能完整表达这个模型，用于导出前的提示。 */
 export function canExpress(model: SkinModel, format: SkinFormatId): boolean {
-  return lossOf(model, entryOf(format).capabilities).items.length === 0
+  return lossOf(model, FORMATS[format].capabilities).items.length === 0
 }
 
 /** 模型自身需要的能力集合，供界面展示「这个皮肤用到了什么」。 */
