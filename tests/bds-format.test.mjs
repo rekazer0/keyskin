@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
+import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds/index.ts"
 import { setNodeRect } from "../src/skin-model/layout.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
 import { box, rectOf } from "./helpers/boxes.mjs"

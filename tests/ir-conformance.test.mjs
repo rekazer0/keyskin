@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
 import { checkRoundTrip, checkTargets, countsOf, summarizeRoundTrip } from "../src/skin-model/conformance.ts"
-import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
+import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds/index.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
 import { readWith } from "./support/driver.mjs"
 

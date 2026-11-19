@@ -3,10 +3,10 @@
 // 识别结果以前只活在 read 的调用栈里，读完就没了；这里让它变成可以展示的数据。
 // 它不改写包、不构造模型，只回答「这个包我读懂了多少」。
 import type { SkinArchive } from "@/skin.ts"
-import { identifyBda } from "@/skin-model/formats/bda-pipeline.ts"
-import { identifyBds } from "@/skin-model/formats/bds-identify.ts"
-import { identifySsf } from "@/skin-model/formats/ssf-pipeline.ts"
-import { identifySxi } from "@/skin-model/formats/sxi-pipeline.ts"
+import { identifyBda } from "@/skin-model/formats/bda/pipeline.ts"
+import { identifyBds } from "@/skin-model/formats/bds/identify.ts"
+import { identifySsf } from "@/skin-model/formats/ssf/pipeline.ts"
+import { identifySxi } from "@/skin-model/formats/sxi/pipeline.ts"
 import type { SkinFormatId } from "@/skin-model/formats/index.ts"
 import { packageOf, roleCounts, unknownFiles, type FileRole, type SkinStructure } from "@/skin-model/pipeline.ts"
 import type { Appearance, Orientation } from "@/skin-model/types.ts"

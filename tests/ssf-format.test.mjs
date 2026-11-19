@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { ssfFormat, ssfSource } from "../src/skin-model/formats/ssf.ts"
+import { ssfFormat, ssfSource } from "../src/skin-model/formats/ssf/index.ts"
 import { unpackSsf } from "../src/ssf/ssf-package.ts"
 import { ssfFixture } from "./helpers/ssf-fixture.mjs"
 import { ssfSkeletonFixture } from "./helpers/ssf-skeleton-fixture.mjs"

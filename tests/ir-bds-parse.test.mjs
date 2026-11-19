@@ -1,8 +1,8 @@
 // 百度皮肤的解析：按角色分桶，每个文件都必须落进某个桶。
 import assert from "node:assert/strict"
 import test from "node:test"
-import { identifyBds } from "../src/skin-model/formats/bds-identify.ts"
-import { parseBds } from "../src/skin-model/formats/bds-parse.ts"
+import { identifyBds } from "../src/skin-model/formats/bds/identify.ts"
+import { parseBds } from "../src/skin-model/formats/bds/parse.ts"
 import { packageOf } from "../src/skin-model/pipeline.ts"
 
 function pkgOf(entries) {

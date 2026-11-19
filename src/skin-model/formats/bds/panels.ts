@@ -3,7 +3,7 @@
 // 这些面板的字段在 `gen.ini` 里声明，具体布局在独立的 `.cnd` / `.pop` 文件里。
 // 读侧把它们整理成板的面板组件；写侧重新生成这几份文件。
 import { IniDocument, blocksOf, numbersOf } from "@/ini.ts"
-import type { DocumentAccess } from "@/skin-model/formats/bds-access.ts"
+import type { DocumentAccess } from "@/skin-model/formats/bds/access.ts"
 import type { CandidateBar, HintBubble, InputBar, ListPanel, MoreMenu, PanelBackdrop, ScanPanel, SkinBoard, Toolbar, ToolbarItem } from "@/skin-model/board.ts"
 import type { Offsets } from "@/skin-model/board.ts"
 import type { SkinAction } from "@/skin-model/types.ts"

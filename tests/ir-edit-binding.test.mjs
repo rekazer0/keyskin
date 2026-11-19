@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
+import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds/index.ts"
 import { findKey } from "../src/skin-model/edit.ts"
 import { actionOfText, applyFieldChange, canApplyField, editableFields } from "../src/skin-model/edit-binding.ts"
 import { layoutOf } from "../src/skin-model/layout-cache.ts"

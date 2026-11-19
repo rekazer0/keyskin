@@ -14,6 +14,7 @@ import { refreshPreview } from "./preview-render"
 import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
 import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes, mobilePortraitQuery } from "./canvas-interaction"
+import { expandSections } from "../preview-items.ts"
 import { actionDescription } from "../actions.ts"
 import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, animationObjectHeading, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
@@ -730,7 +731,7 @@ export function updateSelectedKey(field: HTMLInputElement): void {
   }
   const rectIndex = rectNames.indexOf(name)
   const before = appState.layoutDocument.toString()
-  for (const section of preview.expandSections(appState.selectedKeySections)) {
+  for (const section of expandSections(preview.keys, appState.selectedKeySections)) {
     if (rectIndex >= 0) {
       const rect = appState.layoutDocument.get(section, "VIEW_RECT")?.split(",").map(Number)
       const value = Number(field.value)

@@ -8,7 +8,7 @@ import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
 import { convertSession, openSession } from "../src/skin-model/session.ts"
 import { countsOf } from "../src/skin-model/conformance.ts"
-import { bdaFormat, bdaSource } from "../src/skin-model/formats/bda.ts"
+import { bdaFormat, bdaSource } from "../src/skin-model/formats/bda/index.ts"
 import { bdaAnimatedSkinBytes } from "./helpers/bda-animation-fixture.mjs"
 import { readWith, writeWith } from "./support/driver.mjs"
 

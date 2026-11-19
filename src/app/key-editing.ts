@@ -4,6 +4,7 @@ import { skinModel } from "./skin-model-state"
 import { applyFieldChange } from "@/skin-model/edit-binding.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { preview, source, toolbarPreview } from "./canvas-interaction"
+import { expandSections } from "../preview-items.ts"
 import { normalizeKeySections } from "../ini.ts"
 import { canvasEditable, commitText, updateDirty } from "./edit-history"
 import { setSourceValue, scrollSelectedSource } from "./config-context"
@@ -37,7 +38,7 @@ export function copySelectedKeys(): void {
   })) + 1
   const copies: string[] = []
   const copyBySource = new Map<string, string>()
-  for (const section of preview.expandSections(appState.selectedKeySections)) {
+  for (const section of expandSections(preview.keys, appState.selectedKeySections)) {
     while (occupied.has(`KEY${number}`)) number += 1
     const target = `KEY${number++}`
     const entries = appState.layoutDocument.entries(section).map(({ key, value }) => {
@@ -78,7 +79,7 @@ export async function deleteSelectedKeys(): Promise<void> {
   }
   if (!appState.archive || !appState.layoutDocument || !appState.selectedKeySections.length) return
   const before = appState.layoutDocument.toString()
-  if (!appState.layoutDocument.removeSections(preview.expandSections(appState.selectedKeySections))) return
+  if (!appState.layoutDocument.removeSections(expandSections(preview.keys, appState.selectedKeySections))) return
   normalizeKeySections(appState.layoutDocument)
   const text = appState.layoutDocument.toString()
   commitText(appState.layoutPath, before, text)

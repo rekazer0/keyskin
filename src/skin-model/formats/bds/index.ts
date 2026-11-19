@@ -3,9 +3,9 @@
 // 格式原生数据是归档加路径；read 解析成 IR，write 从 IR 重新生成全部文件（含重新打包的图集）。
 import { appearanceOf, bdsBoardName, bdsDirectory, isBdsLayoutPath, orientationOf } from "@/skin-model/board-paths.ts"
 import { IniDocument, numbersOf } from "@/ini.ts"
-import { accessOf, textContent, type DocumentAccess } from "@/skin-model/formats/bds-access.ts"
-import { identifyBds } from "@/skin-model/formats/bds-identify.ts"
-import { parseBds } from "@/skin-model/formats/bds-parse.ts"
+import { accessOf, textContent, type DocumentAccess } from "@/skin-model/formats/bds/access.ts"
+import { identifyBds } from "@/skin-model/formats/bds/identify.ts"
+import { parseBds } from "@/skin-model/formats/bds/parse.ts"
 import type { FileRole, SkinDocuments, SkinStructure } from "@/skin-model/pipeline.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
 import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
@@ -14,16 +14,16 @@ import { tileSlices } from "@/tiles.ts"
 import type { Size } from "taffy-layout"
 import type { Appearance, BoardKind, KeyEvent, Orientation, SkinAction, SkinWindow } from "@/skin-model/types.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
-import type { LayoutBox } from "@/skin-model/layout.ts"
+import { absoluteBoard, type LayoutBox } from "@/skin-model/layout.ts"
 import type { SkinKey } from "@/skin-model/key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles } from "@/skin-model/style.ts"
 import type { HintBubble, ListPanel, MoreMenu, SkinBoard } from "@/skin-model/board.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, MotionVector, SkinMotion, SkinMotions } from "@/skin-model/motion.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
 import { cutTiles, packAtlasPages, tileDocument, type SkinImage } from "@/skin-model/image.ts"
-import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds-panels.ts"
-import { tipBodyOf, tipLines, tipPoolOf, tipsOf } from "@/skin-model/formats/bds-tips.ts"
-import { buildBoard, containerWithState, stateMatches, type KeyRender } from "@/skin-model/build.ts"
+import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds/panels.ts"
+import { tipLines, tipPoolOf, tipsOf } from "@/skin-model/formats/bds/tips.ts"
+import { buildBoard, type KeyRender } from "@/skin-model/build.ts"
 import { deriveBoard } from "@/skin-model/derive/layout.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 
@@ -621,115 +621,102 @@ function parsePanelSize(document: IniDocument): Size<number> {
 }
 
 /**
- * 板上除按键外的组件：候选栏、列表、更多菜单、输入栏、扫描面板、气泡。
- * 几何优先取 `VIEW_RECT`，没有就按 `SIZE` + `ANCHOR_TYPE` + `POS` 摆到面板上。
+ * 组件在画布上的矩形：优先 `VIEW_RECT`，没有就按 `SIZE` + `ANCHOR_TYPE` + `POS` 摆到面板上。
+ * 候选栏铺满整板；其余组件没给尺寸就没有几何。
  */
-function componentRenders(document: IniDocument, panel: Size<number>): KeyRender[] {
-  const read = (section: string, name: string): string | undefined => document.get(section, name)?.trim() || undefined
-  const panelWidth = panel.width
-  const panelHeight = panel.height
-  return document.sections().flatMap((section) => {
-    if (/^(?:KEY|TIP)\d+$/i.test(section)) return []
-    const viewRect = numbersOf(read(section, "VIEW_RECT"))
-    const size = numbersOf(read(section, "SIZE"))
-    // 候选栏铺满整板；其余组件没给尺寸就不画。
-    const spansPanel = section === "PANEL" || section === "CAND"
-    const width = viewRect.length === 4 ? viewRect[2] : spansPanel ? panelWidth : size[0] ?? 0
-    const height = viewRect.length === 4 ? viewRect[3] : spansPanel ? panelHeight : size[1] ?? 0
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return []
-    let x = 0
-    let y = 0
-    if (viewRect.length === 4) {
-      x = viewRect[0]
-      y = viewRect[1]
-    } else if (section !== "PANEL") {
-      const position = numbersOf(read(section, "POS"))
-      const anchor = Number(read(section, "ANCHOR_TYPE"))
-      const offsetX = Number.isFinite(position[0]) ? position[0] : 0
-      const offsetY = Number.isFinite(position[1]) ? position[1] : 0
-      const xAnchor = ((anchor - 1) % 3) + 1
-      const yAnchor = Math.ceil(anchor / 3)
-      x = xAnchor === 2 ? panelWidth / 2 + offsetX : xAnchor === 3 ? panelWidth + offsetX : offsetX
-      y = yAnchor === 2 ? panelHeight / 2 + offsetY : yAnchor === 3 ? panelHeight + offsetY : offsetY
-    }
-    // CAND.FORE_STYLE 是候选词的运行时样式，不是整条候选栏的静态前景。
-    const fore = section === "CAND"
-      ? []
-      : read(section, "FORE_STYLE")?.split(",").map((token) => token.trim()).filter(Boolean) ?? []
-    const back = read(section, "BACK_STYLE")?.split(",")[0]
-    const press = read(section, "KEY") ?? read(section, "CENTER")
-    const show = read(section, "SHOW")
-    return [{
-      key: {
-        id: section,
-        actions: press ? { press: { kind: "text", value: press } } : {},
-        container: { ...(back ? { back: { style: back } } : {}), fore: fore.map((style) => ({ style })) },
-      },
-      section,
-      sections: [section],
-      rect: { x, y, width, height },
-      container: {
-        ...(back ? { back: { style: back } } : {}),
-        fore: fore.map((style) => ({ style })),
-        ...(show ? { text: { content: show } } : {}),
-      },
-      ...(back ? { backStyle: back } : {}),
-      foreStyles: fore,
-      ...(show ? { text: show } : {}),
-      animStyles: [],
-      editable: false,
-      visible: true,
-      fore: [],
-      layers: [],
-    }]
-  })
+function componentRect(document: IniDocument, section: string, panel: Size<number>): LayoutBox | undefined {
+  const read = (name: string): string | undefined => document.get(section, name)?.trim() || undefined
+  const viewRect = numbersOf(read("VIEW_RECT"))
+  const size = numbersOf(read("SIZE"))
+  const spansPanel = section === "PANEL" || section === "CAND"
+  const width = viewRect.length === 4 ? viewRect[2] : spansPanel ? panel.width : size[0] ?? 0
+  const height = viewRect.length === 4 ? viewRect[3] : spansPanel ? panel.height : size[1] ?? 0
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return
+  if (viewRect.length === 4) {
+    return { position: { x: viewRect[0], y: viewRect[1] }, size: { width, height } }
+  }
+  if (section === "PANEL") return { position: { x: 0, y: 0 }, size: { width, height } }
+  const position = numbersOf(read("POS"))
+  const anchor = Number(read("ANCHOR_TYPE"))
+  const offsetX = Number.isFinite(position[0]) ? position[0] : 0
+  const offsetY = Number.isFinite(position[1]) ? position[1] : 0
+  const xAnchor = ((anchor - 1) % 3) + 1
+  const yAnchor = Math.ceil(anchor / 3)
+  return {
+    position: {
+      x: xAnchor === 2 ? panel.width / 2 + offsetX : xAnchor === 3 ? panel.width + offsetX : offsetX,
+      y: yAnchor === 2 ? panel.height / 2 + offsetY : yAnchor === 3 ? panel.height + offsetY : offsetY,
+    },
+    size: { width, height },
+  }
+}
+
+/** 组件段的样式引用；`CAND.FORE_STYLE` 是候选词的运行时样式，不算整条候选栏的前景。 */
+function componentStyles(document: IniDocument, section: string): { back?: string; fore: string[] } {
+  const read = (name: string): string | undefined => document.get(section, name)?.trim() || undefined
+  return {
+    ...(read("BACK_STYLE")?.split(",")[0] ? { back: read("BACK_STYLE")!.split(",")[0] } : {}),
+    fore: section === "CAND" ? [] : read("FORE_STYLE")?.split(",").map((token) => token.trim()).filter(Boolean) ?? [],
+  }
 }
 
 /**
- * 一份布局文档的渲染投影：几何是 `VIEW_RECT`，样式引用在容器里，
- * 具体样式由调用方的解析器去取。同一位置同一动作的按键段合成一个。
+ * 一份布局文档解析成板：按键、布局树、面板样式与状态池。
+ * 编辑器的画布与检查器共用这一份板，不再各自回文档取数。
  */
-export function bdsRenders(document: IniDocument, state?: number): KeyRender[] {
-  const groups = new Map<string, ReturnType<typeof keysOf>>()
-  for (const entry of keysOf(document)) {
-    const { position, size } = entry.rect
-    const signature = [position.x, position.y, size.width, size.height, actionValue(entry.key.actions.press) ?? ""].join("|")
-    groups.set(signature, [...(groups.get(signature) ?? []), entry])
+export function bdsBoardOf(
+  document: IniDocument,
+  options: { id: string; orientation: Orientation },
+): SkinBoard {
+  const entries = keysOf(document)
+  const placed = entries.filter((entry) => entry.placed)
+  const panel = parsePanelSize(document)
+  const panelStyle = document.get("PANEL", "BACK_STYLE")?.trim() || undefined
+  const panelFore = document.get("PANEL", "FORE_STYLE")?.trim() || undefined
+  const keyCount = keyCountOf(document)
+  const tipCount = tipCountOf(document)
+  // 组件几何写进板：画布只读板，不再回文档算位置。
+  const backdropRect = componentRect(document, "PANEL", panel)
+  const candidateRect = componentRect(document, "CAND", panel)
+  const listRect = componentRect(document, "LIST", panel)
+  const moreRect = componentRect(document, "MORE", panel)
+  const hintRect = componentRect(document, "HINT", panel)
+  const candidateStyles = componentStyles(document, "CAND")
+  return {
+    id: options.id,
+    kind: "main",
+    geometry: "document",
+    orientation: options.orientation,
+    size: panel,
+    layout: absoluteBoard(placed.map((entry) => ({ id: entry.key.id, ...entry.rect }))),
+    ...(panelStyle || panelFore || backdropRect
+      ? {
+        backdrop: {
+          ...(panelStyle ? { style: panelStyle } : {}),
+          ...(panelFore ? { foreStyle: panelFore } : {}),
+          size: panel,
+          ...(backdropRect ? { rect: backdropRect } : {}),
+        },
+      }
+      : {}),
+    ...(panelStyle ? { panelStyle } : {}),
+    ...(candidateRect
+      ? {
+        candidates: [{
+          ...(candidateStyles.back ? { style: candidateStyles.back } : {}),
+          ...(document.get("CAND", "CELL_STYLE")?.trim() ? { cellStyle: document.get("CAND", "CELL_STYLE")!.trim() } : {}),
+          viewRect: candidateRect,
+        }],
+      }
+      : {}),
+    ...(listRect ? { list: { viewRect: listRect } } : {}),
+    ...(moreRect ? { more: { layouts: new Map(), viewRect: moreRect } } : {}),
+    ...(hintRect ? { hint: { viewRect: hintRect } } : {}),
+    keys: entries.map((entry) => entry.key),
+    ...(keyCount !== undefined ? { keyCount } : {}),
+    ...(tipCount !== undefined ? { tipCount } : {}),
+    tips: tipPoolOf(document, { actionOf }),
   }
-  const keys: KeyRender[] = [...groups.values()].map((entries) => {
-    const key = entries[entries.length - 1].key
-    const { position, size } = entries[entries.length - 1].rect
-    // 状态覆盖写在 `[TIPn]` 里；按键只记状态名与段号。
-    const ref = state === undefined ? undefined : key.stateRefs?.find((each) => stateMatches(each.state, state))
-    const override = ref ? tipBodyOf(document, ref.section, { actionOf })?.container : undefined
-    const container = containerWithState(key.container, override)
-    const foreStyles = container.fore.flatMap((layer) => (layer.style ? [layer.style] : []))
-    return {
-      key,
-      section: key.id,
-      sections: entries.flatMap((entry) => entry.key.sections ?? [entry.key.id]),
-      rect: { x: position.x, y: position.y, width: size.width, height: size.height },
-      ...(key.foreRect ? { foreRect: { x: key.foreRect.position.x, y: key.foreRect.position.y, width: key.foreRect.size.width, height: key.foreRect.size.height } } : {}),
-      container,
-      ...(container.back?.style ? { backStyle: container.back.style } : {}),
-      ...(container.back?.pressed ? { highlightBackStyle: container.back.pressed } : {}),
-      foreStyles,
-      ...(container.text?.content ? { text: container.text.content } : {}),
-      animStyles: [
-        ...new Set([
-          ...container.fore.flatMap((layer) => (layer.anim ? [layer.anim] : [])),
-          ...(container.back?.anim ? [container.back.anim] : []),
-          ...(container.press ? [container.press] : []),
-        ]),
-      ],
-      editable: key.editable ?? true,
-      visible: key.visible !== false,
-      fore: [],
-      layers: [],
-    }
-  })
-  // 板上其余组件一起进渲染列表：它们在画布上同样是可画的一块。
-  return [...keys, ...componentRenders(document, parsePanelSize(document))]
 }
 
 /** 同一主题方向下的布局文件：去掉 `gen.ini` 与面板专用文件，只保留真有按键段的。 */

@@ -1,7 +1,7 @@
 // 百度皮肤的识别：每个文件一个角色，判不出来要如实标 unknown。
 import assert from "node:assert/strict"
 import test from "node:test"
-import { identifyBds } from "../src/skin-model/formats/bds-identify.ts"
+import { identifyBds } from "../src/skin-model/formats/bds/identify.ts"
 import { roleCounts, unknownFiles } from "../src/skin-model/pipeline.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"
 

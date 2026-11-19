@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
+import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds/index.ts"
 import { diffModels, describeDiff, diffSize, isEmptyDiff } from "../src/skin-model/compare.ts"
 import { moveKey, removeKey, addKey, setKeyAction, removeStyle } from "../src/skin-model/edit.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"

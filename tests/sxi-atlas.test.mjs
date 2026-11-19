@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { encodePng } from "../src/raster.ts"
-import { atlasImagesOf } from "../src/skin-model/formats/sxi-atlas.ts"
+import { atlasImagesOf } from "../src/skin-model/formats/sxi/atlas.ts"
 
 function atlasPng(width, height) {
   return encodePng({ width, height, data: new Uint8Array(width * height * 4).fill(0x70) })

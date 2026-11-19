@@ -1,6 +1,6 @@
 // 搜狗皮肤文档的入口：打开时把加密容器解成 ZIP，给画布提供官方骨架。
 //
-// 转换成其它格式已经由中间表示承担（`src/skin-model/formats/ssf.ts`），这里只保留
+// 转换成其它格式已经由中间表示承担（`src/skin-model/formats/ssf/index.ts`），这里只保留
 // 打开文档所必需的部分。
 
 import { zipSync } from "fflate"

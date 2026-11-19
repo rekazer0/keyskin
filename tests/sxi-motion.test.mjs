@@ -1,7 +1,7 @@
 // 手心动画 ↔ IR 动效：`ss_2` 的动画家族、`ss_1.s_5` 的时机绑定。
 import assert from "node:assert/strict"
 import test from "node:test"
-import { motionsOfSkin, skinAnimationsOf } from "../src/skin-model/formats/sxi-motion.ts"
+import { motionsOfSkin, skinAnimationsOf } from "../src/skin-model/formats/sxi/motion.ts"
 
 /** 一个最小的手心皮肤：两个动画（属性变化与帧序列），样式 7 按下播放 100。 */
 function skin() {

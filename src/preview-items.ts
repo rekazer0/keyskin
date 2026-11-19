@@ -93,6 +93,14 @@ export function isTouchLongPress(pointerType: string, duration: number, distance
   return pointerType === "touch" && duration >= 500 && distance < 8
 }
 
+/** 选中一个段时，实际要处理的是它所属的整个键；列表单元格会跨多个段。 */
+export function expandSections(keys: readonly PreviewItem[], sections: readonly string[]): string[] {
+  const requested = new Set(sections)
+  return keys.flatMap((render) =>
+    render.key.visible === false ? [] : render.sections.some((section) => requested.has(section)) ? render.sections : []
+  )
+}
+
 export function parseRect(value: string | undefined): Rect | undefined {
   const parts = value?.split(",").map(Number)
   if (!parts || parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) return

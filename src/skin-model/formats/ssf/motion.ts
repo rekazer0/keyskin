@@ -5,7 +5,7 @@
 // 这里负责把 IR 动效翻译成那两份输入。
 import { IniDocument } from "@/ini.ts"
 import { BaiduSsfMotion } from "@/ssf/baidu-anim-to-ssf.ts"
-import { writeMotions } from "@/skin-model/formats/bds.ts"
+import { writeMotions } from "@/skin-model/formats/bds/index.ts"
 import type { SkinBoard } from "@/skin-model/board.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
 import type { SkinModel } from "@/skin-model/model.ts"

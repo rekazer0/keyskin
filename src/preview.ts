@@ -47,7 +47,7 @@ export class Preview {
   /** Palm 文档自己列出按键：按状态与组词给出渲染项，形状与 IR 一致。 */
   private nativeItems?: (state: number | undefined, persistentOnly: boolean) => KeyRender[]
   /** 按皮肤状态算出画布上的键；由编辑器注入，换状态时重算。 */
-  private renderSource?: (state?: number) => KeyRender[]
+  private renderSource?: (state?: number) => KeyRender[] | Promise<KeyRender[]>
   // Resolver lookups are asynchronous and can involve stylesheet/tile parsing
   // and image decoding. Keep the resolved values for the lifetime of a
   // resolver; drag frames then only redraw geometry instead of repeating the
@@ -466,7 +466,10 @@ export class Preview {
     this.skinState = state
     if (this.nativeItems) this.keys = this.layoutItems()
     // 状态覆盖改变的是按键各层，换状态就得按新状态重算一遍渲染项。
-    else if (this.renderSource) this.keys = this.renderSource(state)
+    else if (this.renderSource) {
+      void this.applyRenderSource(state)
+      return
+    }
     void this.draw()
   }
 
@@ -488,20 +491,18 @@ export class Preview {
    * 注入渲染源：画布不自己解析文件，按状态算好的渲染项由外部交进来。
    * 换皮肤状态时会再用同一个源重算。
    */
-  setRenderSource(source?: (state?: number) => KeyRender[]): void {
+  setRenderSource(source?: (state?: number) => KeyRender[] | Promise<KeyRender[]>): void {
     this.renderSource = source
-    this.keys = source?.(this.skinState) ?? []
-    this.visualCache.clear()
-    this.lastRenderCache = undefined
-    void this.draw()
+    void this.applyRenderSource(this.skinState)
   }
 
-  expandSections(sections: readonly string[]): string[] {
-    const requested = new Set(sections)
-    // 可见性由 IR 给，按键自己在渲染项里带 `visible`。
-    return this.keys.flatMap((render) =>
-      render.key.visible === false ? [] : render.sections.some((section) => requested.has(section)) ? render.sections : []
-    )
+  /** 用当前的源重算一次渲染项；源是异步的，算完再画。 */
+  private async applyRenderSource(state?: number): Promise<void> {
+    const source = this.renderSource
+    this.visualCache.clear()
+    this.lastRenderCache = undefined
+    this.keys = source ? await source(state) : []
+    void this.draw()
   }
 
   setAnimation(animation?: BdaAnimation): void {

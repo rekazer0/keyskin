@@ -1,5 +1,6 @@
 import { appState } from "./state"
-import { bdsRenders } from "../skin-model/formats/bds.ts"
+import { bdsBoardOf } from "../skin-model/formats/bds/index.ts"
+import { bdsRenders } from "../skin-model/formats/bds/render.ts"
 import { syncLayoutChoices } from "./layout-switch"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
@@ -337,10 +338,11 @@ export function refreshPreview(): void {
     for (const property of deviceGeometryProperties) deviceShell.style.removeProperty(property)
   }
   preview.setDocument(appState.layoutDocument)
-  // 画布上的键由布局文档的渲染投影给出：几何是 VIEW_RECT，样式引用在按键容器里。
-  preview.setRenderSource(appState.layoutDocument
-    ? (state) => bdsRenders(appState.layoutDocument!, state)
-    : undefined)
+  // 画布读的是板：文档先解析成板，渲染投影再从板出。
+  const board = appState.layoutDocument
+    ? bdsBoardOf(appState.layoutDocument, { id: "layout", orientation: orientation.value === "land" ? "land" : "port" })
+    : undefined
+  preview.setRenderSource(board ? (state) => bdsRenders(board, state) : undefined)
   refreshNativeScenes()
 }
 

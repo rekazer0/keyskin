@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds.ts"
+import { bdsFormat, bdsSource } from "../src/skin-model/formats/bds/index.ts"
 import { actionText, boardProperties, keyActions, keyGeometry, keyProperties, keyStates, motionProperties, panelProperties, styleProperties, summarizeModel } from "../src/skin-model/inspect.ts"
 import { setKeyAction } from "../src/skin-model/edit.ts"
 import { bdsFixture } from "./helpers/baidu-fixture.mjs"

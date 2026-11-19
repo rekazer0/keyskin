@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
-import { ssfFormat, ssfSource } from "../src/skin-model/formats/ssf.ts"
+import { ssfFormat, ssfSource } from "../src/skin-model/formats/ssf/index.ts"
 import { SsfPackage } from "../src/ssf/ssf-package.ts"
 import { ssfSkeleton } from "../src/ssf/ssf-convert.ts"
 import { readWith, writeWith } from "./support/driver.mjs"

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { unzipSync } from "fflate"
-import { sxiFormat, sxiSource } from "../src/skin-model/formats/sxi.ts"
+import { sxiFormat, sxiSource } from "../src/skin-model/formats/sxi/index.ts"
 import { sxiFixture } from "./helpers/sxi-fixture.mjs"
 import { rectOf } from "./helpers/boxes.mjs"
 import { readWith, rectOfKey, writeWith } from "./support/driver.mjs"

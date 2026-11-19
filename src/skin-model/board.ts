@@ -14,6 +14,8 @@ export type PanelBackdrop = {
   foreStyle?: string
   /** 面板自身的尺寸；gen.ini 里写成 `[PANEL] SIZE`，与键盘板尺寸不同。 */
   size?: Size<number>
+  /** 面板在画布上的位置与尺寸；布局文件里由 `SIZE` 与锚点决定。 */
+  viewRect?: LayoutBox
   blur?: boolean
   radius?: number
   opacity?: number
@@ -67,6 +69,10 @@ export type CandidateBar = {
 
 export type HintBubble = {
   style?: string
+  /** 气泡前景样式；布局文件里写成 `[HINT] FORE_STYLE`。 */
+  foreStyle?: string
+  /** 气泡在画布上的位置与尺寸；布局文件里由 `VIEW_RECT` 或 `SIZE` 与锚点决定。 */
+  viewRect?: LayoutBox
   textStyle?: TextStyle
   offset?: Point<number>
   corner?: number
@@ -80,6 +86,8 @@ export type ListPanel = {
   style?: string
   /** 列表前景样式；gen.ini 里写成 `[LIST] FORE_STYLE`。 */
   foreStyle?: string
+  /** 列表在画布上的位置与尺寸；布局文件里由 `VIEW_RECT` 或 `SIZE` 与锚点决定。 */
+  viewRect?: LayoutBox
   cellStyle?: string
   cellSize?: Size<number>
   count?: number
@@ -111,6 +119,8 @@ export type MoreMenu = {
   foreStyle?: string
   grid?: Size<number>
   layoutName?: string
+  /** 菜单在画布上的位置与尺寸；布局文件里由 `SIZE` 与锚点决定。 */
+  viewRect?: LayoutBox
 }
 
 /** 一个图标的两组偏移：常态与反向（横屏/竖屏切换）。 */
