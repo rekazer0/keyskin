@@ -1,7 +1,7 @@
 import type { Preview } from "./preview.ts"
 import { drawMeasurements } from "./preview-measurements.ts"
 import { legacyParticleFrames } from "./preview-animation.ts"
-import { drawSprite, withMotion, type SceneSprite } from "./native-motion.ts"
+import { drawSprite, type SceneSprite } from "./native-motion.ts"
 import { scheduleNativeFrame } from "./preview-native.ts"
 import { bdaAnimationBindingsForKey } from "./preview-animation.ts"
 import { bdaBindingEffects } from "./preview-animation.ts"
@@ -9,34 +9,24 @@ import { bdaParticleEmitter } from "./preview-animation.ts"
 import { hintKeyOf, legacyHintCandidates } from "./preview-hints.ts"
 import { legacyHintIconID } from "./preview-hints.ts"
 import { type Visual } from "./atlas.ts"
-import { type TextVisual } from "./atlas.ts"
 import { previewSurfaceColor, isFullPanelPreviewItem } from "./preview-items.ts"
 import { actionText } from "./skin-model/inspect.ts"
 import { drawVisual } from "./preview-draw.ts"
 import { paintMarquee } from "./paint/marquee.ts"
 import { paintHintBubble } from "./paint/hint.ts"
+import { paintKey, type KeyAnimationState, type KeyPaintEnv } from "./paint/key.ts"
 import { previewSelectionVisible } from "./preview-items.ts"
 import { bdaTransforms } from "./preview-animation.ts"
 import { legacyAnimationScale } from "./preview-animation.ts"
 import { legacyAnimationTranslation } from "./preview-animation.ts"
 import { legacyAnimationRotation } from "./preview-animation.ts"
 import { legacyAnimationOpacity } from "./preview-animation.ts"
-import { phoneForegroundLayers } from "./preview-draw.ts"
-import { shouldDrawItemBackground } from "./preview-items.ts"
-import { withTransform } from "./preview-draw.ts"
-import { paddedRect } from "./preview-items.ts"
-import { foregroundLayerRect } from "./preview-draw.ts"
-import { foregroundTextPoint } from "./preview-draw.ts"
-import { drawStyleText } from "./preview-draw.ts"
-import { canvasFont, withTextShadow } from "./atlas.ts"
-import { previewFallbackText } from "./preview-items.ts"
-import { drawListText } from "./preview-draw.ts"
 import { isLegacyHintInputKey } from "./preview-hints.ts"
 import { setCanvasSize } from "./preview-draw.ts"
 import { keyAnimationStyles } from "./preview-items.ts"
 import { type PreviewItem } from "./preview-items.ts"
 import { DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
-import { drawSceneLayer, type SceneLayer } from "./native-scene.ts"
+import { drawSceneLayer } from "./native-scene.ts"
 import { paintToolbarStrip } from "./paint/toolbar.ts"
 
 export async function paintPreview(self: Preview): Promise<void> {
@@ -227,137 +217,42 @@ export async function paintPreview(self: Preview): Promise<void> {
   )
 
   const sprites: SceneSprite[] = []
-  for (const key of keys) {
-    const keyAnimation = self.legacyAnimationStates.get(key.section)
-    const animationElapsed = player?.motion && player.key?.section === key.section ? player.elapsed
-      : keyAnimation ? Date.now() - keyAnimation.startedAt : -1
-    const activeBdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
-    const bdaBack = bdaTransforms(self.animation, key, activeBdaElapsed, "back")
-    const bdaFore = bdaTransforms(self.animation, key, activeBdaElapsed, "fore")
-    const backAnimationStyle = key.container.back?.anim
-    const backScale = animationElapsed >= 0
-      ? legacyAnimationScale(self.legacyAnimation, backAnimationStyle, animationElapsed)
-      : bdaBack.scale
-    const backTranslation = animationElapsed >= 0
-      ? legacyAnimationTranslation(self.legacyAnimation, backAnimationStyle, animationElapsed, key.rect)
-      : bdaBack.translation
-    const backRotation = animationElapsed >= 0
-      ? legacyAnimationRotation(self.legacyAnimation, backAnimationStyle, animationElapsed)
-      : bdaBack.rotation
-    const backOpacity = animationElapsed >= 0
-      ? legacyAnimationOpacity(self.legacyAnimation, backAnimationStyle, animationElapsed)
-      : bdaBack.opacity
-    const sceneKey = sceneKeys.get(key.section)
-    if (scene && (!scene.partial || sceneKey)) {
-      const press = self.nativePress?.section === key.section ? self.nativePress : undefined
-      const pressed = Boolean(press) || self.active?.key.section === key.section || self.keyPressed(key)
-      const layers = sceneKey?.layers(pressed)
-      if (sceneKey && layers) {
-        const motion = press && scene.effects?.press(key.section, Date.now() - press.startedAt, press.seed)
-        if (motion) sprites.push(...motion.sprites)
-        // Scene layers sit where the skin puts the key; a key being dragged takes them along.
-        const draw = (group: SceneLayer[]) => {
-          context.save()
-          context.translate(key.rect.x, key.rect.y)
-          context.scale(key.rect.width / sceneKey.rect.width, key.rect.height / sceneKey.rect.height)
-          context.translate(-sceneKey.rect.x, -sceneKey.rect.y)
-          for (const layer of group) drawSceneLayer(context, layer)
-          context.restore()
-        }
-        withMotion(context, key.rect, motion?.back, () => draw(layers.back))
-        layers.fore.forEach((layer, index) => withMotion(context, key.rect, motion?.fore[layers.groups?.[index] ?? 0], () => draw([layer])))
-      }
-      strokeSelection(self, context, key)
-      continue
+  const animationOf = (key: PreviewItem): KeyAnimationState => {
+    const bdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
+    const bdaBack = bdaTransforms(self.animation, key, bdaElapsed, "back")
+    const bdaFore = bdaTransforms(self.animation, key, bdaElapsed, "fore")
+    const state = self.legacyAnimationStates.get(key.section)
+    return {
+      ...(state ? { startedAt: state.startedAt } : {}),
+      ...(player?.motion && player.key?.section === key.section ? { playerElapsed: player.elapsed } : {}),
+      bdaBack,
+      bdaFore,
+      ...(key.container.back?.anim ? { backAnim: key.container.back.anim } : {}),
+      transformOf: (style, elapsed, rect, which) => elapsed < 0
+        ? (which === "back" ? bdaBack : bdaFore)
+        : {
+          scale: legacyAnimationScale(self.legacyAnimation, style, elapsed),
+          translation: legacyAnimationTranslation(self.legacyAnimation, style, elapsed, rect),
+          rotation: legacyAnimationRotation(self.legacyAnimation, style, elapsed),
+          opacity: legacyAnimationOpacity(self.legacyAnimation, style, elapsed),
+        },
     }
-    const area = paddedRect(key)
-    const visual = visuals.get(key.section)
-    const styleTexts = visual?.styleTexts ?? []
-    const foregrounds = phoneForegroundLayers(visual?.fore ?? [])
-    const hasForeground = foregrounds.some(Boolean) || styleTexts.some(Boolean)
-    if (shouldDrawItemBackground(key, self.panelStyle, self.panelWidth, self.panelHeight)) {
-      withTransform(context, area, backScale, backTranslation, backRotation, backOpacity, () => {
-        drawVisual(context, visual?.back, area, true)
-      })
-    }
-    for (const [layer, fore] of foregrounds.entries()) {
-      const animationStyle = key.container.fore[layer]?.anim || key.container.press
-      const foreScale = animationElapsed >= 0
-        ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.scale
-      const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
-        : bdaFore.translation
-      const foreRotation = animationElapsed >= 0
-        ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.rotation
-      const foreOpacity = animationElapsed >= 0
-        ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.opacity
-      // 前景偏移只来自按键容器自己那一层，不再回文档查 OFFSET 段。
-      const offset = key.container.fore[layer]?.offset
-      const destination = foregroundLayerRect(area, fore?.source, offset ? [offset.x, offset.y] : undefined)
-      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
-        drawVisual(context, fore, destination, false)
-      })
-    }
-
-    for (const [layer, styleText] of styleTexts.entries()) {
-      if (!styleText || foregrounds[layer]) continue
-      const animationStyle = key.container.fore[layer]?.anim || key.container.press
-      const foreScale = animationElapsed >= 0
-        ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.scale
-      const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
-        : bdaFore.translation
-      const foreRotation = animationElapsed >= 0
-        ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.rotation
-      const foreOpacity = animationElapsed >= 0
-        ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.opacity
-      const offset = key.container.fore[layer]?.offset
-      const point = foregroundTextPoint(area, offset ? [offset.x, offset.y] : undefined)
-      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
-        drawStyleText(context, styleText, point, self.theme)
-      })
-    }
-
-    strokeSelection(self, context, key)
-
-    const textVisual: TextVisual | undefined = visual?.text
-    context.fillStyle = textVisual?.color ?? (self.theme === "dark" ? "#f5f5f7" : "#17191c")
-    const fontSize = textVisual?.fontSize ?? Math.max(18, Math.min(42, area.height * 0.25))
-    context.font = canvasFont(fontSize, textVisual)
-    context.textAlign = "center"
-    context.textBaseline = "middle"
-    const fallbackText = previewFallbackText(key, hasForeground)
-    if (fallbackText) {
-      const animationStyle = key.container.press
-      const foreScale = animationElapsed >= 0
-        ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.scale
-      const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
-        : bdaFore.translation
-      const foreRotation = animationElapsed >= 0
-        ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.rotation
-      const foreOpacity = animationElapsed >= 0
-        ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.opacity
-      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
-        const centerX = area.x + area.width / 2
-        const centerY = area.y + area.height / 2
-        withTextShadow(context, textVisual, () => {
-          if (key.section.startsWith("LIST:")) drawListText(context, fallbackText, centerX, centerY)
-          else context.fillText(fallbackText, centerX, centerY)
-        })
-      })
-    }
-
   }
+  const keyEnv: KeyPaintEnv = {
+    context,
+    theme: self.theme,
+    panelStyle: self.panelStyle,
+    panelWidth: self.panelWidth,
+    panelHeight: self.panelHeight,
+    visuals,
+    ...(scene ? { scene } : {}),
+    sceneKeys,
+    ...(self.nativePress ? { press: self.nativePress } : {}),
+    pressed: (key) => self.active?.key.section === key.section || self.keyPressed(key),
+    sprites,
+    strokeSelection: (key) => strokeSelection(self, context, key),
+  }
+  for (const key of keys) paintKey(keyEnv, key, animationOf(key))
 
   const press = self.nativePress && { section: self.nativePress.section, elapsed: Date.now() - self.nativePress.startedAt, seed: self.nativePress.seed }
   const nativeSprites = [...scene?.effects?.panel?.(Date.now() - self.nativeShownAt, press) ?? [], ...sprites]
