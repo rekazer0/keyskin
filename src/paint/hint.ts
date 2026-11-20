@@ -28,12 +28,29 @@ export type HintPaintData = {
   bar: boolean
   panelWidth: number
   dark: boolean
-  /** 选中格的宽度，指针事件要按它算命中。 */
-  onCellWidth(width: number): void
 }
 
 function fontCss(style: TextStyle | undefined, size: number): string {
   return `${style?.weight ? `${style.weight} ` : ""}${size}px ${canvasFontFamily(style?.font)}`
+}
+
+/** 气泡的宽度与格子宽度；柱状才按候选数铺开，单字气泡用基准宽。 */
+function hintBarWidth(data: HintPaintData): { width: number; cellWidth: number } {
+  const [baseWidth] = data.size
+  const [left, , right] = data.padding
+  const desiredCellWidth = data.cellSize?.[0] && data.cellSize[0] > 0
+    ? data.cellSize[0]
+    : Math.max(data.panelWidth / 14, data.textStyle?.fontSize ?? 0, data.cellVisuals[1]?.bitmap?.width ?? 0)
+  const width = data.bar
+    ? Math.min(data.panelWidth, Math.max(baseWidth, left + right + data.candidates.length * desiredCellWidth))
+    : baseWidth
+  return { width, cellWidth: data.bar ? (width - left - right) / data.candidates.length : desiredCellWidth }
+}
+
+/** 柱状候选的格子宽度；指针事件按它算命中，非柱状没有格子。 */
+export function hintCellWidth(data: HintPaintData): number | undefined {
+  if (!data.bar || !data.candidates.length) return undefined
+  return hintBarWidth(data).cellWidth
 }
 
 /** 画一次气泡；`anchor` 是气泡所属按键的矩形。 */
@@ -43,16 +60,10 @@ export function paintHintBubble(
   anchor: HintRect,
   data: HintPaintData,
 ): void {
-  const [baseWidth, height] = data.size
+  const [, height] = data.size
   const [offsetX, offsetY] = data.position
   const [left, top, right, bottom] = data.padding
-  const desiredCellWidth = data.cellSize?.[0] && data.cellSize[0] > 0
-    ? data.cellSize[0]
-    : Math.max(data.panelWidth / 14, data.textStyle?.fontSize ?? 0, data.cellVisuals[1]?.bitmap?.width ?? 0)
-  const width = data.bar
-    ? Math.min(data.panelWidth, Math.max(baseWidth, left + right + data.candidates.length * desiredCellWidth))
-    : baseWidth
-  const cellWidth = data.bar ? (width - left - right) / data.candidates.length : desiredCellWidth
+  const { width, cellWidth } = hintBarWidth(data)
   const x = Math.max(0, Math.min(data.panelWidth - width, anchor.x + (anchor.width - width) / 2 + offsetX))
   // 九键长按时数字键的气泡要挂在按键上方之外，避免盖住键面。
   const nineKeyBar = data.direction === "hold" && /^\d$/.test(key.up) && data.candidates.length > 3
@@ -70,7 +81,6 @@ export function paintHintBubble(
     return
   }
   const selected = data.direction === "up" ? 0 : legacyHintSelectedIndex(key, data.candidates)
-  data.onCellWidth(cellWidth)
   const cellHeight = data.cellSize?.[1] && data.cellSize[1] > 0
     ? Math.min(data.cellSize[1], height - top - bottom)
     : height - top - bottom

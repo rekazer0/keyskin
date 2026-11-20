@@ -1,12 +1,12 @@
-// 指定皮肤与布局出 PNG：消费 IR 与现有绘制流程（paintLayer / paintKey），不依赖浏览器。
+// 指定皮肤与布局出 PNG：消费 IR 与公共面板渲染核心，不依赖浏览器。
 //
 //   node --import @oxc-node/core/register scripts/render-skin.mjs \
-//     --skin <皮肤包> --layout <板 id> --out <png> [--scale 2] [--theme light] [--orientation port]
+//     --skin <皮肤包> --layout <板 id> --out <png> [--scale 2] [--theme light] [--state idle] [--press KEY1]
 //   node --import @oxc-node/core/register scripts/render-skin.mjs --skin <皮肤包> --list
 //   node --import @oxc-node/core/register scripts/render-skin.mjs --skin <皮肤包> --debug-summary
 //
-// 这是渲染层的消费方：几何来自 `containerOf`/`boardRenders`，样式与像素来自模型，
-// 组合绘制交给 `paintKey`（与浏览器预览同一条链），只画不改。
+// 这是渲染核心的消费方：取数与装配全部交给 `buildPanelFrame`，绘制交给 `paintPanel`，
+// 命中交给 `hitTest`；这里不再自己拼装样式。
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { dirname, extname } from "node:path"
 import { createCanvas, ImageData as CanvasImageData } from "@napi-rs/canvas"
@@ -36,9 +36,9 @@ const { SkinArchive } = await import("../src/skin.ts")
 const { openSession } = await import("../src/skin-model/session.ts")
 const { boardRenders } = await import("../src/paint/board.ts")
 const { containerOf } = await import("../src/skin-model/board.ts")
-const { paintKey } = await import("../src/paint/key.ts")
-const { bitmapOf } = await import("../src/skin-model/image.ts")
-const { styleLayers, colorCss } = await import("../src/skin-model/style.ts")
+const { buildPanelFrame, paintPanel, hitTest } = await import("../src/paint/panel.ts")
+const { actionText } = await import("../src/skin-model/inspect.ts")
+const { gestureDirection } = await import("../src/layout.ts")
 
 const USAGE = `用法：
   node --import @oxc-node/core/register scripts/render-skin.mjs --skin <包> --layout <板 id> --out <png> [选项]
@@ -49,7 +49,11 @@ const USAGE = `用法：
   --skin <path>         必填，皮肤包路径（.bds/.bda/.ssf/.sxi）
   --layout <id>         板 id；缺省时列出全部板 id 并要求指定
   --theme <light|dark> 默认 light
-  --orientation <port|land> 默认 port
+  --orientation <port|land> 默认 port；只用于收窄板 id
+  --state <idle|composing> 默认 idle：顶栏画工具栏；composing 画候选栏
+  --press <KEY1,KEY3>   只按指定段；缺省整板静止
+  --click <x,y>         输出命中结果（section、key.kind、各动作文本），坐标是板坐标
+  --swipe <x1,y1,x2,y2> 起点命中后按方向取 swipe 动作
   --base <path>         BDA 的骨架包，默认 public/bda-base.bds
   --skeleton <path>     SSF 的官方骨架包，默认 public/sogou-template.bds
   --out <path>          必填，输出 PNG 路径
@@ -113,6 +117,10 @@ function parseArgs(argv) {
     layout: undefined,
     theme: "light",
     orientation: "port",
+    state: "idle",
+    press: undefined,
+    click: undefined,
+    swipe: undefined,
     base: undefined,
     skeleton: undefined,
     out: undefined,
@@ -133,6 +141,10 @@ function parseArgs(argv) {
       case "--layout": options.layout = take(++index, arg); break
       case "--theme": options.theme = take(++index, arg); break
       case "--orientation": options.orientation = take(++index, arg); break
+      case "--state": options.state = take(++index, arg); break
+      case "--press": options.press = take(++index, arg); break
+      case "--click": options.click = take(++index, arg); break
+      case "--swipe": options.swipe = take(++index, arg); break
       case "--base": options.base = take(++index, arg); break
       case "--skeleton": options.skeleton = take(++index, arg); break
       case "--out": options.out = take(++index, arg); break
@@ -148,6 +160,7 @@ function parseArgs(argv) {
   if (!options.skin) fail("缺少必填参数 --skin")
   if (!["light", "dark"].includes(options.theme)) fail(`--theme 只能是 light 或 dark，收到：${options.theme}`)
   if (!["port", "land"].includes(options.orientation)) fail(`--orientation 只能是 port 或 land，收到：${options.orientation}`)
+  if (!["idle", "composing"].includes(options.state)) fail(`--state 只能是 idle 或 composing，收到：${options.state}`)
   if (!Number.isFinite(options.scale) || options.scale <= 0) fail(`--scale 必须是正数，收到：${options.scale}`)
   if (!options.list && !options.debugSummary && !options.out) fail("缺少必填参数 --out")
   return options
@@ -230,192 +243,118 @@ function selectBoard(boards, options) {
   process.exit(1)
 }
 
-async function renderBoard(model, board, options) {
-  const container = containerOf(board)
-  if (!container) {
-    fail(`板「${board.id}」没有容器尺寸（container=unknown），没有几何可画；不用 0 或默认值凑一张图。`, 2)
-  }
-  if (!(container.width > 0) || !(container.height > 0)) {
-    fail(`板「${board.id}」的容器尺寸无效：${container.width}x${container.height}`, 2)
-  }
-  const items = await boardRenders(board)
-  // 与预览一致：铺满整板的项在底，其余按渲染投影给的顺序叠放。
-  const ordered = items
-    .filter((item) => item.visible !== false)
-    .sort((left, right) => layerRank(left, container) - layerRank(right, container))
+/** `--press KEY1,KEY3`：只按指定段；空白项与重复项丢掉。 */
+function pressedSections(value) {
+  const sections = (value ?? "")
+    .split(",")
+    .map((section) => section.trim())
+    .filter(Boolean)
+  return new Set(sections)
+}
 
-  const width = Math.max(1, Math.round(container.width * options.scale))
-  const height = Math.max(1, Math.round(container.height * options.scale))
+/** 一个动作的文本；没建模的动作返回 undefined，由调用方如实写出来。 */
+function actionOf(key, name) {
+  return actionText(key.actions?.[name]) ?? "未建模"
+}
+
+async function renderBoard(model, board, options) {
+  const pressed = pressedSections(options.press)
+  const composing = options.state === "composing"
+  const panelOptions = {
+    theme: options.theme,
+    composing,
+    pixelScale: options.scale,
+    pressed,
+    state: undefined,
+  }
+  const frame = await buildPanelFrame(model, board, panelOptions)
+  const missing = [...pressed].filter((section) => !frame.items.some((item) => item.sections.includes(section)))
+  if (missing.length) console.error(`警告：--press 的段不在板上：${missing.join(", ")}`)
+
+  const width = Math.max(1, Math.round(frame.container.width * frame.pixelScale))
+  const height = Math.max(1, Math.round(frame.container.height * frame.pixelScale))
   const canvas = createCanvas(width, height)
   const context = canvas.getContext("2d")
-  if (options.scale !== 1) context.scale(options.scale, options.scale)
+  if (frame.pixelScale !== 1) context.scale(frame.pixelScale, frame.pixelScale)
+  paintPanel(context, frame, panelOptions)
 
-  const missing = new Set()
-  const visuals = new Map()
-  for (const item of ordered) {
-    visuals.set(item.section, await assembleVisuals(model, board, item, missing))
-  }
-  const animation = { bdaBack: {}, bdaFore: {}, transformOf: () => ({}) }
-  const env = {
-    context,
-    theme: options.theme,
-    panelStyle: "",
-    panelWidth: container.width,
-    panelHeight: container.height,
-    visuals,
-    sceneKeys: new Map(),
-    pressed: () => false,
-    sprites: [],
-    strokeSelection: () => {},
-  }
-  for (const item of ordered) {
-    warnOverflow(item, container)
-    paintKey(env, item, animation)
-  }
-  for (const message of missing) console.error(`警告：${message}`)
-  if (!ordered.length) console.error(`警告：板「${board.id}」没有可见渲染项，输出是空白画布`)
+  if (options.click) reportClick(frame, options.click)
+  if (options.swipe) reportSwipe(frame, options.swipe)
+
+  for (const item of frame.items) warnOverflow(item, frame.board)
+  if (!frame.items.length) console.error(`警告：板「${board.id}」没有可见渲染项，输出是空白画布`)
 
   mkdirSync(dirname(options.out), { recursive: true })
   writeFileSync(options.out, await encodePng(canvas))
   console.log(`板：${board.id}（${board.kind}，${board.theme}/${board.orientation}）`)
-  console.log(`容器：${container.width}x${container.height}，缩放 ${options.scale}，画布 ${width}x${height}px`)
-  console.log(`渲染项：${ordered.length}/${items.length}`)
+  console.log(`顶栏：${frame.header ? `${frame.header.rect.height}px（${composing ? "候选栏" : "工具栏"}）` : "无"}`)
+  console.log(`容器：${frame.container.width}x${frame.container.height}，板偏移 y=${frame.board.y}，缩放 ${frame.pixelScale}，画布 ${width}x${height}px`)
+  console.log(`渲染项：${frame.items.length}`)
   console.log(`输出：${options.out}（${statSync(options.out).size} 字节）`)
 }
 
-/** 铺满整板的项先画；与预览的层级规则一致。 */
-function layerRank(item, container) {
-  const rect = item.rect
-  const full = rect.x <= 0 && rect.y <= 0
-    && rect.x + rect.width >= container.width
-    && rect.y + rect.height >= container.height
-  return full ? 0 : 1
+/** 命中结果：段、按键种类与每个动作的文本。 */
+function reportClick(frame, value) {
+  const [x, y] = numbers(value, 2, "--click")
+  const item = hitTest(frame, { x, y })
+  if (!item) {
+    console.log(`命中：无（${x},${y} 不在任何可见渲染项里）`)
+    return
+  }
+  console.log(`命中：${item.section}（${item.key.kind ?? "kind 未建模"}）rect=${rectText(item.rect)}`)
+  console.log(`动作：${actionList(item.key)}`)
 }
 
-/** 超出容器不裁掉也不静默：逐项报到 stderr，画布尺寸仍按容器。 */
-function warnOverflow(item, container) {
+/** 起点命中后按方向取 `swipe-*` 动作；没有位移就是 `press`。 */
+function reportSwipe(frame, value) {
+  const [x1, y1, x2, y2] = numbers(value, 4, "--swipe")
+  const item = hitTest(frame, { x: x1, y: y1 })
+  if (!item) {
+    console.log(`滑动：起点（${x1},${y1}）没有命中任何可见渲染项`)
+    return
+  }
+  const direction = gestureDirection(x2 - x1, y2 - y1, 0, false)
+  const name = direction === "center" ? "press" : `swipe-${direction}`
+  console.log(`滑动：起点命中 ${item.section}，方向 ${direction.toUpperCase()}`)
+  console.log(`动作：${name}=${actionOf(item.key, name)}`)
+}
+
+function actionList(key) {
+  const actions = key.actions ?? {}
+  const names = Object.keys(actions)
+  if (!names.length) return "未建模"
+  return names.map((name) => `${name}=${actionOf(key, name)}`).join(" / ")
+}
+
+function rectText(rect) {
+  return `${Math.round(rect.x)},${Math.round(rect.y)} ${Math.round(rect.width)}x${Math.round(rect.height)}`
+}
+
+function numbers(value, count, name) {
+  const parts = value.split(",").map((part) => Number(part.trim()))
+  if (parts.length !== count || parts.some((part) => !Number.isFinite(part))) {
+    fail(`${name} 需要 ${count} 个数字，收到：${value}`)
+  }
+  return parts
+}
+
+/** 超出板容器不裁掉也不静默：逐项报到 stderr，画布尺寸仍按完整面板。 */
+function warnOverflow(item, board) {
   const rect = item.rect
   const sides = [
     ["左", Math.max(0, -rect.x)],
     ["上", Math.max(0, -rect.y)],
-    ["右", Math.max(0, rect.x + rect.width - container.width)],
-    ["下", Math.max(0, rect.y + rect.height - container.height)],
+    ["右", Math.max(0, rect.x + rect.width - board.width)],
+    ["下", Math.max(0, rect.y + rect.height - board.height)],
   ]
   const parts = sides
     .filter(([, value]) => value > 0.5)
     .map(([side, value]) => `${side} +${Math.round(value)}px`)
   if (!parts.length) return
   console.error(
-    `警告：渲染项 ${item.section}（${Math.round(rect.x)},${Math.round(rect.y)},`
-    + `${Math.round(rect.width)}x${Math.round(rect.height)}）超出容器 `
-    + `${container.width}x${container.height}：${parts.join("，")}`,
+    `警告：渲染项 ${item.section}（${rectText(rect)}）超出板容器 `
+    + `${board.width}x${board.height}：${parts.join("，")}`,
   )
-}
-
-/**
- * 一个渲染项的视觉数据：与预览的装配语义一致。
- *
- * 背景与每个前景样式只取第一个 image，没有 image 再取第一个 color（`paintOf` 语义）；
- * 前景样式里的文本层另外给 `styleTexts`，按键自己的文字样式由前景样式的文本层合并而来。
- */
-async function assembleVisuals(model, board, item, missing) {
-  const back = await paintOf(model, item.backStyle ?? "", missing)
-  const foreLayers = await Promise.all(item.foreStyles.map((styleID) => paintOf(model, styleID, missing)))
-  const fore = await Promise.all(item.foreStyles.map((styleID) => visualOf(model, styleID, missing)))
-  const listCell = item.key?.kind === "list-cell"
-  const styleTexts = listCell
-    ? []
-    : item.foreStyles.map((styleID) => styleTextOf(model, styleID))
-  const text = textOf(model, board, item, listCell)
-  return {
-    ...(back ? { backLayer: back } : {}),
-    foreLayers,
-    fore,
-    styleTexts,
-    ...(text ? { text } : {}),
-  }
-}
-
-/** 第一个 image 层（带位图）；没有 image 时取第一个 color 层。与预览的 `layerPaint` 同义。 */
-async function paintOf(model, styleID, missing) {
-  if (!styleID) return undefined
-  const layers = layersOf(model, styleID, missing)
-  const image = layers.find((layer) => layer.kind === "image")
-  if (image) {
-    const source = model.images.get(image.image)
-    if (!source) {
-      missing.add(`图片 ${image.image} 不在模型里`)
-      return { layer: image }
-    }
-    const bitmap = await bitmapOf(source)
-    if (!bitmap) missing.add(`图片 ${image.image} 无法转成位图`)
-    return { layer: image, ...(bitmap ? { bitmap } : {}) }
-  }
-  const color = layers.find((layer) => layer.kind === "color")
-  return color ? { layer: color } : undefined
-}
-
-/** 前景的通用视觉：图片带源矩形，文本带自己的样式，颜色给出 CSS。 */
-async function visualOf(model, styleID, missing) {
-  const layers = layersOf(model, styleID, missing)
-  const image = layers.find((layer) => layer.kind === "image")
-  if (image) {
-    const source = model.images.get(image.image)
-    const bitmap = source ? await bitmapOf(source) : undefined
-    return bitmap ? { image: bitmap, source: [0, 0, bitmap.width, bitmap.height] } : undefined
-  }
-  const text = layers.find((layer) => layer.kind === "text")
-  if (text) return { text: { text: text.text ?? "", ...textVisual(text.style) } }
-  const color = layers.find((layer) => layer.kind === "color")
-  return color ? { color: colorCss(color.value) } : undefined
-}
-
-/** 样式里的文字层自带字符时才画；没有字符的文本层只是按键文字的样式来源。 */
-function styleTextOf(model, styleID) {
-  const text = layersOf(model, styleID, new Set()).find((layer) => layer.kind === "text")
-  if (!text || text.text === undefined) return undefined
-  return { text: text.text, ...textVisual(text.style) }
-}
-
-/** 按键文字样式：多个前景样式按逗号合并，先到先得；列表格乘板上的字体倍率。 */
-function textOf(model, board, item, listCell) {
-  const style = {}
-  const tokens = item.foreStyles
-    .flatMap((value) => value.split(","))
-    .map((value) => value.trim())
-    .filter(Boolean)
-  for (const token of tokens) {
-    const text = layersOf(model, token, new Set()).find((layer) => layer.kind === "text")
-    if (!text) continue
-    if (style.font === undefined && text.style.font !== undefined) style.font = text.style.font
-    if (style.fontSize === undefined && text.style.fontSize !== undefined) style.fontSize = text.style.fontSize
-    if (style.weight === undefined && text.style.weight !== undefined) style.weight = text.style.weight
-    if (style.color === undefined && text.style.color !== undefined) style.color = text.style.color
-    if (style.shadow === undefined && text.style.shadow !== undefined) style.shadow = text.style.shadow
-  }
-  if (!Object.keys(style).length) return undefined
-  const visual = textVisual(style)
-  const fontScale = listCell ? board.panels?.list?.content?.fontScale ?? 1 : 1
-  if (fontScale !== 1 && visual.fontSize !== undefined) visual.fontSize *= fontScale
-  return visual
-}
-
-function textVisual(style) {
-  return {
-    ...(style.font ? { fontName: style.font } : {}),
-    ...(style.fontSize !== undefined ? { fontSize: style.fontSize } : {}),
-    ...(style.weight !== undefined ? { weight: style.weight } : {}),
-    ...(style.color ? { color: colorCss(style.color) } : {}),
-    ...(style.shadow ? { shadowColor: colorCss(style.shadow.color), shadowSize: style.shadow.size } : {}),
-  }
-}
-
-function layersOf(model, styleID, missing) {
-  if (!model.styles.has(styleID)) {
-    missing.add(`样式 ${styleID} 不在模型里`)
-    return []
-  }
-  return styleLayers(model, styleID, false)
 }
 
 async function encodePng(canvas) {

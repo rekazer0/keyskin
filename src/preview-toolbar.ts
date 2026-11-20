@@ -4,11 +4,15 @@
 import { bitmapOf } from "./skin-model/image.ts"
 import type { Board } from "./skin-model/board.ts"
 import type { SkinModel } from "./skin-model/model.ts"
+import type { ToolbarItem } from "./skin-model/panel.ts"
 import type { LayerPaint } from "./paint/key.ts"
 
-export async function toolbarPaints(model: SkinModel | undefined, board: Board | undefined): Promise<LayerPaint[]> {
+/** 按工具栏项取图标图层；没有 icon 或模型里没有这张图的项跳过。 */
+export async function toolbarItemPaints(
+  model: SkinModel | undefined,
+  items: readonly ToolbarItem[],
+): Promise<LayerPaint[]> {
   if (!model) return []
-  const items = board?.panels?.toolbar?.items ?? []
   const builds: Array<Promise<LayerPaint | undefined>> = []
   for (const item of items) {
     if (!item.icon) continue
@@ -18,4 +22,8 @@ export async function toolbarPaints(model: SkinModel | undefined, board: Board |
     builds.push(bitmapOf(image).then((bitmap) => bitmap ? { layer: { kind: "image" as const, image: imageID }, bitmap } : undefined))
   }
   return (await Promise.all(builds)).filter((paint): paint is LayerPaint => paint !== undefined)
+}
+
+export async function toolbarPaints(model: SkinModel | undefined, board: Board | undefined): Promise<LayerPaint[]> {
+  return toolbarItemPaints(model, board?.panels?.toolbar?.items ?? [])
 }

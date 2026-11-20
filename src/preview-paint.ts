@@ -28,7 +28,7 @@ import { legacyHintIconID } from "./preview-hints.ts"
 import { previewSurfaceColor, isFullPanelPreviewItem } from "./preview-items.ts"
 import { actionText } from "./skin-model/inspect.ts"
 import { paintMarquee } from "./paint/marquee.ts"
-import { paintHintBubble } from "./paint/hint.ts"
+import { paintHintBubble, hintCellWidth } from "./paint/hint.ts"
 import { paintKey, type KeyAnimationState, type KeyPaintEnv } from "./paint/key.ts"
 import { paintParticles } from "./paint/particles.ts"
 import { strokeDraft, strokeSelected } from "./paint/selection.ts"
@@ -305,7 +305,7 @@ export async function paintPreview(self: Preview): Promise<void> {
     for (const layer of popup) drawSceneLayer(hintContext, layer)
   } else if (shouldDrawHint && self.active && hintIcon) {
     self.hintVisible = true
-    paintHintBubble(hintContext, hintKeyOf(self.active.key), self.active.key.rect, {
+    const hintData = {
       size: hintIcon.size,
       position: hintIcon.position,
       padding: hintIcon.padding,
@@ -320,8 +320,10 @@ export async function paintPreview(self: Preview): Promise<void> {
       bar: hintBar,
       panelWidth: self.panelWidth,
       dark: self.theme === "dark",
-      onCellWidth: (width) => { if (self.active) self.active.hintCellWidth = width },
-    })
+    }
+    const hintWidth = hintCellWidth(hintData)
+    if (hintWidth !== undefined && self.active) self.active.hintCellWidth = hintWidth
+    paintHintBubble(hintContext, hintKeyOf(self.active.key), self.active.key.rect, hintData)
   } else {
     self.hintVisible = false
   }

@@ -39,6 +39,8 @@ export type KeyTransform = {
 
 /** 一个键在某个时刻的动画状态：传统动画与 BDA 动画共用一套变换。 */
 export type KeyAnimationState = {
+  /** 调用方算好的已用时长；有值时优先于起播时间，绘制器不自己读时钟。 */
+  elapsed?: number
   /** 该键自身的动画起播时间；没在播就是 undefined。 */
   startedAt?: number
   /** 播放器正在播这个键时的已用时长。 */
@@ -81,7 +83,7 @@ export function paintKey(env: KeyPaintEnv, key: PreviewItem, animation: KeyAnima
   const labels = visual?.labels ?? []
   const foreLayers = visual?.foreLayers ?? []
   const hasForeground = foreLayers.some(Boolean) || labels.some(Boolean)
-  const elapsed = animation.playerElapsed ?? (
+  const elapsed = animation.elapsed ?? animation.playerElapsed ?? (
     animation.startedAt === undefined ? -1 : Date.now() - animation.startedAt
   )
   if (shouldDrawItemBackground(key, env.panelStyle, env.panelWidth, env.panelHeight)) {
