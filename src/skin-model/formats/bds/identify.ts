@@ -25,8 +25,8 @@ function boardKindOf(path: string): BoardKind {
 function panelRole(path: string): FileRole | undefined {
   const leaf = (path.split("/").pop() ?? "").toLowerCase()
   if (leaf === "gen.ini" || leaf === "more.ini" || leaf === "toolbar.ini") return { kind: "panel-config" }
-  // 手写区的配置与布局：`bh.ini` 是按键区，`hw_*.ini` 是手写板自己的版面。
-  if (leaf === "bh.ini" || /^hw_/.test(leaf)) return { kind: "handwriting" }
+  // `hw_*.ini` 是手写板自己的版面；`bh.ini` 不是手写区，它是笔画键盘，按布局走。
+  if (/^hw_/.test(leaf)) return { kind: "handwriting" }
   return undefined
 }
 

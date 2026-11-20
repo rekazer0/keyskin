@@ -12,11 +12,12 @@ function fixtureFiles() {
       "[CAND]", "LAYOUT_NAME=cand1",
       "[HINT]", "LAYOUT_NAME=hint1",
       "[MORE]", "LAYOUT_NAME=sel_ch", "SYM_LAYOUT=symbol",
-      "[LIST]", "CELL_STYLE=120", "FORE_STYLE=3", "PADDING=0,0,0,0", "CELL_SIZE=100,50",
-      "NAMES=， 。 ？", "VALUES=， 。 ？",
+      // 真实包里 `gen.ini` 的 `[LIST]` 只放几何默认值；内容与样式在布局文件的 `[LIST]` 里。
+      "[LIST]", "PADDING=0,0,0,0", "CELL_SIZE=100,50",
     ].join("\n")),
     "light/port/py_26.ini": strToU8([
       "[PANEL]", "SIZE=1080,600", "NO_BLUR=1", "KEY_NUM=2",
+      "[LIST]", "BACK_STYLE=121", "CELL_STYLE=120", "FORE_STYLE=3", "LIST_NUM=3", "NAMES=， 。 ？", "VALUES=， 。 ？",
       "[KEY1]", "BACK_STYLE=2", "FORE_STYLE=3,4", "POS_TYPE=0,5", "VIEW_RECT=10,0,100,120", "CENTER=q", "UP=F38", "STAT_STYLE=S11_4",
       "[KEY2]", "BACK_STYLE=2", "VIEW_RECT=120,0,100,120", "CENTER=F1",
       "[TIP4]", "BACK_STYLE=2", "CENTER=F38",

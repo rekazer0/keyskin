@@ -8,15 +8,14 @@ import { identifyBds } from "@/skin-model/formats/bds/identify.ts"
 import { parseBds } from "@/skin-model/formats/public/parse.ts"
 import type { FileRole, SkinDocuments, SkinStructure } from "@/skin-model/pipeline.ts"
 import { parseLegacyAnimationFile, type LegacyAnimationEntry } from "@/legacy-animation.ts"
-import { decodePng, encodePng, type RgbaImage } from "@/raster.ts"
+import { decodePng, encodePng } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
-import { tileSlices } from "@/tiles.ts"
 import type { Size } from "taffy-layout"
 import type { Theme, BoardKind, KeyEvent, Orientation, KeyAction } from "@/skin-model/types.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import { absoluteBoard, computeLayout, type LayoutBox } from "@/skin-model/layout.ts"
 import type { Key } from "@/skin-model/key.ts"
-import type { SkinLayer, SkinStyle, SkinStyles, Stretch } from "@/skin-model/style.ts"
+import type { Stretch } from "@/skin-model/style.ts"
 import type { Board } from "@/skin-model/board.ts"
 import { containerOf, knownContainer } from "@/skin-model/board.ts"
 import type { AppearanceSet } from "@/skin-model/activation.ts"
@@ -27,9 +26,11 @@ import { boardPanels } from "@/skin-model/panel.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, SkinMotions } from "@/skin-model/motion.ts"
 import { keyframesOf, motionPropertyOf } from "@/skin-model/motion.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
-import { cutTiles, packAtlasPages, type SkinImage } from "@/skin-model/image.ts"
+import { packAtlasPages } from "@/skin-model/image.ts"
 import { panelFiles, panelsOf, type PanelPaths } from "@/skin-model/formats/bds/panels.ts"
 import { tipLines, tipPoolOf, tipsOf } from "@/skin-model/formats/bds/tips.ts"
+import { atlasGlobalOf, atlasImage, atlasText, atlasesOf, leafName, tilIndexOf } from "@/skin-model/formats/bds/atlas.ts"
+import { infoOf, infoText, styleFieldsOf, styleNames, stylesOf, stylesText, textFieldsOf } from "@/skin-model/formats/bds/style.ts"
 import type { KeyRender } from "@/skin-model/build.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 
@@ -133,224 +134,6 @@ const EVENT_FIELDS: ReadonlyArray<{ event: KeyEvent; field: string }> = [
   { event: "swipe-right", field: "RIGHT" },
 ]
 
-/* —— 样式 —— */
-
-function imageRef(value: string | undefined): { file: string; slice?: number } | undefined {
-  const parts = value?.split(",").map((part) => part.trim())
-  const file = parts?.[0]
-  if (!file) return
-  const slice = parts[1] === undefined ? undefined : Number(parts[1])
-  return slice !== undefined && Number.isFinite(slice) ? { file, slice } : { file }
-}
-
-function tilePath(access: DocumentAccess, theme: Theme, orientation: Orientation, file: string): string | undefined {
-  return [
-    `${theme}/skin/${orientation}/res/${file}.til`,
-    `${theme}/skin/res/${file}.til`,
-    `${theme}/res/${file}.til`,
-  ].find((candidate) => access.text(candidate) !== undefined)
-}
-
-/** 图集文件与它的 PNG；切图需要像素，所以两者都要在。 */
-function atlasBytes(access: DocumentAccess, path: string): Uint8Array | undefined {
-  return access.bytes(path.replace(/\.til$/i, ".png"))
-}
-
-/** 把一张图集切进图片资源表，返回 `<图集>#<序号>` 键。 */
-function cutAtlas(images: Map<string, SkinImage>, access: DocumentAccess, path: string): void {
-  if ([...images.keys()].some((key) => key.startsWith(`${path}#`))) return
-  const bytes = atlasBytes(access, path)
-  if (!bytes) return
-  let atlas: RgbaImage
-  try {
-    atlas = decodePng(bytes)
-  } catch {
-    return
-  }
-  const document = access.text(path)
-  if (!document) return
-  const slices = tileSlices(document)
-  for (const [id, image] of cutTiles(atlas, slices.map((slice) => ({ index: slice.index, source: slice.source })), path)) {
-    images.set(id, image)
-  }
-}
-
-/**
- * 切片的 `INNER_RECT` → 拉伸区域。内区就是允许拉伸的那块，与 `nine-slice` 的四边方向相反；
- * 内区等于整片时没有拉伸可表达，返回 undefined。
- */
-function stretchOf(tile: { source: readonly [number, number, number, number]; inner?: readonly [number, number, number, number] }): Stretch | undefined {
-  if (!tile.inner) return
-  const [sourceX, sourceY, width, height] = tile.source
-  const [innerX, innerY, innerWidth, innerHeight] = tile.inner
-  const inner = { x: innerX - sourceX, y: innerY - sourceY, width: innerWidth, height: innerHeight }
-  const fits = inner.x <= 0 && inner.y <= 0 && inner.width >= width && inner.height >= height
-  return fits ? undefined : { kind: "region", inner }
-}
-
-function imageLayer(
-  access: DocumentAccess,
-  images: Map<string, SkinImage>,
-  theme: Theme,
-  orientation: Orientation,
-  document: IniDocument,
-  section: string,
-  field: string,
-): SkinLayer | undefined {
-  const ref = imageRef(document.get(section, field))
-  if (!ref) return
-  const path = tilePath(access, theme, orientation, ref.file)
-  if (!path) return
-  cutAtlas(images, access, path)
-  const tileDocument = access.text(path)
-  if (!tileDocument) return
-  const slices = tileSlices(tileDocument)
-  const tile = ref.slice === undefined ? slices[0] : slices.find((candidate) => candidate.index === ref.slice)
-  if (!tile) return
-  const stretch = stretchOf(tile)
-  return {
-    kind: "image",
-    image: `${path}#${tile.index}`,
-    ...(stretch ? { stretch } : {}),
-  }
-}
-
-function styleLayers(
-  access: DocumentAccess,
-  images: Map<string, SkinImage>,
-  theme: Theme,
-  orientation: Orientation,
-  document: IniDocument,
-  section: string,
-  pressed: boolean,
-): SkinLayer[] {
-  const layers: SkinLayer[] = []
-  const suffix = pressed ? "HL" : "NM"
-  const image = imageLayer(access, images, theme, orientation, document, section, `${suffix}_IMG`)
-  if (image) layers.push(image)
-  const color = document.get(section, `${suffix}_COLOR`)
-  if (color) {
-    const text = document.get(section, "SHOW")
-    const fontSize = Number(document.get(section, "FONT_SIZE"))
-    if (!pressed && (text || Number.isFinite(fontSize))) {
-      layers.push({ kind: "text", ...(text ? { text } : {}), style: { ...(Number.isFinite(fontSize) ? { fontSize } : {}), color } })
-    } else layers.push({ kind: "color", value: color })
-  }
-  if (!pressed) {
-    const sound = document.get(section, "PRESS_SOUND_PATH")
-    if (sound) layers.push({ kind: "sound", binding: { subject: section, sound } })
-  }
-  return layers
-}
-
-function stylesOf(
-  access: DocumentAccess,
-  theme: Theme,
-  orientation: Orientation,
-  document: IniDocument,
-): { styles: SkinStyles; images: Map<string, SkinImage>; fields: Map<string, readonly string[]>; global: ReadonlyMap<string, string> } {
-  const styles = new Map<string, SkinStyle>()
-  const images = new Map<string, SkinImage>()
-  const fields = new Map<string, readonly string[]>()
-  const global = new Map<string, string>()
-  for (const entry of document.entries("GLOBAL")) global.set(entry.key, entry.value)
-  for (const section of document.sections()) {
-    const match = /^STYLE(\d+)$/i.exec(section)
-    if (!match) continue
-    const normal = styleLayers(access, images, theme, orientation, document, section, false)
-    const pressed = styleLayers(access, images, theme, orientation, document, section, true)
-    // 空样式段也是文件里的事实：段头存在、只是没有可识别的字段。
-    styles.set(match[1], { normal, ...(pressed.length ? { pressed } : {}) })
-    // 未建模字段、以及同一段里重复出现的同名字段，都保留原始行。
-    const seen = new Set<string>()
-    const extra: string[] = []
-    for (const entry of document.entries(section)) {
-      const name = entry.key.toUpperCase()
-      const duplicated = seen.has(name)
-      seen.add(name)
-      if (!duplicated && STYLE_MODELED.has(name)) continue
-      extra.push(`${entry.key}=${entry.value}`)
-    }
-    if (extra.length) fields.set(match[1], extra)
-  }
-  return { styles, images, fields, global }
-}
-
-/** `[STYLEn]` 里按结构化字段读出的字段名；其余字段原样保留。 */
-const STYLE_MODELED = new Set([
-  "NM_IMG", "HL_IMG", "NM_COLOR", "HL_COLOR", "SHOW", "FONT_SIZE", "PRESS_SOUND_PATH", "FONT_FILE", "FONT_NAME",
-])
-
-/* —— 图集 —— */
-
-/** `.til` 的 `[IMGn]` 里按结构化字段读出的字段名；其余字段原样保留。 */
-const TILE_MODELED = new Set(["SOURCE_RECT", "INNER_RECT", "SCALE"])
-
-/** `.til` 里除切片之外的原值：`[GLOBAL]` 段还没有 IR 语义，按段原样带回。 */
-type AtlasGlobal = Record<string, string>
-
-/** 图集段号 → `SCALE` 原值；未定字段，进切片的 `extra`。 */
-function scaleOf(document: IniDocument): Map<number, string> {
-  const scales = new Map<number, string>()
-  for (const section of document.sections()) {
-    const match = /^IMG(\d+)$/i.exec(section)
-    const value = document.get(section, "SCALE")?.trim()
-    if (match && value) scales.set(Number(match[1]), value)
-  }
-  return scales
-}
-
-/**
- * 每个 `.til` 一个图集：切片矩形进 `Atlas.slices`，`INNER_RECT`/`SCALE` 进切片 `extra`，
- * `[GLOBAL]` 原样带回。切片的像素同时进图片表，写回时按原像素重建同名 png。
- */
-function atlasesOf(
-  access: DocumentAccess,
-  images: Map<string, SkinImage>,
-): { atlases: Atlas[]; globals: Map<string, AtlasGlobal> } {
-  const atlases: Atlas[] = []
-  const globals = new Map<string, AtlasGlobal>()
-  for (const path of access.paths()) {
-    if (!path.toLowerCase().endsWith(".til")) continue
-    const document = access.text(path)
-    if (!document) continue
-    const global: AtlasGlobal = {}
-    for (const entry of document.entries("GLOBAL")) global[entry.key] = entry.value
-    if (Object.keys(global).length) globals.set(path, global)
-    const scales = scaleOf(document)
-    const slices = tileSlices(document).map((tile): AtlasSlice => {
-      const extra = new Map<string, unknown>()
-      if (tile.inner) extra.set("innerRect", tile.inner)
-      const scale = scales.get(tile.index)
-      if (scale) extra.set("scale", scale)
-      // 切片段里还有 `INFO` 这类没建模的字段：原样保留，写回时逐行还原。
-      for (const entry of document.entries(`IMG${tile.index}`)) {
-        if (TILE_MODELED.has(entry.key.toUpperCase())) continue
-        extra.set(entry.key, entry.value)
-      }
-      // `[IMG<n>]` 编号是 BDS 的打包细节：记下来，写回时才能原样还原。
-      extra.set("tilIndex", tile.index)
-      return {
-        id: `${path}#${tile.index}`,
-        rect: { x: tile.source[0], y: tile.source[1], width: tile.source[2], height: tile.source[3] },
-        extra,
-      }
-    })
-    if (!slices.length) continue
-    const source = path.replace(/\.til$/i, ".png")
-    const bytes = access.bytes(source)
-    if (bytes && !images.has(source)) {
-      try {
-        images.set(source, decodePng(bytes))
-      } catch {
-        // 源图不是能解码的 PNG；切片已经切出来了，整图外的东西不凭空造。
-      }
-    }
-    atlases.push({ name: path, source, slices })
-  }
-  return { atlases, globals }
-}
-
 /* —— 外观与能力声明 —— */
 
 /** 每套主题方向一个外观；BDS 用目录区分主题，没有时段声明。 */
@@ -393,91 +176,6 @@ function profileOf(access: DocumentAccess): FormatProfile {
     capabilities: bdsFormat.capabilities,
     ...(declared.size ? { declared } : {}),
   }
-}
-
-/** 样式表文本；图片引用交给调用方换算成「图集名,切片号」。 */
-/**
- * 百度皮肤的段名映射。
- * 百度样式段只用数字编号（`[STYLE12]`），其它格式转来的样式名（如 `bda:image:10039`）不能直接当段名，
- * 否则写出的段读不回来。这里给每个样式分配一个合法段名，按键引用与样式表用同一张表。
- */
-function styleNames(styles: SkinStyles): Map<string, string> {
-  const names = new Map<string, string>()
-  const used = new Set<string>()
-  let next = 1
-  for (const id of styles.keys()) {
-    // 已经是纯数字的沿用原编号，避免改变原生皮肤的样式名。
-    if (/^\d+$/.test(id) && !used.has(id)) {
-      names.set(id, id)
-      used.add(id)
-      continue
-    }
-    while (used.has(String(next))) next += 1
-    names.set(id, String(next))
-    used.add(String(next))
-    next += 1
-  }
-  return names
-}
-
-function stylesText(
-  styles: SkinStyles,
-  imageRef: (id: string) => string | undefined,
-  names: ReadonlyMap<string, string>,
-  extraOf: (id: string) => readonly string[] | undefined,
-  global: ReadonlyMap<string, string> | undefined,
-): string {
-  const lines: string[] = []
-  // 样式表的 `[GLOBAL]` 段是原文件声明的计数等字段，原样写回；没有它就不写。
-  if (global?.size) {
-    lines.push("[GLOBAL]", ...[...global].map(([key, value]) => `${key}=${value}`), "")
-  }
-  for (const [id, style] of styles) {
-    const name = names.get(id)
-    if (!name) continue
-    const image = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
-    const pressedImage = (style.pressed ?? []).find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
-    const text = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
-    const color = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "color" }> => layer.kind === "color")
-    const pressedColor = (style.pressed ?? []).find((layer): layer is Extract<SkinLayer, { kind: "color" }> => layer.kind === "color")
-    const sound = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "sound" }> => layer.kind === "sound")
-    const normalRef = image && imageRef(image.image)
-    const pressedRef = pressedImage && imageRef(pressedImage.image)
-    const textColor = text?.style.color ?? color?.value
-    const highlightColor = pressedColor?.value
-    // 只有文字没有颜色的样式也要写，否则按键引用会指向不存在的段。
-    const hasText = text?.text !== undefined || text?.style.fontSize !== undefined
-    const extra = extraOf(id)
-    if (!normalRef && !pressedRef && !textColor && !highlightColor && !sound && !hasText && !extra) {
-      // 空样式段也是原文件的一部分：段头保留，字段本来就是空的。
-      lines.push(`[STYLE${name}]`, "")
-      continue
-    }
-    lines.push(`[STYLE${name}]`)
-    if (normalRef) lines.push(`NM_IMG=${normalRef}`)
-    if (pressedRef) lines.push(`HL_IMG=${pressedRef}`)
-    if (textColor) lines.push(`NM_COLOR=${textColor}`)
-    if (highlightColor) lines.push(`HL_COLOR=${highlightColor}`)
-    if (text?.text !== undefined) lines.push(`SHOW=${text.text}`)
-    if (text?.style.fontSize !== undefined) lines.push(`FONT_SIZE=${text.style.fontSize}`)
-    if (sound) lines.push(`PRESS_SOUND_PATH=${sound.binding.sound}`)
-    // 未建模字段原样写回；语义还不知道，但它们是原文件的一部分。
-    for (const line of extra ?? []) lines.push(line)
-    lines.push("")
-  }
-  return `${lines.join("\n")}\n`
-}
-
-/**
- * `Info.txt` 文本。这个文件里除名字/作者/版本之外还有平台、能力声明等字段，IR 不解释它们，
- * 但它们是原包的事实：读时整表留在 `opaque`，写时原样带回；元信息有值时覆盖同名行。
- */
-function infoText(model: SkinModel): string {
-  const fields = textFieldsOf(model.opaque.get("info"))
-  if (model.meta.name) fields.set("Name", model.meta.name)
-  if (model.meta.author) fields.set("Author", model.meta.author)
-  if (model.meta.version) fields.set("Version", model.meta.version)
-  return `${[...fields].map(([key, value]) => `${key}=${value}`).join("\n")}\n`
 }
 
 /** 非按键窗口：候选栏、提示气泡、手写区；原样保留在 opaque 里，导出时按路径写回。 */
@@ -851,53 +549,25 @@ export function writeMotions(motions: SkinMotions): string {
 
 /* —— 模型 —— */
 
-/** 字符串字段表：`Info.txt` 的整张表、样式表 `[GLOBAL]` 的字段都走这一种形状。 */
-function textFieldsOf(value: unknown): Map<string, string> {
-  const fields = new Map<string, string>()
-  if (!(value instanceof Map)) return fields
-  for (const [key, item] of value) {
-    if (typeof key === "string" && typeof item === "string") fields.set(key, item)
-  }
-  return fields
-}
-
-/** `opaque` 里样式段保留的原始行；值不是字符串数组时当作没有。 */
-function styleFieldsOf(value: unknown): readonly string[] | undefined {
-  if (!Array.isArray(value)) return
-  const lines: string[] = []
-  for (const item of value) {
-    if (typeof item !== "string") return
-    lines.push(item)
-  }
-  return lines
-}
-
-function infoOf(access: DocumentAccess): { name?: string; author?: string; version?: string; fields: Map<string, string>; exists: boolean } {
-  const document = access.text("Info.txt")
-  const fields = new Map<string, string>()
-  if (!document) return { fields, exists: false }
-  for (const entry of document.entries()) fields.set(entry.key, entry.value)
-  const value = (key: string): string | undefined => {
-    const hit = [...fields].find(([name]) => name.toLowerCase() === key.toLowerCase())
-    return hit?.[1].trim() || undefined
-  }
-  return {
-    ...(value("Name") ? { name: value("Name") } : {}),
-    ...(value("Author") ? { author: value("Author") } : {}),
-    ...(value("Version") ? { version: value("Version") } : {}),
-    fields,
-    exists: true,
-  }
-}
-
 /**
- * 布局文件的容器尺寸：`[PANEL] SIZE` 是声明值；没有声明时用所有 `VIEW_RECT` 的右下外框，
- * 那是能从文件算出的下界，并明确标成「不是声明的」。两者都没有就没有容器，返回 undefined。
+ * 容器尺寸的来源顺序：布局文件 `[PANEL] SIZE` > 同目录 `gen.ini [PANEL] SIZE` > 按键外框。
+ *
+ * 主输入布局（`py_*`/`def_*`/`en_*`/`bh`/`num_*`）普遍不写 `SIZE`，画布尺寸由 `gen.ini` 声明；
+ * 按键外框是最后能算出的下界。三级都拿不到时返回 undefined，由调用方决定 unknown 还是拒绝。
+ * `declared` 只表示「布局文件自己写了 SIZE」，写回时据此决定要不要写这一行。
  */
-function panelSizeOf(document: IniDocument, keys: ReadonlyArray<{ rect: LayoutBox }>): { size: Size<number>; declared: boolean } | undefined {
-  const parts = numbersOf(document.get("PANEL", "SIZE"))
-  if (parts.length === 2 && parts.every((value) => value > 0)) {
-    return { size: { width: parts[0], height: parts[1] }, declared: true }
+function panelSizeOf(
+  document: IniDocument,
+  keys: ReadonlyArray<{ rect: LayoutBox }>,
+  gen?: IniDocument,
+): { size: Size<number>; declared: boolean } | undefined {
+  const declared = numbersOf(document.get("PANEL", "SIZE"))
+  if (declared.length === 2 && declared.every((value) => value > 0)) {
+    return { size: { width: declared[0], height: declared[1] }, declared: true }
+  }
+  const shared = numbersOf(gen?.get("PANEL", "SIZE"))
+  if (shared.length === 2 && shared.every((value) => value > 0)) {
+    return { size: { width: shared[0], height: shared[1] }, declared: false }
   }
   if (!keys.length) return
   const width = Math.max(...keys.map((key) => key.rect.position.x + key.rect.size.width))
@@ -1022,8 +692,9 @@ function layoutFiles(access: DocumentAccess, theme: Theme, orientation: Orientat
     if (appearanceOf(name) !== theme || orientationOf(name) !== orientation) return false
     const leaf = `${bdsBoardName(name)?.toLowerCase() ?? ""}.ini`
     if (leaf === "gen.ini" || leaf === "more.ini" || leaf === "toolbar.ini") return false
-    // `bh.ini`、`hw_*.ini` 是手写区自己的布局，不是键盘板。
-    if (leaf === "bh.ini" || /^hw_/.test(leaf)) return false
+    // `hw_*.ini` 是手写板自己的版面（笔迹配置与手写大区域），不是键盘板。
+    // `bh.ini` 要当键盘板读：它是笔画键盘（`CENTER=B1..B6` 是笔画动作码，与九宫格是两种输入形态）。
+    if (/^hw_/.test(leaf)) return false
     return (textContent(access, name) ?? "").includes("[KEY")
   })
 }
@@ -1386,15 +1057,14 @@ export async function layoutBoards(
 ): Promise<LayoutBoards> {
   const document = access.text(primaryLayout)
   if (!document) throw new Error(`包里没有这个布局：${primaryLayout}`)
+  const directory = bdsDirectory(theme, orientation)
+  const genDocument = access.text(`${directory}gen.ini`)
   const allKeys = keysOf(document)
   // 有 VIEW_RECT 的键进布局树；没有的那些仍是键（只有身份与样式），只是不填 layoutId。
   const keys = allKeys.filter((each) => each.placed)
-  // 容器尺寸是布局的输入：既没声明又没按键可量时，这块板没有可用的布局，不编一个出来。
-  const measured = panelSizeOf(document, keys)
-  if (!measured) throw new Error(`布局既没有 SIZE 也没有按键，容器尺寸无从确定：${primaryLayout}`)
-  const size = measured.size
-  const directory = bdsDirectory(theme, orientation)
-  const genDocument = access.text(`${directory}gen.ini`)
+  // 容器是布局的输入：布局文件没写就取 gen.ini 声明的面板尺寸，再退到按键外框；
+  // 三级都没有就是显式 unknown，不编一个尺寸。
+  const measured = panelSizeOf(document, keys, genDocument)
   const parsedPanels = genDocument
     ? panelsOf(access, directory, genDocument, actionOf)
     : { panels: {} as BoardPanels, paths: {} }
@@ -1406,7 +1076,7 @@ export async function layoutBoards(
     theme,
     orientation,
     geometry: { kind: "document" },
-    container: knownContainer(size),
+    container: measured ? knownContainer(measured.size) : { kind: "unknown" },
     layout: layoutOfKeys(keys),
     ...(panelStyleOf(document) ? { backdrop: panelStyleOf(document) } : {}),
     keys: orderedMainKeys.map((each) => each.key),
@@ -1421,7 +1091,7 @@ export async function layoutBoards(
     const boardAll = keysOf(other)
     if (!boardAll.length) continue
     const boardKeys = boardAll.filter((each) => each.placed)
-    const boardMeasured = panelSizeOf(other, boardKeys)
+    const boardMeasured = panelSizeOf(other, boardKeys, genDocument)
     // 没有几何的布局建不成板；它的原文由调用方按原样保留，不硬塞一个容器尺寸。
     if (!boardMeasured) {
       skipped.push(layoutPath)
@@ -1447,13 +1117,19 @@ export async function layoutBoards(
 
 /** 布局文件自身声明的面板字段与 `gen.ini` 的面板组件合并；布局文件优先。 */
 function panelsMerged(base: BoardPanels | undefined, document: IniDocument): BoardPanels {
+  // `gen.ini` 的列表只是几何默认值，单独留给 `genList`，不并进合并视图。
+  const { list: genList, hint: genHint, more: genMore, ...baseRest } = base ?? {}
+  const layoutList = listExtrasOf(document)
+  // 列表内容是布局自己的：`gen.ini` 只给几何默认值（`POS`/`CELL_SIZE`/`PADDING`），没有 `NAMES`。
+  // 所以只有布局文件出现 `[LIST]` 段时才挂列表；`py_26` 这类没有该段的板不能凭空得到一个空列表。
+  const list = layoutList && document.sections().includes("LIST") ? { ...genList, ...layoutList } : undefined
   const merged: BoardPanels = {
-    ...base,
+    ...baseRest,
     // 布局文件的 `[HINT]` 段指明用哪个气泡面板，gen.ini 那边只有样式，两边合并。
-    ...(Object.keys(hintExtrasOf(document)).length
-      ? { hint: { ...base?.hint, ...hintExtrasOf(document) } }
+    ...(genHint || Object.keys(hintExtrasOf(document)).length
+      ? { hint: { ...genHint, ...hintExtrasOf(document) } }
       : {}),
-    ...(listExtrasOf(document) ? { list: { ...base?.list, ...listExtrasOf(document) } } : {}),
+    ...(list ? { list } : {}),
     emptySections: emptySectionsOf(document),
     extraFields: unmodeledFieldsOf(document),
     containerDeclared: document.get("PANEL", "SIZE") !== undefined,
@@ -1462,17 +1138,17 @@ function panelsMerged(base: BoardPanels | undefined, document: IniDocument): Boa
       !/^KEY\d+$/i.test(section) && !/^TIP\d+$/i.test(section) && document.entries(section).length > 0),
     ...(document.get("PANEL", "NO_BLUR") !== undefined ? { layoutNoBlur: document.get("PANEL", "NO_BLUR")?.trim() === "1" } : {}),
     tips: tipPoolOf(document, { actionOf }),
-    ...(mergeMore(base?.more, moreMenuOf(document)) ? { more: mergeMore(base?.more, moreMenuOf(document)) } : {}),
+    ...(mergeMore(genMore, moreMenuOf(document)) ? { more: mergeMore(genMore, moreMenuOf(document)) } : {}),
     ...boardExtrasOf(document),
     ...(tipCountOf(document) !== undefined ? { tipCount: tipCountOf(document) } : {}),
     ...(keyCountOf(document) !== undefined ? { keyCount: keyCountOf(document) } : {}),
     // 布局文件与 gen.ini 各自的面板声明分开存：两个文件里的同名字段不是同一份内容。
-    ...(listExtrasOf(document) ? { layoutList: listExtrasOf(document) } : {}),
+    ...(layoutList ? { layoutList } : {}),
     ...(Object.keys(hintExtrasOf(document)).length ? { layoutHint: hintExtrasOf(document) } : {}),
     ...(moreMenuOf(document) ? { layoutMore: moreMenuOf(document) } : {}),
-    ...(base?.list ? { genList: base.list } : {}),
-    ...(base?.hint ? { genHint: base.hint } : {}),
-    ...(base?.more ? { genMore: base.more } : {}),
+    ...(genList ? { genList } : {}),
+    ...(genHint ? { genHint } : {}),
+    ...(genMore ? { genMore } : {}),
   }
   return merged
 }
@@ -1528,8 +1204,8 @@ export async function bdsToModel(
   // 没有样式表的布局（官方基础布局）按空样式读，样式由后续的外观覆盖。
   const styleDocument = (hints.styles ? access.text(hints.styles) : undefined) ?? IniDocument.parse("")
   const primaryPlaced = keysOf(layout).filter((entry) => entry.placed)
-  const measured = panelSizeOf(layout, primaryPlaced)
-  if (!measured) throw new Error(`布局既没有 SIZE 也没有按键，容器尺寸无从确定：${hints.layout}`)
+  const genForPrimary = access.text(`${bdsDirectory(hints.theme, hints.orientation)}gen.ini`)
+  const measured = panelSizeOf(layout, primaryPlaced, genForPrimary)
   const info = infoOf(access)
   const model = emptyModel({
     ...(info.name ? { name: info.name } : {}),
@@ -1537,7 +1213,7 @@ export async function bdsToModel(
     ...(info.version ? { version: info.version } : {}),
     theme: hints.theme,
     orientation: hints.orientation,
-    resolution: measured.size,
+    ...(measured ? { resolution: measured.size } : {}),
   }, "bds")
   // 一个包里可以有多个主题与方向，每套都是完整的键盘；它们都是事实，都要进模型。
   const packagedThemes = [...new Set<Theme>([...roles.keys()].flatMap((path) => {
@@ -1681,113 +1357,6 @@ export async function bdsToModel(
   for (const [name, global] of atlasFiles.globals) opaque.set(`atlas:${name}`, { global })
   model.opaque = opaque
   return model
-}
-
-/** 文件路径或图集引用的最后一段，去掉扩展名：`light/skin/res/fore1.til` → `fore1`，`sxi:default:anjian` → `anjian`。 */
-function leafName(reference: string): string {
-  const match = /[^/:]+$/.exec(reference)
-  return (match?.[0] ?? reference).replace(/\.[^.]+$/, "")
-}
-
-/**
- * 切片在 `.til` 里的 `[IMG<n>]` 编号。编号是 BDS 的打包细节，不是 IR 的标识：
- * `AtlasSlice.id` 是跨格式的稳定标识（BDS 的 `图集#12`、SXI 的 `sxi:default:anjian#IMG1`），
- * 它不承担这个职责。所以 BDS 读进来时把编号记在切片 `extra.tilIndex`，写回时优先用它；
- * 别的格式转来的切片没有这个字段，按它在数组里的位置从 1 开始编号。
- */
-function tilIndexOf(slice: AtlasSlice, position: number): number {
-  const recorded = slice.extra?.get("tilIndex")
-  if (recorded === undefined) return position + 1
-  if (typeof recorded !== "number" || !Number.isInteger(recorded) || recorded < 0) {
-    throw new Error(`切片 ${slice.id} 的 tilIndex 不是非负整数：${String(recorded)}`)
-  }
-  return recorded
-}
-
-/** `INNER_RECT` 的四个数；写下的值不是四个有限数说明模型被改坏了。 */
-function innerRectOf(value: unknown, slice: AtlasSlice): [number, number, number, number] {
-  if (!Array.isArray(value) || value.length !== 4 || !value.every((item) => typeof item === "number" && Number.isFinite(item))) {
-    throw new Error(`切片 ${slice.id} 的内切矩形不合法：${JSON.stringify(value)}`)
-  }
-  return [value[0], value[1], value[2], value[3]]
-}
-
-/** `.til` 文本：`[GLOBAL]` 原值加每个切片一条 `[IMGn]`，编号由调用方按图集分配。 */
-function atlasText(atlas: Atlas, global: AtlasGlobal | undefined, indexes: ReadonlyMap<AtlasSlice, number>): string {
-  const lines = ["[GLOBAL]"]
-  for (const [key, value] of Object.entries(global ?? {})) {
-    if (key.toUpperCase() === "TILE_NUM") continue
-    lines.push(`${key}=${value}`)
-  }
-  // 工具书 V6 p43：`TILE_NUM` 必须与切片数一致，所以它从切片重算而不沿用原值。
-  lines.push(`TILE_NUM=${atlas.slices.length}`, "")
-  for (const slice of atlas.slices) {
-    const index = indexes.get(slice)
-    if (index === undefined) throw new Error(`切片没有分配 .til 编号：${slice.id}`)
-    lines.push(`[IMG${index}]`, `SOURCE_RECT=${slice.rect.x},${slice.rect.y},${slice.rect.width},${slice.rect.height}`)
-    const inner = slice.extra?.get("innerRect")
-    if (inner !== undefined) lines.push(`INNER_RECT=${innerRectOf(inner, slice).join(",")}`)
-    const scale = slice.extra?.get("scale")
-    if (scale !== undefined) {
-      if (typeof scale !== "string") throw new Error(`切片 ${slice.id} 的 SCALE 不是字符串`)
-      lines.push(`SCALE=${scale}`)
-    }
-    // 切片段里没建模的字段（`INFO` 这类）原样写回；`tilIndex` 是 BDS 自己的编号，已经在段头上。
-    // 别的格式的 `extra`（SXI 的 `rect2`/`scales`）不是 `.til` 的行，BDS 也不认识，跳过。
-    for (const [key, value] of slice.extra ?? []) {
-      if (key === "innerRect" || key === "scale" || key === "tilIndex") continue
-      if (typeof value !== "string") continue
-      lines.push(`${key}=${value}`)
-    }
-    lines.push("")
-  }
-  return `${lines.join("\n")}\n`
-}
-
-/**
- * 图集源图：整图在图片表里就用它，否则把切片按原位置贴回去。
- * 一个切片都没有像素时返回 undefined——原包只有 `.til` 声明，不凭空造图；
- * 只缺一部分说明模型不一致，直接报错，不拿半张图冒充整张。
- */
-function atlasImage(atlas: Atlas, images: ReadonlyMap<string, SkinImage>): SkinImage | undefined {
-  const whole = images.get(atlas.source)
-  if (whole) return whole
-  if (!atlas.slices.length) return
-  const present = atlas.slices.flatMap((slice) => {
-    const image = images.get(slice.id)
-    return image ? [{ slice, image }] : []
-  })
-  if (!present.length) return
-  if (present.length !== atlas.slices.length) {
-    const missing = atlas.slices.filter((slice) => !images.has(slice.id)).map((slice) => slice.id)
-    throw new Error(`图集只有部分切片有像素，无法重建 ${atlas.source}：${missing.join("、")}`)
-  }
-  const width = Math.max(...atlas.slices.map((slice) => slice.rect.x + slice.rect.width))
-  const height = Math.max(...atlas.slices.map((slice) => slice.rect.y + slice.rect.height))
-  const data = new Uint8Array(width * height * 4)
-  for (const { slice, image } of present) {
-    if (image.width !== slice.rect.width || image.height !== slice.rect.height) {
-      throw new Error(`切片 ${slice.id} 的像素 ${image.width}x${image.height} 与矩形 ${slice.rect.width}x${slice.rect.height} 不符`)
-    }
-    for (let row = 0; row < image.height; row++) {
-      const from = row * image.width * 4
-      const to = ((slice.rect.y + row) * width + slice.rect.x) * 4
-      data.set(image.data.subarray(from, from + image.width * 4), to)
-    }
-  }
-  return { width, height, data }
-}
-
-/** `opaque` 里的 `[GLOBAL]` 原值；不是记录就当作没有声明。 */
-function atlasGlobalOf(value: unknown): AtlasGlobal | undefined {
-  if (typeof value !== "object" || value === null || !("global" in value)) return
-  const global = (value as { global: unknown }).global
-  if (typeof global !== "object" || global === null) return
-  const fields: AtlasGlobal = {}
-  for (const [key, item] of Object.entries(global)) {
-    if (typeof item === "string") fields[key] = item
-  }
-  return fields
 }
 
 /** `opaque` 里按原文保留的文本载荷：`{ text }`。 */
