@@ -59,3 +59,43 @@ for (const sourceFormat of ['bdi', 'sxi']) test(`${sourceFormat.toUpperCase()} e
   }
   assert.deepEqual(input.toBytes(), before, 'export does not change the source document')
 })
+
+for (const native of [false, true]) test(`BDI → BDS restores the shared panel behind a missing ${native ? 'native' : 'legacy'} candidate image`, async () => {
+  const source = nativeToolbarFixture()
+  for (const [theme, gray] of [['light', 227], ['dark', 21]]) {
+    const root = `${theme}/skin/`
+    const data = Uint8Array.from({ length: 2 * 4 * 4 }, (_, i) => i % 4 === 3 ? 255 : i < 2 * 2 * 4 ? gray : 90)
+    source.setBytes(`${root}res/panel.png`, encodePng({ width: 2, height: 4, data }))
+    source.setText(`${root}res/panel.til`, '[IMG1]\nSOURCE_RECT=0,0,2,4\nINNER_RECT=0,0,2,4\n')
+    source.setText(`${root}res/default.css`, source.getText(`${root}res/default.css`) + '[STYLE5]\nNM_IMG=panel,1\n[STYLE6]\nNM_IMG=missing,1\nHL_IMG=missing,1\nINFO=Candidate\n')
+    for (const orientation of ['port', 'land']) {
+      const dir = `${root}${orientation}/`
+      source.setText(`${dir}gen.ini`, `[PANEL]\nSIZE=1125,592\nBACK_STYLE=5\n[CAND]\nLAYOUT_NAME=cand1\nVIEW_RECT=0,0,1125,124\n${native ? '[LOGO]\nLAYOUT_NAME=logo\n' : ''}`)
+      source.setText(`${dir}cand1.cnd`, '[CAND]\nBACK_STYLE=6\nCELL_W=62\n')
+    }
+  }
+  const before = source.toBytes()
+  const bytes = await completeBdsBytes(await source.toBytesAsync('bds'), () => assert.fail('no atlas consolidation needed'))
+  const target = SkinArchive.open(bytes, 'bds')
+  for (const [theme, gray] of [['light', 227], ['dark', 21]]) {
+    const root = `${theme}/skin/`
+    const styles = IniDocument.parse(target.getText(`${root}res/default.css`))
+    for (const orientation of ['port', 'land']) {
+      const dir = `${root}${orientation}/`
+      const cand = IniDocument.parse(target.getText(`${dir}cand1.cnd`))
+      const style = `STYLE${cand.get('CAND', 'BACK_STYLE')}`
+      const [name] = styles.get(style, 'NM_IMG').split(',')
+      const png = target.getBytes(`${root}res/${name}.png`)
+      assert.ok(png, `${theme}/${orientation} candidate image exists`)
+      const bar = decodePng(png)
+      const general = IniDocument.parse(target.getText(`${dir}gen.ini`))
+      assert.equal(bar.height, Number(general.get('CAND', 'VIEW_RECT').split(',')[3]))
+      assert.ok(bar.data.every((value, i) => value === (i % 4 === 3 ? 255 : gray)), 'only the top band is drawn, not a squashed panel')
+      assert.equal(styles.get(style, 'HL_IMG'), undefined, 'Android reuses the normal image without a second layer')
+      assert.equal(styles.get(style, 'INFO'), 'Candidate')
+      assert.equal(cand.get('CAND', 'CELL_W'), '62')
+    }
+    assert.deepEqual(target.getBytes(`${root}res/panel.png`), source.getBytes(`${root}res/panel.png`))
+  }
+  assert.deepEqual(source.toBytes(), before)
+})

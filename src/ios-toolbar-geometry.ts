@@ -4,9 +4,10 @@ import { IniDocument } from "./ini.ts"
 import { appendStyle } from "./ios-toolbar.ts"
 import { adaptIosPanelBackgrounds, separateBdsBackgroundSlices } from "./ios-toolbar-background.ts"
 import { resolveCandidateRect } from "./candidate-style.ts"
+import { resolvePanelConfig } from "./keyboard.ts"
 import { parseXmlPlist } from "./palm/palm-plist.ts"
 import { previewItems, type Rect } from "./preview-items.ts"
-import { cropImage, decodePng, encodePng, MAX_PIXELS, nineSliceImage, pngSize, resizeImage } from "./ssf/ssf-png.ts"
+import { cropImage, decodePng, encodePng, MAX_PIXELS, nineSliceImage, pngSize, resizeImage, type RgbaImage } from "./ssf/ssf-png.ts"
 
 /** iOS toolbar sizes are @3x pixels, independent of the keyboard's layout width. */
 export function iosToolbarScale(width: number, devicePointWidth: number | undefined): number {
@@ -61,20 +62,20 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
     const plist = files.get(`${root}res/logo/com.baidu.inputmethod.toolbarMenuItems.plist`)
     const candPath = `${root}${orientation}/${gen.get("CAND", "LAYOUT_NAME")?.trim()}.cnd`
     const cand = text(candPath)
-    if (!hasIosToolbarGeometry(gen, cand)) continue
+    const nativeGeometry = hasIosToolbarGeometry(gen, cand)
+    if (!nativeGeometry && source !== "bdi") continue
     const cssPath = files.has(`${root}${orientation}/res/default.css`)
       ? `${root}${orientation}/res/default.css` : `${root}res/default.css`
     const css = text(cssPath)
     if (!cand || !css) continue
     const joined = new Set<string>()
-    adaptIosPanelBackgrounds(files, root, orientation, gen, cand, css, joined)
+    if (nativeGeometry) adaptIosPanelBackgrounds(files, root, orientation, gen, cand, css, joined)
     if (joined.size) joinedBackgrounds.set(cssPath, new Set([...joinedBackgrounds.get(cssPath) ?? [], ...joined]))
     const { x, y, width, height: originalHeight } = resolveCandidateRect(cand, gen)
     // shortcut: exports use the same reference iPhone as canvas mode; recalibrate with other native layouts.
-    const scale = source === "sxi" ? 1 : iosToolbarScale(width, orientation === "port" ? frame.viewportWidth : frame.viewportHeight)
+    const scale = source === "sxi" || !nativeGeometry ? 1 : iosToolbarScale(width, orientation === "port" ? frame.viewportWidth : frame.viewportHeight)
     const height = Math.max(1, Math.round(originalHeight * scale))
-    const implicit = source === "bdi" && implicitIosToolbarRect(gen, cand, width, originalHeight)
-    if (source === "bdi") {
+    if (source === "bdi" && nativeGeometry) {
       const rect = [x, y, width, height].join(",")
       gen.set("CAND", "VIEW_RECT", rect)
       if (cand.get("CAND", "VIEW_RECT")) cand.set("CAND", "VIEW_RECT", rect)
@@ -87,7 +88,8 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
       const source = numbers(til?.get(`IMG${index}`, "SOURCE_RECT"))
       const bytes = files.get(`${folder}${name}.png`)
       if (!bytes || source?.length !== 4 || !source.every(Number.isFinite)) return
-      const decoded = decodePng(bytes)
+      let decoded: RgbaImage
+      try { decoded = decodePng(bytes) } catch { return }
       if (!source.every(Number.isInteger) || source[0] < 0 || source[1] < 0 || source[2] <= 0 || source[3] <= 0
         || source[0] + source[2] > decoded.width || source[1] + source[3] > decoded.height) return
       const inner = numbers(til?.get(`IMG${index}`, "INNER_RECT"))
@@ -97,6 +99,43 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
       const cropped = cropImage(decoded, source[0], source[1], source[2], source[3])
       return destination ? resizeImage(cropped, ...destination) : cropped
     }
+    const back = (cand.get("CAND", "BACK_STYLE") ?? gen.get("CAND", "BACK_STYLE") ?? gen.get("SCAND", "BACK_STYLE"))?.split(",")[0].trim()
+    const entries = css.entries(`STYLE${back}`).map(({ key, value }) => ({ key, value }))
+    if ((source === "bdi" || joined.size) && width * height <= MAX_PIXELS && Number.isInteger(width)) {
+      const saveImage = (output: RgbaImage, key: string) => {
+        let name = `keyskin_${orientation}_candidate_${key.toLowerCase()}`
+        while (files.has(`${root}res/${name}.png`) || files.has(`${root}res/${name}.til`)) name = `_${name}`
+        files.set(`${root}res/${name}.png`, encodePng(output))
+        files.set(`${root}res/${name}.til`, strToU8(`[GLOBAL]\nUSE_ALPHA=1\nTILE_NUM=1\n\n[IMG1]\nSOURCE_RECT=0,0,${width},${height}\n`))
+        return `${name},1`
+      }
+      let hasImage = false
+      const bake = nativeGeometry
+      for (const entry of entries.filter(({ key }) => key === "NM_IMG" || key === "HL_IMG")) {
+        const output = image(entry.value, bake ? [width, height] : undefined)
+        if (!output) continue
+        hasImage = true
+        if (bake) entry.value = saveImage(output, entry.key)
+      }
+      if (bake && hasImage) cand.set("CAND", "BACK_STYLE", appendStyle(css, entries))
+      if (source === "bdi" && !hasImage && !entries.some(({ key, value }) => value && /^(?:NM|HL|BORDER)_COLOR$/.test(key))) {
+        // iOS paints the panel underneath the idle candidate bar. Android needs that top strip as its own image.
+        const panel = resolvePanelConfig(gen, gen, css)
+        const fullHeight = Math.round(panel.height) + height
+        const background = width * fullHeight <= MAX_PIXELS && image(panel.normalImage, [width, fullHeight])
+        if (background) {
+          const value = saveImage(cropImage(background, 0, 0, width, height), "NM_IMG")
+          const retained = entries.filter(({ key }) => key !== "NM_IMG" && key !== "HL_IMG")
+          cand.set("CAND", "BACK_STYLE", appendStyle(css, [...retained, { key: "NM_IMG", value }]))
+          if (!nativeGeometry) {
+            files.set(candPath, strToU8(cand.toString()))
+            files.set(cssPath, strToU8(css.toString()))
+          }
+        }
+      }
+    }
+    if (!nativeGeometry) continue
+    const implicit = source === "bdi" && implicitIosToolbarRect(gen, cand, width, originalHeight)
     const menu = source === "bdi" && plist && parseXmlPlist(plist)
     const functionHeights = Array.isArray(menu) ? menu.flatMap((value) => {
       if (!value || typeof value !== "object" || Array.isArray(value) || value.Position !== "toolbar") return []
@@ -177,20 +216,6 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
         SIZE: `${Math.round(implicit.width)},${height}`,
       }).map(([key, value]) => ({ key, value })))
     }
-    const back = cand.get("CAND", "BACK_STYLE")?.split(",")[0]
-    const entries = css.entries(`STYLE${back}`).map(({ key, value }) => ({ key, value }))
-    let baked = false
-    if ((source === "bdi" || joined.size) && width * height <= MAX_PIXELS && Number.isInteger(width)) for (const entry of entries.filter(({ key }) => key === "NM_IMG" || key === "HL_IMG")) {
-      const output = image(entry.value, [width, height])
-      if (!output) continue
-      let name = `keyskin_${orientation}_candidate_${entry.key.toLowerCase()}`
-      while (files.has(`${root}res/${name}.png`)) name = `_${name}`
-      files.set(`${root}res/${name}.png`, encodePng(output))
-      files.set(`${root}res/${name}.til`, strToU8(`[GLOBAL]\nUSE_ALPHA=1\nTILE_NUM=1\n\n[IMG1]\nSOURCE_RECT=0,0,${width},${height}\n`))
-      entry.value = `${name},1`
-      baked = true
-    }
-    if (baked) cand.set("CAND", "BACK_STYLE", appendStyle(css, entries))
     files.set(path, strToU8(gen.toString()))
     files.set(candPath, strToU8(cand.toString()))
     files.set(cssPath, strToU8(css.toString()))
