@@ -5,8 +5,8 @@
 import type { Board } from "@/skin-model/board.ts"
 import { containerOf } from "@/skin-model/board.ts"
 import { containerWithState, stateMatches, type KeyRender } from "@/skin-model/build.ts"
-import { computeLayout } from "@/skin-model/layout.ts"
-import { boardPanels } from "@/skin-model/panel.ts"
+import { computeLayout, type LayoutBox } from "@/skin-model/layout.ts"
+import { boardPanels, type ListPanel } from "@/skin-model/panel.ts"
 
 /** 一块板的渲染投影；同一位置同一动作的按键段在真机上是一个键。 */
 export async function boardRenders(board: Board, state?: number): Promise<KeyRender[]> {
@@ -90,9 +90,30 @@ function candidateRenders(board: Board): KeyRender[] {
 /** 列表容器；单元格由候选栏的格子样式决定，不单独成项。 */
 function listRenders(board: Board): KeyRender[] {
   const list = boardPanels(board)?.list
-  const viewRect = list?.layout?.viewRect
+  if (!list) return []
+  const viewRect = list.layout?.viewRect ?? derivedListRect(list.layout)
   if (!viewRect) return []
   return [componentOf("LIST", viewRect, list.appearance?.style, list.appearance?.foreStyle)]
+}
+
+/**
+ * 列表矩形：SXI 的原生 `rect` 优先；BDS 由 `offset` 与 `cellSize × count` 推导。
+ *
+ * 方向按 `LIST_ORDER`：`0` 与缺省都是纵向。三个样本（`py_9`/`bh`/`symbol`）纵向都贴底
+ * （`py_9` 与 `bh` 算到 y=311，容器 312；`symbol` 到 y=299，容器 372），横向会压住按键区。
+ * `padding` 不进外框：`bh` 的 `PADDING=2,0,2,0` 缩的是格子内容，外框仍是 `POS` 到
+ * `POS + CELL_SIZE × LIST_NUM`。
+ */
+function derivedListRect(layout: ListPanel["layout"]): LayoutBox | undefined {
+  const offset = layout?.offset
+  const cell = layout?.cellSize
+  const count = layout?.count
+  if (!offset || !cell || !count) return undefined
+  const vertical = layout.order === undefined || layout.order === "0"
+  const size = vertical
+    ? { width: cell.width, height: cell.height * count }
+    : { width: cell.width * count, height: cell.height }
+  return { position: { x: offset.x, y: offset.y }, size }
 }
 
 /** 更多菜单：只有一个前景样式，没有背景层。 */

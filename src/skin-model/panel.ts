@@ -98,6 +98,9 @@ export type ListPanel = {
   /**
    * 布局层：BDS 有 `POS` + `CELL_SIZE` + `LIST_NUM`（几何由它们推导）；
    * SXI 有 `p`/`s`；SSF 没有这一层；BDA 只有归一化 `foreStyleOffsets`，没有固定几何。
+   *
+   * `LIST_ORDER=0` 与缺省都是纵向：`py_9`/`bh`/`symbol` 三个样本纵向都贴底，横向会压住按键区。
+   * `padding` 缩的是格子内容，不进列表外框。
    */
   layout?: {
     viewRect?: LayoutBox
