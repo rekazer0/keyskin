@@ -87,13 +87,41 @@ function candidateRenders(board: Board): KeyRender[] {
   })
 }
 
-/** 列表容器；单元格由候选栏的格子样式决定，不单独成项。 */
+/** 列表容器与逐格内容；单元格由候选栏的格子样式决定，不单独成项。 */
 function listRenders(board: Board): KeyRender[] {
   const list = boardPanels(board)?.list
   if (!list) return []
-  const viewRect = list.layout?.viewRect ?? derivedListRect(list.layout)
+  const layout = list.layout
+  const viewRect = layout?.viewRect ?? derivedListRect(layout)
   if (!viewRect) return []
-  return [componentOf("LIST", viewRect, list.appearance?.style, list.appearance?.foreStyle)]
+  const cell = layout?.cellSize
+  const count = layout?.count
+  // 没有格子规格（SXI 只有原生 `rect`、没有 `p`/`s`）时只画列表外框。
+  const base = list.appearance?.style ? [componentOf("LIST", viewRect, list.appearance.style, undefined)] : []
+  if (!cell || !count) return base
+  const vertical = layout.order === undefined || layout.order === "0"
+  const names = list.content?.names ?? []
+  const cells = Array.from({ length: count }, (_, index) => {
+    const x = vertical ? viewRect.position.x : viewRect.position.x + cell.width * index
+    const y = vertical ? viewRect.position.y + cell.height * index : viewRect.position.y
+    // 槽位存在但内容不足时画格子、不写字：`LIST_NUM` 声明的就是可见槽位，
+    // 格子底由 `CELL_STYLE` 给；`NAMES` 少于槽位（`sel_en` 是 5 槽 0 项）不代表格子不存在。
+    const content = names[index]
+    const container: KeyRender["container"] = {
+      ...(list.appearance?.cellStyle ? { back: { style: list.appearance.cellStyle } } : {}),
+      fore: list.appearance?.foreStyle ? [{ style: list.appearance.foreStyle }] : [],
+      ...(content !== undefined ? { text: { content } } : {}),
+    }
+    return renderOf(`LIST${index + 1}`, { x, y, width: cell.width, height: cell.height }, container, {
+      sections: ["LIST"],
+      // 列表格显示自己的 `NAMES` 条目，不是共享样式里的标签；`paint` 侧按它切列表字体。
+      // 列表格没有动作，按契约不写 `actions`（空对象会被当成「动作未建模」）。
+      key: { id: `LIST${index + 1}`, kind: "list-cell", container },
+      editable: false,
+      visible: true,
+    })
+  })
+  return [...base, ...cells]
 }
 
 /**
