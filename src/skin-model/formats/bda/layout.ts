@@ -279,9 +279,9 @@ function keyExtrasOf(board: Board): ReadonlyMap<string, BdaKeyExtra> {
   return value === undefined ? new Map() : value as ReadonlyMap<string, BdaKeyExtra>
 }
 
-/** 板 id 的叶子名就是键盘名；骨架板的 id 带 `.ini`，外观面板名不带。 */
+/** 板 id 的叶子名就是键盘名；板 id 有路径（`/`）与 SXI 的命名空间（`:`）两种写法。 */
 export function keyboardNameOf(board: Board): string {
-  return (board.id.split("/").pop() ?? board.id).replace(/\.ini$/i, "")
+  return (board.id.split(/[/:]/).pop() ?? board.id).replace(/\.ini$/i, "")
 }
 
 /**
