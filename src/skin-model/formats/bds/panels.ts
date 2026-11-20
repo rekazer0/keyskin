@@ -11,8 +11,8 @@ import type { KeyAction } from "@/skin-model/types.ts"
 
 export type { BoardPanels }
 
-/** 面板文件的原路径；导出时沿用，避免重建把文件名换掉。 */
-export type PanelPaths = { candidate?: string; hint?: string; more?: string }
+/** 面板文件的原路径；导出时沿用，避免重建把文件名换掉。`gen` 只在原包有它时才记。 */
+export type PanelPaths = { candidate?: string; hint?: string; more?: string; gen?: string }
 
 export type ParsedPanels = { panels: BoardPanels; paths: PanelPaths }
 
@@ -45,6 +45,47 @@ function toolbarItems(document: IniDocument, actionOf: ActionReader): ToolbarIte
       ...(position.length === 2 && size.length === 2 ? { offset: { x: position[0], y: position[1] }, size: { width: size[0], height: size[1] } } : {}),
     }]
   })
+}
+
+/** `gen.ini` 里按结构化字段读出的字段名；没列出的字段（含重复键）保留原始行。 */
+const GEN_MODELED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["PANEL", new Set(["BACK_STYLE", "FORE_STYLE", "SIZE", "OFFSET_NUM", "HAS_PAD_INI", "NO_BLUR"])],
+  ["SCAND", new Set(["BACK_STYLE", "FORE_STYLE", "INPUT_STYLE", "SCAND_STYLE", "PADDING"])],
+  ["CAND", new Set(["LAYOUT_NAME", "VIEW_RECT", "TYPE"])],
+  ["HINT", new Set(["LAYOUT_NAME", "TYPE"])],
+  ["MORE", new Set(["GRID", "LAYOUT_NAME", "CELL_STYLE", "FORE_STYLE"])],
+  ["LIST", new Set(["BACK_STYLE", "FORE_STYLE", "CELL_STYLE", "CELL_SIZE", "PADDING", "POS", "NAMES"])],
+  ["TOOLBAR", new Set(["HEIGHT"])],
+  ["LOGO", new Set(["ICON"])],
+  ["EMOJI", new Set(["ICON"])],
+  ["INPUT", new Set(["BACK_STYLE", "FORE_STYLE", "HEIGHT"])],
+])
+
+function genModeledField(section: string, field: string): boolean {
+  const name = field.toUpperCase()
+  if (/^OFFSET\d+$/i.test(section)) return name === "POS" || name === "R_POS"
+  if (/^ICON\d+$/i.test(section)) return ["POS", "SIZE", "IMG", "KEY", "VISIBLE"].includes(name)
+  const modeled = GEN_MODELED.get(section.toUpperCase())
+  if (!modeled) return false
+  return modeled.has(name) || (section.toUpperCase() === "MORE" && /_LAYOUT$/.test(name))
+}
+
+/** `gen.ini` 里各段的未建模行；写回时追加到对应段，不猜语义、不丢字段。 */
+function genUnmodeledFields(gen: IniDocument): ReadonlyMap<string, readonly string[]> {
+  const extra = new Map<string, readonly string[]>()
+  for (const section of gen.sections()) {
+    const seen = new Set<string>()
+    const lines: string[] = []
+    for (const entry of gen.entries(section)) {
+      const name = entry.key.toUpperCase()
+      const duplicated = seen.has(name)
+      seen.add(name)
+      if (!duplicated && genModeledField(section, entry.key)) continue
+      lines.push(`${entry.key}=${entry.value}`)
+    }
+    if (lines.length) extra.set(section, lines)
+  }
+  return extra
 }
 
 /** 从 `gen.ini` 与它引用的面板文件里读出面板组件。 */
@@ -85,13 +126,13 @@ export function panelsOf(access: DocumentAccess, directory: string, gen: IniDocu
     : undefined
 
   // `[OFFSET1..n]` 是工具栏图标各自的偏移，段号就是图标序号。
+  // 空段也要留下：段头存在说明这个序号在原文件里出现过。
   const offsets = new Map<number, Offsets>()
   for (const section of gen.sections()) {
     const match = /^OFFSET(\d+)$/i.exec(section)
     if (!match) continue
     const pos = numbersOf(gen.get(section, "POS"))
     const rPos = numbersOf(gen.get(section, "R_POS"))
-    if (pos.length !== 2 && rPos.length !== 2) continue
     offsets.set(Number(match[1]), {
       ...(pos.length === 2 ? { pos: { x: pos[0], y: pos[1] } } : {}),
       ...(rPos.length === 2 ? { rPos: { x: rPos[0], y: rPos[1] } } : {}),
@@ -208,6 +249,7 @@ export function panelsOf(access: DocumentAccess, directory: string, gen: IniDocu
     }
     : undefined
 
+  const genExtra = genUnmodeledFields(gen)
   return {
     panels: {
       ...(backdrop ? { backdrop } : {}),
@@ -219,8 +261,10 @@ export function panelsOf(access: DocumentAccess, directory: string, gen: IniDocu
       ...(scan ? { scan } : {}),
       ...(more ? { more } : {}),
       ...(offsets.size ? { offsets } : {}),
+      ...(genExtra.size ? { genExtraFields: genExtra } : {}),
     },
     paths: {
+      gen: `${directory}gen.ini`,
       ...(firstCandidatePath ? { candidate: firstCandidatePath } : {}),
       ...(hintPath ? { hint: hintPath } : {}),
       ...(morePath ? { more: morePath } : {}),
@@ -256,9 +300,16 @@ export function panelFiles(
   const files: Array<{ path: string; data: Uint8Array }> = []
   const background: string[] = []
   const panels = boardPanels(board) ?? {}
+  // 布局文件与 `gen.ini` 各自的面板声明分开存：`gen.ini` 只写它自己有的，
+  // 否则会把布局文件的 `[LIST]`/`[HINT]`/`[MORE]` 复制进 `gen.ini`。跨格式转来的板没有这个区分，用合并值。
+  const fromBdsLayout = panels.layoutSections !== undefined
+  const hint = fromBdsLayout ? panels.genHint : panels.hint
+  const list = fromBdsLayout ? panels.genList : panels.list
+  const menu = fromBdsLayout ? panels.genMore : panels.more
   const items = panels.toolbar?.items ?? []
   const iconItems = items.filter((item) => item.icon)
   const nameOf = (path: string | undefined, fallback: string) => (path ?? `${directory}${fallback}`).split("/").pop()!.replace(/\.[^.]+$/, "")
+  const genExtraOf = (section: string): string[] => [...(panels.genExtraFields?.get(section) ?? [])]
 
   // 候选栏与气泡各自一个文件，`gen.ini` 用 LAYOUT_NAME 指向它们。
   // 原包已有 `.cnd` 时它由窗口原样写回，面板生成不覆盖它自己的 VIEW_RECT。
@@ -287,30 +338,30 @@ export function panelFiles(
       "",
     )
   }
-  if (panels.hint) {
+  if (hint) {
     const lines = [
       "[HINT]",
-      ...(panels.hint.style ? [`BACK_ICON=${panels.hint.style}`] : []),
-      ...(panels.hint.offset ? [`OFFSET=${panels.hint.offset.x},${panels.hint.offset.y}`] : []),
-      ...(panels.hint.corner !== undefined ? [`CORNER=${panels.hint.corner}`] : []),
+      ...(hint.style ? [`BACK_ICON=${hint.style}`] : []),
+      ...(hint.offset ? [`OFFSET=${hint.offset.x},${hint.offset.y}`] : []),
+      ...(hint.corner !== undefined ? [`CORNER=${hint.corner}`] : []),
       "",
     ]
     files.push({ path: paths.hint ?? `${directory}hint.pop`, data: text(lines.join("\n")) })
     background.push(
       "[HINT]",
-      `LAYOUT_NAME=${panels.hint.layoutName ?? nameOf(paths.hint, "hint.pop")}`,
-      ...(panels.hint.type !== undefined ? [`TYPE=${panels.hint.type}`] : []),
+      `LAYOUT_NAME=${hint.layoutName ?? nameOf(paths.hint, "hint.pop")}`,
+      ...(hint.type !== undefined ? [`TYPE=${hint.type}`] : []),
+      ...genExtraOf("HINT"),
       "",
     )
   }
   if (iconItems.length) {
     const lines = ["[PANEL]", `SIZE=${size.width},${size.height}`, "", ...iconSection(iconItems, actionValue)]
     files.push({ path: paths.more ?? `${directory}more.ini`, data: text(lines.join("\n")) })
-    background.push("[MORE]", `LAYOUT_NAME=${panels.more?.layoutName ?? nameOf(paths.more, "more.ini")}`, "")
+    background.push("[MORE]", `LAYOUT_NAME=${menu?.layoutName ?? nameOf(paths.more, "more.ini")}`, "")
   }
   // gen.ini 的 `[MORE]` 是符号键盘菜单，除了被引用的面板文件还有网格与各类别布局。
-  if (panels.more && (panels.more.layouts.size || panels.more.grid || panels.more.cellStyle || panels.more.foreStyle)) {
-    const menu = panels.more
+  if (menu && (menu.layouts.size || menu.grid || menu.cellStyle || menu.foreStyle)) {
     const section: string[] = ["[MORE]"]
     if (menu.grid) section.push(`GRID=${menu.grid.width},${menu.grid.height}`)
     if (menu.layoutName) section.push(`LAYOUT_NAME=${menu.layoutName}`)
@@ -319,7 +370,7 @@ export function panelFiles(
     for (const [key, value] of [...menu.layouts].sort(([left], [right]) => left.localeCompare(right))) {
       section.push(`${key}=${value}`)
     }
-    section.push("")
+    section.push(...genExtraOf("MORE"), "")
     background.push(...section)
   }
 
@@ -332,6 +383,7 @@ export function panelFiles(
     ...(panels.backdrop?.offsetCount !== undefined ? [`OFFSET_NUM=${panels.backdrop.offsetCount}`] : []),
     ...(panels.backdrop?.hasPadIni ? ["HAS_PAD_INI=1"] : []),
     ...(panels.backdrop?.blur === false ? ["NO_BLUR=1"] : []),
+    ...genExtraOf("PANEL"),
     "",
     ...(panels.scan
       ? [
@@ -343,20 +395,22 @@ export function panelFiles(
         ...(panels.scan.padding
           ? [`PADDING=${panels.scan.padding.left},${panels.scan.padding.top},${panels.scan.padding.right},${panels.scan.padding.bottom}`]
           : []),
+        ...genExtraOf("SCAND"),
         "",
       ]
       : []),
-    ...(panels.list
+    ...(list
       ? [
         "[LIST]",
-        ...(panels.list.style ? [`BACK_STYLE=${panels.list.style}`] : []),
-        ...(panels.list.foreStyle ? [`FORE_STYLE=${panels.list.foreStyle}`] : []),
-        ...(panels.list.cellStyle ? [`CELL_STYLE=${panels.list.cellStyle}`] : []),
-        ...(panels.list.cellSize ? [`CELL_SIZE=${panels.list.cellSize.width},${panels.list.cellSize.height}`] : []),
-        ...(panels.list.padding
-          ? [`PADDING=${panels.list.padding.left},${panels.list.padding.top},${panels.list.padding.right},${panels.list.padding.bottom}`]
+        ...(list.style ? [`BACK_STYLE=${list.style}`] : []),
+        ...(list.foreStyle ? [`FORE_STYLE=${list.foreStyle}`] : []),
+        ...(list.cellStyle ? [`CELL_STYLE=${list.cellStyle}`] : []),
+        ...(list.cellSize ? [`CELL_SIZE=${list.cellSize.width},${list.cellSize.height}`] : []),
+        ...(list.padding
+          ? [`PADDING=${list.padding.left},${list.padding.top},${list.padding.right},${list.padding.bottom}`]
           : []),
-        ...(panels.list.offset ? [`POS=${panels.list.offset.x},${panels.list.offset.y}`] : []),
+        ...(list.offset ? [`POS=${list.offset.x},${list.offset.y}`] : []),
+        ...genExtraOf("LIST"),
         "",
       ]
       : []),
@@ -366,30 +420,23 @@ export function panelFiles(
         ...(panels.input.style ? [`BACK_STYLE=${panels.input.style}`] : []),
         ...(panels.input.foreStyle ? [`FORE_STYLE=${panels.input.foreStyle}`] : []),
         ...(panels.input.height !== undefined ? [`HEIGHT=${panels.input.height}`] : []),
+        ...genExtraOf("INPUT"),
         "",
       ]
       : []),
-    // 图标偏移表：段号就是图标序号；声明了总数就逐个写，没有偏移的写成空段。
-    ...Array.from({ length: panels.backdrop?.offsetCount ?? 0 }, (_, index) => index + 1)
-      .flatMap((each) => {
-        const offset = panels.offsets?.get(each)
-        return [
-          `[OFFSET${each}]`,
-          ...(offset?.pos ? [`POS=${offset.pos.x},${offset.pos.y}`] : []),
-          ...(offset?.rPos ? [`R_POS=${offset.rPos.x},${offset.rPos.y}`] : []),
-          "",
-        ]
-      }),
-    ...(panels.backdrop?.offsetCount ? [] : [...(panels.offsets ?? [])]
+    // 图标偏移表：段号就是图标序号。只写原文件里真有的段；`OFFSET_NUM` 只是槽位声明，
+    // 按它补空段会凭空造出原文件没有的段。
+    ...[...(panels.offsets ?? [])]
       .sort(([left], [right]) => left - right)
       .flatMap(([index, offset]) => [
         `[OFFSET${index}]`,
         ...(offset.pos ? [`POS=${offset.pos.x},${offset.pos.y}`] : []),
         ...(offset.rPos ? [`R_POS=${offset.rPos.x},${offset.rPos.y}`] : []),
+        ...genExtraOf(`OFFSET${index}`),
         "",
-      ])),
+      ]),
     ...background,
   ]
-  files.push({ path: `${directory}gen.ini`, data: text(panel.join("\n")) })
+  files.push({ path: paths.gen ?? `${directory}gen.ini`, data: text(panel.join("\n")) })
   return files
 }

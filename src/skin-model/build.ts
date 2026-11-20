@@ -62,6 +62,7 @@ function containerIn(container: KeyContainer, state: number | undefined, key: Ke
     ...(patch.text ? { text: { ...container.text, ...patch.text } } : {}),
     ...(patch.icon ? { icon: patch.icon } : {}),
     ...(patch.press ? { press: patch.press } : {}),
+    ...(patch.pressAnim ? { pressAnim: patch.pressAnim } : {}),
   }
 }
 
@@ -81,6 +82,7 @@ export function containerWithState(container: KeyContainer, override: Partial<Ke
     ...(override.text ? { text: { ...container.text, ...override.text } } : {}),
     ...(override.icon ? { icon: override.icon } : {}),
     ...(override.press ? { press: override.press } : {}),
+    ...(override.pressAnim ? { pressAnim: override.pressAnim } : {}),
   }
 }
 
@@ -130,6 +132,7 @@ export async function buildBoard(model: SkinModel, board: Board, state?: number)
           ...container.fore.flatMap((layer) => (layer.anim ? [layer.anim] : [])),
           ...(container.back?.anim ? [container.back.anim] : []),
           ...(container.press ? [container.press] : []),
+          ...(container.pressAnim ? [container.pressAnim] : []),
         ]),
       ],
       editable: key.editable ?? true,

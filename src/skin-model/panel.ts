@@ -159,6 +159,27 @@ export type BoardPanels = {
    * 按键用 `stateRefs` 引用；没被引用的段同样保留，否则导出就丢了。
    */
   tips?: ReadonlyMap<number, import("./key.ts").TipBody>
+  /** 布局文件自己的列表/气泡/菜单声明；写布局文件用它，写 `gen.ini` 用 `gen*` 那一套。 */
+  layoutList?: ListPanel
+  layoutHint?: HintBubble
+  layoutMore?: MoreMenu
+  /** `gen.ini` 自己的列表/气泡/菜单声明。两边同名字段属于不同文件，不能合并成一份写两次。 */
+  genList?: ListPanel
+  genHint?: HintBubble
+  genMore?: MoreMenu
+  /**
+   * 段里没有被建模的字段，按段名保留原始行（`NON_SPLIT_PANEL_REGION`、`SSF_BG`，
+   * 以及同一段里重复出现的同名字段）。写回时追加在对应段内：丢掉它们等于改写原文件。
+   */
+  extraFields?: ReadonlyMap<string, readonly string[]>
+  /** `gen.ini` 各段里没有被建模的原始行；写 `gen.ini` 时追加回对应段。 */
+  genExtraFields?: ReadonlyMap<string, readonly string[]>
+  /** 布局文件是否显式声明了 `[PANEL] SIZE`；没声明时容器尺寸是从按键外框算出来的。 */
+  containerDeclared?: boolean
+  /** 布局文件里出现的非按键段名。写回时只有这些段属于布局文件，其余属于 `gen.ini`。 */
+  layoutSections?: readonly string[]
+  /** 布局文件 `[PANEL] NO_BLUR` 的原始取值；与 `gen.ini` 的 `[PANEL] NO_BLUR` 是两个字段。 */
+  layoutNoBlur?: boolean
   /**
    * 布局文件里声明但内容为空的段，按原顺序保留。
    * 有字段的段必须在 IR 里有对应字段；这里只承载「声明了这个面板但配置在别处」这一事实。

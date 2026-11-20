@@ -50,20 +50,22 @@ test("重建后重新读出保持一致", async () => {
   assert.equal(again.boards[0].keys[0].container.back?.style, "2")
 })
 
-test("重建把用到的图片重新打包成一张图集", async () => {
+test("重建保留原图集的文件名与切片", async () => {
   const archive = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
   const source = bdsSource(archive)
   assert.ok(source)
   const model = await readWith(bdsFormat, source)
   assert.ok(model.images.size > 0, "导入时没有切出图片资源")
+  assert.ok(model.atlases.length > 0, "导入时没有读到 .til 图集")
   const rebuilt = await writeWith(bdsFormat, model, source)
-  const til = rebuilt.archive.names().find((name) => name.endsWith("res/atlas.til"))
-  const png = rebuilt.archive.names().find((name) => name.endsWith("res/atlas.png"))
-  assert.ok(til && png, "重建没有生成图集")
+  const til = rebuilt.archive.names().find((name) => name.endsWith("res/bg.til"))
+  const png = rebuilt.archive.names().find((name) => name.endsWith("res/bg.png"))
+  assert.ok(til && png, "原图集没有按原名重建")
   const text = rebuilt.archive.getText(til)
   assert.match(text, /SOURCE_RECT=/)
   const again = await readWith(bdsFormat, rebuilt)
   assert.ok(again.images.size > 0, "重建的图集读不出图片")
+  assert.equal(again.atlases.length, model.atlases.length)
 })
 
 test("读出面板的候选栏、气泡、列表与工具栏", async () => {
@@ -97,11 +99,13 @@ test("重建后仍能读回面板组件", async () => {
   assert.equal(again?.list?.cellSize?.width, 100)
 })
 
-test("图集超过一页时按页切分", async () => {
+test("不在图集里的散图超过一页时按页切分", async () => {
   const archive = SkinArchive.open(new Uint8Array(bdsFixture()), "bds")
   const source = bdsSource(archive)
   assert.ok(source)
   const model = await readWith(bdsFormat, source)
+  // 清空原图集，让样式引用到的切片作为散图重新打包，才能逼出分页。
+  model.atlases = []
   // 造一张比单页还高的图片，逼出第二页。
   const tall = { width: 8, height: 4096, data: new Uint8Array(8 * 4096 * 4) }
   model.images = new Map([...model.images, ["tall", tall]])

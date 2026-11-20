@@ -80,8 +80,11 @@ export async function openSkin(archive: SkinArchive, options: OpenSkinOptions = 
   })
   if (!source) return
   const model = await importArchive(archiveOfNative(source), format, entry.importer(source, options))
-  // 能力声明属于格式注册表：导入时填进模型，导出与损失报告按它判定。
-  model.profiles = [{ format, capabilities: entry.capabilities }]
+  // 格式能力以注册表为准；importer 从格式自带声明里读出的内容（BDS 的 `gen.ini` 段）留着，
+  // 它只作参考，不参与判定。
+  model.profiles = model.profiles.length
+    ? model.profiles.map((profile) => ({ ...profile, format, capabilities: entry.capabilities }))
+    : [{ format, capabilities: entry.capabilities }]
   return { format, model, source }
 }
 

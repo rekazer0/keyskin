@@ -42,7 +42,10 @@ const ACTION_FIELDS: ReadonlyArray<{ event: KeyEvent; field: string }> = [
   { event: "swipe-right", field: "RIGHT" },
 ]
 
-/** 一个 `[TIPn]` 段 → 段内容；段不存在或没有内容时返回 undefined。 */
+/**
+ * 一个 `[TIPn]` 段 → 段内容。空段返回空对象而不是 undefined：
+ * 段头存在本身就是文件里的事实，写回时要还原，不能因为没读到字段就当它不存在。
+ */
 export function tipBodyOf(document: IniDocument, section: number, options: TipReadOptions): TipBody | undefined {
   const name = `TIP${section}`
   if (!document.sections().includes(name)) return
@@ -79,10 +82,10 @@ export function tipBodyOf(document: IniDocument, section: number, options: TipRe
       }
       : {}),
   }
-  return Object.keys(body).length ? body : undefined
+  return body
 }
 
-/** 板上所有 `[TIPn]` 段；有引用的和没引用的都在，段号是键。 */
+/** 板上所有 `[TIPn]` 段；有引用的、没引用的、内容为空的都在，段号是键。 */
 export function tipPoolOf(document: IniDocument, options: TipReadOptions): Map<number, TipBody> {
   const pool = new Map<number, TipBody>()
   for (const section of document.sections()) {
@@ -114,7 +117,7 @@ export function tipRefsOf(overrides: readonly KeyStateOverride[] | undefined): T
   return refs
 }
 
-/** 一个状态覆盖写成 `[TIPn]` 段的行；没有可写内容时返回空数组。 */
+/** 一个状态覆盖写成 `[TIPn]` 段的行；字段全空的段也要写段头，段头本身是文件里的事实。 */
 export function tipLines(override: TipBody, section: number, actionValue: (action: KeyAction | undefined) => string | undefined): string[] {
   const lines = [`[TIP${section}]`]
   const container = override.container
@@ -134,5 +137,5 @@ export function tipLines(override: TipBody, section: number, actionValue: (actio
     const value = actionValue(override.actions?.[event])
     if (value !== undefined) lines.push(`${field}=${value}`)
   }
-  return lines.length > 1 ? [...lines, ""] : []
+  return [...lines, ""]
 }

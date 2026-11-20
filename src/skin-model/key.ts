@@ -46,6 +46,8 @@ export type KeyContainer = {
   icon?: string
   /** 按下时整键的效果样式。 */
   press?: string
+  /** 按下时的动效样式；与 `press` 是原文件里两个不同字段，必须分开存。 */
+  pressAnim?: string
 }
 
 /** 某个皮肤状态下的按键差异（显示/动作/样式覆盖）。 */
@@ -134,6 +136,7 @@ export function styleReferences(key: Key): string[] {
     ...key.container.fore.map((layer) => layer.anim),
     key.container.back?.anim,
     key.container.press,
+    key.container.pressAnim,
   ]
   return ids.filter((id): id is string => Boolean(id)).filter((id, index, all) => all.indexOf(id) === index)
 }
