@@ -17,7 +17,7 @@ import { filesOf } from "@/skin-model/pipeline.ts"
 import type { SoundBinding } from "@/skin-model/sound.ts"
 import type { SkinStyle } from "@/skin-model/style.ts"
 import type { AppearanceSet } from "@/skin-model/activation.ts"
-import type { Orientation } from "@/skin-model/types.ts"
+import type { Orientation, Theme } from "@/skin-model/types.ts"
 import { atlasesOfTheme } from "./atlas.ts"
 import { boardsOfTheme } from "./board.ts"
 import { arrayOf, objectOf, textOf } from "./json.ts"
@@ -34,7 +34,7 @@ import {
   skinJsonOf,
   SXI_OPAQUE,
 } from "./skin.ts"
-import { stylesOfTheme, type SxiAudioLookup } from "./style.ts"
+import { imageStemOf, stylesOfTheme, type SxiAudioLookup } from "./style.ts"
 
 export type SxiSource = {
   /** 皮肤包内的全部文件。 */
@@ -222,13 +222,15 @@ export async function sxiToModel(documents: SkinDocuments): Promise<SkinModel> {
   return model
 }
 
-/** 样式表里所有主题的音效图层（跨主题收集）。 *//* —— 写回 —— */
+/* —— 写回 —— */
 
-/** 图片写回统一成 PNG；切片是派生资源，不单独成文件。 */
-function pngPathOf(id: string): string {
-  const hash = id.lastIndexOf("#")
-  const path = hash < 0 ? id : id.slice(0, hash)
-  return path.replace(/\.[^.\/]+$/, "") + ".png"
+/** 图片写回统一成 PNG；SXI 自己的包内路径原样保留，别的格式的图片放进主题资源目录。 */
+function pngPathOf(id: string, fallback: Theme): string {
+  const path = id.split("#")[0]
+  // 命名空间前缀（`bda:`/`bds:`）与分辨率目录（`1080/`）是别的格式的资源名，不是手心路径。
+  const foreign = /^[a-z]+:/i.test(path) || /^\d+\//.test(path)
+  if (!foreign) return path.replace(/\.[^./]+$/, "") + ".png"
+  return `${fallback}/skin/res/${imageStemOf(path)}.png`
 }
 
 /** 模型 → 文档。手心包是两份 JSON、若干 `.layout` 与图片音效。 */
@@ -239,7 +241,7 @@ async function sxiFromModel(model: SkinModel): Promise<SkinDocuments> {
   const renamed = new Map<string, string>()
   for (const [id, image] of model.images) {
     if (id.includes("#")) continue
-    const path = pngPathOf(id)
+    const path = pngPathOf(id, model.meta.theme)
     if (path !== id) renamed.set(id, path)
     binaries.set(path, encodePng(image))
     roles.set(path, { kind: "image" })
