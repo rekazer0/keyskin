@@ -287,7 +287,8 @@ async function renderBoard(model, board, options) {
   mkdirSync(dirname(options.out), { recursive: true })
   writeFileSync(options.out, await encodePng(canvas))
   console.log(`板：${board.id}（${board.kind}，${board.theme}/${board.orientation}）`)
-  console.log(`顶栏：${frame.header ? `${frame.header.rect.height}px（${composing ? "候选栏" : "工具栏"}）` : "无"}`)
+  const headerName = frame.header?.candidates.length ? "候选栏" : "工具栏"
+  console.log(`顶栏：${frame.header ? `${frame.header.rect.height}px（${headerName}）` : "无"}`)
   console.log(`容器：${frame.container.width}x${frame.container.height}，板偏移 y=${frame.board.y}，缩放 ${frame.pixelScale}，画布 ${width}x${height}px`)
   console.log(`渲染项：${frame.items.length}`)
   console.log(`输出：${options.out}（${statSync(options.out).size} 字节）`)

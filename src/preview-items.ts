@@ -139,7 +139,8 @@ export function paddedRect(item: PreviewItem): Rect {
 
 export function persistVisible(persist: string | undefined, composing: boolean): boolean {
   const value = persist?.trim()
-  if (value === "0") return false
-  if (value === "3") return true
-  return composing === (value === "2")
+  if (value === "0" || value === "hidden") return false
+  if (value === "3" || value === "always") return true
+  if (value === "2" || value === "composing") return composing
+  return !composing
 }

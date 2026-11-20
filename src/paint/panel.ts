@@ -10,7 +10,7 @@ import type { ToolbarItem } from "../skin-model/panel.ts"
 import { bitmapOf } from "../skin-model/image.ts"
 import { styleLabel, styleLayers, styleText } from "../skin-model/style.ts"
 import type { Rect } from "../preview-items.ts"
-import { isFullPanelPreviewItem, keyAnimationStyles, previewSurfaceColor } from "../preview-items.ts"
+import { isFullPanelPreviewItem, keyAnimationStyles, persistVisible, previewSurfaceColor } from "../preview-items.ts"
 import { actionText } from "../skin-model/inspect.ts"
 import { boardRenders } from "./board.ts"
 import { paintKey, type KeyAnimationState, type KeyPaintEnv, type KeyVisuals, type LayerPaint } from "./key.ts"
@@ -357,14 +357,17 @@ function anchoredRect(item: ToolbarItem, bar: Rect): Rect {
   return { x, y, width: size.width, height: size.height }
 }
 
-/** 一条候选栏/工具栏：图标按锚点定位并取样式图层，候选词项的矩形单独给出。 */
+/** 一条候选栏/工具栏：图标按锚点定位并取样式图层，候选词项的矩形单独给出。
+ *
+ * 可见时机按 `PERSIST` 在取数阶段过滤，`frame` 里只留该显示的项。 */
 async function buildStrip(
   model: SkinModel,
   bar: Rect,
   items: readonly ToolbarItem[],
+  composing: boolean,
 ): Promise<PanelStrip> {
-  const built = await Promise.all(items.map(async (item): Promise<PanelHeaderItem | undefined> => {
-    if (item.visible === false) return undefined
+  const shown = items.filter((item) => item.visible !== false && persistVisible(item.persist, composing))
+  const built = await Promise.all(shown.map(async (item): Promise<PanelHeaderItem> => {
     const rect = anchoredRect(item, bar)
     if (item.role === "candidates") return { rect }
     const [back, fore] = await Promise.all([
@@ -373,29 +376,28 @@ async function buildStrip(
     ])
     return { rect, ...(back ? { back } : {}), ...(fore ? { fore } : {}) }
   }))
-  const candidates = items.find((item) => item.role === "candidates" && item.visible !== false)
+  const candidates = shown.find((item) => item.role === "candidates")
   return {
     rect: bar,
-    items: built.filter((item): item is PanelHeaderItem => item !== undefined),
+    items: built,
     ...(candidates ? { candidatesRect: anchoredRect(candidates, bar) } : {}),
   }
 }
 
-/** 顶栏：输入中按候选栏的全局声明取几何与背景，未输入按板的工具栏取。 */
+/** 顶栏：候选栏存在就是候选栏（图标按 `PERSIST` 随 composing 切换），否则用工具栏。 */
 async function buildHeader(
   model: SkinModel,
   board: Board,
   size: Size<number>,
   composing: boolean,
 ): Promise<PanelHeaderFrame | undefined> {
-  if (composing) {
-    const bars = (board.panels?.candidates ?? []).filter((bar) => bar.viewRect)
-    const first = bars[0]
-    if (!first?.viewRect) return undefined
+  const bars = (board.panels?.candidates ?? []).filter((bar) => bar.viewRect)
+  const first = bars[0]
+  if (first?.viewRect) {
     const height = first.viewRect.size.height
     const strips = await Promise.all(bars.map(async (bar): Promise<PanelStrip> => {
       const rect = { x: 0, y: 0, width: size.width, height: bar.viewRect?.size.height ?? height }
-      return buildStrip(model, rect, bar.icons ?? [])
+      return buildStrip(model, rect, bar.icons ?? [], composing)
     }))
     return {
       rect: { x: 0, y: 0, width: size.width, height },
@@ -411,7 +413,7 @@ async function buildHeader(
   return {
     rect,
     candidates: [],
-    toolbar: await buildStrip(model, rect, toolbar.items),
+    toolbar: await buildStrip(model, rect, toolbar.items, composing),
     ...(toolbar.style ? { background: await paintOf(model, toolbar.style) } : {}),
   }
 }
@@ -571,8 +573,9 @@ export function paintPanel(
     const sceneOwnsToolbar = Boolean(frame.scene && (!frame.scene.partial || frame.items.some(
       (item) => actionText(item.key.actions?.press) === "F14" && frame.sceneKeys.has(item.section),
     )))
-    const toolbar = sceneOwnsToolbar ? undefined : header.toolbar
-    for (const strip of options.composing ? header.candidates : toolbar ? [toolbar] : []) {
+    // 顶栏的可见项已经在取数时按 PERSIST 过滤；候选栏在时画候选栏，否则画工具栏。
+    const strips = sceneOwnsToolbar ? [] : header.candidates.length ? header.candidates : header.toolbar ? [header.toolbar] : []
+    for (const strip of strips) {
       for (const item of strip.items) {
         if (item.back) paintLayer(context, item.back.layer, item.back.bitmap, item.rect)
         if (item.fore) paintLayer(context, item.fore.layer, item.fore.bitmap, item.rect)
