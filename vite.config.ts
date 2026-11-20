@@ -56,6 +56,10 @@ export default defineConfig({
   },
   // 优化依赖预构建
   optimizeDeps: {
+    // taffy-layout 用 new URL('taffy_wasm_bg.wasm', import.meta.url) 定位自己的 wasm。
+    // 预构建会把模块搬到 .vite/deps/，相对路径随之失效、dev server 回落到 index.html，
+    // wasm 于是收到 HTML 而不是二进制。排除后 import.meta.url 指向包内真实路径。
+    exclude: ["taffy-layout"],
     // 启动时扫描全部源码，避免运行中发现新依赖触发重新预构建、旧 chunk 失效导致白屏
     entries: ["index.html", "picker.html", "src/**/*.ts"],
     include: [

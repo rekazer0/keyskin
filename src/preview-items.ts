@@ -85,6 +85,17 @@ export function previewFallbackText(key: PreviewItem, hasForeground: boolean): s
   return key.text
 }
 
+/**
+ * 按键居中显示的字符：显示文本优先，其次文字层内容，最后取按下动作的文本。
+ * 编辑器用它在源代码与画布之间按字符找回同一个键。
+ */
+export function previewCenter(item: PreviewItem): string {
+  if (item.key.label) return item.key.label
+  if (item.text) return item.text
+  const action = item.key.actions.press
+  return action?.kind === "text" ? action.value : ""
+}
+
 export function isAdditiveSelection(event: Pick<MouseEvent, "shiftKey" | "metaKey" | "ctrlKey">): boolean {
   return event.shiftKey || event.metaKey || event.ctrlKey
 }

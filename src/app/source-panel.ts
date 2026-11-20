@@ -22,7 +22,7 @@ import { setMobilePane } from "./mobile-layout"
 import { isEditing } from "./edit-history"
 import { openStylePicker } from "./style-picker"
 import { openStyleReferenceStateImage } from "./style-references"
-import { previewItems } from "../preview-items.ts"
+import { previewCenter } from "../preview-items.ts"
 
 export function syncInspectorSourceToggle(button: HTMLButtonElement): void {
   const active = appState.inspectorTab === "source"
@@ -373,11 +373,12 @@ export function selectKeyFromSourceOffset(offset: number): void {
   const section = sxiSection ?? (bdaSource || palmBoard ? undefined : iniSectionAtOffset(source.value, offset))
   const panelKey = property && property !== "cand" ? property : undefined
   if (!section && !panelKey) return
-  const items = palmBoard ? preview.keys : appState.layoutDocument ? previewItems(appState.layoutDocument) : []
+  // 画布上的渲染项就是 IR 的布局树与按键容器算出的投影，不再从 INI 另外装配一份。
+  const items = preview.keys
   const match = items.find((item) => item.editable && (
     section !== undefined
       ? item.section === section || item.sections.includes(section)
-      : item.center.trim().toLowerCase() === panelKey
+      : previewCenter(item).trim().toLowerCase() === panelKey
   ))
   if (!match) return
   if (appState.selectedKeySections.length === 1 && appState.selectedKeySections[0] === match.section) return

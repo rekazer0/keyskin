@@ -53,6 +53,7 @@ import { animationKeySample } from "./animation-key-sample"
 import type { PreviewItem } from "../preview-items.ts"
 import { animationStyleActions, animationStyleCard } from "./animation-style-inspector"
 import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "../style-card.ts"
+import { irKeyframeSection } from "./motion-ir-panel"
 
 const KIND_ICONS: Record<LegacyAnimationKind, string> = { basic: "blend", combination: "layers", frame: "list-video", particle: "sparkles" }
 const TYPE_ICONS = ["blend", "rotate-cw", "move", "scaling", "scaling", "rotate-3d"]
@@ -325,6 +326,8 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   })
   const selected = selectedAnimation(items)
   const entry = entries.find((candidate) => candidate.section === selected)
+  // IR 的关键帧编辑与格式参数并列：读 MotionNode.track.keyframes，写回同一份 anim.ini。
+  const irSection = entry ? irKeyframeSection(entry) : undefined
   const listRows: HTMLElement[] = []
   const maxIndex = Math.max(0, ...model.entries.map((candidate) => candidate.index ?? 0))
   if (model.animNum !== undefined && model.animNum < maxIndex) {
@@ -405,7 +408,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
           run: () => edit((current) => writeLegacyAnimationFields(current, entry.section, { CATEGORY: String(kindCategory(entry.kind)) })),
         })]
       : [],
-    sections: entry ? parameterSections(entry, byIndex) : [],
+    sections: entry ? [...parameterSections(entry, byIndex), ...(irSection ? [irSection] : [])] : [],
   })
   container.dataset.path = appState.selectedPath
   return true
