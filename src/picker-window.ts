@@ -14,16 +14,7 @@ import type { Rect } from "./preview-items"
 import { IniDocument } from "./ini"
 import type { TextVisual, VisualResolver } from "./atlas"
 import { bindListActionKeys, bindListboxKeys, emptyState, hydrateShortcuts, listToolbar, searchField } from "./dom-element"
-
-type ImagePayload = {
-  path: string
-  dataURL: string
-  slices: TileSlice[]
-  selectedIndex?: number
-  editable: boolean
-  styleName?: string
-  styleLibrary?: boolean
-}
+import type { NativeImagePickerPayload } from "./app/types"
 
 type ResourcePayload = { path: string; dataURL: string }[]
 
@@ -52,11 +43,11 @@ export type StyleLibraryPayload = {
   imageSelection?: boolean
   soundOnly: boolean
   foreground: boolean
-  bda: boolean
   kind: string
   currentID: string
   imagesCompatible: boolean
   applyToStyle?: boolean
+  replaceReferences?: boolean
   bitmaps: Record<string, string>
   animationText: string
   animationFiles: Record<string, number[]>
@@ -109,6 +100,7 @@ const canvas = $("#picker-canvas") as HTMLCanvasElement
 const stage = $(".picker-canvas-stage")
 const sliceSelect = $<HTMLSelectElement>("#picker-slice")
 const sliceApply = $<HTMLButtonElement>("#picker-apply")
+const sliceApplyNewStyle = $<HTMLButtonElement>("#picker-apply-new-style")
 const sliceActions = $(".picker-slice-actions")
 const libraryView = $("#style-library-view")
 const libraryGrid = $("#style-library-grid")
@@ -121,7 +113,7 @@ const libraryPreview = $("#style-library-preview")
 const libraryPreviewImage = $("#style-library-preview-image")
 const libraryApply = $("#style-library-apply") as HTMLButtonElement
 const libraryApplyToStyle = $("#style-library-apply-to-style") as HTMLButtonElement
-const librarySlice = $("#style-library-slice") as HTMLButtonElement
+const libraryReplaceAll = $("#style-library-replace-all") as HTMLButtonElement
 const libraryImport = $("#style-library-import") as HTMLButtonElement
 const libraryNew = $("#style-library-new") as HTMLButtonElement
 const libraryImportInput = $("#style-library-import-input") as HTMLInputElement
@@ -133,7 +125,7 @@ bindListActionKeys(libraryGrid, libraryToolbar)
 const emitMain = pickerEmitter("main", () => parent)
 const onMain = pickerListener(() => parent)
 
-let imagePayload: ImagePayload | undefined
+let imagePayload: NativeImagePickerPayload | undefined
 let image: HTMLImageElement | undefined
 let fit = 0
 let zoom = 1
@@ -230,6 +222,7 @@ function selectSlice(index: number | undefined): void {
   imagePayload.selectedIndex = index
   sliceSelect.value = index === undefined ? "" : String(index)
   sliceApply.disabled = !imagePayload.editable || index === undefined
+  sliceApplyNewStyle.disabled = sliceApply.disabled
   drawImage()
 }
 
@@ -419,14 +412,15 @@ function previewLibraryItem(card: HTMLElement, selected: LibraryTarget): void {
   $("#style-library-preview-title").textContent = selected.imagePath?.split("/").pop() ?? (sound?.label ?? `样式 ${style?.label ?? selected.styleID}`)
   $("#style-library-preview-meta").textContent = selected.imagePath ?? (style?.kind === "anim" ? style.summary ?? "" : sound?.filename ?? style?.sound ?? "")
   const compatible = selected.imagePath ? library.imagesCompatible : library.imageSelection ? style?.kind === "image" : Boolean(style?.compatible ?? sound)
+  const replacing = Boolean(selected.styleID && library.replaceReferences)
+  libraryApply.textContent = replacing ? "更换" : "应用"
   libraryApply.disabled = !compatible || !library.editable
+  libraryReplaceAll.hidden = !replacing
+  libraryReplaceAll.disabled = libraryApply.disabled || selected.styleID === library.currentID
   libraryApplyToStyle.hidden = !selected.imagePath || !library.applyToStyle || Boolean(library.imageSelection || library.initialImages)
   libraryApplyToStyle.disabled = !library.editable
   // 不兼容时只禁用并说明原因，不改按钮文字。
   libraryApply.title = compatible ? "" : "样式类型不兼容"
-  // 引用卡单击打开这里并定位当前样式；改它的图片切片从这里进。
-  librarySlice.hidden = style?.kind !== "image" || library.bda
-  librarySlice.disabled = !library.editable
   libraryDuplicate.disabled = !selected.styleID || !library.canAdd || !library.editable
   libraryPreview.hidden = false
 }
@@ -625,10 +619,13 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
   renderLibrary()
 }
 
-function showImage(payload: ImagePayload): void {
+function showImage(payload: NativeImagePickerPayload): void {
   imagePayload = payload
   styleName.textContent = payload.styleName ?? ""
   sliceApply.disabled = true
+  sliceApplyNewStyle.disabled = true
+  sliceApplyNewStyle.hidden = !payload.canApplyNewStyle
+  sliceActions.toggleAttribute("data-new-style", Boolean(payload.canApplyNewStyle))
   sliceSelect.disabled = true
   sliceSelect.replaceChildren(new Option("选择切片", ""))
   sliceSelect.options[0]!.disabled = true
@@ -680,7 +677,7 @@ libraryImportInput.addEventListener("change", async () => {
   void emitMain("style-library-import", { session, name: file.name, bytes: [...new Uint8Array(await file.arrayBuffer())] })
 })
 libraryApplyToStyle.addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-apply", { ...librarySelected, toStyle: true }) })
-librarySlice.addEventListener("click", () => { if (librarySelected?.styleID) emitLibrary("style-library-slice", librarySelected) })
+libraryReplaceAll.addEventListener("click", () => { if (librarySelected?.styleID) emitLibrary("style-library-apply", { ...librarySelected, replaceAll: true }) })
 $("#style-library-edit").addEventListener("click", () => { if (librarySelected) emitLibrary("style-library-edit", librarySelected) })
 $("#style-library-cancel").addEventListener("click", () => void emitMain("picker-close"))
 function closeLibraryPreview(): void {
@@ -717,10 +714,12 @@ bindSlicePickerZoom(stage, canvas, (factor) => {
   drawImage()
 })
 sliceSelect.addEventListener("change", () => selectSlice(Number(sliceSelect.value)))
-sliceApply.addEventListener("click", () => {
+function applySlice(newStyle = false): void {
   const index = imagePayload?.selectedIndex
-  if (view === "image" && index !== undefined) void emitMain("image-picker-select", { index })
-})
+  if (view === "image" && imagePayload?.editable && index !== undefined) void emitMain("image-picker-select", { index, newStyle })
+}
+sliceApply.addEventListener("click", () => applySlice())
+sliceApplyNewStyle.addEventListener("click", () => applySlice(true))
 canvas.addEventListener("click", (event) => {
   const slice = sliceAtPointer(event)
   if (slice) selectSlice(slice.index)
@@ -732,7 +731,8 @@ canvas.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.repeat && !event.isComposing) sliceApply.click()
 })
 
-await onMain<ImagePayload>("image-picker-data", (payload) => showImage(payload))
+// Start the handshake only after the native or frame listeners are registered.
+await onMain<NativeImagePickerPayload>("image-picker-data", (payload) => showImage(payload))
 await onMain("image-picker-show-list", () => showResourceList())
 await onMain<StyleLibraryPayload>("style-library-data", (payload) => showStyleLibrary(payload))
 await onMain<{ path: string }>("style-library-imported", ({ path }) => {

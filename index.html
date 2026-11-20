@@ -27,7 +27,7 @@
         <button class="ui-icon-button" type="button" data-workspace-page="ai" aria-label="AI 设计" disabled><span data-icon="sparkles" aria-hidden="true"></span><span>AI 设计</span></button>
       </div>
       <div class="ui-workspace-navigation-actions">
-        <button id="workspace-export" class="ui-icon-button" type="button" aria-label="分享" aria-haspopup="dialog" aria-controls="share-dialog" disabled><span data-icon="share" aria-hidden="true"></span><span>分享</span></button>
+        <button id="workspace-export" class="ui-icon-button" type="button" aria-label="分享" title="分享与导出" data-shortcut="shift+S" aria-haspopup="dialog" aria-controls="share-dialog" disabled><span data-icon="share" aria-hidden="true"></span><span>分享</span></button>
         <button class="ui-icon-button" type="button" data-settings-entry="settings" aria-controls="settings-workspace" aria-label="设置"><span data-icon="settings" aria-hidden="true"></span><span>设置</span></button>
       </div>
     </nav>
@@ -268,6 +268,10 @@
                     <button id="recent-next" class="ui-icon-button" data-size="sm" type="button" aria-label="下一页" title="下一页" aria-controls="welcome-recent-grid"><span data-icon="chevron-right" aria-hidden="true"></span></button>
                   </div>
                   <button id="recent-clear" class="ui-button welcome-head-clear" data-variant="quiet" data-size="sm" type="button" hidden>清除记录</button>
+                  <div id="recent-selection" class="ui-list-toolbar" role="group" aria-label="皮肤多选" hidden>
+                    <button id="recent-cancel-selection" class="ui-button" data-variant="quiet" data-size="sm" type="button">取消</button>
+                    <button id="recent-delete" class="ui-button" data-variant="danger" data-size="sm" data-list-action="remove" type="button" disabled>删除</button>
+                  </div>
                 </div>
                 <div id="recent-viewport" class="recent-viewport" hidden>
                   <div id="welcome-recent-grid" class="recent-grid" role="listbox" aria-labelledby="welcome-recent-title"></div>
@@ -843,9 +847,20 @@
             </section>
 
             <section class="settings-page" data-settings-panel="files" role="tabpanel" id="settings-panel-files" aria-labelledby="settings-tab-files" hidden>
-              <section class="settings-group" aria-labelledby="settings-recent-title">
-                <h3 id="settings-recent-title">我的皮肤</h3>
-                <label class="settings-row"><span><span id="recent-history-label">保留数量</span><small id="recent-history-note">默认保留 27 条，填 0 不限。减少数量会移除较早的记录。</small></span><span class="ui-input settings-number"><input id="recent-history-limit" type="number" min="0" step="1" required value="27" inputmode="numeric" aria-labelledby="recent-history-label" aria-describedby="recent-history-note"><span class="ui-input-affix">条</span></span></label>
+              <section class="settings-group" aria-labelledby="settings-skin-files-title">
+                <h3 id="settings-skin-files-title">皮肤文件</h3>
+                <div id="settings-storage-section">
+                  <label id="source-directory-enabled-setting" class="settings-row"><span>保存皮肤源码<small>把打开的皮肤解包到本地，供其他编辑器查看。</small></span><input id="source-directory-enabled" class="ui-switch" type="checkbox" role="switch"></label>
+                  <div class="source-directory-setting">
+                    <span class="settings-path">
+                      <input id="source-directory" type="text" autocomplete="off" spellcheck="false" aria-label="皮肤源码保存目录">
+                      <button id="choose-source-directory" class="ui-icon-button" type="button" title="选择目录" aria-label="选择皮肤源码保存目录"><span class="system-symbol" data-icon="folder" aria-hidden="true"></span></button>
+                      <button id="reset-source-directory" class="ui-icon-button" type="button" title="恢复内置目录" aria-label="恢复内置皮肤源码保存目录"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span></button>
+                    </span>
+                    <small id="source-directory-status"></small>
+                  </div>
+                </div>
+                <label class="settings-row"><span><span id="recent-history-label">保留数量</span><small id="recent-history-note">默认保留 27 项，填 0 不限。保存后移除超额的打开记录；创建源码时清理超额的键设源码目录，不删除皮肤包。</small></span><span class="ui-input settings-number"><input id="recent-history-limit" type="number" min="0" max="2147483647" step="1" required value="27" inputmode="numeric" aria-labelledby="recent-history-label" aria-describedby="recent-history-note"><span class="ui-input-affix">项</span></span></label>
               </section>
             </section>
 
@@ -857,19 +872,6 @@
                 <label class="settings-row"><span>源代码补全</span><input id="source-completion-enabled" class="ui-switch" type="checkbox" role="switch"></label>
                 <label class="settings-row"><span>值解析与快捷编辑</span><input id="source-value-hints-enabled" class="ui-switch" type="checkbox" role="switch"></label>
                 <label class="settings-row"><span>当前行释义</span><input id="source-line-explanation-enabled" class="ui-switch" type="checkbox" role="switch"></label>
-              </section>
-              <section id="settings-storage-section" class="settings-group" aria-labelledby="settings-storage-title">
-                <h3 id="settings-storage-title">源码存储</h3>
-                <p class="settings-group-note">把打开的皮肤解包到本地目录，方便用其他编辑器查看</p>
-                <label id="source-directory-enabled-setting" class="settings-row"><span>保存可访问的源代码</span><input id="source-directory-enabled" class="ui-switch" type="checkbox" role="switch"></label>
-                <div class="source-directory-setting">
-                  <span class="settings-path">
-                    <input id="source-directory" type="text" autocomplete="off" spellcheck="false" aria-label="皮肤源码保存目录">
-                    <button id="choose-source-directory" class="ui-icon-button" type="button" title="选择目录" aria-label="选择皮肤源码保存目录"><span class="system-symbol" data-icon="folder" aria-hidden="true"></span></button>
-                    <button id="reset-source-directory" class="ui-icon-button" type="button" title="恢复内置目录" aria-label="恢复内置皮肤源码保存目录"><span class="system-symbol" data-icon="undo-2" aria-hidden="true"></span></button>
-                  </span>
-                  <small id="source-directory-status"></small>
-                </div>
               </section>
             </section>
 

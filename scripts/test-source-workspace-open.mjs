@@ -17,6 +17,11 @@ try {
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   await page.waitForSelector('.template-card')
+  const group = page.locator('#settings-panel-files .settings-group')
+  assert.equal(await group.count(), 1, 'File settings uses a single group')
+  assert.equal(await group.locator('#recent-history-limit').count(), 1)
+  const storage = group.locator('#settings-storage-section')
+  assert.equal(await storage.getAttribute('hidden'), '', 'browser still hides native source storage')
   const result = await page.evaluate(async (files) => {
     const { mockIPC, clearMocks } = await import('/node_modules/@tauri-apps/api/mocks.js')
     const { loadSourceWorkspace } = await import('/src/app/archive-io.ts')
@@ -55,8 +60,56 @@ try {
   // The skeleton the canvas draws is a separate package; the skin holds only its own files.
   assert.deepEqual(result.names, payload.map((file) => file.path).sort())
   assert.deepEqual(result.files.sort((a, b) => a.path.localeCompare(b.path)), payload.sort((a, b) => a.path.localeCompare(b.path)))
+  const retention = await page.evaluate(async bytes => {
+    const { mockIPC, clearMocks } = await import('/node_modules/@tauri-apps/api/mocks.js')
+    const { appState } = await import('/src/app/state.ts')
+    const { openSkinBytes } = await import('/src/app/archive-io.ts')
+    const { applySourceDirectory } = await import('/src/app/source-workspace.ts')
+    const calls = []
+    mockIPC((command, args) => {
+      if (command === 'prepare_source_directory') return args.path
+      if (command === 'create_source_workspace') {
+        calls.push({ directory: args.directory, sourceLimit: args.sourceLimit })
+        return `/test/custom/workspace-${calls.length}`
+      }
+      if (command === 'plugin:fs|watch') return 1
+      if (command === 'plugin:window|get_all_windows') return []
+    })
+    try {
+      await applySourceDirectory('/test/custom')
+      const setting = document.querySelector('#recent-history-limit')
+      const initialLimit = setting.valueAsNumber
+      const historySizes = []
+      for (const [limit, action] of [[5, 'cancel'], [2, 'save'], [0, 'save']]) {
+        document.querySelector('#workspace-navigation [data-settings-entry="settings"]').click()
+        document.querySelector('#settings-tab-files').click()
+        setting.valueAsNumber = limit
+        setting.dispatchEvent(new Event('input', { bubbles: true }))
+        document.querySelector(`#settings-${action}`).click()
+        await openSkinBytes(Uint8Array.from(bytes), `/test/custom-${limit}.ssf`)
+        while (appState.sourceWorkspacePendingArchive) await new Promise(resolve => setTimeout(resolve, 10))
+        historySizes.push(JSON.parse(localStorage.getItem('recent-files')).length)
+      }
+      return { initialLimit, calls, historySizes: historySizes.slice(1) }
+    } finally {
+      appState.stopSourceWatch?.()
+      clearMocks()
+    }
+  }, [...ssfFixture()])
+  assert.deepEqual(retention, {
+    initialLimit: 27,
+    calls: [27, 2, 0].map(sourceLimit => ({ directory: '/test/custom', sourceLimit })),
+    historySizes: [2, 3],
+  })
+  await page.evaluate(() => {
+    localStorage.setItem('source-auto-delete', 'false')
+    localStorage.setItem('recent-history-limit', '5')
+  })
+  await page.reload()
+  await page.waitForFunction(() => localStorage.getItem('source-auto-delete') === null)
+  assert.equal(await page.locator('#recent-history-limit').inputValue(), '0', 'upgrading must not re-enable cleanup')
   assert.deepEqual(errors, [])
-  console.log('Source workspace: native Base64 payload opens with SSF preview, preserves edits and saves every original resource')
+  console.log('Source workspace: native Base64 payload opens with SSF preview, preserves edits and saves every original resource; recent history and custom source directories share the saved retention limit')
 } finally {
   await browser.close()
   await server.close()

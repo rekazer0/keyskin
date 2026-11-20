@@ -73,7 +73,7 @@
 #settings-workspace .settings-group-header > h3 { margin: 0; }
 #settings-workspace .settings-group-note { margin: 0 0 var(--space-sm); color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1.6; }
 
-#settings-workspace .settings-row {
+#settings-workspace .settings-row:where(:not([hidden])) {
   display: flex;
   align-items: center;
   justify-content: space-between;

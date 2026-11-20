@@ -459,6 +459,38 @@ function updateBdaPanel(bytes: Uint8Array, name: string, desired: JsonObject, cu
   return updateStringMapValue(bytes, 4, name, (value) => patchPanelMessage(value, desired, current, panelPatchSchema))
 }
 
+/** Change only matching references in the current appearance, preserving style definitions and raw fields. */
+export function replaceBdaStyleReferences(bytes: Uint8Array, from: BdaStyleRef, to: BdaStyleRef): Uint8Array {
+  const current = decodedAppearanceSource(decodeBdaAppearance(bytes))
+  const replace = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(replace)
+    const object = jsonObject(value)
+    if (!object) return value
+    if (object.type === from.type && object.key === from.key) return to
+    return Object.fromEntries(Object.entries(object).map(([key, item]) => [key, replace(item)]))
+  }
+  const bar: PanelPatchSchema = { backStyle: { field: 1, kind: "style" } }
+  const tab: PanelPatchSchema = {
+    ...bar, cellForeStyle: { field: 2, kind: "style" }, cellBackStyle: { field: 3, kind: "style" },
+    decoratorBackStyle: { field: 4, kind: "style" },
+  }
+  const game: PanelPatchSchema = {
+    ...bar,
+    corpusFirstTab: { field: 2, kind: "message", schema: tab },
+    corpusList: { field: 3, kind: "message", schema: {
+      backStyle: tab.backStyle, cellForeStyle: tab.cellForeStyle, cellBackStyle: tab.cellBackStyle,
+      corpusSecondTab: { field: 4, kind: "message", schema: tab },
+    } },
+    functionBar: { field: 4, kind: "message", schema: bar },
+    keys: { field: 5, kind: "stringMap", schema: keyPatchSchema },
+  }
+  return patchPanelMessage(bytes, jsonObject(replace(current))!, current, {
+    panels: { field: 4, kind: "stringMap", schema: panelPatchSchema },
+    gamePanel: { field: 7, kind: "message", schema: game },
+    dragBar: { field: 8, kind: "message", schema: bar },
+  })
+}
+
 export function applyDecodedBdaSource(path: string, bytes: Uint8Array, text: string): Uint8Array {
   const desired = jsonObject(JSON.parse(text))
   if (!desired) throw new Error("BDA 解码源码必须是 JSON 对象")

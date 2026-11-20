@@ -35,9 +35,12 @@ try {
         await page.locator('[data-mobile-action="mobile-export-open"]').click()
       } else await page.locator('#mobile-export-open').evaluate(button => button.click())
     }
-    await open()
     const share = page.locator('#share-dialog')
+    if (viewport.width === 1440) {
+      await page.keyboard.press(colorScheme === 'light' ? 'Meta+Shift+S' : 'Control+Shift+S')
+    } else await open()
     await share.waitFor({ state: 'visible' })
+    assert.equal(await page.locator('#file-operation-dialog').isVisible(), false, 'opening share does not start a save')
     assert.equal(await page.locator('.pen-file-menu, #mobile-export-dialog').count(), 0, 'removed menu and export modal are absent')
     assert.equal(await page.locator('dialog:modal').count(), 1, 'share uses one modal')
     assert.ok(await share.evaluate(node => node.contains(document.activeElement)), 'focus remains inside the modal')

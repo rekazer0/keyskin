@@ -1,7 +1,7 @@
 import { type RecentFile, type RecentThumb } from "./types"
 import { appState } from "./state"
-import { runFileOperation } from "./file-operations"
-import { prepareDocumentReplacement } from "./edit-history"
+import { runFileOperation, showError, showStatus } from "./file-operations"
+import { prepareDocumentReplacement, updateDirty } from "./edit-history"
 import { loadNativePath, loadSourceWorkspace } from "./archive-io"
 import { newDocument } from "./new-document"
 import { builtInProjectTemplateExtension } from "../operations"
@@ -11,11 +11,13 @@ import { invoke } from "@tauri-apps/api/core"
 import { canvasWrap, mode, welcomeScroller, $ } from "./dom"
 import { selectChoice } from "./mobile-layout"
 import { selectFile } from "./navigation"
-import { bindListboxKeys } from "../dom-element"
-import { playPageSlide } from "../motion"
+import { bindListActionKeys, bindListboxKeys, iconButton } from "../dom-element"
+import { confirmDeletion } from "./ask"
+import { openActionMenu } from "./context-menu"
+import { cssTimeMs, playPageSlide } from "../motion"
 import { renderBlobPreview, archiveDemoImage, MissingPreviewImageError, renderBuiltInTemplatePreview, releaseArchivePreview, showMissingPreview } from "../template-preview"
 
-export const recentFilesKey = "recent-files"
+const recentFilesKey = "recent-files"
 
 const templatePrefix = "template:"
 
@@ -25,17 +27,17 @@ function recentTemplateId(path: string): string | undefined {
 
 const mobileRecentPageSize = 9
 const desktopRecentRows = 3
-const defaultRecentHistoryLimit = 27
-const recentHistoryLimitKey = "recent-history-limit"
+const defaultFileRetentionLimit = 27
+const fileRetentionLimitKey = "recent-history-limit"
 
-function recentHistoryLimit(): number {
-  const value = Number(localStorage.getItem(recentHistoryLimitKey) ?? defaultRecentHistoryLimit)
-  return Number.isInteger(value) && value >= 0 ? value : defaultRecentHistoryLimit
+export function fileRetentionLimit(): number {
+  const value = Number(localStorage.getItem(fileRetentionLimitKey) ?? defaultFileRetentionLimit)
+  return Number.isInteger(value) && value >= 0 && value <= 0x7fffffff ? value : defaultFileRetentionLimit
 }
 
-export function saveRecentHistoryLimit(limit: number): void {
-  if (limit === recentHistoryLimit()) return
-  localStorage.setItem(recentHistoryLimitKey, String(limit))
+export function saveFileRetentionLimit(limit: number): void {
+  if (limit === fileRetentionLimit()) return
+  localStorage.setItem(fileRetentionLimitKey, String(limit))
   if (limit && readRecentFiles().length > limit) renderRecentFiles()
 }
 
@@ -65,7 +67,7 @@ export function recordRecentFile(path: string, name: string, source = "", replac
   const next = [{ path, name, at: Date.now(), source: source || undefined }, ...readRecentFiles().filter(
     (item) => item.path !== path && item.path !== templatePrefix + replacedTemplateId,
   )]
-  const limit = recentHistoryLimit()
+  const limit = fileRetentionLimit()
   localStorage.setItem(recentFilesKey, JSON.stringify(limit ? next.slice(0, limit) : next))
   appState.recentPage = 0
   renderRecentFiles()
@@ -85,7 +87,7 @@ function formatRecentTime(at: number): string {
 }
 
 function openRecentFile(item: RecentFile): void {
-  if (appState.fileOperationRunning) return
+  if (appState.fileOperationRunning || appState.recentDeleting) return
   const template = recentTemplateId(item.path)
   // 当前皮肤直接重用内存中的文档，不重新加载、不丢未保存修改。
   if (appState.archive && (template !== undefined
@@ -168,7 +170,6 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   const chevron = createIcon("chevron-right", 20)
   chevron.classList.add("ui-skin-entry-chevron")
   card.append(chevron)
-  card.addEventListener("click", () => openRecentFile(item))
   return card
 }
 
@@ -198,7 +199,7 @@ const recentPreviewQueue: HTMLButtonElement[] = []
 
 const recentPreviewQueued = new Set<HTMLButtonElement>()
 
-export function recentThumbRequest<T>(
+function recentThumbRequest<T>(
   mode: IDBTransactionMode,
   run: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
@@ -342,14 +343,13 @@ function renderRecentPage(items: RecentFile[]): void {
   const cards = items.slice(start, start + recentPageSize).map((item, position) => {
     const card = recentCard(item)
     card.role = "option"
-    card.ariaSelected = "false"
     card.tabIndex = position === 0 ? 0 : -1
     return card
   })
   $("#welcome-recent-grid").replaceChildren(...cards)
   $("#recent-viewport").hidden = !items.length
   $("#welcome-recent-empty").hidden = Boolean(items.length)
-  $("#recent-clear").hidden = !items.length
+  syncRecentSelection()
   $("#welcome-recent-hint").textContent = items.length ? `${items.length} 条` : ""
   $("#recent-pagination").hidden = pageCount <= 1
   $("#recent-page-number").textContent = pageCount > 1 ? `${index + 1} / ${pageCount}` : ""
@@ -357,12 +357,180 @@ function renderRecentPage(items: RecentFile[]): void {
   $("#recent-next").toggleAttribute("disabled", index + 1 >= pageCount)
 }
 
-export function wireRecentPage(): void {
-  $<HTMLInputElement>("#recent-history-limit").value = String(recentHistoryLimit())
+function syncRecentSelection(): void {
+  const { recentSelection, recentDeleting } = appState
   const grid = $("#welcome-recent-grid")
+  grid.setAttribute("aria-multiselectable", String(Boolean(recentSelection)))
+  for (const card of grid.querySelectorAll<HTMLElement>("[data-recent]")) {
+    card.setAttribute("aria-selected", String(recentSelection?.has(card.dataset.recent!) ?? false))
+  }
+  $("#recent-selection").hidden = !recentSelection
+  $("#recent-clear").hidden = Boolean(recentSelection) || !grid.childElementCount
+  const remove = $<HTMLButtonElement>("#recent-delete")
+  remove.disabled = !recentSelection?.size || recentDeleting
+  remove.textContent = recentSelection?.size ? `删除 (${recentSelection.size})` : "删除"
+  $<HTMLButtonElement>("#recent-cancel-selection").disabled = recentDeleting
+}
+
+async function deleteRecentFiles(paths: ReadonlySet<string>, trigger: HTMLElement): Promise<void> {
+  if (!isTauri() || appState.recentDeleting || appState.fileOperationRunning) return
+  const items = readRecentFiles().filter(item => paths.has(item.path))
+  if (!items.length) return
+  const files = items.filter(item => recentTemplateId(item.path) === undefined)
+  const scope = files.length === items.length ? "删除皮肤文件及其记录" : files.length
+    ? "删除皮肤文件及其记录；内置模板只移除记录" : "仅移除打开记录，不删除内置模板"
+  const targets = items.map(item => recentTemplateId(item.path) !== undefined ? item.name : item.path)
+  const detail = `${scope}。此操作不可撤销。${files.some(item => item.path === appState.currentPath) ? "当前文档保留在编辑器中，下次保存需选择位置。" : ""}\n\n${targets.join("\n")}`
+  appState.recentDeleting = true
+  let deleted = 0
+  const failures: string[] = []
+  try {
+    if (!await confirmDeletion(items.length === 1 ? `删除「${items[0]!.name}」？` : `删除 ${items.length} 项皮肤？`, detail)) return
+    syncRecentSelection()
+    let results: (string | null)[] | null = files.length ? null : []
+    if (files.length) await runFileOperation("删除皮肤", async () => {
+      results = await invoke<(string | null)[] | null>("delete_skin_files", { paths: files.map(item => item.path) })
+      return results !== null
+    })
+    if (!results) return
+    const status = results
+    const errors = new Map(files.map((item, index) => [item.path, index < status.length ? status[index] : "未收到文件删除结果"]))
+    const removed = new Set<string>()
+    for (const item of items) {
+      const error = errors.get(item.path)
+      if (error) {
+        failures.push(`${item.name}：${error}`)
+        continue
+      }
+      if (appState.currentPath === item.path) {
+        appState.currentPath = ""
+        appState.unsavedNew = true
+        updateDirty()
+      }
+      removed.add(item.path)
+      appState.recentSelection?.delete(item.path)
+    }
+    deleted = removed.size
+    if (deleted) {
+      localStorage.setItem(recentFilesKey, JSON.stringify(readRecentFiles().filter(item => !removed.has(item.path))))
+      if (!appState.recentSelection?.size) appState.recentSelection = undefined
+      renderRecentFiles()
+    }
+  } catch (error) {
+    failures.push(String(error))
+  } finally {
+    appState.recentDeleting = false
+    syncRecentSelection()
+    const focus = trigger.isConnected && !trigger.closest("[hidden]") ? trigger
+      : document.querySelector<HTMLElement>('.recent-card[tabindex="0"]')
+        ?? $(mobilePortraitQuery.matches ? "#mobile-welcome-open" : "#welcome-recent-open")
+    focus.focus({ preventScroll: true })
+  }
+  if (failures.length) showError(`${deleted ? `已删除 ${deleted} 项。` : ""}${failures.join("；")}`, "删除皮肤")
+  else if (deleted) showStatus(`已删除 ${deleted} 项`)
+}
+
+function wireRecentSelection(grid: HTMLElement): void {
+  const toolbar = $("#recent-selection")
+  const remove = $<HTMLButtonElement>("#recent-delete")
+  const cardAt = (event: Event) => (event.target as Element)?.closest<HTMLButtonElement>("[data-recent]")
+  const toggle = (card: HTMLElement) => {
+    const selection = appState.recentSelection ??= new Set<string>()
+    const path = card.dataset.recent!
+    if (!selection.delete(path)) selection.add(path)
+    for (const item of grid.querySelectorAll<HTMLElement>("[data-recent]")) item.tabIndex = item === card ? 0 : -1
+    syncRecentSelection()
+  }
+  const cancel = () => {
+    if (appState.recentDeleting) return
+    appState.recentSelection = undefined
+    syncRecentSelection()
+    grid.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true })
+  }
+  $("#recent-cancel-selection").addEventListener("click", cancel)
+  remove.addEventListener("click", () => void deleteRecentFiles(appState.recentSelection ?? new Set(), remove))
+  bindListActionKeys(grid, toolbar)
+  $("#recent-clear").addEventListener("click", () => {
+    localStorage.removeItem(recentFilesKey)
+    renderRecentFiles()
+  })
+
+  let press: { id: number; x: number; y: number; timer: number } | undefined
+  let held: HTMLButtonElement | undefined
+  const stopPress = () => {
+    if (press) clearTimeout(press.timer)
+    press = undefined
+  }
+  grid.addEventListener("pointerdown", event => {
+    const card = cardAt(event)
+    if (!card || event.button !== 0 || !event.isPrimary || appState.recentDeleting) return
+    stopPress()
+    held = undefined
+    const delay = cssTimeMs(getComputedStyle(grid).getPropertyValue("--long-press-delay"))
+    press = { id: event.pointerId, x: event.clientX, y: event.clientY, timer: window.setTimeout(() => {
+      if (!card.isConnected || !welcomeVisible() || appState.fileOperationRunning || appState.recentDeleting) return
+      held = card
+      toggle(card)
+    }, delay) }
+  })
+  grid.addEventListener("pointermove", event => {
+    if (press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 8) stopPress()
+  })
+  for (const name of ["pointercancel", "pointerleave", "pointerup"] as const) grid.addEventListener(name, stopPress)
+  grid.addEventListener("dragstart", event => { event.preventDefault(); stopPress() })
+  grid.addEventListener("click", event => {
+    const card = cardAt(event)
+    if (!card || appState.recentDeleting) return
+    if (held === card && event.detail) { held = undefined; return }
+    if (appState.recentSelection || event.shiftKey) toggle(card)
+    else {
+      const item = readRecentFiles().find(item => item.path === card.dataset.recent)
+      if (item) openRecentFile(item)
+    }
+  })
+  const context = (card: HTMLButtonElement, x: number, y: number) => {
+    if (appState.recentDeleting || appState.fileOperationRunning) return
+    const action = iconButton("trash-2", "删除…", () => void deleteRecentFiles(new Set([card.dataset.recent!]), card))
+    openActionMenu(card, x, y, "皮肤操作", [action])
+  }
+  grid.addEventListener("contextmenu", event => {
+    const card = cardAt(event)
+    if (!card) return
+    event.preventDefault()
+    if (event.button === 2 && (event as PointerEvent).pointerType !== "touch") {
+      stopPress()
+      context(card, event.clientX, event.clientY)
+    }
+  })
+  grid.addEventListener("keydown", event => {
+    const card = cardAt(event)
+    if (!card || appState.recentDeleting) return
+    if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10") {
+      event.preventDefault()
+      const rect = card.getBoundingClientRect()
+      context(card, rect.left, rect.bottom)
+    } else if (!appState.recentSelection && event.key === "Delete" && !event.repeat) {
+      event.preventDefault()
+      void deleteRecentFiles(new Set([card.dataset.recent!]), card)
+    }
+  })
+  grid.closest<HTMLElement>(".welcome-recent")!.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || event.defaultPrevented || !appState.recentSelection) return
+    event.preventDefault()
+    cancel()
+  })
+}
+
+export function wireRecentPage(): void {
+  // 已关闭旧源码清理的用户保持不限量，避免升级后自动删除目录。
+  if (localStorage.getItem("source-auto-delete") === "false") localStorage.setItem(fileRetentionLimitKey, "0")
+  localStorage.removeItem("source-auto-delete")
+  $<HTMLInputElement>("#recent-history-limit").value = String(fileRetentionLimit())
+  const grid = $("#welcome-recent-grid")
+  wireRecentSelection(grid)
   bindListboxKeys(grid, (option) => {
     for (const card of grid.querySelectorAll<HTMLElement>('[role="option"]')) {
-      card.ariaSelected = String(card === option)
+      if (!appState.recentSelection) card.setAttribute("aria-selected", String(card === option))
       card.tabIndex = card === option ? 0 : -1
     }
     option.focus()
@@ -399,7 +567,7 @@ export function wireRecentPage(): void {
       if (card) {
         current[0]!.tabIndex = -1
         card.tabIndex = 0
-        card.ariaSelected = cards[focusedIndex]!.ariaSelected
+        if (!appState.recentSelection) card.setAttribute("aria-selected", cards[focusedIndex]!.getAttribute("aria-selected") ?? "false")
         card.focus({ preventScroll: true })
       }
     } else if (focusedButton?.disabled) {
@@ -412,10 +580,15 @@ export function wireRecentPage(): void {
 }
 
 export function renderRecentFiles(): void {
-  const limit = recentHistoryLimit()
+  const limit = fileRetentionLimit()
   const saved = readRecentFiles()
   const items = limit && saved.length > limit ? saved.slice(0, limit) : saved
   if (items !== saved) localStorage.setItem(recentFilesKey, JSON.stringify(items))
+  if (appState.recentSelection) {
+    const listed = new Set(items.map(item => item.path))
+    for (const path of appState.recentSelection) if (!listed.has(path)) appState.recentSelection.delete(path)
+    if (!items.length) appState.recentSelection = undefined
+  }
   renderRecentPage(items)
   // 预览图按路径缓存，这里裁掉已不在列表里的条目并释放它们占用的 blob URL
   const listed = new Set(items.map((item) => item.path))

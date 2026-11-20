@@ -304,7 +304,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       context.stroke()
       context.restore()
     }
-    if (tracks.length || clip.particles.length) outline(keyRect, token("--line-strong"))
+    if ((!thumbnail || !sampleLayers.length) && (tracks.length || clip.particles.length)) outline(keyRect, token("--line-strong"))
     if (trails.length) {
       context.save()
       context.fillStyle = token("--accent")

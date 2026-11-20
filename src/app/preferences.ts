@@ -1,6 +1,6 @@
-import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsWorkspace, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, interfaceTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
+import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsWorkspace, canvasBackground, canvasWrap, editorCrosshair, deviceShell, previewCoordinates, editorCoordinateSnapSetting, appTheme, interfaceTheme, sourceFontSize, sourceEditor, windowMaterialOpacity, windowMaterialOpacityValue, windowMaterial, windowMaterialOpacitySetting, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, browserThemeColor, workspaceNavigation, workspaceNavigationOpacity, workspaceNavigationOpacityValue, workspaceNavigationOpacitySetting } from "./dom"
 import { crossfade, playEnter } from "../motion"
-import { isTauri, mobilePortraitQuery, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
+import { isTauri, mobileLayoutQuery, mobilePortraitQuery, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
 import { checkForUpdate } from "../update.ts"
 import { initializeSourceDirectory } from "./source-workspace"
@@ -12,7 +12,7 @@ import { showError } from "./file-operations"
 import { type WindowMaterialKind } from "./types"
 import { updateSourceHighlight } from "./source-panel"
 import { initializeSettings } from "../settings"
-import { saveRecentHistoryLimit } from "./recent-files"
+import { saveFileRetentionLimit } from "./recent-files"
 import { setGuidesVisible } from "./preview-render"
 import { modelSettings } from "./ai-panel"
 
@@ -40,11 +40,13 @@ export async function refreshUpdateStatus(): Promise<void> {
   }
 }
 
+export const nativeSettings = isTauri() || location.hostname === "127.0.0.1" && ["1420", "4173"].includes(location.port)
+
 const settingsDescriptions: Record<string, string> = {
   appearance: "调整界面主题、强调色和窗口材质。",
   canvas: "设置默认预览设备、画布背景和编辑辅助。",
-  files: "设置「我的皮肤」的记录保留数量。",
-  source: "调整编辑器显示与输入辅助，并管理源码存储目录。",
+  files: nativeSettings ? "管理皮肤的打开记录和本地源码。" : "设置「我的皮肤」的记录保留数量。",
+  source: "调整编辑器显示与输入辅助。",
   model: "管理 AI 设计使用的对话和图像模型。",
   adb: "配置 Android 设备连接与皮肤预览。",
   about: "查看版本、更新、诊断与反馈入口。",
@@ -75,8 +77,6 @@ export function showSettingsPage(page: string): void {
   settingsWorkspace.querySelector<HTMLElement>(".settings-content")?.scrollTo({ top: 0 })
   if (target.dataset.settingsPanel === "about") void refreshUpdateStatus()
 }
-
-export const nativeSettings = isTauri() || location.hostname === "127.0.0.1" && ["1420", "4173"].includes(location.port)
 
 export const sourceDirectoryInitialization = initializeSourceDirectory()
 
@@ -185,7 +185,8 @@ async function applyWindowMaterial(): Promise<void> {
   document.documentElement.dataset.windowMaterial = enabled ? "on" : "off"
   applyWindowMaterialOpacity()
   if (!isTauri()) return
-  await invoke("set_window_material", { enabled, opacity: currentWindowMaterialOpacity() })
+  const navigationWidth = document.documentElement.classList.contains("macos") ? workspaceNavigation.offsetWidth : undefined
+  await invoke("set_window_material", { enabled, opacity: currentWindowMaterialOpacity(), navigationWidth })
 }
 
 export function applyWindowMaterialWithRetry(): Promise<void> {
@@ -212,7 +213,11 @@ export async function initializeWindowMaterial(): Promise<void> {
     ? appState.windowMaterialKind !== "acrylic"
     : savedWindowMaterial !== "off"
   windowMaterialOpacitySetting.hidden = appState.windowMaterialKind === "none"
-  workspaceNavigationOpacitySetting.hidden = appState.windowMaterialKind === "none"
+  const macos = document.documentElement.classList.contains("macos")
+  workspaceNavigationOpacitySetting.hidden = macos || appState.windowMaterialKind === "none"
+  if (macos) mobileLayoutQuery.addEventListener("change", () => {
+    if (windowMaterial.checked) void applyWindowMaterialWithRetry().catch(error => handleWindowMaterialError(error, "切换窗口材质"))
+  })
   workspaceNavigationOpacity.value = localStorage.getItem("workspace-navigation-opacity") ?? workspaceNavigationOpacity.defaultValue
   const storageKey = appState.windowMaterialKind === "acrylic" ? "window-acrylic-opacity" : "window-glass-opacity"
   windowMaterialOpacity.value = localStorage.getItem(storageKey) ?? windowMaterialOpacity.defaultValue
@@ -278,8 +283,8 @@ export function setCanvasDropState(active: boolean): void {
   canvasWrap.classList.toggle("drop-target", active)
 }
 
-const recentHistoryLimitInput = settingsWorkspace.querySelector<HTMLInputElement>("#recent-history-limit")!
+const fileRetentionLimitInput = settingsWorkspace.querySelector<HTMLInputElement>("#recent-history-limit")!
 export const settingsController = initializeSettings(settingsWorkspace, setGuidesVisible, modelSettings, () => {
-  saveRecentHistoryLimit(recentHistoryLimitInput.valueAsNumber)
+  saveFileRetentionLimit(fileRetentionLimitInput.valueAsNumber)
 })
-recentHistoryLimitInput.addEventListener("invalid", () => showSettingsPage("files"))
+fileRetentionLimitInput.addEventListener("invalid", () => showSettingsPage("files"))

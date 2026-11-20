@@ -6,7 +6,7 @@ import { wirePinnedToolbar } from "../pinned-toolbar"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
 import { requestEditMode, setMobilePane } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, settingsEntryButtons, settingsWorkspace, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, workspaceExport, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, settingsEntryButtons, settingsWorkspace, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
 import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelections, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
@@ -15,9 +15,8 @@ import { preview, source, scheduleSelectionInspectorSync, isTauri, settingsNavIt
 import { startNewDocument, wireNewProjectChooser } from "../new-document"
 import { runFileOperation, readBrowserSkinFile, showImage, showStatus, showError } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
-import { recentFilesKey, recentPreviewCache, recentThumbRequest, renderRecentFiles, wireRecentPage } from "../recent-files"
+import { renderRecentFiles, wireRecentPage } from "../recent-files"
 import { dismissLayoutOverview } from "../layout-overview"
-import { releaseArchivePreview } from "../../template-preview"
 import { refreshUpdateStatus, settingsController, showSettingsPage, nativeSettings, savedDefaultDevice, applyCanvasBackground, initialCanvasBackground, applyEditorCrosshairSetting, applyAppTheme, systemTheme, savedSourceFontSize, applySourceFontSize, saveSourceFontSize, initializeWindowMaterial, handleWindowMaterialError, applyWindowMaterialWithRetry, currentWindowMaterialOpacity, applyWindowMaterialOpacity, startWindowsWindowDrag, restoreWindowMaterialAfterDrag, applySourceEditorFeatures, setCanvasDropState } from "../preferences"
 import { clientLogZip, clientLog } from "../../client-log.ts"
 import { applyAiDesignDraft, discardAiDesignDraft, toggleAiDraftComparison } from "../ai-panel"
@@ -134,11 +133,15 @@ export function wireFilesAndSettings(): void {
     source.collapseSelection()
     scheduleSelectionInspectorSync(preview)
   })
-  // ⌘/Ctrl + S 保存；不接管的话浏览器会弹“保存网页”。
+  // ⌘/Ctrl + S 保存，加 Shift 打开分享与导出；阻止浏览器的默认保存动作。
   document.addEventListener("keydown", (event) => {
-    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "s") return
+    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== "s") return
     event.preventDefault()
     if (document.querySelector("dialog[open]")) return
+    if (event.shiftKey) {
+      if (!event.repeat) workspaceExport.click()
+      return
+    }
     if (!settingsWorkspace.hidden) { $("#settings-save").click(); return }
     if (saveButton.disabled) return
     // 正在输入的字段先提交，保存下来的才是屏幕上的值。
@@ -153,13 +156,6 @@ export function wireFilesAndSettings(): void {
     else browserOpen.click()
   })
   wireRecentPage()
-  $("#recent-clear")?.addEventListener("click", () => {
-    localStorage.removeItem(recentFilesKey)
-    for (const cached of recentPreviewCache.values()) releaseArchivePreview(cached.image)
-    recentPreviewCache.clear()
-    void recentThumbRequest("readwrite", (store) => store.clear()).catch(() => undefined)
-    renderRecentFiles()
-  })
   $("#welcome-recent-open")?.addEventListener("click", () => openButton.click())
   $("#mobile-welcome-open").addEventListener("click", () => openButton.click())
   // 回到启动页但不关闭当前皮肤；打开别的皮肤时再询问是否导出。

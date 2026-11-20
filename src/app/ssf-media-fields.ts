@@ -38,7 +38,7 @@ function chooseSound(current: string, commit: (value: string) => void): void {
 export function ssfSoundLibraryPayload(input: HTMLInputElement): StyleLibraryPayload {
   return {
     sliceBack: false, editable: isEditing() && !input.disabled, canAdd: false,
-    soundOnly: true, foreground: false, bda: false, kind: "sound", currentID: input.value,
+    soundOnly: true, foreground: false, kind: "sound", currentID: input.value,
     imagesCompatible: false, bitmaps: {}, animationText: "", animationFiles: {}, particleVisuals: {},
     styles: [], images: [], sounds: soundOptions().map(value => {
       const path = soundPath(value)

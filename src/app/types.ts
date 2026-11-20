@@ -42,6 +42,7 @@ export type StyleImagePickerTarget = {
   sections?: string[]
   selectImage?(path: string, source?: TileSlice["source"]): void
   selectReference?(value: string): void
+  applyNewStyle?(value: string): boolean
 }
 
 export type NativeImagePickerPayload = {
@@ -51,6 +52,7 @@ export type NativeImagePickerPayload = {
   selectedIndex?: number
   editable: boolean
   styleName?: string
+  canApplyNewStyle?: boolean
   // 有样式引用输入框时，切片窗口的返回回到样式库「全部样式」。
   styleLibrary?: boolean
 }

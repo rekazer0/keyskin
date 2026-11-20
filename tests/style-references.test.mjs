@@ -7,12 +7,14 @@ import { declarations, run } from './helpers/app-source.mjs'
 
 function setup(texts, stylePath = 'light/skin/port/res/default.css') {
   let context
-  context = run(declarations('usageIndex', 'styleUsageIndex', 'styleUsages', 'missingStyleReferences', 'isStyleReferenceKey', 'legacyAnimationConfigPath'), {
+  context = run(declarations('usageIndex', 'styleUsageIndex', 'legacyStyleReferencePaths', 'replaceStyleReferences', 'styleUsages', 'missingStyleReferences', 'isStyleReferenceKey', 'legacyAnimationConfigPath'), {
     IniDocument,
     archive: SkinArchive.fromFiles(new Map(Object.entries(texts).map(([path, text]) => [path, strToU8(text)])), 'bds'),
     theme: { value: 'light' },
     orientation: { value: 'port' },
     styleConfigPath: () => stylePath,
+    isEditing: () => true,
+    commitTextChanges: changes => { for (const { path, after } of changes) context.archive.setText(path, after) },
     layoutSource: () => context.archive,
     availableStyleIDs: () => IniDocument.parse(context.archive.getText(stylePath)).sections().flatMap(section => /^STYLE(\d+)$/.exec(section)?.[1] ?? []),
   })
@@ -72,4 +74,26 @@ test('large-library usage counts retain direct and numeric text fallback referen
   context.archive.setText(layout, '[KEY1]\nFORE_STYLE=200\n')
   assert.equal(context.styleUsages('1').length, 0)
   assert.equal(context.styleUsages('2').length, 1)
+})
+
+
+test('bulk replacement rewrites exact ids across layouts sharing the original stylesheet', () => {
+  const stylePath = 'light/skin/res/default.css'
+  const port = 'light/skin/port/py_9.ini'
+  const land = 'light/skin/land/py_9.ini'
+  const dark = 'dark/skin/port/py_9.ini'
+  const styles = '[STYLE1]\nNM_IMG=old,0\n[STYLE2]\nNM_IMG=new,0\n'
+  const key = '[KEY1]\nBACK_STYLE=1\nFORE_STYLE=11, 1,,0, 100,1\nPOS=1,1\n'
+  const context = setup({ [stylePath]: styles, [port]: key, [land]: key, [dark]: key }, stylePath)
+  assert.equal(context.replaceStyleReferences('1', '2'), true)
+  const expected = '[KEY1]\nBACK_STYLE=2\nFORE_STYLE=11, 2,,0, 100,2\nPOS=1,1\n'
+  assert.equal(context.archive.getText(port), expected)
+  assert.equal(context.archive.getText(land), expected)
+  assert.equal(context.archive.getText(dark), key)
+  assert.equal(context.archive.getText(stylePath), styles)
+
+  context.archive.setText('light/skin/land/res/default.css', styles)
+  context.replaceStyleReferences('2', '1')
+  assert.equal(context.archive.getText(port), key)
+  assert.equal(context.archive.getText(land), expected, 'a direction with its own stylesheet is not changed')
 })

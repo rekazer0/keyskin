@@ -128,6 +128,7 @@
   /* 动效：3 档时长，进入、展开与平滑往复曲线 */
   --duration-fast: 120ms;   /* hover、按下、颜色变化 */
   --motion-repeat: infinite; /* 减少动态效果时不启动循环 */
+  --long-press-delay: 500ms; /* 长按选择，不受减少动态效果影响 */
   --double-click-delay: 400ms; /* 位移控件等待双击，不受减少动态效果影响 */
   --duration-base: 200ms;   /* 展开收起、浮层出现 */
   --duration-slow: 320ms;   /* 对话框、sheet、页面切换 */
@@ -194,6 +195,7 @@
   --glass-shadow: 0 8px 28px rgb(18 24 40 / 10%), inset 0 1px rgb(255 255 255 / 78%);
   --window: var(--material-window);
   --toolbar: var(--material-toolbar);
+  --workspace-shell-background: var(--material-window);
   --titlebar-surface: var(--panel);
   --titlebar-backdrop-filter: var(--workspace-navigation-backdrop-filter);
   --workspace-navigation-backdrop-filter: none;
@@ -799,5 +801,17 @@
 @media (min-width: 761px) {
   :root.macos[data-window-material-kind="glass"][data-window-material="on"] {
     --titlebar-backdrop-filter: none;
+  }
+}
+
+@media (min-width: 761px) and (min-height: 601px), (min-width: 951px) {
+  :root.macos[data-app-theme][data-interface-theme][data-window-material-kind="glass"][data-window-material="on"] {
+    /* 导航栏连同下方的窗口外壳都留空，才能显示 AppKit 从窗后采样的材质。 */
+    --workspace-shell-background: linear-gradient(to right, transparent var(--workspace-navigation-width), var(--material-window) var(--workspace-navigation-width));
+    --workspace-navigation-backdrop-filter: none;
+    --workspace-navigation-surface: transparent;
+    --workspace-navigation-text: var(--secondary);
+    --workspace-navigation-hover-text: var(--text);
+    --workspace-navigation-hover-surface: var(--hover);
   }
 }

@@ -6,7 +6,7 @@ import { styleConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { cachedIniDocument } from "./style-document"
 import { type StyleKind } from "./types"
-import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, openStyleReferenceStateImage, refreshStyleReferenceThumbnail, layoutAnimationFields, styleUsages } from "./style-references"
+import { isStyleReferenceKey, styleReferenceForeground, styleWriteTarget, styleReferenceKey, openStyleReferenceEditor, refreshStyleReferenceThumbnail, layoutAnimationFields, styleUsages, replaceStyleReferences } from "./style-references"
 import { commitText, commitBytes, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
 import { addBdaStyle, updateBdaStyle } from "../bda-encode"
 import { updateBdaRefs } from "./key-inspector"
@@ -200,7 +200,7 @@ export function styleLibraryCategories(): Map<string, Set<string>> {
   return result
 }
 
-export function applyStyleLibrarySelection(toStyle = false): void {
+export function applyStyleLibrarySelection(toStyle = false, replaceAll = false): void {
   const target = appState.stylePickerTarget
   const selected = appState.styleLibrarySelected
   const imageTarget = appState.pickerTarget
@@ -219,10 +219,16 @@ export function applyStyleLibrarySelection(toStyle = false): void {
   if (selected.styleID) {
     const ref = bdaStyleRef(selected.styleID)
     if (target.dataset.bdaStyleType && ref?.type !== target.dataset.bdaStyleType) return
+    if (replaceAll) {
+      const currentID = target.value.split(",")[0]?.trim()
+      if (!currentID || currentID === "0" || !availableStyleIDs().includes(selected.styleID)) return
+      if (!replaceStyleReferences(currentID, selected.styleID)) return
+    } else {
+      target.value = selected.styleID
+      target.dispatchEvent(new Event("input", { bubbles: true }))
+      target.dispatchEvent(new Event("change", { bubbles: true }))
+    }
     rememberStyle(selected.styleID)
-    target.value = selected.styleID
-    target.dispatchEvent(new Event("input", { bubbles: true }))
-    target.dispatchEvent(new Event("change", { bubbles: true }))
     closeStylePicker()
   } else if (selected.imagePath) {
     if (target.dataset.bdaStyleType && target.dataset.bdaStyleType !== "image") return
@@ -231,7 +237,7 @@ export function applyStyleLibrarySelection(toStyle = false): void {
     const directImage = appState.styleLibraryInitialImages && availableStyleIDs().includes(styleID)
     if (!toStyle && !directImage) {
       if (appState.archive?.format === "bda") {
-        createImageStyleReference(target, styleID, bdaImageResourceID(selected.imagePath), highlighted)
+        if (createImageStyleReference(target, styleID, bdaImageResourceID(selected.imagePath), highlighted)) closeStylePicker()
       } else {
         const source = appState.archive
         openImageSlicePicker(selected.imagePath, {
@@ -262,14 +268,14 @@ export function applyStyleLibrarySelection(toStyle = false): void {
   }
 }
 
-function createImageStyleReference(target: HTMLInputElement, currentID: string, value: string, highlighted: boolean): void {
-  if (!isEditing() || target.disabled) return
+export function createImageStyleReference(target: HTMLInputElement, currentID: string, value: string, highlighted: boolean): boolean {
+  if (!isEditing() || target.disabled) return false
   const property = highlighted ? "HL_IMG" : "NM_IMG"
   const previous = appState.undoStack.at(-1)
   let id: string | undefined
   if (appState.archive?.format === "bda") {
     const info = currentBdaAppearance()
-    if (!info) return
+    if (!info) return false
     const ref = bdaStyleRef(currentID)
     const added = addBdaStyle(info.bytes, "image", ref?.type === "image" ? ref.key : undefined)
     commitBytes(info.path, info.bytes, updateBdaStyle(added.bytes, added.ref, property, value))
@@ -286,7 +292,7 @@ function createImageStyleReference(target: HTMLInputElement, currentID: string, 
     styles.appendSection(`STYLE${id}`, styles.entries(`STYLE${currentID}`).map(({ key, value }) => ({ key, value })))
     styles.set(`STYLE${id}`, property, value)
   })
-  if (!id) return
+  if (!id) return false
   rememberStyle(id)
   target.value = id
   target.dispatchEvent(new Event("input", { bubbles: true }))
@@ -295,7 +301,7 @@ function createImageStyleReference(target: HTMLInputElement, currentID: string, 
   const changes = appState.undoStack.splice(previous ? appState.undoStack.indexOf(previous) + 1 : 0)
   if (changes.length) appState.undoStack.push(changes.length === 1 ? changes[0] : { kind: "batch", changes })
   updateHistoryButtons()
-  closeStylePicker()
+  return true
 }
 
 function closeStylePicker(): void {
@@ -419,9 +425,10 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     recentStyles: (appState.recentStyles.get(source)?.get(recentStyleScope()) ?? []).filter(id => ids.includes(id)),
     editable: isEditing() && !target?.disabled,
     canAdd, soundOnly: key === "SOUND_STYLE",
-    foreground: styleReferenceForeground(key), bda: source.format === "bda",
+    foreground: styleReferenceForeground(key),
     kind: styleKindForKey(key), currentID,
     imagesCompatible: !targetType || targetType === "image",
+    replaceReferences: Boolean(currentID && currentID !== "0" && !imageSelection),
     applyToStyle: Boolean(currentID && ids.includes(currentID) && (!targetType || bdaStyleRef(currentID)?.type === "image")),
     bitmaps: {}, animationText: "", animationFiles: {}, particleVisuals: {}, styles: [], images: [], sounds: [],
   }
@@ -496,12 +503,6 @@ export function addStyleFromLibrary(): void {
     applyStyleLibrarySelection()
     openStyleReferenceEditor(id)
   } else void emitStyleLibrary()
-}
-
-/** 预览栏的「选择切片」：改选中样式的图片切片，按打开弹窗时的状态（正常 / 按下）。 */
-export function sliceStyleLibrarySelection(styleID: string): void {
-  const target = appState.stylePickerTarget
-  if (target) void openStyleReferenceStateImage(target, styleReferenceKey(target), appState.styleLibraryHighlighted, [styleID])
 }
 
 export async function updateStylePreviews(): Promise<void> {

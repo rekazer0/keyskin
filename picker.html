@@ -29,6 +29,7 @@
         <div class="picker-canvas-stage"><canvas id="picker-canvas" class="ui-checker" width="720" height="420" aria-label="原始图片切片选择器" tabindex="0"></canvas></div>
         <footer class="ui-dialog-footer picker-slice-actions">
           <label class="ui-input ui-select"><select id="picker-slice" aria-label="切片" disabled></select></label>
+          <button id="picker-apply-new-style" class="ui-button" type="button" hidden disabled>新建样式应用</button>
           <button id="picker-apply" class="ui-button" data-variant="primary" type="button" disabled>应用</button>
         </footer>
       </section>
@@ -54,7 +55,7 @@
               <button id="style-library-cancel" class="ui-button" type="button">取消</button>
               <button id="style-library-apply" class="ui-button" data-variant="primary" type="button">应用</button>
               <button id="style-library-apply-to-style" class="ui-button" type="button" hidden>应用至样式</button>
-              <button id="style-library-slice" class="ui-button" type="button" hidden>选择切片</button>
+              <button id="style-library-replace-all" class="ui-button" type="button" hidden>全部更换</button>
               <button id="style-library-edit" class="ui-icon-button" type="button" title="编辑" data-shortcut="单击" aria-label="编辑"><span data-icon="pencil" aria-hidden="true"></span></button>
             </div>
           </div>

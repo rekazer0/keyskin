@@ -4,28 +4,31 @@ import { IniDocument } from "../ini.ts"
 import { soundPathForFilename, soundResourcePaths } from "../sounds.ts"
 import { theme, orientation, keyFields, toolbarFields, quickInspector } from "./dom"
 import { keyboardFields } from "./canvas-interaction"
-import { editStyleConfig, refreshStyleReferenceThumbnails, openStylePicker, styleConfigDocument, styleKind, availableStyleIDs, styleSoundFile } from "./style-picker"
-import { openPalmSkin, palmTheme, sxiPointer } from "./sxi-documents"
+import { createImageStyleReference, editStyleConfig, refreshStyleReferenceThumbnails, openStylePicker, styleConfigDocument, styleKind, availableStyleIDs, styleSoundFile } from "./style-picker"
+import { openPalmSkin, palmOrientation, palmTheme, sxiPointer } from "./sxi-documents"
 import { drawVisualPreview } from "../atlas.ts"
-import { visualResolver, bdaAppearanceStylePath } from "./bda-documents"
+import { visualResolver, bdaAppearanceStylePath, currentBdaAppearance, refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
 import { type StyleImagePickerTarget } from "./types"
 import { openImageSlicePicker } from "./image-pickers"
 import { openStyleImageResourceChooser, selectStyleResource } from "./resource-inspector"
 import { bdaStyleRef, type BdaAppearanceStyleGroup, type BdaStyleRef, bdaStyleID } from "../bda.ts"
+import { replaceBdaStyleReferences } from "../bda-source.ts"
 import { NEW_FORE_LAYER } from "../bda-layout-styles.ts"
 import { selectFile } from "./navigation"
 import { previewStyleAnimation } from "./animation-resource"
-import { updateBdaAppearanceStyleRef } from "./key-inspector"
+import { populateKeyInspector, updateBdaAppearanceStyleRef } from "./key-inspector"
 import { styleAnimationReferenceStates } from "./legacy-animation-inspector"
 import { keySoundSample, palmStyleAnimationStates } from "./style-card-preview"
 import { styleKindIcon, styleReferenceAddButton, styleReferenceCard, type StyleReferenceState } from "../style-card"
-import { palmStyleLocation } from "../palm/palm-style-edit.ts"
+import { palmStyleLocation, remapPalmLayoutStyles } from "../palm/palm-style-edit.ts"
 import { palmFieldLabel } from "../palm/palm-labels.ts"
 import { asObject, type Json } from "../palm/sxi-ini.ts"
 import { palmStyle, palmStylePointer } from "./sxi-styles"
 import { chooseReferenceValue } from "./ask"
 import { editSxi } from "./sxi-fields"
-import { isEditing } from "./edit-history"
+import { commitBytes, commitTextChanges, isEditing, updateDirty } from "./edit-history"
+import { refreshPreview } from "./preview-render"
+import { showError } from "./file-operations"
 import type { SkinArchive } from "../skin.ts"
 
 export const layoutAnimationFields = new Set(["ANIM_STYLE", "BACK_ANIM_STYLE", "FORE_ANIM_STYLE", "PRESS_STYLE"])
@@ -108,7 +111,7 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
     if (emptySlot(styleID) && !mixed) return []
     const name = slotInput(index, styleID)
     name.setAttribute("aria-label", key === "FORE_ANIM_STYLE" ? `前景 ${index + 1} 动画样式编号` : `样式 ${index + 1} 编号`)
-    const choose = (highlighted = appState.mobileAppearancePressed ?? false) => openStylePicker(slotInput(index, styleID), highlighted)
+    const choose = (highlighted = false) => openStylePicker(slotInput(index, styleID), highlighted)
     const empty = emptySlot(styleID)
     const kind = styleKind(styleID, styles)
     const replaceLabel = key === "SOUND_STYLE" ? "更换音效样式" : animationReference ? "更换动画样式" : "更换样式"
@@ -122,7 +125,16 @@ export function refreshStyleReferenceThumbnail(list: HTMLElement, input: HTMLInp
       states = [false, true].map((highlighted) => ({
         label: ["image", "empty"].includes(kind) ? `更换${highlighted ? "按下" : "正常"}图片` : highlighted ? "按下" : "正常",
         draw: async (canvas: HTMLCanvasElement) => drawVisualPreview(canvas, [await resolver?.resolve(styleID, highlighted).catch(() => undefined)], foreground),
-        onClick: ["image", "empty"].includes(kind) ? (edit: boolean) => edit ? openStyleReferenceEditor(styleID) : openStyleReferenceStateImage(input, key, highlighted, [styleID], true) : undefined,
+        onClick: ["image", "empty"].includes(kind) ? (edit: boolean) => {
+          if (edit) return openStyleReferenceEditor(styleID)
+          if (input.disabled || !isEditing()) return
+          const target = styleWriteTarget(foreground ? "FORE_STYLE" : "BACK_STYLE", highlighted ? "HL_IMG" : "NM_IMG", [styleID])
+          if (!target.sections?.length) return
+          const reference = slotInput(index, styleID)
+          target.applyNewStyle = value => createImageStyleReference(reference, styleID, value, highlighted)
+          appState.stylePickerTarget = undefined
+          openStyleImageResourceChooser(target)
+        } : undefined,
       }))
     }
     const removable = !input.disabled && !empty
@@ -164,6 +176,68 @@ export function styleReferenceForeground(key: string): boolean {
   return /FORE|INPUT_STYLE|SCAND_STYLE|CELL_STYLE/.test(key)
 }
 
+function legacyStyleReferencePaths(archive: SkinArchive): string[] {
+  const styles = styleConfigPath()
+  const animation = legacyAnimationConfigPath()
+  return archive.names().filter(path => {
+    if (!path.startsWith(`${theme.value}/`) || !/\.(ini|cnd|pop)$/i.test(path) || !archive.isText(path)) return false
+    const local = /^(.*\/skin\/(?:port|land))\//.exec(path)?.[1]
+    const effectiveStyles = local && archive.isText(`${local}/res/default.css`) ? `${local}/res/default.css` : `${theme.value}/skin/res/default.css`
+    // 公共 anim.ini 也会由方向样式表解析粒子图片，不能按动画文件所在目录排除引用。
+    return styles === effectiveStyles || path === animation
+  })
+}
+
+/** Change direct references only, never the shared style definitions or text fallback IDs. */
+export function replaceStyleReferences(from: string, to: string): boolean {
+  const archive = appState.archive
+  if (!archive || !isEditing() || from === to) return false
+  if (archive.format === "bda") {
+    const info = currentBdaAppearance()
+    const previous = bdaStyleRef(from), next = bdaStyleRef(to)
+    if (!info || !previous || !next || previous.type !== next.type) return false
+    try {
+      commitBytes(info.path, info.bytes, replaceBdaStyleReferences(info.bytes, previous, next))
+    } catch (error) {
+      showError(error, "全部更换样式")
+      return false
+    }
+    refreshBdaLayout(appState.layoutPath)
+    refreshSelectedBdaSource()
+    refreshPreview()
+    populateKeyInspector()
+    updateDirty()
+  } else if (archive.format === "sxi") {
+    const targetTheme = palmTheme()
+    const current = palmOrientation()
+    editSxi(skin => {
+      const table = (dir: "port" | "land", id: string) => palmStyleLocation(skin, targetTheme, dir, id)?.[1]
+      const sourceTable = table(current, from), targetTable = table(current, to)
+      const ids = new Map([[from, Number(to)]])
+      for (const dir of ["port", "land"] as const) {
+        if (table(dir, from) === sourceTable && table(dir, to) === targetTable) {
+          remapPalmLayoutStyles(asObject(skin[targetTheme])?.[`${dir}_layout`], ids)
+        }
+      }
+    })
+  } else if (archive.format === "bdi" || archive.format === "bds") {
+    const changes = legacyStyleReferencePaths(archive).flatMap(path => {
+      const before = archive.getText(path)
+      if (!before.includes(from)) return []
+      const document = IniDocument.parse(before)
+      let changed = false
+      for (const { section, key, value } of document.entries()) {
+        if (!isStyleReferenceKey(key)) continue
+        const next = value.split(",").map(part => part.trim() === from ? part.replace(from, to) : part).join(",")
+        if (next !== value && document.set(section, key, next)) changed = true
+      }
+      return changed ? [{ path, before, after: document.toString() }] : []
+    })
+    commitTextChanges(changes)
+  } else return false
+  return true
+}
+
 /** Each style id's reference locations, built once per archive revision (thousands of cards ask for it). */
 const usageIndex: { archive?: SkinArchive; key?: string; index?: Map<string, string[]>; parents?: Set<number> } = {}
 
@@ -195,12 +269,7 @@ function styleUsageIndex(): Map<string, string[]> {
       }
     }
     for (const orientation of ["port", "land"] as const) walk(asObject(skin?.[palmTheme()])?.[`${orientation}_layout`], [palmTheme(), `${orientation}_layout`], orientation)
-  } else for (const path of archive.names()) {
-    if (!path.startsWith(`${theme.value}/`) || !/\.(ini|cnd|pop)$/i.test(path) || !archive.isText(path)) continue
-    const local = /^(.*\/skin\/(?:port|land))\//.exec(path)?.[1]
-    const effectiveStyles = local && archive.isText(`${local}/res/default.css`) ? `${local}/res/default.css` : `${theme.value}/skin/res/default.css`
-    // 公共 anim.ini 也会由方向样式表解析粒子图片，不能按动画文件所在目录排除引用。
-    if (styleConfigPath() !== effectiveStyles && path !== legacyAnimationConfigPath()) continue
+  } else for (const path of legacyStyleReferencePaths(archive)) {
     const document = path === appState.layoutPath && appState.layoutDocument ? appState.layoutDocument : IniDocument.parse(archive.getText(path))
     for (const { section, key, value } of document.entries()) {
       if (isStyleReferenceKey(key)) for (const id of new Set(value.split(",").map((part) => part.trim()).filter(Boolean))) add(id, `${path} · [${section}] ${key}`)
@@ -284,7 +353,6 @@ export async function openStyleReferenceStateImage(
   key: string,
   highlighted: boolean,
   styleIDs = input.value.split(",").map((value) => value.trim()).filter(Boolean),
-  replace = false,
 ): Promise<void> {
   if (input.disabled) return
   const resolver = visualResolver()
@@ -292,12 +360,6 @@ export async function openStyleReferenceStateImage(
   const foreground = styleReferenceForeground(key)
   const source: "BACK_STYLE" | "FORE_STYLE" = foreground ? "FORE_STYLE" : "BACK_STYLE"
   const property = highlighted ? "HL_IMG" : "NM_IMG"
-  if (replace) {
-    const target = styleWriteTarget(source, property, styleIDs)
-    if (!target.sections?.length || !isEditing()) return
-    appState.stylePickerTarget = undefined
-    return openStyleImageResourceChooser(target)
-  }
   let targetSource = source
   let visual = (await Promise.all(styleIDs.map((styleID) => resolver.resolve(styleID, highlighted).catch(() => undefined))))
     .find((item) => item?.imagePath)

@@ -244,12 +244,14 @@ function pickerImageReference(index: number): string {
   return index === WHOLE_IMAGE_INDEX ? name : `${name},${index}`
 }
 
-export async function applyImageSliceSelection(index: number): Promise<void> {
+export async function applyImageSliceSelection(index: number, newStyle = false): Promise<void> {
   const archive = appState.archive
   const target = appState.pickerTarget
   const path = appState.pickerPath
   if (!archive || !target || !isEditing()) return
   if (index === WHOLE_IMAGE_INDEX ? appState.pickerSlices.length : !appState.pickerSlices.some(slice => slice.index === index)) return
+  const apply = newStyle ? target.applyNewStyle : (value: string) => updateSelectedImageReference(target, value)
+  if (!apply) return
   try {
     if (index === WHOLE_IMAGE_INDEX && !target.selectImage && (archive.format === "bdi" || archive.format === "bds" || archive.format === "sxi")) {
       const bytes = archive.getBytes(path)
@@ -279,7 +281,7 @@ export async function applyImageSliceSelection(index: number): Promise<void> {
         appState.nativeImagePickerPayload.slices = appState.pickerSlices
         appState.nativeImagePickerPayload.selectedIndex = index
       }
-      const applied = updateSelectedImageReference(target, pickerImageReference(index))
+      const applied = apply(pickerImageReference(index))
       // 自动补切片与应用图片是一笔操作，撤销时同时恢复。
       const changes = appState.undoStack.splice(previous ? appState.undoStack.indexOf(previous) + 1 : 0)
       if (changes.length) appState.undoStack.push(changes.length === 1 ? changes[0] : { kind: "batch", changes })
@@ -291,7 +293,7 @@ export async function applyImageSliceSelection(index: number): Promise<void> {
       return
     }
     appState.pickerSelectedIndex = index
-    if (updateSelectedImageReference(target, pickerImageReference(index)) && appState.pickerTarget === target) clearImageSlicePicker()
+    if (apply(pickerImageReference(index)) && appState.pickerTarget === target) clearImageSlicePicker()
   } catch (error) {
     showError(error, "应用图片")
   }
@@ -316,6 +318,7 @@ export function openImageSlicePicker(path: string, target: StyleImagePickerTarge
     selectedIndex: appState.pickerSelectedIndex,
     editable: isEditing(),
     styleName: imagePickerStyleName(target),
+    canApplyNewStyle: Boolean(target.applyNewStyle),
     // 行内缩略图传入的是未挂载的克隆输入框，只要有引用目标就能回到样式库。
     styleLibrary: Boolean(appState.stylePickerTarget),
   }

@@ -256,9 +256,7 @@ export async function activateSourceWorkspace(path: string, prefix = ""): Promis
 function setSourceDirectoryState(path: string, custom: boolean, error = ""): void {
   sourceDirectory.value = path
   sourceDirectory.closest("label")?.setAttribute("data-invalid", String(Boolean(error)))
-  sourceDirectoryStatus.textContent = error || (custom
-    ? "自定义目录 · 不自动删除源码"
-    : "内置目录 · 保留最近 9 份源码")
+  sourceDirectoryStatus.textContent = error || (custom ? "自定义目录" : "内置目录")
 }
 
 export async function applySourceDirectory(path: string | null): Promise<void> {

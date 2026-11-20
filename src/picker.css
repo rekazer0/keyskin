@@ -24,8 +24,9 @@
 .image-picker-view[hidden] { display: none; }
 #picker-canvas { flex: none; margin: auto; outline: 1px solid var(--line); }
 #picker-canvas:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
-.picker-slice-actions { flex-wrap: nowrap; justify-content: space-between; padding: var(--space-md) var(--space-lg); background: var(--panel); }
-.picker-slice-actions > .ui-select { min-width: 0; }
+.picker-slice-actions { flex-wrap: nowrap; padding: var(--space-md) var(--space-lg); background: var(--panel); }
+.picker-slice-actions > .ui-select { min-width: 0; margin-inline-end: auto; }
+.picker-slice-actions > [hidden] { display: none; }
 /* 全部样式：与切片共用窗口，网格单独滚动，预览固定在底部。 */
 .style-library-view { position: relative; height: calc(var(--viewport-height) - var(--_toolbar-h)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 .style-library-view[hidden] { display: none; }
@@ -98,6 +99,11 @@
   .picker-toolbar #picker-title { font-size: var(--font-size-title); }
   .style-library-preview-actions > #style-library-apply { justify-content: center; }
   .style-library-preview-actions > #style-library-cancel { justify-content: center; background: var(--content); }
+}
+
+@media (max-width: 390px) and (orientation: portrait) {
+  .picker-slice-actions[data-new-style] { flex-wrap: wrap; }
+  .picker-slice-actions[data-new-style] > .ui-select { flex-basis: 100%; }
 }
 
 /* 弱分隔线独立绘制，不改变面板外形或控件尺寸。 */

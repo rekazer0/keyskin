@@ -286,6 +286,8 @@ export const appState = {
   stylePreviewsPending: false,
   pickerSelectedIndex: undefined as number | undefined,
   recentPage: 0,
+  recentSelection: undefined as Set<string> | undefined,
+  recentDeleting: false,
   recentPageSize: 9,
   recentPreviewRunning: false,
   // 使用教程进行中时的停止函数

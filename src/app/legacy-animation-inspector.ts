@@ -39,6 +39,7 @@ import {
   type LegacyAnimationReference,
   type LegacyAnimationTimeline,
 } from "../legacy-animation.ts"
+import { preview } from "./canvas-interaction"
 import { visualResolver } from "./bda-documents"
 import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./config-context"
 import { commitText, commitTextChanges, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
@@ -298,6 +299,14 @@ function pressStyles(entry: LegacyAnimationEntry, entries: readonly LegacyAnimat
     .map((reference) => reference.styleSection.replace(/^STYLE/i, "")))
 }
 
+function legacyPlayerArtwork(styles: ReadonlySet<string>) {
+  return {
+    resolver: visualResolver(),
+    readFile: readSkinFile,
+    sample: () => animationKeySample(styles),
+  }
+}
+
 /* —— 对外入口 —— */
 export function populateLegacyAnimationInspector(container: HTMLElement): boolean {
   if (!isLegacyAnimationDocument()) return false
@@ -308,7 +317,8 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   const referencesOf = (entry: LegacyAnimationEntry) => references.filter((reference) => reference.animation === entry.index)
   const entries = model.entries.filter((entry) => shownInAnimationView(entry.kind === "particle"))
   const pressByAnimation = new Map(entries.map((candidate) => [candidate.section, pressStyles(candidate, model.entries, references)]))
-  const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, pressByAnimation.get(id) ?? new Set())
+  const boundStyles = (id: string) => pressByAnimation.get(id) ?? new Set<string>()
+  const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, boundStyles(id))
   const { items: keyItems, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(entry, byIndex, referencesOf(entry).length)), plays)
   // 样式列表只列引用了当前入口动效的样式。
   const styles = legacyAnimationStyles(styleDocument())
@@ -336,6 +346,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
     return next.text
   })
   renderAnimationResource(container, {
+    listContext: JSON.stringify([appState.layoutPath, preview.theme, preview.skinState, appState.animationKeys]),
     listSource: appState.archive,
     mode: appState.animationDesignMode,
     particleCount: model.entries.filter(entry => entry.kind === "particle").length,
@@ -347,7 +358,11 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
     selected,
     keyFilter,
     styles: { noun: "样式", icon: "paintbrush", items: usage, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard, ...animationStyleActions(entry?.index) },
-    thumbnail: id => ({ clip: iniPreviewClip(appState.selectedDocument!, id, { fillBefore: true }), key: `${appState.selectedPath}|${id}`, resolver: visualResolver(), readFile: readSkinFile }),
+    thumbnail: id => ({
+      clip: iniPreviewClip(appState.selectedDocument!, id, { fillBefore: true }),
+      key: `${appState.selectedPath}|${id}`,
+      ...legacyPlayerArtwork(boundStyles(id)),
+    }),
     styleFilter,
     editable: isEditing(),
     presets: {
@@ -393,10 +408,8 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
     player: entry && {
       clip: iniPreviewClip(appState.selectedDocument!, entry.section, { fillBefore: true }),
       key: `${appState.selectedPath}|${entry.section}`,
-      resolver: visualResolver(),
-      readFile: readSkinFile,
-      sample: () => animationKeySample((key) => keyPlaysStyle(key, pressByAnimation.get(entry.section) ?? new Set()), pressByAnimation.get(entry.section) ?? new Set()),
-      keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressByAnimation.get(entry.section) ?? new Set())),
+      ...legacyPlayerArtwork(boundStyles(entry.section)),
+      keyboard: keyboardPlayback(key => plays(entry.section, key)),
       direct: isEditing() ? { text, section: entry.section, editable: true, commit: (next) => edit(() => next) } : undefined,
     },
     warnings: entry?.category !== undefined && entry.category !== kindCategory(entry.kind)
@@ -463,13 +476,13 @@ export function styleAnimationPlayers(styleID: string, styles: IniDocument, thum
   const path = legacyAnimationConfigPath()!
   const animations = styleAnimations(styleID, styles)
   const animationsDocument = animations.length ? cachedIniDocument(path) : undefined
+  const boundStyles = new Set([styleID])
   return animations.map((entry) => animationPlayer({
-    thumbnail,
     clip: iniPreviewClip(animationsDocument!, entry.section, { fillBefore: true }),
     key: `${path}|${entry.section}`,
-    resolver: visualResolver(),
-    readFile: readSkinFile,
-    keyboard: thumbnail ? undefined : keyboardPlayback((key) => keyPlaysStyle(key, new Set([styleID]))),
+    ...legacyPlayerArtwork(boundStyles),
+    thumbnail,
+    keyboard: thumbnail ? undefined : keyboardPlayback(key => keyPlaysStyle(key, boundStyles)),
   }))
 }
 
@@ -508,7 +521,7 @@ export function styleAnimationReferenceStates(styleID: string, styles: IniDocume
 }
 
 /** 样式里 PRESS_ANIM 等字段：预览格只更换对应槽位，⌘ 单击打开动画。 */
-export function decorateStyleAnimationField(row: HTMLElement, key: string, value: string): void {
+export function decorateStyleAnimationField(row: HTMLElement, styleID: string, key: string, value: string): void {
   const path = legacyAnimationConfigPath()
   const input = row.querySelector("input")
   if (!STYLE_ANIM_FIELDS.some((field) => field === key) || !path || !input) return
@@ -521,9 +534,15 @@ export function decorateStyleAnimationField(row: HTMLElement, key: string, value
     input.value = slots.join(",")
     input.dispatchEvent(new Event("change", { bubbles: true }))
   })
+  const boundStyles = new Set([styleID])
   const states: StyleReferenceState[] = animations.map(({ id, slot, entry }) => ({
     label: entry ? `更换动画 ${id} · ${kindLabel(entry)}` : `更换动画 ${id}（缺失）`,
-    content: entry ? animationPlayer({ thumbnail: true, clip: iniPreviewClip(document!, entry.section, { fillBefore: true }), key: `${path}|${entry.section}`, resolver: visualResolver(), readFile: readSkinFile }) : createIcon("image-off", 16),
+    content: entry ? animationPlayer({
+      clip: iniPreviewClip(document!, entry.section, { fillBefore: true }),
+      key: `${path}|${entry.section}`,
+      ...legacyPlayerArtwork(boundStyles),
+      thumbnail: true,
+    }) : createIcon("image-off", 16),
     onClick: edit => edit && entry ? openAnimation(path, entry.kind === "particle", entry.section) : choose(id, slot),
   }))
   row.classList.add("style-reference-field")

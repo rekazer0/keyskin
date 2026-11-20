@@ -29,8 +29,6 @@ const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_SOURCE_FILES: usize = 4096;
 const SOURCE_MARKER: &str = ".keyskin-source";
 const SOURCE_MANIFEST: &str = ".keyskin-files.json";
-// 与前端最近皮肤上限 recentFilesLimit 保持一致，每条最近记录都能找回自己的源码目录。
-const SOURCE_LIMIT: usize = 9;
 const RELEASES_URL: &str = "https://github.com/rekazer0/keyskin/releases";
 const CLIENT_LOG_FILE: &str = "client.jsonl";
 const CLIENT_LOG_PREVIOUS_FILE: &str = "client.previous.jsonl";
@@ -438,19 +436,28 @@ fn workspace_name(name: &str) -> String {
     }
 }
 
-fn prune_source_workspaces(root: &Path) -> Result<(), String> {
+fn prune_source_workspaces(root: &Path, current: &Path, limit: usize) -> Result<(), String> {
+    if limit == 0 {
+        return Ok(());
+    }
     let mut workspaces = fs::read_dir(root)
         .map_err(|error| error.to_string())?
         .filter_map(Result::ok)
-        .filter(|entry| entry.path().is_dir() && entry.path().join(SOURCE_MARKER).is_file())
+        .filter(|entry| {
+            entry.path() != current
+                && entry.file_type().is_ok_and(|kind| kind.is_dir())
+                && fs::symlink_metadata(entry.path().join(SOURCE_MARKER))
+                    .is_ok_and(|marker| marker.is_file())
+        })
         .collect::<Vec<_>>();
     // 按标记文件时间排序：打开源码目录时会刷新它，最近用过的目录不会先被删。
     workspaces.sort_by_key(|entry| {
-        fs::metadata(entry.path().join(SOURCE_MARKER))
+        let modified = fs::metadata(entry.path().join(SOURCE_MARKER))
             .and_then(|metadata| metadata.modified())
-            .unwrap_or(UNIX_EPOCH)
+            .unwrap_or(UNIX_EPOCH);
+        (modified, entry.file_name())
     });
-    let remove_count = workspaces.len().saturating_sub(SOURCE_LIMIT);
+    let remove_count = workspaces.len().saturating_sub(limit - 1);
     for entry in workspaces.into_iter().take(remove_count) {
         fs::remove_dir_all(entry.path()).map_err(|error| error.to_string())?;
     }
@@ -479,7 +486,9 @@ async fn create_source_workspace(
     directory: Option<String>,
     name: String,
     files: Vec<EncodedSourceFile>,
+    source_limit: i32,
 ) -> Result<String, String> {
+    let source_limit = usize::try_from(source_limit).map_err(|_| "保留数量不能小于 0".to_string())?;
     #[cfg(target_os = "android")]
     if let Some(uri) = directory
         .as_deref()
@@ -490,13 +499,11 @@ async fn create_source_workspace(
             uri.to_string(),
             name,
             serde_json::to_value(files).map_err(|error| error.to_string())?,
+            (source_limit > 0).then_some(source_limit),
         )
         .await;
     }
     let files = decode_source_files(files)?;
-    let uses_builtin_directory = directory
-        .as_ref()
-        .is_none_or(|value| value.trim().is_empty());
     let root = source_root(&app, directory)?;
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -514,9 +521,7 @@ async fn create_source_workspace(
         fs::write(workspace.join(SOURCE_MARKER), b"KeySkin source workspace\n")
             .map_err(|error| error.to_string())?;
         write_source_files(&workspace, &files)?;
-        if uses_builtin_directory {
-            prune_source_workspaces(&root)?;
-        }
+        prune_source_workspaces(&root, &workspace, source_limit)?;
         app.fs_scope()
             .allow_directory(&workspace, true)
             .map_err(|error| error.to_string())?;
@@ -818,6 +823,96 @@ async fn skin_file_stamp(path: String) -> Result<[u64; 2], String> {
     Ok([metadata.len(), modified])
 }
 
+fn checked_skin_path(path: &Path) -> Result<Option<PathBuf>, String> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase);
+    if !path.is_absolute()
+        || path.components().any(|part| part == Component::ParentDir)
+        || !matches!(
+            extension.as_deref(),
+            Some("bdi" | "bds" | "bda" | "ssf" | "mssf" | "sxi")
+        )
+    {
+        return Err("只可删除本地皮肤文件".into());
+    }
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => fs::canonicalize(path)
+            .map(Some)
+            .map_err(|error| error.to_string()),
+        Ok(_) => Err("所选路径不是普通皮肤文件".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+async fn delete_skin_files(
+    window: tauri::WebviewWindow,
+    paths: Vec<String>,
+) -> Result<Option<Vec<Option<String>>>, String> {
+    if window.label() != "main" {
+        return Err("只能在主窗口删除皮肤".into());
+    }
+    let candidates = paths
+        .iter()
+        .map(|path| checked_skin_path(Path::new(path)))
+        .collect::<Vec<_>>();
+    {
+        use tauri::scope::fs::Pattern;
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+        // 只信任原生选取的精确路径，不把自定义源码根目录的递归授权当成删除许可。
+        let scope = window.fs_scope();
+        let allowed = scope.allowed_patterns();
+        let unapproved = candidates
+            .iter()
+            .filter_map(|candidate| match candidate {
+                Ok(Some(path))
+                    if !scope.is_allowed(path)
+                        || !allowed.iter().any(|pattern| {
+                            path.to_str()
+                                .is_some_and(|path| pattern.as_str() == Pattern::escape(path))
+                        }) =>
+                {
+                    Some(path.display().to_string())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if !unapproved.is_empty()
+            && !window
+                .dialog()
+                .message(format!(
+                    "允许键设永久删除以下皮肤文件？\n\n{}",
+                    unapproved.join("\n")
+                ))
+                .title("确认文件删除权限")
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    "删除".into(),
+                    "取消".into(),
+                ))
+                .blocking_show()
+        {
+            return Ok(None);
+        }
+    }
+    let mut errors = Vec::with_capacity(paths.len());
+    for candidate in candidates {
+        errors.push(
+            candidate
+                .and_then(|path| match path {
+                    Some(path) => fs::remove_file(path).map_err(|error| error.to_string()),
+                    None => Ok(()),
+                })
+                .err(),
+        );
+    }
+    Ok(Some(errors))
+}
+
 #[tauri::command]
 async fn read_skin_file(
     path: String,
@@ -991,14 +1086,17 @@ async fn set_window_material(
     window: tauri::WebviewWindow,
     enabled: bool,
     opacity: u8,
+    navigation_width: Option<u16>,
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let _ = opacity;
-        window_material::set_material(window, enabled).await
+        window_material::set_material(window, enabled.then_some(navigation_width.unwrap_or(0)))
+            .await
     }
     #[cfg(target_os = "windows")]
     {
+        let _ = navigation_width;
         if !enabled {
             return window.set_effects(None).map_err(|error| error.to_string());
         }
@@ -1015,7 +1113,7 @@ async fn set_window_material(
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = (window, enabled, opacity);
+        let _ = (window, enabled, opacity, navigation_width);
         Ok(())
     }
 }
@@ -1529,7 +1627,7 @@ mod tests {
         read_file, read_file_bytes, read_model_configuration_path, read_source_changes_path,
         read_source_files, safe_source_path, valid_share_filename, windows_material_kind,
         write_file, write_model_configuration_path, write_source_files, ModelConfiguration,
-        MAX_ARCHIVE_BYTES, SOURCE_LIMIT, SOURCE_MARKER,
+        MAX_ARCHIVE_BYTES, SOURCE_MARKER,
     };
     use std::fs;
     use std::thread;
@@ -1842,6 +1940,27 @@ mod tests {
     }
 
     #[test]
+    fn skin_deletion_only_accepts_regular_skin_files() {
+        let root = std::env::temp_dir().join(format!("keyskin-delete-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("folder.bds")).expect("create fixture directory");
+        let skin = root.join("肤色.BDS");
+        fs::write(&skin, b"skin").expect("create test skin");
+        assert_eq!(super::checked_skin_path(&skin).unwrap(), Some(fs::canonicalize(&skin).unwrap()));
+        assert!(super::checked_skin_path(&root.join("folder.bds")).is_err());
+        assert!(super::checked_skin_path(&root.join("not-a-skin.txt")).is_err());
+        assert!(super::checked_skin_path(std::path::Path::new("relative.bds")).is_err());
+        assert_eq!(super::checked_skin_path(&root.join("missing.bds")).unwrap(), None);
+        #[cfg(unix)]
+        {
+            let link = root.join("link.bds");
+            std::os::unix::fs::symlink(&skin, &link).unwrap();
+            assert!(super::checked_skin_path(&link).is_err());
+        }
+        fs::remove_dir_all(root).expect("cleanup fixtures");
+    }
+
+    #[test]
     fn source_workspace_sync_only_removes_editor_managed_files() {
         let root = std::env::temp_dir().join(format!("keyskin-source-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
@@ -1899,11 +2018,11 @@ mod tests {
     }
 
     #[test]
-    fn built_in_source_pruning_keeps_limit_marked_workspaces() {
+    fn source_pruning_respects_limit_and_keeps_current_workspace() {
         let root = std::env::temp_dir().join(format!("keyskin-prune-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create source root");
-        for index in 0..=SOURCE_LIMIT {
+        for index in 0..4 {
             let directory = root.join(format!("workspace-{index}"));
             fs::create_dir_all(&directory).expect("create workspace");
             fs::write(directory.join(SOURCE_MARKER), b"managed").expect("mark workspace");
@@ -1911,15 +2030,22 @@ mod tests {
         }
         let unmanaged = root.join("user-folder");
         fs::create_dir_all(&unmanaged).expect("create unmanaged folder");
-        prune_source_workspaces(&root).expect("prune workspaces");
+        let skin = root.join("皮肤.bds");
+        fs::write(&skin, b"skin package").expect("create skin package");
+        let current = root.join("workspace-0");
+        prune_source_workspaces(&root, &current, 0).expect("skip pruning at zero");
+        assert!(root.join("workspace-1").is_dir());
+        prune_source_workspaces(&root, &current, 2).expect("prune workspaces");
         let marked = fs::read_dir(&root)
             .expect("read source root")
             .filter_map(Result::ok)
             .filter(|entry| entry.path().join(SOURCE_MARKER).is_file())
             .count();
-        assert_eq!(marked, SOURCE_LIMIT);
-        assert!(!root.join("workspace-0").exists());
+        assert_eq!(marked, 2);
+        assert!(current.is_dir());
+        assert!(root.join("workspace-3").is_dir());
         assert!(unmanaged.is_dir());
+        assert!(skin.is_file());
         fs::remove_dir_all(root).expect("cleanup source root");
     }
 
@@ -2028,6 +2154,7 @@ pub fn run() {
         read_file,
         skin_file_size,
         skin_file_stamp,
+        delete_skin_files,
         read_skin_file,
         write_file,
         append_client_log,
@@ -2074,6 +2201,7 @@ pub fn run() {
         read_file,
         skin_file_size,
         skin_file_stamp,
+        delete_skin_files,
         read_skin_file,
         write_file,
         append_client_log,

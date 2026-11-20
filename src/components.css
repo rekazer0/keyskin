@@ -1065,7 +1065,6 @@ body {
 /* —— 图片资源卡片 —— */
 /* 动效设计的动画 / 样式列表（.ui-listbox 里的样式卡片）复用同一外观：缩略图在上，名称与摘要在下。 */
 .ui-image-card, .ui-listbox > .ui-style-card {
-  display: grid;
   align-content: start;
   gap: var(--space-sm);
   width: 100%;
@@ -1074,9 +1073,9 @@ body {
   text-align: left;
   cursor: default;
 }
-.ui-image-card { color: var(--text); font: inherit; }
-/* 与图片卡片一样不跳过布局：content-visibility 记住的旧高度会在改宽后撑高或压扁卡片。 */
-.ui-listbox > .ui-style-card { grid-template-rows: none; gap: var(--space-2xs); content-visibility: visible; }
+.ui-image-card { display: grid; color: var(--text); font: inherit; }
+/* 保持布局可见并纵向排列，避免 WebKit 改宽后沿用旧的卡片高度或网格行高。 */
+.ui-listbox > .ui-style-card { display: flex; flex-direction: column; gap: var(--space-2xs); content-visibility: visible; }
 .ui-image-card-preview, .ui-listbox > .ui-style-card > .ui-style-preview {
   position: relative;
   display: grid;
@@ -1104,7 +1103,7 @@ body {
   pointer-events: none;
 }
 .ui-image-card-size[hidden] { display: none; }
-/* 预览与图片卡片同为固定高度，改宽时卡片高度不变；文字只留一行标题与一行摘要。 */
+/* 预览与图片卡片同为 4:3，随卡宽变化；标题和摘要位于预览下方。 */
 .ui-listbox > .ui-style-card > .ui-style-preview { order: -1; }
 .ui-listbox > .ui-style-card > .ui-style-card-caption { padding: 0 var(--space-xs); }
 .ui-listbox > .ui-style-card .ui-animation-stage { height: 100%; border-radius: 0; }
@@ -1112,6 +1111,15 @@ body {
 .ui-image-card-caption > strong { flex: 1; min-width: 0; overflow: hidden; font-family: var(--font-mono); font-size: var(--font-size-sm); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .ui-image-card-til { display: flex; flex: none; color: var(--secondary); }
 .ui-image-card > small, .ui-listbox > .ui-style-card > :is(.ui-list-item-meta, .ui-field-note) { padding: 0 var(--space-xs); overflow: hidden; color: var(--tertiary); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+/* 资源页的缩略图与文字区共用卡片外框，不再给缩略图套内框。 */
+:where(.resource-gallery) :is(.ui-style-card, .ui-image-card), .ui-resource-catalog-item {
+  background-color: var(--content);
+  box-shadow: none;
+}
+:where(.resource-gallery) :is(.ui-style-card:not([data-style-kind="sound"]), .ui-image-card) { gap: 0; padding: 0; overflow: clip; }
+:where(.resource-gallery) :is(.ui-style-card > .ui-style-card-caption, .ui-image-card-caption) { padding: var(--space-sm); }
+:where(.resource-gallery) :is(.ui-style-card > .ui-style-preview, .ui-style-card .ui-animation-stage, .ui-image-card-preview) { border-radius: 0; }
+:where(.resource-gallery) .ui-image-card-preview { border: 0; }
 .ui-measurements {
   position: absolute;
   inset-inline: var(--space-xs);
@@ -1127,6 +1135,7 @@ body {
 
 /* 手机底部导航复用原工作区、AI 面板与设置窗口。 */
 .ui-mobile-navigation { display: none; }
+.ui-project-card[data-variant="recent"] { user-select: none; -webkit-touch-callout: none; }
 .ui-skin-entry-meta, .ui-skin-entry-chevron { display: none; }
 .ui-mobile-back, .mobile-dialog-intro, .mobile-dialog-note, .ui-mobile-form-field { display: none; }
 @media (max-width: 760px) and (orientation: portrait) {

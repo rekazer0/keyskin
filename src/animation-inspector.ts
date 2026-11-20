@@ -463,7 +463,7 @@ export function renderAnimationResource(container: HTMLElement, view: AnimationR
   const item = view.items.find((candidate) => candidate.id === view.selected)
   const hosts = animationWorkspaceHosts()
   view.listOwner = container
-  view.listContext = JSON.stringify([view.mode, hosts?.allTypes, view.context])
+  view.listContext = JSON.stringify([view.mode, hosts?.allTypes, view.context, view.listContext])
   const showingSource = shell?.showingSource()
   if (view.mode !== "all" && (!shell?.editingStyle() || showingSource)) renderObjectHeader(view.context, item, view.mode)
   if (hosts && view.mode !== "all") {

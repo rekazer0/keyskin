@@ -6,9 +6,15 @@
 type Duration = "fast" | "base" | "slow"
 type Ease = "standard" | "emphasized"
 
+/** Production CSS can shorten a millisecond token to seconds (e.g. 500ms → .5s). */
+export function cssTimeMs(value: string): number {
+  const time = value.trim()
+  return Number.parseFloat(time) * (time.endsWith("s") && !time.endsWith("ms") ? 1000 : 1)
+}
+
 function timing(duration: Duration, ease: Ease): KeyframeAnimationOptions | undefined {
   const style = getComputedStyle(document.documentElement)
-  const ms = Number.parseFloat(style.getPropertyValue(`--duration-${duration}`))
+  const ms = cssTimeMs(style.getPropertyValue(`--duration-${duration}`))
   if (!(ms > 0) || typeof Element.prototype.animate !== "function") return undefined
   return { duration: ms, easing: style.getPropertyValue(`--ease-${ease}`).trim() || "ease-out" }
 }
@@ -36,7 +42,7 @@ export function animateProgress(progress: HTMLProgressElement, target: number, u
   }
   if (motion.frame) return
 
-  const duration = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--duration-base"))
+  const duration = cssTimeMs(getComputedStyle(document.documentElement).getPropertyValue("--duration-base"))
   if (!(duration > 0)) {
     progress.value = target
     updated(target)

@@ -20,7 +20,7 @@ import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
 import { invokeBinary } from "../native-binary.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
-import { recordRecentFile } from "./recent-files"
+import { fileRetentionLimit, recordRecentFile } from "./recent-files"
 import { dismissLayoutOverview } from "./layout-overview"
 import { renderFiles } from "./file-tree"
 import { bdaAvailableLayoutPaths, preferredPath, isBdaLayoutPath } from "./bda-documents"
@@ -178,19 +178,17 @@ export async function loadArchive(
     const pendingArchive = nextArchive
     void (async () => {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+      const createWorkspace = (directory: string | null) => invoke<string>("create_source_workspace", {
+        directory,
+        name: displayName || documentNameForPath(path, nextArchive),
+        files: sourceFilesPayload(nextArchive),
+        sourceLimit: fileRetentionLimit(),
+      })
       try {
-        return await invoke<string>("create_source_workspace", {
-          directory: pendingSourceDirectory,
-          name: path || displayName || exportName("未命名", nextArchive.format),
-          files: sourceFilesPayload(nextArchive),
-        })
+        return await createWorkspace(pendingSourceDirectory)
       } catch (error) {
         if (isAndroidTauri() || !pendingSourceDirectory) throw error
-        const workspace = await invoke<string>("create_source_workspace", {
-          directory: null,
-          name: path || displayName || exportName("未命名", nextArchive.format),
-          files: sourceFilesPayload(nextArchive),
-        })
+        const workspace = await createWorkspace(null)
         showStatus("自定义源码目录不可用，本次已保存到内置目录")
         return workspace
       }
@@ -199,7 +197,7 @@ export async function loadArchive(
       const pendingPaths = [...pendingSourcePaths]
       await activateSourceWorkspace(workspace, sourcePrefix)
       if (appState.archive !== pendingArchive || appState.sourceWorkspacePendingArchive !== pendingArchive) return
-      if (!isNew && path) recordRecentFile(path, documentName.textContent, workspace)
+      if (!isNew && path && appState.currentPath === path) recordRecentFile(path, documentName.textContent, workspace)
       pendingPaths.forEach((changedPath) => pendingSourcePaths.add(changedPath))
       await flushSourceAutosave()
       appState.sourceWorkspacePendingArchive = undefined
@@ -528,15 +526,14 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
     }
   }
   if (!exported.converted && appState.archive === exported.archive) {
+    const firstSave = appState.unsavedNew
     appState.currentPath = path
     appState.unsavedNew = false
     // The written file's baked images are not part of the document; the next save starts from the document again.
     exported.archive.markSaved(exported.document, format, exported.revision)
     documentName.textContent = documentNameForPath(path, exported.archive)
-    if (appState.currentTemplateId) {
-      recordRecentFile(path, documentName.textContent, appState.sourceWorkspacePath, appState.currentTemplateId)
-      appState.currentTemplateId = ""
-    }
+    if (firstSave) recordRecentFile(path, documentName.textContent, appState.sourceWorkspacePath, appState.currentTemplateId)
+    appState.currentTemplateId = ""
     updateDirty()
   }
   return true

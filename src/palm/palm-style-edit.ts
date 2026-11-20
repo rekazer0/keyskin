@@ -5,6 +5,7 @@
 import type { TileRect, TileSlice } from "../tiles.ts"
 import type { PalmOrientation, PalmTheme } from "./palm-board.ts"
 import { asObject, rectParts, type Json, type JsonObject } from "./sxi-ini.ts"
+import { palmStyleReference } from "./palm-labels.ts"
 import { sxiFragment } from "./sxi-json.ts"
 import { nextStyleNumber } from "../layout-image.ts"
 
@@ -21,6 +22,21 @@ export function palmStyleLocation(skin: JsonObject, theme: PalmTheme, orientatio
 export function palmStyleIDList(skin: JsonObject, theme: PalmTheme, orientation: PalmOrientation): string[] {
   const ids = new Set([`s_${orientation}`, "s_info"].flatMap((name) => Object.keys(asObject(sxiFragment(skin, [theme, name, "ss_1"])) ?? {})))
   return [...ids].sort(new Intl.Collator(undefined, { numeric: true }).compare)
+}
+
+export function remapPalmLayoutStyles(value: Json | undefined, ids: ReadonlyMap<string, number>): void {
+  if (Array.isArray(value)) {
+    for (const child of value) remapPalmLayoutStyles(child, ids)
+    return
+  }
+  const object = asObject(value)
+  if (!object) return
+  for (const [key, child] of Object.entries(object)) {
+    if (palmStyleReference(key) || key === "a" && "r" in object) {
+      const replace = (id: Json) => ids.get(String(id)) ?? id
+      object[key] = Array.isArray(child) ? child.map(replace) : replace(child)
+    } else remapPalmLayoutStyles(child, ids)
+  }
 }
 
 /**

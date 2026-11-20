@@ -52,7 +52,16 @@ try {
     await page.locator("#settings-cancel").click()
     await page.locator("#settings-workspace").waitFor({ state: "hidden" })
     assert.equal(await page.locator("#workspace-navigation-opacity").isDisabled(), false)
-    await page.locator("html").evaluate(root => root.classList.add("macos"))
+    await page.evaluate(async () => {
+      document.documentElement.classList.add("macos")
+      window.materialCalls = []
+      window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
+        if (command === "window_material_kind") return "glass"
+        if (command === "set_window_material") window.materialCalls.push(args)
+      } }
+      await (await import("/src/app/preferences.ts")).initializeWindowMaterial()
+    })
+    await page.waitForFunction(() => window.materialCalls.at(-1)?.navigationWidth === document.querySelector("#workspace-navigation").offsetWidth)
     await open()
     const settingsSurfaces = () => page.evaluate(() => Object.fromEntries(
       [".titlebar", ".settings-header", "main", "#settings-workspace", ".settings-layout", ".settings-footer", "#workspace-navigation"].map(selector => [selector, getComputedStyle(document.querySelector(selector)).backgroundColor]),
@@ -63,7 +72,9 @@ try {
     for (const selector of [".titlebar", ".settings-header"]) {
       assert.equal(await backdrop(selector), "none", `${selector} has no extra blur`)
     }
-    assert.match(await backdrop("#workspace-navigation"), /blur\(/, "navigation retains its blur")
+    assert.equal(await navigationSlider.isVisible(), false, "AppKit owns navigation opacity")
+    assert.equal(await backdrop("#workspace-navigation"), "none", "the native sidebar needs no web blur")
+    assert.equal(glass["#workspace-navigation"], transparent, "the default theme exposes the native material")
     assert.equal(glass.main, transparent)
     assert.equal(glass["#settings-workspace"], glass.main, "the titlebar has no underlying web fill")
     for (const opacity of ["20", "60", "100"]) {
@@ -76,13 +87,32 @@ try {
       else assert.ok(adjusted[".settings-header"].endsWith(`, ${Number(opacity) / 100})`), `titlebar has ${opacity}% opacity`)
       assert.equal(adjusted["#workspace-navigation"], glass["#workspace-navigation"], "navigation remains independent of content opacity")
     }
+    await page.getByRole("option", { name: "玫瑰石英" }).click()
+    await page.waitForFunction(() => document.documentElement.dataset.interfaceTheme === "rose-quartz")
+    assert.equal((await settingsSurfaces())["#workspace-navigation"], transparent, "design themes expose the same native material")
+    assert.equal(await backdrop("#workspace-navigation"), "none")
+    await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement)
+      const body = getComputedStyle(document.body)
+      const width = document.querySelector("#workspace-navigation").offsetWidth
+      if (root.backgroundColor !== "rgba(0, 0, 0, 0)" || body.backgroundColor !== root.backgroundColor || !body.backgroundImage.includes(`rgba(0, 0, 0, 0) ${width}px`)) {
+        throw new Error("The theme shell must not cover the native sidebar")
+      }
+    })
     await page.locator("#window-material").uncheck()
+    await page.waitForFunction(() => window.materialCalls.at(-1)?.enabled === false)
     const materialOff = await settingsSurfaces()
     assert.match(materialOff[".titlebar"], /^rgb\(/, "turning off the material keeps the titlebar opaque")
     assert.equal(materialOff[".settings-header"], materialOff[".titlebar"])
+    assert.match(materialOff["#workspace-navigation"], /^rgb\(/, "the sidebar is opaque with material off")
     await page.locator("#settings-cancel").click()
+    await page.waitForFunction(() => window.materialCalls.at(-1)?.enabled === true)
+    await page.setViewportSize({ width: 900, height: 600 })
+    await page.waitForFunction(() => window.materialCalls.at(-1)?.navigationWidth === 0)
+    await page.setViewportSize({ width: 900, height: 700 })
+    await page.waitForFunction(() => window.materialCalls.at(-1)?.navigationWidth > 0)
     await page.close()
-    console.log(`workspace material ${colorScheme}: independent opacity, macOS titlebar, cancel, save and reload passed`)
+    console.log(`workspace material ${colorScheme}: opacity persistence, AppKit sidebar handoff, toggle and compact layout passed`)
   }
 } finally {
   await browser.close()

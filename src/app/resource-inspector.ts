@@ -241,7 +241,7 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
     } else {
       // 百度配置值的类型化控件（颜色、开关……）。
       row = configField(section, key, label, value, isEditing(), commit) ?? field({ ...options, spec: { kind: "text", value } })
-      decorateStyleAnimationField(row, key, value)
+      decorateStyleAnimationField(row, styleID, key, value)
     }
     groupRows.get(groups.find(([, , matches]) => matches?.(key))![0])!.push(row)
   }

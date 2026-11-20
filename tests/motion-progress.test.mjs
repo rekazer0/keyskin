@@ -1,6 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { animateProgress, closeDialog } from "../src/motion.ts"
+import { animateProgress, closeDialog, cssTimeMs } from "../src/motion.ts"
+
+test("CSS timing tokens retain their millisecond value after production minification", () => {
+  assert.equal(cssTimeMs(" 500ms "), 500)
+  assert.equal(cssTimeMs(" .5s "), 500)
+  assert.equal(cssTimeMs("0s"), 0)
+})
 
 test("operation progress follows changing targets smoothly", () => {
   const previous = new Map(["document", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame"]

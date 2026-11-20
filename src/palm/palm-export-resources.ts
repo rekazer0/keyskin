@@ -1,5 +1,5 @@
 // Palm Android looks up styles globally and images by basename, even for orientation overrides.
-import { palmStyleReference } from "./palm-labels.ts"
+import { remapPalmLayoutStyles } from "./palm-style-edit.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 
 type Resource = { path: string; bytes?: Uint8Array; directory: boolean }
@@ -58,7 +58,7 @@ export function separateOrientationResources(skin: JsonObject, entries: Resource
       }
       renamedStyles[String(next)] = copy
     }
-    remapLayout(skin[`${orientation}_layout`], remap)
+    remapPalmLayoutStyles(skin[`${orientation}_layout`], remap)
     Object.assign(styles, renamedStyles)
     Object.assign(asObject(own.ss_1) ?? {}, renamedStyles)
     const globalResources = Array.isArray(skin.r_info) ? skin.r_info as Json[] : []
@@ -67,19 +67,4 @@ export function separateOrientationResources(skin: JsonObject, entries: Resource
   }
   shared.ss_1 = styles
   shared.info = tiles
-}
-
-function remapLayout(value: Json, ids: Map<string, number>): void {
-  if (Array.isArray(value)) {
-    for (const child of value) remapLayout(child, ids)
-    return
-  }
-  const object = asObject(value)
-  if (!object) return
-  for (const [key, child] of Object.entries(object)) {
-    if (palmStyleReference(key) || key === "a" && "r" in object) {
-      const replace = (id: Json) => ids.get(String(id)) ?? id
-      object[key] = Array.isArray(child) ? child.map(replace) : replace(child)
-    } else remapLayout(child, ids)
-  }
 }

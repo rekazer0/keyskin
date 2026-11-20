@@ -24,10 +24,7 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "transparent": true,
-        "backgroundColor": [0, 0, 0, 0],
-        "windowEffects": {
-          "effects": ["hudWindow"]
-        }
+        "backgroundColor": [0, 0, 0, 0]
       }
     ]
   },

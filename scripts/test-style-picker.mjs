@@ -41,17 +41,44 @@ async function selectKey(page, format) {
     populateKeyInspector()
   }, format)
 }
-async function snapshot(page, format) {
-  return page.evaluate(async format => {
+async function snapshot(page, format, styleID) {
+  return page.evaluate(async ({ format, styleID }) => {
     const { appState } = await import('/src/app/state.ts')
     const { styleConfigPath } = await import('/src/app/config-context.ts')
     const { palmStyle } = await import('/src/app/sxi-styles.ts')
-    const id = document.querySelector(format === 'sxi' ? '#document-fields input[data-document-style-key="BACK_STYLE"]' : '#quick-inspector input[data-key-field="BACK_STYLE"]').value
+    const id = styleID ?? document.querySelector(format === 'sxi' ? '#document-fields input[data-document-style-key="BACK_STYLE"]' : '#quick-inspector input[data-key-field="BACK_STYLE"]').value
     const styles = (await import('/src/app/style-picker.ts')).styleConfigDocument()
     return { id, undo: appState.undoStack.length,
       text: appState.archive.getText(format === 'sxi' ? 'skin.json' : styleConfigPath()),
       image: format === 'sxi' ? palmStyle(id)?.s_2 : { normal: styles.get(`STYLE${id}`, 'NM_IMG'), hl: styles.get(`STYLE${id}`, 'HL_IMG') } }
-  }, format)
+  }, { format, styleID })
+}
+async function checkReplacement(page, format, originalID) {
+  const library = picker(page)
+  const reference = page.locator(`${referenceInput(format)}:not(.ui-style-ref-number)`)
+  const panel = reference.locator('..')
+  const state = () => page.evaluate(async ({ format, originalID }) => {
+    const { appState } = await import('/src/app/state.ts')
+    const { styleUsages } = await import('/src/app/style-references.ts')
+    const paths = format === 'sxi' ? ['skin.json'] : appState.archive.names().filter(path => appState.archive.isText(path))
+    return { count: styleUsages(originalID).length, undo: appState.undoStack.length, texts: paths.map(path => appState.archive.getText(path)) }
+  }, { format, originalID })
+  const before = await state()
+  assert.ok(before.count > 1, 'the original style is shared')
+  for (const [name, remaining] of [['更换', before.count - 1], ['全部更换', 0]]) {
+    await panel.locator('.ui-style-ref-action').click()
+    await library.locator('.ui-style-card[data-style-id="6"]').click()
+    assert.equal(await library.getByRole('button', { name: '选择切片', exact: true }).count(), 0)
+    assert.deepEqual(await state(), before, 'preview does not change references')
+    await library.getByRole('button', { name, exact: true }).click()
+    await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+    assert.equal(await reference.inputValue(), '6')
+    const after = await state()
+    assert.equal(after.count, remaining)
+    assert.equal(after.undo, before.undo + 1)
+    await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+    assert.deepEqual(await state(), before, 'one undo restores all affected references')
+  }
 }
 async function checkMediaReferences(page, format) {
   const row = key => page.locator(`.ui-style-ref-list:visible`).filter({ has: page.locator(`:scope > input[data-document-style-key="${key}"]`) })
@@ -95,6 +122,7 @@ try {
     const files = unzipSync(bdsFixture())
     const add = (path, text) => { files[path] = strToU8(strFromU8(files[path]) + text) }
     files['light/port/py_26.ini'] = strToU8(strFromU8(files['light/port/py_26.ini']).replace('[KEY1]', '[KEY1]\nANIM_STYLE=7\nSOUND_STYLE=8'))
+    files['light/res/default.css'] = strToU8(strFromU8(files['light/res/default.css']).replace('[STYLE4]', '[STYLE4]\nNM_IMG=btn,0'))
     add('light/res/default.css', '\n[STYLE7]\nPRESS_ANIM=1\n[STYLE8]\nPRESS_SOUND_PATH=a.wav\n')
     add('light/res/anim.ini', '\n[ANIM2]\nCATEGORY=0\nTYPE=1\nDURATION=300\nFROM=0\nTO=1\n')
     for (const name of ['a.wav', 'b.wav']) files[`light/res/${name}`] = new Uint8Array(44)
@@ -105,6 +133,7 @@ try {
     await selectKey(page, format)
     await checkMediaReferences(page, format)
     const before = await snapshot(page, format)
+    await checkReplacement(page, format, before.id)
     const background = page.locator(referenceInput(format)).locator('..')
     await background.locator('.ui-style-remove').click()
     assert.equal((await snapshot(page, format)).id, '', '移除背景样式清空引用')
@@ -187,6 +216,18 @@ try {
     assert.notEqual(afterLayers[1], beforeLayers[1], '仅替换点击的前景层')
     await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
     assert.deepEqual(await foreground(), beforeLayers)
+    await field.locator(':scope > .ui-style-ref').nth(1).locator('.ui-style-state[data-state="normal"]').click()
+    await picker(page).locator('.ui-image-card[data-path$="/bg.png"]').click()
+    await canvas.click({ position: { x: 1, y: 1 } })
+    const applyNewStyle = picker(page).getByRole('button', { name: '新建样式应用', exact: true })
+    await applyNewStyle.click()
+    await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+    const copiedLayers = await foreground()
+    assert.equal(copiedLayers.length, beforeLayers.length)
+    assert.equal(copiedLayers[0], beforeLayers[0])
+    assert.notEqual(copiedLayers[1], beforeLayers[1], '从图片入口新建样式也只替换当前层')
+    await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
+    assert.deepEqual(await foreground(), beforeLayers)
     console.log(`${format}: foreground layer selection and undo passed`)
     const imageSlices = () => page.evaluate(async () => {
       const { appState } = await import('/src/app/state.ts')
@@ -200,7 +241,7 @@ try {
         ? palmTileSlices(openPalmSkin(), 'light/skin/res/unsliced.png')
         : text === null ? [] : tileSlices(IniDocument.parse(text)) }
     })
-    for (const [state, toStyle] of [['normal', false], ['normal', true], ['pressed', true]]) {
+    for (const [state, toStyle, newStyle] of [['normal', false], ['normal', true], ['pressed', true], ['pressed', false, true]]) {
       await page.evaluate(({ format, toStyle }) => {
         return import('/src/app/state.ts').then(({ appState }) => {
           appState.archive.setBytes('light/skin/res/unsliced.png', appState.archive.getBytes('light/skin/res/bg.png').slice())
@@ -216,18 +257,20 @@ try {
       await picker(page).locator('.ui-image-card[data-path$="/unsliced.png"]').click()
       await picker(page).locator('#picker-canvas').waitFor({ state: 'visible' })
       assert.equal(await picker(page).locator('#picker-apply').isDisabled(), true)
+      assert.equal(await applyNewStyle.isDisabled(), true)
       await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
       assert.equal(await picker(page).locator('#picker-slice').inputValue(), '-1')
       assert.equal(await picker(page).locator('#picker-apply').isEnabled(), true)
+      assert.equal(await applyNewStyle.isEnabled(), true)
       assert.deepEqual(await imageSlices(), beforeSlices)
       await picker(page).locator('#picker-close').click()
       await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
       assert.deepEqual(await snapshot(page, format), before)
-      if (toStyle) {
+      if (toStyle || newStyle) {
         await stateImage().click()
         await picker(page).locator('.ui-image-card[data-path$="/unsliced.png"]').click()
         await picker(page).locator('#picker-canvas').click({ position: { x: 1, y: 1 } })
-        await picker(page).locator('#picker-apply').click()
+        await (newStyle ? applyNewStyle : picker(page).locator('#picker-apply')).click()
       } else {
         await changeStyle.click()
         await chooseImage(page, false, 'unsliced')
@@ -245,7 +288,10 @@ try {
       }, { id: after.id, state }), [0, 0, 2, 2], '应用后的样式能解析到真实切片')
       assert.equal(after.image[state === 'pressed' ? 'normal' : 'hl'], before.image[state === 'pressed' ? 'normal' : 'hl'])
       if (toStyle) assert.equal(after.id, before.id)
-      else assert.notEqual(after.id, before.id)
+      else {
+        assert.notEqual(after.id, before.id)
+        assert.deepEqual((await snapshot(page, format, before.id)).image, before.image, '新建样式不修改原样式')
+      }
       await page.evaluate(async () => (await import('/src/app/edit-history.ts')).undo())
       assert.equal((await snapshot(page, format)).text, before.text)
       assert.equal((await snapshot(page, format)).id, before.id)

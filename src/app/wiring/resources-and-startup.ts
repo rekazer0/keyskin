@@ -8,7 +8,7 @@ import { applyImageSliceSelection, resourcePickerPayload, selectImageResource, e
 import { appState } from "../state"
 import { isTauri, isAndroidTauri, playSoundPath, syncDeviceControlIcon, clearSimulatedOutput } from "../canvas-interaction"
 import { listen } from "@tauri-apps/api/event"
-import { emitStyleLibrary, emitStyleLibraryPreview, emitStyleLibraryImage, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle, sliceStyleLibrarySelection } from "../style-picker"
+import { emitStyleLibrary, emitStyleLibraryPreview, emitStyleLibraryImage, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle } from "../style-picker"
 import { canvasEditable, isEditing, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
 import { soundPathForFilename } from "../../sounds.ts"
 import { bindPaneResize, applyModeState } from "../mobile-layout"
@@ -55,18 +55,18 @@ export function wireResourcesAndStartup(): void {
     appState.pickerFrameReady = false
     pickerFrame.src = "about:blank"
   })
-  void onPickerEvent<{ index: number }>("image-picker-select", ({ index }) => {
-    void applyImageSliceSelection(index)
+  void onPickerEvent<{ index: number; newStyle?: boolean }>("image-picker-select", ({ index, newStyle }) => {
+    void applyImageSliceSelection(index, newStyle)
   })
   // 切片窗口返回「全部样式」：留在同一个窗口里切视图。
   void onPickerEvent("image-picker-back-styles", () => void emitStyleLibrary(true))
   void onPickerEvent<{ session: string; styleID: string }>("style-library-preview-request", request => void emitStyleLibraryPreview(request))
   void onPickerEvent<{ session: string; key: string }>("style-library-image-request", request => void emitStyleLibraryImage(request))
   void onPickerEvent<{ session?: string; styleID?: string; imagePath?: string }>("style-library-preview-selection", selected => void previewMobilePickerSelection(selected))
-  void onPickerEvent<{ styleID?: string; imagePath?: string; toStyle?: boolean }>("style-library-apply", (selected) => {
+  void onPickerEvent<{ styleID?: string; imagePath?: string; toStyle?: boolean; replaceAll?: boolean }>("style-library-apply", (selected) => {
     clearMobilePickerPreview()
     appState.styleLibrarySelected = selected
-    applyStyleLibrarySelection(selected.toStyle)
+    applyStyleLibrarySelection(selected.toStyle, selected.replaceAll)
   })
   void onPickerEvent<{ styleID?: string; imagePath?: string }>("style-library-edit", (selected) => {
     appState.styleLibrarySelected = selected
@@ -84,7 +84,6 @@ export function wireResourcesAndStartup(): void {
     })
   })
   void onPickerEvent<{ styleID: string }>("style-library-duplicate", ({ styleID }) => { if (duplicateStyle(styleID)) void emitStyleLibrary() })
-  void onPickerEvent<{ styleID: string }>("style-library-slice", ({ styleID }) => sliceStyleLibrarySelection(styleID))
   void onPickerEvent<{ filename: string }>("style-library-play", ({ filename }) => {
     const path = appState.archive?.format === "ssf" ? ssfPackage()?.soundPath(ssfTheme(), filename)
       : soundPathForFilename(appState.archive?.names() ?? [], theme.value, orientation.value, filename)
@@ -338,7 +337,7 @@ export function wireResourcesAndStartup(): void {
       clearTimeout(appState.fitCanvasDebounce)
       movingDebounce = setTimeout(() => { fitCanvasPreview() }, 300)
     })
-    // Only Windows acrylic needs focus recovery; reapplying macOS vibrancy stacks native views.
+    // AppKit tracks activation itself; only the Windows material needs focus recovery.
     if (document.documentElement.classList.contains("windows")) void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused && windowMaterial.checked && !appState.windowDragPointerDown && !appState.windowDragMaterialDisabled) {
         void applyWindowMaterialWithRetry().catch((error) => handleWindowMaterialError(error, "恢复窗口材质"))
