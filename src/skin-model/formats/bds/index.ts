@@ -53,9 +53,19 @@ export function bdsSource(
   const kind = options.kind ?? "main"
   const prefix = bdsDirectory(theme, orientation)
   const candidates = archive.names().filter((name) => name.startsWith(prefix) && name.endsWith(".ini") && !/gen\.ini$/i.test(name))
+  // 只有带按键段的布局才是键盘；菜单、候选栏这类板没有 `[KEY`，
+  // 只按文件名排序会把它们当成主布局，读回时连容器尺寸都定不出来。
+  const withKeys = candidates.filter((name) => {
+    try {
+      return archive.getText(name).includes("[KEY")
+    } catch {
+      return false
+    }
+  })
   const layout = options.layout
-    ?? candidates.find((name) => /\/py_26\.ini$/.test(name))
-    ?? candidates.find((name) => /_26\.ini$/.test(name))
+    ?? withKeys.find((name) => /\/py_26\.ini$/.test(name))
+    ?? withKeys.find((name) => /_26\.ini$/.test(name))
+    ?? withKeys[0]
     ?? candidates[0]
   if (!layout) return
   // 基础布局只提供几何，没有样式表；样式可以缺失，读取时按空样式处理。
@@ -317,10 +327,12 @@ function atlasesOf(
         if (TILE_MODELED.has(entry.key.toUpperCase())) continue
         extra.set(entry.key, entry.value)
       }
+      // `[IMG<n>]` 编号是 BDS 的打包细节：记下来，写回时才能原样还原。
+      extra.set("tilIndex", tile.index)
       return {
         id: `${path}#${tile.index}`,
         rect: { x: tile.source[0], y: tile.source[1], width: tile.source[2], height: tile.source[3] },
-        ...(extra.size ? { extra } : {}),
+        extra,
       }
     })
     if (!slices.length) continue
@@ -558,12 +570,26 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
   }
   // 没有 VIEW_RECT 的模板键不进布局树，但段本身要写回。
   const unplaced = new Set((panels.unplacedKeys ?? []).map((key) => key.id))
+  // BDS 的按键段名是 `[KEYn]`；别的格式的键 id 是任意标识符，写进 `.til` 前要改成段名，
+  // 否则读回时认不出这些段。原生键 id 已经是 `KEYn`，原样沿用。
+  const sectionNames = new Map<string, string>()
+  const sectionOf = (key: Key): string => {
+    if (/^KEY\d+$/i.test(key.id)) return key.id
+    const existing = sectionNames.get(key.id)
+    if (existing !== undefined) return existing
+    let next = 1
+    const used = new Set(sectionNames.values())
+    while (used.has(`KEY${next}`)) next += 1
+    const name = `KEY${next}`
+    sectionNames.set(key.id, name)
+    return name
+  }
   for (const key of [...board.keys, ...(panels.unplacedKeys ?? [])]) {
     // 几何只有布局树这一个来源：taffy 算出矩形，写回的就是它。
     const rect = renders.find((render) => render.key.id === key.id)?.rect
     // 树里没有这个键、它也不是模板段，就没有几何，不写半截的 VIEW_RECT。
     if (!rect && !unplaced.has(key.id)) continue
-    lines.push(`[${key.id}]`)
+    lines.push(`[${sectionOf(key)}]`)
     if (rect) {
       lines.push(`VIEW_RECT=${rect.x},${rect.y},${rect.width},${rect.height}`)
     }
@@ -612,8 +638,8 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
     // 按键自身的动效引用：一张表里按键 id → 动效 id。
     const motions = Object.entries(key.motions ?? {}).flatMap(([slot, id]) => (id ? [`${slot.toUpperCase()}_ANIM=${id}`] : []))
     lines.push(...motions)
-    writtenSections.add(key.id)
-    lines.push(...extraOf(key.id), "")
+    writtenSections.add(sectionOf(key))
+    lines.push(...extraOf(sectionOf(key)), "")
   }
   // 只有未建模字段、没有结构化字段的段：原样写回，不猜它的含义。
   for (const section of panels.extraFields?.keys() ?? []) {
@@ -1652,19 +1678,25 @@ export async function bdsToModel(
   return model
 }
 
-/** 文件路径的文件名，去掉扩展名：`light/skin/res/fore1.til` → `fore1`。 */
-function leafName(path: string): string {
-  return (path.split("/").pop() ?? path).replace(/\.[^.]+$/, "")
+/** 文件路径或图集引用的最后一段，去掉扩展名：`light/skin/res/fore1.til` → `fore1`，`sxi:default:anjian` → `anjian`。 */
+function leafName(reference: string): string {
+  const match = /[^/:]+$/.exec(reference)
+  return (match?.[0] ?? reference).replace(/\.[^.]+$/, "")
 }
 
 /**
- * 切片 id 里的 `[IMGn]` 编号。`<图集>#<编号>` 是读侧写下的 id 约定，
- * 所以写侧遇到不合约定的 id 是模型被改坏了，不是可以补个默认值的缺失。
+ * 切片在 `.til` 里的 `[IMG<n>]` 编号。编号是 BDS 的打包细节，不是 IR 的标识：
+ * `AtlasSlice.id` 是跨格式的稳定标识（BDS 的 `图集#12`、SXI 的 `sxi:default:anjian#IMG1`），
+ * 它不承担这个职责。所以 BDS 读进来时把编号记在切片 `extra.tilIndex`，写回时优先用它；
+ * 别的格式转来的切片没有这个字段，按它在数组里的位置从 1 开始编号。
  */
-function sliceIndexOf(id: string): number {
-  const match = /#(\d+)$/.exec(id)
-  if (!match) throw new Error(`图集切片 id 缺少编号：${id}`)
-  return Number(match[1])
+function tilIndexOf(slice: AtlasSlice, position: number): number {
+  const recorded = slice.extra?.get("tilIndex")
+  if (recorded === undefined) return position + 1
+  if (typeof recorded !== "number" || !Number.isInteger(recorded) || recorded < 0) {
+    throw new Error(`切片 ${slice.id} 的 tilIndex 不是非负整数：${String(recorded)}`)
+  }
+  return recorded
 }
 
 /** `INNER_RECT` 的四个数；写下的值不是四个有限数说明模型被改坏了。 */
@@ -1675,8 +1707,8 @@ function innerRectOf(value: unknown, slice: AtlasSlice): [number, number, number
   return [value[0], value[1], value[2], value[3]]
 }
 
-/** `.til` 文本：`[GLOBAL]` 原值加每个切片一条 `[IMGn]`，切片号沿用原编号。 */
-function atlasText(atlas: Atlas, global: AtlasGlobal | undefined): string {
+/** `.til` 文本：`[GLOBAL]` 原值加每个切片一条 `[IMGn]`，编号由调用方按图集分配。 */
+function atlasText(atlas: Atlas, global: AtlasGlobal | undefined, indexes: ReadonlyMap<AtlasSlice, number>): string {
   const lines = ["[GLOBAL]"]
   for (const [key, value] of Object.entries(global ?? {})) {
     if (key.toUpperCase() === "TILE_NUM") continue
@@ -1685,7 +1717,9 @@ function atlasText(atlas: Atlas, global: AtlasGlobal | undefined): string {
   // 工具书 V6 p43：`TILE_NUM` 必须与切片数一致，所以它从切片重算而不沿用原值。
   lines.push(`TILE_NUM=${atlas.slices.length}`, "")
   for (const slice of atlas.slices) {
-    lines.push(`[IMG${sliceIndexOf(slice.id)}]`, `SOURCE_RECT=${slice.rect.x},${slice.rect.y},${slice.rect.width},${slice.rect.height}`)
+    const index = indexes.get(slice)
+    if (index === undefined) throw new Error(`切片没有分配 .til 编号：${slice.id}`)
+    lines.push(`[IMG${index}]`, `SOURCE_RECT=${slice.rect.x},${slice.rect.y},${slice.rect.width},${slice.rect.height}`)
     const inner = slice.extra?.get("innerRect")
     if (inner !== undefined) lines.push(`INNER_RECT=${innerRectOf(inner, slice).join(",")}`)
     const scale = slice.extra?.get("scale")
@@ -1693,10 +1727,11 @@ function atlasText(atlas: Atlas, global: AtlasGlobal | undefined): string {
       if (typeof scale !== "string") throw new Error(`切片 ${slice.id} 的 SCALE 不是字符串`)
       lines.push(`SCALE=${scale}`)
     }
-    // 切片段里没建模的字段（`INFO` 这类）原样写回。
+    // 切片段里没建模的字段（`INFO` 这类）原样写回；`tilIndex` 是 BDS 自己的编号，已经在段头上。
+    // 别的格式的 `extra`（SXI 的 `rect2`/`scales`）不是 `.til` 的行，BDS 也不认识，跳过。
     for (const [key, value] of slice.extra ?? []) {
-      if (key === "innerRect" || key === "scale") continue
-      if (typeof value !== "string") throw new Error(`切片 ${slice.id} 的 ${key} 不是字符串`)
+      if (key === "innerRect" || key === "scale" || key === "tilIndex") continue
+      if (typeof value !== "string") continue
       lines.push(`${key}=${value}`)
     }
     lines.push("")
@@ -1774,6 +1809,15 @@ function panelPathsOf(value: unknown): Map<string, PanelPaths> {
 }
 
 /**
+ * 板在 BDS 里的布局文件路径。BDS 自己读的板 id 已经是完整路径；
+ * 别的格式的板 id 是标识符，落到主题方向目录下并补 `.ini`。
+ */
+function layoutPathOf(board: Board): string {
+  if (board.id.includes("/")) return board.id
+  return `${board.theme}/skin/${board.orientation}/${board.id.replace(/[^A-Za-z0-9_.-]/g, "_")}.ini`
+}
+
+/**
  * 模型 → 文档。
  * 写出时我们清楚每个文件是什么角色，所以角色在这里直接登记，不靠路径猜。
  */
@@ -1799,26 +1843,51 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
       if (layer.kind === "image" || layer.kind === "icon") used.add(layer.image)
     }
   }
-  // 已有图集原样重建：切片号沿用 id 里的编号，样式引用写成「图集文件名,切片号」。
+  // 已有图集原样重建：BDS 读进来的切片用 extra.tilIndex 保留原编号，
+  // 其它格式转来的切片没有这个字段，按它在数组里的位置从 1 编号。
   const atlases = [...model.atlases]
   const placed = new Map<string, { path: string; index: number }>()
+  const tilIndexes = new Map<AtlasSlice, number>()
+  // 图集在 BDS 里的文件名：BDS 自己的路径原样沿用；别的格式转来的图集落到 `res/` 下，
+  // 名字取图集引用的最后一段，重名顺延，不覆盖原图。
+  const taken = new Set<string>()
+  const atlasFiles = new Map<Atlas, { path: string; source: string }>()
+  const reservePath = (base: string): string => {
+    let path = `${root}/res/${base}.til`
+    let suffix = 2
+    while (taken.has(path)) {
+      path = `${root}/res/${base}${suffix}.til`
+      suffix += 1
+    }
+    taken.add(path)
+    return path
+  }
   for (const atlas of atlases) {
-    for (const slice of atlas.slices) placed.set(slice.id, { path: atlas.name, index: sliceIndexOf(slice.id) })
+    const path = /\.til$/i.test(atlas.name) && atlas.name.includes("/") ? atlas.name : reservePath(leafName(atlas.name))
+    taken.add(path)
+    atlasFiles.set(atlas, { path, source: path.replace(/\.til$/i, ".png") })
+    // `[IMG<n>]` 在一个图集里必须唯一；重复说明模型被改坏了，静默改号会让样式引用错位。
+    const usedIndexes = new Set<number>()
+    for (const [position, slice] of atlas.slices.entries()) {
+      const index = tilIndexOf(slice, position)
+      if (usedIndexes.has(index)) throw new Error(`图集 ${atlas.name} 的切片编号重复：[IMG${index}]`)
+      usedIndexes.add(index)
+      tilIndexes.set(slice, index)
+      placed.set(slice.id, { path, index })
+    }
   }
   // 不在任何图集里的图片重新打包成一张图集；图集名按 `atlas`、`atlas2` 顺延，不覆盖原图。
   const images = new Map(model.images)
   const loose = new Map([...images].filter(([id]) => used.has(id) && !placed.has(id)))
-  const taken = new Set(atlases.map((atlas) => atlas.name))
   let nextPage = 0
   const reserveAtlas = (): string => {
-    let path = `${root}/res/${atlasName(nextPage)}.til`
-    while (taken.has(path)) {
+    let base = atlasName(nextPage)
+    while (taken.has(`${root}/res/${base}.til`)) {
       nextPage += 1
-      path = `${root}/res/${atlasName(nextPage)}.til`
+      base = atlasName(nextPage)
     }
     nextPage += 1
-    taken.add(path)
-    return path
+    return reservePath(base)
   }
   // 页尺寸跟随板尺寸：小屏皮肤不该产出 2048 的图集，大屏也不该被压到 1024。
   const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.container.width, board.container.height) / 512) * 512))
@@ -1851,7 +1920,10 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
       }
     })
     const source = path.replace(/\.til$/i, ".png")
-    atlases.push({ name: path, source, slices })
+    const atlas: Atlas = { name: path, source, slices }
+    atlases.push(atlas)
+    atlasFiles.set(atlas, { path, source })
+    slices.forEach((slice, index) => tilIndexes.set(slice, index + 1))
     // 新图集的整页像素就是它自己，按源图路径记进图片表，写回时直接用它。
     images.set(source, page.image)
     // 样式引用的是原图片 id，不是切片 id：两者都要能反查到这张图集。
@@ -1903,7 +1975,9 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   // 每块板各自一份布局文件；板 id 已带目录时沿用，其它格式转来的板放到方向目录下。
   const writtenLayouts = new Set<string>()
   for (const each of model.boards) {
-    const path = each.id.includes("/") ? each.id : `${each.theme}/skin/${each.orientation}/${each.id}`
+    // 板 id 是完整路径时（BDS 自己读的）原样沿用；别的格式的板 id 是标识符，
+    // 落到方向目录下并补 `.ini`，标识符里的 `:` 之类换成文件名能用的字符。
+    const path = layoutPathOf(each)
     putText(path, layoutText(each, await rendersOf(each), names), { kind: "layout", board: each.kind, theme: each.theme, orientation: each.orientation })
     writtenLayouts.add(path)
   }
@@ -1933,12 +2007,14 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
     if (text === undefined) continue
     putText(path, text, { kind: "style", theme: appearanceOf(path) ?? theme })
   }
-  // 每个图集按原路径写回：`.til` 从切片重建，`.png` 用原像素或由切片贴回。
+  // 每个图集按 BDS 路径写回：`.til` 从切片重建，`.png` 用原像素或由切片贴回。
   for (const atlas of atlases) {
-    putText(atlas.name, atlasText(atlas, atlasGlobalOf(model.opaque.get(`atlas:${atlas.name}`))), { kind: "atlas", theme, orientation })
+    const file = atlasFiles.get(atlas)
+    if (!file) continue
+    putText(file.path, atlasText(atlas, atlasGlobalOf(model.opaque.get(`atlas:${atlas.name}`)), tilIndexes), { kind: "atlas", theme, orientation })
     const image = atlasImage(atlas, images)
     // 整图和切片都没有像素时（原包只有 `.til` 声明），不凭空造一张图。
-    if (image) putBytes(atlas.source, encodePng(image), { kind: "image" })
+    if (image) putBytes(file.source, encodePng(image), { kind: "image" })
   }
   // 没有图集也没有样式引用时，图片按原路径写回，不改名也不合并。
   if (!atlases.length) {
@@ -1974,11 +2050,13 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
     putBytes(key.slice("raw:".length), value, { kind: "unknown", reason: "源包里识别不出来，按原字节保留" })
   }
   // 主布局由模型决定，不靠打包阶段按文件名猜：同一份皮肤可能有多个方向的 `py_26.ini`。
+  // 主布局由模型决定，不靠打包阶段按文件名猜：同一份皮肤可能有多个方向的 `py_26.ini`。
+  // 跨格式的板可能没有 `main` 种类，这时挑第一块有按键的板——没有按键的布局读不回来。
   const primary = model.boards.find((each) => each.kind === "main" && each.orientation === model.meta.orientation)
     ?? model.boards.find((each) => each.kind === "main")
+    ?? model.boards.find((each) => each.keys.length > 0)
   if (primary) {
-    const path = primary.id.includes("/") ? primary.id : `${primary.theme}/skin/${primary.orientation}/${primary.id}`
-    return { roles, texts, structs: new Map([["primaryLayout", path]]), binaries }
+    return { roles, texts, structs: new Map([["primaryLayout", layoutPathOf(primary)]]), binaries }
   }
   return { roles, texts, structs: new Map(), binaries }
 }

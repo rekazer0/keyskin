@@ -69,9 +69,11 @@ test("手心皮肤经会话层打开并保存回去", async () => {
   assert.equal(again.model.boards[0].keys.length, opened.model.boards[0].keys.length)
 })
 
-test("BDA 保存需要骨架，缺了回来的是失败", async () => {
+test("BDA 自带布局，没有骨架也能打开", async () => {
   const archive = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/default-template.bda", import.meta.url))), "bda")
   const opened = await openSession(archive)
-  assert.equal(opened.ok, false)
-  assert.equal(opened.error.kind, "missing-basis")
+  assert.ok(opened.ok)
+  // 这份样本是「只有外观」的包：没有 layoutConfig，板按面板建、几何来自客户端。
+  // 自带 layoutConfig 的包走绝对布局，container 取包里的画布尺寸，同样不依赖外部骨架。
+  assert.ok(opened.model.boards.length > 0)
 })
