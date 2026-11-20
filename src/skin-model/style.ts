@@ -87,7 +87,8 @@ export function colorCss(value: string): string {
 export function styleText(model: SkinModel | undefined, styleIDs: string, highlighted: boolean): TextStyle | undefined {
   if (!model) return
   const result: TextStyle = {}
-  for (const token of styleIDs.split(",").map((value) => value.trim()).filter(Boolean)) {
+  // 空 id 也照常查表（查不到就是没有），与逐段解析的旧行为一致。
+  for (const token of styleIDs.split(",").map((value) => value.trim())) {
     const text = styleLayers(model, token, highlighted).find((layer) => layer.kind === "text")
     if (text?.kind !== "text") continue
     const style = text.style

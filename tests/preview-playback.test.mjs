@@ -169,16 +169,16 @@ test('late image decoding cannot replace a newer press or revive a reset animati
   preview.resolveResource = () => new Promise((resolve) => pending.push(resolve))
   const first = playAnimation(preview, keys[0])
   const second = playAnimation(preview, keys[1])
-  pending[1]({ imagePath: 'new' })
+  pending[1]({ layer: { kind: 'image', image: 'new' } })
   await second
-  pending[0]({ imagePath: 'old' })
+  pending[0]({ layer: { kind: 'image', image: 'old' } })
   await first
   assert.equal(preview.animationVisual.key.section, 'KEY2')
-  assert.equal(preview.animationVisual.visual.imagePath, 'new')
+  assert.equal(preview.animationVisual.paint.layer.image, 'new')
   assert.equal(timers.size, 1)
   const third = playAnimation(preview, keys[0])
   preview.setAnimation(undefined)
-  pending[2]({ imagePath: 'stale' })
+  pending[2]({ layer: { kind: 'image', image: 'stale' } })
   await third
   assert.equal(preview.animationVisual, undefined)
   assert.equal(timers.size, 0)

@@ -14,13 +14,24 @@ test('input code background comes from the candidate layout, then the general co
 })
 
 // Baidu Android InputBarView: L = trunc(2.5dp), the code starts 6dp in and ends two Ls before the edge.
+function skinModel(styles, images = new Map()) {
+  return {
+    styles: new Map(Object.entries(styles).map(([id, layers]) => [id, { normal: layers }])),
+    images,
+    resourceIndex: new Map(),
+  }
+}
+
+const textLayer = (style) => ({ kind: 'text', style })
+const imageLayer = (image) => ({ kind: 'image', image })
+
 test('input code bar wraps the code and fills the panel when the code is wider', () => {
-  const resolver = { resolveText: () => ({ fontSize: 28 }) }
-  const metrics = resolveCandidateInputStyle(IniDocument.parse('[INPUT]\nFORE_STYLE=128\n'), resolver, 480)
+  const model = skinModel({ '128': [textLayer({ fontSize: 28 })], '': [textLayer({ fontSize: 28 })] })
+  const metrics = resolveCandidateInputStyle(IniDocument.parse('[INPUT]\nFORE_STYLE=128\n'), model, 480)
   assert.deepEqual({ height: metrics.height, inset: metrics.inset, textLeft: metrics.textLeft }, { height: 34, inset: 3, textLeft: 9 })
   assert.deepEqual(inputBarBox(100, metrics, 480), { width: 115, paddingStart: 9, paddingEnd: 6 })
   assert.deepEqual(inputBarBox(470, metrics, 480), { width: 480, paddingStart: 3, paddingEnd: 3 })
-  const wide = resolveCandidateInputStyle(undefined, resolver, 1080)
+  const wide = resolveCandidateInputStyle(undefined, model, 1080)
   assert.deepEqual({ inset: wide.inset, textLeft: wide.textLeft }, { inset: 8, textLeft: 19 })
 })
 
@@ -55,35 +66,35 @@ test('input background has a border on the left, top and right, with no bottom e
 
 test('iPhone inline input uses SCAND artwork and colour with INPUT text size', () => {
   const general = IniDocument.parse('[INPUT]\nBACK_STYLE=3\nFORE_STYLE=1\n[SCAND]\nBACK_STYLE=514\nINPUT_STYLE=6\n')
-  const resolver = {
-    resolveText: (id) => ({ '1': { fontSize: 45, fontName: 'BdiEmbeddedFont1', color: '#7a7f82' }, '6': { fontSize: 90, fontName: 'BdiEmbeddedFont1', color: '#92b5bf' } })[id],
-    sourceSize: (id) => id === '514' ? { width: 1080, height: 70 } : undefined,
-  }
+  const model = skinModel({
+    '1': [textLayer({ fontSize: 45, font: 'BdiEmbeddedFont1', color: '#7a7f82' })],
+    '6': [textLayer({ fontSize: 90, font: 'BdiEmbeddedFont1', color: '#92b5bf' })],
+    '514': [imageLayer('bg')],
+  }, new Map([['bg', { width: 1080, height: 70 }]]))
   assert.equal(candidateInputBackgroundStyle(general), '3')
   assert.equal(candidateInputBackgroundStyle(general, undefined, true), '514')
-  assert.equal(resolveCandidateInputTextVisual(general, resolver)?.fontSize, 90)
-  assert.deepEqual(resolveCandidateInputTextVisual(general, resolver, undefined, true), { fontSize: 45, fontName: undefined, color: '#92b5bf' })
-  assert.equal(resolveCandidateInputStyle(general, resolver, 1080).height, 106)
-  assert.equal(resolveCandidateInputStyle(general, resolver, 1080, undefined, true).height, 70)
+  assert.equal(resolveCandidateInputTextVisual(general, model)?.fontSize, 90)
+  assert.deepEqual(resolveCandidateInputTextVisual(general, model, undefined, true), { fontSize: 45, font: undefined, color: '#92b5bf' })
+  assert.equal(resolveCandidateInputStyle(general, model, 1080).height, 106)
+  assert.equal(resolveCandidateInputStyle(general, model, 1080, undefined, true).height, 70)
 })
 
 test('iPhone input keeps the INPUT background when no SCAND artwork is configured', () => {
   const general = IniDocument.parse('[INPUT]\nBACK_STYLE=7\nFORE_STYLE=8\n')
-  const resolver = { resolveText: () => ({ fontSize: 45 }), sourceSize: () => undefined }
+  const model = skinModel({ '8': [textLayer({ fontSize: 45 })], '': [textLayer({ fontSize: 45 })] })
   assert.equal(candidateInputBackgroundStyle(general, undefined, true), '7')
-  assert.equal(resolveCandidateInputStyle(general, resolver, 1125, undefined, true).height, 61)
-  assert.equal(resolveCandidateInputStyle(undefined, resolver, 1080, undefined, true).height, 61)
+  assert.equal(resolveCandidateInputStyle(general, model, 1125, undefined, true).height, 61)
+  assert.equal(resolveCandidateInputStyle(undefined, model, 1080, undefined, true).height, 61)
 })
 
 test('candidate words keep skin size and colour but use the user font, not the skin font', () => {
   const candidate = IniDocument.parse('[CAND]\nFORE_STYLE=160\nFIRST_FORE=210\n')
-  const resolver = {
-    resolveText: (id) => id === '160'
-      ? { fontSize: 57, fontName: 'BdiEmbeddedFont1', color: '#36383c' }
-      : { fontSize: 57, fontName: 'BdiEmbeddedFont1', color: '#3482ff' },
-  }
-  assert.deepEqual(resolveCandidateTextVisuals(candidate, undefined, resolver), {
-    normal: { fontSize: 57, fontName: undefined, color: '#36383c' },
-    first: { fontSize: 57, fontName: undefined, color: '#3482ff' },
+  const model = skinModel({
+    '160': [textLayer({ fontSize: 57, font: 'BdiEmbeddedFont1', color: '#36383c' })],
+    '210': [textLayer({ fontSize: 57, font: 'BdiEmbeddedFont1', color: '#3482ff' })],
+  })
+  assert.deepEqual(resolveCandidateTextVisuals(candidate, undefined, model), {
+    normal: { fontSize: 57, font: undefined, color: '#36383c' },
+    first: { fontSize: 57, font: undefined, color: '#3482ff' },
   })
 })

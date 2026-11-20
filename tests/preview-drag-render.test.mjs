@@ -29,18 +29,23 @@ test('drag frames keep each key background and foreground when press animations 
     fillRect(x, y, width, height) { backgrounds.push([x, y, width, height, this.fillStyle]) },
     fillText(text, x, y) { foregrounds.push([x, y, text]) },
   }
-  let resolves = 0
   const preview = Object.assign(Object.create(Preview.prototype), {
     keys, drawID: 0, panelWidth: 340, panelHeight: 100, panelTopInset: 0,
     theme: 'light', transparent: true, mode: 'edit', selected: new Set(), draftSections: new Set(),
     legacyAnimationStates: new Map(), scenes: new Map(),
     canvas: { width: 340, height: 100, getContext: () => context },
-    resolver: {
-      resolve: async () => undefined,
-      resolveText: () => undefined,
-      resolveStyleText: (style) => ({ text: style }),
+    model: {
+      styles: new Map([
+        ['1', { normal: [{ kind: 'color', value: '#000001' }] }],
+        ['2', { normal: [{ kind: 'color', value: '#000002' }] }],
+        ['3', { normal: [{ kind: 'color', value: '#000003' }] }],
+        ['11', { normal: [{ kind: 'text', text: '11', style: {} }] }],
+        ['12', { normal: [{ kind: 'text', text: '12', style: {} }] }],
+        ['13', { normal: [{ kind: 'text', text: '13', style: {} }] }],
+      ]),
+      images: new Map(),
+      resourceIndex: new Map(),
     },
-    resolveVisual: async (style) => { resolves++; return { color: `#00000${style}` } },
     resolveToolbar: async () => [],
   })
   const frame = async () => {
@@ -49,7 +54,6 @@ test('drag frames keep each key background and foreground when press animations 
     return { backgrounds: [...backgrounds].sort((a, b) => a[0] - b[0]), foregrounds: [...foregrounds].sort((a, b) => a[0] - b[0]) }
   }
   const baseline = await frame()
-  const cachedResolves = resolves
   preview.editDrag = { original: new Map([[keys[0].section, { ...keys[0].rect }]]) }
   preview.legacyAnimationStates.set('KEY1', { key: keys[0], startedAt: Date.now(), duration: 1000 })
   assert.deepEqual(await frame(), baseline, 'clicking an animated key must not swap other keys styles')
@@ -61,7 +65,6 @@ test('drag frames keep each key background and foreground when press animations 
   assert.equal(moved.foregrounds[0][0], 60)
   preview.legacyAnimationStates.clear()
   assert.deepEqual(await frame(), moved, 'animation expiry restores drawing order without swapping styles')
-  assert.equal(resolves, cachedResolves, 'drag frames reuse the resolved visuals')
   preview.editDrag = undefined
   assert.deepEqual(await frame(), moved, 'releasing the pointer keeps the same styles')
 })
