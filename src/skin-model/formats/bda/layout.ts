@@ -6,12 +6,12 @@
 import { type BdaLayout, type BdaLayoutExtras, type BdaLayoutKey, type BdaLayoutKeyboard, type BdaLayoutBar, type BdaLayoutVariant, type BdaCandidateElement, type BdaPanel, type BdaRect, type ProtoField, type BdaStyleRef } from "@/bda.ts"
 import { encodeFields } from "@/skin-model/formats/bda/appearance.ts"
 import { actionOf, actionValue } from "@/skin-model/formats/bds/index.ts"
-import type { Board } from "@/skin-model/board.ts"
+import type { Board, ContainerSize } from "@/skin-model/board.ts"
+import { containerOf as boardContainerOf } from "@/skin-model/board.ts"
 import type { Key, KeyContainer } from "@/skin-model/key.ts"
 import { absoluteBoard, type LayoutBox } from "@/skin-model/layout.ts"
 import type { BoardKind } from "@/skin-model/types.ts"
 import type { Orientation, Theme } from "@/skin-model/types.ts"
-import type { Size } from "taffy-layout"
 
 /** 板 `extra` 里保存布局原文的键：键盘级内容与每个键的未建模字段。 */
 export const KEYBOARD_EXTRA = "bda.keyboard"
@@ -155,7 +155,8 @@ export function bdaBoardKind(name: string): BoardKind {
   const lower = name.toLowerCase()
   if (/^sym|^sel_|^symbol/.test(lower)) return "symbol"
   if (/^num|^dial|^def_9$|_9_?pad$|_9$/.test(lower)) return "number"
-  if (/^hw|^bh/.test(lower)) return "other"
+  if (/^bh/.test(lower)) return "stroke"
+  if (/^hw/.test(lower)) return "other"
   if (/^cand/.test(lower)) return "candidate"
   if (/^(?:py|en|def|email|net|url)/.test(lower)) return "main"
   return "other"
@@ -209,9 +210,9 @@ function keyOf(key: BdaLayoutKey, panel: BdaPanel | undefined, options: LayoutRe
   }
 }
 
-/** 布局画布；没有 `#7` 时用设计宽度与零高度表示「几何缺失」，不编造画布。 */
-function keyboardContainer(keyboard: BdaLayoutKeyboard, designWidth: number | undefined): Size<number> {
-  return keyboard.canvas ?? { width: designWidth ?? 0, height: 0 }
+/** 布局画布；没有 `#7` 时几何由骨架提供，容器就是未知——不用设计宽度与零高度编一个。 */
+function keyboardContainer(keyboard: BdaLayoutKeyboard): ContainerSize {
+  return keyboard.canvas ? { kind: "known", size: keyboard.canvas } : { kind: "unknown" }
 }
 
 /**
@@ -255,7 +256,7 @@ export function boardsOfLayout(layout: BdaLayout, options: LayoutReadOptions): B
       theme: options.theme,
       orientation: options.orientation,
       geometry: keyboard.canvas ? { kind: "document" } : { kind: "client", basis: "bda" },
-      container: keyboardContainer(keyboard, options.designWidth),
+      container: keyboardContainer(keyboard),
       layout: absoluteBoard(placed),
       ...(panel?.backStyle ? { backdrop: options.styleName(panel.backStyle) } : {}),
       keys: keyboard.keys.map((key) => keyOf(key, panel, options)),
@@ -294,6 +295,7 @@ export function layoutOfBoards(boards: readonly Board[], rects: ReadonlyMap<stri
       const extra = keyboardExtraOf(board)
       const keyExtras = keyExtrasOf(board)
       const placed = rects.get(board.id) ?? new Map<string, LayoutBox>()
+      const container = boardContainerOf(board)
       return {
         name: keyboardNameOf(board),
         variants: extra.variants,
@@ -312,7 +314,8 @@ export function layoutOfBoards(boards: readonly Board[], rects: ReadonlyMap<stri
         }),
         ...(extra.extras ? { extras: extra.extras } : {}),
         ...(extra.grid ? { grid: extra.grid } : {}),
-        canvas: { width: board.container.width, height: board.container.height },
+        // 容器未知时不写 canvas：那块板的几何来自骨架，不把「不知道」写成 0。
+        ...(container ? { canvas: { width: container.width, height: container.height } } : {}),
         ...(extra.flag !== undefined ? { flag: extra.flag } : {}),
         parts: extra.parts,
       }

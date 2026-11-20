@@ -100,8 +100,11 @@ export type Key = {
   /**
    * 在布局树里的节点 id。键的矩形由 computeLayout 算出，不在这里存；
    * `id` 是键在板内的稳定标识，`layoutId` 指向几何。
+   *
+   * 没有这个字段表示键只有身份与样式、没有几何：BDA 的外观键、SXI 的菜单项都属这一类。
+   * 它们照常留在 `Board.keys` 里，只是不参与布局、不画、不可拖。
    */
-  layoutId: string
+  layoutId?: string
   /** 触摸区覆盖。不参与布局，只影响命中测试。 */
   hitArea?: HitArea
   /**

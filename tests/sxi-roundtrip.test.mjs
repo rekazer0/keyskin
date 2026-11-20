@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { unzipSync } from "fflate"
 import { SkinArchive } from "../src/skin.ts"
+import { containerOf } from "../src/skin-model/board.ts"
 import { computeLayout } from "../src/skin-model/layout.ts"
 import { openSkin } from "../src/skin-model/formats/index.ts"
 import { sxiFormat, sxiSource } from "../src/skin-model/formats/sxi/index.ts"
@@ -29,7 +30,9 @@ function archiveOf(path) {
 async function rectsOf(model) {
   const result = {}
   for (const board of model.boards) {
-    const rects = await computeLayout(board.layout, board.container)
+    const size = containerOf(board)
+    if (!size) continue
+    const rects = await computeLayout(board.layout, size)
     result[board.id] = Object.fromEntries([...rects].map(([id, box]) => [id, [
       box.position.x, box.position.y, box.size.width, box.size.height,
     ]]))
@@ -106,7 +109,9 @@ function modelSignature(model) {
       theme: board.theme,
       orientation: board.orientation,
       // 布局计算按像素取整（layout.ts 的既定行为）；比较时与之一致，浮点差不算结构变化。
-      container: { width: Math.round(board.container.width), height: Math.round(board.container.height) },
+      container: containerOf(board)
+        ? { width: Math.round(containerOf(board).width), height: Math.round(containerOf(board).height) }
+        : null,
       geometry: board.geometry,
       backdrop: board.backdrop ?? null,
       removedKeys: board.removedKeys ?? null,
@@ -242,7 +247,7 @@ test("菜单是工具栏板，两层状态结构原样保留", async () => {
   const { first } = await roundtrip("public/res/Skin(4).sxi")
   const menu = first.boards.find((board) => board.kind === "toolbar")
   assert.ok(menu, "没有菜单板")
-  const panels = menu.extra?.get("panels")
+  const panels = menu.panels
   assert.ok(panels.toolbar.items.length > 0, "菜单项没有读出来")
   assert.ok(Array.isArray(menu.extra.get("sxi:menu")), "两层菜单原值没有保留")
 })
@@ -270,7 +275,7 @@ test("读出的几何、样式与音效关键字段正确", async () => {
   const board = first.boards.find((item) => item.id.startsWith("sxi:default:port:"))
   assert.ok(board)
   assert.equal(board.geometry.kind, "document")
-  assert.ok(board.container.width > 0)
+  assert.ok(containerOf(board).width > 0)
   const key = board.keys.find((item) => item.actions.press?.kind === "text" && item.actions.press.value === "q")
   assert.ok(key, "没有读出 q 键")
   assert.ok(key.container.back?.style?.startsWith("sxi:light:"))

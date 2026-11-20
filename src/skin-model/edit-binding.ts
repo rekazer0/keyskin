@@ -122,6 +122,8 @@ function moveGeometry(model: SkinModel, boardId: string, keyId: string, field: s
   const board = model.boards.find((item) => item.id === boardId)
   const key = board?.keys.find((item) => item.id === keyId)
   if (!board || !key) return model
+  // 没有布局节点的键只有样式，几何无处可写；这类改动不生效，也不编一个节点出来。
+  if (key.layoutId === undefined) return model
   // 显示区由布局树给出；触摸区相对显示区内缩，编辑时先还原成像素再改回。
   const display = cachedLayout(board)?.get(key.layoutId) ?? { position: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
   const touchArea: LayoutBox = key.hitArea?.kind === "inset"

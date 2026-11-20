@@ -16,7 +16,7 @@ async function boardOf(keys) {
     kind: 'main',
     geometry: { kind: 'document' },
     orientation: 'port',
-    container: size,
+    container: { kind: 'known', size },
     layout: absoluteBoard(keys.map((key) => ({ id: key.id, ...box(key.rect[0], key.rect[1], key.rect[2], key.rect[3]) }))),
     keys: keys.map((key) => ({
       id: key.id,

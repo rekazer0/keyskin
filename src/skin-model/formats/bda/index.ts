@@ -10,6 +10,7 @@ import { SkinArchive } from "@/skin.ts"
 import { atlasesOf, imagePathOf, infoOf, infoText, tilText } from "@/skin-model/formats/bda/assets.ts"
 import { bdaStyleName, colorStyleOf, imageIDOf, imageStyleOf, styleRefOf, stylesOf, textStyleOf, type BdaStyleParts } from "@/skin-model/formats/bda/style.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
+import { containerOf } from "@/skin-model/board.ts"
 import { absoluteBoard, computeLayout } from "@/skin-model/layout.ts"
 import { accessOf, type DocumentAccess } from "@/skin-model/formats/public/access.ts"
 import { identifyBds } from "@/skin-model/formats/bds/identify.ts"
@@ -165,7 +166,8 @@ function panelsAsBoards(appearance: BdaAppearance, options: { theme: Theme; orie
     theme: options.theme,
     orientation: options.orientation,
     geometry: { kind: "client", basis: "bda" },
-    container: { width: appearance.designWidth ?? 0, height: 0 },
+    // 外观面板没有画布尺寸：designWidth 是基准宽，不是容器。骨架缺失时容器就是未知。
+    container: { kind: "unknown" },
     layout: absoluteBoard([]),
     ...(panel.backStyle ? { backdrop: bdaStyleName(panel.backStyle) } : {}),
     keys: [],
@@ -551,7 +553,12 @@ async function bdaFromModel(model: SkinModel): Promise<SkinDocuments> {
   // 只有读自带布局的包才写布局配置；只读外观的包没有几何可写。
   if (model.boards.some((board) => board.extra?.has(KEYBOARD_EXTRA))) {
     const rects = new Map<string, ReadonlyMap<string, import("@/skin-model/layout.ts").LayoutBox>>()
-    for (const board of model.boards) rects.set(board.id, await computeLayout(board.layout, board.container))
+    for (const board of model.boards) {
+      // 容器未知的板没有布局可写；它的几何本来就来自骨架，不在这里编一个矩形集合。
+      const container = containerOf(board)
+      if (!container) continue
+      rects.set(board.id, await computeLayout(board.layout, container))
+    }
     put(placement.layoutPath ?? `${prefix}layoutConfig`, encodeBdaLayout(layoutOfBoards(model.boards, rects)), {
       kind: "layout",
       board: "main",

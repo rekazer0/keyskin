@@ -1,7 +1,7 @@
-// 板的面板细节：候选栏、气泡、列表、工具栏、输入栏与面板背景。
+// 板的面板组件：候选栏、气泡、列表、工具栏、输入栏与面板背景。
 //
-// 这些内容在三个格式里的表达不同（BDS 的 `gen.ini` 段、SXI 的独立窗口文件、SSF 的组件段），
-// 语义也还没逐个吃透，因此按「板的格式专有内容」放在 `Board.extra` 里，用 `boardPanels` 收窄读取。
+// 这些是板上的区域，几何相对本板推导（BDS 的 `gen.ini POS` + `CELL_SIZE`），语义上属于板，
+// 因此是 `Board.panels` 的正式契约而不是 `extra` 里的自由结构。
 import type { Point, Rect, Size } from "taffy-layout"
 import type { Board } from "./board.ts"
 import type { KeyAction } from "./types.ts"
@@ -132,7 +132,7 @@ export type Offsets = {
 /** 板之间的跳转：按下或长按某个动作进入另一块板。 */
 export type BoardTransition = { trigger: "press" | "long-press"; target: Board["kind"] }
 
-/** 一块板的面板组件；存在 `Board.extra` 的 `panels` 键下。 */
+/** 一块板的面板组件；存在 `Board.panels` 上。 */
 export type BoardPanels = {
   backdrop?: PanelBackdrop
   /** 候选栏；gen.ini 里可以有多个 `[CAND]` 段，按出现顺序保留。 */
@@ -185,22 +185,9 @@ export type BoardPanels = {
    * 有字段的段必须在 IR 里有对应字段；这里只承载「声明了这个面板但配置在别处」这一事实。
    */
   emptySections?: readonly string[]
-  /**
-   * 没有 `VIEW_RECT` 的按键定义（模板、示例段）。
-   * 它们不进布局树，但仍是文件的一部分，写回时按原样附在末尾。
-   */
-  unplacedKeys?: import("./key.ts").Key[]
 }
 
-const PANELS = "panels"
-
-/** 从板的 extra 里取面板组件；没有就是这块板没有面板。 */
+/** 从板上取面板组件；没有就是这块板没有面板。 */
 export function boardPanels(board: Board): BoardPanels | undefined {
-  const value = board.extra?.get(PANELS)
-  return value === undefined ? undefined : value as BoardPanels
-}
-
-/** 把面板组件并入 extra；其它键原样保留。 */
-export function withPanels(extra: ReadonlyMap<string, unknown> | undefined, panels: BoardPanels): ReadonlyMap<string, unknown> {
-  return new Map([...(extra ?? []), [PANELS, panels]])
+  return board.panels
 }

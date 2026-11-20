@@ -65,7 +65,7 @@ test("删样式会清掉按键与动效上的引用", async () => {
 test("改板尺寸会同步主板分辨率", async () => {
   const before = await model()
   const after = resizeBoard(before, BOARD, { width: 1200, height: 700 })
-  assert.deepEqual(after.boards[0].container, { width: 1200, height: 700 })
+  assert.deepEqual(after.boards[0].container, { kind: "known", size: { width: 1200, height: 700 } })
   assert.deepEqual(after.meta.resolution, { width: 1200, height: 700 })
 })
 

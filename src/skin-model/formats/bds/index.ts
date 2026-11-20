@@ -18,11 +18,12 @@ import { absoluteBoard, computeLayout, type LayoutBox } from "@/skin-model/layou
 import type { Key } from "@/skin-model/key.ts"
 import type { SkinLayer, SkinStyle, SkinStyles, Stretch } from "@/skin-model/style.ts"
 import type { Board } from "@/skin-model/board.ts"
+import { containerOf, knownContainer } from "@/skin-model/board.ts"
 import type { AppearanceSet } from "@/skin-model/activation.ts"
 import type { Atlas, AtlasSlice } from "@/skin-model/atlas.ts"
 import type { FormatProfile } from "@/skin-model/profile.ts"
 import type { BoardPanels, HintBubble, ListPanel, MoreMenu } from "@/skin-model/panel.ts"
-import { boardPanels, withPanels } from "@/skin-model/panel.ts"
+import { boardPanels } from "@/skin-model/panel.ts"
 import type { MotionEmitter, MotionNode, MotionRange, MotionTimeline, MotionTrack, SkinMotions } from "@/skin-model/motion.ts"
 import { keyframesOf, motionPropertyOf } from "@/skin-model/motion.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
@@ -517,7 +518,9 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
   if (panels.handwritingStyle) lines.push(`HW_FORE_STYLE=${panels.handwritingStyle}`)
   if (board.backdrop) lines.push(`BACK_STYLE=${board.backdrop}`)
   // 源文件没声明 SIZE 时容器尺寸是从按键外框算出来的，写回它会把推导值冒充成声明值。
-  if (panels.containerDeclared !== false) lines.push(`SIZE=${board.container.width},${board.container.height}`)
+  // 容器未知时也写不出来：宁可省略，不写一个编出来的 0。
+  const layoutContainer = containerOf(board)
+  if (layoutContainer && panels.containerDeclared !== false) lines.push(`SIZE=${layoutContainer.width},${layoutContainer.height}`)
   lines.push(`KEY_NUM=${panels.keyCount ?? board.keys.length}`)
   // TIP_NUM 是原文件声明的槽位数，可能与实际定义数不同；没有声明时按写出的 TIP 段计。
   const tipCount = panels.tipCount ?? panels.tips?.size ?? 0
@@ -568,8 +571,11 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
     writtenSections.add(`TIP${section}`)
     tipBlocks.push(...tipLines(override, section, actionValue), ...extraOf(`TIP${section}`))
   }
-  // 没有 VIEW_RECT 的模板键不进布局树，但段本身要写回。
-  const unplaced = new Set((panels.unplacedKeys ?? []).map((key) => key.id))
+  // 没有几何的键排在后面：原文件里它们也是附在末尾的模板段，写回顺序保持不变。
+  const orderedKeys = [
+    ...board.keys.filter((key) => key.layoutId !== undefined),
+    ...board.keys.filter((key) => key.layoutId === undefined),
+  ]
   // BDS 的按键段名是 `[KEYn]`；别的格式的键 id 是任意标识符，写进 `.til` 前要改成段名，
   // 否则读回时认不出这些段。原生键 id 已经是 `KEYn`，原样沿用。
   const sectionNames = new Map<string, string>()
@@ -584,11 +590,11 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
     sectionNames.set(key.id, name)
     return name
   }
-  for (const key of [...board.keys, ...(panels.unplacedKeys ?? [])]) {
+  for (const key of orderedKeys) {
     // 几何只有布局树这一个来源：taffy 算出矩形，写回的就是它。
     const rect = renders.find((render) => render.key.id === key.id)?.rect
-    // 树里没有这个键、它也不是模板段，就没有几何，不写半截的 VIEW_RECT。
-    if (!rect && !unplaced.has(key.id)) continue
+    // 有 layoutId 却没有矩形说明布局树对不上；没有 layoutId 的键本来就没有几何，段照写。
+    if (!rect && key.layoutId !== undefined) continue
     lines.push(`[${sectionOf(key)}]`)
     if (rect) {
       lines.push(`VIEW_RECT=${rect.x},${rect.y},${rect.width},${rect.height}`)
@@ -999,11 +1005,11 @@ export function bdsBoardOf(
     theme: options.theme,
     orientation: options.orientation,
     geometry: { kind: "document" },
-    container: panel,
+    container: knownContainer(panel),
     layout: absoluteBoard(placed.map((entry) => ({ id: entry.key.id, ...entry.rect }))),
     ...(panelStyle ? { backdrop: panelStyle } : {}),
     keys: entries.map((entry) => entry.key),
-    extra: withPanels(undefined, panels),
+    panels,
   }
 }
 
@@ -1027,8 +1033,10 @@ function boardKindOf(layout: string): BoardKind {
   const name = (layout.split("/").pop() ?? "").replace(/\.ini$/i, "").toLowerCase()
   if (/symbol|^zy|^bq|emoji|^sel|_ch$/.test(name)) return "symbol"
   if (/^cand|^hy/.test(name)) return "candidate"
+  // `bh` 是笔画键盘：B1~B9 的横竖撇捺折，与数字九宫格是两种输入形态。
+  if (/^bh/.test(name)) return "stroke"
   // 九宫格的名字带 `_9`，要在 `py`/`en` 之前判断，否则会被当成 26 键主板。
-  if (/(?:^|_)(?:9)$|^num|^bh/.test(name)) return "number"
+  if (/(?:^|_)(?:9)$|^num/.test(name)) return "number"
   if (/^(?:py|en|def|hw|big)/.test(name)) return "main"
   return "other"
 }
@@ -1138,7 +1146,8 @@ function keysOf(document: IniDocument): Array<{ key: Key; rect: LayoutBox; place
       : undefined
     const key: Key = {
       id: section,
-      layoutId: section,
+      // 只有进布局树的键才有节点；没有 VIEW_RECT 的段是「有身份、无几何」，不填 layoutId。
+      ...(placed ? { layoutId: section } : {}),
       ...(hitArea ? { hitArea } : {}),
       ...(padding.length === 4 ? { padding: { left: padding[0], top: padding[1], right: padding[2], bottom: padding[3] } } : {}),
       ...(foreground ? { foreground } : {}),
@@ -1378,9 +1387,8 @@ export async function layoutBoards(
   const document = access.text(primaryLayout)
   if (!document) throw new Error(`包里没有这个布局：${primaryLayout}`)
   const allKeys = keysOf(document)
-  // 只有带 VIEW_RECT 的键进布局树；模板段另存，写回时附在末尾。
+  // 有 VIEW_RECT 的键进布局树；没有的那些仍是键（只有身份与样式），只是不填 layoutId。
   const keys = allKeys.filter((each) => each.placed)
-  const unplacedKeys = allKeys.filter((each) => !each.placed).map((each) => each.key)
   // 容器尺寸是布局的输入：既没声明又没按键可量时，这块板没有可用的布局，不编一个出来。
   const measured = panelSizeOf(document, keys)
   if (!measured) throw new Error(`布局既没有 SIZE 也没有按键，容器尺寸无从确定：${primaryLayout}`)
@@ -1390,20 +1398,19 @@ export async function layoutBoards(
   const parsedPanels = genDocument
     ? panelsOf(access, directory, genDocument, actionOf)
     : { panels: {} as BoardPanels, paths: {} }
+  // 模型里的键顺序就是写回顺序：有几何的在前，只有样式的在后，与 `layoutText` 的分组一致。
+  const orderedMainKeys = [...keys, ...allKeys.filter((each) => !each.placed)]
   const boards: Board[] = [{
     id: primaryLayout,
     kind: primaryKind,
     theme,
     orientation,
     geometry: { kind: "document" },
-    container: size,
+    container: knownContainer(size),
     layout: layoutOfKeys(keys),
     ...(panelStyleOf(document) ? { backdrop: panelStyleOf(document) } : {}),
-    keys: keys.map((each) => each.key),
-    extra: withPanels(undefined, {
-      ...panelsMerged(parsedPanels.panels, document),
-      ...(unplacedKeys.length ? { unplacedKeys } : {}),
-    }),
+    keys: orderedMainKeys.map((each) => each.key),
+    panels: panelsMerged(parsedPanels.panels, document),
   }]
   // 同一主题方向下其余布局文件也是板：九宫格、符号、候选等，一并读进来。
   const skipped: string[] = []
@@ -1414,27 +1421,25 @@ export async function layoutBoards(
     const boardAll = keysOf(other)
     if (!boardAll.length) continue
     const boardKeys = boardAll.filter((each) => each.placed)
-    const boardUnplaced = boardAll.filter((each) => !each.placed).map((each) => each.key)
     const boardMeasured = panelSizeOf(other, boardKeys)
     // 没有几何的布局建不成板；它的原文由调用方按原样保留，不硬塞一个容器尺寸。
     if (!boardMeasured) {
       skipped.push(layoutPath)
       continue
     }
+    // 同上：有几何的键在前，只有样式的键在后，顺序与写回一致。
+    const orderedKeys = [...boardKeys, ...boardAll.filter((each) => !each.placed)]
     boards.push({
       id: layoutPath,
       kind: boardKindOf(layoutPath),
       theme,
       orientation,
       geometry: { kind: "document" },
-      container: boardMeasured.size,
+      container: knownContainer(boardMeasured.size),
       layout: layoutOfKeys(boardKeys),
       ...(panelStyleOf(other) ? { backdrop: panelStyleOf(other) } : {}),
-      keys: boardKeys.map((each) => each.key),
-      extra: withPanels(undefined, {
-        ...panelsMerged(undefined, other),
-        ...(boardUnplaced.length ? { unplacedKeys: boardUnplaced } : {}),
-      }),
+      keys: orderedKeys.map((each) => each.key),
+      panels: panelsMerged(undefined, other),
     })
   }
   return { boards, paths: parsedPanels.paths, skipped }
@@ -1614,7 +1619,7 @@ export async function bdsToModel(
       return [{ trigger: "press" as const, target: action.board }]
     })
     const unique = transitions.filter((entry, index) => transitions.findIndex((other) => other.target === entry.target) === index)
-    if (unique.length) board.extra = withPanels(board.extra, { ...(boardPanels(board) ?? {}), transitions: unique })
+    if (unique.length) board.panels = { ...(board.panels ?? {}), transitions: unique }
   }
   if (hints.animation) {
     const animationText = textContent(access, hints.animation)
@@ -1830,7 +1835,9 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
   const root = `${theme}/skin`
   // 几何只有布局树这一个来源；每块板各自算，不按动作合并按键（合并会让同位置的键丢掉 VIEW_RECT）。
   const rendersOf = async (each: Board): Promise<Array<Pick<KeyRender, "key" | "rect">>> => {
-    const rects = await computeLayout(each.layout, each.container)
+    const container = containerOf(each)
+    if (!container) return []
+    const rects = await computeLayout(each.layout, container)
     return each.keys.flatMap((key) => {
       const rect = rects.get(key.id)
       return rect ? [{ key, rect: { x: rect.position.x, y: rect.position.y, width: rect.size.width, height: rect.size.height } }] : []
@@ -1890,7 +1897,9 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
     return reservePath(base)
   }
   // 页尺寸跟随板尺寸：小屏皮肤不该产出 2048 的图集，大屏也不该被压到 1024。
-  const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(board.container.width, board.container.height) / 512) * 512))
+  // 容器未知时按最小页算——这是打包策略，不是几何，不能编一个板尺寸出来。
+  const mainContainer = containerOf(board)
+  const pageSize = Math.min(2048, Math.max(1024, Math.ceil(Math.max(mainContainer?.width ?? 0, mainContainer?.height ?? 0) / 512) * 512))
   const pages = loose.size ? packAtlasPages(loose, pageSize, pageSize) : []
   // 样式图层声明的拉伸区域：图集里的 `INNER_RECT` 是图集绝对坐标。
   const stretchByImage = new Map<string, Stretch>()
@@ -1966,7 +1975,10 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
     const groupOrientation = orientationOf(`${group}/`) ?? orientation
     const paths = recordedPaths.get(group) ?? {}
     const directory = `${groupTheme}/skin/${groupOrientation}/`
-    for (const file of panelFiles(main, directory, main.container, actionValue, paths)) {
+    // 面板几何要一个确定的容器；未知时这块板的面板文件写不出来，跳过而不是编尺寸。
+    const panelContainer = containerOf(main)
+    if (!panelContainer) continue
+    for (const file of panelFiles(main, directory, panelContainer, actionValue, paths)) {
       // 原包没有 gen.ini 时不要凭空造一份：这层配置在该包里本来就没有。
       if (pathsRecorded && file.path.endsWith("/gen.ini") && !paths.gen) continue
       putText(file.path, new TextDecoder().decode(file.data), { kind: "panel-config" })

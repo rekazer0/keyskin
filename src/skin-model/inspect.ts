@@ -3,6 +3,7 @@
 // 检查器以前按格式各自决定显示什么字段。现在统一从模型派生：字段名、值、类型都由模型给出，
 // 格式差异只体现在「这个格式有没有这个能力」，不再体现在字段表上。
 import type { Board } from "./board.ts"
+import { containerOf } from "./board.ts"
 import type { Key } from "./key.ts"
 import type { SkinModel } from "./model.ts"
 import type { SkinStyle } from "./style.ts"
@@ -51,8 +52,10 @@ export function keyGeometry(model: SkinModel, boardId: string, keyId: string): P
   if (!found) return []
   const { board, key } = found
   const editable = board.geometry.kind === "document"
-  const note = editable ? undefined : "几何由客户端决定，不能在这里改"
-  const rect = cachedLayout(board)?.get(key.layoutId)
+  const note = key.layoutId === undefined
+    ? "这个键只有样式，没有布局节点"
+    : editable ? undefined : "几何由客户端决定，不能在这里改"
+  const rect = key.layoutId === undefined ? undefined : cachedLayout(board)?.get(key.layoutId)
   // 触摸区按显示区还原成像素；same 就是显示区本身，none 是零面积。
   const touch = key.hitArea?.kind === "inset" && rect
     ? {
@@ -175,9 +178,10 @@ export function boardProperties(model: SkinModel, boardId: string): PropertyView
   const board: Board | undefined = model.boards.find((item) => item.id === boardId)
   if (!board) return []
   const geometryNote = board.geometry.kind === "document" ? "由文档决定" : board.geometry.kind === "client" ? "由客户端决定" : "由骨架决定"
+  const size = containerOf(board)
   return [
-    numberView("size.width", "宽", board.container.width, geometryNote),
-    numberView("size.height", "高", board.container.height, geometryNote),
+    numberView("size.width", "宽", size?.width, geometryNote),
+    numberView("size.height", "高", size?.height, geometryNote),
     { key: "kind", label: "板种类", kind: "readonly", value: board.kind },
     { key: "geometry", label: "几何来源", kind: "readonly", value: board.geometry.kind },
     { key: "keys", label: "按键数", kind: "readonly", value: board.keys.length },
@@ -276,6 +280,6 @@ export function summarizeModel(model: SkinModel): ModelSummary {
     images: model.images.size,
     motions: model.motions.size,
     sounds: model.sounds.length,
-    main: main ? { width: main.container.width, height: main.container.height } : undefined,
+    main: main && containerOf(main) ? { width: containerOf(main)!.width, height: containerOf(main)!.height } : undefined,
   }
 }

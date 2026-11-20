@@ -3,15 +3,21 @@
 // 按键的几何来自布局树，样式引用来自按键容器与板上各组件自己的字段；
 // 具体样式（图集、切图、文字度量）由编辑器的解析器去取，这里只出引用。
 import type { Board } from "@/skin-model/board.ts"
+import { containerOf } from "@/skin-model/board.ts"
 import { containerWithState, stateMatches, type KeyRender } from "@/skin-model/build.ts"
 import { computeLayout } from "@/skin-model/layout.ts"
 import { boardPanels } from "@/skin-model/panel.ts"
 
 /** 一块板的渲染投影；同一位置同一动作的按键段在真机上是一个键。 */
 export async function boardRenders(board: Board, state?: number): Promise<KeyRender[]> {
-  const rects = await computeLayout(board.layout, board.container)
+  const container = containerOf(board)
+  // 容器未知就没有几何可算：这块板没有可画的键，不拿 0 去造一堆零矩形。
+  if (!container) return []
+  const rects = await computeLayout(board.layout, container)
   const groups = new Map<string, typeof board.keys>()
   for (const key of board.keys) {
+    // 没有 layoutId 的键只有身份与样式，没有几何：不画、不命中。
+    if (key.layoutId === undefined) continue
     const rect = rects.get(key.layoutId)
     // 布局树里没有这个键就没有几何。
     if (!rect) continue
@@ -21,7 +27,8 @@ export async function boardRenders(board: Board, state?: number): Promise<KeyRen
   }
   const keys = [...groups.values()].map((members) => {
     const key = members[members.length - 1]
-    const { position, size } = rects.get(key.layoutId)!
+    // 分组时已经跳过没有 layoutId 的键，这里一定有节点。
+    const { position, size } = rects.get(key.layoutId!)!
     // 状态覆盖写在板的提示池里；按键只记状态名与段号。
     const ref = state === undefined ? undefined : key.stateRefs?.find((each) => stateMatches(each.state, state))
     const override = ref ? boardPanels(board)?.tips?.get(ref.section)?.container : undefined

@@ -2,6 +2,7 @@
 //
 // 格式转换最容易出的错是悬空引用：样式指向不存在的图片、按键指向不存在的样式、
 // 动效绑到已删除的对象。这些错误在导出时看不出来，只会在输入法里表现为空白块。
+import { containerOf } from "@/skin-model/board.ts"
 import type { LayoutNode } from "@/skin-model/layout.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 
@@ -98,6 +99,8 @@ export function validateModel(model: SkinModel): ValidationReport {
     const nodes = collectNodes(board.layout)
     const layoutIds = new Set(nodes.map((node) => node.id))
     for (const key of board.keys) {
+      // 没有 layoutId 的键是「有样式、无几何」的合法状态，不是缺失。
+      if (key.layoutId === undefined) continue
       if (!layoutIds.has(key.layoutId)) {
         add("error", "layout-key-mismatch", `${board.id}/${key.id}`, "布局树里没有这个按键的节点")
       }
@@ -118,10 +121,11 @@ export function validateModel(model: SkinModel): ValidationReport {
 
   // 主板的尺寸应当与模型记录的分辨率一致。
   const primary = model.boards.find((board) => board.kind === "main") ?? model.boards[0]
-  if (primary && model.meta.resolution) {
+  const primarySize = primary ? containerOf(primary) : undefined
+  if (primary && primarySize && model.meta.resolution) {
     const { width, height } = model.meta.resolution
-    if (primary.container.width !== width || primary.container.height !== height) {
-      add("warning", "size-mismatch", primary.id, `主板尺寸 ${primary.container.width}×${primary.container.height} 与分辨率 ${width}×${height} 不一致`)
+    if (primarySize.width !== width || primarySize.height !== height) {
+      add("warning", "size-mismatch", primary.id, `主板尺寸 ${primarySize.width}×${primarySize.height} 与分辨率 ${width}×${height} 不一致`)
     }
   }
 

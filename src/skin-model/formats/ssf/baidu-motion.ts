@@ -8,6 +8,7 @@ import { IniDocument } from "@/ini.ts"
 import { BaiduSsfMotion } from "@/ssf/baidu-anim-to-ssf.ts"
 import { writeMotions } from "@/skin-model/formats/bds/index.ts"
 import type { Board } from "@/skin-model/board.ts"
+import { containerOf } from "@/skin-model/board.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { cachedLayout, layoutOf } from "@/skin-model/layout-cache.ts"
@@ -47,6 +48,9 @@ export async function ssfBaiduAnimationOf(
     }
   }
   if (!byKey.size) return { bindings, warnings }
+  // 容器未知就没有按键尺寸，动画段写不出来；不拿 0 去生成一份错尺寸的布局。
+  const container = containerOf(board)
+  if (!container) return { bindings, warnings }
 
   // `BaiduSsfMotion` 按 `ANIM<id>` 找段；IR 的 id 是格式自己的名字（`alpha:press`），
   // 这里补上百度侧的前缀，子段本来就是 `ANIM<n>`，不重复加。
@@ -63,7 +67,7 @@ export async function ssfBaiduAnimationOf(
   const styles = IniDocument.parse(styleLines.join("\n"))
   const layout = IniDocument.parse([
     "[PANEL]",
-    `SIZE=${board.container.width},${board.container.height}`,
+    `SIZE=${container.width},${container.height}`,
     "",
     ...board.keys.flatMap((key) => {
       const styleId = styleOf.get(key.id)
@@ -82,7 +86,7 @@ export async function ssfBaiduAnimationOf(
   for (const key of board.keys) {
     const rect = rects.get(key.id)
     if (!rect) continue
-    const style = converter.press(layout, key.id, { width: rect.size.width, height: rect.size.height }, { width: board.container.width, height: board.container.height })
+    const style = converter.press(layout, key.id, { width: rect.size.width, height: rect.size.height }, { width: container.width, height: container.height })
     if (style) bindings.set(key.id, style)
   }
   return { animation, bindings, warnings }

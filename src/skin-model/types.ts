@@ -19,7 +19,7 @@ export type UnitRect = { left: number; top: number; right: number; bottom: numbe
 /** 像素边距，顺序 left,top,right,bottom。 */
 export type Edges = { left: number; top: number; right: number; bottom: number }
 
-export type BoardKind = "main" | "number" | "symbol" | "candidate" | "hint" | "list" | "toolbar" | "input" | "popup" | "other"
+export type BoardKind = "main" | "number" | "stroke" | "symbol" | "candidate" | "hint" | "list" | "toolbar" | "input" | "popup" | "other"
 
 /** 板的几何从哪里来：包里自带、客户端内置、或外部基准文件。 */
 export type GeometrySource =

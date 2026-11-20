@@ -8,6 +8,7 @@ import { decodePng } from "@/raster.ts"
 import { IniDocument } from "@/ini.ts"
 import type { AppearanceSet, Activation } from "@/skin-model/activation.ts"
 import type { Board } from "@/skin-model/board.ts"
+import { knownContainer } from "@/skin-model/board.ts"
 import type { Key, KeyContainer, KeyStateStyle } from "@/skin-model/key.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
 import { computeLayout, type LayoutBoard } from "@/skin-model/layout.ts"
@@ -468,7 +469,7 @@ export async function ssfToModel(documents: SkinDocuments, hints: SsfReadHints):
       theme: look.theme,
       orientation: hints.orientation,
       geometry: { kind: "client", basis: "sogou" },
-      container: hints.container,
+      container: knownContainer(hints.container),
       layout,
       keys,
       extra: new Map<string, unknown>([

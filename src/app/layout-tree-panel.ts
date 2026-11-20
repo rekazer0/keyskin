@@ -6,6 +6,7 @@
 // 渲染分两档：模型换了（打开、编辑、切板）才重建 DOM 并保留折叠与滚动；
 // 只是选中变了就改 `aria-selected`，不碰结构。渲染状态属于容器自己，不放在模块上。
 import type { LayoutBox, LayoutNode } from "@/skin-model/layout.ts"
+import { containerOf } from "@/skin-model/board.ts"
 import { computeLayout } from "@/skin-model/layout.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { describeNode } from "@/skin-model/layout-view.ts"
@@ -128,7 +129,8 @@ export async function renderLayoutTree(container: HTMLElement): Promise<void> {
     return
   }
   // 矩形由布局树算出来，和画布、导出用的是同一份。
-  const rects = await computeLayout(board.layout, board.container)
+  const size = containerOf(board)
+  const rects = size ? await computeLayout(board.layout, size) : new Map()
   const keyIds = new Set(board.keys.map((key) => key.id))
   container.replaceChildren(renderNode(board.layout, board.layout, keyIds, true, container, state, rects))
   syncSelection(container)

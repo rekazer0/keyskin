@@ -161,3 +161,36 @@ function detachNode(node: LayoutNode, id: string): LayoutNode | undefined {
   })
   return detached ? { ...node, children } : undefined
 }
+
+/**
+ * 一组已计算矩形的包围盒：内容实际尺寸。
+ * 容器只是可见尺寸，键可以超出它；超出的部分由这里给出，不在板上存第二份。
+ */
+export function layoutBounds(rects: ReadonlyMap<string, LayoutBox>): LayoutBox | undefined {
+  if (!rects.size) return undefined
+  let left = Number.POSITIVE_INFINITY
+  let top = Number.POSITIVE_INFINITY
+  let right = Number.NEGATIVE_INFINITY
+  let bottom = Number.NEGATIVE_INFINITY
+  for (const box of rects.values()) {
+    left = Math.min(left, box.position.x)
+    top = Math.min(top, box.position.y)
+    right = Math.max(right, box.position.x + box.size.width)
+    bottom = Math.max(bottom, box.position.y + box.size.height)
+  }
+  return { position: { x: left, y: top }, size: { width: right - left, height: bottom - top } }
+}
+
+/**
+ * 内容在画布上的可见范围：上边取 0 与最上沿的较小者，下边不超过画布高度。
+ * 渲染、导出与检查器共用这一份，避免各自对同一组矩形做一遍 reduce。
+ */
+export function contentBounds(
+  items: ReadonlyArray<{ rect: { x: number; y: number; width: number; height: number } }>,
+  surfaceHeight: number,
+): { top: number; height: number } {
+  if (!items.length) return { top: 0, height: surfaceHeight }
+  const top = Math.max(0, Math.min(...items.map((item) => item.rect.y)))
+  const bottom = Math.min(surfaceHeight, Math.max(...items.map((item) => item.rect.y + item.rect.height)))
+  return { top, height: Math.max(0, bottom - top) }
+}

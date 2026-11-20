@@ -4,6 +4,7 @@ import test from "node:test"
 import { emptyModel, boardsOfKind } from "../src/skin-model/model.ts"
 import { requiredCapabilities, lossOf } from "../src/skin-model/capability.ts"
 import { absoluteBoard, computeLayout } from "../src/skin-model/layout.ts"
+import { containerOf } from "../src/skin-model/board.ts"
 import { box, rectOf } from "./helpers/boxes.mjs"
 
 function model() {
@@ -14,7 +15,7 @@ function model() {
     theme: "light",
     geometry: { kind: "document" },
     orientation: "port",
-    container: { width: 1080, height: 600 },
+    container: { kind: "known", size: { width: 1080, height: 600 } },
     layout: absoluteBoard([{ id: "k1", ...box(10, 10, 100, 50) }]),
     keys: [
       {
@@ -47,7 +48,7 @@ test("模型可容纳板、样式、动效与音效", () => {
 
 test("板的布局树可用于计算按键矩形", async () => {
   const skin = model()
-  const layout = await computeLayout(skin.boards[0].layout, skin.boards[0].container)
+  const layout = await computeLayout(skin.boards[0].layout, containerOf(skin.boards[0]))
   assert.deepEqual(rectOf(layout.get("k1")), { x: 10, y: 10, width: 100, height: 50 })
 })
 

@@ -6,6 +6,7 @@ import { createHash } from "node:crypto"
 import { readFileSync, readdirSync } from "node:fs"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
+import { containerOf } from "../src/skin-model/board.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaLayout, decodeBdaSoundConfig } from "../src/bda-decode.ts"
 import { bdaFormat, bdaSource } from "../src/skin-model/formats/bda/index.ts"
 import { exportSkin, importArchive } from "../src/skin-model/pipeline.ts"
@@ -130,7 +131,8 @@ test("自带布局的包读得出每键几何，画布与配置一致", async ()
     const board = model.boards.find((item) => item.keys.length > 0)
     assert.ok(board, `${name} 没有带按键的板`)
     assert.equal(board.geometry.kind, "document")
-    assert.ok(board.container.width > 0 && board.container.height > 0, `${name} 的画布尺寸丢了`)
+    const size = containerOf(board)
+    assert.ok(size && size.width > 0 && size.height > 0, `${name} 的画布尺寸丢了`)
     assert.ok(board.keys.every((key) => key.actions.press !== undefined), `${name} 有按键没有动作`)
   }
 })

@@ -2,6 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { unzipSync } from "fflate"
+import { containerOf } from "../src/skin-model/board.ts"
 import { computeLayout } from "../src/skin-model/layout.ts"
 import { sxiFormat, sxiSource } from "../src/skin-model/formats/sxi/index.ts"
 import { sxiFixture } from "./helpers/sxi-fixture.mjs"
@@ -21,7 +22,7 @@ test("手心皮肤读出按键、动作与样式", async () => {
   assert.ok(board)
   assert.equal(board.kind, "main")
   assert.equal(board.keys.length, 2)
-  const rects = await computeLayout(board.layout, board.container)
+  const rects = await computeLayout(board.layout, containerOf(board))
   assert.deepEqual(rects.get("1").position, { x: 0, y: 0 })
   assert.deepEqual(rects.get("1").size, { width: 100, height: 100 })
   const key = board.keys[0]
@@ -49,7 +50,7 @@ test("手心皮肤写回后仍能读出同样的按键与板", async () => {
   assert.ok(board)
   assert.equal(board.keys.length, 2)
   assert.deepEqual(board.keys[0].actions.press, { kind: "text", value: "q" })
-  const rects = await computeLayout(board.layout, board.container)
+  const rects = await computeLayout(board.layout, containerOf(board))
   assert.deepEqual(rects.get("1").size, { width: 100, height: 100 })
   assert.equal(again.meta.name, "手心测试")
   assert.equal(again.boards.length, model.boards.length)

@@ -202,6 +202,6 @@ export function setMeta(model: SkinModel, patch: Partial<SkinMeta>): SkinModel {
 export function resizeBoard(model: SkinModel, boardId: string, size: { width: number; height: number }): SkinModel {
   const board = model.boards.find((item) => item.id === boardId)
   if (!board) return unchanged(model)
-  const next = replaceBoard(model, boardId, { ...board, container: size })
+  const next = replaceBoard(model, boardId, { ...board, container: { kind: "known", size } })
   return board.kind === "main" ? { ...next, meta: { ...next.meta, resolution: size } } : next
 }

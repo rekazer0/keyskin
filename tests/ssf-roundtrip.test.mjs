@@ -9,6 +9,7 @@ import test from "node:test"
 import { zipSync } from "fflate"
 import { IniDocument } from "../src/ini.ts"
 import { SkinArchive } from "../src/skin.ts"
+import { containerOf } from "../src/skin-model/board.ts"
 import { openSkin, writeSkin } from "../src/skin-model/formats/index.ts"
 import { computeLayout } from "../src/skin-model/layout.ts"
 import { skeletonBoardOf } from "../src/skin-model/formats/ssf/skeleton.ts"
@@ -123,7 +124,8 @@ test("搜狗没有按键坐标：几何来自客户端骨架，布局树能还�
       assert.equal(node.style.position, undefined, `布局节点 ${node.id} 写死了定位`)
       assert.equal(node.style.inset, undefined, `布局节点 ${node.id} 写死了 inset`)
     }
-    const rects = await computeLayout(board.layout, board.container)
+    const container = containerOf(board)
+    const rects = container ? await computeLayout(board.layout, container) : new Map()
     for (const key of skeletonBoard.keys) {
       const rect = rects.get(key.id)
       if (!rect) continue

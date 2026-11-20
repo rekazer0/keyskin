@@ -14,7 +14,7 @@ function model() {
     theme: "light",
     geometry: { kind: "document" },
     orientation: "port",
-    container: { width: 300, height: 100 },
+    container: { kind: "known", size: { width: 300, height: 100 } },
     layout: absoluteBoard([{ id: "k", ...box(10, 10, 100, 50) }]),
     keys: [{
       id: "k",

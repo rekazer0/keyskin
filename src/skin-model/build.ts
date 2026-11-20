@@ -3,6 +3,7 @@
 // 布局树用 taffy 计算每个按键的矩形；样式引用在模型样式表里解析成图层。
 // 这是预览与导出共用的“板 → 可绘制按键”的路径。
 import type { Board } from "./board.ts"
+import { containerOf } from "./board.ts"
 import type { KeyContainer, Key } from "./key.ts"
 import { actionText } from "./inspect.ts"
 import type { LayoutBox } from "./layout.ts"
@@ -88,7 +89,10 @@ export function containerWithState(container: KeyContainer, override: Partial<Ke
 
 /** 一块板的按键渲染数据；矩形来自布局树，图层来自按键容器各自的层。 */
 export async function buildBoard(model: SkinModel, board: Board, state?: number): Promise<KeyRender[]> {
-  const rects = await computeLayout(board.layout, board.container)
+  const container = containerOf(board)
+  // 容器未知时没有几何可算，板渲染为空——不伪造 0 尺寸的键。
+  if (!container) return []
+  const rects = await computeLayout(board.layout, container)
   // 同位置、同动作的几个段在真机上是一个键：只画一次，段名都留着。
   // 后者覆盖前者的样式，与同一按键在多个状态下重复定义时一致。
   const groups = new Map<string, Key[]>()

@@ -8,6 +8,7 @@ import { parseSkinJson, SXI_INFO_PATH, SXI_SKIN_PATH } from "@/palm/sxi-json.ts"
 import { decodePng, encodePng } from "@/raster.ts"
 import type { SkinArchive } from "@/skin.ts"
 import type { Atlas } from "@/skin-model/atlas.ts"
+import { containerOf } from "@/skin-model/board.ts"
 import type { Capability, CapabilityLevel } from "@/skin-model/capability.ts"
 import type { SkinFormat } from "@/skin-model/format.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
@@ -215,9 +216,10 @@ export async function sxiToModel(documents: SkinDocuments): Promise<SkinModel> {
   model.resources = resources
   // 手心不声明画布；板尺寸由键的并集推出，主板的宽度就是设计宽。
   const main = model.boards.find((board) => board.kind === "main" && board.orientation === "port")
-  if (main) {
-    model.meta.designWidth = main.container.width
-    model.meta.resolution = { width: main.container.width, height: main.container.height }
+  const mainSize = main ? containerOf(main) : undefined
+  if (mainSize) {
+    model.meta.designWidth = mainSize.width
+    model.meta.resolution = { width: mainSize.width, height: mainSize.height }
   }
   return model
 }

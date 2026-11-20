@@ -1,5 +1,6 @@
 import { appState } from "./state"
 import { bdsBoardOf } from "../skin-model/formats/bds/index.ts"
+import { containerOf } from "../skin-model/board.ts"
 import { boardRenders } from "../paint/board.ts"
 import { syncLayoutChoices } from "./layout-switch"
 import { rebuildSsfPreview } from "./ssf-preview"
@@ -17,14 +18,7 @@ import { decodeBdaAnimation } from "../bda-decode.ts"
 import { parseLegacyAnimation } from "../preview-animation.ts"
 import { parseLegacyHint } from "../preview-hints.ts"
 import { type PreviewItem } from "../preview-items.ts"
-
-/** 内容在竖直方向占的范围：按键矩形的上边到下边。 */
-function contentBounds(items: readonly PreviewItem[], surfaceHeight: number): { top: number; height: number } {
-  if (!items.length) return { top: 0, height: surfaceHeight }
-  const top = Math.max(0, Math.min(...items.map((item) => item.rect.y)))
-  const bottom = Math.min(surfaceHeight, Math.max(...items.map((item) => item.rect.y + item.rect.height)))
-  return { top, height: Math.max(0, bottom - top) }
-}
+import { contentBounds } from "../skin-model/layout.ts"
 import { IniDocument } from "../ini.ts"
 import { resolvePanelConfig, DEFAULT_BDA_PANEL_WIDTH, DEFAULT_BDA_PANEL_HEIGHT } from "../keyboard.ts"
 import { resolveCandidateInputTextVisual, resolveCandidateTextVisuals } from "../candidate-style.ts"
@@ -237,6 +231,16 @@ export function refreshPreview(): void {
   preview.setDefaults(context?.gen ?? bdaGen)
   preview.setTheme(theme.value === "dark" ? "dark" : "light")
   preview.setTransparent(devicePreviewTransparent())
+  // 画布的坐标系只有一个来源：IR 的 board.container。布局树按它算，画布也按它画。
+  // 不再另读一遍 `[PANEL] SIZE`：那是同一件事的第二份来源，两者不一致时键就会错位。
+  const board = appState.layoutDocument
+    ? bdsBoardOf(appState.layoutDocument, {
+      id: "layout",
+      orientation: orientation.value === "land" ? "land" : "port",
+      theme: theme.value === "dark" ? "dark" : "light",
+    })
+    : undefined
+  const container = board ? containerOf(board) : undefined
   if (context && appState.layoutDocument && resolver) {
     const symbolPanel = candidateArea.hidden
     const candidatePath = toolbarConfigPath()
@@ -248,14 +252,17 @@ export function refreshPreview(): void {
       context.gen,
       context.styles,
     )
+    // 尺寸跟 IR 的容器走；INI 里的 SIZE 只是容器的一个来源，不再是画布的第二来源。
+    const panelWidth = container?.width ?? config.width
+    const panelHeight = container?.height ?? config.height
     const skinFont = appState.archive.format === "ssf"
-    const native = nativeCandidateText(config.width)
+    const native = nativeCandidateText(panelWidth)
     const builtIn = resolveCandidateTextVisuals(candidateLayout, context.gen, resolver, skinFont)
     const inputVisual = merged(resolveCandidateInputTextVisual(context.gen, resolver, candidateLayout, inputBarInKeyboard(), skinFont), native?.input)
     const candidateVisual = merged(builtIn.normal, native?.words)
     const firstCandidateVisual = native?.first ? merged(builtIn.first ?? builtIn.normal, native.first) : builtIn.first
     appState.firstCandidateTextVisual = firstCandidateVisual
-    appState.candidateTextWidth = config.width
+    appState.candidateTextWidth = panelWidth
     applyCandidateTextVisual(candidateInput, inputVisual, appState.candidateTextWidth)
     applyCandidateTextVisual(
       candidateWords,
@@ -268,32 +275,29 @@ export function refreshPreview(): void {
     }
     preview.setPanel(
       config.styleID,
-      config.width,
-      config.height,
+      panelWidth,
+      panelHeight,
       appState.layoutDocument.get("PANEL", "ANIM_STYLE") ?? context.gen.get("PANEL", "ANIM_STYLE") ?? "",
     )
     const candidateInputHeight = symbolPanel ? 0 : (toolbarSize?.inputHeight ?? 0)
     const barHeight = symbolPanel ? 0 : (toolbarSize?.height ?? 0)
-    const surfaceHeight = updatePanelTools(config.width, config.height, deviceShell.hasAttribute("data-candidate-overlay") ? 0 : barHeight)
+    const surfaceHeight = updatePanelTools(panelWidth, panelHeight, deviceShell.hasAttribute("data-candidate-overlay") ? 0 : barHeight)
     const candidateHeight = overlaidCandidateHeight(barHeight, surfaceHeight)
     appState.activeKeyboardGeometry = {
-      panelWidth: config.width,
+      panelWidth,
       panelHeight: surfaceHeight,
       candidateHeight,
       candidateInputHeight,
     }
     applyDeviceKeyboardGeometry(
-      config.width,
+      panelWidth,
       surfaceHeight,
       candidateHeight,
       candidateInputHeight,
     )
   } else if (bdaGen && appState.layoutDocument) {
-    const generalSize = bdaGen.get("PANEL", "SIZE")?.split(",").map(Number)
-    const layoutSize = appState.layoutDocument.get("PANEL", "SIZE")?.split(",").map(Number)
-    const generalPanelWidth = generalSize?.[0] || DEFAULT_BDA_PANEL_WIDTH
-    const panelWidth = layoutSize?.[0] || generalPanelWidth
-    const panelHeight = layoutSize?.[1] || generalSize?.[1] || DEFAULT_BDA_PANEL_HEIGHT
+    const panelWidth = container?.width ?? DEFAULT_BDA_PANEL_WIDTH
+    const panelHeight = container?.height ?? DEFAULT_BDA_PANEL_HEIGHT
     const candidateDocument = toolbarConfigPath() ? textDocument(toolbarConfigPath()!) : undefined
     const panel = currentBdaAppearance()?.appearance.panels.get(layout.value.replace(/\.ini$/i, ""))
     const inputVisual = panel?.input?.textStyle
@@ -339,9 +343,6 @@ export function refreshPreview(): void {
   }
   preview.setDocument(appState.layoutDocument)
   // 文档解析成板，板的渲染投影就是画布上的键；板是派生，不另存一份。
-  const board = appState.layoutDocument
-    ? bdsBoardOf(appState.layoutDocument, { id: "layout", orientation: orientation.value === "land" ? "land" : "port", theme: "light" })
-    : undefined
   preview.setRenderSource(board ? (state) => boardRenders(board, state) : undefined)
   refreshNativeScenes()
 }

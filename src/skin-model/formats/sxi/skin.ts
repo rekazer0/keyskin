@@ -10,7 +10,6 @@ import type { Board } from "@/skin-model/board.ts"
 import { absoluteBoard } from "@/skin-model/layout.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import type { ToolbarItem } from "@/skin-model/panel.ts"
-import { withPanels } from "@/skin-model/panel.ts"
 import type { Theme } from "@/skin-model/types.ts"
 import { atlasesJson } from "./atlas.ts"
 import { keyboardJson, keyboardNameOf, parseBoardId } from "./board.ts"
@@ -134,10 +133,12 @@ export function menuBoardOf(menu: Json, themeKey: SxiThemeKey, theme: Theme): Bo
     theme,
     orientation: "port",
     geometry: { kind: "document" },
-    container: { width: 0, height: 0 },
+    // 菜单没有画布尺寸：条目的位置由客户端排布，不拿 0 冒充一个容器。
+    container: { kind: "unknown" },
     layout: absoluteBoard([]),
     keys: [],
-    extra: withPanels(extra, { toolbar: { items } }),
+    panels: { toolbar: { items } },
+    extra,
   }
 }
 

@@ -9,6 +9,7 @@
 import { ACTION_CODES } from "@/palm/palm-ini.ts"
 import { asObject, type Json, type JsonObject } from "@/palm/sxi-ini.ts"
 import type { Board } from "@/skin-model/board.ts"
+import { containerOf as boardContainerOf, knownContainer } from "@/skin-model/board.ts"
 import { actionOf as actionOfCode } from "@/skin-model/formats/bds/index.ts"
 import type { Key } from "@/skin-model/key.ts"
 import { absoluteBoard, computeLayout, type LayoutBox } from "@/skin-model/layout.ts"
@@ -210,8 +211,10 @@ function boardKindOfName(type: string): Board["kind"] {
   const name = type.toLowerCase()
   if (/symbol|^zy|^bq|emoji/.test(name)) return "symbol"
   if (/^cand/.test(name)) return "candidate"
-  if (/number|(?:^|_)(?:9|num|bh)(?:_|$)/.test(name)) return "number"
-  if (/pinyin|english|default|stroke|^t9|^full|^big|^py|^en|^def|^hw|handwriting/.test(name)) return "main"
+  // 手心的 `strokePad` 与 `bh` 是笔画键盘，和数字九宫格不是一回事。
+  if (/stroke|(?:^|_)bh(?:_|$)/.test(name)) return "stroke"
+  if (/number|(?:^|_)(?:9|num)(?:_|$)/.test(name)) return "number"
+  if (/pinyin|english|default|^t9|^full|^big|^py|^en|^def|^hw|handwriting/.test(name)) return "main"
   return "other"
 }
 
@@ -285,7 +288,7 @@ function boardOf(
     theme,
     orientation,
     geometry: { kind: "document" },
-    container: { width, height },
+    container: knownContainer({ width, height }),
     layout,
     keys,
     ...(removedKeys?.length ? { removedKeys } : {}),
@@ -385,7 +388,9 @@ export function keyboardNameOf(board: Board): string {
 
 /** 一块板 → 键盘对象。几何从布局树算，未建模字段按原值铺底。 */
 export async function keyboardJson(board: Board): Promise<JsonObject> {
-  const rects = await computeLayout(board.layout, board.container)
+  // 容器未知就没有可写的画布尺寸；下面按布局结果写 keys，尺寸那一段留空。
+  const container = boardContainerOf(board)
+  const rects = container ? await computeLayout(board.layout, container) : new Map<string, never>()
   const raw = objectOf(board.extra?.get("sxi:keyboard") as Json | undefined) ?? {}
   const keyFix = board.extra?.get("sxi:keyFix") as Json | undefined
   const rawKeys = board.extra?.get("sxi:keys") as ReadonlyMap<string, JsonObject> | undefined

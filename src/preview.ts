@@ -59,7 +59,11 @@ export class Preview {
   panelWidth = DEFAULT_PANEL_WIDTH
   panelHeight = DEFAULT_PANEL_HEIGHT
   panelTopInset = 0
-  private surfaceKeys?: KeyRender[]
+  /**
+   * 画布高度缓存：按键列表、面板宽高与「只看常驻键」任一变化都要重算。
+   * 只认 `keys` 引用不够——切布局时尺寸换了而列表引用可能被复用，画布就会停在上一块板的比例上。
+   */
+  private surfaceCache?: { keys: readonly KeyRender[]; width: number; height: number; persistent: boolean }
   private surfaceHeightValue = DEFAULT_PANEL_HEIGHT
   theme: "light" | "dark" = "light"
   transparent = false
@@ -502,6 +506,8 @@ export class Preview {
     this.visualCache.clear()
     this.lastRenderCache = undefined
     this.keys = source ? await source(state) : []
+    // 渲染项换了就是另一块板的几何：画布比例要跟着重算，否则停在上一块板的尺寸上。
+    this.fitCanvas()
     void this.draw()
   }
 
@@ -609,12 +615,14 @@ export class Preview {
   }
 
   get surfaceHeight(): number {
-    if (this.surfaceKeys !== this.keys) {
-      this.surfaceKeys = this.keys
+    const cache = this.surfaceCache
+    if (!cache || cache.keys !== this.keys || cache.width !== this.panelWidth
+      || cache.height !== this.panelHeight || cache.persistent !== this.persistentOnly) {
       // 画布高度按所有布局键量，矩形来自布局树。
       const keys = this.persistentOnly ? this.layoutItems(false) : this.keys
       const bottom = keys.reduce((max, render) => Math.max(max, render.rect.y + render.rect.height), 0)
       this.surfaceHeightValue = Math.max(this.panelHeight, bottom)
+      this.surfaceCache = { keys: this.keys, width: this.panelWidth, height: this.panelHeight, persistent: this.persistentOnly }
     }
     return this.surfaceHeightValue
   }

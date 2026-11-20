@@ -5,6 +5,7 @@
 import type { Board } from "./board.ts"
 import type { LayoutBox, LayoutNode } from "./layout.ts"
 import { computeLayout } from "./layout.ts"
+import { containerOf } from "./board.ts"
 
 const cache = new WeakMap<LayoutNode, ReadonlyMap<string, LayoutBox>>()
 
@@ -12,7 +13,9 @@ const cache = new WeakMap<LayoutNode, ReadonlyMap<string, LayoutBox>>()
 export async function layoutOf(board: Board): Promise<ReadonlyMap<string, LayoutBox>> {
   const cached = cache.get(board.layout)
   if (cached) return cached
-  const rects = await computeLayout(board.layout, board.container)
+  const container = containerOf(board)
+  // 容器未知就没有布局可算：返回空表，不拿 0 去算出一堆零矩形。
+  const rects = container ? await computeLayout(board.layout, container) : new Map<string, LayoutBox>()
   cache.set(board.layout, rects)
   return rects
 }

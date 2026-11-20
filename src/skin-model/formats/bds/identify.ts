@@ -11,8 +11,10 @@ function boardKindOf(path: string): BoardKind {
   const name = (bdsBoardName(path) ?? "").toLowerCase()
   if (/symbol|^zy|^bq|emoji|^sel|_ch$/.test(name)) return "symbol"
   if (/^cand|^hy/.test(name)) return "candidate"
+  // `bh` 是笔画键盘，与数字九宫格是两种输入形态。
+  if (/^bh/.test(name)) return "stroke"
   // 九宫格带 `_9`，要在 py/en 之前判断，否则会被当成 26 键主板。
-  if (/(?:^|_)(?:9)$|^num|^bh/.test(name)) return "number"
+  if (/(?:^|_)(?:9)$|^num/.test(name)) return "number"
   if (/^(?:py|en|def|hw|big)/.test(name)) return "main"
   if (/toolbar/.test(name)) return "toolbar"
   if (/list|more/.test(name)) return "list"

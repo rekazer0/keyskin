@@ -2,6 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
+import { containerOf } from "../src/skin-model/board.ts"
 import { ssfFormat, ssfSource } from "../src/skin-model/formats/ssf/index.ts"
 import { unpackSsf } from "../src/ssf/ssf-package.ts"
 import { ssfFixture } from "./helpers/ssf-fixture.mjs"
@@ -25,7 +26,7 @@ test("搜狗皮肤读出骨架几何与皮肤样式", async () => {
   assert.equal(board.keys.length, 3)
   // 搜狗包里没有坐标：几何由客户端骨架提供，模型里只声明这一点。
   assert.deepEqual(board.geometry, { kind: "client", basis: "sogou" })
-  assert.ok(board.container.width > 0)
+  assert.ok(containerOf(board).width > 0)
   // 几何来自布局树；按 x 排序后与骨架的三列对齐。
   const rects = await Promise.all(board.keys.map((key) => rectOfKey(skin, board.id, key.id)))
   const keys = rects.map((rect) => rect.position.x).sort((left, right) => left - right)
