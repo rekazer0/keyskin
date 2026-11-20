@@ -1009,9 +1009,11 @@ function listExtrasOf(document: IniDocument): ListPanel | undefined {
     ...(Number.isFinite(type) ? { type } : {}),
   }
   // BDS 的列表一定有内容层：`NAMES` 没写就是空池，不是「没有池」。
+  // 列表格用独立字体绘制（`SubList.n()` 的用户字体），固定 `NAMES` 的字号是普通文字的 1.2 倍。
   const content = {
     ...(names?.length ? { names } : {}),
     ...(values?.length ? { values } : {}),
+    fontScale: 1.2,
   }
   const panel: ListPanel = {
     ...(Object.keys(appearance).length ? { appearance } : {}),

@@ -169,10 +169,29 @@ export function refreshPreview(): void {
   const currentArchive = appState.archive
   const composing = refreshSimulationState()
   if (refreshPalmPreview()) return
-  const resolver = visualResolver()
+  // 画布的坐标系只有一个来源：IR 的 board.container。布局树按它算，画布也按它画。
+  // 板只有一个来源：模型。板 id 与 `layoutPath` 同值（BDS/BDA/SXI 实测一致），直接取模型里的那块。
+  const board = skinModel.model?.boards.find((item) => item.id === appState.layoutPath)
+  // 「模型没就绪」与「布局没命中板」是两种原因，都要能看见；状态不变时不重复报。
+  const missing = !board && appState.layoutPath
+    ? skinModel.model ? "missing" : "pending"
+    : undefined
+  if (missing !== boardMissing) {
+    boardMissing = missing
+    if (missing) {
+      console.warn(missing === "missing" ? "当前布局在模型里找不到对应的板" : "模型尚未就绪", {
+        layoutPath: appState.layoutPath,
+        boards: skinModel.model?.boards.length ?? 0,
+      })
+    }
+  }
+  const container = board ? containerOf(board) : undefined
+  const resolver = visualResolver(board)
   const context = keyboardContext()
   const toolbarSize = resolver ? refreshToolbarPreview(composing, resolver) : undefined
   preview.setResolver(resolver)
+  // 新路径：样式与图片从模型取；与 resolver 并存，切换期两条都能画。
+  preview.setModel(skinModel.model)
   const animationPath = appState.archive.format === "bda"
     ? bdaConfigPath(appState.archive, theme.value, orientation.value, "animation")
     : undefined
@@ -234,25 +253,6 @@ export function refreshPreview(): void {
   preview.setDefaults(context?.gen ?? bdaGen)
   preview.setTheme(theme.value === "dark" ? "dark" : "light")
   preview.setTransparent(devicePreviewTransparent())
-  // 画布的坐标系只有一个来源：IR 的 board.container。布局树按它算，画布也按它画。
-  // 不再另读一遍 `[PANEL] SIZE`：那是同一件事的第二份来源，两者不一致时键就会错位。
-  // 板只有一个来源：模型。BDA 的预览以前用 BDS 的板构造器从伪 INI 现建一份，
-  // 与 `model.boards` 并行；板 id 与 `layoutPath` 同值（BDS/BDA/SXI 实测一致），直接取模型里的那块。
-  const board = skinModel.model?.boards.find((item) => item.id === appState.layoutPath)
-  // 「模型没就绪」与「布局没命中板」是两种原因，都要能看见；状态不变时不重复报。
-  const missing = !board && appState.layoutPath
-    ? skinModel.model ? "missing" : "pending"
-    : undefined
-  if (missing !== boardMissing) {
-    boardMissing = missing
-    if (missing) {
-      console.warn(missing === "missing" ? "当前布局在模型里找不到对应的板" : "模型尚未就绪", {
-        layoutPath: appState.layoutPath,
-        boards: skinModel.model?.boards.length ?? 0,
-      })
-    }
-  }
-  const container = board ? containerOf(board) : undefined
   // BDS 分支的几何来自模型里的板；`layoutDocument` 只剩样式与面板配置的输入，不是几何来源。
   if (context && board && resolver && appState.layoutDocument) {
     const symbolPanel = candidateArea.hidden

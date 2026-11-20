@@ -8,16 +8,17 @@ import { updateDirty, isEditing, commitBytes, commitBatch } from "./edit-history
 import { type BdaAppearance, bdaAppearancePath, type BdaAppearanceStyleGroup, type BdaAppearancePart, bdaLayoutDocument } from "../bda.ts"
 import { decodeBdaAppearance } from "../bda-decode.ts"
 import { decodedBdaAppearancePart, decodedBdaEditorSource, decodedBdaSource, applyDecodedBdaAppearancePart, bdaDecodedSourceEditable, applyDecodedBdaSource } from "../bda-source.ts"
-import { bdaLayoutNames, BdaResolver } from "../bda-resolver.ts"
+import { bdaLayoutNames } from "../bda-resolver.ts"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { layoutSource, setSourceValue } from "./config-context"
 import { source } from "./canvas-interaction"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
 import { IniDocument } from "../ini.ts"
-import { type VisualResolver, AtlasResolver } from "../atlas.ts"
-import { PalmStyles } from "../palm/palm-styles.ts"
-import { palmSkin } from "./sxi-documents"
+import type { VisualResolver } from "../atlas.ts"
+import { ModelResolver } from "../model-render.ts"
+import { skinModel } from "./skin-model-state"
+import type { Board } from "../skin-model/board.ts"
 
 export function preferredPath(): string {
   return `${theme.value}/skin/${orientation.value}/${layout.value}`
@@ -228,22 +229,8 @@ export function refreshBdaLayout(path = preferredPath()): boolean {
   return true
 }
 
-/** Palm documents resolve styles from skin.json itself; Sogou boards draw with the official skeleton's styles. */
-export function visualResolver(): VisualResolver | undefined {
-  const source = layoutSource()
-  if (!appState.archive || !source) return
-  const appearancePath = appState.archive.format === "bda" ? bdaAppearancePath(appState.archive, theme.value, orientation.value) : undefined
-  const appearanceBytes = appearancePath ? appState.archive.getBytes(appearancePath) : undefined
-  // 新建解析器会重新解析样式、重新解码全部 PNG；归档内容（revision）与主题方向不变时复用，保留位图缓存。
-  const key = [appState.archive, appState.archive.revision, appState.bdaBase, appState.bdaBase?.revision, source, appearanceBytes, theme.value, orientation.value]
-  if (appState.cachedVisualResolver?.key.every((value, index) => value === key[index])) return appState.cachedVisualResolver.resolver
-  // A BDA without this look's appearanceConfig has nothing to draw; it never falls back to the INI atlas.
-  if (appState.archive.format === "bda" && !appearanceBytes) return
-  const resolver = appearanceBytes
-    ? new BdaResolver(appState.archive, appearanceBytes, appState.bdaBase, theme.value, orientation.value)
-    : appState.archive.format === "sxi"
-      ? new PalmStyles(appState.archive, palmSkin(appState.archive), theme.value === "dark" ? "night" : "default", orientation.value === "land" ? "land" : "port")
-      : new AtlasResolver(source, theme.value, orientation.value)
-  appState.cachedVisualResolver = { key, resolver }
-  return resolver
+/** 样式与图片一律从模型取；板只提供工具栏这类板级数据，不碰格式包。 */
+export function visualResolver(board?: Board): VisualResolver | undefined {
+  const model = skinModel.model
+  return model ? new ModelResolver(model, board) : undefined
 }

@@ -109,3 +109,17 @@ export function tileDocument(atlas: PackedAtlas, inner: ReadonlyMap<string, read
   }
   return `${lines.join("\n")}\n`
 }
+
+const bitmaps = new WeakMap<SkinImage, Promise<ImageBitmap | undefined>>()
+
+/** IR 的像素转位图；按图片对象缓存，同一张图只解一次。非浏览器环境没有位图。 */
+export function bitmapOf(image: SkinImage): Promise<ImageBitmap | undefined> {
+  let result = bitmaps.get(image)
+  if (!result) {
+    result = typeof createImageBitmap === "function"
+      ? createImageBitmap(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height)).catch(() => undefined)
+      : Promise.resolve(undefined)
+    bitmaps.set(image, result)
+  }
+  return result
+}

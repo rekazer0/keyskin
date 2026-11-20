@@ -4,6 +4,7 @@
 // 都是同一套图层。拉伸信息挂在图片图层上，用 `Stretch` 表达，不再依赖格式自己的字段名。
 import type { Point, Size } from "taffy-layout"
 import type { Box, Color, Edges, UnitRect } from "./types.ts"
+import type { SkinModel } from "./model.ts"
 import type { SoundBinding } from "./sound.ts"
 
 export type StyleRef = string
@@ -62,4 +63,22 @@ export function resolveStyle(styles: SkinStyles | undefined, ref: string | undef
 /** 样式的图片图层，便于只需要背景图的调用方。 */
 export function imageLayer(style: SkinStyle | undefined): Extract<SkinLayer, { kind: "image" }> | undefined {
   return style?.normal.find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
+}
+
+/** 按状态取样式图层；没有样式就是空数组。渲染只读模型，不认识格式。 */
+export function styleLayers(model: SkinModel | undefined, styleID: string, highlighted: boolean): readonly SkinLayer[] {
+  const style = model?.styles.get(styleID)
+  if (!style) return []
+  return highlighted ? style.pressed ?? style.normal : style.normal
+}
+
+/** IR 的颜色是 `AARRGGBB` 十六进制；渲染要 CSS 颜色。 */
+export function colorCss(value: string): string {
+  const hex = value.trim().replace(/^#/, "")
+  if (!/^[0-9a-f]{8}$/i.test(hex)) return value.startsWith("#") ? value : `#${hex}`
+  const alpha = Number.parseInt(hex.slice(0, 2), 16) / 255
+  const red = Number.parseInt(hex.slice(2, 4), 16)
+  const green = Number.parseInt(hex.slice(4, 6), 16)
+  const blue = Number.parseInt(hex.slice(6, 8), 16)
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }

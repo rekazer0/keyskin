@@ -5,6 +5,7 @@ import { snapPointToRects } from "./layout.ts"
 import type { BdaAnimation } from "./bda.ts"
 import { type PreviewItem, type Rect } from "./preview-items.ts"
 import type { Board } from "./skin-model/board.ts"
+import type { SkinModel } from "./skin-model/model.ts"
 import type { KeyRender } from "./skin-model/build.ts"
 import { type LegacyAnimation } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
@@ -40,6 +41,8 @@ export class Preview {
   toolbarRect?: { x: number; y: number; width: number; height: number }
   offsets?: IniDocument
   resolver?: VisualResolver
+  /** IR 模型：新路径直接从这里取样式与图片；与 `resolver` 并存，切换期两条路都能画。 */
+  model?: SkinModel
   private documentIdentity?: unknown
   /** Palm and Sogou skins paint a scene read from their own files instead of resolving styles. */
   scene?: (state: number | undefined) => Promise<NativeScene | undefined>
@@ -365,6 +368,12 @@ export class Preview {
     this.visualCache.clear()
     this.resourceCache.clear()
     this.toolbarImagesCache = undefined
+    this.lastRenderCache = undefined
+    void this.draw()
+  }
+
+  setModel(model?: SkinModel): void {
+    this.model = model
     this.lastRenderCache = undefined
     void this.draw()
   }

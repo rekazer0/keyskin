@@ -118,7 +118,15 @@ export type ListPanel = {
    *
    * 层不存在时整个字段缺省（BDA/SSF）；层存在但没有内容时是 `content: {}`（BDS 的 `NAMES` 空池）。
    */
-  content?: { names?: readonly string[]; values?: readonly string[] }
+  content?: {
+    names?: readonly string[]
+    values?: readonly string[]
+    /**
+     * 列表格用独立字体绘制，字号相对普通文字样式的倍率；缺省 1 表示不缩放。
+     * BDS 的列表有自己的一套用户字体绘制，固定 `NAMES` 用 1.2 倍。
+     */
+    fontScale?: number
+  }
 }
 
 export type InputBar = {

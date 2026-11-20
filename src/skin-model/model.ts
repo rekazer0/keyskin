@@ -20,6 +20,14 @@ export type SkinModel = {
   resources: ReadonlyMap<string, SkinResource>
   /** 图片资源：导入时切出的像素，导出时重新打包。 */
   images: ReadonlyMap<string, SkinImage>
+  /**
+   * 格式包里的原始资源名 → IR 的图片 id。
+   *
+   * 动画粒子与帧序列引用的是包里的原始资源名（BDA 的 `10055`），而图片 id 是 IR 自己的命名
+   * （`bda:10055`、`bt.til#10`）。两者不是一回事，由格式层建模型时填这一层，渲染层只查表。
+   * 没有这个概念格式留空表。
+   */
+  resourceIndex: ReadonlyMap<string, string>
   /** 图集：打包方式，多个切片共用一张源图。 */
   atlases: Atlas[]
   boards: Board[]
@@ -39,6 +47,7 @@ export function emptyModel(meta: SkinMeta, format = ""): SkinModel {
     profiles: format ? [{ format, capabilities: new Map() }] : [],
     resources: new Map(),
     images: new Map(),
+    resourceIndex: new Map(),
     atlases: [],
     boards: [],
     appearances: [],

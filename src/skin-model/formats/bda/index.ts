@@ -285,6 +285,12 @@ async function bdaToModel(documents: SkinDocuments, hints: BdaReadHints, options
   model.boards.push(...boards)
   model.styles = styled.styles
   model.images = images
+  // 动画与帧序列引用的是包里的原始资源名（`10055`），图片 id 是 `bda:10055`：
+  // 这层对应关系由格式层建好，渲染层只查表，不碰 `bda:` 这个前缀。
+  model.resourceIndex = new Map([...images.keys()].flatMap((id) => {
+    const resourceID = id.replace(/^bda:/, "")
+    return resourceID === id ? [] : [[resourceID, id] as [string, string]]
+  }))
 
   // 音效与字体是包里的文件，字节要进模型。
   const resources = new Map(model.resources)

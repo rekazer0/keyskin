@@ -2,6 +2,8 @@
 //
 // 数据来自渲染项（几何 + 样式引用）；图与文字由调用方事先解析好传进来。
 import { canvasFont, withTextShadow, type StyleTextVisual, type TextVisual, type Visual } from "../atlas.ts"
+import { paintLayer } from "./layer.ts"
+import type { SkinLayer } from "../skin-model/style.ts"
 import { drawSceneLayer, type NativeScene, type SceneKey, type SceneLayer } from "../native-scene.ts"
 import { withMotion, type SceneSprite } from "../native-motion.ts"
 import type { PreviewItem, Rect } from "../preview-items.ts"
@@ -16,12 +18,18 @@ import {
   withTransform,
 } from "../preview-draw.ts"
 
+/** 一个 IR 图层与它按需解码好的位图；新路径直接画这个，不再经过 `Visual`。 */
+export type LayerPaint = { layer: SkinLayer; bitmap?: ImageBitmap }
+
 /** 一个键解析后的图与文字；没有就是没解析到。 */
 export type KeyVisuals = {
   back?: Visual
   fore?: (Visual | undefined)[]
   text?: TextVisual
   styleTexts?: (StyleTextVisual | undefined)[]
+  /** 新路径：从模型取的图层；有值时优先于 `back`/`fore`。 */
+  backLayer?: LayerPaint
+  foreLayers?: (LayerPaint | undefined)[]
 }
 
 /** 动画在某一时刻的变换；缺省表示这一项不动。 */
@@ -75,6 +83,8 @@ export function paintKey(env: KeyPaintEnv, key: PreviewItem, animation: KeyAnima
   const visual = env.visuals.get(key.section)
   const styleTexts = visual?.styleTexts ?? []
   const foregrounds = phoneForegroundLayers(visual?.fore ?? [])
+  // 新路径的图层来自模型；旧路径来自解析器。两边的层数取多者，缺的一边留空。
+  const foreCount = Math.max(foregrounds.length, visual?.foreLayers?.length ?? 0)
   const hasForeground = foregrounds.some(Boolean) || styleTexts.some(Boolean)
   const elapsed = animation.playerElapsed ?? (
     animation.startedAt === undefined ? -1 : Date.now() - animation.startedAt
@@ -82,16 +92,23 @@ export function paintKey(env: KeyPaintEnv, key: PreviewItem, animation: KeyAnima
   if (shouldDrawItemBackground(key, env.panelStyle, env.panelWidth, env.panelHeight)) {
     const back = animation.transformOf(animation.backAnim, elapsed, area, "back")
     withTransform(context, area, back.scale, back.translation, back.rotation, back.opacity, () => {
-      drawVisual(context, visual?.back, area, true)
+      if (visual?.backLayer) paintLayer(context, visual.backLayer.layer, visual.backLayer.bitmap, area)
+      else drawVisual(context, visual?.back, area, true)
     })
   }
-  for (const [layer, fore] of foregrounds.entries()) {
+  for (let layer = 0; layer < foreCount; layer++) {
+    const fore = foregrounds[layer] as Visual | undefined
     const style = key.container.fore[layer]?.anim || key.container.press
     const transform = animation.transformOf(style, elapsed, area, "fore")
     const offset = key.container.fore[layer]?.offset
-    const destination = foregroundLayerRect(area, fore?.source, offset ? [offset.x, offset.y] : undefined)
+    const paint = visual?.foreLayers?.[layer]
+    const source = paint?.bitmap
+      ? [0, 0, paint.bitmap.width, paint.bitmap.height] as [number, number, number, number]
+      : fore?.source
+    const destination = foregroundLayerRect(area, source, offset ? [offset.x, offset.y] : undefined)
     withTransform(context, area, transform.scale, transform.translation, transform.rotation, transform.opacity, () => {
-      drawVisual(context, fore, destination, false)
+      if (paint) paintLayer(context, paint.layer, paint.bitmap, destination)
+      else drawVisual(context, fore, destination, false)
     })
   }
   for (const [layer, styleText] of styleTexts.entries()) {

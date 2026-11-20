@@ -1,4 +1,6 @@
 import type { Preview } from "./preview.ts"
+import { bitmapOf } from "./skin-model/image.ts"
+import { styleLayers } from "./skin-model/style.ts"
 import { drawMeasurements } from "./preview-measurements.ts"
 import { legacyParticleFrames } from "./preview-animation.ts"
 import { drawSprite, type SceneSprite } from "./native-motion.ts"
@@ -149,9 +151,27 @@ export async function paintPreview(self: Preview): Promise<void> {
             self.legacyAnimationStates.has(key.section) ||
             self.keyPressed(key)
           try {
+            // 新路径：样式与图片直接从模型取；旧路径（resolver）仍然保留，两条路并存。
+            const model = self.model
+            const layerPaint = async (styleID: string | undefined) => {
+              if (!model) return undefined
+              const layers = styleLayers(model, styleID ?? "", highlighted)
+              const image = layers.find((layer) => layer.kind === "image")
+              if (image?.kind === "image") {
+                const source = model.images.get(image.image)
+                return { layer: image, ...(source ? { bitmap: await bitmapOf(source) } : {}) }
+              }
+              const color = layers.find((layer) => layer.kind === "color")
+              return color ? { layer: color } : undefined
+            }
+            const backID = highlighted ? key.highlightBackStyle ?? key.backStyle ?? "" : key.backStyle ?? ""
             return {
+              ...(model ? {
+                backLayer: await layerPaint(backID),
+                foreLayers: await Promise.all(foreStyles.map((style) => layerPaint(style))),
+              } : {}),
               back: draft && !draft.foreground ? draft.visual : await self.resolveVisual(
-                highlighted ? key.highlightBackStyle ?? key.backStyle ?? "" : key.backStyle ?? "",
+                backID,
                 highlighted,
               ).catch(() => undefined),
               fore: await Promise.all(
