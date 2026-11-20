@@ -3,13 +3,14 @@
 // 几何只有一处来源：布局里每个键的 `{position,size}` 交给 absoluteBoard 建树，矩形由
 // computeLayout 算出，不在这里保存。未建模的字段（第二个矩形、可变键的字符串、`#4` 的三个
 // float、`#6` 的两个数）按原始 protobuf 字段进板的 `extra`，写回时原样输出。
-import { type BdaLayout, type BdaLayoutExtras, type BdaLayoutKey, type BdaLayoutKeyboard, type BdaLayoutBar, type BdaLayoutVariant, type BdaCandidateElement, type BdaPanel, type BdaRect, type ProtoField, type BdaStyleRef } from "@/bda.ts"
+import { type BdaLayout, type BdaLayoutExtras, type BdaLayoutKey, type BdaLayoutKeyboard, type BdaLayoutBar, type BdaLayoutVariant, type BdaCandidateElement, type BdaList, type BdaPanel, type BdaRect, type ProtoField, type BdaStyleRef } from "@/bda.ts"
 import { encodeFields } from "@/skin-model/formats/bda/appearance.ts"
 import { actionOf, actionValue } from "@/skin-model/formats/bds/index.ts"
 import type { Board, ContainerSize } from "@/skin-model/board.ts"
 import { containerOf as boardContainerOf } from "@/skin-model/board.ts"
 import type { Key, KeyContainer } from "@/skin-model/key.ts"
 import { absoluteBoard, type LayoutBox } from "@/skin-model/layout.ts"
+import type { ListPanel } from "@/skin-model/panel.ts"
 import type { BoardKind } from "@/skin-model/types.ts"
 import type { Orientation, Theme } from "@/skin-model/types.ts"
 
@@ -203,12 +204,22 @@ export function keyContainerOf(
   }
 }
 
-function keyOf(key: BdaLayoutKey, panel: BdaPanel | undefined, options: LayoutReadOptions): Key {
+function keyOf(
+  key: BdaLayoutKey,
+  panel: BdaPanel | undefined,
+  options: LayoutReadOptions,
+  placedNames: ReadonlySet<string>,
+): Key {
+  // 变体的几何继承基础键；`KEY_F0_*` 没有基础节点，就没有几何。
+  // `F0` 是占位不是动作码（`actions.ts` 的动作码表里没有它），`S7`/`S8` 的状态语义未确认。
+  const layoutId = key.rect ? key.name : placedNames.has(baseKeyName(key.name)) ? baseKeyName(key.name) : undefined
   const action = actionOf(key.action)
   return {
     id: key.name,
-    layoutId: key.rect ? key.name : baseKeyName(key.name),
-    actions: action ? { press: action } : {},
+    ...(layoutId ? { layoutId } : {}),
+    ...(action ? { actions: { press: action } } : {}),
+    // 没有几何的键不可触摸；有几何的键和它的状态变体共用同一块显示区。
+    ...(layoutId ? {} : { hitArea: { kind: "none" } as const }),
     container: keyContainerOf(panel, key.name, options.styleName),
   }
 }
@@ -219,12 +230,38 @@ function keyboardContainer(keyboard: BdaLayoutKeyboard): ContainerSize {
 }
 
 /**
+ * 外观的列表条目 → IR 的列表面板。
+ * BDA 只有样式层：布局层与内容层缺省，表示「BDA 没有这两层」，不是「这两层是空的」。
+ * `foreStyles`/`foreStyleOffsets` 是多条前景，`ListPanel.appearance` 只留一条 `foreStyle`，
+ * 这几条不进 IR，写回时按原文保留。
+ */
+export function listPanelOf(
+  list: BdaList | undefined,
+  styleName: (ref: BdaStyleRef) => string | undefined,
+): ListPanel | undefined {
+  if (!list) return undefined
+  const style = list.backStyle ? styleName(list.backStyle) : undefined
+  const cellStyle = list.cellBackStyle ? styleName(list.cellBackStyle) : undefined
+  const foreStyle = list.cellForeStyle ? styleName(list.cellForeStyle) : undefined
+  if (!style && !cellStyle && !foreStyle) return undefined
+  return {
+    appearance: {
+      ...(style ? { style } : {}),
+      ...(cellStyle ? { cellStyle } : {}),
+      ...(foreStyle ? { foreStyle } : {}),
+    },
+  }
+}
+
+/**
  * 布局配置 → 板。
  * 每个键盘一块板；变体键与基础键共用布局节点，几何仍由 computeLayout 给出。
  */
 export function boardsOfLayout(layout: BdaLayout, options: LayoutReadOptions): Board[] {
   return layout.keyboards.map((keyboard) => {
     const panel = options.panels.get(keyboard.name)
+    // 列表按方向索引：只取当前方向那一条，不把两个方向的样式混在一起。
+    const list = listPanelOf(panel?.lists.get(options.orientation), options.styleName)
     const placed = keyboard.keys.flatMap((key) => (key.rect
       ? [{
         id: key.name,
@@ -232,6 +269,8 @@ export function boardsOfLayout(layout: BdaLayout, options: LayoutReadOptions): B
         size: { width: key.rect.width, height: key.rect.height },
       }]
       : []))
+    // 布局树里有哪些节点：变体键的 `layoutId` 只能指向真实存在的节点。
+    const placedNames = new Set(placed.map((item) => item.id))
     const keyboardExtra: BdaKeyboardExtra = {
       variants: keyboard.variants,
       ...(keyboard.extras ? { extras: keyboard.extras } : {}),
@@ -262,7 +301,8 @@ export function boardsOfLayout(layout: BdaLayout, options: LayoutReadOptions): B
       container: keyboardContainer(keyboard),
       layout: absoluteBoard(placed),
       ...(panel?.backStyle ? { backdrop: options.styleName(panel.backStyle) } : {}),
-      keys: keyboard.keys.map((key) => keyOf(key, panel, options)),
+      ...(list ? { panels: { list } } : {}),
+      keys: keyboard.keys.map((key) => keyOf(key, panel, options, placedNames)),
       extra,
     }
   })

@@ -3,7 +3,7 @@
 // 读分两种：带 `layoutConfig` 的包用包内几何建板；只有外观的包（多数皮肤）用外部布局骨架
 // 提供几何，没有骨架时只建外观板、不伪造坐标。写回时以模型为准重建整套配置，未建模的文件
 // 与字段原样带在 `opaque` 里，避免导出时丢掉读不懂的内容。
-import { type BdaAnimationBinding, type BdaAppearance, type BdaColorStyle, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle, bdaPanelKeyName } from "@/bda.ts"
+import { type BdaAnimationBinding, type BdaAppearance, type BdaColorStyle, type BdaImageStyle, type BdaKey, type BdaList, type BdaPanel, type BdaStyleRef, type BdaTextStyle, bdaPanelKeyName } from "@/bda.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaLayout, decodeBdaSoundConfig } from "@/bda-decode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
@@ -18,7 +18,7 @@ import { parseBds } from "@/skin-model/formats/public/parse.ts"
 import { actionOf, actionValue, layoutBoards } from "@/skin-model/formats/bds/index.ts"
 import { packageOf, type FileRole, type SkinDocuments, type SkinStructure } from "@/skin-model/pipeline.ts"
 import { encodeAnimation, encodeAppearance, encodeSoundConfig } from "@/skin-model/formats/bda/appearance.ts"
-import { bdaBoardKind, boardsOfLayout, encodeBdaLayout, keyboardNameOf, KEYBOARD_EXTRA, keyContainerOf, layoutOfBoards, PANEL_EXTRA, panelOf } from "@/skin-model/formats/bda/layout.ts"
+import { bdaBoardKind, boardsOfLayout, encodeBdaLayout, keyboardNameOf, KEYBOARD_EXTRA, keyContainerOf, layoutOfBoards, listPanelOf, PANEL_EXTRA, panelOf } from "@/skin-model/formats/bda/layout.ts"
 import { configBytes, identifyBda, parseBda, pathsOfRole } from "@/skin-model/formats/bda/pipeline.ts"
 import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig, soundTypesOf, type BdaMotionParts } from "@/skin-model/formats/bda/motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
@@ -164,15 +164,18 @@ function actionCodeOfKeyName(name: string): string {
 }
 
 /**
- * 外观面板里的按键没有几何：每个键名一条 `Key`，`layoutId` 缺省。
+ * 外观面板里的按键没有几何：每个键名一条 `Key`，`layoutId` 缺省、不可触摸。
  * `_S<n>` 变体保持独立——状态号的编码规则还没确认，合成 `states` 就得猜轴。
  */
 function keysOfAppearancePanel(panel: BdaPanel): Key[] {
   return [...panel.keys].map(([name]) => {
-    const action = actionOf(actionCodeOfKeyName(name))
+    const code = actionCodeOfKeyName(name)
+    // `F0` 是占位不是动作码（`actions.ts` 的动作码表里没有它），不能交给 `actionOf` 解。
+    const action = code === "F0" ? undefined : actionOf(code)
     return {
       id: name,
-      actions: action ? { press: action } : {},
+      hitArea: { kind: "none" } as const,
+      ...(action ? { actions: { press: action } } : {}),
       container: keyContainerOf(panel, name, bdaStyleName),
     }
   })
@@ -180,19 +183,24 @@ function keysOfAppearancePanel(panel: BdaPanel): Key[] {
 
 /** 没有包内布局时，每个外观面板一块板：几何标为客户端提供，画布未知，按键只有样式。 */
 function panelsAsBoards(appearance: BdaAppearance, options: { theme: Theme; orientation: Orientation }): import("@/skin-model/board.ts").Board[] {
-  return [...appearance.panels].map(([name, panel]) => ({
-    id: `${options.theme}/${options.orientation}/${name}`,
-    kind: bdaBoardKind(name),
-    theme: options.theme,
-    orientation: options.orientation,
-    geometry: { kind: "client", basis: "bda" },
-    // 外观面板没有画布尺寸：designWidth 是基准宽，不是容器。骨架缺失时容器就是未知。
-    container: { kind: "unknown" },
-    layout: absoluteBoard([]),
-    ...(panel.backStyle ? { backdrop: bdaStyleName(panel.backStyle) } : {}),
-    keys: keysOfAppearancePanel(panel),
-    extra: new Map<string, unknown>([[PANEL_EXTRA, panel]]),
-  }))
+  return [...appearance.panels].map(([name, panel]) => {
+    // 列表按方向索引：只取当前方向那一条，不把两个方向的样式混在一起。
+    const list = listPanelOf(panel.lists.get(options.orientation), bdaStyleName)
+    return {
+      id: `${options.theme}/${options.orientation}/${name}`,
+      kind: bdaBoardKind(name),
+      theme: options.theme,
+      orientation: options.orientation,
+      geometry: { kind: "client", basis: "bda" },
+      // 外观面板没有画布尺寸：designWidth 是基准宽，不是容器。骨架缺失时容器就是未知。
+      container: { kind: "unknown" },
+      layout: absoluteBoard([]),
+      ...(panel.backStyle ? { backdrop: bdaStyleName(panel.backStyle) } : {}),
+      ...(list ? { panels: { list } } : {}),
+      keys: keysOfAppearancePanel(panel),
+      extra: new Map<string, unknown>([[PANEL_EXTRA, panel]]),
+    }
+  })
 }
 
 /** 外观里的按键样式覆盖骨架布局里的按键；骨架的编号在 BDA 里不指向任何外观样式。 */
@@ -200,24 +208,10 @@ function applyPanelStyles(boards: readonly import("@/skin-model/board.ts").Board
   for (const board of boards) {
     const panel = appearance.panels.get(keyboardNameOf(board))
     for (const key of board.keys) {
+      // 没有动作的键（KEY_F0_*）直接按键名查；有动作的键在骨架里用的是 BDS 键名，靠动作码对齐。
       const action = actionValue(key.actions?.press)
-      const entry = action && panel ? panel.keys.get(bdaPanelKeyName(action)) : undefined
-      key.container = entry
-        ? {
-          ...(entry.backStyle || entry.backStyleState
-            ? {
-              back: {
-                ...(entry.backStyle ? { style: bdaStyleName(entry.backStyle) } : {}),
-                ...(entry.backStyleState ? { pressed: bdaStyleName(entry.backStyleState) } : {}),
-              },
-            }
-            : {}),
-          fore: entry.foreStyles.flatMap((ref) => {
-            const name = bdaStyleName(ref)
-            return name ? [{ style: name }] : []
-          }),
-        }
-        : { fore: [] }
+      const name = action ? bdaPanelKeyName(action) : key.id
+      key.container = keyContainerOf(panel, name, bdaStyleName)
     }
   }
 }
@@ -449,6 +443,33 @@ function styleRefsOf(model: SkinModel): Map<string, BdaStyleRef> {
   return refs
 }
 
+/**
+ * 板上的列表面板 → 外观的列表条目。
+ * 只覆盖外观层；多条前景与偏移 IR 不表达，沿用原文。
+ * `panel.lists` 按方向索引，只写当前方向那一条，不混两个方向。
+ */
+function listsOfBoard(
+  board: import("@/skin-model/board.ts").Board,
+  source: ReadonlyMap<string, BdaList> | undefined,
+): Map<string, BdaList> | undefined {
+  const appearance = board.panels?.list?.appearance
+  const lists = new Map(source ?? [])
+  if (!appearance) return lists.size ? lists : undefined
+  const key = source?.has(board.orientation) ? board.orientation : [...(source?.keys() ?? [])][0] ?? board.orientation
+  const original = lists.get(key)
+  const backStyle = styleRefOf(appearance.style) ?? original?.backStyle
+  const cellBackStyle = styleRefOf(appearance.cellStyle) ?? original?.cellBackStyle
+  const cellForeStyle = styleRefOf(appearance.foreStyle) ?? original?.cellForeStyle
+  lists.set(key, {
+    ...(backStyle ? { backStyle } : {}),
+    ...(cellBackStyle ? { cellBackStyle } : {}),
+    ...(cellForeStyle ? { cellForeStyle } : {}),
+    foreStyles: original?.foreStyles ?? [],
+    foreStyleOffsets: original?.foreStyleOffsets ?? [],
+  })
+  return lists
+}
+
 /** 面板从模型重建：顺序按读取时的面板表，样式引用以按键容器为准。 */
 function panelsOf(model: SkinModel, refs: ReadonlyMap<string, BdaStyleRef>): Map<string, BdaPanel> {
   const order = model.opaque.get(PANEL_ORDER) as readonly string[] | undefined
@@ -462,7 +483,7 @@ function panelsOf(model: SkinModel, refs: ReadonlyMap<string, BdaStyleRef>): Map
     const back = refs.get(board.backdrop ?? "")
     panels.set(name, {
       hints: source?.hints ?? new Map(),
-      lists: source?.lists ?? new Map(),
+      lists: listsOfBoard(board, source?.lists) ?? new Map(),
       keys: keysOfBoard(board, source, refs),
       ...(source?.cand ? { cand: source.cand } : {}),
       ...(source?.input ? { input: source.input } : {}),
