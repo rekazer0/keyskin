@@ -1,64 +1,69 @@
-// 手心动画 ↔ IR 动效：`ss_2` 的动画家族、`ss_1.s_5` 的时机绑定。
+// 手心动画 ↔ IR 动效：`ss_2` 的 `a1` 属性过渡与 `a3` 组合。
 import assert from "node:assert/strict"
 import test from "node:test"
-import { motionsOfSkin, skinAnimationsOf } from "../src/skin-model/formats/sxi/motion.ts"
+import { motionsOfTheme, motionsJson } from "../src/skin-model/formats/sxi/motion.ts"
 
-/** 一个最小的手心皮肤：两个动画（属性变化与帧序列），样式 7 按下播放 100。 */
 function skin() {
   return {
-    default: {
-      light: {
-        s_info: {
-          ss_2: {
-            "100": { a1: { b: { c: 0, t: 0 }, from: "255", to: "0", duration: "200", delay: "0", style: "1" } },
-            "200": { af2: { type: "0", file: "anim.webp", psr: ["100", "200"], d: "300", delay: "0" } },
-          },
-          ss_1: { "7": { s_5: { "1": "100" } }, "8": { s_5: { "3": "200" } } },
-        },
+    100: {
+      id: "ANIM100",
+      a1: {
+        b: { t: 4, c: 0, count: 1, back: false, clear: true },
+        style: 1,
+        from_p: [100, 100],
+        to_p: [90, 90],
+        duration: 40,
+        c_delay: 10,
       },
+    },
+    200: {
+      id: "ANIM200",
+      a3: { a_method: "sequential", animations: [100, 101] },
     },
   }
 }
 
-test("手心动画读成动效：属性变化成轨道，帧序列成帧", () => {
-  const motions = motionsOfSkin(skin(), "light", "port")
-  assert.equal(motions.size, 2)
-  const alpha = motions.get("100")
-  assert.equal(alpha.kind, "track")
-  assert.equal(alpha.target.property, "alpha")
-  assert.deepEqual(alpha.vector.from, [[255, 255], [255, 255]])
-  assert.deepEqual(alpha.vector.to, [[0, 0], [0, 0]])
-  assert.equal(alpha.easing.kind, "ease-out")
-  assert.equal(alpha.timeline.duration, 0.2)
-  assert.deepEqual(alpha.bindings.map((binding) => binding.slot), ["press"])
-
-  const frames = motions.get("200")
-  assert.equal(frames.kind, "frames")
-  assert.ok(frames.frames.length >= 1)
-  assert.equal(frames.frames[0].image, "anim.webp")
-  assert.deepEqual(frames.bindings.map((binding) => binding.slot), ["show"])
+test("a1 读成两点轨道，a3 读成组合", () => {
+  const motions = motionsOfTheme(skin(), "light")
+  const track = motions.get("sxi:light:ss_2:100")
+  assert.equal(track.kind, "track")
+  assert.equal(track.target.property, "scale")
+  assert.deepEqual(track.vector.from, [[100, 100], [100, 100]])
+  assert.deepEqual(track.vector.to, [[90, 90], [90, 90]])
+  assert.equal(track.easing.kind, "ease-in")
+  assert.equal(track.timeline.duration, 0.04)
+  assert.equal(track.timeline.delay, 0.01)
+  const group = motions.get("sxi:light:ss_2:200")
+  assert.equal(group.kind, "group")
+  assert.equal(group.method, "sequential")
+  assert.deepEqual(group.children.map((child) => child.id), ["sxi:light:ss_2:100", "sxi:light:ss_2:101"])
 })
 
-test("动效写回手心动画：家族与时长都回来", () => {
-  const motions = motionsOfSkin(skin(), "light", "port")
-  const built = skinAnimationsOf(motions)
-  assert.ok(built.animations["100"].a1)
-  assert.equal(built.animations["100"].a1.duration, "200")
-  assert.equal(built.animations["100"].a1.from, "255")
-  assert.equal(built.animations["100"].a1.to, "0")
-  assert.ok(built.animations["200"].af2)
-  assert.equal(built.animations["200"].af2.file, "anim.webp")
-  assert.deepEqual(built.bindings.get("7"), { "1": "100" })
-  assert.deepEqual(built.bindings.get("8"), { "3": "200" })
-  assert.deepEqual(built.warnings, [])
+test("写回的动画家族、时长与组合方式都回来", () => {
+  const motions = motionsOfTheme(skin(), "light")
+  const rebuilt = motionsJson("light", motions, skin())
+  assert.equal(rebuilt["100"].a1.duration, 40)
+  assert.equal(rebuilt["100"].a1.c_delay, 10)
+  assert.deepEqual(rebuilt["100"].a1.from_p, [100, 100])
+  assert.deepEqual(rebuilt["100"].a1.to_p, [90, 90])
+  assert.equal(rebuilt["200"].a3.a_method, "sequential")
+  assert.deepEqual(rebuilt["200"].a3.animations, [100, 101])
 })
 
-test("写回的动画再读出来，类型与时长不变", () => {
-  const before = motionsOfSkin(skin(), "light", "port")
-  const round = motionsOfSkin({ default: { light: { s_info: { ss_2: skinAnimationsOf(before).animations } } } }, "light", "port")
+test("动效写回后再读，类型与时长不变", () => {
+  const before = motionsOfTheme(skin(), "light")
+  const round = motionsOfTheme(motionsJson("light", before, skin()), "light")
   assert.equal(round.size, before.size)
   for (const [id, motion] of before) {
-    assert.equal(round.get(id)?.kind, motion.kind, `${id} 的类型变了`)
-    assert.equal(round.get(id)?.timeline.duration, motion.timeline.duration, `${id} 的时长变了`)
+    assert.equal(round.get(id).kind, motion.kind, `${id} 的类型变了`)
+    assert.equal(round.get(id).timeline.duration, motion.timeline.duration, `${id} 的时长变了`)
   }
+})
+
+test("不认识的动画家族原样保留成不透明节点", () => {
+  const motions = motionsOfTheme({ 300: { id: "ANIM300", a4: { aera: [0, 0, 1, 1], count: 3 } } }, "light")
+  const node = motions.get("sxi:light:ss_2:300")
+  assert.equal(node.kind, "opaque")
+  assert.equal(node.format, "sxi.a4")
+  assert.deepEqual((motionsJson("light", motions, { 300: { id: "ANIM300", a4: { count: 3 } } }))["300"].a4, { aera: [0, 0, 1, 1], count: 3 })
 })
