@@ -28,7 +28,9 @@ test("非按键面板按后缀与文件名识别", () => {
   const pkg = pkgOf([
     ["light/skin/port/cand1.cnd", "x"],
     ["light/skin/port/hint1.pop", "x"],
-    ["light/skin/port/bh.ini", "x"],
+    // `bh.ini` 是笔画键盘，按布局走；`hw_*.ini` 才是手写区。
+    ["light/skin/port/bh.ini", LAYOUT],
+    ["light/skin/port/hw_full.ini", LAYOUT],
     ["light/skin/port/gen.ini", "[PANEL]\n"],
     ["light/skin/res/default.css", "x"],
     ["light/skin/res/click.wav", "x"],
@@ -41,6 +43,7 @@ test("非按键面板按后缀与文件名识别", () => {
   assert.equal(counts.get("candidate-window"), 1)
   assert.equal(counts.get("hint-window"), 1)
   assert.equal(counts.get("handwriting"), 1)
+  assert.equal(counts.get("layout"), 1)
   assert.equal(counts.get("panel-config"), 1)
   assert.equal(counts.get("style"), 1)
   assert.equal(counts.get("audio"), 1)

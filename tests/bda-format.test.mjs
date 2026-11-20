@@ -37,7 +37,7 @@ test("BDA 读成多块板，样式与图片来自外观", async () => {
 test("键按键是板种类的三者之一", async () => {
   const { bda, base } = archives()
   const model = await readWith(bdaFormat, bdaSource(bda, base))
-  const kinds = new Set(["main", "number", "symbol", "candidate", "other"])
+  const kinds = new Set(["main", "number", "stroke", "symbol", "candidate", "other"])
   for (const board of model.boards) assert.ok(kinds.has(board.kind), `未知板种类 ${board.kind}`)
 })
 
