@@ -76,6 +76,7 @@ function previewOptions(self: Preview, scene: PanelFrame["scene"]): PanelOptions
   return {
     theme: self.theme,
     pressed,
+    transparent: self.transparent,
     panelStyle: self.panelStyle,
     panelAnimationStyle: self.panelAnimationStyle,
     // 预览的两块画布各自显示自己的部分，不合成顶栏。
