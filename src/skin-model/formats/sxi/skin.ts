@@ -82,30 +82,6 @@ export function binaryFilesOf(opaque: ReadonlyMap<string, unknown>): Map<string,
   return files
 }
 
-/** `.layout` 的 `deleteKey`：一个规则作用于多个键盘时，删除的键名归到每个键盘的板上。 */
-export function removedKeysOf(layouts: Map<string, unknown>): Map<string, string[]> {
-  const removed = new Map<string, string[]>()
-  for (const value of layouts.values()) {
-    const layout = objectOf(value as Json)
-    const rules = layout ? objectOf(layout.rules) : undefined
-    if (!rules) continue
-    for (const [group, ruleValue] of Object.entries(rules)) {
-      const groupRules = objectOf(ruleValue)
-      if (!groupRules) continue
-      const names = group.split("|").map((name) => name.trim()).filter(Boolean)
-      const targets = arrayOf(groupRules.rule).flatMap((entry) => {
-        const rule = objectOf(entry)
-        if (rule?.operation !== "deleteKey") return []
-        const target = textOf(rule.target)
-        return target ? target.split("|").map((name) => name.trim()).filter(Boolean) : []
-      })
-      if (!targets.length) continue
-      for (const name of names) removed.set(name, [...new Set([...(removed.get(name) ?? []), ...targets])])
-    }
-  }
-  return removed
-}
-
 function menuBoardId(themeKey: SxiThemeKey): string {
   return `sxi:${themeKey}:menu`
 }

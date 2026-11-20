@@ -12,6 +12,7 @@ import type { Board } from "@/skin-model/board.ts"
 import { containerOf as boardContainerOf, knownContainer } from "@/skin-model/board.ts"
 import { actionOf as actionOfCode } from "@/skin-model/formats/bds/index.ts"
 import type { Key } from "@/skin-model/key.ts"
+import type { ListPanel } from "@/skin-model/panel.ts"
 import { absoluteBoard, computeLayout, type LayoutBox } from "@/skin-model/layout.ts"
 import type { KeyAction, KeyEvent, Theme } from "@/skin-model/types.ts"
 import { arrayOf, boxJson, boxOf, numberOf, numbersOf, objectOf, textOf } from "./json.ts"
@@ -67,8 +68,8 @@ function actionValue(action: KeyAction | undefined): string | undefined {
 }
 
 /** `values` 扁平表 → 动作、显示文字、长按符号串。 */
-function valuesOf(values: Json[]): { actions: Key["actions"]; label?: string; holdSymbol?: string } {
-  const actions: Key["actions"] = {}
+function valuesOf(values: Json[]): { actions: NonNullable<Key["actions"]>; label?: string; holdSymbol?: string } {
+  const actions: NonNullable<Key["actions"]> = {}
   let label: string | undefined
   let holdSymbol: string | undefined
   for (let index = 0; index + 1 < values.length; index += 2) {
@@ -228,6 +229,104 @@ export function parseBoardId(id: string): { themeKey: "default" | "night"; orien
   return { themeKey: match[1] as "default" | "night", orientation: match[2] as "port" | "land", name: match[3] }
 }
 
+function pairOf(value: Json | undefined): [number, number] | undefined {
+  const numbers = numbersOf(value)
+  return numbers.length >= 2 ? [numbers[0], numbers[1]] : undefined
+}
+
+/**
+ * 手心的 `list` → 三层：
+ * 外观来自 `b`/`i_cell` 的样式引用，布局来自 `size`/`pos`/`rect`/`count`/`t`/`insets`，
+ * 内容来自 `titles`/`values`。`order` 是布尔，`ListPanel.layout.order` 是字符串，语义未确认，
+ * 原值留在 `sxi:keyboard` 里，不硬转。
+ */
+function listPanelOf(list: JsonObject, theme: Theme, ss1: JsonObject): ListPanel {
+  const base = objectOf(list.b) ?? {}
+  const style = styleRefOf(base.base_b, theme, ss1, "s_2")
+  const fore = numbersOf(base.base_f).flatMap((key) => {
+    const ref = styleRefOf(key, theme, ss1, "s_1")
+    return ref ? [ref] : []
+  })
+  const cell = styleRefOf(list.i_cell, theme, ss1, "s_1")
+  const size = pairOf(list.size)
+  const position = pairOf(list.pos)
+  const inRect = boxOf(list.rect)
+  const count = numberOf(list.count)
+  const type = numberOf(list.t)
+  const insets = objectOf(list.insets)
+  const [left, top, right, bottom] = insets
+    ? [numberOf(insets.left), numberOf(insets.top), numberOf(insets.right), numberOf(insets.bottom)]
+    : []
+  const padding = left !== undefined && top !== undefined && right !== undefined && bottom !== undefined
+    ? { left, top, right, bottom }
+    : undefined
+  // 只有原包给了 `rect` 才填 `viewRect`：没有时由 `offset + cellSize × count` 表达，
+  // 不在这里推一个原包没有的矩形，写回才不会凭空多出 `rect`。
+  const viewRect = inRect
+    ? { position: { x: inRect.x, y: inRect.y }, size: { width: inRect.width, height: inRect.height } }
+    : undefined
+  const layout: NonNullable<ListPanel["layout"]> = {
+    ...(viewRect ? { viewRect } : {}),
+    ...(size ? { cellSize: { width: size[0], height: size[1] } } : {}),
+    ...(count !== undefined ? { count } : {}),
+    ...(position ? { offset: { x: position[0], y: position[1] } } : {}),
+    ...(padding ? { padding } : {}),
+    ...(type !== undefined ? { type } : {}),
+  }
+  const names = arrayOf(list.titles).flatMap((item) => (typeof item === "string" ? [item] : []))
+  const values = arrayOf(list.values).flatMap((item) => (typeof item === "string" ? [item] : []))
+  return {
+    appearance: {
+      ...(style ? { style } : {}),
+      ...(fore.length ? { foreStyle: fore[0] } : {}),
+      ...(cell ? { cellStyle: cell } : {}),
+    },
+    layout,
+    content: {
+      ...(names.length ? { names } : {}),
+      ...(values.length ? { values } : {}),
+    },
+  }
+}
+
+/** 三层 → 手心 `list`；原 `list` 里没建模的字段（`order`、`i_scroll`）与空数组按原值保留。 */
+function listJsonOf(panel: ListPanel, before: JsonObject): JsonObject {
+  const next: JsonObject = { ...before }
+  // IR 没表达的字段不删：原包的空数组与缺省是两种状态，不在这里改写。
+  const set = (field: string, value: Json | undefined): void => {
+    if (value !== undefined) next[field] = value
+  }
+  const appearance = panel.appearance
+  if (appearance) {
+    const base: JsonObject = { ...(objectOf(before.b) ?? {}) }
+    const style = styleKey(appearance.style)
+    const fore = styleKey(appearance.foreStyle)
+    if (style !== undefined) base.base_b = style
+    if (fore !== undefined) base.base_f = [fore]
+    if (Object.keys(base).length) next.b = base
+    set("i_cell", styleKey(appearance.cellStyle))
+  }
+  const layout = panel.layout
+  if (layout) {
+    set("count", layout.count)
+    set("size", layout.cellSize ? [layout.cellSize.width, layout.cellSize.height] : undefined)
+    set("pos", layout.offset ? [layout.offset.x, layout.offset.y] : undefined)
+    set("rect", layout.viewRect
+      ? boxJson({ x: layout.viewRect.position.x, y: layout.viewRect.position.y, width: layout.viewRect.size.width, height: layout.viewRect.size.height })
+      : undefined)
+    set("t", layout.type)
+    set("insets", layout.padding
+      ? { left: layout.padding.left, top: layout.padding.top, right: layout.padding.right, bottom: layout.padding.bottom }
+      : undefined)
+  }
+  const content = panel.content
+  if (content) {
+    set("titles", content.names?.length ? [...content.names] : undefined)
+    set("values", content.values?.length ? [...content.values] : undefined)
+  }
+  return next
+}
+
 /** 键盘 → 板；没有 `keys` 的纯面板键盘同样是一块板，只是没有按键。 */
 function boardOf(
   name: string,
@@ -236,7 +335,6 @@ function boardOf(
   theme: Theme,
   orientation: "port" | "land",
   ss1: JsonObject,
-  removedKeys: string[] | undefined,
 ): Board {
   const raws = arrayOf(keyboard.keys).flatMap((entry) => {
     const raw = keyRawOf(entry)
@@ -261,13 +359,15 @@ function boardOf(
       // 没有 `rect` 的键只有身份与样式，没有几何：留在 `Board.keys`，但不进布局树。
       ...(raw.box ? { layoutId: id } : {}),
       ...(raw.box && raw.hit ? { hitArea: insetOf(raw.box, raw.hit) } : {}),
-      actions: values.actions,
+      // `values: []` 的键没有动作：缺省就是「没有动作」，不写空对象。
+      ...(Object.keys(values.actions).length ? { actions: values.actions } : {}),
       ...containerOf(base, theme, ss1),
       ...(values.label !== undefined ? { label: values.label } : {}),
       ...(values.holdSymbol !== undefined ? { holdSymbol: values.holdSymbol } : {}),
     }]
   })
   const layout = absoluteBoard(placed.map((raw) => ({ id: String(raw.record.id), ...raw.box })))
+  const list = objectOf(keyboard.list)
   const keyboardRest: JsonObject = { ...keyboard }
   delete keyboardRest.keys
   delete keyboardRest.type
@@ -294,7 +394,8 @@ function boardOf(
     container: placed.length ? knownContainer({ width, height }) : { kind: "unknown" },
     layout,
     keys,
-    ...(removedKeys?.length ? { removedKeys } : {}),
+    // 手心的 `list` 三层全有：外观（`b`/`i_cell`）、布局（几何）、内容（`titles`/`values`）。
+    ...(list ? { panels: { list: listPanelOf(list, theme, ss1) } } : {}),
     extra,
   }
 }
@@ -305,7 +406,6 @@ export function boardsOfTheme(
   themeKey: "default" | "night",
   theme: Theme,
   ss1: JsonObject,
-  removed: ReadonlyMap<string, string[]>,
 ): Board[] {
   const boards: Board[] = []
   for (const orientation of ["port", "land"] as const) {
@@ -315,7 +415,7 @@ export function boardsOfTheme(
     for (const [name, value] of Object.entries(group)) {
       const keyboard = objectOf(value)
       if (!keyboard) continue
-      boards.push(boardOf(name, keyboard, boardIdOf(themeKey, orientation, name), theme, orientation, ss1, removed.get(name)))
+      boards.push(boardOf(name, keyboard, boardIdOf(themeKey, orientation, name), theme, orientation, ss1))
     }
   }
   return boards
@@ -437,6 +537,8 @@ export async function keyboardJson(board: Board): Promise<JsonObject> {
   return {
     ...raw,
     ...(keyFix !== undefined ? { key_fix: keyFix } : {}),
+    // `list` 以 `panels.list` 为准重建已知字段；`order` 等未建模字段沿用原值。
+    ...(board.panels?.list ? { list: listJsonOf(board.panels.list, objectOf(raw.list) ?? {}) } : {}),
     type: textOf(board.extra?.get("sxi:keyType") as Json | undefined) ?? keyboardNameOf(board),
     ...(hasKeys || keys.length ? { keys } : {}),
   }
