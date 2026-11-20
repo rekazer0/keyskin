@@ -387,7 +387,7 @@ async function buildStrip(
   }
 }
 
-/** 顶栏：候选栏存在就是候选栏（图标按 `PERSIST` 随 composing 切换），否则用工具栏。 */
+/** 顶栏：输入中画候选栏（图标按 `PERSIST` 过滤）；未输入画工具栏，皮肤没给图标时只画背景。 */
 async function buildHeader(
   model: SkinModel,
   board: Board,
@@ -396,7 +396,7 @@ async function buildHeader(
 ): Promise<PanelHeaderFrame | undefined> {
   const bars = (board.panels?.candidates ?? []).filter((bar) => bar.viewRect)
   const first = bars[0]
-  if (first?.viewRect) {
+  if (composing && first?.viewRect) {
     const height = first.viewRect.size.height
     const strips = await Promise.all(bars.map(async (bar): Promise<PanelStrip> => {
       const rect = { x: 0, y: 0, width: size.width, height: bar.viewRect?.size.height ?? height }
@@ -409,16 +409,26 @@ async function buildHeader(
     }
   }
   const toolbar = board.panels?.toolbar
-  if (!toolbar) return undefined
-  const height = toolbar.height ?? toolbar.iconSize?.height ?? 0
-  if (!(height > 0)) return undefined
-  const rect = { x: 0, y: 0, width: size.width, height }
-  return {
-    rect,
-    candidates: [],
-    toolbar: await buildStrip(model, rect, toolbar.items, composing),
-    ...(toolbar.style ? { background: await paintOf(model, toolbar.style) } : {}),
+  const toolbarHeight = toolbar?.height ?? toolbar?.iconSize?.height ?? 0
+  if (toolbar && toolbarHeight > 0) {
+    const rect = { x: 0, y: 0, width: size.width, height: toolbarHeight }
+    return {
+      rect,
+      candidates: [],
+      toolbar: await buildStrip(model, rect, toolbar.items, composing),
+      ...(toolbar.style ? { background: await paintOf(model, toolbar.style) } : {}),
+    }
   }
+  // 未输入且皮肤没给工具栏图标：顶栏仍占位，只画候选栏区域的背景。
+  if (first?.viewRect) {
+    const height = first.viewRect.size.height
+    return {
+      rect: { x: 0, y: 0, width: size.width, height },
+      candidates: [],
+      ...(first.style ? { background: await paintOf(model, first.style) } : {}),
+    }
+  }
+  return undefined
 }
 
 /** 顶栏是否已经占在板容器内：按键从顶栏下方开始，就不再加高画布。 */
