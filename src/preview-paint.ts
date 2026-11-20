@@ -1,64 +1,18 @@
 import type { Preview } from "./preview.ts"
-import { bitmapOf } from "./skin-model/image.ts"
-import { styleLabel, styleLayers, styleText } from "./skin-model/style.ts"
-import type { SkinModel } from "./skin-model/model.ts"
-import type { LayerPaint } from "./paint/key.ts"
-import { paintLayer } from "./paint/layer.ts"
-
-/** 从模型取一个样式 id 的背景图层与位图；没有样式或没有可画图层就是 undefined。 */
-async function paintOf(model: SkinModel, styleID: string, highlighted = false): Promise<LayerPaint | undefined> {
-  const layers = styleLayers(model, styleID, highlighted)
-  const image = layers.find((layer) => layer.kind === "image")
-  if (image?.kind === "image") {
-    const source = model.images.get(image.image)
-    return { layer: image, ...(source ? { bitmap: await bitmapOf(source) } : {}) }
-  }
-  const color = layers.find((layer) => layer.kind === "color")
-  return color ? { layer: color } : undefined
-}
+import { buildPanelFrame, paintPanel, type PanelFrame, type PanelOptions } from "./paint/panel.ts"
 import { drawMeasurements } from "./preview-measurements.ts"
-import { legacyParticleFrames } from "./preview-animation.ts"
-import { drawSprite, type SceneSprite } from "./native-motion.ts"
 import { scheduleNativeFrame } from "./preview-native.ts"
-import { bdaAnimationBindingsForKey } from "./preview-animation.ts"
-import { bdaBindingEffects } from "./preview-animation.ts"
-import { bdaParticleEmitter } from "./preview-animation.ts"
-import { hintKeyOf, legacyHintCandidates } from "./preview-hints.ts"
-import { legacyHintIconID } from "./preview-hints.ts"
-import { previewSurfaceColor, isFullPanelPreviewItem } from "./preview-items.ts"
-import { actionText } from "./skin-model/inspect.ts"
+import { previewSelectionVisible, previewSurfaceColor } from "./preview-items.ts"
 import { paintMarquee } from "./paint/marquee.ts"
-import { paintHintBubble, hintCellWidth } from "./paint/hint.ts"
-import { paintKey, type KeyAnimationState, type KeyPaintEnv } from "./paint/key.ts"
-import { paintParticles } from "./paint/particles.ts"
+import { paintLayer } from "./paint/layer.ts"
 import { strokeDraft, strokeSelected } from "./paint/selection.ts"
-import { previewSelectionVisible } from "./preview-items.ts"
-import { bdaTransforms } from "./preview-animation.ts"
-import { legacyAnimationScale } from "./preview-animation.ts"
-import { legacyAnimationTranslation } from "./preview-animation.ts"
-import { legacyAnimationRotation } from "./preview-animation.ts"
-import { legacyAnimationOpacity } from "./preview-animation.ts"
-import { isLegacyHintInputKey } from "./preview-hints.ts"
 import { setCanvasSize } from "./preview-draw.ts"
-import { keyAnimationStyles } from "./preview-items.ts"
-import { type PreviewItem } from "./preview-items.ts"
 import { DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
-import { drawSceneLayer } from "./native-scene.ts"
-import { paintToolbarStrip } from "./paint/toolbar.ts"
+import type { PreviewItem } from "./preview-items.ts"
 
 export async function paintPreview(self: Preview): Promise<void> {
   const drawID = ++self.drawID
   const isDragging = Boolean(self.editDrag)
-
-  // 拖拽时跳过 resolver 的 ready 等待，使用已缓存的数据
-  if (!isDragging) {
-    try {
-
-    } catch (error) {
-      console.warn("预览解析准备失败:", error)
-      return
-    }
-  }
 
   // A native scene (Palm, Sogou) replaces the resolver's panel, key and toolbar visuals.
   // A running animation keeps the painted scene while the next one (a press refreshes it) builds.
@@ -68,283 +22,110 @@ export async function paintPreview(self: Preview): Promise<void> {
     console.warn("预览场景生成失败:", error)
     return undefined
   })
-  const sceneKeys = new Map(scene?.keys.map((key) => [key.section, key]))
-  const panelAnimationElapsed = self.legacyPanelAnimationStartedAt
-    ? Date.now() - self.legacyPanelAnimationStartedAt
-    : -1
-  // 面板自己的粒子：先看面板的显示动画（SHOW_ANIM），再看面板的按下动画。
-  const particles = (self.legacyShowAnimation?.get(self.panelAnimationStyle)
-    ?? self.legacyAnimation?.get(self.panelAnimationStyle))?.particles ?? []
-  const particleFrames = panelAnimationElapsed < 0
-    ? []
-    : particles.flatMap((particle) =>
-        legacyParticleFrames(particle, panelAnimationElapsed, self.panelWidth, self.panelHeight)
-      )
-  const player = self.playerParticles
-  const playerRect = player?.key?.rect ?? { x: 0, y: 0, width: self.panelWidth, height: self.panelHeight }
-  const playerParticleFrames = (player?.particles ?? []).flatMap((item) =>
-    player!.elapsed < item.start || player!.elapsed > item.start + item.duration
-      ? []
-      : legacyParticleFrames(item.emitter, player!.elapsed - item.start, playerRect.width, playerRect.height)
-        .map((frame) => ({ ...frame, x: frame.x + playerRect.x, y: frame.y + playerRect.y })),
-  )
-  const bdaAnimationElapsed = self.bdaAnimationState ? Date.now() - self.bdaAnimationState.startedAt : -1
-  // The player already draws this key's particles at its own time.
-  const bdaParticleFrames = self.animation && self.bdaAnimationState && bdaAnimationElapsed >= 0 && player?.key !== self.bdaAnimationState.key
-    ? bdaAnimationBindingsForKey(self.animation, self.bdaAnimationState.key).flatMap((binding) =>
-        bdaBindingEffects(self.animation!, binding).flatMap((effect) => {
-          if (effect.kind !== "emitter" || !effect.resources.length) return []
-          return legacyParticleFrames(
-            bdaParticleEmitter(effect), bdaAnimationElapsed,
-            self.bdaAnimationState!.key.rect.width, self.bdaAnimationState!.key.rect.height,
-          ).map((frame) => ({
-            ...frame,
-            x: frame.x + self.bdaAnimationState!.key.rect.x,
-            y: frame.y + self.bdaAnimationState!.key.rect.y,
-          }))
-        })
-      )
-    : []
-  // 旧版按键按下时，它的动画样式引用的粒子从按键上发射；播放器已在画这个键时不重复。
-  const pressedParticleFrames = [...self.legacyAnimationStates.values()].flatMap((pressed) =>
-    player?.key?.section === pressed.key.section ? [] : keyAnimationStyles(pressed.key, self.panelAnimationStyle)
-      .flatMap((style) => self.legacyAnimation?.get(style)?.particles ?? [])
-      .flatMap((emitter) => legacyParticleFrames(emitter, Date.now() - pressed.startedAt, pressed.key.rect.width, pressed.key.rect.height))
-      .map((frame) => ({ ...frame, x: frame.x + pressed.key.rect.x, y: frame.y + pressed.key.rect.y })),
-  )
-  const allParticleFrames = [...particleFrames, ...bdaParticleFrames, ...playerParticleFrames, ...pressedParticleFrames]
-  const particleStyleIDs = [...new Set(allParticleFrames.map((frame) => frame.styleID))]
-  const hintDirection = self.active?.direction ?? "center"
-  const hintConfig = hintDirection === "hold" ? self.longHint ?? self.shortHint : self.shortHint
-  const hintCandidates = self.active && (
-    hintDirection === "hold" || hintDirection === "up" && hintConfig?.upIcon
-  )
-    ? legacyHintCandidates(hintKeyOf(self.active.key), hintDirection, Boolean(self.stateDocument) || self.bdaHints || Boolean(hintConfig?.defaultCandidates))
-    : []
-  const hintBar = hintCandidates.length > 0 && Boolean(hintConfig?.barIcon)
-  const hintIconID = hintBar ? hintConfig?.barIcon : legacyHintIconID(hintConfig, hintDirection)
-  const hintIcon = hintIconID ? hintConfig?.icons.get(hintIconID) : undefined
-  const hintCellStyle = hintIcon?.cellStyle ?? hintConfig?.cellStyle
-  const hintCellSize = hintIcon?.cellSize ?? hintConfig?.cellSize
-  // 可见性与状态覆盖都已经在 IR 里定好，画的时候只排序：整板的键在底，普通键在上。
-  const visible = self.keys.filter((key) => key.visible)
-  const keys = [...visible].sort((left, right) => {
-    const layerOf = (key: PreviewItem) => key.section === self.legacyAnimationState?.key.section
-      ? 2
-      : isFullPanelPreviewItem(key, self.panelWidth, self.panelHeight) ? 0 : 1
-    return layerOf(left) - layerOf(right)
-  })
 
-  // 拖拽时优先使用缓存的视觉数据，避免重复异步解析
-  let panelLayer: LayerPaint | undefined
-  let visuals: NonNullable<Preview["lastRenderCache"]>["visuals"]
-  let toolbarImages: LayerPaint[]
-
-  if (scene && !scene.partial) {
-    panelLayer = undefined
-    visuals = new Map()
-    toolbarImages = []
-  } else if (isDragging && self.lastRenderCache) {
-    // 使用缓存数据进行快速拖拽渲染
-    panelLayer = self.lastRenderCache.panelLayer
-    visuals = self.lastRenderCache.visuals
-    toolbarImages = self.lastRenderCache.toolbarImages
-  } else {
-    // 正常渲染：完整解析所有视觉元素
-    try {
-      [panelLayer, visuals, toolbarImages] = await Promise.all([
-        self.model ? paintOf(self.model, self.panelStyle) : Promise.resolve(undefined),
-        Promise.all(keys.map(async (key) => {
-          const draft = self.draftVisual && key.sections.includes(self.draftVisual.section) ? self.draftVisual : undefined
-          const foreStyles = [...key.foreStyles]
-          if (draft?.foreground) foreStyles[draft.layer] = draft.styleID ?? ""
-          const highlighted = self.active?.key.section === key.section ||
-            draft?.pressed ||
-            player?.motion && player.key?.section === key.section ||
-            self.legacyAnimationStates.has(key.section) ||
-            self.keyPressed(key)
-          try {
-            // 样式与图片只从模型取。
-            const model = self.model
-            const backID = highlighted ? key.highlightBackStyle ?? key.backStyle ?? "" : key.backStyle ?? ""
-            return {
-              backLayer: model ? await paintOf(model, backID, highlighted) : undefined,
-              foreLayers: await Promise.all(foreStyles.map((style) => model ? paintOf(model, style, highlighted) : undefined)),
-              textStyle: model ? styleText(model, foreStyles.join(","), highlighted) : undefined,
-              // 列表格显示自己的条目，不取共享样式里的标签。
-              labels: key.key.kind === "list-cell" || !model
-                ? []
-                : foreStyles.map((style) => styleLabel(model, style, highlighted)),
-            }
-          } catch (error) {
-            console.warn(`解析按键 ${key.section} 失败:`, error)
-            return {
-              backLayer: undefined,
-              foreLayers: [],
-              textStyle: undefined,
-              labels: [],
-            }
-          }
-        })).then((resolved) => new Map(keys.map((key, index) => [key.section, resolved[index]]))),
-        self.resolveToolbar().catch(() => []),
-      ])
-      // 按键按下动画会改变绘制顺序，缓存必须按 section 匹配。
-      self.lastRenderCache = { panelLayer, visuals, toolbarImages }
-    } catch (error) {
-      console.warn("预览渲染解析失败:", error)
-      // 使用空数据继续渲染，避免完全失败
-      panelLayer = undefined
-      visuals = new Map()
-      toolbarImages = []
-    }
+  const options = previewOptions(self, scene)
+  // IR 是唯一真相：模型或板还没就绪时只画底色，不用 resolver 兜底。
+  if (!self.model || !self.board) {
+    self.lastFrame = undefined
+    beginCanvas(self)
+    return
   }
+  // 拖拽只改同一批渲染项的 rect；复用上一帧，不重复解析样式。
+  const frame = isDragging && self.lastFrame
+    ? self.lastFrame
+    : await buildPanelFrame(self.model, self.board, options)
+  self.lastFrame = frame
 
-  const [particleVisuals, hintVisuals, hintTextVisual, hintSelectedTextVisual, hintCellVisuals] = await Promise.all([
-    Promise.all(particleStyleIDs.map(async (styleID) =>
-      await self.resolveResource(styleID).catch(() => undefined)
-    )),
-    hintIcon && self.model
-      ? Promise.all([paintOf(self.model, hintIcon.backStyle ?? ""), paintOf(self.model, hintIcon.foreStyle ?? "")])
-      : Promise.resolve([undefined, undefined]),
-    hintIcon && self.model ? styleText(self.model, hintIcon.foreStyle ?? "", false) : undefined,
-    hintIcon && self.model ? styleText(self.model, hintIcon.foreStyle ?? "", true) : undefined,
-    hintBar && hintCellStyle && self.model
-      ? Promise.all([paintOf(self.model, hintCellStyle), paintOf(self.model, hintCellStyle, true)])
-      : Promise.resolve([undefined, undefined]),
-  ])
   if (drawID !== self.drawID) return
   const context = beginCanvas(self)
   if (!context) return
-  if (scene) for (const layer of scene.background) drawSceneLayer(context, layer)
-  else if (panelLayer) paintLayer(
-    context,
-    panelLayer.layer,
-    panelLayer.bitmap,
-    { x: 0, y: -self.panelTopInset, width: self.panelWidth, height: self.surfaceHeight + self.panelTopInset },
-  )
-
-  const sprites: SceneSprite[] = []
-  const animationOf = (key: PreviewItem): KeyAnimationState => {
-    const bdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
-    const bdaBack = bdaTransforms(self.animation, key, bdaElapsed, "back")
-    const bdaFore = bdaTransforms(self.animation, key, bdaElapsed, "fore")
-    const state = self.legacyAnimationStates.get(key.section)
-    return {
-      ...(state ? { startedAt: state.startedAt } : {}),
-      ...(player?.motion && player.key?.section === key.section ? { playerElapsed: player.elapsed } : {}),
-      bdaBack,
-      bdaFore,
-      ...(key.container.back?.anim ? { backAnim: key.container.back.anim } : {}),
-      transformOf: (style, elapsed, rect, which) => elapsed < 0
-        ? (which === "back" ? bdaBack : bdaFore)
-        : {
-          scale: legacyAnimationScale(self.legacyAnimation, style, elapsed),
-          translation: legacyAnimationTranslation(self.legacyAnimation, style, elapsed, rect),
-          rotation: legacyAnimationRotation(self.legacyAnimation, style, elapsed),
-          opacity: legacyAnimationOpacity(self.legacyAnimation, style, elapsed),
-        },
-    }
-  }
-  const keyEnv: KeyPaintEnv = {
-    context,
-    theme: self.theme,
-    panelStyle: self.panelStyle,
-    panelWidth: self.panelWidth,
-    panelHeight: self.panelHeight,
-    visuals,
-    ...(scene ? { scene } : {}),
-    sceneKeys,
-    ...(self.nativePress ? { press: self.nativePress } : {}),
-    pressed: (key) => self.active?.key.section === key.section || self.keyPressed(key),
-    sprites,
-    strokeSelection: (key) => strokeSelection(self, context, key),
-  }
-  for (const key of keys) paintKey(keyEnv, key, animationOf(key))
-
-  const press = self.nativePress && { section: self.nativePress.section, elapsed: Date.now() - self.nativePress.startedAt, seed: self.nativePress.seed }
-  const nativeSprites = [...scene?.effects?.panel?.(Date.now() - self.nativeShownAt, press) ?? [], ...sprites]
-  const overlaySprites = nativeSprites.filter(sprite => sprite.overlay && self.hintCanvas)
-  for (const sprite of nativeSprites) if (!sprite.overlay || !self.hintCanvas) drawSprite(context, sprite)
-  self.drawnScene = scene
-  scheduleNativeFrame(self, scene)
-
-  const popupKey = self.active && sceneKeys.get(self.active.key.section)
-  const holdPopup = self.active?.direction === "hold" && popupKey?.holdPopup
-  if (holdPopup && self.active) self.active.hintCellWidth = holdPopup.cellWidth
-  const popup = holdPopup && self.active
-    ? holdPopup.layers(self.active.hintIndex ?? holdPopup.selected)
-    : undefined
-  const shouldDrawHint = Boolean(popup?.length || self.active && (isLegacyHintInputKey(hintKeyOf(self.active.key)) || hintCandidates.length) && hintIcon)
-  let hintContext = context
-  if (self.hintCanvas && (shouldDrawHint || self.hintVisible || overlaySprites.length || self.nativeOverlayVisible)) {
-    const overlayBounds = self.hintCanvas.getBoundingClientRect()
-    const previewBounds = self.canvas.getBoundingClientRect()
-    const scale = globalThis.devicePixelRatio || 1
-    setCanvasSize(
-      self.hintCanvas,
-      Math.max(1, Math.round(overlayBounds.width * scale)),
-      Math.max(1, Math.round(overlayBounds.height * scale)),
-    )
-    const overlayContext = self.hintCanvas.getContext("2d")
-    if (overlayContext) {
-      overlayContext.setTransform(scale, 0, 0, scale, 0, 0)
-      overlayContext.clearRect(0, 0, overlayBounds.width, overlayBounds.height)
-      overlayContext.translate(previewBounds.left - overlayBounds.left, previewBounds.top - overlayBounds.top)
-      overlayContext.scale(previewBounds.width / self.panelWidth, previewBounds.height / self.surfaceHeight)
-      overlayContext.imageSmoothingEnabled = true
-      overlayContext.imageSmoothingQuality = "high"
-      hintContext = overlayContext
-    }
-  }
-
-  self.nativeOverlayVisible = overlaySprites.length > 0
-  for (const sprite of overlaySprites) drawSprite(hintContext, sprite)
-
-  if (popup?.length) {
-    self.hintVisible = true
-    for (const layer of popup) drawSceneLayer(hintContext, layer)
-  } else if (shouldDrawHint && self.active && hintIcon) {
-    self.hintVisible = true
-    const hintData = {
-      size: hintIcon.size,
-      position: hintIcon.position,
-      padding: hintIcon.padding,
-      background: hintVisuals[0],
-      foreground: hintVisuals[1],
-      candidates: hintCandidates,
-      cellVisuals: hintCellVisuals,
-      textStyle: hintTextVisual,
-      selectedTextStyle: hintSelectedTextVisual,
-      cellSize: hintCellSize,
-      direction: hintDirection,
-      bar: hintBar,
-      panelWidth: self.panelWidth,
-      dark: self.theme === "dark",
-    }
-    const hintWidth = hintCellWidth(hintData)
-    if (hintWidth !== undefined && self.active) self.active.hintCellWidth = hintWidth
-    paintHintBubble(hintContext, hintKeyOf(self.active.key), self.active.key.rect, hintData)
-  } else {
-    self.hintVisible = false
-  }
-
-  const particleVisualByStyle = new Map(
-    particleStyleIDs.map((styleID, index) => [styleID, particleVisuals[index]]),
-  )
-  paintParticles(context, allParticleFrames, (styleID) => particleVisualByStyle.get(styleID))
-
+  const overlay = overlayContext(self, frame)
+  paintPanel(context, frame, options, {
+    ...(overlay ? { overlay } : {}),
+    onItemPainted: (key) => strokeSelection(self, context, key),
+  })
+  // 动效设计播放器把当前样式临时盖在键上，属于编辑器叠加。
   if (self.animationVisual) {
     const paint = self.animationVisual.paint
     paintLayer(context, paint.layer, paint.bitmap, self.animationVisual.key.rect)
   }
-
-  // 原生场景已经画了 F14 那条时不重复画。
-  const sceneOwnsToolbar = Boolean(scene && (!scene.partial || keys.some((key) => actionText(key.key.actions?.press) === "F14" && sceneKeys.has(key.section))))
-  if (!sceneOwnsToolbar) paintToolbarStrip(context, toolbarImages, self.toolbarRect)
+  self.hintVisible = Boolean(frame.hint)
+  self.nativeOverlayVisible = frame.panelSprites.some((sprite) => sprite.overlay)
+  self.drawnScene = scene
+  scheduleNativeFrame(self, scene)
 
   paintMarquee(context, self.marquee?.rect, () => getComputedStyle(self.canvas).getPropertyValue("--selection").trim())
-  drawGuides(self, visible)
+  drawGuides(self, frame.items.filter((key) => key.visible))
   self.lastDrawnID = drawID
+}
+
+/** 预览侧的渲染参数：把指针状态、动画时刻与场景折成核心认识的形状。 */
+function previewOptions(self: Preview, scene: PanelFrame["scene"]): PanelOptions {
+  const now = Date.now()
+  const pressed = new Set<string>()
+  for (const key of self.keys) {
+    if (self.active?.key.section === key.section || self.keyPressed(key)) {
+      for (const section of key.sections) pressed.add(section)
+    }
+  }
+  const pressedElapsed = new Map<string, number>()
+  for (const [section, state] of self.legacyAnimationStates) pressedElapsed.set(section, now - state.startedAt)
+  const player = self.playerParticles
+  const hintDirection = self.active?.direction ?? "center"
+  const hintConfig = hintDirection === "hold" ? self.longHint ?? self.shortHint : self.shortHint
+  return {
+    theme: self.theme,
+    pressed,
+    panelStyle: self.panelStyle,
+    panelAnimationStyle: self.panelAnimationStyle,
+    // 预览的两块画布各自显示自己的部分，不合成顶栏。
+    container: { width: self.panelWidth, height: self.surfaceHeight },
+    items: self.keys,
+    time: {
+      ...(self.legacyPanelAnimationStartedAt ? { panel: now - self.legacyPanelAnimationStartedAt } : {}),
+      ...(pressedElapsed.size ? { pressed: pressedElapsed } : {}),
+      ...(self.bdaAnimationState
+        ? { bda: { section: self.bdaAnimationState.key.section, elapsed: now - self.bdaAnimationState.startedAt } }
+        : {}),
+      ...(player
+        ? {
+          player: {
+            particles: player.particles,
+            elapsed: player.elapsed,
+            ...(player.key ? { section: player.key.section } : {}),
+            ...(player.motion ? { motion: true } : {}),
+          },
+        }
+        : {}),
+      ...(self.nativePress
+        ? { nativePress: { section: self.nativePress.section, elapsed: now - self.nativePress.startedAt, seed: self.nativePress.seed } }
+        : {}),
+      sceneShown: now - self.nativeShownAt,
+    },
+    ...(self.legacyAnimation ? { legacyAnimation: self.legacyAnimation } : {}),
+    ...(self.legacyShowAnimation ? { showAnimation: self.legacyShowAnimation } : {}),
+    ...(self.animation ? { animation: self.animation } : {}),
+    ...(scene ? { scene } : {}),
+    ...(self.active
+      ? {
+        hint: {
+          section: self.active.key.section,
+          direction: self.active.direction,
+          ...(self.active.hintIndex === undefined ? {} : { index: self.active.hintIndex }),
+        },
+      }
+      : {}),
+    ...(self.shortHint || self.longHint
+      ? {
+        hintConfig: {
+          short: self.shortHint,
+          long: self.longHint,
+          defaults: Boolean(self.stateDocument) || self.bdaHints || Boolean(hintConfig?.defaultCandidates),
+        },
+      }
+      : {}),
+    ...(self.draftVisual ? { draft: self.draftVisual } : {}),
+  }
 }
 
 function beginCanvas(self: Preview): CanvasRenderingContext2D | undefined {
@@ -360,6 +141,30 @@ function beginCanvas(self: Preview): CanvasRenderingContext2D | undefined {
     context.fillStyle = surfaceColor
     context.fillRect(0, 0, self.panelWidth, self.surfaceHeight)
   }
+  return context
+}
+
+/** 气泡与原生覆盖层画在独立的 hint 画布上；没有该画布时由核心画到主画布。 */
+function overlayContext(self: Preview, frame: PanelFrame): CanvasRenderingContext2D | undefined {
+  if (!self.hintCanvas) return undefined
+  const overlays = frame.panelSprites.some((sprite) => sprite.overlay)
+  if (!(frame.hint || overlays || self.hintVisible || self.nativeOverlayVisible)) return undefined
+  const overlayBounds = self.hintCanvas.getBoundingClientRect()
+  const previewBounds = self.canvas.getBoundingClientRect()
+  const scale = globalThis.devicePixelRatio || 1
+  setCanvasSize(
+    self.hintCanvas,
+    Math.max(1, Math.round(overlayBounds.width * scale)),
+    Math.max(1, Math.round(overlayBounds.height * scale)),
+  )
+  const context = self.hintCanvas.getContext("2d")
+  if (!context) return undefined
+  context.setTransform(scale, 0, 0, scale, 0, 0)
+  context.clearRect(0, 0, overlayBounds.width, overlayBounds.height)
+  context.translate(previewBounds.left - overlayBounds.left, previewBounds.top - overlayBounds.top)
+  context.scale(previewBounds.width / self.panelWidth, previewBounds.height / self.surfaceHeight)
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = "high"
   return context
 }
 

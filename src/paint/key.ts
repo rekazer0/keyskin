@@ -39,10 +39,8 @@ export type KeyTransform = {
 
 /** 一个键在某个时刻的动画状态：传统动画与 BDA 动画共用一套变换。 */
 export type KeyAnimationState = {
-  /** 调用方算好的已用时长；有值时优先于起播时间，绘制器不自己读时钟。 */
+  /** 调用方算好的已用时长；没在播就是 undefined。绘制器不自己读时钟。 */
   elapsed?: number
-  /** 该键自身的动画起播时间；没在播就是 undefined。 */
-  startedAt?: number
   /** 播放器正在播这个键时的已用时长。 */
   playerElapsed?: number
   bdaBack: KeyTransform
@@ -62,7 +60,7 @@ export type KeyPaintEnv = {
   /** 原生场景：Palm / 搜狗这类有自己的图层模型。 */
   scene?: NativeScene
   sceneKeys: ReadonlyMap<string, SceneKey>
-  press?: { section: string; startedAt: number; seed: number }
+  press?: { section: string; elapsed: number; seed: number }
   pressed(key: PreviewItem): boolean
   sprites: SceneSprite[]
   /** 选中描边由编辑器给，绘制器不碰选择状态。 */
@@ -83,9 +81,7 @@ export function paintKey(env: KeyPaintEnv, key: PreviewItem, animation: KeyAnima
   const labels = visual?.labels ?? []
   const foreLayers = visual?.foreLayers ?? []
   const hasForeground = foreLayers.some(Boolean) || labels.some(Boolean)
-  const elapsed = animation.elapsed ?? animation.playerElapsed ?? (
-    animation.startedAt === undefined ? -1 : Date.now() - animation.startedAt
-  )
+  const elapsed = animation.elapsed ?? animation.playerElapsed ?? -1
   if (shouldDrawItemBackground(key, env.panelStyle, env.panelWidth, env.panelHeight)) {
     const back = animation.transformOf(animation.backAnim, elapsed, area, "back")
     withTransform(context, area, back.scale, back.translation, back.rotation, back.opacity, () => {
@@ -128,7 +124,7 @@ function paintSceneKey(env: KeyPaintEnv, key: PreviewItem, sceneKey: SceneKey | 
   const pressed = Boolean(press) || env.pressed(key)
   const layers = sceneKey?.layers(pressed)
   if (!sceneKey || !layers) return
-  const motion = press && env.scene?.effects?.press(key.section, Date.now() - press.startedAt, press.seed)
+  const motion = press && env.scene?.effects?.press(key.section, press.elapsed, press.seed)
   if (motion) env.sprites.push(...motion.sprites)
   // 场景图层摆在皮肤给的位置上；键被拖动时跟着走。
   const draw = (group: SceneLayer[]) => {

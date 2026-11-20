@@ -1,5 +1,5 @@
 import { type Visual, type VisualResolver } from "./atlas.ts"
-import type { KeyVisuals, LayerPaint } from "./paint/key.ts"
+import type { LayerPaint } from "./paint/key.ts"
 import { IniDocument } from "./ini.ts"
 import { DEFAULT_PANEL_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { snapPointToRects } from "./layout.ts"
@@ -12,6 +12,7 @@ import { type LegacyAnimation } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
 import { paintPreview } from "./preview-paint.ts"
+import { hitTest, type PanelFrame } from "./paint/panel.ts"
 import { toolbarPaints } from "./preview-toolbar.ts"
 import { bitmapOf } from "./skin-model/image.ts"
 import type { NativeScene } from "./native-scene.ts"
@@ -166,11 +167,8 @@ export class Preview {
   hintVisible = false
   nativeOverlayVisible = false
   dragDrawFrame = 0
-  lastRenderCache?: {
-    panelLayer?: LayerPaint
-    visuals: Map<string, KeyVisuals>
-    toolbarImages: LayerPaint[]
-  }
+  /** 最近一次构建的面板帧；命中测试读它，拖拽只改同一批渲染项的 rect。 */
+  lastFrame?: PanelFrame
   private readonly resizeObserver: ResizeObserver
 
   constructor(
@@ -331,7 +329,7 @@ export class Preview {
   setDraftVisual(draft?: Preview["draftVisual"]): void {
     if (!draft && !this.draftVisual) return
     this.draftVisual = draft
-    this.lastRenderCache = undefined
+    this.lastFrame = undefined
     void this.draw()
   }
 
@@ -367,14 +365,14 @@ export class Preview {
     this.resolver = resolver
     this.resourceCache.clear()
     this.toolbarImagesCache = undefined
-    this.lastRenderCache = undefined
+    this.lastFrame = undefined
     void this.draw()
   }
 
   setModel(model?: SkinModel, board?: Board): void {
     this.model = model
     if (board) this.board = board
-    this.lastRenderCache = undefined
+    this.lastFrame = undefined
     void this.draw()
   }
 
@@ -490,7 +488,7 @@ export class Preview {
   /** 用当前的源重算一次渲染项；源是异步的，算完再画。 */
   private async applyRenderSource(state?: number): Promise<void> {
     const source = this.renderSource
-    this.lastRenderCache = undefined
+    this.lastFrame = undefined
     try {
       this.keys = source ? await source(state) : []
     } catch (error) {
@@ -543,7 +541,7 @@ export class Preview {
   setPanel(styleID: string, width: number, height: number, animationStyle = ""): void {
     const animationChanged = this.panelAnimationStyle !== animationStyle
     this.panelStyle = styleID
-    this.lastRenderCache = undefined
+    this.lastFrame = undefined
     this.panelAnimationStyle = animationStyle
     this.panelWidth = width
     this.panelHeight = height
@@ -581,7 +579,7 @@ export class Preview {
     this.documentIdentity = identity
     // An edit to the layout is an edit to the skin a scene is built from.
     this.scenes.clear()
-    this.lastRenderCache = undefined
+    this.lastFrame = undefined
     this.keys = this.layoutItems()
     const available = new Set(this.keys.map((render) => render.key.id))
     this.selected = new Set([...this.selected].filter((section) => available.has(section)))
@@ -635,22 +633,9 @@ export class Preview {
     return this.nativeItems ? undefined : this.document
   }
 
-  /** 一个点是否落在布局树给的矩形里。 */
-  private insideBox(rect: { x: number; y: number; width: number; height: number }, point: { x: number; y: number }): boolean {
-    return point.x >= rect.x && point.x <= rect.x + rect.width
-      && point.y >= rect.y && point.y <= rect.y + rect.height
-  }
-
-  /** 命中测试：矩形来自布局树，可见性来自 IR。 */
+  /** 命中测试：只查最近一帧的渲染项，从后往前找第一个命中的。 */
   hit(point: { x: number; y: number }): KeyRender | undefined {
-    // 后画的在上层，命中从后往前找。
-    for (let index = this.keys.length - 1; index >= 0; index -= 1) {
-      const render = this.keys[index]
-      if (render.key.visible === false) continue
-      if (!this.insideBox(render.rect, point)) continue
-      return render
-    }
-    return undefined
+    return this.lastFrame ? hitTest(this.lastFrame, point) : undefined
   }
 
   itemSelected(item: KeyRender): boolean {

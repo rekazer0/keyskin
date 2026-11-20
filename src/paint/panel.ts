@@ -70,8 +70,13 @@ export type PanelOptions = {
   contentOf?: (section: string) => string | undefined
   /** 输出像素倍率；缺省 1，只影响 `PanelFrame.pixelScale`，不改逻辑坐标。 */
   pixelScale?: number
-  /** 输入中：顶栏显示候选栏；否则显示工具栏。 */
+  /**
+   * 完整面板合成：给了这个就以它决定顶栏画候选栏（true）还是工具栏（false），
+   * 板整体下移到顶栏下方。缺省不合成——预览的两块画布各自显示自己的部分。
+   */
   composing?: boolean
+  /** 画布尺寸；缺省按板容器（合成顶栏时再加顶栏高）。预览用它表示自己的画布。 */
+  container?: Size<number>
   /** 已算好的渲染项（板坐标）；缺省用 `boardRenders(board, state)`。 */
   items?: readonly KeyRender[]
   /** items 缺省时用它调 `boardRenders`。 */
@@ -163,6 +168,8 @@ export type PanelFrame = {
   surfaceColor?: string
   /** 整板样式 id，用于「背景与整板样式相同就不重画」。 */
   panelStyle: string
+  /** 原生按键动画；没有就是 undefined。 */
+  press?: { section: string; elapsed: number; seed: number }
 }
 
 /** 从模型取一个样式 id 的图层与位图；没有样式或没有可画图层就是 undefined。 */
@@ -186,11 +193,12 @@ async function resourcePaintOf(model: SkinModel, resourceID: string): Promise<La
   return bitmap ? { layer: { kind: "image", image: imageID }, bitmap } : undefined
 }
 
-/** 可见项按绘制顺序排：整板键在底、普通项居中、按下的键在上。 */
+/** 可见项按绘制顺序排：整板键在底、普通项居中、按下的键在上；合成顶栏时 CAND 由顶栏代理。 */
 function orderItems(
   items: readonly KeyRender[],
   size: Size<number>,
   pressed: ReadonlySet<string>,
+  stripCandidates: boolean,
 ): KeyRender[] {
   const rank = (item: KeyRender): number => {
     if (item.sections.some((section) => pressed.has(section))) return 2
@@ -198,7 +206,7 @@ function orderItems(
   }
   return items
     .filter((item) => item.visible !== false)
-    .filter((item) => !/^CAND\d*$/i.test(item.section))
+    .filter((item) => !stripCandidates || !/^CAND\d*$/i.test(item.section))
     .sort((left, right) => rank(left) - rank(right))
 }
 
@@ -441,10 +449,12 @@ export async function buildPanelFrame(
   const scene = options.scene
   const sceneKeys = new Map((scene?.keys ?? []).map((key) => [key.section, key]))
   const source = options.items ?? await boardRenders(board, options.state)
-  const items = withContent(orderItems(source, size, pressed), options.contentOf)
+  const header = options.composing === undefined ? undefined : await buildHeader(model, board, size, options.composing)
+  const items = withContent(orderItems(source, size, pressed, Boolean(header)), options.contentOf)
   const replaced = Boolean(scene && !scene.partial)
-  const header = await buildHeader(model, board, size, options.composing ?? false)
   const inset = headerInset(header, items)
+  const container = options.container ?? { width: size.width, height: size.height + inset }
+  const boardRect = { x: 0, y: options.container ? 0 : inset, width: size.width, height: size.height }
   const visuals = replaced
     ? new Map<string, KeyVisuals>()
     : await buildVisuals(model, items, options, pressed)
@@ -456,8 +466,8 @@ export async function buildPanelFrame(
       [styleID, await resourcePaintOf(model, styleID)]),
   )).filter((entry): entry is [string, LayerPaint] => entry[1] !== undefined))
   return {
-    container: { width: size.width, height: size.height + inset },
-    board: { x: 0, y: inset, width: size.width, height: size.height },
+    container,
+    board: boardRect,
     pixelScale: options.pixelScale ?? 1,
     items,
     pressed,
@@ -474,7 +484,16 @@ export async function buildPanelFrame(
     panelSprites: scene?.effects?.panel?.(time.sceneShown ?? 0, time.nativePress) ?? [],
     surfaceColor: options.transparent ? undefined : previewSurfaceColor(options.theme, false),
     panelStyle,
+    ...(time.nativePress ? { press: time.nativePress } : {}),
   }
+}
+
+/** 绘制接缝：编辑器把气泡/覆盖层画到自己的画布，并在键画完时叠加选中描边。 */
+export type PanelPaintHooks = {
+  /** 气泡与覆盖层精灵画到这里；缺省画主画布。 */
+  overlay?: CanvasRenderingContext2D
+  /** 每键画完后调用；缺省不叠加。 */
+  onItemPainted?: (item: KeyRender) => void
 }
 
 /** 只画 `frame` 里已有的东西：不查模型，不认编辑器状态。
@@ -485,6 +504,7 @@ export function paintPanel(
   context: CanvasRenderingContext2D,
   frame: PanelFrame,
   options: PanelOptions,
+  hooks: PanelPaintHooks = {},
 ): void {
   const { width, height } = frame.container
   if (frame.surfaceColor) {
@@ -522,6 +542,7 @@ export function paintPanel(
     visuals: frame.visuals,
     ...(frame.scene ? { scene: frame.scene } : {}),
     sceneKeys: frame.sceneKeys,
+    ...(frame.press ? { press: frame.press } : {}),
     pressed: (key) => isPressed(key, frame.pressed),
     sprites,
     strokeSelection: () => {},
@@ -529,13 +550,18 @@ export function paintPanel(
   for (const item of frame.items) {
     const animation = frame.animations.get(item.section)
     if (animation) paintKey(env, item, animation)
+    hooks.onItemPainted?.(item)
   }
-  for (const sprite of [...frame.panelSprites, ...sprites]) drawSprite(context, sprite)
+  const overlay = hooks.overlay
+  for (const sprite of [...frame.panelSprites, ...sprites]) {
+    drawSprite(sprite.overlay && overlay ? overlay : context, sprite)
+  }
   if (frame.hint) {
+    const target = overlay ?? context
     if (frame.hint.popup?.length) {
-      for (const layer of frame.hint.popup) drawSceneLayer(context, layer)
+      for (const layer of frame.hint.popup) drawSceneLayer(target, layer)
     } else if (frame.hint.data) {
-      paintHintBubble(context, frame.hint.key, frame.hint.anchor, frame.hint.data)
+      paintHintBubble(target, frame.hint.key, frame.hint.anchor, frame.hint.data)
     }
   }
   paintParticles(context, frame.particles, (styleID) => frame.particleVisuals.get(styleID))

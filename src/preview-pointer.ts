@@ -274,8 +274,6 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     self.cancelDragDraw()
     self.editDrag = undefined
     self.updateCursor()
-    // 拖拽结束，清除缓存以便下次正常渲染
-    self.lastRenderCache = undefined
     if (dx || dy) {
       self.onMove([...drag.original.keys()], dx, dy)
     }
