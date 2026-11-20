@@ -1,5 +1,5 @@
 import { appState } from "./state"
-import { bdsBoardOf } from "../skin-model/formats/bds/index.ts"
+import { skinModel } from "./skin-model-state"
 import { containerOf } from "../skin-model/board.ts"
 import { boardRenders } from "../paint/board.ts"
 import { syncLayoutChoices } from "./layout-switch"
@@ -233,15 +233,12 @@ export function refreshPreview(): void {
   preview.setTransparent(devicePreviewTransparent())
   // 画布的坐标系只有一个来源：IR 的 board.container。布局树按它算，画布也按它画。
   // 不再另读一遍 `[PANEL] SIZE`：那是同一件事的第二份来源，两者不一致时键就会错位。
-  const board = appState.layoutDocument
-    ? bdsBoardOf(appState.layoutDocument, {
-      id: "layout",
-      orientation: orientation.value === "land" ? "land" : "port",
-      theme: theme.value === "dark" ? "dark" : "light",
-    })
-    : undefined
+  // 板只有一个来源：模型。BDA 的预览以前用 BDS 的板构造器从伪 INI 现建一份，
+  // 与 `model.boards` 并行；板 id 与 `layoutPath` 同值（BDS/BDA/SXI 实测一致），直接取模型里的那块。
+  const board = skinModel.model?.boards.find((item) => item.id === appState.layoutPath)
   const container = board ? containerOf(board) : undefined
-  if (context && appState.layoutDocument && resolver) {
+  // BDS 分支的几何来自模型里的板；`layoutDocument` 只剩样式与面板配置的输入，不是几何来源。
+  if (context && board && resolver && appState.layoutDocument) {
     const symbolPanel = candidateArea.hidden
     const candidatePath = toolbarConfigPath()
     const candidateLayout = candidatePath && layouts?.isText(candidatePath)
@@ -295,7 +292,7 @@ export function refreshPreview(): void {
       candidateHeight,
       candidateInputHeight,
     )
-  } else if (bdaGen && appState.layoutDocument) {
+  } else if (bdaGen && board) {
     const panelWidth = container?.width ?? DEFAULT_BDA_PANEL_WIDTH
     const panelHeight = container?.height ?? DEFAULT_BDA_PANEL_HEIGHT
     const candidateDocument = toolbarConfigPath() ? textDocument(toolbarConfigPath()!) : undefined
