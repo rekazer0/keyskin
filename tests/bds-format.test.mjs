@@ -117,3 +117,18 @@ test("不在图集里的散图超过一页时按页切分", async () => {
   const again = await readWith(bdsFormat, rebuilt)
   assert.ok(again.images.size > 0)
 })
+
+test("布局里的空面板段是显式关闭，面板本身仍来自全局声明", async () => {
+  const template = new URL("../public/default-template.bds", import.meta.url)
+  const { readFileSync } = await import("node:fs")
+  const archive = SkinArchive.open(new Uint8Array(readFileSync(template)), "bds")
+  const source = bdsSource(archive)
+  assert.ok(source)
+  const board = (await readWith(bdsFormat, source)).boards.find((each) => each.id === "light/skin/port/py_9.ini")
+  const panels = boardPanels(board)
+  // 候选栏是 gen.ini 的全局声明：cand1 与它的矩形仍在模型里。
+  assert.equal(panels?.candidates?.[0]?.layoutName, "cand1")
+  assert.deepEqual(panels?.candidates?.[0]?.viewRect, { position: { x: 0, y: 0 }, size: { width: 480, height: 60 } })
+  // 布局文件的空段只表示这个布局不显示它们。
+  assert.deepEqual(panels?.closed, ["candidates", "input", "more"])
+})

@@ -206,7 +206,13 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
   const layoutSections = new Set(panels.layoutSections ?? [])
   const says = (section: string): boolean => layoutSections.has(section)
   // 空段按原顺序声明；它们的配置在 gen.ini 与面板文件里，段本身只表明存在这个面板。
-  for (const section of panels.emptySections ?? []) {
+  // `closed` 声明的面板必须写空段，否则读回来会变成「没有提这个面板」而继承全局声明。
+  const closedSection = { candidates: "CAND", input: "INPUT", hint: "HINT", more: "MORE" } as const
+  const emptySections = [...new Set([
+    ...(panels.emptySections ?? []),
+    ...(panels.closed ?? []).map((slot) => closedSection[slot]).filter((section) => !says(section)),
+  ])]
+  for (const section of emptySections) {
     writtenSections.add(section)
     lines.push(`[${section}]`, "")
   }
@@ -1179,6 +1185,15 @@ function panelsMerged(base: BoardPanels | undefined, document: IniDocument): Boa
   // 空段表示本布局关闭该面板，不能再用 `gen.ini` 的声明。`[LIST]` 不适用——
   // 列表拆在两处（`gen.ini` 给几何、布局文件给内容），必须继续合并。
   const owns = (section: string): boolean => sections.has(section)
+  // 空段在格式语义上就是「关闭这个面板」：面板本身来自全局面板声明，本布局不显示它。
+  const closedSlot = (section: string, slot: "candidates" | "input" | "hint" | "more"): boolean =>
+    owns(section) && document.entries(section).length === 0 && Boolean(slot)
+  const closed = [
+    ...(closedSlot("CAND", "candidates") ? ["candidates" as const] : []),
+    ...(closedSlot("INPUT", "input") ? ["input" as const] : []),
+    ...(closedSlot("HINT", "hint") ? ["hint" as const] : []),
+    ...(closedSlot("MORE", "more") ? ["more" as const] : []),
+  ]
   const layoutHint = hintExtrasOf(document)
   const layoutMore = moreMenuOf(document)
   const layoutList = listExtrasOf(document)
@@ -1190,9 +1205,11 @@ function panelsMerged(base: BoardPanels | undefined, document: IniDocument): Boa
   const more = mergeMore(inheritedMore, layoutMore)
   const merged: BoardPanels = {
     ...baseRest,
-    // 候选栏与输入栏没有布局级覆盖时沿用 `gen.ini` 的方向级声明；布局文件里出现空段就是关闭。
-    ...(genCandidates && !owns("CAND") ? { candidates: genCandidates } : {}),
-    ...(genInput && !owns("INPUT") ? { input: genInput } : {}),
+    // 候选栏与输入栏是 `gen.ini` 的全局面板声明：布局文件里的空段只是「本布局关闭」，
+    // 不能把面板本身也丢掉。
+    ...(genCandidates ? { candidates: genCandidates } : {}),
+    ...(genInput ? { input: genInput } : {}),
+    ...(closed.length ? { closed } : {}),
     // 布局文件的 `[HINT]` 段指明用哪个气泡面板，gen.ini 那边只有样式，两边合并。
     ...(inheritedHint || Object.keys(layoutHint).length
       ? { hint: { ...inheritedHint, ...layoutHint } }

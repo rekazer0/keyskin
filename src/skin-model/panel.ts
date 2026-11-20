@@ -162,8 +162,16 @@ export type Offsets = {
 /** 板之间的跳转：按下或长按某个动作进入另一块板。 */
 export type BoardTransition = { trigger: "press" | "long-press"; target: Board["kind"] }
 
+/** 布局可以声明关闭的面板；值是 IR 的语义名，不是格式段名。 */
+export type PanelSlot = "candidates" | "input" | "hint" | "more"
+
 /** 一块板的面板组件；存在 `Board.panels` 上。 */
 export type BoardPanels = {
+  /**
+   * 本布局显式关闭的面板。面板本身仍由全局声明保留（`candidates`/`input` 等仍是全局面板），
+   * 这里只表示「这个布局不显示它」；与「没有这个面板」是两件事。
+   */
+  closed?: readonly PanelSlot[]
   backdrop?: PanelBackdrop
   /** 候选栏；gen.ini 里可以有多个 `[CAND]` 段，按出现顺序保留。 */
   candidates?: readonly CandidateBar[]
