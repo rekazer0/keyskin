@@ -32,11 +32,12 @@ test("BDS 自转不丢主键盘与样式", async () => {
   assert.equal(report.after.styles, report.before.styles)
 })
 
-test("转到手心会少板与键，作为提示而不是失败", async () => {
+test("转到手心保留板与键，表达不了的内容只作提示", async () => {
   const report = await checkRoundTrip(baseBds(), "sxi", { base: baseBds() })
   assert.ok(report)
-  assert.equal(report.ok, true, "单板是手心格式的限制，不该判失败")
-  assert.ok(report.notes.length > 0, "应当如实提示少掉的板与键")
+  // 表达不了的板与键只进 notes；手心现在能保留全部键盘布局，不应因此判失败。
+  assert.equal(report.ok, true, report.problems.join("；"))
+  for (const note of report.notes) assert.match(note, /少了|表达不了|跳过/)
   assert.equal(report.after.mainKeys, report.before.mainKeys, "主键盘本身不能少键")
 })
 

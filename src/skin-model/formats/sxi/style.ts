@@ -40,8 +40,11 @@ function sliceRefOf(image: string): { name: string; slice: string } | undefined 
 
 /** 图片图层引用的切片 → `s_2` 的写法；组名原样带回来，不能换成文件名。 */
 function imageRefOf(image: string): string | undefined {
-  const match = /^sxi:(?:light|dark):(.+)#IMG(\d+)$/.exec(image)
-  return match ? `${match[1]},${match[2]}` : undefined
+  const sxi = /^sxi:(?:light|dark):(.+)#IMG(\d+)$/.exec(image)
+  if (sxi) return `${sxi[1]},${sxi[2]}`
+  // 别的格式的图集切片（BDS 的 `<图集路径>#<序号>`）：组名取文件名，序号原样保留。
+  const sliced = /^(.+)#(\d+)$/.exec(image)
+  return sliced ? `${imageStemOf(sliced[1])},${sliced[2]}` : undefined
 }
 
 /** 音效样式里的 `path_N` 指同目录下的文件；另一扩展名的同名文件是同一音效的另一版。 */

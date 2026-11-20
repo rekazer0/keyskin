@@ -189,6 +189,24 @@ function singleTileInfo(model: SkinModel, themeKey: SxiThemeKey, theme: Theme, e
     if (owner !== themeKey) continue
     info[stem] = [{ id: "IMG1", rect1: [[0, 0], [image.width, image.height]], alpha: 1, scales: [] }]
   }
+  // 图集：别的格式（BDS 的 `.til`）的切片表原样写成 SXI 的 `info`，切片编号沿用原序号。
+  for (const atlas of model.atlases) {
+    if (atlasNameOf(atlas)) continue
+    const name = imageStemOf(atlas.name)
+    if (info[name] !== undefined) continue
+    const owner: SxiThemeKey = /^dark\//.test(atlas.source) ? "night" : /^light\//.test(atlas.source) ? "default" : (theme === "dark" ? "night" : "default")
+    if (owner !== themeKey) continue
+    info[name] = atlas.slices.map((slice, position) => {
+      const recorded = slice.extra?.get("tilIndex")
+      const index = typeof recorded === "number" && Number.isInteger(recorded) ? recorded : position + 1
+      return {
+        id: `IMG${index}`,
+        rect1: [[slice.rect.x, slice.rect.y], [slice.rect.width, slice.rect.height]],
+        alpha: 1,
+        scales: [],
+      }
+    })
+  }
   return info
 }
 
