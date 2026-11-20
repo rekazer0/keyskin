@@ -279,9 +279,15 @@ export class IniDocument {
   }
 }
 
-/** 逗号分隔的数值字段；非数值的片段直接丢弃。 */
+/**
+ * 逗号分隔的数值字段；非数值的片段直接丢弃。
+ *
+ * 字段不存在或为空串时返回空数组，不能返回 `[0]`：`"".split(",")` 是 `[""]`，
+ * 而 `Number("")` 是 `0`，那会把「没有这个字段」伪造成「值是 0」，下游只能各自防漏。
+ */
 export function numbersOf(value: string | undefined): number[] {
-  return (value ?? "").split(",").map((token) => Number(token.trim())).filter((each) => Number.isFinite(each))
+  if (value === undefined || value.trim() === "") return []
+  return value.split(",").map((token) => Number(token.trim())).filter((each) => Number.isFinite(each))
 }
 
 /** 同名段在文件里可以重复出现；按出现顺序返回每一块的字段表。 */
