@@ -24,7 +24,7 @@ test("搜狗皮肤的音效与字体进模型", async () => {
   const files = ssfFiles()
   const pkg = SsfPackage.fromFiles(files)
   const skeletonArchive = SkinArchive.fromSourceFiles([
-    { path: "light/skin/port/py_26.ini", data: bytes("[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=F13\n") },
+    { path: "light/skin/port/py_26.ini", data: bytes("[PANEL]\nSIZE=1080,642\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=F13\n") },
   ])
   const skeleton = ssfSkeleton(pkg, skeletonArchive)
   const model = await readWith(ssfFormat, ssfSource(files, skeletonArchive))
@@ -40,7 +40,7 @@ test("搜狗皮肤的音效与字体进模型", async () => {
 test("搜狗导出把资源写回包里", async () => {
   const files = ssfFiles()
   const skeletonArchive = SkinArchive.fromSourceFiles([
-    { path: "light/skin/port/py_26.ini", data: bytes("[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=F13\n") },
+    { path: "light/skin/port/py_26.ini", data: bytes("[PANEL]\nSIZE=1080,642\n[KEY1]\nVIEW_RECT=0,0,100,100\nCENTER=F13\n") },
   ])
   const model = await readWith(ssfFormat, ssfSource(files, skeletonArchive))
   const out = await writeWith(ssfFormat, model)

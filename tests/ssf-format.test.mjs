@@ -23,7 +23,8 @@ test("搜狗皮肤读出骨架几何与皮肤样式", async () => {
   assert.equal(skin.meta.theme, "light")
   const board = skin.boards[0]
   assert.equal(board.keys.length, 3)
-  assert.equal(board.geometry.kind, "document")
+  // 搜狗包里没有坐标：几何由客户端骨架提供，模型里只声明这一点。
+  assert.deepEqual(board.geometry, { kind: "client", basis: "sogou" })
   assert.ok(board.container.width > 0)
   // 几何来自布局树；按 x 排序后与骨架的三列对齐。
   const rects = await Promise.all(board.keys.map((key) => rectOfKey(skin, board.id, key.id)))

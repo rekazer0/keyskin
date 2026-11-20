@@ -18,9 +18,18 @@ import { MAX_FILES, MAX_UNPACKED_BYTES, normalizeEntryCounts, parseZip, safePath
 import { isSkinContainer, unpackSkinContainer } from "./ssf-container.ts"
 
 export type SsfTheme = "light" | "dark"
-/** Stretchable band of a Sogou image: pixel ranges `left..right` and `top..bottom`. */
+/**
+ * Stretchable band of a Sogou image: pixel ranges `left..right` and `top..bottom`.
+ * The four numbers are read left, right, top, bottom: `1,238,1,173` means the fixed borders are
+ * 1px left/right and 1px top/bottom (`ssf-look.ts` uses the same reading).
+ */
 export type SsfStretch = [left: number, right: number, top: number, bottom: number]
-export type SsfImageRef = { file: string; stretch?: SsfStretch }
+/**
+ * An image reference: the file plus the numbers after it.
+ * Four numbers are a stretch band (`stretch`); any other count is kept as written in `numbers`,
+ * because six-number bands have no known meaning and must not be reinterpreted.
+ */
+export type SsfImageRef = { file: string; stretch?: SsfStretch; numbers?: readonly number[] }
 type SsfInfo = { name: string; author: string; version: string }
 
 const PC_SKIN_ERROR = "这是电脑版搜狗皮肤（候选窗皮肤），没有手机键盘，不能转换"
@@ -40,9 +49,13 @@ function decodeSsfText(bytes: Uint8Array): string {
 export function parseSsfImage(value: string | undefined): SsfImageRef | undefined {
   const [file, ...rest] = value?.split(",").map((part) => part.trim()) ?? []
   if (!file || !/\.(png|webp|jpg|jpeg)$/i.test(file)) return
-  const numbers = rest.slice(0, 4).map(Number)
-  const valid = numbers.length === 4 && numbers.every(Number.isInteger) && numbers[0] < numbers[1] && numbers[2] < numbers[3]
-  return valid ? { file, stretch: numbers as SsfStretch } : { file }
+  if (!rest.length) return { file }
+  const numbers = rest.map(Number)
+  if (!numbers.every(Number.isInteger)) return { file }
+  const four = numbers.length === 4 && numbers[0] < numbers[1] && numbers[2] < numbers[3]
+  return four
+    ? { file, stretch: numbers as SsfStretch, numbers }
+    : { file, numbers }
 }
 
 export function ssfColor(value: string | undefined): string | undefined {

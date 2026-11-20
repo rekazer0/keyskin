@@ -79,6 +79,22 @@ export type TipRef = {
   section: number
 }
 
+/**
+ * 按键在某个状态组合下的样式。
+ *
+ * `Key.states` 的键是 `pressed|enabled|on` 三个布尔轴的编码，未知的轴写 `*`
+ * （SSF 的 `DISABLED` 只说明可用性，不说明开关在哪一侧）。
+ * 三个轴正交：开关是否打开与是否按下互不替代，所以不用并列的状态名。
+ */
+export type KeyStateStyle = {
+  /** 这个组合覆盖的整键样式；没有就沿用按键默认容器。 */
+  style?: string
+  /** 这个组合覆盖的动作。 */
+  actions?: KeyAction[]
+  /** 这个组合覆盖的前景区域。 */
+  foreground?: UnitRect
+}
+
 export type Key = {
   id: string
   /**
@@ -116,6 +132,11 @@ export type Key = {
   editable?: boolean
   /** 引用板上哪些状态样式段，以及各自对应哪个状态；定义在 `board.tips` 里。 */
   stateRefs?: readonly TipRef[]
+  /**
+   * 三个正交状态轴的样式组合；键见 `KeyStateStyle`。
+   * SSF 的五个状态字段落在这里，BDA 的变体与 SXI 的覆盖也按同一编码落进来。
+   */
+  states?: ReadonlyMap<string, KeyStateStyle>
 }
 
 /** 按键是否可被编辑（客户端排布的板不可增删）。 */

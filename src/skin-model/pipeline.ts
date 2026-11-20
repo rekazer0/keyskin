@@ -37,6 +37,8 @@ export type FileRole =
   | { kind: "hint-window" }
   | { kind: "handwriting" }
   | { kind: "panel-config" }
+  /** 包内文件清单（搜狗的 smafilelist.ini）；导出时按实际文件重生成。 */
+  | { kind: "manifest" }
   | { kind: "unknown"; reason: string }
 
 /** 识别产物：每个文件的角色，以及包里出现的主题与方向。 */

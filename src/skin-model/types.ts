@@ -54,6 +54,11 @@ export type SkinResource =
   | { kind: "audio"; path: string; format?: string; duration?: number; data?: Uint8Array }
   | { kind: "font"; path: string; family?: string; weight?: number; data?: Uint8Array }
   | { kind: "frame"; path: string; duration?: number; data?: Uint8Array }
+  /**
+   * 无法解码成像素的图片文件（搜狗包里的 webp）。
+   * 模型至少要能原样写出它，否则写回会引用一个不存在的文件；它进不了 `images`，因为那里是像素。
+   */
+  | { kind: "image"; path: string; format?: string; data?: Uint8Array }
 
 /** 皮肤元信息；`scale` 是设计宽到目标分辨率的换算比例。 */
 export type SkinMeta = {

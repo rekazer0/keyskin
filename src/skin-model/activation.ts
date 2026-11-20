@@ -12,6 +12,11 @@ export type AppearanceSet = {
   theme: Theme
   orientation: Orientation
   activation: Activation
+  /**
+   * 外观在源格式里的标识（搜狗的 `status1`/`status2`）。
+   * 导出要按它建目录与段名；换一个名字，写出的包就不是同一个外观了。
+   */
+  name?: string
   /** 这套外观覆盖哪些板。 */
   boards: string[]
 }
