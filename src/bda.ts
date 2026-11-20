@@ -283,6 +283,69 @@ export type BdaSoundConfig = {
   keySounds: Map<string, BdaResource>
   iosKeySounds: Map<string, BdaResource>
 }
+/* —— layoutConfig —— */
+//
+// 键盘的几何与动作只在这里：每个键盘一个 `#1`，键名由动作码构造，状态变体只有动作与
+// `#11` 标记、没有矩形。语义未定的内容（气泡栏、候选栏元素、`#2`/`#3` 等）整段按原始
+// protobuf 字段保留，写回时原样输出，避免猜错语义。
+
+/** 键盘顶部气泡栏的一个元素；`body` 是原始字段。 */
+export type BdaLayoutBar = {
+  name: string
+  body: readonly ProtoField[]
+}
+
+export type BdaLayoutVariant = {
+  name: string
+  bars: BdaLayoutBar[]
+}
+
+/** 候选栏按键元素（`CAND_<动作码>`）；布局与外观分开，内容按原始字段保留。 */
+export type BdaCandidateElement = {
+  name: string
+  body: readonly ProtoField[]
+}
+
+export type BdaLayoutExtras = {
+  /** `#1`/`#2`/`#3` 三个 float，语义未定。 */
+  floats: readonly number[]
+  /** `#4` 的原始字段。 */
+  inset?: ProtoField
+  candidates: BdaCandidateElement[]
+  parts: readonly ProtoField[]
+}
+
+export type BdaLayoutKey = {
+  name: string
+  /** `#1` 的显示矩形；状态变体没有。 */
+  rect?: BdaRect
+  /** `#1` 的原始字段；矩形没被改动时原样写回，保住原本缺省的分量。 */
+  rectField?: ProtoField
+  action?: string
+  /** `#11`：状态变体标记。 */
+  variant?: number
+  /** 其余未建模字段（含语义未定的第二个矩形），按原样写回。 */
+  parts: readonly ProtoField[]
+}
+
+export type BdaLayoutKeyboard = {
+  name: string
+  variants: BdaLayoutVariant[]
+  keys: BdaLayoutKey[]
+  extras?: BdaLayoutExtras
+  /** `#6` 的两个数，语义未定。 */
+  grid?: readonly [number, number]
+  /** `#7` 画布尺寸。 */
+  canvas?: { width: number; height: number }
+  /** `#8` 标志位。 */
+  flag?: number
+  /** 其余未建模字段。 */
+  parts: readonly ProtoField[]
+}
+
+export type BdaLayout = {
+  keyboards: BdaLayoutKeyboard[]
+}
 type BdaConfigKind =
   | "appearance"
   | "animation"

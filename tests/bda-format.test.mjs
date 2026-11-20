@@ -41,11 +41,14 @@ test("键按键是板种类的三者之一", async () => {
   for (const board of model.boards) assert.ok(kinds.has(board.kind), `未知板种类 ${board.kind}`)
 })
 
-test("缺少布局骨架时明确失败", async () => {
+test("缺少布局骨架时仍能打开，只是没有按键几何", async () => {
   const { bda } = archives()
   const source = bdaSource(bda)
   assert.ok(source)
-  await assert.rejects(() => readWith(bdaFormat, source), /布局骨架/)
+  const model = await readWith(bdaFormat, source)
+  assert.ok(model.boards.length > 1, "面板仍应成为板")
+  assert.ok(model.boards.every((board) => board.keys.length === 0), "没有骨架就不该有按键")
+  assert.ok(model.boards.every((board) => board.geometry.kind === "client"), "几何来源应标为客户端")
 })
 
 test("统一入口也能打开 BDA", async () => {

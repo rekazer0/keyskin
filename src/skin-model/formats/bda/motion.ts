@@ -36,6 +36,23 @@ const PROPERTY_KINDS: Record<MotionProperty, BdaTransformAnimation["kind"]> = {
 
 const DEFAULT_TIMELINE: MotionTimeline = { delay: 0, duration: 0, repeat: 1, reverse: false, clear: false }
 
+/**
+ * IR 的 `frames` 节点不表达的 BDA 播放设置。
+ * 帧序列（`image`）与单资源（`frame`）在 IR 里都是逐帧，写回时靠这里还原成原来那一类。
+ */
+export type BdaMotionParts = {
+  /** 逐帧效果的类型；只有这类效果才需要区分，其余动效只有 `scopes`。 */
+  kind?: "image" | "frame"
+  /** `image` 效果的循环与起始帧。 */
+  image?: { loopForever: boolean; startRepeatFrame: number; repeatMode: number }
+  /** `frame` 效果的资源、占位图与起始帧。 */
+  frame?: { resource?: BdaResource; placeholder?: BdaResource; startRepeatFrame?: number; repeatMode?: number }
+  /** 与 `bindings` 同序的 BDA 绑定原值；IR 的 `scope`/`location` 表达不了它们。 */
+  bindings?: ReadonlyArray<{ scope: number; location?: number; removeOnInteraction?: boolean; condition?: string }>
+  /** 重复方式的原值；IR 的 `timeline.reverse` 只区分「是否反向」。 */
+  repeatMode?: number
+}
+
 /** 旧版插值器的取值：0 线性、1 先快后慢、2 先慢后快、3 两端平滑。 */
 function easingOf(interpolation: number): Easing {
   if (interpolation === 1) return { kind: "ease-out" }
@@ -78,8 +95,15 @@ function bindingOf(target: string, binding: BdaAnimationBinding): MotionBinding 
   }
 }
 
+/** 帧序列：BDA 的时长是毫秒，IR 的 timeline 用秒。 */
+function framesOf(sequence: BdaAnimationSequence): Array<{ image: string; duration?: number }> {
+  return sequence.frames.flatMap((frame) => (frame.resourceID
+    ? [{ image: frame.resourceID, ...(frame.duration !== undefined ? { duration: frame.duration / 1000 } : {}) }]
+    : []))
+}
+
 /** 单个 BDA 效果 → IR 节点；不认识的类型保留为不透明节点，参数原样带上。 */
-function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationSequence>): MotionNode {
+function nodeOf(effect: BdaAnimationEffect): MotionNode {
   const timeline = timelineOf(effect)
   if (effect.kind === "group") {
     // 组合的子项是别的效果编号；IR 用引用节点保住编号，写回时按前缀还原类型。
@@ -91,11 +115,12 @@ function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationS
     }
   }
   if (effect.kind === "frame") {
-    const sequence = effect.resource ? sequences.get(effect.resource.resourceID) : undefined
-    const frames = (sequence?.frames ?? []).flatMap((frame) => (frame.resourceID
-      ? [{ image: frame.resourceID, ...(frame.duration !== undefined ? { duration: frame.duration / 1000 } : {}) }]
-      : []))
-    return { kind: "frames", frames, timeline }
+    // 单资源帧：包里没有帧表，只有资源引用与占位图。
+    return {
+      kind: "frames",
+      frames: effect.resource?.resourceID ? [{ image: effect.resource.resourceID }] : [],
+      timeline,
+    }
   }
   if (effect.kind === "lottie" || effect.kind === "video") {
     // 逐帧之外的媒体由外部驱动，语义没吃透，原样保留。
@@ -105,20 +130,8 @@ function nodeOf(effect: BdaAnimationEffect, sequences: Map<string, BdaAnimationS
     return { kind: "opaque", format: "bda.emitter", blob: emitterOf(effect as BdaEmitterAnimation), timeline }
   }
   if (effect.kind === "image") {
-    // 帧序列没有对应概念，但编号、播放设置与帧清单都要留住，否则写回时整条效果会消失。
-    const values = new Map<string, number | string | boolean>([
-      ["key", effect.key],
-      ["repeatCount", effect.repeatCount],
-      ["repeatMode", effect.repeatMode],
-      ["removeOnFinish", effect.removeOnFinish],
-      ["loopForever", effect.loopForever],
-      ["startRepeatFrame", effect.startRepeatFrame],
-    ])
-    effect.sequence.frames.forEach((frame, index) => {
-      if (frame.resourceID !== undefined) values.set(`frame.${index}.id`, frame.resourceID)
-      if (frame.duration !== undefined) values.set(`frame.${index}.duration`, frame.duration)
-    })
-    return { kind: "opaque", format: "bda.image", blob: values, timeline }
+    // 帧序列在 IR 里就是 `frames`：每帧一张图加时长，循环设置另存在 `BdaMotionParts`。
+    return { kind: "frames", frames: framesOf(effect.sequence), timeline }
   }
   const transform = effect as BdaTransformAnimation
   const track: MotionTrack = {
@@ -184,7 +197,7 @@ function timelineOf(effect: BdaAnimationEffect): MotionTimeline {
     return { delay: 0, duration: effect.duration / 1000, repeat: effect.repeatCount, reverse: effect.repeatMode === 2, clear: effect.removeOnFinish }
   }
   if (effect.kind === "image") {
-    return { delay: 0, duration: 0, repeat: 0, reverse: false, clear: false }
+    return { delay: 0, duration: 0, repeat: effect.repeatCount, reverse: effect.repeatMode === 2, clear: effect.removeOnFinish }
   }
   const transform = effect as BdaTransformAnimation
   return {
@@ -197,70 +210,104 @@ function timelineOf(effect: BdaAnimationEffect): MotionTimeline {
 }
 
 /** BDA 动画配置 → IR 动效表：每个效果一个动效，绑定按目标聚合。 */
-export function motionsOfAnimation(animation: BdaAnimation): SkinMotions {
+export function motionsOfAnimation(animation: BdaAnimation): {
+  motions: SkinMotions
+  parts: Map<string, BdaMotionParts>
+  /** 指向不存在效果的绑定；原包里有，写回时原样带上。 */
+  dangling: Array<{ target: string; binding: BdaAnimationBinding }>
+} {
   const motions = new Map<string, MotionNode>()
+  const parts = new Map<string, BdaMotionParts>()
+  const claimed = new Set<BdaAnimationBinding>()
   for (const [key, effect] of animation.effects) {
     const bindings: MotionBinding[] = []
+    const originals: NonNullable<BdaMotionParts["bindings"]>[number][] = []
     // 效果的键带 `<类型>:` 前缀，绑定的键是裸名，比较前要还原，否则绑定全部丢掉。
     const bare = bareKeyOf(key, effect.kind)
     for (const [target, entries] of animation.targetBindings) {
       for (const entry of entries) {
         if (entry.key !== bare && entry.key !== key) continue
+        claimed.add(entry)
         bindings.push(bindingOf(target, entry))
+        originals.push({
+          scope: entry.scope,
+          ...(entry.location !== undefined ? { location: entry.location } : {}),
+          ...(entry.removeOnInteraction !== undefined ? { removeOnInteraction: entry.removeOnInteraction } : {}),
+          ...(entry.condition ? { condition: entry.condition } : {}),
+        })
       }
     }
-    motions.set(key, { ...nodeOf(effect, animation.sequences), bindings })
+    motions.set(key, { ...nodeOf(effect), bindings })
+    const part = partsOf(effect) ?? {}
+    if (part.kind || originals.length) parts.set(key, { ...part, ...(originals.length ? { bindings: originals } : {}) })
   }
-  return motions
+  const dangling = [...animation.targetBindings].flatMap(([target, entries]) => entries
+    .filter((entry) => !claimed.has(entry))
+    .map((binding) => ({ target, binding })))
+  return { motions, parts, dangling }
+}
+
+/** 逐帧效果里 IR 没有对应字段的播放设置；其余效果只补 `repeatMode`。 */
+function partsOf(effect: BdaAnimationEffect): BdaMotionParts | undefined {
+  if (effect.kind === "image") {
+    return {
+      kind: "image",
+      image: {
+        loopForever: effect.loopForever,
+        startRepeatFrame: effect.startRepeatFrame,
+        repeatMode: effect.repeatMode,
+      },
+    }
+  }
+  if (effect.kind === "frame") {
+    return {
+      kind: "frame",
+      frame: {
+        ...(effect.resource ? { resource: effect.resource } : {}),
+        ...(effect.placeholder ? { placeholder: effect.placeholder } : {}),
+        ...(effect.startRepeatFrame !== undefined ? { startRepeatFrame: effect.startRepeatFrame } : {}),
+      },
+    }
+  }
+  if ("repeatMode" in effect) return { repeatMode: effect.repeatMode }
+  return
 }
 
 /** IR 动效 → BDA 效果；只处理能表达的类型，其它类型由调用方报告损失。 */
-function effectOf(motion: MotionNode, id: string): BdaAnimationEffect | undefined {
+function effectOf(motion: MotionNode, id: string, part: BdaMotionParts | undefined): BdaAnimationEffect | undefined {
   const timeline = motion.timeline ?? DEFAULT_TIMELINE
-  if (motion.kind === "opaque" && motion.format === "bda.image") {
-    const values = motion.blob as ReadonlyMap<string, number | string | boolean>
-    // 图片序列：编号、播放设置与帧清单照原样写回，避免整条效果被丢掉。
-    const key = values.get("key")
-    const number = (name: string): number => {
-      const value = values.get(name)
-      return typeof value === "number" ? value : 0
-    }
-    const frames: BdaAnimationFrame[] = []
-    for (let index = 0; ; index += 1) {
-      const resourceID = values.get(`frame.${index}.id`)
-      if (resourceID === undefined) break
-      const duration = values.get(`frame.${index}.duration`)
-      frames.push({
-        resourceID: String(resourceID),
-        ...(typeof duration === "number" ? { duration } : {}),
-      })
-    }
-    return {
-      kind: "image",
-      key: typeof key === "string" ? key : id,
-      repeatCount: number("repeatCount"),
-      repeatMode: number("repeatMode"),
-      removeOnFinish: values.get("removeOnFinish") === true,
-      loopForever: values.get("loopForever") === true,
-      startRepeatFrame: number("startRepeatFrame"),
-      sequence: { name: typeof key === "string" ? key : id, frames },
-    }
-  }
   if (motion.kind === "opaque" && (motion.format === "bda.lottie" || motion.format === "bda.video")) {
     return motion.blob as BdaAnimationEffect
   }
   if (motion.kind === "frames") {
+    const frames: BdaAnimationFrame[] = motion.frames.map((frame) => ({
+      resourceID: frame.image,
+      ...(frame.duration !== undefined ? { duration: Math.round(frame.duration * 1000) } : {}),
+    }))
+    // 单资源帧与帧序列在 IR 里同为 `frames`；原来的是哪一类看 `BdaMotionParts`，没有就按帧数判断。
+    const single = part?.kind === "frame" || (part === undefined && frames.length <= 1)
+    if (single) {
+      const resource = part?.frame?.resource ?? (frames[0]?.resourceID ? { type: 0, resourceID: frames[0].resourceID } : undefined)
+      return {
+        kind: "frame",
+        key: id,
+        repeatCount: timeline.repeat,
+        removeOnFinish: timeline.clear,
+        ...(resource ? { resource } : {}),
+        ...(part?.frame?.placeholder ? { placeholder: part.frame.placeholder } : {}),
+        ...(part?.frame?.startRepeatFrame !== undefined ? { startRepeatFrame: part.frame.startRepeatFrame } : {}),
+      }
+    }
     return {
-      kind: "frame",
+      kind: "image",
       key: id,
       repeatCount: timeline.repeat,
-      repeatMode: timeline.reverse ? 2 : 0,
+      repeatMode: part?.image?.repeatMode ?? (timeline.reverse ? 2 : 0),
       removeOnFinish: timeline.clear,
-      loopForever: false,
-      startRepeatFrame: 0,
-      resource: { type: 0, resourceID: id },
-      placeholder: { type: 0, resourceID: "" },
-    } as BdaAnimationEffect
+      loopForever: part?.image?.loopForever ?? false,
+      startRepeatFrame: part?.image?.startRepeatFrame ?? 0,
+      sequence: { name: id, frames },
+    }
   }
   if (motion.kind === "opaque" && motion.format === "bda.emitter") {
     const emitter = motion.blob as MotionEmitter
@@ -268,7 +315,7 @@ function effectOf(motion: MotionNode, id: string): BdaAnimationEffect | undefine
       kind: "emitter",
       key: id,
       repeatCount: timeline.repeat,
-      repeatMode: timeline.reverse ? 2 : 0,
+      repeatMode: part?.repeatMode ?? (timeline.reverse ? 2 : 0),
       removeOnFinish: timeline.clear,
       duration: Math.round(timeline.duration * 1000),
       birthRate: emitter.birthRate,
@@ -308,7 +355,7 @@ function effectOf(motion: MotionNode, id: string): BdaAnimationEffect | undefine
       key: id,
       buildMode: motion.method === "sequential" ? 1 : 0,
       repeatCount: timeline.repeat,
-      repeatMode: timeline.reverse ? 2 : 0,
+      repeatMode: part?.repeatMode ?? (timeline.reverse ? 2 : 0),
       removeOnFinish: timeline.clear,
       delay: Math.round(timeline.delay * 1000),
       items,
@@ -327,7 +374,7 @@ function effectOf(motion: MotionNode, id: string): BdaAnimationEffect | undefine
     kind,
     key: id,
     repeatCount: timeline.repeat,
-    repeatMode: timeline.reverse ? 2 : 0,
+    repeatMode: part?.repeatMode ?? (timeline.reverse ? 2 : 0),
     delay: Math.round(timeline.delay * 1000),
     removeOnFinish: timeline.clear,
     duration: Math.round(timeline.duration * 1000),
@@ -360,12 +407,19 @@ function bareKeyOf(id: string, kind: string): string {
   return id.startsWith(prefix) ? id.slice(prefix.length) : id
 }
 
-export function animationOfMotions(motions: SkinMotions, designWidth?: number): { animation: BdaAnimation; warnings: string[] } {
+export function animationOfMotions(
+  motions: SkinMotions,
+  designWidth?: number,
+  parts?: ReadonlyMap<string, BdaMotionParts>,
+  targets?: readonly string[],
+): { animation: BdaAnimation; warnings: string[] } {
   const effects = new Map<string, BdaAnimationEffect>()
   const targetBindings = new Map<string, BdaAnimationBinding[]>()
+  // 原配置里可能声明了没有绑定的目标；先占位，写回时才不会少一条。
+  for (const target of targets ?? []) targetBindings.set(target, [])
   const warnings: string[] = []
   for (const [id, motion] of motions) {
-    const effect = effectOf(motion, id)
+    const effect = effectOf(motion, id, parts?.get(id))
     if (!effect) {
       warnings.push(`${id}：动效类型 ${motion.kind} 无法写成 BDA 效果`)
       continue
@@ -374,15 +428,19 @@ export function animationOfMotions(motions: SkinMotions, designWidth?: number): 
     const key = bareKeyOf(id, effect.kind)
     const written = { ...effect, key } as BdaAnimationEffect
     effects.set(key, written)
-    for (const binding of motion.bindings ?? []) {
+    for (const [index, binding] of (motion.bindings ?? []).entries()) {
       const entries = targetBindings.get(binding.target) ?? []
+      const original = parts?.get(id)?.bindings?.[index]
       entries.push({
         kind: written.kind,
         key,
-        scope: 0,
+        // 作用域与位置是 BDA 自己的数值；IR 的 `scope` 只是粗分类，原值在这里按位置取回。
+        scope: original?.scope ?? 0,
         event: eventOf(binding.slot),
         isolated: binding.isolated === true,
-        ...(binding.condition ? { condition: binding.condition } : {}),
+        ...(original?.location !== undefined ? { location: original.location } : {}),
+        ...(binding.condition ?? original?.condition ? { condition: binding.condition ?? original?.condition } : {}),
+        ...(original?.removeOnInteraction !== undefined ? { removeOnInteraction: original.removeOnInteraction } : {}),
       })
       targetBindings.set(binding.target, entries)
     }
@@ -412,14 +470,23 @@ export function soundsOfConfig(config: BdaSoundConfig): SoundBinding[] {
   return sounds
 }
 
-/** IR 音效表 → BDA 音效配置；平台决定进哪张表。 */
-export function soundConfigOf(sounds: readonly SoundBinding[], type = 0): BdaSoundConfig {
+/** IR 音效表 → BDA 音效配置；平台决定进哪张表，资源类型按主体取回原值。 */
+export function soundConfigOf(sounds: readonly SoundBinding[], types?: ReadonlyMap<string, number>): BdaSoundConfig {
   const keySounds = new Map<string, BdaResource>()
   const iosKeySounds = new Map<string, BdaResource>()
   for (const sound of sounds) {
-    const resource = { type, resourceID: sound.sound }
-    if (sound.platform === "ios") iosKeySounds.set(sound.subject, resource)
+    const platform = sound.platform === "ios" ? "ios" : "android"
+    const resource = { type: types?.get(`${platform}:${sound.subject}`) ?? 0, resourceID: sound.sound }
+    if (platform === "ios") iosKeySounds.set(sound.subject, resource)
     else keySounds.set(sound.subject, resource)
   }
   return { keySounds, iosKeySounds }
+}
+
+/** 音效配置里的资源类型（ogg/wav/aiff 的编号）；IR 的绑定没有这个字段。 */
+export function soundTypesOf(config: BdaSoundConfig): Map<string, number> {
+  const types = new Map<string, number>()
+  for (const [subject, resource] of config.keySounds) types.set(`android:${subject}`, resource.type)
+  for (const [subject, resource] of config.iosKeySounds) types.set(`ios:${subject}`, resource.type)
+  return types
 }

@@ -1,4 +1,4 @@
-import { type ProtoField, type BdaResource, type BdaStyleRef, type BdaScaledOffset, type BdaRect, type BdaImageAtom, type BdaImageStyle, type BdaTextStyle, type BdaColorStyle, type BdaKey, type BdaBar, type BdaTab, type BdaCorpusList, type BdaGamePanel, type BdaSwitch, type BdaCand, type BdaList, type BdaHint, type BdaInputTile, type BdaGrid, type BdaPanel, type BdaColorPalette, type BdaAppearance, type BdaAnimation, type BdaNumberRange, type BdaVectorRange, type BdaAnimationEffect, type BdaAnimationKind, type BdaTransformAnimation, type BdaGroupAnimation, type BdaResourceAnimation, type BdaAnimationSequence, type BdaImageAnimation, type BdaEmitterAnimation, type BdaAnimationBinding, type BdaSoundConfig } from "./bda.ts"
+import { type ProtoField, type BdaResource, type BdaStyleRef, type BdaScaledOffset, type BdaRect, type BdaImageAtom, type BdaImageStyle, type BdaTextStyle, type BdaColorStyle, type BdaKey, type BdaBar, type BdaTab, type BdaCorpusList, type BdaGamePanel, type BdaSwitch, type BdaCand, type BdaList, type BdaHint, type BdaInputTile, type BdaGrid, type BdaPanel, type BdaColorPalette, type BdaAppearance, type BdaAnimation, type BdaNumberRange, type BdaVectorRange, type BdaAnimationEffect, type BdaAnimationKind, type BdaTransformAnimation, type BdaGroupAnimation, type BdaResourceAnimation, type BdaAnimationSequence, type BdaImageAnimation, type BdaEmitterAnimation, type BdaAnimationBinding, type BdaSoundConfig, type BdaLayout, type BdaLayoutKeyboard, type BdaLayoutKey, type BdaLayoutBar, type BdaLayoutVariant, type BdaLayoutExtras, type BdaCandidateElement } from "./bda.ts"
 
 export const decoder = new TextDecoder("utf-8", { fatal: true })
 
@@ -381,6 +381,7 @@ export function decodeBdaAnimation(bytes: Uint8Array): BdaAnimation {
   const numberRange = (field: ProtoField | undefined): BdaNumberRange => {
     const value = message(field)
     const min = int32(first(value, 1))
+    // `#2` 是区间终点；缺它就表示起点与终点相同。
     const max = first(value, 2)
     return [min, max ? int32(max) : min]
   }
@@ -588,5 +589,90 @@ export function decodeBdaSoundConfig(bytes: Uint8Array): BdaSoundConfig {
   return {
     keySounds: soundMap(1),
     iosKeySounds: soundMap(3),
+  }
+}
+
+/* —— layoutConfig —— */
+
+/** 消息里除指定字段号以外的原始字段；未建模的内容整段保留。 */
+function others(items: ProtoField[], numbers: ReadonlySet<number>): ProtoField[] {
+  return items.filter((item) => !numbers.has(item.number))
+}
+
+/** 名字 + 消息体的条目（键盘、变体条目、按键、气泡栏都是这个形状）。 */
+function namedEntry(field: ProtoField): { name: string; body: ProtoField[] } {
+  const entry = message(field)
+  return { name: string(first(entry, 1)), body: message(first(entry, 2)) }
+}
+
+/** 气泡栏元素与候选栏元素都按原始字段保留，语义未定。 */
+function layoutBar(field: ProtoField): BdaLayoutBar {
+  const { name, body } = namedEntry(field)
+  return { name, body }
+}
+
+function layoutVariant(field: ProtoField): BdaLayoutVariant {
+  const { name, body } = namedEntry(field)
+  return {
+    name,
+    bars: message(first(body, 2)).map(layoutBar),
+  }
+}
+
+function candidateElement(field: ProtoField): BdaCandidateElement {
+  const { name, body } = namedEntry(field)
+  return { name, body }
+}
+
+function layoutExtras(field: ProtoField): BdaLayoutExtras {
+  const body = message(field)
+  const inset = first(body, 4)
+  return {
+    floats: [float(body, 1), float(body, 2), float(body, 3)],
+    ...(inset ? { inset } : {}),
+    candidates: body.filter((item) => item.number === 5).map(candidateElement),
+    parts: others(body, new Set([1, 2, 3, 4, 5])),
+  }
+}
+
+function layoutKey(field: ProtoField): BdaLayoutKey {
+  const { name, body } = namedEntry(field)
+  const rectField = first(body, 1)
+  const box = rect(rectField)
+  return {
+    name,
+    ...(box ? { rect: box } : {}),
+    ...(rectField ? { rectField } : {}),
+    ...(first(body, 8) ? { action: string(first(body, 8)) } : {}),
+    ...(first(body, 11)?.varint !== undefined ? { variant: first(body, 11)?.varint } : {}),
+    parts: others(body, new Set([1, 8, 11])),
+  }
+}
+
+function layoutKeyboard(field: ProtoField): BdaLayoutKeyboard | undefined {
+  const { name, body: content } = namedEntry(field)
+  if (!name) return
+  const grid = message(first(content, 6))
+  const canvas = message(first(content, 7))
+  return {
+    name,
+    variants: content.filter((item) => item.number === 1).map(layoutVariant),
+    keys: content.filter((item) => item.number === 2).map(layoutKey),
+    ...(first(content, 4) ? { extras: layoutExtras(first(content, 4)!) } : {}),
+    ...(grid.length >= 2 ? { grid: [first(grid, 1)?.varint ?? 0, first(grid, 2)?.varint ?? 0] as const } : {}),
+    ...(canvas.length >= 2 ? { canvas: { width: first(canvas, 1)?.varint ?? 0, height: first(canvas, 2)?.varint ?? 0 } } : {}),
+    ...(first(content, 8)?.varint !== undefined ? { flag: first(content, 8)?.varint } : {}),
+    parts: others(content, new Set([1, 2, 4, 6, 7, 8])),
+  }
+}
+
+/** 布局配置：顶层只有键盘，每个键盘自带键与画布。 */
+export function decodeBdaLayout(bytes: Uint8Array): BdaLayout {
+  const root = fields(bytes)
+  return {
+    keyboards: root.filter((item) => item.number === 1).flatMap((item) => {
+      const keyboard = layoutKeyboard(item)
+      return keyboard ? [keyboard] : []
+    }),
   }
 }

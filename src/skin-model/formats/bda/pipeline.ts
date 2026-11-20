@@ -1,27 +1,22 @@
 // BDA 皮肤的识别与解析阶段。
 //
-// BDA 包里的核心是几份二进制配置（外观、动画、音效）与图片；
-// 键盘布局不在包里，来自外部的布局骨架，所以这里不产生布局角色。
+// 归档把两种原始目录（`light/port/` 与 `port/`）统一成 `<主题>/skin/<方向>/`，图片在 `<主题>/skin/res/`。
+// 配置类型靠文件名识别，与目录无关；布局配置是 protobuf，不能按 INI 解析，按角色区分开。
 import { IniDocument } from "@/ini.ts"
 import type { FileRole, SkinDocuments, SkinPackage, SkinStructure } from "@/skin-model/pipeline.ts"
 import type { Theme, Orientation } from "@/skin-model/types.ts"
 
-/** 从路径里取主题与方向；BDA 的目录就是 `<主题>/skin/<方向>/`。 */
-function placeOf(path: string): { theme: Theme; orientation: Orientation } | undefined {
-  const match = /^(light|dark)\/skin\/(port|land)\//i.exec(path)
-  if (!match) return
-  return {
-    theme: match[1].toLowerCase() as Theme,
-    orientation: match[2].toLowerCase() as Orientation,
-  }
-}
+const CONFIG_LEAF = /^(?:\d*)(appearanceConfig|animationConfig|soundConfig|switchConfig|layoutConfig)$/i
 
-/** 配置文件名去掉可能的前导编号后是什么。 */
-function configKind(leaf: string): FileRole["kind"] | undefined {
-  const bare = leaf.replace(/^\d+/, "")
-  if (/^appearanceConfig$/i.test(bare)) return "appearance"
-  if (/^animationConfig$/i.test(bare)) return "motion"
-  if (/^soundConfig$/i.test(bare)) return "sound-config"
+/** 路径里能读出的主题与方向；`res/` 目录只有主题，`port/` 目录只有方向。 */
+function placeOf(path: string): { theme?: Theme; orientation?: Orientation } | undefined {
+  const themed = /^(light|dark)\/skin\/(?:(port|land)\/|res\/)/i.exec(path)
+  if (themed) {
+    return {
+      theme: themed[1].toLowerCase() as Theme,
+      ...(themed[2] ? { orientation: themed[2].toLowerCase() as Orientation } : {}),
+    }
+  }
   return
 }
 
@@ -29,20 +24,29 @@ function roleOf(path: string): FileRole {
   const lower = path.toLowerCase()
   const leaf = lower.split("/").pop() ?? lower
   const place = placeOf(path)
+  const orientation = place?.orientation ?? "port"
+  const theme = place?.theme ?? "light"
 
-  if (lower.endsWith(".png")) return { kind: "image" }
+  if (lower.endsWith(".png") || lower.endsWith(".webp")) return { kind: "image" }
   if (/\.(?:mp3|ogg|wav|m4a)$/.test(lower)) return { kind: "audio" }
   if (/\.(?:ttf|otf|ttc)$/.test(lower)) return { kind: "font" }
   if (leaf === "info.txt") return { kind: "info" }
+  if (lower.endsWith(".til")) return { kind: "atlas", theme, orientation }
 
   if (place) {
-    const kind = configKind(leaf)
-    if (kind) return { kind } as FileRole
-    if (lower.endsWith(".ini")) return { kind: "layout", board: "main", theme: place.theme, orientation: place.orientation }
-    // 配置目录下还有菜单、面板一类的文本文件，按面板配置对待。
+    const config = CONFIG_LEAF.exec(leaf)
+    if (config) {
+      const kind = config[1].toLowerCase()
+      if (kind === "appearanceconfig") return { kind: "appearance" }
+      if (kind === "animationconfig") return { kind: "motion" }
+      if (kind === "soundconfig") return { kind: "sound-config" }
+      if (kind === "layoutconfig") return { kind: "layout", board: "main", theme, orientation }
+      return { kind: "unknown", reason: `BDA 的 ${leaf} 没有建模，原样保留` }
+    }
+    if (lower.endsWith(".ini")) return { kind: "layout", board: "main", theme, orientation }
     if (lower.endsWith(".txt") || lower.endsWith(".json")) return { kind: "panel-config" }
   }
-  return { kind: "unknown", reason: place ? `BDA 包里没有这种文件的位置：${leaf}` : "不在主题方向目录下，无法判断用途" }
+  return { kind: "unknown", reason: place ? `BDA 包里没有这种文件的位置：${leaf}` : "不在皮肤目录下，无法判断用途" }
 }
 
 export function identifyBda(pkg: SkinPackage): SkinStructure {
@@ -60,17 +64,19 @@ export function identifyBda(pkg: SkinPackage): SkinStructure {
 
 /**
  * 解析 BDA 包。
- * 二进制配置与图片原样保留，布局类解析成 INI 文档；判不出角色的文件也保留字节。
+ * 文本配置（信息、图集、面板）解析成文档，二进制配置与图片原样保留字节。
  */
 export function parseBda(pkg: SkinPackage, structure: SkinStructure): SkinDocuments {
-  const texts = new Map()
+  const texts = new Map<string, IniDocument>()
   const structs = new Map<string, unknown>()
   const binaries = new Map<string, Uint8Array>()
   const decoder = new TextDecoder()
   for (const [path, role] of structure.roles) {
     const data = pkg.files.get(path)
     if (!data) throw new Error(`识别出角色但包里没有文件：${path}`)
-    if (role.kind === "layout") {
+    // 布局配置是 protobuf；其余带 layout 角色的（BDA 里没有）才是 INI。
+    const textRole = role.kind === "info" || role.kind === "atlas" || (role.kind === "layout" && !/layoutConfig$/i.test(path))
+    if (textRole) {
       texts.set(path, IniDocument.parse(decoder.decode(data)))
     } else if (role.kind === "panel-config") {
       structs.set(path, decoder.decode(data))
@@ -81,12 +87,18 @@ export function parseBda(pkg: SkinPackage, structure: SkinStructure): SkinDocume
   return { roles: structure.roles, texts, structs, binaries }
 }
 
-/** 配置类文件按路径取字节；转换阶段用它读外观与动画。 */
-export function configBytes(documents: SkinDocuments, kind: "appearance" | "animation" | "sound"): Uint8Array | undefined {
+/** 配置类文件按路径取字节；转换阶段用它读当前这套外观的配置。 */
+export function configBytes(
+  documents: SkinDocuments,
+  kind: "appearance" | "animation" | "sound" | "layout",
+  prefix = "",
+): Uint8Array | undefined {
+  const wanted: FileRole["kind"] = kind === "layout" ? "layout" : kind === "sound" ? "sound-config" : kind === "animation" ? "motion" : "appearance"
   for (const [path, role] of documents.roles) {
-    if (role.kind === "appearance" && kind === "appearance") return documents.binaries.get(path)
-    if (role.kind === "motion" && kind === "animation") return documents.binaries.get(path)
-    if (role.kind === "sound-config" && kind === "sound") return documents.binaries.get(path)
+    if (role.kind !== wanted) continue
+    if (prefix && !path.toLowerCase().startsWith(prefix.toLowerCase())) continue
+    const data = documents.binaries.get(path)
+    if (data) return data
   }
   return
 }

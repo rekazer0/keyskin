@@ -334,11 +334,20 @@ function encodeRange(number: number, value: BdaNumberRange | undefined): ProtoFi
   ])
 }
 
-function encodeVectorRange(number: number, value: BdaVectorRange | undefined): ProtoField[] {
+function encodeIntVectorRange(number: number, value: BdaVectorRange | undefined): ProtoField[] {
   if (!value) return []
   return messageField(number, [
-    ...encodeRange(1, value[0]),
-    ...encodeRange(2, value[1]),
+    ...encodeIntRange(1, value[0]),
+    ...encodeIntRange(2, value[1]),
+  ])
+}
+
+/** 变换类动效的区间是 varint（可为负），与粒子效果的浮点区间不是同一套编码。 */
+function encodeIntRange(number: number, value: BdaNumberRange | undefined): ProtoField[] {
+  if (!value) return []
+  return messageField(number, [
+    ...varintField(1, value[0]),
+    ...(value[1] !== value[0] ? varintField(2, value[1]) : []),
   ])
 }
 
@@ -348,14 +357,22 @@ function encodeIntPair(number: number, value: [number, number] | undefined): Pro
   return messageField(number, [...varintField(1, value[0]), ...varintField(2, value[1])])
 }
 
+/** 一条绑定；列表元素用哪个字段号由调用方按 `isolated` 决定。 */
 function encodeBinding(item: BdaAnimationBinding): ProtoField[] {
   const simple = ["group", "alpha", "scale", "shift", "rotate"] as const
   const complex = ["frame", "image", "emitter", "lottie", "video"] as const
-  if (item.kind === "image") {
-    // 帧类绑定写在第二个子消息里，带位置与是否随交互移除。
-    return [...varintField(1, item.location ?? 0), ...varintField(2, complex.indexOf(item.kind)), ...varintField(3, 0), ...stringField(4, item.key), ...varintField(5, item.event), ...varintField(6, item.removeOnInteraction ? 1 : 0)]
-  }
   const isSimple = (simple as readonly string[]).includes(item.kind)
+  if (item.isolated) {
+    // 随交互移除的复杂绑定：位置、类型、键、事件、条件、移除开关。
+    return [
+      ...varintField(1, item.location ?? 0),
+      ...varintField(2, complex.indexOf(item.kind as typeof complex[number])),
+      ...stringField(3, item.key),
+      ...varintField(4, item.event),
+      ...stringField(5, item.condition),
+      ...varintField(6, item.removeOnInteraction ? 1 : 0),
+    ]
+  }
   return [
     ...varintField(1, item.scope),
     ...(isSimple ? varintField(2, simple.indexOf(item.kind as typeof simple[number])) : varintField(3, complex.indexOf(item.kind as typeof complex[number]))),
@@ -366,13 +383,15 @@ function encodeBinding(item: BdaAnimationBinding): ProtoField[] {
 }
 
 function encodeTransform(effect: BdaTransformAnimation): ProtoField[] {
+  // alpha 与 rotate 是单值区间，scale 与 shift 才是双轴向量。
+  const scalar = effect.kind === "alpha" || effect.kind === "rotate"
   return [
     ...varintField(1, effect.repeatCount),
     ...varintField(2, effect.repeatMode),
     ...varintField(3, effect.delay),
     ...varintField(4, effect.removeOnFinish ? 1 : 0),
-    ...encodeVectorRange(5, effect.from),
-    ...encodeVectorRange(6, effect.to),
+    ...(scalar ? encodeIntRange(5, effect.from[0]) : encodeIntVectorRange(5, effect.from)),
+    ...(scalar ? encodeIntRange(6, effect.to[0]) : encodeIntVectorRange(6, effect.to)),
     ...varintField(7, effect.duration),
     ...varintField(8, effect.interpolation),
     ...encodeIntPair(9, effect.pivotPx),
@@ -453,10 +472,11 @@ function encodeImageEffect(effect: BdaImageAnimation): ProtoField[] {
     ...varintField(1, effect.repeatCount),
     ...varintField(2, effect.repeatMode),
     ...varintField(4, effect.removeOnFinish ? 1 : 0),
-    ...messageField(5, effect.sequence.frames.map((frame) => [
+    // 每帧是一个独立的 `#5` 消息；把字段摊平会写成只有一帧。
+    ...effect.sequence.frames.flatMap((frame) => messageField(5, [
       ...(frame.resourceID !== undefined ? messageField(1, encodeResource({ type: 0, resourceID: frame.resourceID })) : []),
       ...(frame.duration !== undefined ? varintField(2, frame.duration) : []),
-    ]).flat()),
+    ])),
     ...varintField(6, effect.loopForever ? 1 : 0),
     ...varintField(7, effect.startRepeatFrame),
   ]
@@ -482,7 +502,8 @@ export function encodeAnimation(animation: BdaAnimation): Uint8Array {
   for (const [target, bindings] of animation.targetBindings) {
     targets.push(...messageField(1, [
       ...stringField(1, target),
-      ...messageField(2, bindings.flatMap((item) => messageField(1, encodeBinding(item)))),
+      // 普通绑定是列表里的 `#1`，随交互移除的复杂绑定是 `#2`。
+      ...messageField(2, bindings.flatMap((item) => messageField(item.isolated ? 2 : 1, encodeBinding(item)))),
     ]))
   }
   return encodeFields([
