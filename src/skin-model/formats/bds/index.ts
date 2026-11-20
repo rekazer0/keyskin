@@ -2,7 +2,7 @@
 //
 // 格式原生数据是归档加路径；read 解析成 IR，write 从 IR 重新生成全部文件（含重新打包的图集）。
 import { appearanceOf, bdsBoardName, bdsDirectory, isBdsLayoutPath, orientationOf } from "@/skin-model/board-paths.ts"
-import { IniDocument, numbersOf } from "@/ini.ts"
+import { IniDocument, blocksOf, numbersOf } from "@/ini.ts"
 import { accessOf, textContent, type DocumentAccess } from "@/skin-model/formats/public/access.ts"
 import { identifyBds } from "@/skin-model/formats/bds/identify.ts"
 import { parseBds } from "@/skin-model/formats/public/parse.ts"
@@ -974,7 +974,8 @@ function moreMenuOf(document: IniDocument): MoreMenu | undefined {
     ...(grid.length === 2 ? { grid: { width: grid[0], height: grid[1] } } : {}),
     ...(layoutName ? { layoutName } : {}),
   }
-  return layouts.size || cellStyle || foreStyle || grid.length || layoutName ? menu : undefined
+  // `numbersOf` 对缺省或空串会给出 `[0]`，所以这里只认两个数，不能用数组长度判断有没有 `GRID`。
+  return layouts.size || cellStyle || foreStyle || grid.length === 2 || layoutName ? menu : undefined
 }
 
 /** 布局文件里的 `[LIST]` 段：列表的位置、尺寸、条目与取值。 */
@@ -1143,19 +1144,56 @@ export async function layoutBoards(
   return { boards, paths: parsedPanels.paths, skipped }
 }
 
+/** `opaque` 里按主题方向存的 `gen.ini` 面板段；不是记录就当作没有。 */
+function genPanelsOf(value: unknown): ReadonlyMap<string, ReadonlyMap<string, ReadonlyArray<ReadonlyMap<string, string>>>> {
+  if (!(value instanceof Map)) return new Map()
+  const groups = new Map<string, ReadonlyMap<string, ReadonlyArray<ReadonlyMap<string, string>>>>()
+  for (const [group, sections] of value) {
+    if (typeof group !== "string" || !(sections instanceof Map)) continue
+    const parsed = new Map<string, ReadonlyArray<ReadonlyMap<string, string>>>()
+    for (const [name, blocks] of sections) {
+      if (typeof name !== "string" || !Array.isArray(blocks)) continue
+      const entries = blocks.flatMap((block): Map<string, string>[] => {
+        if (!(block instanceof Map)) return []
+        const fields = new Map<string, string>()
+        for (const [key, item] of block) {
+          if (typeof key === "string" && typeof item === "string") fields.set(key, item)
+        }
+        return fields.size ? [fields] : []
+      })
+      if (entries.length) parsed.set(name, entries)
+    }
+    if (parsed.size) groups.set(group, parsed)
+  }
+  return groups
+}
+
 /** 布局文件自身声明的面板字段与 `gen.ini` 的面板组件合并；布局文件优先。 */
 function panelsMerged(base: BoardPanels | undefined, document: IniDocument): BoardPanels {
   // `gen.ini` 的列表只是几何默认值，单独留给 `genList`，不并进合并视图。
-  const { list: genList, hint: genHint, more: genMore, ...baseRest } = base ?? {}
+  const { list: genList, hint: genHint, more: genMore, candidates: genCandidates, input: genInput, ...baseRest } = base ?? {}
+  const sections = new Set(document.sections())
+  // 面板段是「方向级默认 + 布局级覆盖」：布局文件里出现该段（哪怕空段）就由它决定，
+  // 空段表示本布局关闭该面板，不能再用 `gen.ini` 的声明。`[LIST]` 不适用——
+  // 列表拆在两处（`gen.ini` 给几何、布局文件给内容），必须继续合并。
+  const owns = (section: string): boolean => sections.has(section)
+  const layoutHint = hintExtrasOf(document)
+  const layoutMore = moreMenuOf(document)
   const layoutList = listExtrasOf(document)
   // 列表内容是布局自己的：`gen.ini` 只给几何默认值（`POS`/`CELL_SIZE`/`PADDING`），没有 `NAMES`。
   // 所以只有布局文件出现 `[LIST]` 段时才挂列表；`py_26` 这类没有该段的板不能凭空得到一个空列表。
-  const list = layoutList && document.sections().includes("LIST") ? mergeListPanel(genList, layoutList) : undefined
+  const list = layoutList && owns("LIST") ? mergeListPanel(genList, layoutList) : undefined
+  const inheritedHint = owns("HINT") ? undefined : genHint
+  const inheritedMore = owns("MORE") ? undefined : genMore
+  const more = mergeMore(inheritedMore, layoutMore)
   const merged: BoardPanels = {
     ...baseRest,
+    // 候选栏与输入栏没有布局级覆盖时沿用 `gen.ini` 的方向级声明；布局文件里出现空段就是关闭。
+    ...(genCandidates && !owns("CAND") ? { candidates: genCandidates } : {}),
+    ...(genInput && !owns("INPUT") ? { input: genInput } : {}),
     // 布局文件的 `[HINT]` 段指明用哪个气泡面板，gen.ini 那边只有样式，两边合并。
-    ...(genHint || Object.keys(hintExtrasOf(document)).length
-      ? { hint: { ...genHint, ...hintExtrasOf(document) } }
+    ...(inheritedHint || Object.keys(layoutHint).length
+      ? { hint: { ...inheritedHint, ...layoutHint } }
       : {}),
     ...(list ? { list } : {}),
     emptySections: emptySectionsOf(document),
@@ -1166,14 +1204,14 @@ function panelsMerged(base: BoardPanels | undefined, document: IniDocument): Boa
       !/^KEY\d+$/i.test(section) && !/^TIP\d+$/i.test(section) && document.entries(section).length > 0),
     ...(document.get("PANEL", "NO_BLUR") !== undefined ? { layoutNoBlur: document.get("PANEL", "NO_BLUR")?.trim() === "1" } : {}),
     tips: tipPoolOf(document, { actionOf }),
-    ...(mergeMore(genMore, moreMenuOf(document)) ? { more: mergeMore(genMore, moreMenuOf(document)) } : {}),
+    ...(more ? { more } : {}),
     ...boardExtrasOf(document),
     ...(tipCountOf(document) !== undefined ? { tipCount: tipCountOf(document) } : {}),
     ...(keyCountOf(document) !== undefined ? { keyCount: keyCountOf(document) } : {}),
     // 布局文件与 gen.ini 各自的面板声明分开存：两个文件里的同名字段不是同一份内容。
     ...(layoutList ? { layoutList } : {}),
-    ...(Object.keys(hintExtrasOf(document)).length ? { layoutHint: hintExtrasOf(document) } : {}),
-    ...(moreMenuOf(document) ? { layoutMore: moreMenuOf(document) } : {}),
+    ...(Object.keys(layoutHint).length ? { layoutHint } : {}),
+    ...(layoutMore ? { layoutMore } : {}),
     ...(genList ? { genList } : {}),
     ...(genHint ? { genHint } : {}),
     ...(genMore ? { genMore } : {}),
@@ -1349,6 +1387,23 @@ export async function bdsToModel(
   }
   // 面板文件的原路径也要记住，导出时沿用原名，避免重建后出现两份面板文件。
   if (panelPaths.size) opaque.set("panelPaths", Object.fromEntries(panelPaths))
+  // `gen.ini` 的方向级面板段：布局文件里的空段只是关闭本布局的面板，不代表这些声明不存在。
+  // 按主题方向各存一份，写回 `gen.ini` 时按原文逐块还原 `[CAND]`/`[INPUT]`。
+  const genPanels = new Map<string, ReadonlyMap<string, ReadonlyArray<ReadonlyMap<string, string>>>>()
+  for (const path of access.paths()) {
+    if (!/^[^/]+\/skin\/(?:port|land)\/gen\.ini$/i.test(path)) continue
+    const document = access.text(path)
+    if (!document) continue
+    const group = `${path.split("/")[0]}/${path.split("/")[2]}`
+    const genSections = new Map<string, ReadonlyArray<ReadonlyMap<string, string>>>()
+    for (const section of ["CAND", "INPUT"]) {
+      // 同名段可以出现多次（多个 `[CAND]`），按块保留。
+      const blocks = blocksOf(document, section)
+      if (blocks.length) genSections.set(section, blocks.map((block) => new Map(block)))
+    }
+    if (genSections.size) genPanels.set(group, genSections)
+  }
+  if (genPanels.size) opaque.set("genPanels", genPanels)
   // 主样式表已经进了 `styles`；其它方向/主题的样式表用同一批段号表达不同内容，单张样式表装不下，
   // 按原路径原样保留，导出时照抄。
   if (hints.styles) opaque.set("stylePath", hints.styles)
@@ -1575,7 +1630,9 @@ async function bdsFromModel(model: SkinModel): Promise<SkinDocuments> {
     // 面板几何要一个确定的容器；未知时这块板的面板文件写不出来，跳过而不是编尺寸。
     const panelContainer = containerOf(main)
     if (!panelContainer) continue
-    for (const file of panelFiles(main, directory, panelContainer, actionValue, paths)) {
+    // `gen.ini` 的 `[CAND]`/`[INPUT]` 是方向级声明，布局文件里的空段关不掉它们。
+    const genPanels = genPanelsOf(model.opaque.get("genPanels")).get(group) ?? new Map()
+    for (const file of panelFiles(main, directory, panelContainer, actionValue, paths, genPanels)) {
       // 原包没有 gen.ini 时不要凭空造一份：这层配置在该包里本来就没有。
       if (pathsRecorded && file.path.endsWith("/gen.ini") && !paths.gen) continue
       putText(file.path, new TextDecoder().decode(file.data), { kind: "panel-config" })
