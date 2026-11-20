@@ -200,7 +200,7 @@ function applyPanelStyles(boards: readonly import("@/skin-model/board.ts").Board
   for (const board of boards) {
     const panel = appearance.panels.get(keyboardNameOf(board))
     for (const key of board.keys) {
-      const action = actionValue(key.actions.press)
+      const action = actionValue(key.actions?.press)
       const entry = action && panel ? panel.keys.get(bdaPanelKeyName(action)) : undefined
       key.container = entry
         ? {
@@ -481,7 +481,7 @@ function panelsOf(model: SkinModel, refs: ReadonlyMap<string, BdaStyleRef>): Map
 /** BDA 面板的键名是 `KEY_<动作码>`；来自其它格式的按键 id 不是这个形状，按动作码补。 */
 function panelKeyNameOf(key: Key, used: ReadonlySet<string>): string {
   if (/^KEY_/i.test(key.id)) return key.id
-  const code = actionValue(key.actions.press)
+  const code = actionValue(key.actions?.press)
   const name = code ? bdaPanelKeyName(code) : undefined
   return name && !used.has(name) ? name : key.id
 }

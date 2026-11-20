@@ -328,7 +328,7 @@ export function layoutOfBoards(boards: readonly Board[], rects: ReadonlyMap<stri
 
 /** 按键动作用按下的动作码写回；没有动作就不写 `#8`。 */
 function actionSurface(key: Key): { action?: string } {
-  const code = actionValue(key.actions.press)
+  const code = actionValue(key.actions?.press)
   return code ? { action: code } : {}
 }
 

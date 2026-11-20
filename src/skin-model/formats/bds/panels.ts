@@ -213,17 +213,24 @@ export function panelsOf(access: DocumentAccess, directory: string, gen: IniDocu
   const listPadding = numbersOf(gen.get("LIST", "PADDING"))
   const listPos = numbersOf(gen.get("LIST", "POS"))
   const listNames = gen.get("LIST", "NAMES")?.split(/\s+/).filter(Boolean)
-  const list: ListPanel | undefined = listStyle || listFore || listCell || cellSize.length === 2 || listPadding.length === 4 || listPos.length === 2
+  // gen.ini 只给几何与样式；内容池在布局文件里，所以这一层不填。
+  const listAppearance = {
+    ...(listStyle ? { style: listStyle } : {}),
+    ...(listFore ? { foreStyle: listFore } : {}),
+    ...(listCell ? { cellStyle: listCell } : {}),
+  }
+  const listLayout = {
+    ...(cellSize.length === 2 ? { cellSize: { width: cellSize[0], height: cellSize[1] } } : {}),
+    ...(listPadding.length === 4
+      ? { padding: { left: listPadding[0], top: listPadding[1], right: listPadding[2], bottom: listPadding[3] } }
+      : {}),
+    ...(listPos.length === 2 ? { offset: { x: listPos[0], y: listPos[1] } } : {}),
+    ...(listNames?.length ? { count: listNames.length } : {}),
+  }
+  const list: ListPanel | undefined = Object.keys(listAppearance).length || Object.keys(listLayout).length
     ? {
-      ...(listStyle ? { style: listStyle } : {}),
-      ...(listFore ? { foreStyle: listFore } : {}),
-      ...(listCell ? { cellStyle: listCell } : {}),
-      ...(cellSize.length === 2 ? { cellSize: { width: cellSize[0], height: cellSize[1] } } : {}),
-      ...(listPadding.length === 4
-        ? { padding: { left: listPadding[0], top: listPadding[1], right: listPadding[2], bottom: listPadding[3] } }
-        : {}),
-      ...(listPos.length === 2 ? { offset: { x: listPos[0], y: listPos[1] } } : {}),
-      ...(listNames?.length ? { count: listNames.length } : {}),
+      ...(Object.keys(listAppearance).length ? { appearance: listAppearance } : {}),
+      ...(Object.keys(listLayout).length ? { layout: listLayout } : {}),
     }
     : undefined
 
@@ -402,14 +409,14 @@ export function panelFiles(
     ...(list
       ? [
         "[LIST]",
-        ...(list.style ? [`BACK_STYLE=${list.style}`] : []),
-        ...(list.foreStyle ? [`FORE_STYLE=${list.foreStyle}`] : []),
-        ...(list.cellStyle ? [`CELL_STYLE=${list.cellStyle}`] : []),
-        ...(list.cellSize ? [`CELL_SIZE=${list.cellSize.width},${list.cellSize.height}`] : []),
-        ...(list.padding
-          ? [`PADDING=${list.padding.left},${list.padding.top},${list.padding.right},${list.padding.bottom}`]
+        ...(list.appearance?.style ? [`BACK_STYLE=${list.appearance.style}`] : []),
+        ...(list.appearance?.foreStyle ? [`FORE_STYLE=${list.appearance.foreStyle}`] : []),
+        ...(list.appearance?.cellStyle ? [`CELL_STYLE=${list.appearance.cellStyle}`] : []),
+        ...(list.layout?.cellSize ? [`CELL_SIZE=${list.layout.cellSize.width},${list.layout.cellSize.height}`] : []),
+        ...(list.layout?.padding
+          ? [`PADDING=${list.layout.padding.left},${list.layout.padding.top},${list.layout.padding.right},${list.layout.padding.bottom}`]
           : []),
-        ...(list.offset ? [`POS=${list.offset.x},${list.offset.y}`] : []),
+        ...(list.layout?.offset ? [`POS=${list.layout.offset.x},${list.layout.offset.y}`] : []),
         ...genExtraOf("LIST"),
         "",
       ]

@@ -90,8 +90,9 @@ function candidateRenders(board: Board): KeyRender[] {
 /** 列表容器；单元格由候选栏的格子样式决定，不单独成项。 */
 function listRenders(board: Board): KeyRender[] {
   const list = boardPanels(board)?.list
-  if (!list?.viewRect) return []
-  return [componentOf("LIST", list.viewRect, list.style, list.foreStyle)]
+  const viewRect = list?.layout?.viewRect
+  if (!viewRect) return []
+  return [componentOf("LIST", viewRect, list.appearance?.style, list.appearance?.foreStyle)]
 }
 
 /** 更多菜单：只有一个前景样式，没有背景层。 */
@@ -161,7 +162,7 @@ function renderOf(
 
 /** 按键按下时执行的动作文本，用来区分同位置但动作不同的键。 */
 function pressOf(key: Board["keys"][number]): string {
-  const action = key.actions.press
+  const action = key.actions?.press
   if (!action) return ""
   return action.kind === "text" ? action.value : `${action.kind}:${"code" in action ? action.code : ""}`
 }

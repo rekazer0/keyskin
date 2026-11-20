@@ -79,7 +79,7 @@ export function iosToolbarItems(
 
 /** 键在按下时执行的动作文本；工具栏用它区分系统功能键。 */
 function pressText(item: PreviewItem): string {
-  return actionText(item.key.actions.press) ?? ""
+  return actionText(item.key.actions?.press) ?? ""
 }
 
 /** Oversized CND hit boxes must not drag the fixed-size artwork below the visible native bar. */

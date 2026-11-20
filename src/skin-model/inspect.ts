@@ -81,7 +81,7 @@ export function keyGeometry(model: SkinModel, boardId: string, keyId: string): P
   ]
 }
 
-const ACTION_LABELS: ReadonlyArray<[keyof Key["actions"], string]> = [
+const ACTION_LABELS: ReadonlyArray<[keyof NonNullable<Key["actions"]>, string]> = [
   ["press", "点击"],
   ["long-press", "长按"],
   ["swipe-up", "上滑"],
@@ -91,7 +91,7 @@ const ACTION_LABELS: ReadonlyArray<[keyof Key["actions"], string]> = [
 ]
 
 /** 动作码：模型里的动作是语义对象，这里换成可读的短写。 */
-export function actionText(action: Key["actions"][keyof Key["actions"]]): string | undefined {
+export function actionText(action: NonNullable<Key["actions"]>[keyof NonNullable<Key["actions"]>] | undefined): string | undefined {
   if (!action) return
   switch (action.kind) {
     case "text": return action.value === " " ? "空格" : action.value
@@ -111,7 +111,7 @@ export function keyActions(model: SkinModel, boardId: string, keyId: string): Pr
   const found = findKey(model, boardId, keyId)
   if (!found) return []
   return ACTION_LABELS.map(([event, label]) => {
-    const action = found.key.actions[event]
+    const action = found.key.actions?.[event]
     const text = actionText(action)
     return {
       key: `action.${event}`,
@@ -207,10 +207,11 @@ export function panelProperties(model: SkinModel, boardId: string): PropertyView
   }
   if (panels?.hint) views.push(styleView("panel.hint", "气泡背景", panels.hint.style))
   if (panels?.list) {
-    views.push(styleView("panel.list", "列表背景", panels.list.style))
-    if (panels.list.cellSize) {
-      views.push(numberView("panel.list.cell.width", "格子宽", panels.list.cellSize.width))
-      views.push(numberView("panel.list.cell.height", "格子高", panels.list.cellSize.height))
+    views.push(styleView("panel.list", "列表背景", panels.list.appearance?.style))
+    const cellSize = panels.list.layout?.cellSize
+    if (cellSize) {
+      views.push(numberView("panel.list.cell.width", "格子宽", cellSize.width))
+      views.push(numberView("panel.list.cell.height", "格子高", cellSize.height))
     }
   }
   if (panels?.toolbar) views.push({ key: "panel.toolbar", label: "工具栏按钮", kind: "readonly", value: panels.toolbar.items.length })

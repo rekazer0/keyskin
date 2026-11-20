@@ -92,7 +92,7 @@ export function previewFallbackText(key: PreviewItem, hasForeground: boolean): s
 export function previewCenter(item: PreviewItem): string {
   if (item.key.label) return item.key.label
   if (item.text) return item.text
-  const action = item.key.actions.press
+  const action = item.key.actions?.press
   return action?.kind === "text" ? action.value : ""
 }
 

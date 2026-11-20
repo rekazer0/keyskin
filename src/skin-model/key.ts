@@ -105,7 +105,10 @@ export type Key = {
    * 它们照常留在 `Board.keys` 里，只是不参与布局、不画、不可拖。
    */
   layoutId?: string
-  /** 触摸区覆盖。不参与布局，只影响命中测试。 */
+  /**
+   * 触摸区覆盖。不参与布局，只影响命中测试。
+   * `{kind:"none"}` 是显式拒绝触摸：BDS 的 `TOUCH_RECT=0,0,0,0` 读成它。
+   */
   hitArea?: HitArea
   /**
    * 按键在皮肤里扮演的角色。列表单元格的字要用列表字体、也不能直接被拖动，
@@ -117,9 +120,20 @@ export type Key = {
   /** 默认状态下是否可见；状态覆盖里的 `visible` 优先。 */
   visible?: boolean
   padding?: Rect<number>
-  /** 默认状态下的动作。 */
-  actions: Partial<Record<KeyEvent, KeyAction>>
-  /** 按键容器：它自己知道内部有几层、每层怎么画。 */
+  /**
+   * 默认状态下的动作；缺省表示这个键没有动作。
+   *
+   * 没有动作的键是面板上的纯视觉块：BDS 的裸 `[KEYn]`（22 个里的 10 个，只有
+   * `BACK_STYLE` 与 `VIEW_RECT`）、BDA 的 `KEY_F0_*`（12 个，无动作、无矩形）。
+   * 不要写成空对象——空对象和缺省没有区别，会把「没有动作」与「动作未建模」混在一起。
+   */
+  actions?: Partial<Record<KeyEvent, KeyAction>>
+  /**
+   * 按键容器：它自己知道内部有几层、每层怎么画。
+   *
+   * 没有几何的键（`layoutId` 缺省）把背景样式放在 `container.back`：
+   * BDA 的 `KEY_F0_*` 从面板样式表挪到这里，不留在面板的外观层里。
+   */
   container: KeyContainer
   motions?: Partial<Record<MotionSlot, string>>
   sound?: string

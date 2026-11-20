@@ -221,7 +221,7 @@ function writeKey(
   const background = key.container.back?.style ? parseStyleName(key.container.back.style) : undefined
   if (background && skinSection && background.section !== skinSection) {
     // 皮肤没给这个键写背景时，客户端用默认背景类；那不是这个键的段字段，写回不能凭空造一条。
-    const binding = ssfKeyBinding(layout, actionValue(key.actions.press) ?? "", false)
+    const binding = ssfKeyBinding(layout, actionValue(key.actions?.press) ?? "", false)
     const defaults = [...binding.defaults, ...(skeletonBackgrounds.has(key.id) ? [skeletonBackgrounds.get(key.id)!] : [])]
     if (!defaults.includes(background.section)) {
       const field = refs.get(`${plan.name}|${skinSection}`)?.[0]?.field ?? "BG_IMAGES"

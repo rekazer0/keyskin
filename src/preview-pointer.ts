@@ -20,7 +20,7 @@ const DIRECTION_EVENTS: Readonly<Record<string, KeyEvent>> = {
 /** 某个方向的动作文本；没有动作就是空串。 */
 function actionAt(key: PreviewItem, direction: string): string {
   const event = DIRECTION_EVENTS[direction]
-  return event ? actionText(key.key.actions[event]) ?? "" : ""
+  return event ? actionText(key.key.actions?.[event]) ?? "" : ""
 }
 
 /** 可见的按键：可见性由 IR 给。 */

@@ -227,19 +227,22 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
   // 列表段：尺寸、条目、位置与取值都按布局文件自己的声明写回。
   if (panels.layoutList && says("LIST") && Object.keys(panels.layoutList).length) {
     const list = panels.layoutList
+    const appearance = list.appearance
+    const layout = list.layout
+    const content = list.content
     writtenSections.add("LIST")
     lines.push("[LIST]")
-    if (list.style) lines.push(`BACK_STYLE=${list.style}`)
-    if (list.foreStyle) lines.push(`FORE_STYLE=${list.foreStyle}`)
-    if (list.cellStyle) lines.push(`CELL_STYLE=${list.cellStyle}`)
-    if (list.cellSize) lines.push(`CELL_SIZE=${list.cellSize.width},${list.cellSize.height}`)
-    if (list.count !== undefined) lines.push(`LIST_NUM=${list.count}`)
-    if (list.order) lines.push(`LIST_ORDER=${list.order}`)
-    if (list.names?.length) lines.push(`NAMES=${list.names.join(" ")}`)
-    if (list.offset) lines.push(`POS=${list.offset.x},${list.offset.y}`)
-    if (list.padding) lines.push(`PADDING=${list.padding.left},${list.padding.top},${list.padding.right},${list.padding.bottom}`)
-    if (list.type !== undefined) lines.push(`TYPE=${list.type}`)
-    if (list.values?.length) lines.push(`VALUES=${list.values.join(" ")}`)
+    if (appearance?.style) lines.push(`BACK_STYLE=${appearance.style}`)
+    if (appearance?.foreStyle) lines.push(`FORE_STYLE=${appearance.foreStyle}`)
+    if (appearance?.cellStyle) lines.push(`CELL_STYLE=${appearance.cellStyle}`)
+    if (layout?.cellSize) lines.push(`CELL_SIZE=${layout.cellSize.width},${layout.cellSize.height}`)
+    if (layout?.count !== undefined) lines.push(`LIST_NUM=${layout.count}`)
+    if (layout?.order) lines.push(`LIST_ORDER=${layout.order}`)
+    if (content?.names?.length) lines.push(`NAMES=${content.names.join(" ")}`)
+    if (layout?.offset) lines.push(`POS=${layout.offset.x},${layout.offset.y}`)
+    if (layout?.padding) lines.push(`PADDING=${layout.padding.left},${layout.padding.top},${layout.padding.right},${layout.padding.bottom}`)
+    if (layout?.type !== undefined) lines.push(`TYPE=${layout.type}`)
+    if (content?.values?.length) lines.push(`VALUES=${content.values.join(" ")}`)
     lines.push(...extraOf("LIST"), "")
   }
   if (says("HINT") && (panels.layoutHint?.layoutName || panels.layoutHint?.type !== undefined)) {
@@ -319,7 +322,7 @@ export function layoutText(board: Board, renders: ReadonlyArray<Pick<KeyRender, 
     const refs = key.stateRefs ?? []
     if (refs.length) lines.push(`STAT_STYLE=${refs.map((ref) => `${ref.state}_${ref.section}`).join("|")}`)
     for (const { event, field: name } of EVENT_FIELDS) {
-      const value = actionValue(key.actions[event])
+      const value = actionValue(key.actions?.[event])
       if (value !== undefined) lines.push(`${name}=${value}`)
     }
     // 样式引用要经过同一张名表，否则键会指向不存在的段。
@@ -662,7 +665,7 @@ export function bdsBoardOf(
         }],
       }
       : {}),
-    ...(listRect ? { list: { viewRect: listRect } } : {}),
+    ...(listRect ? { list: { layout: { viewRect: listRect } } } : {}),
     ...(moreRect ? { more: { layouts: new Map(), viewRect: moreRect } } : {}),
     ...(hintRect ? { hint: { viewRect: hintRect } } : {}),
     ...(keyCount !== undefined ? { keyCount } : {}),
@@ -986,20 +989,40 @@ function listExtrasOf(document: IniDocument): ListPanel | undefined {
   const type = Number(document.get("LIST", "TYPE")?.trim())
   const values = document.get("LIST", "VALUES")?.split(/\s+/).filter(Boolean)
   const count = Number(document.get("LIST", "LIST_NUM")?.trim())
-  const panel: ListPanel = {
+  // 三层分开装：「这个格式没有这一层」是整个字段缺省，「这一层是空的」是对象存在但没有字段。
+  const appearance = {
     ...(style ? { style } : {}),
     ...(foreStyle ? { foreStyle } : {}),
     ...(cellStyle ? { cellStyle } : {}),
+  }
+  const layout = {
     ...(cell.length === 2 ? { cellSize: { width: cell[0], height: cell[1] } } : {}),
     ...(Number.isFinite(count) ? { count } : {}),
     ...(order ? { order } : {}),
-    ...(names?.length ? { names } : {}),
     ...(pos.length === 2 ? { offset: { x: pos[0], y: pos[1] } } : {}),
     ...(padding.length === 4 ? { padding: { left: padding[0], top: padding[1], right: padding[2], bottom: padding[3] } } : {}),
     ...(Number.isFinite(type) ? { type } : {}),
+  }
+  // BDS 的列表一定有内容层：`NAMES` 没写就是空池，不是「没有池」。
+  const content = {
+    ...(names?.length ? { names } : {}),
     ...(values?.length ? { values } : {}),
   }
-  return Object.keys(panel).length ? panel : undefined
+  const panel: ListPanel = {
+    ...(Object.keys(appearance).length ? { appearance } : {}),
+    ...(Object.keys(layout).length ? { layout } : {}),
+    content,
+  }
+  return Object.keys(appearance).length || Object.keys(layout).length || Object.keys(content).length ? panel : undefined
+}
+
+/** 列表的三层各自合并：整层浅合并会把 `gen.ini` 的几何默认值覆盖掉。 */
+function mergeListPanel(base: ListPanel | undefined, extra: ListPanel): ListPanel {
+  return {
+    ...(base?.appearance || extra.appearance ? { appearance: { ...base?.appearance, ...extra.appearance } } : {}),
+    ...(base?.layout || extra.layout ? { layout: { ...base?.layout, ...extra.layout } } : {}),
+    ...(base?.content || extra.content ? { content: { ...base?.content, ...extra.content } } : {}),
+  }
 }
 
 /** 两块符号键盘菜单合成一块：布局文件里的声明优先，两侧的类别引用并集。 */
@@ -1122,7 +1145,7 @@ function panelsMerged(base: BoardPanels | undefined, document: IniDocument): Boa
   const layoutList = listExtrasOf(document)
   // 列表内容是布局自己的：`gen.ini` 只给几何默认值（`POS`/`CELL_SIZE`/`PADDING`），没有 `NAMES`。
   // 所以只有布局文件出现 `[LIST]` 段时才挂列表；`py_26` 这类没有该段的板不能凭空得到一个空列表。
-  const list = layoutList && document.sections().includes("LIST") ? { ...genList, ...layoutList } : undefined
+  const list = layoutList && document.sections().includes("LIST") ? mergeListPanel(genList, layoutList) : undefined
   const merged: BoardPanels = {
     ...baseRest,
     // 布局文件的 `[HINT]` 段指明用哪个气泡面板，gen.ini 那边只有样式，两边合并。
@@ -1290,7 +1313,7 @@ export async function bdsToModel(
   // 按键动作里指向另一块板的，就是板间跳转。
   for (const board of model.boards) {
     const transitions = board.keys.flatMap((key) => {
-      const action = key.actions.press
+      const action = key.actions?.press
       if (action?.kind !== "switch") return []
       return [{ trigger: "press" as const, target: action.board }]
     })

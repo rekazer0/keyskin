@@ -372,8 +372,8 @@ export function animationSequenceForKey(
 }
 
 function bdaTargetForKey(animation: BdaAnimation, item: PreviewItem): string | undefined {
-  const press = actionText(item.key.actions.press) ?? ""
-  const down = actionText(item.key.actions["swipe-down"]) ?? ""
+  const press = actionText(item.key.actions?.press) ?? ""
+  const down = actionText(item.key.actions?.["swipe-down"]) ?? ""
   const candidates = [item.section, press, down, `KEY_${press}`]
     .map((value) => value.trim().toUpperCase()).filter(Boolean)
   const exact = animation.targets.find((value) => candidates.includes(value.toUpperCase()))

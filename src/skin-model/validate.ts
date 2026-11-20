@@ -92,7 +92,7 @@ export function validateModel(model: SkinModel): ValidationReport {
       for (const layer of key.container.fore) {
         if (layer.style && !knownStyles.has(layer.style)) add("error", "missing-style", `${board.id}/${key.id}`, `前景样式「${layer.style}」不存在`)
       }
-      if (!Object.keys(key.actions).length) add("warning", "unknown-action", `${board.id}/${key.id}`, "按键没有任何动作")
+      if (!Object.keys(key.actions ?? {}).length) add("warning", "unknown-action", `${board.id}/${key.id}`, "按键没有任何动作")
     }
 
     // 布局树里的几何节点应当与按键一一对应；多出来的节点在导出时会变成空块。

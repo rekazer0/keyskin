@@ -22,7 +22,7 @@ export function syncMobileKeyPreview(pressed = false): void {
     || !key || appState.selectedPath !== appState.layoutPath
   if (mobileKeyPreview.hidden || !key) return
   selectedKeyContext.textContent = `${layoutName} · ${section}`
-  const label = key.text ?? actionText(key.key.actions.press) ?? ""
+  const label = key.text ?? actionText(key.key.actions?.press) ?? ""
   if (/^[\p{L}\p{N}]$/u.test(label)) selectedKeyName.textContent = `按键 ${label}`
   if (pressed) preview.flashPress(key)
   else preview.cancelPointerInteraction()

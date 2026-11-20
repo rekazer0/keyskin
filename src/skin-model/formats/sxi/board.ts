@@ -114,7 +114,7 @@ function valuesJson(key: Key, order: readonly number[], original: readonly Json[
     if (value === undefined || written.has(code)) return
     written.add(code)
     const before = originalValue(code)
-    const action = event ? key.actions[event] : undefined
+    const action = event ? key.actions?.[event] : undefined
     if (before !== undefined && event && sameAction(actionOf(before), action)) {
       flat.push(code, before)
       return
@@ -124,9 +124,9 @@ function valuesJson(key: Key, order: readonly number[], original: readonly Json[
   for (const code of order) {
     if (code === SHOW) write(code, undefined, key.label)
     else if (code === HOLDSYM) write(code, undefined, key.holdSymbol)
-    else write(code, EVENTS[code], actionValue(key.actions[EVENTS[code]]))
+    else write(code, EVENTS[code], actionValue(key.actions?.[EVENTS[code]]))
   }
-  for (const [code, event] of Object.entries(EVENTS)) write(Number(code), event, actionValue(key.actions[event]))
+  for (const [code, event] of Object.entries(EVENTS)) write(Number(code), event, actionValue(key.actions?.[event]))
   write(SHOW, undefined, key.label)
   write(HOLDSYM, undefined, key.holdSymbol)
   return flat

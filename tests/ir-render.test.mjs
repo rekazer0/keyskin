@@ -36,7 +36,7 @@ function board() {
     panels: {
       backdrop: { style: "1", foreStyle: "2", viewRect: box(0, 0, 300, 100) },
       candidates: [{ style: "3", viewRect: box(0, 0, 300, 40) }],
-      list: { style: "4", foreStyle: "5", viewRect: box(0, 50, 300, 50) },
+      list: { appearance: { style: "4", foreStyle: "5" }, layout: { viewRect: box(0, 50, 300, 50) } },
       more: { foreStyle: "6", viewRect: box(200, 0, 100, 40) },
       hint: { style: "7", foreStyle: "8", viewRect: box(0, 0, 120, 40) },
       tips: new Map(),

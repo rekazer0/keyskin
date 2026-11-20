@@ -35,7 +35,7 @@ export async function ssfBaiduAnimationOf(
     if (!letter) return
     const wanted = letter[1].toLowerCase()
     return board.keys.find((key) => {
-      const press = key.actions.press
+      const press = key.actions?.press
       return press?.kind === "text" && press.value.toLowerCase() === wanted
     })?.id
   }

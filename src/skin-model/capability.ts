@@ -61,7 +61,7 @@ export function requiredCapabilities(model: SkinModel): CapabilitySet {
   for (const board of model.boards) {
     need("board.geometry", board.geometry.kind === "document" ? "full" : "partial")
     if (board.keys.length) need("board.keys")
-    if (board.keys.some((key) => Object.keys(key.actions).length)) need("key.actions")
+    if (board.keys.some((key) => Object.keys(key.actions ?? {}).length)) need("key.actions")
     if (board.keys.some((key) => (key.stateRefs?.length ?? 0) > 0)) need("key.states")
     if (board.keys.some((key) => key.hitArea !== undefined)) need("key.touch")
     const panels = boardPanels(board)

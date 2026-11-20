@@ -94,7 +94,7 @@ export type HintKey = {
 
 /** 从一个渲染项取出提示需要的那几个动作。 */
 export function hintKeyOf(key: PreviewItem): HintKey {
-  const text = (event: KeyEvent): string => actionText(key.key.actions[event]) ?? ""
+  const text = (event: KeyEvent): string => actionText(key.key.actions?.[event]) ?? ""
   return {
     section: key.section,
     center: text("press"),

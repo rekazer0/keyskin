@@ -80,9 +80,9 @@ test("读出面板的候选栏、气泡、列表与工具栏", async () => {
   assert.equal(panels?.candidates?.[0]?.icons?.[0]?.action?.kind, "system")
   assert.equal(panels?.hint?.style, "0")
   assert.deepEqual(panels?.hint?.offset, { x: 1, y: 2 })
-  assert.equal(panels?.list?.cellStyle, "120")
-  assert.deepEqual(panels?.list?.cellSize, { width: 100, height: 50 })
-  assert.equal(panels?.list?.count, 3)
+  assert.equal(panels?.list?.appearance?.cellStyle, "120")
+  assert.deepEqual(panels?.list?.layout?.cellSize, { width: 100, height: 50 })
+  assert.equal(panels?.list?.layout?.count, 3)
 })
 
 test("重建后仍能读回面板组件", async () => {
@@ -96,7 +96,7 @@ test("重建后仍能读回面板组件", async () => {
   assert.ok(again?.candidates?.length)
   assert.ok(again?.hint)
   assert.ok(again?.list)
-  assert.equal(again?.list?.cellSize?.width, 100)
+  assert.equal(again?.list?.layout?.cellSize?.width, 100)
 })
 
 test("不在图集里的散图超过一页时按页切分", async () => {

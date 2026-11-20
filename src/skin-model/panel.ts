@@ -83,25 +83,29 @@ export type HintBubble = {
 }
 
 export type ListPanel = {
-  style?: string
-  /** 列表前景样式；gen.ini 里写成 `[LIST] FORE_STYLE`。 */
-  foreStyle?: string
-  /** 列表在画布上的位置与尺寸；布局文件里由 `VIEW_RECT` 或 `SIZE` 与锚点决定。 */
-  viewRect?: LayoutBox
-  cellStyle?: string
-  cellSize?: Size<number>
-  count?: number
-  orientation?: "horizontal" | "vertical"
-  /** 列表里各项的排布方向与来源名，布局文件里写成 `LIST_ORDER` 与 `NAMES`。 */
-  order?: string
-  names?: readonly string[]
-  /** 列表在板上的位置与向外留白，布局文件里写成 `POS` 与 `PADDING`。 */
-  offset?: Point<number>
-  padding?: Rect<number>
-  /** 列表类型，布局文件里写成 `TYPE`。 */
-  type?: number
-  /** 列表项取值，布局文件里写成 `VALUES`。 */
-  values?: readonly string[]
+  /** 外观层：四个格式都有（BDS 的 `BACK/CELL/FORE_STYLE`、BDA 的 `lists`、SXI 的 `list` 样式）。 */
+  appearance?: { style?: string; foreStyle?: string; cellStyle?: string }
+  /**
+   * 布局层：BDS 有 `POS` + `CELL_SIZE` + `LIST_NUM`（几何由它们推导）；
+   * SXI 有 `p`/`s`；SSF 没有这一层；BDA 只有归一化 `foreStyleOffsets`，没有固定几何。
+   */
+  layout?: {
+    viewRect?: LayoutBox
+    cellSize?: Size<number>
+    count?: number
+    order?: string
+    offset?: Point<number>
+    padding?: Rect<number>
+    orientation?: "horizontal" | "vertical"
+    type?: number
+  }
+  /**
+   * 内容层：BDS 有 `NAMES`/`VALUES`（皮肤给的固定池，`count` 是显示槽位，两者可以不相等）；
+   * SXI 有 `titles`/`values`；BDA 与 SSF 没有这一层。
+   *
+   * 层不存在时整个字段缺省（BDA/SSF）；层存在但没有内容时是 `content: {}`（BDS 的 `NAMES` 空池）。
+   */
+  content?: { names?: readonly string[]; values?: readonly string[] }
 }
 
 export type InputBar = {

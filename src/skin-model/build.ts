@@ -100,7 +100,7 @@ export async function buildBoard(model: SkinModel, board: Board, state?: number)
     const rect = rects.get(key.id)
     // 布局树里没有这个键就没有几何；不给兜底值，缺了就是缺了。
     if (!rect) continue
-    const signature = [rect.position.x, rect.position.y, rect.size.width, rect.size.height, actionText(key.actions.press) ?? ""].join("|")
+    const signature = [rect.position.x, rect.position.y, rect.size.width, rect.size.height, actionText(key.actions?.press) ?? ""].join("|")
     groups.set(signature, [...(groups.get(signature) ?? []), key])
   }
   return [...groups.values()].map((keys) => {

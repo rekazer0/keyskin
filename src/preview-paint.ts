@@ -331,7 +331,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   }
 
   // 原生场景已经画了 F14 那条时不重复画。
-  const sceneOwnsToolbar = Boolean(scene && (!scene.partial || keys.some((key) => actionText(key.key.actions.press) === "F14" && sceneKeys.has(key.section))))
+  const sceneOwnsToolbar = Boolean(scene && (!scene.partial || keys.some((key) => actionText(key.key.actions?.press) === "F14" && sceneKeys.has(key.section))))
   if (!sceneOwnsToolbar) paintToolbarStrip(context, toolbarImages, self.toolbarRect, self.panelWidth, self.devicePointWidth)
 
   paintMarquee(context, self.marquee?.rect, () => getComputedStyle(self.canvas).getPropertyValue("--selection").trim())
