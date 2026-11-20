@@ -12,7 +12,7 @@
     "version:feature": "node scripts/bump-version.mjs feature",
     "version:bugfix": "node scripts/bump-version.mjs bugfix",
     "tauri": "node scripts/tauri.mjs",
-    "test": "node --import ./scripts/alias-loader.mjs --test tests/*.test.mjs",
+    "test": "node --import @oxc-node/core/register --test tests/*.test.mjs",
     "test:e2e": "for f in scripts/test-*.mjs; do echo \"== $f\"; node \"$f\" || exit 1; done",
     "test:ui": "node scripts/ui-snapshot.mjs compare"
   },
@@ -39,6 +39,8 @@
     "wasm-media-encoders": "^0.7.0"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.1.1",
+    "@oxc-node/core": "^1.0.2",
     "@cloudbase/cli": "^3.8.1",
     "@tauri-apps/cli": "^2.8.0",
     "playwright": "^1.56.1",
