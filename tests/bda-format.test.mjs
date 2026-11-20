@@ -47,7 +47,7 @@ test("缺少布局骨架时仍能打开，只是没有按键几何", async () =>
   assert.ok(source)
   const model = await readWith(bdaFormat, source)
   assert.ok(model.boards.length > 1, "面板仍应成为板")
-  assert.ok(model.boards.every((board) => board.keys.length === 0), "没有骨架就不该有按键")
+  assert.ok(model.boards.every((board) => board.keys.every((key) => key.layoutId === undefined)), "没有骨架时按键只有样式、没有几何")
   assert.ok(model.boards.every((board) => board.geometry.kind === "client"), "几何来源应标为客户端")
 })
 

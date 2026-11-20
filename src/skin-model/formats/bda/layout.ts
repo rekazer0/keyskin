@@ -178,22 +178,25 @@ type LayoutReadOptions = {
 }
 
 /** 按键容器：背景一层、前景若干层，按下态的高亮背景单独一格。 */
-function containerOf(panel: BdaPanel | undefined, name: string, styleName: (ref: BdaStyleRef) => string): KeyContainer {
+export function keyContainerOf(
+  panel: BdaPanel | undefined,
+  name: string,
+  styleName: (ref: BdaStyleRef) => string | undefined,
+): KeyContainer {
   const entry = panel?.keys.get(name)
   if (!entry) return { fore: [] }
+  const back = entry.backStyle ? styleName(entry.backStyle) : undefined
+  const pressed = entry.backStyleState ? styleName(entry.backStyleState) : undefined
   return {
-    ...(entry.backStyle || entry.backStyleState
-      ? {
-        back: {
-          ...(entry.backStyle ? { style: styleName(entry.backStyle) } : {}),
-          ...(entry.backStyleState ? { pressed: styleName(entry.backStyleState) } : {}),
-        },
-      }
+    ...(back || pressed
+      ? { back: { ...(back ? { style: back } : {}), ...(pressed ? { pressed } : {}) } }
       : {}),
     fore: entry.foreStyles.flatMap((ref, index) => {
+      const style = styleName(ref)
+      if (!style) return []
       const offset = entry.foreStyleOffsets[index]
       return [{
-        style: styleName(ref),
+        style,
         ...(offset ? { offset: { x: offset.x, y: offset.y } } : {}),
       }]
     }),
@@ -206,7 +209,7 @@ function keyOf(key: BdaLayoutKey, panel: BdaPanel | undefined, options: LayoutRe
     id: key.name,
     layoutId: key.rect ? key.name : baseKeyName(key.name),
     actions: action ? { press: action } : {},
-    container: containerOf(panel, key.name, options.styleName),
+    container: keyContainerOf(panel, key.name, options.styleName),
   }
 }
 
