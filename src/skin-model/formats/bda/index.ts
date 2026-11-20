@@ -3,7 +3,7 @@
 // 读分两种：带 `layoutConfig` 的包用包内几何建板；只有外观的包（多数皮肤）用外部布局骨架
 // 提供几何，没有骨架时只建外观板、不伪造坐标。写回时以模型为准重建整套配置，未建模的文件
 // 与字段原样带在 `opaque` 里，避免导出时丢掉读不懂的内容。
-import { type BdaAnimationBinding, type BdaAppearance, type BdaColorStyle, type BdaImageStyle, type BdaKey, type BdaList, type BdaPanel, type BdaStyleRef, type BdaTextStyle, bdaPanelKeyName } from "@/bda.ts"
+import { type BdaAnimationBinding, type BdaAppearance, type BdaCand, type BdaColorStyle, type BdaImageStyle, type BdaKey, type BdaList, type BdaPanel, type BdaStyleRef, type BdaTextStyle, bdaPanelKeyName } from "@/bda.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaLayout, decodeBdaSoundConfig } from "@/bda-decode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
@@ -204,6 +204,31 @@ function panelsAsBoards(appearance: BdaAppearance, options: { theme: Theme; orie
 }
 
 /** 外观里的按键样式覆盖骨架布局里的按键；骨架的编号在 BDA 里不指向任何外观样式。 */
+/** BDA 的候选栏：样式引用归一化，`candKeys` 的图标带上各自的样式引用与角色。 */
+function candidateBarsOf(cand: BdaCand | undefined): import("@/skin-model/panel.ts").CandidateBar[] | undefined {
+  if (!cand) return
+  const style = bdaStyleName(cand.candBarStyle)
+  const cellStyle = bdaStyleName(cand.cellBackStyle)
+  const icons = [...cand.candKeys].map(([name, key]) => {
+    const code = name.replace(/^CAND_/i, "")
+    const foreStyle = key.foreStyles[0] ? bdaStyleName(key.foreStyles[0]) : undefined
+    const backStyle = key.backStyle ? bdaStyleName(key.backStyle) : undefined
+    const action = code === "F0" ? undefined : actionOf(code)
+    return {
+      id: name,
+      ...(foreStyle ? { foreStyle } : {}),
+      ...(backStyle ? { backStyle } : {}),
+      ...(action ? { action } : {}),
+      role: code === "F14" ? "candidates" as const : "icon" as const,
+    }
+  })
+  return [{
+    ...(style ? { style } : {}),
+    ...(cellStyle ? { cellStyle } : {}),
+    ...(icons.length ? { icons } : {}),
+  }]
+}
+
 function applyPanelStyles(
   boards: readonly import("@/skin-model/board.ts").Board[],
   appearance: BdaAppearance,
@@ -211,10 +236,12 @@ function applyPanelStyles(
 ): void {
   for (const board of boards) {
     const panel = appearance.panels.get(keyboardNameOf(board))
-    // 骨架带过来的是 BDS 的列表外观，对 BDA 是错的；BDA 外观没有列表就把这一层删掉。
+    // 骨架带过来的是 BDS 的列表与候选栏，对 BDA 是错的；用 BDA 外观重建，没有就删掉这一层。
     const list = listPanelOf(panel?.lists.get(orientation), bdaStyleName)
-    const { list: _skeletonList, ...panels } = board.panels ?? {}
-    board.panels = list ? { ...panels, list } : (Object.keys(panels).length ? panels : undefined)
+    const candidates = candidateBarsOf(panel?.cand)
+    const { list: _skeletonList, layoutList: _skeletonLayoutList, genList: _skeletonGenList, candidates: _skeletonCandidates, ...panels } = board.panels ?? {}
+    const merged = { ...panels, ...(list ? { list } : {}), ...(candidates ? { candidates } : {}) }
+    board.panels = Object.keys(merged).length ? merged : undefined
     for (const key of board.keys) {
       // 没有动作的键（KEY_F0_*）直接按键名查；有动作的键在骨架里用的是 BDS 键名，靠动作码对齐。
       const action = actionValue(key.actions?.press)

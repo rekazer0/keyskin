@@ -34,8 +34,18 @@ export type ScanPanel = {
   padding?: Rect<number>
 }
 
+/** 工具栏项的锚点：`offset` 相对哪条边，九宫格的语义名。 */
+export type ToolbarAnchor = {
+  x: "left" | "center" | "right"
+  y: "top" | "middle" | "bottom"
+}
+
 export type ToolbarItem = {
   id: string
+  /** 图标图的样式引用（BDS 的 `FORE_STYLE`）；有它就不缺图，`icon` 是直接给图片 id 的写法。 */
+  foreStyle?: string
+  /** 图标底/边框的样式引用（BDS 的 `BACK_STYLE`）。 */
+  backStyle?: string
   icon?: string
   label?: string
   action?: KeyAction
@@ -43,6 +53,10 @@ export type ToolbarItem = {
   /** 图标在工具栏里的位置与尺寸；面板文件按它写 `POS` 与 `SIZE`。 */
   offset?: Point<number>
   size?: Size<number>
+  /** `offset` 的基准：BDS 的 `[ICONn]` 用 `ANCHOR_TYPE` 九宫格。 */
+  anchor?: ToolbarAnchor
+  /** 这一项是普通图标，还是候选词显示区（BDS 的 `[ICONn]` 里 `KEY=F14` 且无样式引用）。 */
+  role?: "icon" | "candidates"
 }
 
 export type Toolbar = {

@@ -5,7 +5,7 @@
 import { IniDocument, blocksOf, numbersOf } from "@/ini.ts"
 import type { DocumentAccess } from "@/skin-model/formats/public/access.ts"
 import type { Board } from "@/skin-model/board.ts"
-import type { BoardPanels, CandidateBar, HintBubble, InputBar, ListPanel, MoreMenu, Offsets, PanelBackdrop, ScanPanel, Toolbar, ToolbarItem } from "@/skin-model/panel.ts"
+import type { BoardPanels, CandidateBar, HintBubble, InputBar, ListPanel, MoreMenu, Offsets, PanelBackdrop, ScanPanel, Toolbar, ToolbarAnchor, ToolbarItem } from "@/skin-model/panel.ts"
 import { boardPanels } from "@/skin-model/panel.ts"
 import type { KeyAction } from "@/skin-model/types.ts"
 
@@ -29,20 +29,42 @@ function numbers(value: string | undefined): number[] {
   return value?.split(",").map((part) => Number(part.trim())).filter(Number.isFinite) ?? []
 }
 
+/** `ANCHOR_TYPE` 的九宫格（1 左上、2 上中、3 右上、4 左中、5 中中、6 右中、7 左下、8 下中、9 右下）。 */
+function anchorOf(value: number): ToolbarAnchor | undefined {
+  if (!Number.isInteger(value) || value < 1 || value > 9) return
+  const x = (["left", "center", "right"] as const)[(value - 1) % 3]
+  const y = (["top", "middle", "bottom"] as const)[Math.ceil(value / 3) - 1]
+  return { x, y }
+}
+
 /** `[ICON1] POS=0,0 SIZE=10,10 KEY=F31` 这类工具栏项。 */
 function toolbarItems(document: IniDocument, actionOf: ActionReader): ToolbarItem[] {
   return document.sections().flatMap((section) => {
     const match = /^ICON(\d+)$/i.exec(section)
     if (!match) return []
-    const position = numbers(document.get(section, "POS"))
-    const size = numbers(document.get(section, "SIZE"))
-    const action = actionOf(document.get(section, "KEY"))
+    const read = (name: string): string | undefined => document.get(section, name)?.trim() || undefined
+    const position = numbers(read("POS"))
+    const size = numbers(read("SIZE"))
+    const action = actionOf(read("KEY"))
+    // BDS 的图标图片来自样式（`FORE_STYLE`），`IMG` 只是直接给图片 id 的另一种写法。
+    const foreStyle = read("FORE_STYLE")?.split(",")[0]?.trim() || undefined
+    const backStyle = read("BACK_STYLE")?.split(",")[0]?.trim() || undefined
+    const icon = read("IMG")
+    const anchor = anchorOf(Number(read("ANCHOR_TYPE")))
+    // 候选词显示区：候选区动作、没有图、矩形占满中间。
+    const role = /^F14$/i.test(read("KEY") ?? "") && !foreStyle && !backStyle && !icon ? "candidates" as const : "icon" as const
     return [{
       id: `icon${match[1]}`,
-      ...(document.get(section, "IMG") ? { icon: document.get(section, "IMG")!.trim() } : {}),
+      ...(foreStyle ? { foreStyle } : {}),
+      ...(backStyle ? { backStyle } : {}),
+      ...(icon ? { icon } : {}),
       ...(action ? { action } : {}),
-      ...(document.get(section, "VISIBLE") === "0" ? { visible: false } : {}),
-      ...(position.length === 2 && size.length === 2 ? { offset: { x: position[0], y: position[1] }, size: { width: size[0], height: size[1] } } : {}),
+      ...(read("VISIBLE") === "0" ? { visible: false } : {}),
+      // `POS` 与 `SIZE` 各自独立：缺一个不影响另一个。
+      ...(position.length === 2 ? { offset: { x: position[0], y: position[1] } } : {}),
+      ...(size.length === 2 ? { size: { width: size[0], height: size[1] } } : {}),
+      ...(anchor ? { anchor } : {}),
+      role,
     }]
   })
 }
@@ -64,7 +86,7 @@ const GEN_MODELED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 function genModeledField(section: string, field: string): boolean {
   const name = field.toUpperCase()
   if (/^OFFSET\d+$/i.test(section)) return name === "POS" || name === "R_POS"
-  if (/^ICON\d+$/i.test(section)) return ["POS", "SIZE", "IMG", "KEY", "VISIBLE"].includes(name)
+  if (/^ICON\d+$/i.test(section)) return ["POS", "SIZE", "IMG", "KEY", "VISIBLE", "FORE_STYLE", "BACK_STYLE", "ANCHOR_TYPE"].includes(name)
   const modeled = GEN_MODELED.get(section.toUpperCase())
   if (!modeled) return false
   return modeled.has(name) || (section.toUpperCase() === "MORE" && /_LAYOUT$/.test(name))
@@ -279,14 +301,24 @@ export function panelsOf(access: DocumentAccess, directory: string, gen: IniDocu
   }
 }
 
+/** 锚点的九宫格编号：1 左上 … 9 右下。 */
+function anchorValue(anchor: ToolbarAnchor): number {
+  const x = { left: 1, center: 2, right: 3 }[anchor.x]
+  const y = { top: 1, middle: 2, bottom: 3 }[anchor.y]
+  return (y - 1) * 3 + x
+}
+
 function iconSection(items: readonly ToolbarItem[], actionValue: ActionWriter): string[] {
   const lines: string[] = []
   items.forEach((item, index) => {
     const action = actionValue(item.action)
     lines.push(`[ICON${index + 1}]`)
-    // 位置与尺寸来自面板定义；没有时退回原点，保持旧行为。
-    lines.push(`POS=${item.offset ? `${item.offset.x},${item.offset.y}` : "0,0"}`)
+    if (item.backStyle) lines.push(`BACK_STYLE=${item.backStyle}`)
+    if (item.foreStyle) lines.push(`FORE_STYLE=${item.foreStyle}`)
     if (item.size) lines.push(`SIZE=${item.size.width},${item.size.height}`)
+    if (item.anchor) lines.push(`ANCHOR_TYPE=${anchorValue(item.anchor)}`)
+    // 位置来自面板定义；没有时退回原点，保持旧行为。
+    lines.push(`POS=${item.offset ? `${item.offset.x},${item.offset.y}` : "0,0"}`)
     if (item.icon) lines.push(`IMG=${item.icon}`)
     if (action) lines.push(`KEY=${action}`)
     if (item.visible === false) lines.push("VISIBLE=0")
