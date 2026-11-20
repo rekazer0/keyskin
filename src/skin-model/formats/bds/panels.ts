@@ -302,6 +302,7 @@ export function panelFiles(
   size: { width: number; height: number },
   actionValue: ActionWriter,
   paths: PanelPaths = {},
+  genPanels: ReadonlyMap<string, ReadonlyArray<ReadonlyMap<string, string>>> = new Map(),
 ): Array<{ path: string; data: Uint8Array }> {
   const text = (value: string) => new TextEncoder().encode(value)
   const files: Array<{ path: string; data: Uint8Array }> = []
@@ -317,6 +318,12 @@ export function panelFiles(
   const iconItems = items.filter((item) => item.icon)
   const nameOf = (path: string | undefined, fallback: string) => (path ?? `${directory}${fallback}`).split("/").pop()!.replace(/\.[^.]+$/, "")
   const genExtraOf = (section: string): string[] => [...(panels.genExtraFields?.get(section) ?? [])]
+  // `[CAND]`/`[INPUT]` 是方向级声明：布局文件里的空段只关闭该布局的面板，不能把 gen.ini 的声明抹掉。
+  // 同名段可以出现多次，按块逐段写回。
+  const rawBlocksOf = (section: string): Array<Array<string>> | undefined => {
+    const blocks = genPanels.get(section)
+    return blocks?.map((fields) => [...fields].map(([key, value]) => `${key}=${value}`))
+  }
 
   // 候选栏与气泡各自一个文件，`gen.ini` 用 LAYOUT_NAME 指向它们。
   // 原包已有 `.cnd` 时它由窗口原样写回，面板生成不覆盖它自己的 VIEW_RECT。
@@ -334,16 +341,22 @@ export function panelFiles(
     files.push({ path: `${directory}cand.cnd`, data: text(lines.join("\n")) })
   }
   // 候选栏的位置与类型写在 gen.ini 的 `[CAND]` 里，与 `.cnd` 是否存在无关；每段各写一份。
-  for (const candidate of panels.candidates ?? []) {
-    background.push(
-      "[CAND]",
-      `LAYOUT_NAME=${candidate.layoutName ?? nameOf(paths.candidate, "cand.cnd")}`,
-      ...(candidate.viewRect
-        ? [`VIEW_RECT=${candidate.viewRect.position.x},${candidate.viewRect.position.y},${candidate.viewRect.size.width},${candidate.viewRect.size.height}`]
-        : []),
-      ...(candidate.type !== undefined ? [`TYPE=${candidate.type}`] : []),
-      "",
-    )
+  // 布局文件里的空 `[CAND]` 只是关闭该布局的候选栏，gen.ini 的方向级声明仍要按原文写回。
+  const rawCandidate = rawBlocksOf("CAND")
+  if (rawCandidate) {
+    for (const block of rawCandidate) background.push("[CAND]", ...block, "")
+  } else {
+    for (const candidate of panels.candidates ?? []) {
+      background.push(
+        "[CAND]",
+        `LAYOUT_NAME=${candidate.layoutName ?? nameOf(paths.candidate, "cand.cnd")}`,
+        ...(candidate.viewRect
+          ? [`VIEW_RECT=${candidate.viewRect.position.x},${candidate.viewRect.position.y},${candidate.viewRect.size.width},${candidate.viewRect.size.height}`]
+          : []),
+        ...(candidate.type !== undefined ? [`TYPE=${candidate.type}`] : []),
+        "",
+      )
+    }
   }
   if (hint) {
     const lines = [
@@ -421,16 +434,18 @@ export function panelFiles(
         "",
       ]
       : []),
-    ...(panels.input
-      ? [
-        "[INPUT]",
-        ...(panels.input.style ? [`BACK_STYLE=${panels.input.style}`] : []),
-        ...(panels.input.foreStyle ? [`FORE_STYLE=${panels.input.foreStyle}`] : []),
-        ...(panels.input.height !== undefined ? [`HEIGHT=${panels.input.height}`] : []),
-        ...genExtraOf("INPUT"),
-        "",
-      ]
-      : []),
+    ...(rawBlocksOf("INPUT")
+      ? rawBlocksOf("INPUT")!.flatMap((block) => ["[INPUT]", ...block, ""])
+      : panels.input
+        ? [
+          "[INPUT]",
+          ...(panels.input.style ? [`BACK_STYLE=${panels.input.style}`] : []),
+          ...(panels.input.foreStyle ? [`FORE_STYLE=${panels.input.foreStyle}`] : []),
+          ...(panels.input.height !== undefined ? [`HEIGHT=${panels.input.height}`] : []),
+          ...genExtraOf("INPUT"),
+          "",
+        ]
+        : []),
     // 图标偏移表：段号就是图标序号。只写原文件里真有的段；`OFFSET_NUM` 只是槽位声明，
     // 按它补空段会凭空造出原文件没有的段。
     ...[...(panels.offsets ?? [])]
