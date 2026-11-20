@@ -1,4 +1,5 @@
-import { type StyleTextVisual, type TextVisual, type Visual, type VisualResolver } from "./atlas.ts"
+import { type Visual, type VisualResolver } from "./atlas.ts"
+import type { KeyVisuals, LayerPaint } from "./paint/key.ts"
 import { IniDocument } from "./ini.ts"
 import { DEFAULT_PANEL_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 import { snapPointToRects } from "./layout.ts"
@@ -11,14 +12,14 @@ import { type LegacyAnimation } from "./preview-animation.ts"
 import { type LegacyHint } from "./preview-hints.ts"
 import { constrainedCanvasSize, setCanvasSize } from "./preview-draw.ts"
 import { paintPreview } from "./preview-paint.ts"
+import { toolbarPaints } from "./preview-toolbar.ts"
+import { bitmapOf } from "./skin-model/image.ts"
 import type { NativeScene } from "./native-scene.ts"
 import type { PreviewClip } from "./animation-preview-model.ts"
 import { playAnimation, restartLegacyPanelAnimation, syncLegacyPanelAnimation } from "./preview-playback.ts"
 import { pointerDown } from "./preview-pointer.ts"
 import { pointerMove } from "./preview-pointer.ts"
 import { pointerUp } from "./preview-pointer.ts"
-import { defaultToolbarIcon } from "./preview-draw.ts"
-import { candidateWordsForeground } from "./candidate-style.ts"
 
 export type PreviewEvent = {
   section: string
@@ -55,9 +56,8 @@ export class Preview {
   // and image decoding. Keep the resolved values for the lifetime of a
   // resolver; drag frames then only redraw geometry instead of repeating the
   // expensive lookups for every key.
-  private readonly visualCache = new Map<string, Promise<Visual | undefined>>()
-  private readonly resourceCache = new Map<string, Promise<Visual | undefined>>()
-  private toolbarImagesCache?: Promise<Visual[]>
+  private readonly resourceCache = new Map<string, Promise<LayerPaint | undefined>>()
+  private toolbarImagesCache?: Promise<LayerPaint[]>
   panelStyle = ""
   panelWidth = DEFAULT_PANEL_WIDTH
   panelHeight = DEFAULT_PANEL_HEIGHT
@@ -127,7 +127,7 @@ export class Preview {
   skinState?: number
   private persistentOnly = false
   animation?: BdaAnimation
-  animationVisual?: { key: PreviewItem; visual: Visual }
+  animationVisual?: { key: PreviewItem; paint: LayerPaint }
   animationTimer?: number
   animationPlayback = 0
   bdaAnimationState?: { key: PreviewItem; startedAt: number }
@@ -167,9 +167,9 @@ export class Preview {
   nativeOverlayVisible = false
   dragDrawFrame = 0
   lastRenderCache?: {
-    panel: Visual | undefined
-    visuals: Map<string, { back: Visual | undefined; fore: Array<Visual | undefined>; text: TextVisual | undefined; styleTexts: Array<StyleTextVisual | undefined> }>
-    toolbarImages: Visual[]
+    panelLayer?: LayerPaint
+    visuals: Map<string, KeyVisuals>
+    toolbarImages: LayerPaint[]
   }
   private readonly resizeObserver: ResizeObserver
 
@@ -365,7 +365,6 @@ export class Preview {
 
   setResolver(resolver?: VisualResolver): void {
     this.resolver = resolver
-    this.visualCache.clear()
     this.resourceCache.clear()
     this.toolbarImagesCache = undefined
     this.lastRenderCache = undefined
@@ -403,41 +402,24 @@ export class Preview {
   /** Scenes whose build has finished, which painting need not wait for. */
   readonly builtScenes = new WeakSet<Promise<NativeScene | undefined>>()
 
-  resolveVisual(styleID: string, highlighted: boolean): Promise<Visual | undefined> {
-    const key = `${highlighted ? "1" : "0"}:${styleID}`
-    let result = this.visualCache.get(key)
-    if (!result) {
-      result = this.resolver?.resolve(styleID, highlighted) ?? Promise.resolve(undefined)
-      this.visualCache.set(key, result)
-    }
-    return result
-  }
-
-  resolveResource(resourceID: string): Promise<Visual | undefined> {
+  resolveResource(resourceID: string): Promise<LayerPaint | undefined> {
     let result = this.resourceCache.get(resourceID)
     if (!result) {
-      const resource = this.resolver?.resolveResource?.(resourceID)
-      result = resource
-        ? resource.then((value) => value ?? this.resolveVisual(resourceID, false))
-        : this.resolveVisual(resourceID, false)
+      const model = this.model
+      const imageID = model ? model.resourceIndex.get(resourceID) ?? resourceID : resourceID
+      const image = model?.images.get(imageID)
+      result = image
+        ? bitmapOf(image).then((bitmap) => bitmap ? { layer: { kind: "image" as const, image: imageID }, bitmap } : undefined)
+        : Promise.resolve(undefined)
       this.resourceCache.set(resourceID, result)
     }
     return result
   }
 
-  resolveToolbar(): Promise<Visual[]> {
-    if (!this.toolbarImagesCache) {
-      this.toolbarImagesCache = this.toolbarSlots && !this.persistentOnly
-        ? (this.resolver?.resolveToolbarImages() ?? Promise.resolve([])).then((visuals) => Promise.all(visuals.map(async (visual) => {
-          if (visual.image || !visual.defaultIcon) return visual
-          const size = Math.min(this.panelWidth / 18, this.panelHeight * 0.45)
-          const color = this.resolver?.resolveText(candidateWordsForeground(this.document, this.offsets), false)?.color
-            ?? getComputedStyle(this.canvas).color
-          const fallback = await defaultToolbarIcon(visual.defaultIcon, size, color)
-          return { ...visual, ...fallback, imageSource: undefined }
-        })))
-        : Promise.resolve([])
-    }
+  resolveToolbar(): Promise<LayerPaint[]> {
+    this.toolbarImagesCache ??= this.toolbarSlots && !this.persistentOnly
+      ? toolbarPaints(this.model, this.board)
+      : Promise.resolve([])
     return this.toolbarImagesCache
   }
 
@@ -486,7 +468,6 @@ export class Preview {
   setPersistentOnly(persistentOnly: boolean): void {
     if (this.persistentOnly === persistentOnly) return
     this.persistentOnly = persistentOnly
-    this.visualCache.clear()
     this.toolbarImagesCache = undefined
     this.keys = this.layoutItems()
     void this.draw()
@@ -509,7 +490,6 @@ export class Preview {
   /** 用当前的源重算一次渲染项；源是异步的，算完再画。 */
   private async applyRenderSource(state?: number): Promise<void> {
     const source = this.renderSource
-    this.visualCache.clear()
     this.lastRenderCache = undefined
     try {
       this.keys = source ? await source(state) : []
@@ -563,7 +543,6 @@ export class Preview {
   setPanel(styleID: string, width: number, height: number, animationStyle = ""): void {
     const animationChanged = this.panelAnimationStyle !== animationStyle
     this.panelStyle = styleID
-    this.visualCache.clear()
     this.lastRenderCache = undefined
     this.panelAnimationStyle = animationStyle
     this.panelWidth = width
@@ -602,7 +581,6 @@ export class Preview {
     this.documentIdentity = identity
     // An edit to the layout is an edit to the skin a scene is built from.
     this.scenes.clear()
-    this.visualCache.clear()
     this.lastRenderCache = undefined
     this.keys = this.layoutItems()
     const available = new Set(this.keys.map((render) => render.key.id))

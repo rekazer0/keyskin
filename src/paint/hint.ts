@@ -1,8 +1,10 @@
 // 长按/滑动提示气泡：一条柱状候选或单字气泡，画在按键上方。
 //
-// 位置、尺寸与候选都来自格式已解析好的数据；这里只负责摆位与画字。
-import { canvasFont, type TextVisual, type Visual } from "../atlas.ts"
-import { drawVisual, phoneForegroundVisual } from "../preview-draw.ts"
+// 位置、尺寸与候选都来自格式已解析好的数据；样式与位图由调用方从模型取好，这里只负责摆位与画字。
+import { canvasFontFamily } from "../atlas.ts"
+import type { LayerPaint } from "./key.ts"
+import { paintLayer } from "./layer.ts"
+import { colorCss, type TextStyle } from "../skin-model/style.ts"
 import type { HintKey } from "../preview-hints.ts"
 import { legacyHintSelectedIndex, legacyHintText } from "../preview-hints.ts"
 
@@ -13,13 +15,13 @@ export type HintPaintData = {
   size: readonly [number, number]
   position: readonly [number, number]
   padding: readonly [number, number, number, number]
-  background?: Visual
-  foreground?: Visual
+  background?: LayerPaint
+  foreground?: LayerPaint
   candidates: readonly string[]
   /** 单元格的常态图与选中图。 */
-  cellVisuals: readonly (Visual | undefined)[]
-  textVisual?: TextVisual
-  selectedTextVisual?: TextVisual
+  cellVisuals: readonly (LayerPaint | undefined)[]
+  textStyle?: TextStyle
+  selectedTextStyle?: TextStyle
   cellSize?: readonly [number, number]
   direction: "center" | "up" | "down" | "left" | "right" | "hold"
   /** 柱状候选：一条里排多个字；否则只画一个字。 */
@@ -28,6 +30,10 @@ export type HintPaintData = {
   dark: boolean
   /** 选中格的宽度，指针事件要按它算命中。 */
   onCellWidth(width: number): void
+}
+
+function fontCss(style: TextStyle | undefined, size: number): string {
+  return `${style?.weight ? `${style.weight} ` : ""}${size}px ${canvasFontFamily(style?.font)}`
 }
 
 /** 画一次气泡；`anchor` 是气泡所属按键的矩形。 */
@@ -42,7 +48,7 @@ export function paintHintBubble(
   const [left, top, right, bottom] = data.padding
   const desiredCellWidth = data.cellSize?.[0] && data.cellSize[0] > 0
     ? data.cellSize[0]
-    : Math.max(data.panelWidth / 14, data.textVisual?.fontSize ?? 0, data.cellVisuals[1]?.source?.[2] ?? 0)
+    : Math.max(data.panelWidth / 14, data.textStyle?.fontSize ?? 0, data.cellVisuals[1]?.bitmap?.width ?? 0)
   const width = data.bar
     ? Math.min(data.panelWidth, Math.max(baseWidth, left + right + data.candidates.length * desiredCellWidth))
     : baseWidth
@@ -51,13 +57,13 @@ export function paintHintBubble(
   // 九键长按时数字键的气泡要挂在按键上方之外，避免盖住键面。
   const nineKeyBar = data.direction === "hold" && /^\d$/.test(key.up) && data.candidates.length > 3
   const rect = { x, y: nineKeyBar ? -height + offsetY : anchor.y - height + offsetY, width, height }
-  drawVisual(context, data.background, rect, true)
-  drawVisual(context, phoneForegroundVisual(data.foreground), rect, false)
+  if (data.background) paintLayer(context, data.background.layer, data.background.bitmap, rect)
+  if (data.foreground) paintLayer(context, data.foreground.layer, data.foreground.bitmap, rect)
   if (!data.bar) {
     const text = legacyHintText(key, data.direction)
     if (!text) return
-    context.fillStyle = data.textVisual?.color ?? (data.dark ? "#f5f5f7" : "#17191c")
-    context.font = canvasFont(data.textVisual?.fontSize ?? Math.max(18, Math.min(42, height * 0.25)), data.textVisual)
+    context.fillStyle = data.textStyle?.color ? colorCss(data.textStyle.color) : (data.dark ? "#f5f5f7" : "#17191c")
+    context.font = fontCss(data.textStyle, data.textStyle?.fontSize ?? Math.max(18, Math.min(42, height * 0.25)))
     context.textAlign = "center"
     context.textBaseline = "middle"
     context.fillText(text, rect.x + left + (width - left - right) / 2, rect.y + top + (height - top - bottom) / 2)
@@ -70,10 +76,11 @@ export function paintHintBubble(
     : height - top - bottom
   data.candidates.forEach((action, index) => {
     const cell = { x: rect.x + left + index * cellWidth, y: rect.y + top, width: cellWidth, height: cellHeight }
-    drawVisual(context, data.cellVisuals[index === selected ? 1 : 0], cell, true)
-    const text = index === selected ? data.selectedTextVisual ?? data.textVisual : data.textVisual
-    context.fillStyle = text?.color ?? (data.dark ? "#f5f5f7" : "#17191c")
-    context.font = canvasFont(text?.fontSize ?? Math.max(18, Math.min(42, height * 0.25)), text)
+    const visual = data.cellVisuals[index === selected ? 1 : 0]
+    if (visual) paintLayer(context, visual.layer, visual.bitmap, cell)
+    const text = index === selected ? data.selectedTextStyle ?? data.textStyle : data.textStyle
+    context.fillStyle = text?.color ? colorCss(text.color) : (data.dark ? "#f5f5f7" : "#17191c")
+    context.font = fontCss(text, text?.fontSize ?? Math.max(18, Math.min(42, height * 0.25)))
     context.textAlign = "center"
     context.textBaseline = "middle"
     context.fillText(action, cell.x + cell.width / 2, cell.y + cell.height / 2)

@@ -3,6 +3,7 @@ import { palmAnimationTableAddress, palmCandidateAddress, palmStyleTableAddress,
 import { palmStylePointer } from "./sxi-styles"
 import { palmTilePointer } from "../palm/palm-style-edit.ts"
 import { appState } from "./state"
+import { skinModel } from "./skin-model-state"
 import { skinState, sourceEditor, theme, orientation, candidateArea, toolbarStrip, candidateBackgroundCanvas, candidateInputBackgroundCanvas, candidateInputBox, candidateInputText, toolbarCanvas } from "./dom"
 import { isListCell } from "../layout.ts"
 import { effectivePanelSection } from "../panel-tools.ts"
@@ -365,7 +366,7 @@ export function refreshToolbarPreview(
   const inputGeneral = bdaPanel?.input?.textStyle
     ? IniDocument.parse(`[INPUT]\nFORE_STYLE=${bdaStyleID(bdaPanel.input.textStyle)}\n`)
     : gen
-  const inputStyle = resolveCandidateInputStyle(inputGeneral, resolver, width, document, inputBarInKeyboard())
+  const inputStyle = resolveCandidateInputStyle(inputGeneral, skinModel.model!, width, document, inputBarInKeyboard())
   const hasInlineStyle = [document, gen].some((config) =>
     config?.get("SCAND", "BACK_STYLE") || config?.get("SCAND", "INPUT_STYLE"),
   )

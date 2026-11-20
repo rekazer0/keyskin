@@ -24,7 +24,7 @@ export type AnimationPlayerOptions = {
   /** A card-sized player: no transport, loops while visible, one frame every 30 ms. */ thumbnail?: boolean | "slow"
   docked?: boolean
   direct?: AnimationDirectEdit
-  sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
+  sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ bitmap: ImageBitmap; animate: boolean }> } | undefined>
   native?: () => Promise<{ key: SceneKey; effects: SceneEffects } | undefined>
 }
 
@@ -107,7 +107,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
 
   const context = canvas.getContext("2d")!
   let tracks = stageTracks(clip.tracks)
-  let sampleLayers: Array<{ visual: Visual; animate: boolean }> = []
+  let sampleLayers: Array<{ bitmap: ImageBitmap; animate: boolean }> = []
   const keyRect = { ...KEY }
   const visuals = new Map<string, Visual | undefined>()
   const images = new Map<string, Frame[]>()
@@ -318,7 +318,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       context.restore()
     }
     if (sampleLayers.length) {
-      for (const layer of sampleLayers) withMotion(context, keyRect, layer.animate ? motionAt(tracks, elapsed, keyRect) : undefined, () => drawVisual(context, layer.visual, keyRect, true))
+      for (const layer of sampleLayers) withMotion(context, keyRect, layer.animate ? motionAt(tracks, elapsed, keyRect) : undefined, () => context.drawImage(layer.bitmap, keyRect.x, keyRect.y, keyRect.width, keyRect.height))
     } else if (tracks.length) withMotion(context, keyRect, motionAt(tracks, elapsed, keyRect), () => {
       context.fillStyle = token("--control")
       context.strokeStyle = token("--line-strong")

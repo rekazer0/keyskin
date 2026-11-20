@@ -1,4 +1,5 @@
-import { type StyleTextVisual, type Visual, canvasFont, isTransparentColor, withTextShadow } from "./atlas.ts"
+import { type Visual, canvasFontFamily, isTransparentColor } from "./atlas.ts"
+import { colorCss, type TextStyle } from "./skin-model/style.ts"
 import { type Rect } from "./preview-items.ts"
 import { iconMarkup } from "./icons.ts"
 
@@ -181,10 +182,16 @@ export function foregroundLayerRect(
   }
 }
 
-export function foregroundTextPoint(rect: Rect, offset?: [number, number]): { x: number; y: number } {
+export function foregroundTextPoint(
+  rect: Rect,
+  offset?: [number, number],
+  unit: "pixel" | "ratio" = "pixel",
+): { x: number; y: number } {
+  // BDA 的前景偏移是按目标高度的比例，BDS 是像素；比例值不缩放会叠在一起。
+  const scale = unit === "ratio" ? rect.height : 1
   return {
-    x: rect.x + rect.width / 2 + (offset?.[0] ?? 0),
-    y: rect.y + rect.height / 2 + (offset?.[1] ?? 0),
+    x: rect.x + rect.width / 2 + (offset?.[0] ?? 0) * scale,
+    y: rect.y + rect.height / 2 + (offset?.[1] ?? 0) * scale,
   }
 }
 
@@ -344,13 +351,25 @@ export function withTransform(
 
 export function drawStyleText(
   context: CanvasRenderingContext2D,
-  visual: StyleTextVisual,
+  label: { text: string; style: TextStyle },
   point: { x: number; y: number },
   theme: "light" | "dark",
 ): void {
-  context.fillStyle = visual.color ?? (theme === "dark" ? "#f5f5f7" : "#17191c")
-  context.font = canvasFont(visual.fontSize ?? 24, visual)
+  const style = label.style
+  context.fillStyle = style.color ? colorCss(style.color) : (theme === "dark" ? "#f5f5f7" : "#17191c")
+  context.font = `${style.weight ? `${style.weight} ` : ""}${style.fontSize ?? 24}px ${canvasFontFamily(style.font)}`
   context.textAlign = "center"
   context.textBaseline = "middle"
-  withTextShadow(context, visual, () => context.fillText(visual.text, point.x, point.y))
+  const shadow = style.shadow
+  if (shadow && shadow.size > 0 && !isTransparentColor(colorCss(shadow.color))) {
+    context.save()
+    context.shadowColor = colorCss(shadow.color)
+    context.shadowBlur = shadow.size / 5
+    context.shadowOffsetX = shadow.offset?.x ?? 0
+    context.shadowOffsetY = shadow.offset?.y ?? shadow.size
+    context.fillText(label.text, point.x, point.y)
+    context.restore()
+  } else {
+    context.fillText(label.text, point.x, point.y)
+  }
 }

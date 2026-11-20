@@ -1,6 +1,21 @@
 import type { Preview } from "./preview.ts"
 import { bitmapOf } from "./skin-model/image.ts"
-import { styleLayers } from "./skin-model/style.ts"
+import { styleLabel, styleLayers, styleText } from "./skin-model/style.ts"
+import type { SkinModel } from "./skin-model/model.ts"
+import type { LayerPaint } from "./paint/key.ts"
+import { paintLayer } from "./paint/layer.ts"
+
+/** 从模型取一个样式 id 的背景图层与位图；没有样式或没有可画图层就是 undefined。 */
+async function paintOf(model: SkinModel, styleID: string, highlighted = false): Promise<LayerPaint | undefined> {
+  const layers = styleLayers(model, styleID, highlighted)
+  const image = layers.find((layer) => layer.kind === "image")
+  if (image?.kind === "image") {
+    const source = model.images.get(image.image)
+    return { layer: image, ...(source ? { bitmap: await bitmapOf(source) } : {}) }
+  }
+  const color = layers.find((layer) => layer.kind === "color")
+  return color ? { layer: color } : undefined
+}
 import { drawMeasurements } from "./preview-measurements.ts"
 import { legacyParticleFrames } from "./preview-animation.ts"
 import { drawSprite, type SceneSprite } from "./native-motion.ts"
@@ -10,10 +25,8 @@ import { bdaBindingEffects } from "./preview-animation.ts"
 import { bdaParticleEmitter } from "./preview-animation.ts"
 import { hintKeyOf, legacyHintCandidates } from "./preview-hints.ts"
 import { legacyHintIconID } from "./preview-hints.ts"
-import { type Visual } from "./atlas.ts"
 import { previewSurfaceColor, isFullPanelPreviewItem } from "./preview-items.ts"
 import { actionText } from "./skin-model/inspect.ts"
-import { drawVisual } from "./preview-draw.ts"
 import { paintMarquee } from "./paint/marquee.ts"
 import { paintHintBubble } from "./paint/hint.ts"
 import { paintKey, type KeyAnimationState, type KeyPaintEnv } from "./paint/key.ts"
@@ -40,7 +53,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   // 拖拽时跳过 resolver 的 ready 等待，使用已缓存的数据
   if (!isDragging) {
     try {
-      await self.resolver?.ready?.()
+
     } catch (error) {
       console.warn("预览解析准备失败:", error)
       return
@@ -123,24 +136,24 @@ export async function paintPreview(self: Preview): Promise<void> {
   })
 
   // 拖拽时优先使用缓存的视觉数据，避免重复异步解析
-  let panel: Visual | undefined
+  let panelLayer: LayerPaint | undefined
   let visuals: NonNullable<Preview["lastRenderCache"]>["visuals"]
-  let toolbarImages: Visual[]
+  let toolbarImages: LayerPaint[]
 
   if (scene && !scene.partial) {
-    panel = undefined
+    panelLayer = undefined
     visuals = new Map()
     toolbarImages = []
   } else if (isDragging && self.lastRenderCache) {
     // 使用缓存数据进行快速拖拽渲染
-    panel = self.lastRenderCache.panel
+    panelLayer = self.lastRenderCache.panelLayer
     visuals = self.lastRenderCache.visuals
     toolbarImages = self.lastRenderCache.toolbarImages
   } else {
     // 正常渲染：完整解析所有视觉元素
     try {
-      [panel, visuals, toolbarImages] = await Promise.all([
-        self.resolver?.resolve(self.panelStyle, false).catch(() => undefined),
+      [panelLayer, visuals, toolbarImages] = await Promise.all([
+        self.model ? paintOf(self.model, self.panelStyle) : Promise.resolve(undefined),
         Promise.all(keys.map(async (key) => {
           const draft = self.draftVisual && key.sections.includes(self.draftVisual.section) ? self.draftVisual : undefined
           const foreStyles = [...key.foreStyles]
@@ -151,58 +164,36 @@ export async function paintPreview(self: Preview): Promise<void> {
             self.legacyAnimationStates.has(key.section) ||
             self.keyPressed(key)
           try {
-            // 新路径：样式与图片直接从模型取；旧路径（resolver）仍然保留，两条路并存。
+            // 样式与图片只从模型取。
             const model = self.model
-            const layerPaint = async (styleID: string | undefined) => {
-              if (!model) return undefined
-              const layers = styleLayers(model, styleID ?? "", highlighted)
-              const image = layers.find((layer) => layer.kind === "image")
-              if (image?.kind === "image") {
-                const source = model.images.get(image.image)
-                return { layer: image, ...(source ? { bitmap: await bitmapOf(source) } : {}) }
-              }
-              const color = layers.find((layer) => layer.kind === "color")
-              return color ? { layer: color } : undefined
-            }
             const backID = highlighted ? key.highlightBackStyle ?? key.backStyle ?? "" : key.backStyle ?? ""
             return {
-              ...(model ? {
-                backLayer: await layerPaint(backID),
-                foreLayers: await Promise.all(foreStyles.map((style) => layerPaint(style))),
-              } : {}),
-              back: draft && !draft.foreground ? draft.visual : await self.resolveVisual(
-                backID,
-                highlighted,
-              ).catch(() => undefined),
-              fore: await Promise.all(
-                foreStyles.map((style, index) => draft?.foreground && draft.layer === index ? draft.visual : self.resolveVisual(style, highlighted).catch(() => undefined)),
-              ),
-              text: key.key.kind === "list-cell" && self.resolver?.resolveListText
-                ? self.resolver.resolveListText(foreStyles.join(","), highlighted)
-                : self.resolver?.resolveText(foreStyles.join(","), highlighted),
-              // A list cell shows its own entry (NAMES); a label carried by its shared style is not the cell's text.
-              styleTexts: key.key.kind === "list-cell" ? [] : foreStyles.map((style) =>
-                self.resolver?.resolveStyleText?.(style, highlighted)
-              ),
+              backLayer: model ? await paintOf(model, backID, highlighted) : undefined,
+              foreLayers: await Promise.all(foreStyles.map((style) => model ? paintOf(model, style, highlighted) : undefined)),
+              textStyle: model ? styleText(model, foreStyles.join(","), highlighted) : undefined,
+              // 列表格显示自己的条目，不取共享样式里的标签。
+              labels: key.key.kind === "list-cell" || !model
+                ? []
+                : foreStyles.map((style) => styleLabel(model, style, highlighted)),
             }
           } catch (error) {
             console.warn(`解析按键 ${key.section} 失败:`, error)
             return {
-              back: undefined,
-              fore: [],
-              text: undefined,
-              styleTexts: [],
+              backLayer: undefined,
+              foreLayers: [],
+              textStyle: undefined,
+              labels: [],
             }
           }
         })).then((resolved) => new Map(keys.map((key, index) => [key.section, resolved[index]]))),
         self.resolveToolbar().catch(() => []),
       ])
       // 按键按下动画会改变绘制顺序，缓存必须按 section 匹配。
-      self.lastRenderCache = { panel, visuals, toolbarImages }
+      self.lastRenderCache = { panelLayer, visuals, toolbarImages }
     } catch (error) {
       console.warn("预览渲染解析失败:", error)
       // 使用空数据继续渲染，避免完全失败
-      panel = undefined
+      panelLayer = undefined
       visuals = new Map()
       toolbarImages = []
     }
@@ -212,30 +203,24 @@ export async function paintPreview(self: Preview): Promise<void> {
     Promise.all(particleStyleIDs.map(async (styleID) =>
       await self.resolveResource(styleID).catch(() => undefined)
     )),
-    hintIcon
-      ? Promise.all([
-          self.resolveVisual(hintIcon.backStyle, false).catch(() => undefined),
-          self.resolveVisual(hintIcon.foreStyle, false).catch(() => undefined),
-        ])
+    hintIcon && self.model
+      ? Promise.all([paintOf(self.model, hintIcon.backStyle ?? ""), paintOf(self.model, hintIcon.foreStyle ?? "")])
       : Promise.resolve([undefined, undefined]),
-    hintIcon ? self.resolver?.resolveText(hintIcon.foreStyle, false) : undefined,
-    hintIcon ? self.resolver?.resolveText(hintIcon.foreStyle, true) : undefined,
-    hintBar && hintCellStyle
-      ? Promise.all([
-          self.resolveVisual(hintCellStyle, false).catch(() => undefined),
-          self.resolveVisual(hintCellStyle, true).catch(() => undefined),
-        ])
+    hintIcon && self.model ? styleText(self.model, hintIcon.foreStyle ?? "", false) : undefined,
+    hintIcon && self.model ? styleText(self.model, hintIcon.foreStyle ?? "", true) : undefined,
+    hintBar && hintCellStyle && self.model
+      ? Promise.all([paintOf(self.model, hintCellStyle), paintOf(self.model, hintCellStyle, true)])
       : Promise.resolve([undefined, undefined]),
   ])
   if (drawID !== self.drawID) return
   const context = beginCanvas(self)
   if (!context) return
   if (scene) for (const layer of scene.background) drawSceneLayer(context, layer)
-  else drawVisual(
+  else if (panelLayer) paintLayer(
     context,
-    panel,
+    panelLayer.layer,
+    panelLayer.bitmap,
     { x: 0, y: -self.panelTopInset, width: self.panelWidth, height: self.surfaceHeight + self.panelTopInset },
-    true,
   )
 
   const sprites: SceneSprite[] = []
@@ -328,8 +313,8 @@ export async function paintPreview(self: Preview): Promise<void> {
       foreground: hintVisuals[1],
       candidates: hintCandidates,
       cellVisuals: hintCellVisuals,
-      textVisual: hintTextVisual,
-      selectedTextVisual: hintSelectedTextVisual,
+      textStyle: hintTextVisual,
+      selectedTextStyle: hintSelectedTextVisual,
       cellSize: hintCellSize,
       direction: hintDirection,
       bar: hintBar,
@@ -347,12 +332,13 @@ export async function paintPreview(self: Preview): Promise<void> {
   paintParticles(context, allParticleFrames, (styleID) => particleVisualByStyle.get(styleID))
 
   if (self.animationVisual) {
-    drawVisual(context, self.animationVisual.visual, self.animationVisual.key.rect, false)
+    const paint = self.animationVisual.paint
+    paintLayer(context, paint.layer, paint.bitmap, self.animationVisual.key.rect)
   }
 
   // 原生场景已经画了 F14 那条时不重复画。
   const sceneOwnsToolbar = Boolean(scene && (!scene.partial || keys.some((key) => actionText(key.key.actions?.press) === "F14" && sceneKeys.has(key.section))))
-  if (!sceneOwnsToolbar) paintToolbarStrip(context, toolbarImages, self.toolbarRect, self.panelWidth, self.devicePointWidth)
+  if (!sceneOwnsToolbar) paintToolbarStrip(context, toolbarImages, self.toolbarRect)
 
   paintMarquee(context, self.marquee?.rect, () => getComputedStyle(self.canvas).getPropertyValue("--selection").trim())
   drawGuides(self, visible)

@@ -1,4 +1,5 @@
-import type { TextVisual, VisualResolver } from "./atlas.ts"
+import type { SkinModel } from "./skin-model/model.ts"
+import { styleLayers, styleText, type TextStyle } from "./skin-model/style.ts"
 import type { IniDocument } from "./ini.ts"
 import { DEFAULT_CANDIDATE_HEIGHT, DEFAULT_PANEL_WIDTH } from "./keyboard.ts"
 
@@ -103,18 +104,18 @@ export function candidateInputForegroundStyle(
 
 export function resolveCandidateInputTextVisual(
   general: IniDocument | undefined,
-  resolver: VisualResolver,
+  model: SkinModel,
   candidate?: IniDocument,
   inKeyboard = false,
   skinFont = false,
-): TextVisual | undefined {
-  const visual = resolver.resolveText(candidateInputForegroundStyle(general, candidate), false)
+): TextStyle | undefined {
+  const visual = styleText(model, candidateInputForegroundStyle(general, candidate), false)
   if (!visual) return
   // 和候选字一样，输入码文字在真机用用户字体（InputBarView/CandHandler），皮肤只提供字号与颜色；
   // 预览不能套 FONT_NAME，否则真机与画布不一致。
   const userFont = candidateUserFont(visual, skinFont)!
   if (!inKeyboard) return userFont
-  const input = resolver.resolveText(candidateInputSizeForeground(general, candidate), false)
+  const input = styleText(model, candidateInputSizeForeground(general, candidate), false)
   // shortcut: iOS 的 INPUT 字号与 SCAND 颜色已按真机截图校准，取得 iOS 绘制代码后核对更多皮肤。
   return { ...input, ...userFont, fontSize: input?.fontSize ?? visual.fontSize }
 }
@@ -136,34 +137,36 @@ export function candidateInputBackgroundStyle(
 // 百度真机候选字使用用户字体（含字重），皮肤样式只提供字号与颜色。编辑器无法得知用户字体，
 // 因此预览固定用系统字体，不能套用皮肤 FONT_NAME / FONT_PATH，否则会与真机不一致。
 // 搜狗皮肤的 TYPEFACE 由皮肤自己指定（skinFont），照用。
-function candidateUserFont(visual: TextVisual | undefined, skinFont: boolean): TextVisual | undefined {
-  return visual && (skinFont ? visual : { ...visual, fontName: undefined })
+function candidateUserFont(style: TextStyle | undefined, skinFont: boolean): TextStyle | undefined {
+  return style && (skinFont ? style : { ...style, font: undefined })
 }
 
 export function resolveCandidateTextVisuals(
   candidate: IniDocument | undefined,
   general: IniDocument | undefined,
-  resolver: VisualResolver,
+  model: SkinModel,
   skinFont = false,
-): { normal: TextVisual | undefined; first: TextVisual | undefined } {
+): { normal: TextStyle | undefined; first: TextStyle | undefined } {
   return {
-    normal: candidateUserFont(resolver.resolveText(candidateWordsForeground(candidate, general), false), skinFont),
-    first: candidateUserFont(resolver.resolveText(candidateFirstForeground(candidate, general), false), skinFont),
+    normal: candidateUserFont(styleText(model, candidateWordsForeground(candidate, general), false), skinFont),
+    first: candidateUserFont(styleText(model, candidateFirstForeground(candidate, general), false), skinFont),
   }
 }
 
 export function resolveCandidateInputStyle(
   general: IniDocument | undefined,
-  resolver: VisualResolver,
+  model: SkinModel,
   width: number,
   candidate?: IniDocument,
   inKeyboard = false,
 ): CandidateInputStyle {
   const foregroundStyle = candidateInputForegroundStyle(general, candidate)
-  const fontSize = resolveCandidateInputTextVisual(general, resolver, candidate, inKeyboard)?.fontSize
-  const background = inKeyboard
-    ? resolver.sourceSize?.(candidateInputBackgroundStyle(general, candidate, true), false)
+  const fontSize = resolveCandidateInputTextVisual(general, model, candidate, inKeyboard)?.fontSize
+  const backgroundLayer = inKeyboard
+    ? styleLayers(model, candidateInputBackgroundStyle(general, candidate, true), false).find((layer) => layer.kind === "image")
     : undefined
+  const backgroundImage = backgroundLayer?.kind === "image" ? model.images.get(backgroundLayer.image) : undefined
+  const background = backgroundImage ? { width: backgroundImage.width, height: backgroundImage.height } : undefined
   return { foregroundStyle, ...inputBarMetrics(fontSize, width, background) }
 }
 

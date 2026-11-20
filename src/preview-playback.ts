@@ -44,10 +44,10 @@ export async function playAnimation(self: Preview, key: PreviewItem): Promise<vo
       return
     }
     if (frame.resourceID === undefined) return play(index + 1)
-    const visual = await self.resolveResource(frame.resourceID).catch(() => undefined)
+    const paint = await self.resolveResource(frame.resourceID).catch(() => undefined)
     if (playback !== self.animationPlayback) return
-    if (!visual) return play(index + 1)
-    self.animationVisual = { key, visual }
+    if (!paint) return play(index + 1)
+    self.animationVisual = { key, paint }
     self.draw()
     self.animationTimer = window.setTimeout(() => void play(index + 1), Math.max(16, frame.duration ?? 0))
   }

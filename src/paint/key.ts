@@ -1,9 +1,9 @@
 // 一个按键的绘制：背景一层、前景层栈、文字，各自带自己的动画变换。
 //
 // 数据来自渲染项（几何 + 样式引用）；图与文字由调用方事先解析好传进来。
-import { canvasFont, withTextShadow, type StyleTextVisual, type TextVisual, type Visual } from "../atlas.ts"
+import { canvasFontFamily, isTransparentColor } from "../atlas.ts"
+import { colorCss, type SkinLayer, type TextStyle } from "../skin-model/style.ts"
 import { paintLayer } from "./layer.ts"
-import type { SkinLayer } from "../skin-model/style.ts"
 import { drawSceneLayer, type NativeScene, type SceneKey, type SceneLayer } from "../native-scene.ts"
 import { withMotion, type SceneSprite } from "../native-motion.ts"
 import type { PreviewItem, Rect } from "../preview-items.ts"
@@ -11,10 +11,8 @@ import { paddedRect, previewFallbackText, shouldDrawItemBackground } from "../pr
 import {
   drawListText,
   drawStyleText,
-  drawVisual,
   foregroundLayerRect,
   foregroundTextPoint,
-  phoneForegroundLayers,
   withTransform,
 } from "../preview-draw.ts"
 
@@ -23,13 +21,12 @@ export type LayerPaint = { layer: SkinLayer; bitmap?: ImageBitmap }
 
 /** 一个键解析后的图与文字；没有就是没解析到。 */
 export type KeyVisuals = {
-  back?: Visual
-  fore?: (Visual | undefined)[]
-  text?: TextVisual
-  styleTexts?: (StyleTextVisual | undefined)[]
-  /** 新路径：从模型取的图层；有值时优先于 `back`/`fore`。 */
+  /** 从模型取的图层；`back`/`fore` 的旧解析结果已经退役。 */
   backLayer?: LayerPaint
   foreLayers?: (LayerPaint | undefined)[]
+  /** 键上文字与样式标签，都来自模型的 `text` 层。 */
+  textStyle?: TextStyle
+  labels?: ReadonlyArray<{ text: string; style: TextStyle } | undefined>
 }
 
 /** 动画在某一时刻的变换；缺省表示这一项不动。 */
@@ -81,11 +78,9 @@ export function paintKey(env: KeyPaintEnv, key: PreviewItem, animation: KeyAnima
   }
   const area = paddedRect(key)
   const visual = env.visuals.get(key.section)
-  const styleTexts = visual?.styleTexts ?? []
-  const foregrounds = phoneForegroundLayers(visual?.fore ?? [])
-  // 新路径的图层来自模型；旧路径来自解析器。两边的层数取多者，缺的一边留空。
-  const foreCount = Math.max(foregrounds.length, visual?.foreLayers?.length ?? 0)
-  const hasForeground = foregrounds.some(Boolean) || styleTexts.some(Boolean)
+  const labels = visual?.labels ?? []
+  const foreLayers = visual?.foreLayers ?? []
+  const hasForeground = foreLayers.some(Boolean) || labels.some(Boolean)
   const elapsed = animation.playerElapsed ?? (
     animation.startedAt === undefined ? -1 : Date.now() - animation.startedAt
   )
@@ -93,36 +88,35 @@ export function paintKey(env: KeyPaintEnv, key: PreviewItem, animation: KeyAnima
     const back = animation.transformOf(animation.backAnim, elapsed, area, "back")
     withTransform(context, area, back.scale, back.translation, back.rotation, back.opacity, () => {
       if (visual?.backLayer) paintLayer(context, visual.backLayer.layer, visual.backLayer.bitmap, area)
-      else drawVisual(context, visual?.back, area, true)
     })
   }
-  for (let layer = 0; layer < foreCount; layer++) {
-    const fore = foregrounds[layer] as Visual | undefined
+  for (let layer = 0; layer < foreLayers.length; layer++) {
+    const paint = foreLayers[layer]
+    if (!paint) continue
     const style = key.container.fore[layer]?.anim || key.container.press
     const transform = animation.transformOf(style, elapsed, area, "fore")
     const offset = key.container.fore[layer]?.offset
-    const paint = visual?.foreLayers?.[layer]
-    const source = paint?.bitmap
+    const source = paint.bitmap
       ? [0, 0, paint.bitmap.width, paint.bitmap.height] as [number, number, number, number]
-      : fore?.source
+      : undefined
     const destination = foregroundLayerRect(area, source, offset ? [offset.x, offset.y] : undefined)
     withTransform(context, area, transform.scale, transform.translation, transform.rotation, transform.opacity, () => {
-      if (paint) paintLayer(context, paint.layer, paint.bitmap, destination)
-      else drawVisual(context, fore, destination, false)
+      paintLayer(context, paint.layer, paint.bitmap, destination)
     })
   }
-  for (const [layer, styleText] of styleTexts.entries()) {
-    if (!styleText || foregrounds[layer]) continue
+  for (const [layer, label] of labels.entries()) {
+    if (!label || foreLayers[layer]) continue
     const style = key.container.fore[layer]?.anim || key.container.press
     const transform = animation.transformOf(style, elapsed, area, "fore")
     const offset = key.container.fore[layer]?.offset
-    const point = foregroundTextPoint(area, offset ? [offset.x, offset.y] : undefined)
+    const unit = key.container.fore[layer]?.offsetUnit
+    const point = foregroundTextPoint(area, offset ? [offset.x, offset.y] : undefined, unit)
     withTransform(context, area, transform.scale, transform.translation, transform.rotation, transform.opacity, () => {
-      drawStyleText(context, styleText, point, env.theme)
+      drawStyleText(context, label, point, env.theme)
     })
   }
   env.strokeSelection(key)
-  paintKeyText(env, key, area, visual?.text, elapsed, hasForeground, animation)
+  paintKeyText(env, key, area, visual?.textStyle, elapsed, hasForeground, animation)
 }
 
 /** 原生场景里的键：图层由场景给，位移按场景坐标缩放。 */
@@ -154,7 +148,7 @@ function paintKeyText(
   env: KeyPaintEnv,
   key: PreviewItem,
   area: { x: number; y: number; width: number; height: number },
-  textVisual: TextVisual | undefined,
+  textStyle: TextStyle | undefined,
   elapsed: number,
   hasForeground: boolean,
   animation: KeyAnimationState,
@@ -166,14 +160,25 @@ function paintKeyText(
   withTransform(context, area, transform.scale, transform.translation, transform.rotation, transform.opacity, () => {
     const centerX = area.x + area.width / 2
     const centerY = area.y + area.height / 2
-    context.fillStyle = textVisual?.color ?? (env.theme === "dark" ? "#f5f5f7" : "#17191c")
-    context.font = canvasFont(textVisual?.fontSize ?? Math.max(18, Math.min(42, area.height * 0.25)), textVisual)
+    context.fillStyle = textStyle?.color ? colorCss(textStyle.color) : (env.theme === "dark" ? "#f5f5f7" : "#17191c")
+    context.font = `${textStyle?.weight ? `${textStyle.weight} ` : ""}${textStyle?.fontSize ?? Math.max(18, Math.min(42, area.height * 0.25))}px ${canvasFontFamily(textStyle?.font)}`
     context.textAlign = "center"
     context.textBaseline = "middle"
-    withTextShadow(context, textVisual, () => {
+    const shadow = textStyle?.shadow
+    if (shadow && shadow.size > 0 && !isTransparentColor(colorCss(shadow.color))) {
+      context.save()
+      context.shadowColor = colorCss(shadow.color)
+      context.shadowBlur = shadow.size / 5
+      context.shadowOffsetX = shadow.offset?.x ?? 0
+      context.shadowOffsetY = shadow.offset?.y ?? shadow.size
       if (key.key.kind === "list-cell") drawListText(context, text, centerX, centerY)
       else context.fillText(text, centerX, centerY)
-    })
+      context.restore()
+    } else if (key.key.kind === "list-cell") {
+      drawListText(context, text, centerX, centerY)
+    } else {
+      context.fillText(text, centerX, centerY)
+    }
   })
 }
 

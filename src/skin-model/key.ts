@@ -20,6 +20,8 @@ export type KeyLayer = {
   style?: string
   /** 相对按键的偏移；空位表示这一层不偏移。 */
   offset?: Point<number>
+  /** 偏移的单位：`ratio` 是按目标高度的比例（BDA），缺省是像素（BDS）。 */
+  offsetUnit?: "pixel" | "ratio"
   /** 这一层自己的动画样式。 */
   anim?: string
   /** 按下时的样式；只有背景层用它。 */

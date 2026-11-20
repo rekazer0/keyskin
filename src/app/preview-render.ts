@@ -1,5 +1,6 @@
 import { appState } from "./state"
 import { skinModel } from "./skin-model-state"
+import { styleText } from "../skin-model/style.ts"
 import { containerOf } from "../skin-model/board.ts"
 import { boardRenders } from "../paint/board.ts"
 import { syncLayoutChoices } from "./layout-switch"
@@ -270,8 +271,8 @@ export function refreshPreview(): void {
     const panelHeight = container?.height ?? config.height
     const skinFont = appState.archive.format === "ssf"
     const native = nativeCandidateText(panelWidth)
-    const builtIn = resolveCandidateTextVisuals(candidateLayout, context.gen, resolver, skinFont)
-    const inputVisual = merged(resolveCandidateInputTextVisual(context.gen, resolver, candidateLayout, inputBarInKeyboard(), skinFont), native?.input)
+    const builtIn = resolveCandidateTextVisuals(candidateLayout, context.gen, skinModel.model!, skinFont)
+    const inputVisual = merged(resolveCandidateInputTextVisual(context.gen, skinModel.model!, candidateLayout, inputBarInKeyboard(), skinFont), native?.input)
     const candidateVisual = merged(builtIn.normal, native?.words)
     const firstCandidateVisual = native?.first ? merged(builtIn.first ?? builtIn.normal, native.first) : builtIn.first
     appState.firstCandidateTextVisual = firstCandidateVisual
@@ -314,10 +315,10 @@ export function refreshPreview(): void {
     const candidateDocument = toolbarConfigPath() ? textDocument(toolbarConfigPath()!) : undefined
     const panel = currentBdaAppearance()?.appearance.panels.get(layout.value.replace(/\.ini$/i, ""))
     const inputVisual = panel?.input?.textStyle
-      ? resolver?.resolveText(bdaStyleID(panel.input.textStyle), false)
-      : resolver && resolveCandidateInputTextVisual(bdaGen, resolver, candidateDocument, inputBarInKeyboard())
+      ? styleText(skinModel.model!, bdaStyleID(panel.input.textStyle), false)
+      : skinModel.model ? resolveCandidateInputTextVisual(bdaGen, skinModel.model, candidateDocument, inputBarInKeyboard()) : undefined
     const { normal: candidateVisual, first: firstVisual } = resolver
-      ? resolveCandidateTextVisuals(candidateDocument, bdaGen, resolver)
+      ? resolveCandidateTextVisuals(candidateDocument, bdaGen, skinModel.model!)
       : { normal: undefined, first: undefined }
     appState.candidateTextWidth = panelWidth
     appState.firstCandidateTextVisual = firstVisual

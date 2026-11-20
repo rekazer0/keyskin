@@ -204,9 +204,17 @@ function panelsAsBoards(appearance: BdaAppearance, options: { theme: Theme; orie
 }
 
 /** 外观里的按键样式覆盖骨架布局里的按键；骨架的编号在 BDA 里不指向任何外观样式。 */
-function applyPanelStyles(boards: readonly import("@/skin-model/board.ts").Board[], appearance: BdaAppearance): void {
+function applyPanelStyles(
+  boards: readonly import("@/skin-model/board.ts").Board[],
+  appearance: BdaAppearance,
+  orientation: Orientation,
+): void {
   for (const board of boards) {
     const panel = appearance.panels.get(keyboardNameOf(board))
+    // 骨架带过来的是 BDS 的列表外观，对 BDA 是错的；BDA 外观没有列表就把这一层删掉。
+    const list = listPanelOf(panel?.lists.get(orientation), bdaStyleName)
+    const { list: _skeletonList, ...panels } = board.panels ?? {}
+    board.panels = list ? { ...panels, list } : (Object.keys(panels).length ? panels : undefined)
     for (const key of board.keys) {
       // 没有动作的键（KEY_F0_*）直接按键名查；有动作的键在骨架里用的是 BDS 键名，靠动作码对齐。
       const action = actionValue(key.actions?.press)
@@ -265,7 +273,7 @@ async function bdaToModel(documents: SkinDocuments, hints: BdaReadHints, options
     const layout = layoutOf(hints.base, hints.theme, hints.orientation)
     if (layout) {
       const parsed = await layoutBoards(hints.base, hints.theme, hints.orientation, layout, "main", options)
-      applyPanelStyles(parsed.boards, appearance)
+      applyPanelStyles(parsed.boards, appearance, hints.orientation)
       boards = parsed.boards
     } else {
       boards = panelsAsBoards(appearance, hints)

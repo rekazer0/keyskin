@@ -198,7 +198,7 @@ export function keyContainerOf(
       const offset = entry.foreStyleOffsets[index]
       return [{
         style,
-        ...(offset ? { offset: { x: offset.x, y: offset.y } } : {}),
+        ...(offset ? { offset: { x: offset.x, y: offset.y }, offsetUnit: "ratio" as const } : {}),
       }]
     }),
   }
@@ -240,6 +240,8 @@ export function listPanelOf(
   styleName: (ref: BdaStyleRef) => string | undefined,
 ): ListPanel | undefined {
   if (!list) return undefined
+  // 外观里的引用是包内的数字编码；IR 的样式键由注入的 `styleName` 归一化，
+  // 两个入口（有包内布局与骨架布局）必须用同一套转换。
   const style = list.backStyle ? styleName(list.backStyle) : undefined
   const cellStyle = list.cellBackStyle ? styleName(list.cellBackStyle) : undefined
   const foreStyle = list.cellForeStyle ? styleName(list.cellForeStyle) : undefined

@@ -82,3 +82,31 @@ export function colorCss(value: string): string {
   const blue = Number.parseInt(hex.slice(6, 8), 16)
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }
+
+/** 逗号分隔的样式 id：取文字层，字段级取第一个有值的（BDS 的多前景写法）。 */
+export function styleText(model: SkinModel | undefined, styleIDs: string, highlighted: boolean): TextStyle | undefined {
+  if (!model) return
+  const result: TextStyle = {}
+  for (const token of styleIDs.split(",").map((value) => value.trim()).filter(Boolean)) {
+    const text = styleLayers(model, token, highlighted).find((layer) => layer.kind === "text")
+    if (text?.kind !== "text") continue
+    const style = text.style
+    if (result.font === undefined && style.font) result.font = style.font
+    if (result.fontSize === undefined && style.fontSize !== undefined) result.fontSize = style.fontSize
+    if (result.weight === undefined && style.weight !== undefined) result.weight = style.weight
+    if (result.color === undefined && style.color) result.color = style.color
+    if (result.shadow === undefined && style.shadow) result.shadow = style.shadow
+  }
+  return Object.keys(result).length ? result : undefined
+}
+
+/** 样式自带的标签：文字层的内容与样式。 */
+export function styleLabel(
+  model: SkinModel | undefined,
+  styleID: string,
+  highlighted: boolean,
+): { text: string; style: TextStyle } | undefined {
+  const text = styleLayers(model, styleID, highlighted).find((layer) => layer.kind === "text")
+  if (text?.kind !== "text" || text.text === undefined) return
+  return { text: text.text, style: text.style }
+}
