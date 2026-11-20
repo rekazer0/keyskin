@@ -501,7 +501,13 @@ export class Preview {
     const source = this.renderSource
     this.visualCache.clear()
     this.lastRenderCache = undefined
-    this.keys = source ? await source(state) : []
+    try {
+      this.keys = source ? await source(state) : []
+    } catch (error) {
+      this.keys = []
+      // 渲染项装配失败要能被看见，不能静默退化成一个空画布。
+      console.error("渲染项装配失败", error)
+    }
     // 渲染项换了就是另一块板的几何，画布比例要跟着重算。
     this.fitCanvas()
     void this.draw()
