@@ -6,6 +6,7 @@ import type { Board } from "../skin-model/board.ts"
 import { containerOf } from "../skin-model/board.ts"
 import type { SkinModel } from "../skin-model/model.ts"
 import type { KeyRender } from "../skin-model/build.ts"
+import type { ToolbarItem } from "../skin-model/panel.ts"
 import { bitmapOf } from "../skin-model/image.ts"
 import { styleLabel, styleLayers, styleText } from "../skin-model/style.ts"
 import type { Rect } from "../preview-items.ts"
@@ -15,7 +16,6 @@ import { boardRenders } from "./board.ts"
 import { paintKey, type KeyAnimationState, type KeyPaintEnv, type KeyVisuals, type LayerPaint } from "./key.ts"
 import { paintLayer } from "./layer.ts"
 import { paintParticles, type ParticleFrame } from "./particles.ts"
-import { paintToolbarStrip, type StripRect } from "./toolbar.ts"
 import { hintCellWidth, paintHintBubble, type HintPaintData } from "./hint.ts"
 import { drawSceneLayer, type NativeScene, type SceneKey, type SceneLayer } from "../native-scene.ts"
 import { drawSprite, type SceneSprite } from "../native-motion.ts"
@@ -41,7 +41,6 @@ import {
 } from "../preview-animation.ts"
 import type { BdaAnimation } from "../bda.ts"
 import type { PreviewClip } from "../animation-preview-model.ts"
-import { toolbarItemPaints, toolbarPaints } from "../preview-toolbar.ts"
 
 export type HintDirection = "center" | "up" | "down" | "left" | "right" | "hold"
 
@@ -105,8 +104,20 @@ export type PanelOptions = {
   transparent?: boolean
 }
 
-/** 顶栏里的一条：候选栏或工具栏，图标按槽位等分。 */
-export type PanelStrip = { rect: StripRect; layers: readonly LayerPaint[] }
+/** 顶栏里的一个图标：已解码的图层与它在完整面板里的矩形。 */
+export type PanelHeaderItem = {
+  rect: Rect
+  back?: LayerPaint
+  fore?: LayerPaint
+}
+
+/** 顶栏里的一条：候选栏或工具栏，图标按各自的锚点定位。 */
+export type PanelStrip = {
+  rect: Rect
+  items: readonly PanelHeaderItem[]
+  /** 候选词显示区（`role` 为 candidates 的项）；没有就是 undefined。 */
+  candidatesRect?: Rect
+}
 
 /** 顶栏：输入中画候选栏，未输入画工具栏。 */
 export type PanelHeaderFrame = {
@@ -333,6 +344,43 @@ function buildParticles(
   return frames
 }
 
+/** 顶栏项的矩形：`offset` 相对 `anchor` 给的锚点，不是面板左上角。 */
+function anchoredRect(item: ToolbarItem, bar: Rect): Rect {
+  const offset = item.offset ?? { x: 0, y: 0 }
+  const size = item.size ?? { width: bar.width, height: bar.height }
+  const x = item.anchor?.x === "center"
+    ? bar.x + bar.width / 2 + offset.x
+    : item.anchor?.x === "right" ? bar.x + bar.width - size.width + offset.x : bar.x + offset.x
+  const y = item.anchor?.y === "middle"
+    ? bar.y + bar.height / 2 + offset.y
+    : item.anchor?.y === "bottom" ? bar.y + bar.height - size.height + offset.y : bar.y + offset.y
+  return { x, y, width: size.width, height: size.height }
+}
+
+/** 一条候选栏/工具栏：图标按锚点定位并取样式图层，候选词项的矩形单独给出。 */
+async function buildStrip(
+  model: SkinModel,
+  bar: Rect,
+  items: readonly ToolbarItem[],
+): Promise<PanelStrip> {
+  const built = await Promise.all(items.map(async (item): Promise<PanelHeaderItem | undefined> => {
+    if (item.visible === false) return undefined
+    const rect = anchoredRect(item, bar)
+    if (item.role === "candidates") return { rect }
+    const [back, fore] = await Promise.all([
+      item.backStyle ? paintOf(model, item.backStyle) : undefined,
+      item.foreStyle ? paintOf(model, item.foreStyle) : undefined,
+    ])
+    return { rect, ...(back ? { back } : {}), ...(fore ? { fore } : {}) }
+  }))
+  const candidates = items.find((item) => item.role === "candidates" && item.visible !== false)
+  return {
+    rect: bar,
+    items: built.filter((item): item is PanelHeaderItem => item !== undefined),
+    ...(candidates ? { candidatesRect: anchoredRect(candidates, bar) } : {}),
+  }
+}
+
 /** 顶栏：输入中按候选栏的全局声明取几何与背景，未输入按板的工具栏取。 */
 async function buildHeader(
   model: SkinModel,
@@ -345,10 +393,10 @@ async function buildHeader(
     const first = bars[0]
     if (!first?.viewRect) return undefined
     const height = first.viewRect.size.height
-    const strips = await Promise.all(bars.map(async (bar): Promise<PanelStrip> => ({
-      rect: { x: 0, y: 0, width: size.width, height: bar.viewRect?.size.height ?? height },
-      layers: await toolbarItemPaints(model, bar.icons ?? []),
-    })))
+    const strips = await Promise.all(bars.map(async (bar): Promise<PanelStrip> => {
+      const rect = { x: 0, y: 0, width: size.width, height: bar.viewRect?.size.height ?? height }
+      return buildStrip(model, rect, bar.icons ?? [])
+    }))
     return {
       rect: { x: 0, y: 0, width: size.width, height },
       candidates: strips,
@@ -359,10 +407,11 @@ async function buildHeader(
   if (!toolbar) return undefined
   const height = toolbar.height ?? toolbar.iconSize?.height ?? 0
   if (!(height > 0)) return undefined
+  const rect = { x: 0, y: 0, width: size.width, height }
   return {
-    rect: { x: 0, y: 0, width: size.width, height },
+    rect,
     candidates: [],
-    toolbar: { rect: { x: 0, y: 0, width: size.width, height }, layers: await toolbarPaints(model, board) },
+    toolbar: await buildStrip(model, rect, toolbar.items),
     ...(toolbar.style ? { background: await paintOf(model, toolbar.style) } : {}),
   }
 }
@@ -450,7 +499,11 @@ export async function buildPanelFrame(
   const sceneKeys = new Map((scene?.keys ?? []).map((key) => [key.section, key]))
   const source = options.items ?? await boardRenders(board, options.state)
   const header = options.composing === undefined ? undefined : await buildHeader(model, board, size, options.composing)
-  const items = withContent(orderItems(source, size, pressed, Boolean(header)), options.contentOf)
+  // 合成完整面板时 CAND 由顶栏代理；预览不合成，保留在自己的画布上。
+  const items = withContent(
+    orderItems(source, size, pressed, options.composing !== undefined),
+    options.contentOf,
+  )
   const replaced = Boolean(scene && !scene.partial)
   const inset = headerInset(header, items)
   const container = options.container ?? { width: size.width, height: size.height + inset }
@@ -519,8 +572,11 @@ export function paintPanel(
       (item) => actionText(item.key.actions?.press) === "F14" && frame.sceneKeys.has(item.section),
     )))
     const toolbar = sceneOwnsToolbar ? undefined : header.toolbar
-    for (const each of options.composing ? header.candidates : toolbar ? [toolbar] : []) {
-      paintToolbarStrip(context, each.layers, each.rect)
+    for (const strip of options.composing ? header.candidates : toolbar ? [toolbar] : []) {
+      for (const item of strip.items) {
+        if (item.back) paintLayer(context, item.back.layer, item.back.bitmap, item.rect)
+        if (item.fore) paintLayer(context, item.fore.layer, item.fore.bitmap, item.rect)
+      }
     }
   }
   context.save()
