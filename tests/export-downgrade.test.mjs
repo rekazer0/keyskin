@@ -59,7 +59,7 @@ for (const native of [false, true]) for (const platform of [undefined, 'ios']) {
     const context = run(declarations('saveArchive', 'saveNative', 'downloadArchive', 'exportForSave', 'exportArchive', 'acceptDowngrade', 'exportTargetLabel'), { summarizeWarnings,
       archive, currentPath: '', documentName: { textContent: '测试' },
       flushNumberInputWheel: () => {}, exportName: (_, format) => `测试.${format}`,
-      isTauri: () => native, clientLog: { info: () => {} },
+      isTauri: () => native, isAndroidWeb: () => false, isIOSWeb: () => false, clientLog: { info: () => {} },
       exportArchiveBytes: async () => ({ bytes: new Uint8Array([1]), converted: true, warnings: ['内容将降级'] }),
       showFileOperationProgress: () => events.push('progress'),
       waitForInterfacePaint: async () => {},
@@ -81,7 +81,7 @@ test('an expired browser activation opens the save picker inside the next tap', 
   const events = []
   const context = run(declarations('writeToChosenFile'), {
     Uint8Array, DOMException,
-    isTauri: () => false,
+    isTauri: () => false, isAndroidWeb: () => false, isIOSWeb: () => false,
     navigator: { userActivation: { isActive: false } },
     window: { showSaveFilePicker: async () => {
       events.push('picker')
