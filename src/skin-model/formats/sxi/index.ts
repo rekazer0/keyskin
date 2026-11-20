@@ -31,7 +31,6 @@ import {
   jsonFilesOf,
   layoutsOf,
   menuBoardOf,
-  removedKeysOf,
   skinJsonOf,
   SXI_OPAQUE,
 } from "./skin.ts"
@@ -158,7 +157,6 @@ export async function sxiToModel(documents: SkinDocuments): Promise<SkinModel> {
     if (/\.(?:png|webp|jpe?g|aiff|ogg|mp3|wav|m4a|ttf|otf|ttc)$/i.test(path)) continue
     opaque.set(SXI_OPAQUE.file(path), data)
   }
-  const removed = removedKeysOf(layouts)
   const images = imagesOf(documents)
   const atlases: Atlas[] = []
   const styles = new Map(model.styles)
@@ -190,7 +188,7 @@ export async function sxiToModel(documents: SkinDocuments): Promise<SkinModel> {
     const themeStyles = stylesOfTheme(ss1, theme, atlasRead.lookup, audioLookup(documents.binaries, theme))
     for (const [id, style] of themeStyles) styles.set(id, style)
     for (const [id, motion] of motionsOfTheme(objectOf(sInfo.ss_2) ?? {}, theme)) motions.set(id, motion)
-    const themeBoards = boardsOfTheme(struct, themeKey, theme, ss1, removed)
+    const themeBoards = boardsOfTheme(struct, themeKey, theme, ss1)
     const menu = menuBoardOf(struct.menu as Json, themeKey, theme)
     model.boards.push(...themeBoards, ...(menu ? [menu] : []))
     for (const orientation of ["port", "land"] as const) {

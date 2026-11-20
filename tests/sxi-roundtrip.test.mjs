@@ -276,7 +276,7 @@ test("读出的几何、样式与音效关键字段正确", async () => {
   assert.ok(board)
   assert.equal(board.geometry.kind, "document")
   assert.ok(containerOf(board).width > 0)
-  const key = board.keys.find((item) => item.actions.press?.kind === "text" && item.actions.press.value === "q")
+  const key = board.keys.find((item) => item.actions?.press?.kind === "text" && item.actions.press.value === "q")
   assert.ok(key, "没有读出 q 键")
   assert.ok(key.container.back?.style?.startsWith("sxi:light:"))
   const sound = [...first.styles.values()]
