@@ -52,3 +52,6 @@ src-tauri/gen/
 /public/inspector-fragment.html
 .ui-baseline/
 .ui-current/
+
+# Local Pencil design drafts
+/*.pen
