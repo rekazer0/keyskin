@@ -29,6 +29,17 @@ function numbers(value: string | undefined): number[] {
   return value?.split(",").map((part) => Number(part.trim())).filter(Number.isFinite) ?? []
 }
 
+/** `PERSIST` 的四态：0 隐藏、1 空档、2 输入中、3 始终；没写按空档（`persistVisible` 的落空分支）。 */
+function persistOf(value: string | undefined): ToolbarItem["persist"] | undefined {
+  switch (value?.trim()) {
+    case "0": return "hidden"
+    case "1": return "idle"
+    case "2": return "composing"
+    case "3": return "always"
+    default: return value === undefined ? "idle" : undefined
+  }
+}
+
 /** `ANCHOR_TYPE` 的九宫格（1 左上、2 上中、3 右上、4 左中、5 中中、6 右中、7 左下、8 下中、9 右下）。 */
 function anchorOf(value: number): ToolbarAnchor | undefined {
   if (!Number.isInteger(value) || value < 1 || value > 9) return
@@ -53,6 +64,7 @@ function toolbarItems(document: IniDocument, actionOf: ActionReader): ToolbarIte
     const anchor = anchorOf(Number(read("ANCHOR_TYPE")))
     // 候选词显示区：候选区动作、没有图、矩形占满中间。
     const role = /^F14$/i.test(read("KEY") ?? "") && !foreStyle && !backStyle && !icon ? "candidates" as const : "icon" as const
+    const persist = persistOf(read("PERSIST"))
     return [{
       id: `icon${match[1]}`,
       ...(foreStyle ? { foreStyle } : {}),
@@ -65,6 +77,7 @@ function toolbarItems(document: IniDocument, actionOf: ActionReader): ToolbarIte
       ...(size.length === 2 ? { size: { width: size[0], height: size[1] } } : {}),
       ...(anchor ? { anchor } : {}),
       role,
+      ...(persist ? { persist } : {}),
     }]
   })
 }
@@ -86,7 +99,7 @@ const GEN_MODELED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 function genModeledField(section: string, field: string): boolean {
   const name = field.toUpperCase()
   if (/^OFFSET\d+$/i.test(section)) return name === "POS" || name === "R_POS"
-  if (/^ICON\d+$/i.test(section)) return ["POS", "SIZE", "IMG", "KEY", "VISIBLE", "FORE_STYLE", "BACK_STYLE", "ANCHOR_TYPE"].includes(name)
+  if (/^ICON\d+$/i.test(section)) return ["POS", "SIZE", "IMG", "KEY", "VISIBLE", "FORE_STYLE", "BACK_STYLE", "ANCHOR_TYPE", "PERSIST"].includes(name)
   const modeled = GEN_MODELED.get(section.toUpperCase())
   if (!modeled) return false
   return modeled.has(name) || (section.toUpperCase() === "MORE" && /_LAYOUT$/.test(name))
@@ -308,6 +321,10 @@ function anchorValue(anchor: ToolbarAnchor): number {
   return (y - 1) * 3 + x
 }
 
+function persistValue(persist: NonNullable<ToolbarItem["persist"]>): number {
+  return { hidden: 0, idle: 1, composing: 2, always: 3 }[persist]
+}
+
 function iconSection(items: readonly ToolbarItem[], actionValue: ActionWriter): string[] {
   const lines: string[] = []
   items.forEach((item, index) => {
@@ -322,6 +339,7 @@ function iconSection(items: readonly ToolbarItem[], actionValue: ActionWriter): 
     if (item.icon) lines.push(`IMG=${item.icon}`)
     if (action) lines.push(`KEY=${action}`)
     if (item.visible === false) lines.push("VISIBLE=0")
+    if (item.persist) lines.push(`PERSIST=${persistValue(item.persist)}`)
     lines.push("")
   })
   return lines

@@ -57,6 +57,11 @@ export type ToolbarItem = {
   anchor?: ToolbarAnchor
   /** 这一项是普通图标，还是候选词显示区（BDS 的 `[ICONn]` 里 `KEY=F14` 且无样式引用）。 */
   role?: "icon" | "candidates"
+  /**
+   * 图标的可见时机；BDS 的 `PERSIST` 是四态：`hidden`(0) / `idle`(1，无候选时) /
+   * `composing`(2，有候选时) / `always`(3)。缺省按 `idle`，与 `persistVisible` 的落空分支一致。
+   */
+  persist?: "hidden" | "idle" | "composing" | "always"
 }
 
 export type Toolbar = {
