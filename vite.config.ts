@@ -21,7 +21,8 @@ export default defineConfig({
         },
       },
     },
-    target: "es2022",
+    // 旧 Android WebView 兼容目标；运行时 API 由入口按需补齐。
+    target: ["es2022", "chrome89"],
     minify: "esbuild",
     cssMinify: true,
     cssCodeSplit: true,

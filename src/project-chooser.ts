@@ -19,7 +19,7 @@ export function initializeProjectChooser(form: HTMLFormElement): void {
   header.replaceChildren(title, iconButton("upload", "上传文件", () => form.dispatchEvent(new Event("project-import"))))
 
   const body = element("div", "ui-dialog-body project-chooser-body")
-  const options = [...form.querySelectorAll<HTMLLabelElement>("label:has(input[name=project-template])")]
+  const options = [...form.querySelectorAll<HTMLLabelElement>("label.project-template-option")]
   const section = document.createElement("fieldset")
   const legend = document.createElement("legend")
   count.textContent = `${options.length} 个模板`

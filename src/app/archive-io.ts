@@ -592,7 +592,8 @@ export async function writeToChosenFile(
     await writeNativePath(path, bytes)
     return path
   }
-  const picker = (window as typeof window & {
+  const mobileWeb = isAndroidWeb() || isIOSWeb()
+  const picker = !mobileWeb && (window as typeof window & {
     showSaveFilePicker?: (options: {
       suggestedName: string
       types?: Array<{ description: string; accept: Record<string, string[]> }>
@@ -600,26 +601,38 @@ export async function writeToChosenFile(
   }).showSaveFilePicker
   const downloadBytes = async (bytes: Uint8Array, retry = false) => {
     updateFileOperationProgress(90, "正在准备下载…")
-    const download = () => {
-      const link = document.createElement("a")
-      const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/octet-stream" }))
-      link.href = url
-      link.download = filename
-      link.hidden = true
-      document.body.append(link)
-      link.click()
-      link.remove()
-      // Mobile download managers may read the URL after the click handler returns.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/octet-stream" }))
+    link.href = url
+    link.download = filename
+    if (mobileWeb) {
+      link.textContent = "下载"
+      const tapped = await waitForTap(`${filename} 已生成，请点按下载。若内置浏览器不支持下载，请改用 Chrome、Safari 或键设客户端。`, link)
+      if (!tapped) {
+        URL.revokeObjectURL(url)
+        return
+      }
+      showFileOperationResult(`文件：${filename}\n请在浏览器的下载列表确认。若未收到文件，请改用 Chrome、Safari 或键设客户端。`, "download-requested")
+    } else {
+      const download = () => {
+        link.hidden = true
+        document.body.append(link)
+        link.click()
+        link.remove()
+      }
+      if (retry || navigator.userActivation && !navigator.userActivation.isActive) {
+        const detail = retry
+          ? "无法写入所选位置，轻点“下载”保存已生成的文件"
+          : `${filename} 已生成，轻点“下载”继续`
+        if (!await waitForTap(detail, "下载", download)) {
+          URL.revokeObjectURL(url)
+          return
+        }
+      } else download()
+      showFileOperationResult(`文件：${filename}\n保存位置：浏览器下载目录（以浏览器设置为准）`)
     }
-    // Mobile scripted downloads need a fresh tap if packaging or a write attempt used up activation.
-    if (retry || navigator.userActivation && !navigator.userActivation.isActive) {
-      const detail = retry
-        ? "无法写入所选位置，轻点“下载”保存已生成的文件"
-        : `${filename} 已生成，轻点“下载”继续`
-      if (!await waitForTap(detail, "下载", download)) return
-    } else download()
-    showFileOperationResult(`文件：${filename}\n保存位置：浏览器下载目录（以浏览器设置为准）`)
+    // The browser may read the URL after the click handler returns.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
     return filename
   }
   if (!picker) {
@@ -680,7 +693,8 @@ async function downloadArchive(format: ExportFormat, suggestedName: string): Pro
   if (!exported) return false
   const path = await writeToChosenFile(suggestedName, exported.bytes, exportTargetLabel(format))
   if (!path) return false
-  if (!exported.converted && appState.archive === exported.archive) {
+  // Downloads are handed to the browser. On mobile, the host may silently discard them.
+  if (!isAndroidWeb() && !isIOSWeb() && !exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
     documentName.textContent = suggestedName
     exported.archive.markSaved(exported.document, format, exported.revision)

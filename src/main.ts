@@ -1,3 +1,4 @@
+import "./webview-compat"
 import "@fontsource-variable/jetbrains-mono"
 import "./tokens.css"
 import "./components.css"

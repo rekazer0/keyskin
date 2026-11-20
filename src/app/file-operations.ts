@@ -177,7 +177,8 @@ export function showFileOperationCompatibility(title: string, warnings: string[]
   fileOperationDetail.textContent = `有 ${warnings.length} 项内容需要确认 · ${title}。原始皮肤保持不变`
 }
 
-export function showFileOperationResult(detail: string): void {
+export function showFileOperationResult(detail: string, outcome?: "download-requested"): void {
+  if (outcome) fileOperationDialog.dataset.resultKind = outcome
   fileOperationResult.textContent = detail
   fileOperationResult.hidden = false
   const filename = /^文件：([^\n]+)/.exec(detail)?.[1]
@@ -322,6 +323,7 @@ export async function runFileOperation(
   showStatus(`正在${action}…`, "progress")
   delete fileOperationDialog.dataset.stage
   delete fileOperationDialog.dataset.resultFile
+  delete fileOperationDialog.dataset.resultKind
   fileOperationDialog.dataset.outcome = "progress"
   fileOperationIcon.replaceChildren(createIcon(action === "导出" ? "upload" : "save", 20))
   fileOperationTitle.textContent = `正在${action}`
@@ -364,12 +366,13 @@ export async function runFileOperation(
       outcome: completed ? "completed" : "cancelled",
       durationMs: Math.round(performance.now() - started),
     })
-    showStatus(completed ? `${action}完成` : `${action}已取消`)
+    const downloadRequested = fileOperationDialog.dataset.resultKind === "download-requested"
+    showStatus(completed ? downloadRequested ? "已发起下载" : `${action}完成` : `${action}已取消`)
     if (completed && exporting) {
       showFileOperationProgress()
       fileOperationDialog.dataset.outcome = "success"
       fileOperationClose.textContent = inline ? "完成" : "继续编辑"
-      fileOperationTitle.textContent = action === "保存" ? "皮肤已保存" : action === "另存为" ? "另存为完成" : "皮肤已导出"
+      fileOperationTitle.textContent = downloadRequested ? "已发起下载" : action === "保存" ? "皮肤已保存" : action === "另存为" ? "另存为完成" : "皮肤已导出"
       fileOperationIcon.replaceChildren(createIcon("check", 20))
       updateFileOperationProgress(100, fileOperationDialog.dataset.resultFile ?? `${action}完成`)
     } else if (appState.fileOperationProgressVisible) {
@@ -449,42 +452,38 @@ export function percentProgress(start: number, end: number, detail: string): (fr
  * Shows a button in the progress dialog and resolves once it is tapped (true) or the dialog is dismissed
  * (false). `onTap` runs inside the tap's click handler, while its user activation is still live.
  */
-export function waitForTap(detail: string, label: string, onTap?: () => void | Promise<boolean>): Promise<boolean> {
+export function waitForTap(detail: string, action: string | HTMLAnchorElement, onTap?: () => void | Promise<boolean>): Promise<boolean> {
   return new Promise((resolve, reject) => {
     showFileOperationProgress()
     fileOperationDetail.textContent = detail
-    const share = document.createElement("button")
-    share.type = "button"
-    share.className = "ui-button"
-    share.dataset.variant = "primary"
-    share.dataset.size = "lg"
-    share.textContent = label
-    fileOperationClose.after(share)
+    const control = typeof action === "string"
+      ? Object.assign(document.createElement("button"), { type: "button", textContent: action })
+      : action
+    control.className = "ui-button"
+    control.dataset.variant = "primary"
+    control.dataset.size = "lg"
+    fileOperationClose.after(control)
     fileOperationClose.dataset.variant = "quiet"
     fileOperationClose.textContent = "取消"
     fileOperationClose.disabled = false
-    const finish = (confirmed: boolean) => {
-      share.remove()
+    const cleanUp = () => {
+      control.remove()
       fileOperationClose.disabled = true
       fileOperationClose.dataset.variant = "primary"
       fileOperationClose.textContent = "关闭"
       fileOperationClose.removeEventListener("click", cancel)
       fileOperationDialog.removeEventListener("close", cancel)
       fileOperationDialog.removeEventListener("cancel", cancel)
-      resolve(confirmed)
     }
+    const finish = (confirmed: boolean) => { cleanUp(); resolve(confirmed) }
     const cancel = (event: Event) => { event.preventDefault(); finish(false) }
-    share.addEventListener("click", async () => {
+    control.addEventListener("click", async () => {
       try {
+        // Keep the link attached until the browser has processed its native click action.
+        if (control instanceof HTMLAnchorElement) await new Promise(resolve => setTimeout(resolve, 0))
         finish(await onTap?.() ?? true)
       } catch (error) {
-        share.remove()
-        fileOperationClose.disabled = true
-        fileOperationClose.dataset.variant = "primary"
-        fileOperationClose.textContent = "关闭"
-        fileOperationClose.removeEventListener("click", cancel)
-        fileOperationDialog.removeEventListener("close", cancel)
-        fileOperationDialog.removeEventListener("cancel", cancel)
+        cleanUp()
         reject(error)
       }
     }, { once: true })
