@@ -34,6 +34,7 @@ test('drag frames keep each key background and foreground when press animations 
     theme: 'light', transparent: true, mode: 'edit', selected: new Set(), draftSections: new Set(),
     legacyAnimationStates: new Map(), scenes: new Map(),
     canvas: { width: 340, height: 100, getContext: () => context },
+    board: { container: { kind: 'known', size: { width: 340, height: 100 } } },
     model: {
       styles: new Map([
         ['1', { normal: [{ kind: 'color', value: '#000001' }] }],

@@ -579,8 +579,12 @@ export function paintPanel(
       }
     }
   }
-  context.save()
-  context.translate(frame.board.x, frame.board.y)
+  // 板在完整面板里有偏移时整体平移；没有偏移就不碰调用方的画布状态。
+  const offset = frame.board.x !== 0 || frame.board.y !== 0
+  if (offset) {
+    context.save()
+    context.translate(frame.board.x, frame.board.y)
+  }
   if (frame.scene) {
     for (const layer of frame.background) drawSceneLayer(context, layer)
   } else if (frame.panelLayer) {
@@ -621,7 +625,7 @@ export function paintPanel(
     }
   }
   paintParticles(context, frame.particles, (styleID) => frame.particleVisuals.get(styleID))
-  context.restore()
+  if (offset) context.restore()
 }
 
 /** 命中测试：只查 `frame.items`，从后往前找第一个可见且包含点的项。 */
