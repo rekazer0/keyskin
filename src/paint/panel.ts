@@ -183,8 +183,10 @@ export type PanelFrame = {
   press?: { section: string; elapsed: number; seed: number }
 }
 
-/** 从模型取一个样式 id 的图层与位图；没有样式或没有可画图层就是 undefined。 */
-async function paintOf(model: SkinModel, styleID: string, highlighted = false): Promise<LayerPaint | undefined> {
+/** 从模型取一个样式 id 的图层与位图；没有样式或没有可画图层就是 undefined。
+ *
+ * 编辑器侧的缩略图与预览也从这里取，不要在别处再拼一份样式装配。 */
+export async function paintLayerOf(model: SkinModel, styleID: string, highlighted = false): Promise<LayerPaint | undefined> {
   const layers = styleLayers(model, styleID, highlighted)
   const image = layers.find((layer) => layer.kind === "image")
   if (image?.kind === "image") {
@@ -247,8 +249,8 @@ async function buildVisuals(
     const highlighted = isPressed(item, pressed) || Boolean(draft?.pressed)
     const backID = highlighted ? item.highlightBackStyle ?? item.backStyle ?? "" : item.backStyle ?? ""
     return [item.section, {
-      backLayer: await paintOf(model, backID, highlighted),
-      foreLayers: await Promise.all(foreStyles.map((style) => paintOf(model, style, highlighted))),
+      backLayer: await paintLayerOf(model, backID, highlighted),
+      foreLayers: await Promise.all(foreStyles.map((style) => paintLayerOf(model, style, highlighted))),
       textStyle: styleText(model, foreStyles.join(","), highlighted),
       // 列表格显示自己的条目，不取共享样式里的标签。
       labels: item.key.kind === "list-cell" ? [] : foreStyles.map((style) => styleLabel(model, style, highlighted)),
@@ -374,8 +376,8 @@ async function buildStrip(
     const rect = anchoredRect(item, bar)
     if (item.role === "candidates") return { rect }
     const [back, fore] = await Promise.all([
-      item.backStyle ? paintOf(model, item.backStyle) : undefined,
-      item.foreStyle ? paintOf(model, item.foreStyle) : undefined,
+      item.backStyle ? paintLayerOf(model, item.backStyle) : undefined,
+      item.foreStyle ? paintLayerOf(model, item.foreStyle) : undefined,
     ])
     return { rect, ...(back ? { back } : {}), ...(fore ? { fore } : {}) }
   }))
@@ -405,7 +407,7 @@ async function buildHeader(
     return {
       rect: { x: 0, y: 0, width: size.width, height },
       candidates: strips,
-      ...(first.style ? { background: await paintOf(model, first.style) } : {}),
+      ...(first.style ? { background: await paintLayerOf(model, first.style) } : {}),
     }
   }
   const toolbar = board.panels?.toolbar
@@ -416,7 +418,7 @@ async function buildHeader(
       rect,
       candidates: [],
       toolbar: await buildStrip(model, rect, toolbar.items, composing),
-      ...(toolbar.style ? { background: await paintOf(model, toolbar.style) } : {}),
+      ...(toolbar.style ? { background: await paintLayerOf(model, toolbar.style) } : {}),
     }
   }
   // 未输入且皮肤没给工具栏图标：顶栏仍占位，只画候选栏区域的背景。
@@ -425,7 +427,7 @@ async function buildHeader(
     return {
       rect: { x: 0, y: 0, width: size.width, height },
       candidates: [],
-      ...(first.style ? { background: await paintOf(model, first.style) } : {}),
+      ...(first.style ? { background: await paintLayerOf(model, first.style) } : {}),
     }
   }
   return undefined
@@ -469,8 +471,8 @@ async function buildHint(
   if (!icon) return { key, anchor: item.rect, ...(popupLayers?.length ? { popup: popupLayers } : {}) }
   const cellStyle = icon.cellStyle ?? config?.cellStyle
   const [background, foreground] = await Promise.all([
-    paintOf(model, icon.backStyle ?? ""),
-    paintOf(model, icon.foreStyle ?? ""),
+    paintLayerOf(model, icon.backStyle ?? ""),
+    paintLayerOf(model, icon.foreStyle ?? ""),
   ])
   const data: HintPaintData = {
     size: icon.size,
@@ -480,7 +482,7 @@ async function buildHint(
     ...(foreground ? { foreground } : {}),
     candidates,
     cellVisuals: bar && cellStyle
-      ? await Promise.all([paintOf(model, cellStyle), paintOf(model, cellStyle, true)])
+      ? await Promise.all([paintLayerOf(model, cellStyle), paintLayerOf(model, cellStyle, true)])
       : [undefined, undefined],
     ...(icon.foreStyle ? { textStyle: styleText(model, icon.foreStyle, false) } : {}),
     ...(icon.foreStyle ? { selectedTextStyle: styleText(model, icon.foreStyle, true) } : {}),
@@ -541,7 +543,7 @@ export async function buildPanelFrame(
     pressed,
     visuals,
     animations: buildAnimations(items, options, time),
-    ...(replaced ? {} : { panelLayer: await paintOf(model, panelStyle) }),
+    ...(replaced ? {} : { panelLayer: await paintLayerOf(model, panelStyle) }),
     background: scene?.background ?? [],
     ...(scene ? { scene } : {}),
     sceneKeys,

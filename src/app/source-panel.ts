@@ -6,7 +6,7 @@ import { syncAtlasWorkspace } from "./tile-editing"
 import { files, sourceName, quickInspector, asset, resourceInspector, resourceDetail, styleResourceDetail, resourceSourceToggle, inspectorSourceToggle, inspectorLayoutToggle, layoutTree, inspectorPane, sourceEditor, aiDesignPanel, sourceToolbar, sourceFindToggle, sourceSearch, sourceValueHintsEnabled, sourceCompletionEnabled, sourceLineExplanationEnabled, sourceSearchCount, sourceSearchPrevious, sourceSearchNext, sourceReplacement, sourceReplace, sourceReplaceAll, sourceColorPicker, sourceStyleProxy } from "./dom"
 import { appState } from "./state"
 import { showsLayoutProperties, isSkinInfoPath, selectedSourceSections, selectedBdaSourceRange, scrollSelectedSource, styleConfigPath, sxiSourceRanges } from "./config-context"
-import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, visualResolver, bdaAppearanceStylePath } from "./bda-documents"
+import { isBdaLayoutPath, bdaAppearancePart, isBdaVirtualTextPath, isBdaAppearancePartPath, commitBdaSourceEdit, bdaAppearanceStylePath } from "./bda-documents"
 import { inspectorTabButtons, source, mobilePortraitQuery, preview } from "./canvas-interaction"
 import { loadVisibleSourceEditor } from "./resource-inspector"
 import { refreshPreview, syncCandidateSelection } from "./preview-render"
@@ -15,7 +15,10 @@ import { jsonPropertyRanges, iniSectionRanges, findTextMatches, replaceTextMatch
 import { selectedBdaSourceKeys } from "./document-inspector"
 import { sourceValueRanges, replacedSourceColor } from "../source-value-ranges.ts"
 import { type SourceEditorValueRange, type SourceEditorValueClick } from "../lazy-source-editor.ts"
-import { retinaThumbnail, drawVisualPreview } from "../atlas.ts"
+import { retinaThumbnail } from "../atlas.ts"
+import { paintLayerOf } from "../paint/panel.ts"
+import { paintLayerPreview } from "../paint/layer.ts"
+import { skinModel } from "./skin-model-state"
 import { bdaStyleRef } from "../bda.ts"
 import { selectFile } from "./navigation"
 import { setMobilePane } from "./mobile-layout"
@@ -289,11 +292,11 @@ export function renderSourceValueThumbnail(canvas: HTMLCanvasElement, range: Sou
     context.fillRect(0, 0, canvas.width, canvas.height)
     return
   }
-  const resolver = visualResolver()
-  if (!resolver) return
+  const model = skinModel.model
   const styleID = range.value.replace(/^STYLE/i, "")
-  void resolver.resolve(styleID, false).then((visual) => {
-    if (canvas.isConnected) drawVisualPreview(canvas, [visual], false)
+  if (!model) return
+  void paintLayerOf(model, styleID).then((paint) => {
+    if (canvas.isConnected) paintLayerPreview(canvas, paint)
   }).catch(() => {})
 }
 

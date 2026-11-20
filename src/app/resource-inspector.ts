@@ -15,7 +15,12 @@ import { populateTileInspector, drawAtlas, loadTiles, syncAtlasWorkspace, setDra
 import { styleConfigPath, setSourceValue, scrollSelectedSource } from "./config-context"
 import { IniDocument } from "../ini.ts"
 import { renderBdaStyleEditor } from "../bda-editor.ts"
-import { drawVisualPreview, parseColor, retinaThumbnail, thumbnailRecycler, type VisualResolver } from "../atlas.ts"
+import { parseColor, retinaThumbnail, thumbnailRecycler } from "../atlas.ts"
+import { paintLayerOf } from "../paint/panel.ts"
+import { paintLayerPreview } from "../paint/layer.ts"
+import { styleText } from "../skin-model/style.ts"
+import type { SkinModel } from "../skin-model/model.ts"
+import { skinModel } from "./skin-model-state"
 import { argbColor } from "../native-scene.ts"
 import { translatedConfigLabel } from "./document-inspector"
 import { refreshPreview } from "./preview-render"
@@ -171,13 +176,13 @@ export async function renderStyleResourceDetail(embedded?: { container: HTMLElem
     styleResourceDetail.hidden = appState.inspectorTab === "source"
     soundResourceDetail.hidden = true
     styleDetailPreviews.hidden = animated
-    const resolver = visualResolver()
-    if (resolver && !animated) {
+    const model = skinModel.model
+    if (model && !animated) {
       const archive = appState.archive
-      const visuals = await Promise.all([false, true].map(highlighted => resolver.resolve(styleID, highlighted).catch(() => undefined)))
+      const paints = await Promise.all([false, true].map(highlighted => paintLayerOf(model, styleID, highlighted)))
       if (appState.archive !== archive || appState.selectedStyleID !== styleID || styleConfigPath() !== path) return
-      drawVisualPreview(retinaThumbnail(styleDetailNormal, 128, 88), [visuals[0]], false)
-      drawVisualPreview(retinaThumbnail(styleDetailHighlighted, 128, 88), [visuals[1]], false)
+      paintLayerPreview(retinaThumbnail(styleDetailNormal, 128, 88), paints[0], false)
+      paintLayerPreview(retinaThumbnail(styleDetailHighlighted, 128, 88), paints[1], false)
     }
   }
   if (palm) {
@@ -329,8 +334,8 @@ function usesResourceStyleCategories(): boolean {
   return browsingResources() || mobilePortraitQuery.matches
 }
 
-function sameTextPreview(resolver: VisualResolver, id: string): boolean {
-  return JSON.stringify(resolver.resolveText(id, false)) === JSON.stringify(resolver.resolveText(id, true))
+function sameTextPreview(model: SkinModel, id: string): boolean {
+  return JSON.stringify(styleText(model, id, false)) === JSON.stringify(styleText(model, id, true))
 }
 
 function sameStylePreview(id: string, styles: IniDocument | undefined): boolean {
@@ -375,8 +380,8 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
   soundResourceDetail.hidden = true
   resourceListView.hidden = Boolean(appState.selectedStyleID) && !document.body.classList.contains("style-workspace")
   resourceDetail.hidden = !appState.selectedStyleID
-  const resolver = visualResolver()
-  if (!resolver) return
+  const model = skinModel.model
+  if (!model) return
   resourceGallery.setAttribute("role", "listbox")
   resourceGallery.setAttribute("aria-label", "样式")
   const editable = canAddStyle() && isEditing()
@@ -389,12 +394,12 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
     const soundPath = soundFilename ? soundPathForFilename(names, theme.value, orientation.value, soundFilename) : undefined
     const button = styleCard({
       id: styleID, label: `STYLE${styleID}`, kind,
-      stateLayout: (kind === "text" ? sameTextPreview(resolver, styleID) : sameStylePreview(styleID, stylesDocument)) ? "single" : "joined",
+      stateLayout: (kind === "text" ? sameTextPreview(model, styleID) : sameStylePreview(styleID, stylesDocument)) ? "single" : "joined",
       info: stylesDocument?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
       canvas: galleryCanvas,
       draw: async (canvas, highlighted) => {
-        if (kind === "text") await textStyleSample(canvas, resolver, styleID, highlighted)
-        else drawVisualPreview(canvas, [await resolver.resolve(styleID, highlighted).catch(() => undefined)], false)
+        if (kind === "text") await textStyleSample(canvas, model, styleID, highlighted)
+        else paintLayerPreview(canvas, await paintLayerOf(model, styleID, highlighted))
       },
       animation: () => stylesDocument ? styleAnimationPlayers(styleID, stylesDocument, true) : [],
       summary: kind === "anim" && stylesDocument ? styleAnimationSummary(styleID, stylesDocument) : undefined,
@@ -470,7 +475,7 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
   soundResourceDetail.hidden = true
   resourceListView.hidden = Boolean(appState.selectedStyleID) && !document.body.classList.contains("style-workspace")
   resourceDetail.hidden = !appState.selectedStyleID
-  const resolver = visualResolver()
+  const model = skinModel.model
   const choose = (ref: BdaStyleRef) => {
     const group = ref.type === "image" ? "imageStyles" : ref.type === "text" ? "textStyles" : "colorStyles"
     if (group !== part.group) {
@@ -484,7 +489,7 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
     const image = info.appearance.imageStyles.get(ref.key)
     const color = info.appearance.colorStyles.get(ref.key)
     const id = bdaStyleID(ref)
-    const merged = ref.type === "text" ? resolver && sameTextPreview(resolver, id)
+    const merged = ref.type === "text" ? Boolean(model && sameTextPreview(model, id))
       : ref.type === "image" ? JSON.stringify(image?.normalImage) === JSON.stringify(image?.highlightImage ?? image?.normalImage)
       : (color?.normalColor ?? 0) === (color?.highlightColor ?? color?.normalColor ?? 0)
     const button = styleCard({
@@ -492,8 +497,9 @@ async function renderBdaStyleResourceGallery(galleryCanvas: ReturnType<typeof th
       stateLayout: merged ? "single" : "joined",
       canvas: galleryCanvas,
       draw: async (canvas, highlighted) => {
-        if (ref.type === "text" && resolver) await textStyleSample(canvas, resolver, id, highlighted)
-        else drawVisualPreview(canvas, [await resolver?.resolve(id, highlighted).catch(() => undefined)], false)
+        if (!model) return
+        if (ref.type === "text") await textStyleSample(canvas, model, id, highlighted)
+        else paintLayerPreview(canvas, await paintLayerOf(model, id, highlighted))
       },
     })
     button.classList.add("resource-item", "style-resource-item")
