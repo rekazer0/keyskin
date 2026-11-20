@@ -444,3 +444,53 @@ export function percentProgress(start: number, end: number, detail: string): (fr
     updateFileOperationProgress(start + (end - start) * Math.min(1, Math.max(0, fraction)), stage ?? detail)
   }
 }
+
+/**
+ * Shows a button in the progress dialog and resolves once it is tapped (true) or the dialog is dismissed
+ * (false). `onTap` runs inside the tap's click handler, while its user activation is still live.
+ */
+export function waitForTap(detail: string, label: string, onTap?: () => void | Promise<boolean>): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    showFileOperationProgress()
+    fileOperationDetail.textContent = detail
+    const share = document.createElement("button")
+    share.type = "button"
+    share.className = "ui-button"
+    share.dataset.variant = "primary"
+    share.dataset.size = "lg"
+    share.textContent = label
+    fileOperationClose.after(share)
+    fileOperationClose.dataset.variant = "quiet"
+    fileOperationClose.textContent = "取消"
+    fileOperationClose.disabled = false
+    const finish = (confirmed: boolean) => {
+      share.remove()
+      fileOperationClose.disabled = true
+      fileOperationClose.dataset.variant = "primary"
+      fileOperationClose.textContent = "关闭"
+      fileOperationClose.removeEventListener("click", cancel)
+      fileOperationDialog.removeEventListener("close", cancel)
+      fileOperationDialog.removeEventListener("cancel", cancel)
+      resolve(confirmed)
+    }
+    const cancel = (event: Event) => { event.preventDefault(); finish(false) }
+    share.addEventListener("click", async () => {
+      try {
+        finish(await onTap?.() ?? true)
+      } catch (error) {
+        share.remove()
+        fileOperationClose.disabled = true
+        fileOperationClose.dataset.variant = "primary"
+        fileOperationClose.textContent = "关闭"
+        fileOperationClose.removeEventListener("click", cancel)
+        fileOperationDialog.removeEventListener("close", cancel)
+        fileOperationDialog.removeEventListener("cancel", cancel)
+        reject(error)
+      }
+    }, { once: true })
+    fileOperationClose.addEventListener("click", cancel, { once: true })
+    fileOperationDialog.addEventListener("close", cancel, { once: true })
+    fileOperationDialog.addEventListener("cancel", cancel, { once: true })
+    fileOperationClose.focus({ preventScroll: true })
+  })
+}

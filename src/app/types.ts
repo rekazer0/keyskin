@@ -88,7 +88,7 @@ export type SourceUpload = { name: string; bytes: Uint8Array }
 
 export type BrowserSaveFileHandle = {
   name: string
-  createWritable(): Promise<{ write(data: Uint8Array): Promise<void>; close(): Promise<void> }>
+  createWritable(): Promise<{ write(data: Uint8Array): Promise<void>; close(): Promise<void>; abort?(): Promise<void> }>
 }
 
 export type ChosenFileData = Uint8Array | (() => Promise<Uint8Array | undefined>)

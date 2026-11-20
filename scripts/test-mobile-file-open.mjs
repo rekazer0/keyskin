@@ -1,6 +1,7 @@
 import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 // OS picker filtering still needs a device; verify the options and browser import flow here.
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
@@ -36,6 +37,35 @@ try {
         await page.waitForFunction(() => document.querySelector('#event-log').dataset.kind === 'error')
         assert.match(await page.locator('#event-log').textContent(), /仅支持/)
         assert.equal(await page.locator('#document-name').textContent(), '安卓搜狗.ssf')
+
+        // Android providers can invalidate the browser's save handle after file selection.
+        await page.evaluate(() => {
+          window.showSaveFilePicker = async () => ({
+            name: '安卓搜狗.ssf',
+            createWritable: async () => ({
+              write: async (bytes) => { window.attemptedWrite = [...bytes] },
+              close: async () => { throw new DOMException('File state changed', 'InvalidStateError') },
+              abort: async () => { window.abortedWrite = true },
+            }),
+          })
+        })
+        await page.locator('#mobile-app-more > summary').click()
+        await page.getByRole('menuitem', { name: '分享与导出…', exact: true }).click()
+        const operation = page.locator('#file-operation-dialog')
+        await page.getByRole('button', { name: '另存为', exact: true }).click()
+        const save = operation.getByRole('button', { name: '保存', exact: true })
+        const download = operation.getByRole('button', { name: '下载', exact: true })
+        if (await Promise.race([save.waitFor().then(() => true), download.waitFor().then(() => false)])) await save.click()
+        await download.waitFor()
+        assert.ok(await page.evaluate(() => window.abortedWrite))
+        assert.match(await operation.locator('#file-operation-detail').textContent(), /无法写入所选位置/)
+        const pending = page.waitForEvent('download')
+        await download.click()
+        const exported = await pending
+        assert.equal(exported.suggestedFilename(), '安卓搜狗.ssf')
+        assert.deepEqual(readFileSync(await exported.path()), Buffer.from(await page.evaluate(() => window.attemptedWrite)))
+        await page.waitForFunction(() => document.querySelector('#file-operation-progress').value === 100)
+        assert.match(await operation.locator('#file-operation-result').textContent(), /浏览器下载目录/)
       }
       if (platform === 'iPhone') {
         // iOS 只在点击里同步调用 click() 时弹选择框：先选文件，再询问是否导出当前皮肤。
@@ -68,7 +98,7 @@ try {
         assert.equal(await page.getByRole('button', { name: '开始编辑', exact: true }).isVisible(), true)
       }
       assert.deepEqual(errors, [])
-      console.log(`PASS: ${platform} file picker${platform === 'Android' ? ', SSF import and invalid-file rejection' : platform === 'iPhone' ? ', picker before export prompt' : ''}`)
+      console.log(`PASS: ${platform} file picker${platform === 'Android' ? ', SSF import, invalid-file rejection, save-handle fallback' : platform === 'iPhone' ? ', picker before export prompt' : ''}`)
     } finally {
       await context.close()
     }

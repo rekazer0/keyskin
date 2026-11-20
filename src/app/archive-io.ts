@@ -1,6 +1,6 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, composeAtlasPng, conversionProgress, percentProgress } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, composeAtlasPng, conversionProgress, percentProgress, waitForTap } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
@@ -12,7 +12,7 @@ import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
-import { aiDesignStatus, aiDesignPanel, theme, mode, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationClose, fileOperationDetail, fileOperationResult } from "./dom"
+import { aiDesignStatus, aiDesignPanel, theme, mode, device, canvasBackground, canvasWrap, documentName, saveButton, layout, fileOperationDialog, fileOperationDetail, fileOperationResult } from "./dom"
 import { setAiDesignDraft, syncAiDesignContext } from "./ai-panel"
 import { applyModeState, syncSegmentedControls, setMobilePane } from "./mobile-layout"
 import { canvasDeviceValue, type CanvasBackground } from "../canvas-background.ts"
@@ -598,33 +598,34 @@ export async function writeToChosenFile(
       types?: Array<{ description: string; accept: Record<string, string[]> }>
     }) => Promise<BrowserSaveFileHandle>
   }).showSaveFilePicker
-  if (!picker) {
-    const bytes = await produce()
-    if (!bytes) return
+  const downloadBytes = async (bytes: Uint8Array, retry = false) => {
     updateFileOperationProgress(90, "正在准备下载…")
-    const link = document.createElement("a")
-    link.href = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/octet-stream" }))
-    link.download = filename
-    link.hidden = true
-    // Mobile browsers hand blob downloads to a download manager that reads the URL later.
-    const revoke = () => setTimeout(() => URL.revokeObjectURL(link.href), 60_000)
     const download = () => {
+      const link = document.createElement("a")
+      const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/octet-stream" }))
+      link.href = url
+      link.download = filename
+      link.hidden = true
       document.body.append(link)
       link.click()
       link.remove()
+      // Mobile download managers may read the URL after the click handler returns.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
     }
-    // Chrome on Android silently drops a scripted download once the click's user activation has
-    // expired, which packaging the skin usually outlasts; ask for one more tap in that case.
-    if (navigator.userActivation && !navigator.userActivation.isActive) {
-      const confirmed = await waitForTap(`${filename} 已生成，轻点“下载”继续`, "下载", download)
-      revoke()
-      if (!confirmed) return
-    } else {
-      download()
-      revoke()
-    }
+    // Mobile scripted downloads need a fresh tap if packaging or a write attempt used up activation.
+    if (retry || navigator.userActivation && !navigator.userActivation.isActive) {
+      const detail = retry
+        ? "无法写入所选位置，轻点“下载”保存已生成的文件"
+        : `${filename} 已生成，轻点“下载”继续`
+      if (!await waitForTap(detail, "下载", download)) return
+    } else download()
     showFileOperationResult(`文件：${filename}\n保存位置：浏览器下载目录（以浏览器设置为准）`)
     return filename
+  }
+  if (!picker) {
+    const bytes = await produce()
+    if (bytes) return downloadBytes(bytes)
+    return
   }
   let file: BrowserSaveFileHandle | undefined
   const pick = async () => {
@@ -659,9 +660,16 @@ export async function writeToChosenFile(
     return
   }
   updateFileOperationProgress(90, "正在写入文件…")
-  const writable = await file.createWritable()
-  await writable.write(bytes)
-  await writable.close()
+  let writable: Awaited<ReturnType<BrowserSaveFileHandle["createWritable"]>> | undefined
+  try {
+    writable = await file.createWritable()
+    await writable.write(bytes)
+    await writable.close()
+  } catch (error) {
+    await writable?.abort?.().catch(() => undefined)
+    if (error instanceof DOMException && error.name === "InvalidStateError") return downloadBytes(bytes, true)
+    throw error
+  }
   showFileOperationResult(`文件：${file.name}\n保存位置：浏览器中选择的文件夹`)
   return file.name
 }
@@ -746,54 +754,4 @@ export async function shareArchiveToMobile(): Promise<boolean> {
     return waitForTap(`${name} 已生成，轻点“分享”继续`, "分享", share)
   }
   return share()
-}
-
-/**
- * Shows a button in the progress dialog and resolves once it is tapped (true) or the dialog is dismissed
- * (false). `onTap` runs inside the tap's click handler, while its user activation is still live.
- */
-export function waitForTap(detail: string, label: string, onTap?: () => void | Promise<boolean>): Promise<boolean> {
-  return new Promise((resolve, reject) => {
-    showFileOperationProgress()
-    fileOperationDetail.textContent = detail
-    const share = document.createElement("button")
-    share.type = "button"
-    share.className = "ui-button"
-    share.dataset.variant = "primary"
-    share.dataset.size = "lg"
-    share.textContent = label
-    fileOperationClose.after(share)
-    fileOperationClose.dataset.variant = "quiet"
-    fileOperationClose.textContent = "取消"
-    fileOperationClose.disabled = false
-    const finish = (confirmed: boolean) => {
-      share.remove()
-      fileOperationClose.disabled = true
-      fileOperationClose.dataset.variant = "primary"
-      fileOperationClose.textContent = "关闭"
-      fileOperationClose.removeEventListener("click", cancel)
-      fileOperationDialog.removeEventListener("close", cancel)
-      fileOperationDialog.removeEventListener("cancel", cancel)
-      resolve(confirmed)
-    }
-    const cancel = (event: Event) => { event.preventDefault(); finish(false) }
-    share.addEventListener("click", async () => {
-      try {
-        finish(await onTap?.() ?? true)
-      } catch (error) {
-        share.remove()
-        fileOperationClose.disabled = true
-        fileOperationClose.dataset.variant = "primary"
-        fileOperationClose.textContent = "关闭"
-        fileOperationClose.removeEventListener("click", cancel)
-        fileOperationDialog.removeEventListener("close", cancel)
-        fileOperationDialog.removeEventListener("cancel", cancel)
-        reject(error)
-      }
-    }, { once: true })
-    fileOperationClose.addEventListener("click", cancel, { once: true })
-    fileOperationDialog.addEventListener("close", cancel, { once: true })
-    fileOperationDialog.addEventListener("cancel", cancel, { once: true })
-    fileOperationClose.focus({ preventScroll: true })
-  })
 }
