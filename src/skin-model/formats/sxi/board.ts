@@ -211,8 +211,8 @@ function boardKindOfName(type: string): Board["kind"] {
   const name = type.toLowerCase()
   if (/symbol|^zy|^bq|emoji/.test(name)) return "symbol"
   if (/^cand/.test(name)) return "candidate"
-  // 手心的 `strokePad` 与 `bh` 是笔画键盘，和数字九宫格不是一回事。
-  if (/stroke|(?:^|_)bh(?:_|$)/.test(name)) return "stroke"
+  // 手心的 `strokePad` / `stroke` / `bh` 是笔画键盘；`sel_ch_no_stroke` 这类「无笔画」的选择键盘不算。
+  if (/^stroke(?:pad)?$|(?:^|_)bh(?:_|$)/.test(name)) return "stroke"
   if (/number|(?:^|_)(?:9|num)(?:_|$)/.test(name)) return "number"
   if (/pinyin|english|default|^t9|^full|^big|^py|^en|^def|^hw|handwriting/.test(name)) return "main"
   return "other"
@@ -250,15 +250,17 @@ function boardOf(
     return typeof value === "number" || typeof value === "string" ? [String(value)] : []
   })
   const keys = raws.flatMap((raw): Key[] => {
-    if (!raw.box) return []
     const record = raw.record
+    const value = record.id
+    if (typeof value !== "number" && typeof value !== "string") return []
+    const id = String(value)
     const base = objectOf(record.b) ?? {}
-    const id = String(record.id)
     const values = valuesOf(arrayOf(record.values))
     return [{
       id,
-      layoutId: id,
-      ...(raw.hit ? { hitArea: insetOf(raw.box, raw.hit) } : {}),
+      // 没有 `rect` 的键只有身份与样式，没有几何：留在 `Board.keys`，但不进布局树。
+      ...(raw.box ? { layoutId: id } : {}),
+      ...(raw.box && raw.hit ? { hitArea: insetOf(raw.box, raw.hit) } : {}),
       actions: values.actions,
       ...containerOf(base, theme, ss1),
       ...(values.label !== undefined ? { label: values.label } : {}),
@@ -288,7 +290,8 @@ function boardOf(
     theme,
     orientation,
     geometry: { kind: "document" },
-    container: knownContainer({ width, height }),
+    // 没有按键的纯面板键盘拿不到画布尺寸：`unknown` 是显式状态，不拿 0 冒充。
+    container: placed.length ? knownContainer({ width, height }) : { kind: "unknown" },
     layout,
     keys,
     ...(removedKeys?.length ? { removedKeys } : {}),
@@ -401,24 +404,29 @@ export async function keyboardJson(board: Board): Promise<JsonObject> {
   const keys: Json[] = []
   for (const id of order ?? board.keys.map((key) => key.id)) {
     const key = byId.get(id)
-    const rect = key ? rects.get(key.id) : undefined
     const before = rawKeys?.get(id)
-    if (!key || !rect) {
+    if (!key) {
       if (before) keys.push(before)
       continue
     }
+    // `layoutId` 缺省的键没有几何：只写 IR 的样式与动作，不写 `rect`。
+    const rect = key.layoutId ? rects.get(key.layoutId) : undefined
     const out: JsonObject = {
       ...before,
       // `id` 的原类型（字符串或数字）按原值保留；新键才用板内的字符串 id。
       id: before?.id ?? id,
-      rect: boxJson({ x: rect.position.x, y: rect.position.y, width: rect.size.width, height: rect.size.height }),
+    }
+    if (rect) {
+      out.rect = boxJson({ x: rect.position.x, y: rect.position.y, width: rect.size.width, height: rect.size.height })
+    } else {
+      delete out.rect
     }
     // 原键没有 `b`、IR 也没有样式可写时不能补一个空对象：缺失与空对象是两种状态。
     const beforeBase = objectOf(before?.b)
     const rebuiltBase = baseJsonOf(key, beforeBase ?? {})
     if (beforeBase !== undefined || Object.keys(rebuiltBase).length) out.b = rebuiltBase
     else delete out.b
-    const hit = hitRectJson(key, rect)
+    const hit = rect ? hitRectJson(key, rect) : undefined
     if (hit !== undefined) out.hit_rect = hit
     else delete out.hit_rect
     const values = valuesJson(key, valueOrders?.get(id) ?? [], arrayOf(before?.values))

@@ -214,8 +214,9 @@ export async function sxiToModel(documents: SkinDocuments): Promise<SkinModel> {
     else if (/\.(?:ttf|otf|ttc)$/i.test(path)) resources.set(path, { kind: "font", path, data })
   }
   model.resources = resources
-  // 手心不声明画布；板尺寸由键的并集推出，主板的宽度就是设计宽。
-  const main = model.boards.find((board) => board.kind === "main" && board.orientation === "port")
+  // 手心不声明画布；有几何的键盘板宽度就是设计宽。无键的纯面板主板没有尺寸，跳过。
+  const main = model.boards.find((board) => board.kind === "main" && board.orientation === "port" && containerOf(board))
+    ?? model.boards.find((board) => board.kind === "main" && containerOf(board))
   const mainSize = main ? containerOf(main) : undefined
   if (mainSize) {
     model.meta.designWidth = mainSize.width
