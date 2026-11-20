@@ -1,4 +1,6 @@
-import { canvasFont, retinaThumbnail, withTextShadow, type VisualResolver } from "./atlas.ts"
+import { canvasFont, retinaThumbnail, withTextShadow, type TextVisual } from "./atlas.ts"
+import { colorCss, styleLabel, styleText } from "./skin-model/style.ts"
+import type { SkinModel } from "./skin-model/model.ts"
 import { element, emptyState, iconButton } from "./dom-element.ts"
 import { releaseOnRemove } from "./dom-lifecycle.ts"
 import { createIcon } from "./icons.ts"
@@ -59,25 +61,41 @@ export function styleFilterButtons(options: readonly (readonly [string, string])
   return group
 }
 
-export async function textStyleSample(canvas: HTMLCanvasElement, resolver: VisualResolver, styleID: string, highlighted: boolean): Promise<void> {
-  await resolver.ready?.()
-  const text = resolver.resolveStyleText?.(styleID, highlighted)
-  const visual = text ?? resolver.resolveText(styleID, highlighted)
+/** 文字样式的卡片样张：文字层与样式都从模型取，不再经过 resolver。 */
+export async function textStyleSample(canvas: HTMLCanvasElement, model: SkinModel, styleID: string, highlighted: boolean): Promise<void> {
+  const label = styleLabel(model, styleID, highlighted)
+  textVisualSample(canvas, textVisualOf(styleText(model, styleID, highlighted)), label?.text || "键设 Aa", highlighted)
+}
+
+/** 样式库卡片等在模型之外的调用方：已经拿到文字视觉时直接画。 */
+export function textVisualSample(canvas: HTMLCanvasElement, visual: TextVisual | undefined, sample: string, highlighted: boolean): void {
   const context = canvas.getContext("2d")
   if (!context) return
   context.clearRect(0, 0, canvas.width, canvas.height)
   context.fillStyle = visual?.color ?? getComputedStyle(canvas).getPropertyValue("--text").trim()
   // 字号随预览块高度缩放：保留样式间的大小差别，又不会在宽卡片里撑满或在窄卡片里小到看不清。
   // 放不下时等比缩小字号，不用 fillText 的 maxWidth 把字形横向压扁。
-  const sample = text?.text || "键设 Aa"
   const size = Math.min(32, Math.max(16, visual?.fontSize ?? 24)) / 32 * canvas.height * 0.3
-  context.font = canvasFont(size, visual)
+  const font = (px: number) => canvasFont(px, visual)
+  context.font = font(size)
   const fit = Math.min(1, (canvas.width * 0.85) / Math.max(1, context.measureText(sample).width))
-  if (fit < 1) context.font = canvasFont(size * fit, visual)
+  if (fit < 1) context.font = font(size * fit)
   context.textAlign = "center"
   context.textBaseline = "middle"
   withTextShadow(context, visual, () => context.fillText(sample, canvas.width / 2, canvas.height / 2))
-  canvas.setAttribute("aria-label", `${highlighted ? "按下" : "正常"}文字示例：${text?.text || "键设 Aa"}`)
+  canvas.setAttribute("aria-label", `${highlighted ? "按下" : "正常"}文字示例：${sample}`)
+}
+
+/** IR 的 `TextStyle` → 绘制函数用的 `TextVisual`；两者字段名不同，只在这里转换。 */
+function textVisualOf(style: import("./skin-model/style.ts").TextStyle | undefined): TextVisual | undefined {
+  if (!style) return
+  return {
+    ...(style.fontSize === undefined ? {} : { fontSize: style.fontSize }),
+    ...(style.font ? { fontName: style.font } : {}),
+    ...(style.weight === undefined ? {} : { weight: style.weight }),
+    ...(style.color ? { color: colorCss(style.color) } : {}),
+    ...(style.shadow ? { shadowColor: colorCss(style.shadow.color), shadowSize: style.shadow.size } : {}),
+  }
 }
 
 // 几千个样式时缩略图进入视口才绘制，打开列表不必一次画完；尺寸按实际布局取，卡片随窗口缩放后在可见时重画。

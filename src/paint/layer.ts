@@ -199,3 +199,29 @@ function paintImage(
     context.restore()
   }
 }
+
+/** 把一张图层画进预览画布：背景填满，前景等比缩放并居中。 */
+export function paintLayerPreview(
+  canvas: HTMLCanvasElement,
+  paint: { layer: SkinLayer; bitmap?: ImageBitmap } | undefined,
+  foreground = false,
+): void {
+  const context = canvas.getContext("2d")
+  if (!context) return
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  if (!paint) return
+  const box = { x: 0, y: 0, width: canvas.width, height: canvas.height }
+  if (!foreground) {
+    paintLayer(context, paint.layer, paint.bitmap, box)
+    return
+  }
+  const width = paint.bitmap?.width ?? box.width
+  const height = paint.bitmap?.height ?? box.height
+  const fit = Math.min(1, box.width / width, box.height / height)
+  paintLayer(context, paint.layer, paint.bitmap, {
+    x: (box.width - width * fit) / 2,
+    y: (box.height - height * fit) / 2,
+    width: width * fit,
+    height: height * fit,
+  })
+}

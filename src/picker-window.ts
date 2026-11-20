@@ -5,7 +5,7 @@ import { tileSliceAt, type TileSlice } from "./tiles.ts"
 import { drawVisualPreview, retinaThumbnail, type Visual } from "./atlas.ts"
 import { hydrateIcons } from "./icons.ts"
 import { nativePickerWindow, pickerEmitter, pickerListener } from "./picker-channel.ts"
-import { imageResourceCard, soundStyleSample, styleAddCard, styleCard, styleFilterButtons, styleMatches, styleTypeOptions, styleUsageOptions, textStyleSample } from "./style-card"
+import { imageResourceCard, soundStyleSample, styleAddCard, styleCard, styleFilterButtons, styleMatches, styleTypeOptions, styleUsageOptions, textVisualSample } from "./style-card"
 import { animationPlayer } from "./animation-player"
 import { emptyClip, iniPreviewClip } from "./animation-preview-model"
 import { SsfMotion } from "./ssf/ssf-motion"
@@ -520,9 +520,13 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
   return payload.styles.filter(style => (libraryFilter !== "recent" || payload.recentStyles?.includes(style.styleID)) && styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, style.info, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter === "recent" ? "all" : libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
     const card = styleCard({
       id: style.styleID, label: payload.ssfAnimation ? style.label : `STYLE${style.label}`, info: style.info, kind: style.kind,
-      draw: (canvas, highlighted) => style.kind === "text"
-        ? textStyleSample(canvas, libraryTextResolver(style), style.styleID, highlighted)
-        : loadLibraryStyle(style).then(() => drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(payload.foreground))),
+      draw: (canvas, highlighted) => {
+        if (style.kind !== "text") {
+          return loadLibraryStyle(style).then(() => drawLibraryVisual(canvas, style.visuals[Number(highlighted)], Boolean(payload.foreground)))
+        }
+        const text = libraryTextResolver(style).resolveStyleText?.(style.styleID, highlighted)
+        textVisualSample(canvas, text, text?.text || "键设 Aa", highlighted)
+      },
       animation: () => libraryAnimationPlayers(style), summary: style.summary,
       sound: style.sound ? () => librarySound(style.sound!, Boolean(style.soundPlayable)) : undefined,
     })

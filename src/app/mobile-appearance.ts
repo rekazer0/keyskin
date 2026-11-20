@@ -1,11 +1,12 @@
 import { element, iconButton } from "../dom-element"
 import { createIcon } from "../icons"
-import { drawVisualPreview } from "../atlas"
 import { textStyleSample } from "../style-card"
+import { paintLayerOf } from "../paint/panel"
+import { paintLayerPreview } from "../paint/layer"
+import { skinModel } from "./skin-model-state"
 import { appState } from "./state"
 import { mobilePortraitQuery, preview } from "./canvas-interaction"
 import { quickInspector, keyFields } from "./dom"
-import { visualResolver } from "./bda-documents"
 import { canAddStyle, duplicateStyle, openStylePicker, styleConfigDocument, styleKind } from "./style-picker"
 import { openStyleReferenceEditor, refreshStyleReferenceThumbnail, styleUsages } from "./style-references"
 import { isEditing, updateHistoryButtons } from "./edit-history"
@@ -107,7 +108,7 @@ export function syncMobileAppearance(): void {
   const states = element("div", "mobile-background-states")
   states.setAttribute("role", "group")
   states.setAttribute("aria-label", `${label}状态`)
-  const resolver = visualResolver()
+  const model = skinModel.model
   const kind = styleKind(id, styles)
   const image = kind === "image" || kind === "empty"
   for (const [pressed, state] of [[false, "正常"], [true, "按下"]] as const) {
@@ -122,8 +123,10 @@ export function syncMobileAppearance(): void {
     const caption = Object.assign(element("span"), { textContent: `${label} · ${state}` })
     caption.append(Object.assign(element("small"), { textContent: id ? `STYLE${id}` : "未设置" }))
     button.append(canvas, caption)
-    if (id && resolver) {
-      const draw = kind === "text" ? textStyleSample(canvas, resolver, id, pressed) : resolver.resolve(id, pressed).then(visual => drawVisualPreview(canvas, [visual], foreground))
+    if (id && model) {
+      const draw = kind === "text"
+        ? textStyleSample(canvas, model, id, pressed)
+        : paintLayerOf(model, id, pressed).then((paint) => paintLayerPreview(canvas, paint, foreground))
       void draw.catch(() => {})
     }
     button.addEventListener("click", () => {
