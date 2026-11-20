@@ -3,7 +3,7 @@
 // 只拿解析产物（文档与字节），拿不到包；骨架是外部输入，提供容器尺寸与键清单。
 // 一个时段就是一套外观：`status1`/`status2` 各自有 phoneSkin/keys/anim，各自一块键盘板。
 // 包里没有按键坐标，布局树由骨架的相邻关系推出（见 `layout.ts`），不往模型里写矩形。
-import type { Size } from "taffy-layout"
+import type { Rect, Size } from "taffy-layout"
 import { decodePng } from "@/raster.ts"
 import { IniDocument } from "@/ini.ts"
 import type { AppearanceSet, Activation } from "@/skin-model/activation.ts"
@@ -14,6 +14,7 @@ import type { SkinImage } from "@/skin-model/image.ts"
 import { computeLayout, type LayoutBoard } from "@/skin-model/layout.ts"
 import type { SkinModel } from "@/skin-model/model.ts"
 import { emptyModel } from "@/skin-model/model.ts"
+import type { BoardPanels, CandidateBar, HintBubble, InputBar, ListPanel } from "@/skin-model/panel.ts"
 import type { SkinDocuments } from "@/skin-model/pipeline.ts"
 import type { SkinLayer, SkinStyle, Stretch } from "@/skin-model/style.ts"
 import type { SoundBinding } from "@/skin-model/sound.ts"
@@ -302,7 +303,10 @@ function keyOf(
   const key: Key = {
     id: skeletonKey.id,
     layoutId: skeletonKey.id,
-    actions: action ? { press: action } : {},
+    // 动作来自客户端骨架的 `CENTER`（骨架就是客户端的键位表），不是皮肤段；
+    // 写回皮肤时不写动作（SSF 没有动作字段），再读仍由骨架给出同一个动作。
+    // 骨架给不出动作时不写成空对象：缺省表示「没有动作」，空对象会把两件事混在一起。
+    ...(action ? { actions: { press: action } } : {}),
     container,
     ...(keySection?.foregroundRect ? { foreground: keySection.foregroundRect } : {}),
     ...(keySection?.labelPosition ? { labelPosition: keySection.labelPosition } : {}),
@@ -404,6 +408,83 @@ function themeMeta(documents: SkinDocuments, field: string): string | undefined 
   return value === undefined ? undefined : value.trim()
 }
 
+/** `left,top,right,bottom` 四数 → 像素内边距；数量不对就没有这一层。 */
+function paddingOf(value: string | undefined): Rect<number> | undefined {
+  const numbers = value?.split(",").map((part) => Number(part.trim())) ?? []
+  if (numbers.length !== 4 || !numbers.every(Number.isFinite)) return undefined
+  return { left: numbers[0], top: numbers[1], right: numbers[2], bottom: numbers[3] }
+}
+
+/**
+ * 面板级段 → `BoardPanels`。
+ *
+ * SSF 的面板段只有外观与像素内边距：
+ * - 外观：`BG_STYLE`/`BG_IMAGE`/`BG_COLOR` 与文字样式引用，形状在样式表里，这里只给引用；
+ * - 布局：只有 `MARGINS`/`PADDINGS` 这类像素内边距，没有位置尺寸，也没有格子或槽位；
+ * - 内容：没有。5 个样本的全部字段名里没有 `NAMES`/`VALUES`/`LIST_NUM`/`CELL_SIZE`/`LIST_ORDER`。
+ *
+ * 所以候选栏/输入条/气泡填 `style + padding`，列表只填 `appearance`——`layout` 与 `content`
+ * 整层缺省，这是格式本身没有这一层，不是没读到。
+ *
+ * 同一类面板有多个变体（`CandidateViewLand`/`_Weixin`/`_DoubleLines`）时取主变体；
+ * 变体之间只差 `MARGINS` 与背景，契约没有变体位，其余变体继续留在样式表里，不丢。
+ */
+function panelsOf(look: LookDocuments, lookName: string): BoardPanels | undefined {
+  const read = (section: string, field: string): string | undefined => look.skin.get(section, field)?.trim() || undefined
+  /** 引用字段指向的段 → 样式表里的样式名；指向图片文件时没有样式段。 */
+  const refStyle = (value: string | undefined): string | undefined => {
+    const reference = referenceOf(value)
+    return reference?.section ? sectionStyleName(lookName, reference.section) : undefined
+  }
+
+  const candidates: CandidateBar[] = []
+  const candidateSection = ["CandidateView", "CandidateViewDoubleLines", "CandidateViewLand", "CandidateViewWeixin"]
+    .find((section) => look.skin.hasSection(section))
+  if (candidateSection) {
+    const style = refStyle(read(candidateSection, "BG_IMAGE")) ?? refStyle(read(candidateSection, "BG_IMAGES"))
+    const padding = paddingOf(read(candidateSection, "MARGINS"))
+    if (style || padding) candidates.push({ ...(style ? { style } : {}), ...(padding ? { padding } : {}) })
+  }
+
+  const inputSection = ["ComposingView", "CloudView"].find((section) => look.skin.hasSection(section))
+  const input: InputBar | undefined = inputSection
+    ? (() => {
+      const style = refStyle(read(inputSection, "BG_IMAGE")) ?? sectionStyleName(lookName, inputSection)
+      const padding = paddingOf(read(inputSection, "MARGINS"))
+      return { ...(style ? { style } : {}), ...(padding ? { padding } : {}) }
+    })()
+    : undefined
+
+  const hintSection = ["PopupBG", "PopupBG_Phone", "PopupBG_Candidate"].find((section) => look.skin.hasSection(section))
+  const hint: HintBubble | undefined = hintSection
+    ? (() => {
+      const style = refStyle(read(hintSection, "BG_IMAGE"))
+      const padding = paddingOf(read(hintSection, "PADDINGS"))
+      return style || padding ? { ...(style ? { style } : {}), ...(padding ? { padding } : {}) } : undefined
+    })()
+    : undefined
+
+  const listSection = "CandidateCodeView"
+  const list: ListPanel | undefined = look.skin.hasSection(listSection)
+    ? (() => {
+      const style = refStyle(read(listSection, "BG_IMAGE"))
+      const cellStyle = refStyle(read(listSection, "BG_IMAGES"))
+      // `FG_IMGE` 是原格式的拼写，读时按原字段名取；写回仍按原样。
+      const foreStyle = refStyle(read(listSection, "FG_IMGE"))
+      const appearance = { ...(style ? { style } : {}), ...(cellStyle ? { cellStyle } : {}), ...(foreStyle ? { foreStyle } : {}) }
+      return Object.keys(appearance).length ? { appearance } : undefined
+    })()
+    : undefined
+
+  if (!candidates.length && !input && !hint && !list) return
+  return {
+    ...(candidates.length ? { candidates } : {}),
+    ...(input ? { input } : {}),
+    ...(hint ? { hint } : {}),
+    ...(list ? { list } : {}),
+  }
+}
+
 /** 读模型：一个分辨率、每个时段一块键盘板。 */
 export async function ssfToModel(documents: SkinDocuments, hints: SsfReadHints): Promise<SkinModel> {
   const model = emptyModel({
@@ -455,6 +536,7 @@ export async function ssfToModel(documents: SkinDocuments, hints: SsfReadHints):
       read: (section) => readSection([lookDocuments.skin, lookDocuments.keys], section),
     }
     const boardId = `${hints.layout.replace(/^.*\//, "").replace(/\.ini$/i, "")}@${look.name}`
+    const panels = panelsOf(lookDocuments, look.name)
     const keys: Key[] = []
     const used = new Set<string>()
     for (const skeletonKey of hints.keys) {
@@ -480,6 +562,7 @@ export async function ssfToModel(documents: SkinDocuments, hints: SsfReadHints):
         ["skeletonBackgrounds", new Map(hints.keys.flatMap((key) => (key.background ? [[key.id, key.background] as [string, string]] : [])))],
       ]),
       ...(context.read("RootView") ? { backdrop: sectionStyleName(look.name, "RootView") } : {}),
+      ...(panels ? { panels } : {}),
     })
     appearances.push({
       theme: look.theme,

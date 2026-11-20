@@ -65,6 +65,11 @@ export type CandidateBar = {
   /** 候选栏类型与引用的布局名；gen.ini 里写成 `[CAND] TYPE` 与 `LAYOUT_NAME`。 */
   type?: number
   layoutName?: string
+  /**
+   * 像素内边距。SSF 只给这一层：`MARGINS` 是像素（`3,0,3,0`，480 档变 `2,0,2,0`），
+   * 包里没有位置尺寸；BDS 的 `[CAND]` 用 `VIEW_RECT` 给绝对矩形，不用这个字段。
+   */
+  padding?: Rect<number>
 }
 
 export type HintBubble = {
@@ -80,6 +85,11 @@ export type HintBubble = {
   layoutName?: string
   /** 气泡类型，布局文件里写成 `[HINT]` 的 `TYPE`。 */
   type?: number
+  /**
+   * 像素内边距。SSF 只给这一层：`PADDINGS` 是像素（`0,0,0,20`），
+   * 气泡的位置与文字盒子都不在皮肤里（文字位置在按键前景样式的 `LABEL_POSITION`）。
+   */
+  padding?: Rect<number>
 }
 
 export type ListPanel = {
@@ -114,6 +124,11 @@ export type InputBar = {
   foreStyle?: string
   textStyle?: TextStyle
   height?: number
+  /**
+   * 像素内边距。SSF 只给这一层：`MARGINS` 是像素（输入中条 `10,0,10,0`），
+   * 输入条没有位置尺寸，只有这个边距。
+   */
+  padding?: Rect<number>
 }
 
 /** 符号键盘菜单：各类别指向哪块布局，以及它自己的网格与样式。 */

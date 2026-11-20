@@ -63,6 +63,7 @@ function project(model) {
       geometry: board.geometry,
       container: board.container,
       backdrop: board.backdrop ?? null,
+      panels: plain(board.panels ?? null),
       extra: plain(board.extra ?? null),
       layout: board.layout,
       keys: board.keys.map((key) => ({
