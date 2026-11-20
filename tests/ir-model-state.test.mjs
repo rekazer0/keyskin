@@ -1,5 +1,6 @@
 // 当前文档的模型状态：懒加载、缓存与失效。
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 import { SkinArchive } from "../src/skin.ts"
 import { SkinModelState } from "../src/app/skin-model-state.ts"
@@ -112,4 +113,22 @@ test("没有快照时同步被忽略", async () => {
   state.reset()
   state.update(model)
   assert.equal(state.model, undefined, "没有快照时不该凭空造出一份")
+})
+
+test("先无骨架建好的模型，带骨架 ensure 会重建", async () => {
+  const state = new SkinModelState()
+  const archive = SkinArchive.open(
+    new Uint8Array(readFileSync(new URL("../public/default-template.bda", import.meta.url))),
+    "bda",
+  )
+  const base = SkinArchive.open(new Uint8Array(readFileSync(new URL("../public/bda-base.bds", import.meta.url))))
+  const bare = await state.load(archive, {})
+  assert.equal(bare.state, "ready")
+  assert.ok(bare.model.boards.every((board) => board.container.kind === "unknown"), "没带骨架时不该有画布尺寸")
+
+  state.ensure(archive, { base })
+  const withBase = await state.load(archive, { base })
+  assert.equal(withBase.state, "ready")
+  assert.ok(withBase.model.boards.every((board) => board.container.kind === "known"), "带骨架后应重建出画布尺寸")
+  assert.ok(withBase.model.boards.length > bare.model.boards.length, "带骨架后板应来自骨架布局")
 })
