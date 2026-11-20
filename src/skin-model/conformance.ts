@@ -2,11 +2,12 @@
 //
 // 旧转换器是一条条分支，替换成 IR 之后需要能回答「有没有丢东西」。
 // 这里给出可重复的比对：板、按键、样式、图片、动效、音效，以及自检错误数。
-import type { LossReport } from "./capability.ts"
+import type { Capability, CapabilitySet, LossReport } from "./capability.ts"
 import { convertModel, describeLoss } from "./convert.ts"
-import type { SkinFormatId } from "./formats/index.ts"
+import { capabilitiesOf, type SkinFormatId } from "./formats/index.ts"
 import { openSession, type SkinHints } from "./session.ts"
 import type { SkinModel } from "./model.ts"
+import type { SkinLayer } from "./style.ts"
 import { validateModel } from "./validate.ts"
 
 /** 一次往返的计数快照。 */
@@ -78,6 +79,30 @@ const REQUIRED: ReadonlyArray<keyof ModelCounts> = ["mainKeys", "styles"]
 /** 这些计数减少可能是格式限制：多板、动效、音效、图片。 */
 const TOLERATED: ReadonlyArray<keyof ModelCounts> = ["boards", "keys", "motions", "sounds", "images"]
 
+/** 图层种类对应的目标能力；目标没有这项能力，含该图层的样式本来就写不过去。 */
+const LAYER_CAPABILITY: Record<SkinLayer["kind"], Capability> = {
+  image: "style.image",
+  color: "style.color",
+  text: "style.text",
+  border: "style.border",
+  icon: "style.icon",
+  gradient: "style.gradient",
+  sound: "style.sound",
+}
+
+/**
+ * 源模型里目标格式能表达的样式数。
+ * 样式里夹着目标格式没有的图层（例如 BDA 的样式表没有音效槽）时，这条样式本来就写不过去，
+ * 应在损失报告里说明，不能算成写侧丢样式。
+ */
+function expressibleStyles(model: SkinModel, capabilities: CapabilitySet): number {
+  const canRender = (layer: SkinLayer): boolean => (capabilities.get(LAYER_CAPABILITY[layer.kind]) ?? "none") !== "none"
+  return [...model.styles.values()].filter((style) => {
+    const layers = [...style.normal, ...(style.pressed ?? []), ...(style.disabled ?? [])]
+    return layers.length > 0 && layers.every(canRender)
+  }).length
+}
+
 /**
  * 往返的问题分两类：
  * - `problems`：主键盘或样式丢了、源模型本来干净却出现自检错误——必须修；
@@ -89,6 +114,7 @@ function problemsOf(
   before: ModelCounts,
   after: ModelCounts,
   target: SkinFormatId,
+  missingStyles = 0,
 ): { problems: string[]; notes: string[] } {
   const problems: string[] = []
   const notes: string[] = []
@@ -97,7 +123,8 @@ function problemsOf(
   if (target === "bda") limits.mainKeys = "BDA 按键由客户端布局决定"
   if (target === "ssf") limits.styles = "搜狗皮肤包只存自己的样式段，其余来自官方骨架"
   for (const key of REQUIRED) {
-    const value = delta[key]
+    // 样式的基线是「目标能表达的那些」，不是源模型的全部：夹着目标没有的图层的样式本来写不过去。
+    const value = key === "styles" ? (delta.styles ?? 0) + missingStyles : delta[key]
     if (value === undefined || value >= 0) continue
     const limit = limits[key]
     if (limit) notes.push(`${key} 少了 ${-value}（${limit}）`)
@@ -162,7 +189,10 @@ export async function checkRoundTrip(
 
   const after = countsOf(reopened.model)
   const delta = deltaOf(before, after)
-  const { problems, notes } = problemsOf(delta, before, after, target)
+  // 目标格式表达不了的样式不计入「写侧丢样式」，由损失报告说明。
+  const missingStyles = before.styles - expressibleStyles(opened.model, capabilitiesOf(target))
+  const { problems, notes } = problemsOf(delta, before, after, target, missingStyles)
+  if (missingStyles > 0) notes.push(`源模型有 ${missingStyles} 条样式目标格式表达不了（见损失报告）`)
   return {
     from: opened.format,
     to: target,

@@ -3,7 +3,7 @@
 // 这里只做三件事：探测格式、把归档交给对应格式的 open、把结果交给驱动器。
 // 格式自己不再有 read/write——读写都是驱动器的动作。
 import { SkinArchive } from "@/skin.ts"
-import { lossOf, requiredCapabilities, type Capability, type CapabilityLevel, type LossReport } from "@/skin-model/capability.ts"
+import { lossOf, requiredCapabilities, type Capability, type CapabilityLevel, type CapabilitySet, type LossReport } from "@/skin-model/capability.ts"
 import { bdaFormat, type BdaSource } from "@/skin-model/formats/bda/index.ts"
 import { bdsFormat, type BdsSource } from "@/skin-model/formats/bds/index.ts"
 import { ssfFormat, type SsfSource } from "@/skin-model/formats/ssf/index.ts"
@@ -108,6 +108,11 @@ export async function writeSkin(model: SkinModel, format: SkinFormatId): Promise
 /** 目标格式能不能完整表达这个模型，用于导出前的提示。 */
 export function canExpress(model: SkinModel, format: SkinFormatId): boolean {
   return lossOf(model, FORMATS[format].capabilities).items.length === 0
+}
+
+/** 目标格式的能力表；一致性检查按它判断哪些内容本来就表达不了。 */
+export function capabilitiesOf(format: SkinFormatId): CapabilitySet {
+  return FORMATS[format].capabilities
 }
 
 /** 模型自身需要的能力集合，供界面展示「这个皮肤用到了什么」。 */

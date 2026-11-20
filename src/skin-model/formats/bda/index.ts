@@ -3,7 +3,7 @@
 // 读分两种：带 `layoutConfig` 的包用包内几何建板；只有外观的包（多数皮肤）用外部布局骨架
 // 提供几何，没有骨架时只建外观板、不伪造坐标。写回时以模型为准重建整套配置，未建模的文件
 // 与字段原样带在 `opaque` 里，避免导出时丢掉读不懂的内容。
-import { type BdaAnimationBinding, type BdaAppearance, type BdaColorStyle, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaTextStyle, bdaPanelKeyName } from "@/bda.ts"
+import { type BdaAnimationBinding, type BdaAppearance, type BdaColorStyle, type BdaImageStyle, type BdaKey, type BdaPanel, type BdaStyleRef, type BdaTextStyle, bdaPanelKeyName } from "@/bda.ts"
 import { decodeBdaAnimation, decodeBdaAppearance, decodeBdaLayout, decodeBdaSoundConfig } from "@/bda-decode.ts"
 import { decodePng, encodePng } from "@/raster.ts"
 import { SkinArchive } from "@/skin.ts"
@@ -22,7 +22,9 @@ import { configBytes, identifyBda, parseBda, pathsOfRole } from "@/skin-model/fo
 import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig, soundTypesOf, type BdaMotionParts } from "@/skin-model/formats/bda/motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
 import type { SkinImage } from "@/skin-model/image.ts"
+import type { Key } from "@/skin-model/key.ts"
 import { emptyModel, type SkinModel } from "@/skin-model/model.ts"
+import type { SkinStyle } from "@/skin-model/style.ts"
 import type { Theme, Orientation } from "@/skin-model/types.ts"
 import type { AppearanceSet } from "@/skin-model/activation.ts"
 
@@ -389,8 +391,44 @@ function rawOf(path: string, themeRoot: string): string {
   return themeRoot ? `${match[1]}/${match[2]}` : match[2]
 }
 
+/** 样式里各图层决定它进哪张表；BDA 的样式表只装图片、文字与颜色。 */
+function styleTypeOf(style: SkinStyle): BdaStyleRef["type"] | undefined {
+  const layers = [...style.normal, ...(style.pressed ?? []), ...(style.disabled ?? [])]
+  if (layers.some((layer) => layer.kind === "image")) return "image"
+  if (layers.some((layer) => layer.kind === "text")) return "text"
+  if (layers.some((layer) => layer.kind === "color")) return "color"
+  return undefined
+}
+
+/**
+ * IR 样式名 → BDA 的 `{类型, 编号}`。
+ * 本来就是 BDA 编号的沿用原值；来自其它格式的按图层种类分配新编号，
+ * 否则写回时会被当成不认识的样式全部丢掉。
+ */
+function styleRefsOf(model: SkinModel): Map<string, BdaStyleRef> {
+  const refs = new Map<string, BdaStyleRef>()
+  const used = { image: new Set<number>(), text: new Set<number>(), color: new Set<number>() }
+  for (const name of model.styles.keys()) {
+    const ref = styleRefOf(name)
+    if (!ref) continue
+    refs.set(name, ref)
+    used[ref.type].add(ref.key)
+  }
+  const nexts = { image: 1, text: 1, color: 1 }
+  for (const [name, style] of model.styles) {
+    if (refs.has(name)) continue
+    const type = styleTypeOf(style)
+    if (!type) continue
+    while (used[type].has(nexts[type])) nexts[type] += 1
+    refs.set(name, { type, key: nexts[type] })
+    used[type].add(nexts[type])
+    nexts[type] += 1
+  }
+  return refs
+}
+
 /** 面板从模型重建：顺序按读取时的面板表，样式引用以按键容器为准。 */
-function panelsOf(model: SkinModel): Map<string, BdaPanel> {
+function panelsOf(model: SkinModel, refs: ReadonlyMap<string, BdaStyleRef>): Map<string, BdaPanel> {
   const order = model.opaque.get(PANEL_ORDER) as readonly string[] | undefined
   const boards = new Map(model.boards.map((board) => [keyboardNameOf(board), board]))
   const names = [...(order ?? []).filter((name) => boards.has(name)), ...boards.keys()]
@@ -399,11 +437,11 @@ function panelsOf(model: SkinModel): Map<string, BdaPanel> {
     const board = boards.get(name)
     if (!board) continue
     const source = panelOf(board)
-    const back = styleRefOf(board.backdrop)
+    const back = refs.get(board.backdrop ?? "")
     panels.set(name, {
       hints: source?.hints ?? new Map(),
       lists: source?.lists ?? new Map(),
-      keys: keysOfBoard(board, source),
+      keys: keysOfBoard(board, source, refs),
       ...(source?.cand ? { cand: source.cand } : {}),
       ...(source?.input ? { input: source.input } : {}),
       ...(source?.more ? { more: source.more } : {}),
@@ -418,20 +456,33 @@ function panelsOf(model: SkinModel): Map<string, BdaPanel> {
   return panels
 }
 
+/** BDA 面板的键名是 `KEY_<动作码>`；来自其它格式的按键 id 不是这个形状，按动作码补。 */
+function panelKeyNameOf(key: Key, used: ReadonlySet<string>): string {
+  if (/^KEY_/i.test(key.id)) return key.id
+  const code = actionValue(key.actions.press)
+  const name = code ? bdaPanelKeyName(code) : undefined
+  return name && !used.has(name) ? name : key.id
+}
+
 /** 一块板的按键表：以面板原来的顺序为底，样式引用从容器取。 */
-function keysOfBoard(board: import("@/skin-model/board.ts").Board, source: BdaPanel | undefined): Map<string, BdaKey> {
+function keysOfBoard(
+  board: import("@/skin-model/board.ts").Board,
+  source: BdaPanel | undefined,
+  refs: ReadonlyMap<string, BdaStyleRef>,
+): Map<string, BdaKey> {
   const keys = new Map<string, BdaKey>(source?.keys ?? [])
   for (const key of board.keys) {
-    const original = keys.get(key.id)
-    const back = styleRefOf(key.container.back?.style) ?? original?.backStyle
-    const pressed = styleRefOf(key.container.back?.pressed) ?? original?.backStyleState
+    const name = panelKeyNameOf(key, new Set(keys.keys()))
+    const original = keys.get(name) ?? keys.get(key.id)
+    const back = refs.get(key.container.back?.style ?? "") ?? original?.backStyle
+    const pressed = refs.get(key.container.back?.pressed ?? "") ?? original?.backStyleState
     const fore = key.container.fore.flatMap((layer) => {
-      const ref = styleRefOf(layer.style)
+      const ref = refs.get(layer.style ?? "")
       return ref ? [ref] : []
     })
     const offsets = key.container.fore.flatMap((layer) => (layer.offset ? [{ x: layer.offset.x, y: layer.offset.y }] : []))
     if (!original && !back && !pressed && !fore.length) continue
-    keys.set(key.id, {
+    keys.set(name, {
       ...(back ? { backStyle: back } : {}),
       foreStyles: fore.length ? fore : original?.foreStyles ?? [],
       foreStyleOffsets: offsets.length ? offsets : original?.foreStyleOffsets ?? [],
@@ -442,14 +493,14 @@ function keysOfBoard(board: import("@/skin-model/board.ts").Board, source: BdaPa
 }
 
 /** 模型的三张样式表 → 外观。 */
-function appearanceOf(model: SkinModel): BdaAppearance {
+function appearanceOf(model: SkinModel, refs: ReadonlyMap<string, BdaStyleRef>): BdaAppearance {
   const parts = model.opaque.get(STYLE_PARTS) as ReadonlyMap<string, BdaStyleParts> | undefined
   const extra = model.opaque.get(APPEARANCE_PARTS) as Partial<Pick<BdaAppearance, "colorPalette" | "gamePanel" | "dragBar">> | undefined
   const imageStyles = new Map<number, BdaImageStyle>()
   const textStyles = new Map<number, BdaTextStyle>()
   const colorStyles = new Map<number, BdaColorStyle>()
   for (const [name, style] of model.styles) {
-    const ref = styleRefOf(name)
+    const ref = refs.get(name)
     if (!ref) continue
     const part = parts?.get(name)
     if (ref.type === "image") imageStyles.set(ref.key, imageStyleOf(style, part?.image))
@@ -460,7 +511,7 @@ function appearanceOf(model: SkinModel): BdaAppearance {
     imageStyles,
     textStyles,
     colorStyles,
-    panels: panelsOf(model),
+    panels: panelsOf(model, refs),
     ...(extra?.colorPalette ? { colorPalette: extra.colorPalette } : {}),
     ...(extra?.gamePanel ? { gamePanel: extra.gamePanel } : {}),
     ...(extra?.dragBar ? { dragBar: extra.dragBar } : {}),
@@ -493,7 +544,9 @@ async function bdaFromModel(model: SkinModel): Promise<SkinDocuments> {
   if (model.meta.version !== undefined) declared.set("VersionCode", model.meta.version)
   if (declared.size) put(placement.infoPath ?? "Info.txt", new TextEncoder().encode(infoText(declared)), { kind: "info" })
 
-  put(placement.appearancePath, encodeAppearance(appearanceOf(model)), { kind: "appearance" })
+  // 三张表的编号在这一次写回里只算一遍，样式表与按键引用必须用同一份映射。
+  const refs = styleRefsOf(model)
+  put(placement.appearancePath, encodeAppearance(appearanceOf(model, refs)), { kind: "appearance" })
 
   // 只有读自带布局的包才写布局配置；只读外观的包没有几何可写。
   if (model.boards.some((board) => board.extra?.has(KEYBOARD_EXTRA))) {
