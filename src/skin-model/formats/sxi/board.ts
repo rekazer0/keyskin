@@ -219,10 +219,10 @@ function boardIdOf(themeKey: string, orientation: "port" | "land", name: string)
   return `sxi:${themeKey}:${orientation}:${name}`
 }
 
-export function parseBoardId(id: string): { themeKey: string; orientation: "port" | "land"; name: string } | undefined {
+export function parseBoardId(id: string): { themeKey: "default" | "night"; orientation: "port" | "land"; name: string } | undefined {
   const match = /^sxi:(default|night):(port|land):(.+)$/.exec(id)
   if (!match) return
-  return { themeKey: match[1], orientation: match[2] as "port" | "land", name: match[3] }
+  return { themeKey: match[1] as "default" | "night", orientation: match[2] as "port" | "land", name: match[3] }
 }
 
 /** 键盘 → 板；没有 `keys` 的纯面板键盘同样是一块板，只是没有按键。 */
@@ -375,6 +375,14 @@ function hitRectJson(key: Key, rect: LayoutBox): Json | undefined {
   })
 }
 
+/** 键盘名：SXI 自己的板 id 带名字；别的格式取板 id 的叶子并去掉文件扩展名。 */
+export function keyboardNameOf(board: Board): string {
+  const parsed = parseBoardId(board.id)
+  if (parsed) return parsed.name
+  const leaf = board.id.split("/").pop() ?? board.id
+  return leaf.replace(/\.(?:ini|json)$/i, "")
+}
+
 /** 一块板 → 键盘对象。几何从布局树算，未建模字段按原值铺底。 */
 export async function keyboardJson(board: Board): Promise<JsonObject> {
   const rects = await computeLayout(board.layout, board.container)
@@ -416,7 +424,7 @@ export async function keyboardJson(board: Board): Promise<JsonObject> {
   return {
     ...raw,
     ...(keyFix !== undefined ? { key_fix: keyFix } : {}),
-    type: textOf(board.extra?.get("sxi:keyType") as Json | undefined) ?? parseBoardId(board.id)?.name ?? board.id,
+    type: textOf(board.extra?.get("sxi:keyType") as Json | undefined) ?? keyboardNameOf(board),
     ...(hasKeys || keys.length ? { keys } : {}),
   }
 }

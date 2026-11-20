@@ -131,7 +131,16 @@ export function stylesOfTheme(
   return styles
 }
 
-/** 一个样式拆回槽字段：按图层类型落进对应的槽。 */
+/** 图片 id 的图集名：去掉命名空间前缀、目录与扩展名；散图按整图一片引用。 */
+export function imageStemOf(id: string): string {
+  const leaf = id.split("#")[0].split("/").pop() ?? id
+  return leaf.replace(/^[a-z]+:/i, "").replace(/\.[^.]+$/, "")
+}
+
+/**
+ * 一个样式拆回槽字段：按图层类型落进对应的槽。
+ * 别的格式的图片不是 SXI 的图集切片，按「整图一片」引用；导出时会为它补一张单图图集。
+ */
 function slotJsonOf(style: SkinStyle, original: JsonObject): Partial<Record<SxiSlot, JsonObject>> {
   const text = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "text" }> => layer.kind === "text")
   const image = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "image" }> => layer.kind === "image")
@@ -139,7 +148,9 @@ function slotJsonOf(style: SkinStyle, original: JsonObject): Partial<Record<SxiS
   const color = style.normal.find((layer): layer is Extract<SkinLayer, { kind: "color" }> => layer.kind === "color")
   const sounds = style.normal.filter((layer): layer is Extract<SkinLayer, { kind: "sound" }> => layer.kind === "sound")
   const result: Partial<Record<SxiSlot, JsonObject>> = {}
-  if (text) {
+  // 一个样式同时有图片与文字时只写图片槽：SXI 的一条样式拆成多个槽会让样式数翻倍，
+  // 而按键字符来自 `values`，样式里的文字（BDA 的 `fontInfo`）不是必需内容。
+  if (text && !image && !pressedImage) {
     const before = asObject(original.s_1) ?? {}
     result.s_1 = {
       ...before,
@@ -155,8 +166,8 @@ function slotJsonOf(style: SkinStyle, original: JsonObject): Partial<Record<SxiS
     const before = asObject(original.s_2) ?? {}
     result.s_2 = {
       ...before,
-      ...(image ? { normal: imageRefOf(image.image) ?? before.normal } : {}),
-      ...(pressedImage ? { hl: imageRefOf(pressedImage.image) ?? before.hl } : {}),
+      ...(image ? { normal: imageRefOf(image.image) ?? `${imageStemOf(image.image)},1` } : {}),
+      ...(pressedImage ? { hl: imageRefOf(pressedImage.image) ?? `${imageStemOf(pressedImage.image)},1` } : {}),
     }
   }
   if (color) {
@@ -204,19 +215,25 @@ export function stylesJson(theme: Theme, styles: SkinStyles, original: JsonObjec
     }
     table[key] = next
   }
-  // IR 里新增的样式（其它格式转来）按空位补编号。
+  // IR 里没在 `ss_1` 原表里的样式（其它格式转来）按空位补编号；
+  // SXI 自己的样式名带主题，别的主题的样式不能写进本主题。
   const used = new Set(Object.keys(table).map(Number))
   let next = 1
+  const allocate = (): string => {
+    while (used.has(next)) next += 1
+    const key = String(next)
+    used.add(next)
+    return key
+  }
   for (const [name, style] of styles) {
     const parsed = parseSlotRef(name)
-    if (!parsed || parsed.theme !== theme || seen.has(name)) continue
+    if (parsed && parsed.theme !== theme) continue
+    if (parsed && seen.has(name)) continue
     const slots = slotJsonOf(style, {})
     if (!Object.keys(slots).length) continue
-    while (used.has(next)) next += 1
-    used.add(next)
-    const key = parsed.key && !table[parsed.key] ? parsed.key : String(next)
+    const key = parsed?.key !== undefined && table[parsed.key] === undefined ? parsed.key : allocate()
     table[key] = {
-      ...asObject(table[key]) ?? {},
+      ...(asObject(table[key]) ?? {}),
       ...(slots.s_1 ? { s_1: slots.s_1 } : {}),
       ...(slots.s_2 ? { s_2: slots.s_2 } : {}),
       ...(slots.s_3 ? { s_3: slots.s_3 } : {}),
