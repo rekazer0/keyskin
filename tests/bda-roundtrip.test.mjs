@@ -143,6 +143,9 @@ test("只有外观的包按面板建板，不伪造坐标", async () => {
     const { model } = await roundtrip(name)
     assert.ok(model.boards.length > 1, `${name} 没读到面板`)
     assert.ok(model.boards.every((board) => board.geometry.kind === "client"))
-    assert.ok(model.boards.every((board) => board.keys.length === 0))
+    assert.ok(model.boards.every((board) => board.container.kind === "unknown"), `${name} 的外观面板没有画布，容器应为未知`)
+    // 外观里有键，只是没有几何：键照常进板，layoutId 缺省。
+    assert.ok(model.boards.some((board) => board.keys.length > 0), `${name} 的外观按键没读出来`)
+    assert.ok(model.boards.every((board) => board.keys.every((key) => key.layoutId === undefined)))
   }
 })

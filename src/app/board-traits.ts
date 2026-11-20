@@ -14,7 +14,8 @@ export function boardTraits(boardId: string | undefined, model?: SkinModel | und
   // 模型为空通常是编辑让它失效了；这里把重建排上，下一次刷新就能用上新模型。
   if (!current && model === undefined) {
     const archive = appState.archive
-    if (archive) skinModel.ensure(archive)
+    // BDA 只有外观的包靠官方基础布局补几何；不把骨架传进去就建不出按键。
+    if (archive) skinModel.ensure(archive, archive.format === "bda" ? { base: appState.bdaBase } : {})
   }
   const board = boardId === undefined ? undefined : current?.boards.find((item) => item.id === boardId)
   return board ? traitsOf(board, format) : fallbackTraits(format)

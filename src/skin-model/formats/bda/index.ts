@@ -15,10 +15,10 @@ import { absoluteBoard, computeLayout } from "@/skin-model/layout.ts"
 import { accessOf, type DocumentAccess } from "@/skin-model/formats/public/access.ts"
 import { identifyBds } from "@/skin-model/formats/bds/identify.ts"
 import { parseBds } from "@/skin-model/formats/public/parse.ts"
-import { actionValue, layoutBoards } from "@/skin-model/formats/bds/index.ts"
+import { actionOf, actionValue, layoutBoards } from "@/skin-model/formats/bds/index.ts"
 import { packageOf, type FileRole, type SkinDocuments, type SkinStructure } from "@/skin-model/pipeline.ts"
 import { encodeAnimation, encodeAppearance, encodeSoundConfig } from "@/skin-model/formats/bda/appearance.ts"
-import { bdaBoardKind, boardsOfLayout, encodeBdaLayout, keyboardNameOf, KEYBOARD_EXTRA, layoutOfBoards, PANEL_EXTRA, panelOf } from "@/skin-model/formats/bda/layout.ts"
+import { bdaBoardKind, boardsOfLayout, encodeBdaLayout, keyboardNameOf, KEYBOARD_EXTRA, keyContainerOf, layoutOfBoards, PANEL_EXTRA, panelOf } from "@/skin-model/formats/bda/layout.ts"
 import { configBytes, identifyBda, parseBda, pathsOfRole } from "@/skin-model/formats/bda/pipeline.ts"
 import { animationOfMotions, motionsOfAnimation, soundConfigOf, soundsOfConfig, soundTypesOf, type BdaMotionParts } from "@/skin-model/formats/bda/motion.ts"
 import type { ImportOptions, SkinFormat } from "@/skin-model/format.ts"
@@ -158,7 +158,27 @@ function layoutOf(access: DocumentAccess, theme: Theme, orientation: Orientation
   return names.find((name) => /(?:def|py|en)_26\.ini$/i.test(name)) ?? names[0]
 }
 
-/** 没有包内布局时，每个外观面板一块板：几何标为客户端提供，不伪造画布。 */
+/** 键名里的动作码：`KEY_F39_S17` → `F39`。 */
+function actionCodeOfKeyName(name: string): string {
+  return name.replace(/^KEY_/i, "").replace(/_S\d+$/i, "")
+}
+
+/**
+ * 外观面板里的按键没有几何：每个键名一条 `Key`，`layoutId` 缺省。
+ * `_S<n>` 变体保持独立——状态号的编码规则还没确认，合成 `states` 就得猜轴。
+ */
+function keysOfAppearancePanel(panel: BdaPanel): Key[] {
+  return [...panel.keys].map(([name]) => {
+    const action = actionOf(actionCodeOfKeyName(name))
+    return {
+      id: name,
+      actions: action ? { press: action } : {},
+      container: keyContainerOf(panel, name, bdaStyleName),
+    }
+  })
+}
+
+/** 没有包内布局时，每个外观面板一块板：几何标为客户端提供，画布未知，按键只有样式。 */
 function panelsAsBoards(appearance: BdaAppearance, options: { theme: Theme; orientation: Orientation }): import("@/skin-model/board.ts").Board[] {
   return [...appearance.panels].map(([name, panel]) => ({
     id: `${options.theme}/${options.orientation}/${name}`,
@@ -170,7 +190,7 @@ function panelsAsBoards(appearance: BdaAppearance, options: { theme: Theme; orie
     container: { kind: "unknown" },
     layout: absoluteBoard([]),
     ...(panel.backStyle ? { backdrop: bdaStyleName(panel.backStyle) } : {}),
-    keys: [],
+    keys: keysOfAppearancePanel(panel),
     extra: new Map<string, unknown>([[PANEL_EXTRA, panel]]),
   }))
 }
@@ -482,7 +502,13 @@ function keysOfBoard(
       const ref = refs.get(layer.style ?? "")
       return ref ? [ref] : []
     })
-    const offsets = key.container.fore.flatMap((layer) => (layer.offset ? [{ x: layer.offset.x, y: layer.offset.y }] : []))
+    // BDA 的偏移表可以比前景表长；以原文为底按模型覆盖，往返才不会丢多出的项。
+    const offsets = (original?.foreStyleOffsets ?? []).map((offset) => ({ x: offset.x, y: offset.y }))
+    for (const [index, layer] of key.container.fore.entries()) {
+      if (!layer.offset) continue
+      if (index < offsets.length) offsets[index] = { x: layer.offset.x, y: layer.offset.y }
+      else offsets.push({ x: layer.offset.x, y: layer.offset.y })
+    }
     if (!original && !back && !pressed && !fore.length) continue
     keys.set(name, {
       ...(back ? { backStyle: back } : {}),

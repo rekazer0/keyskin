@@ -21,6 +21,8 @@ export type ModelSnapshot = {
   archive: SkinArchive
   /** 归档的修订号，用来判断快照是否过期。 */
   revision: number
+  /** 建这份模型用的外部输入；换了骨架就必须重建。 */
+  hints: SkinHints
   model: SkinModel
   format: SkinFormatId
   report: ValidationReport
@@ -79,11 +81,13 @@ export class SkinModelState {
     void Promise.all(model.boards.map((board) => warmLayout(board)))
   }
 
-  /** 快照是否仍然对应当前归档与修订。 */
-  private fresh(archive: SkinArchive): boolean {
+  /** 快照是否仍然对应当前归档、修订与外部输入。 */
+  private fresh(archive: SkinArchive, hints: SkinHints): boolean {
     return this.snapshot !== undefined
       && this.snapshot.archive === archive
       && this.snapshot.revision === revisionOf(archive)
+      && this.snapshot.hints.base === hints.base
+      && this.snapshot.hints.skeleton === hints.skeleton
   }
 
   /**
@@ -91,7 +95,7 @@ export class SkinModelState {
    * 并发调用共享同一次构建，不重复解析。
    */
   async load(archive: SkinArchive, hints: SkinHints = {}): Promise<ModelStatus> {
-    if (this.fresh(archive)) return this.status
+    if (this.fresh(archive, hints)) return this.status
     if (this.pending) {
       await this.pending
       return this.status
@@ -112,7 +116,7 @@ export class SkinModelState {
    * 这样连续编辑期间读到的始终是最新一份（或退回文档），不会长久停在「没有模型」。
    */
   ensure(archive: SkinArchive, hints: SkinHints = {}): void {
-    if (this.fresh(archive) || this.pending) return
+    if (this.fresh(archive, hints) || this.pending) return
     void this.load(archive, hints).catch(() => {
       // 构建失败只会让界面继续走原路径，不打扰用户。
     })
@@ -126,7 +130,7 @@ export class SkinModelState {
       return
     }
     const report = validateModel(opened.model)
-    this.snapshot = { archive, revision: revisionOf(archive), model: opened.model, format: opened.format, report }
+    this.snapshot = { archive, revision: revisionOf(archive), hints, model: opened.model, format: opened.format, report }
     this.status = { state: "ready", model: opened.model, format: opened.format, report }
     // 布局是异步算的，界面是同步渲染；模型建好后先把每块板的布局预热掉。
     await Promise.all(opened.model.boards.map((board) => warmLayout(board)))
