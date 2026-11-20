@@ -344,16 +344,19 @@ function buildParticles(
   return frames
 }
 
-/** 顶栏项的矩形：`offset` 相对 `anchor` 给的锚点，不是面板左上角。 */
+/** 顶栏项的矩形：`offset` 相对 `anchor` 给的锚点线，不是面板左上角。
+ *
+ * 右/下锚点按边界定位：图标左边缘在 `右边界 + offset`（`offset` 为负即贴右），
+ * 与左/上锚点对称，不做「再减图标宽」的二次换算。 */
 function anchoredRect(item: ToolbarItem, bar: Rect): Rect {
   const offset = item.offset ?? { x: 0, y: 0 }
   const size = item.size ?? { width: bar.width, height: bar.height }
   const x = item.anchor?.x === "center"
     ? bar.x + bar.width / 2 + offset.x
-    : item.anchor?.x === "right" ? bar.x + bar.width - size.width + offset.x : bar.x + offset.x
+    : item.anchor?.x === "right" ? bar.x + bar.width + offset.x : bar.x + offset.x
   const y = item.anchor?.y === "middle"
     ? bar.y + bar.height / 2 + offset.y
-    : item.anchor?.y === "bottom" ? bar.y + bar.height - size.height + offset.y : bar.y + offset.y
+    : item.anchor?.y === "bottom" ? bar.y + bar.height + offset.y : bar.y + offset.y
   return { x, y, width: size.width, height: size.height }
 }
 
