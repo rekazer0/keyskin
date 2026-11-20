@@ -100,9 +100,11 @@ function capabilities(): ReadonlyMap<Capability, CapabilityLevel> {
     ["style.text", "full"],
     ["style.icon", "full"],
     ["panel.backdrop", "full"],
+    // 面板只有外观与像素内边距：形状在样式表里，位置尺寸与内容池都不在包里。
     ["panel.candidate", "partial"],
-    ["panel.hint", "none"],
-    ["panel.list", "none"],
+    ["panel.hint", "partial"],
+    ["panel.list", "partial"],
+    ["panel.input", "partial"],
     ["panel.toolbar", "partial"],
     // 关键帧曲线能写回；Anim_Style/Animation/Anim_Obj 三层语义未定，原样保留成 opaque。
     ["motion.track", "partial"],
