@@ -1488,3 +1488,5 @@ body {
   padding: var(--space-sm) var(--space-lg) var(--space-lg);
 }
 .ui-tree[hidden] { display: none; }
+/* 层级靠缩进表达：每深一层，内容右移一档。 */
+.ui-tree .nav-group-body { padding-left: var(--space-lg); }

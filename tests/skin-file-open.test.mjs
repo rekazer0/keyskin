@@ -49,10 +49,12 @@ test('opening another skin offers export for saved and unsaved skins and preserv
     const context = run(declarations('prepareDocumentReplacement', 'hasUnsavedChanges'), {
       archive, unsavedNew: false,
       documentName: { textContent: '当前皮肤.bds' },
+      // 打开别的皮肤前选择「去分享导出」会清掉空画布状态，再打开分享弹窗。
+      canvasWrap: { classList: { remove() {} } },
       flushNumberInputWheel: () => calls.push('flush-input'),
       flushSourceAutosave: async () => calls.push('flush-source'),
       ask: async (options) => { assert.match(options.title, /导出当前皮肤/); calls.push('ask'); return decision },
-      openSharePage: () => calls.push('share'),
+      openShareDialog: () => calls.push('share'),
       saveArchive: () => assert.fail('the user exports from the share page'),
     })
     assert.equal(await context.prepareDocumentReplacement('open'), decision === 'discard')

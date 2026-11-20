@@ -16,7 +16,7 @@ import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
 import { actionFieldNames, preview, keyboardFields, layoutActionButtons, actionMeaningNodes, mobilePortraitQuery } from "./canvas-interaction"
 import { expandSections } from "../preview-items.ts"
 import { actionDescription } from "../actions.ts"
-import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, animationObjectHeading, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme } from "./dom"
+import { keyFields, primaryCssFields, skinFieldsGroup, toolbarFieldsGroup, keyboardFieldsGroup, keyOnlyGroups, keyGestureFieldsGroup, ssfGestureNote, keyTypographyFieldsGroup, selectedKeyName, selectedKeyPreview, selectedKeyContext, animationObjectHeading, quickInspector, skinFields, toolbarFields, keyTextLayerSwitch, $, canvasMultiToolbar, canvasMultiCount, keyLayoutFieldsGroup, keyModeButtons, keyActionButtons, keyActionMenuItems, gapFields, mode, theme, layoutTree } from "./dom"
 import { deferNumberInputRefresh } from "../number-input-wheel.ts"
 import { effectivePanelSection } from "../panel-tools.ts"
 import { createIcon } from "../icons"
@@ -28,6 +28,7 @@ import { soundStyleForKey } from "../sounds.ts"
 import { selectedRects, resizeSelectedKeys } from "./key-editing"
 import { updateStylePreviews } from "./style-picker"
 import { ssfInspectorTitle } from "./ssf-inspector"
+import { renderLayoutTree } from "./layout-tree-panel"
 import { sxiInspectorTitle } from "./sxi-inspector"
 import { legacyAnimationInspectorTitle } from "./legacy-animation-inspector"
 import { populateDocumentInspector, populateBdaConfigInspector } from "./document-inspector"
@@ -567,6 +568,8 @@ export function populateKeyInspector(): void {
   revealSinglePageInspectorGroup(JSON.stringify([appState.selectedPath, appState.selectedKeySections, appState.selectedCandidate]))
   applyModeState()
   syncInspectorRows(JSON.stringify([appState.selectedPath, appState.selectedKeySections, mode.value, animationSelectionContext()]))
+  // 面板打开时只同步选中；模型没换不会重建 DOM。
+  if (!layoutTree.hidden) void renderLayoutTree(layoutTree)
 }
 
 export function updateSkinInfo(field: HTMLInputElement): void {

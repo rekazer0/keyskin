@@ -23,6 +23,7 @@ import { isEditing } from "./edit-history"
 import { openStylePicker } from "./style-picker"
 import { openStyleReferenceStateImage } from "./style-references"
 import { previewCenter } from "../preview-items.ts"
+import { renderLayoutTree } from "./layout-tree-panel"
 
 export function syncInspectorSourceToggle(button: HTMLButtonElement): void {
   const active = appState.inspectorTab === "source"
@@ -139,6 +140,7 @@ export function updateInspectorView(): void {
   quickInspector.hidden = !propertiesAvailable || appState.inspectorTab !== "properties" && !localView
   sourceEditor.hidden = !inSource
   layoutTree.hidden = !inLayout
+  if (inLayout) void renderLayoutTree(layoutTree)
   aiDesignPanel.hidden = appState.inspectorTab !== "ai"
   updateSourceFindVisibility()
   loadVisibleSourceEditor()

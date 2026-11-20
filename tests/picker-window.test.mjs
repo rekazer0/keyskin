@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
-import { appSource } from "./helpers/app-source.mjs"
+import { appSource, declarations } from "./helpers/app-source.mjs"
 
 const html = readFileSync(new URL("../picker.html", import.meta.url), "utf8")
 const script = readFileSync(new URL("../src/picker-window.ts", import.meta.url), "utf8")
@@ -44,7 +44,10 @@ test("切片窗口不再提供右侧的选择图片资源按钮", () => {
 })
 
 test("样式库在切片窗口内作为视图打开，切片返回直接切到全部样式", () => {
-  assert.match(main, /appState\.styleLibrarySelected = undefined\s*void showPickerWindow\("styles", "全部样式"/)
+  // 清空上一次选中后，用同一个窗口切到「全部样式」视图。打开被包进 openLibrary，
+  // 以便手机端先选动画目标；两条语句不再相邻，但顺序与行为不变。
+  const openStylePicker = declarations("openStylePicker")
+  assert.match(openStylePicker, /appState\.styleLibrarySelected = undefined[\s\S]{0,400}showPickerWindow\("styles", "全部样式"/)
   assert.match(main, /onPickerEvent\("image-picker-back-styles", \(\) => void emitStyleLibrary\(true\)\)/)
   assert.match(main, /styleLibrary: Boolean\(appState\.stylePickerTarget\),/)
   assert.match(script, /onMain<StyleLibraryPayload>\("style-library-data"/)
