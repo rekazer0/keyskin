@@ -52,3 +52,12 @@ src-tauri/gen/
 /public/inspector-fragment.html
 .ui-baseline/
 .ui-current/
+
+.gitignore
+AGENTS.md
+.agents
+.idea
+node_modules
+.bak
+/pnpm-workspace.yaml
+/pnpm-lock.yaml
