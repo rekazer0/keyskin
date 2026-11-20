@@ -4,6 +4,7 @@ import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResul
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
+import { refreshPreview } from "./preview-render"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
@@ -128,10 +129,14 @@ export async function loadArchive(
   const ssfWarnings = rebuildSsfPreview()
   if (ssfWarnings.length) clientLog.info("ssf.preview.warning", { warnings: ssfWarnings.join("；") })
   // 模型供检查器与导出读取；构建失败只是没有模型，界面仍走原有路径。
+  // 模型建好后要重画一次：预览在这个 `load` 之前已经跑过，那时 `skinModel.model` 还是空的。
   void skinModel.load(nextArchive, {
     ...(appState.ssfSkeleton ? { skeleton: appState.ssfSkeleton.archive } : {}),
     ...(appState.bdaBase ? { base: appState.bdaBase } : {}),
-  }).then(() => updateDirty()).catch((error: unknown) => clientLog.info("archive.model.error", { detail: String(error) }))
+  }).then(() => {
+    updateDirty()
+    refreshPreview()
+  }).catch((error: unknown) => clientLog.info("archive.model.error", { detail: String(error) }))
   appState.aiDesignConversationTarget = nextArchive
   appState.aiSessions = []
   appState.aiSessionId = ""

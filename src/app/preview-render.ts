@@ -1,4 +1,5 @@
 import { appState } from "./state"
+import { clientLog } from "../client-log.ts"
 import { skinModel } from "./skin-model-state"
 import { containerOf } from "../skin-model/board.ts"
 import { boardRenders } from "../paint/board.ts"
@@ -26,6 +27,9 @@ import { availableSkinStates, canvasFitWidth, previewScalePercent } from "../pan
 import { populateKeyInspector } from "./key-inspector"
 import { setDrawingTile, drawAtlas } from "./tile-editing"
 import { nativeCandidateText, refreshNativeScenes, refreshPalmPreview } from "./native-preview"
+
+/** 上一次预览时是否已经记过「模型未就绪」；只在状态变化时记，避免每次刷新刷屏。 */
+let modelPendingLogged = false
 
 export function simulationLanguage(): "zh" | "en" {
   return /^en_/i.test(appState.layoutPath.split("/").pop() ?? "") ? "en" : "zh"
@@ -236,6 +240,13 @@ export function refreshPreview(): void {
   // 板只有一个来源：模型。BDA 的预览以前用 BDS 的板构造器从伪 INI 现建一份，
   // 与 `model.boards` 并行；板 id 与 `layoutPath` 同值（BDS/BDA/SXI 实测一致），直接取模型里的那块。
   const board = skinModel.model?.boards.find((item) => item.id === appState.layoutPath)
+  // 模型还没就绪时预览只能空着：状态变化时记一次，避免以后从截图倒推。
+  if (!skinModel.model && !modelPendingLogged) {
+    modelPendingLogged = true
+    clientLog.info("preview.board.pending", { path: appState.layoutPath })
+  } else if (skinModel.model && modelPendingLogged) {
+    modelPendingLogged = false
+  }
   const container = board ? containerOf(board) : undefined
   // BDS 分支的几何来自模型里的板；`layoutDocument` 只剩样式与面板配置的输入，不是几何来源。
   if (context && board && resolver && appState.layoutDocument) {
