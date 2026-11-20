@@ -372,8 +372,9 @@ export class Preview {
     void this.draw()
   }
 
-  setModel(model?: SkinModel): void {
+  setModel(model?: SkinModel, board?: Board): void {
     this.model = model
+    if (board) this.board = board
     this.lastRenderCache = undefined
     void this.draw()
   }

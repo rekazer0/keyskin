@@ -191,7 +191,7 @@ export function refreshPreview(): void {
   const toolbarSize = resolver ? refreshToolbarPreview(composing, resolver) : undefined
   preview.setResolver(resolver)
   // 新路径：样式与图片从模型取；与 resolver 并存，切换期两条都能画。
-  preview.setModel(skinModel.model)
+  preview.setModel(skinModel.model, board)
   const animationPath = appState.archive.format === "bda"
     ? bdaConfigPath(appState.archive, theme.value, orientation.value, "animation")
     : undefined
