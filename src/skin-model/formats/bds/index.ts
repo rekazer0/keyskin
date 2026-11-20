@@ -767,7 +767,7 @@ function keysOf(document: IniDocument): Array<{ key: Key; rect: LayoutBox; place
       return parts.length === 2 ? { x: parts[0], y: parts[1] } : undefined
     }) ?? []
     const foreAnims = read("FORE_ANIM_STYLE")?.split(",").map((token) => token.trim()) ?? []
-    const actions: Key["actions"] = {}
+    const actions: Partial<Record<KeyEvent, KeyAction>> = {}
     const press = actionOf(item.center || item.show)
     if (press) actions.press = press
     const label = item.show
@@ -830,7 +830,8 @@ function keysOf(document: IniDocument): Array<{ key: Key; rect: LayoutBox; place
       ...(read("HOLDSYM") ? { holdSymbol: read("HOLDSYM") } : {}),
       ...(read("INFO") ? { info: read("INFO") } : {}),
       ...(positionTypes.length ? { labelPosition: positionTypes } : {}),
-      actions,
+      // 没有动作的键不写 `actions`：缺省就是没有动作，不是「动作未建模」。
+      ...(Object.keys(actions).length ? { actions } : {}),
       // 按键自己的容器：背景一层、前景若干层（各带偏移与动画）、文字层。
       container: {
         ...(back || pressed || backAnim
@@ -995,6 +996,9 @@ function listExtrasOf(document: IniDocument): ListPanel | undefined {
     ...(foreStyle ? { foreStyle } : {}),
     ...(cellStyle ? { cellStyle } : {}),
   }
+  // `viewRect` 有意不填：BDS 的列表几何是 `POS` + `CELL_SIZE` + `LIST_NUM`，排列方向由
+  // `LIST_ORDER` 决定，但样本里只观测到 `0`、没有 `1` 可对照，横向还是纵向无法验证。
+  // 宁缺省也不编一个方向——三个参数已经在 IR 里，渲染层按真实规则算。
   const layout = {
     ...(cell.length === 2 ? { cellSize: { width: cell[0], height: cell[1] } } : {}),
     ...(Number.isFinite(count) ? { count } : {}),
@@ -1132,7 +1136,8 @@ export async function layoutBoards(
       layout: layoutOfKeys(boardKeys),
       ...(panelStyleOf(other) ? { backdrop: panelStyleOf(other) } : {}),
       keys: orderedKeys.map((each) => each.key),
-      panels: panelsMerged(undefined, other),
+      // 同方向的布局共享 `gen.ini` 的面板声明（候选栏、气泡、列表几何），不是主布局独有。
+      panels: panelsMerged(parsedPanels.panels, other),
     })
   }
   return { boards, paths: parsedPanels.paths, skipped }
