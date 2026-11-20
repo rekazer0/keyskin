@@ -12,7 +12,7 @@ const pane = html.slice(html.indexOf('<section class="source">'), html.indexOf('
 
 test("pane header: segmented mode switch above the object header", () => {
   const tabs = pane.indexOf('class="inspector-tabs ui-segmented"')
-  const title = pane.indexOf('class="inspector-title key-inspector-title"')
+  const title = pane.indexOf('class="ui-inspector-object key-inspector-title"')
   assert.ok(tabs > 0 && title > tabs, "模式切换在对象头之上")
   for (const tab of ["properties", "source", "ai"]) assert.match(pane, new RegExp(`data-inspector-tab="${tab}"`))
 })
