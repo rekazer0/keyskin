@@ -53,5 +53,8 @@ src-tauri/gen/
 .ui-baseline/
 .ui-current/
 
-# Local Pencil design drafts
+# Local design drafts
 /*.pen
+/assets/icon-background-options/
+/assets/keyskin-icon-concepts*.png
+/assets/keyskin-logo-lockups*.png

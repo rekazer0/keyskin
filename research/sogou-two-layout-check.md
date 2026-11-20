@@ -5,8 +5,8 @@
 ## 输入与证据
 
 - 本地 SSF 样本，SHA-256：`61faa44356bc06f009e94959e673d58d3edba6fa650b184887e3087791e5d14a`。
-- `/Users/kaze/Downloads/SogouInput_20.17.0_android_sweb.apk`，SHA-256：`3eb2612040fd7daefb7e92b9de5c1a715b03f272b644e0664948742df1c7a416`。
-- 读取已有 JADX 反编译源码：`/Users/kaze/.codex/worktrees/preview-input-apk/bdi/artifacts/sogou-apk-research/decompiled/sources/`。反编译不是无损源码；以下同时与 APK 内 INI、真实 SSF 交叉核对。
+- `SogouInput_20.17.0_android_sweb.apk`，SHA-256：`3eb2612040fd7daefb7e92b9de5c1a715b03f272b644e0664948742df1c7a416`。
+- 读取已有 JADX 反编译源码：本地验收样本的源码副本。反编译不是无损源码；以下同时与 APK 内 INI、真实 SSF 交叉核对。
 - 原始布局摘取、配置断言结果与浏览器截图：`artifacts/two-layout-check-2026-10-19/`。
 
 ## 1. 大九键左上空位
