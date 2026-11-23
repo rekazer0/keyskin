@@ -414,7 +414,9 @@
 @media (max-width: 760px) and (orientation: portrait) {
   .source {
     position: absolute;
-    inset: var(--mobile-preview-height) 0 auto;
+    top: var(--mobile-preview-height);
+    left: 0;
+    right: 0;
     width: 100%;
     height: calc(100% - var(--mobile-preview-height));
     min-width: 0;

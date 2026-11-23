@@ -191,8 +191,8 @@ export function syncMobileInspectorGroups(): void {
   const combinedBda = appState.archive?.format === "bda" && appState.selectedKeySections.length > 0 && !appState.selectedCandidate
   if (combinedBda && keyTypographyFieldsGroup.parentElement !== bdaConfigFieldsGroup) bdaConfigFieldsGroup.append(keyTypographyFieldsGroup)
   else if (!combinedBda && keyTypographyFieldsGroup.parentElement !== quickInspector) quickInspector.insertBefore(keyTypographyFieldsGroup, quickInspector.querySelector(".key-gesture-fields"))
-  let groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(":scope > :is(.ui-section, .skin-fields, .toolbar-fields, .document-fields, .bda-config-fields)"))
-    .filter((group) => !group.hidden)
+  let groups = (Array.from(quickInspector.children) as HTMLElement[])
+    .filter(group => !group.hidden && group.matches(".ui-section, .skin-fields, .toolbar-fields, .document-fields, .bda-config-fields"))
     .flatMap((group) => {
       if (group.matches(".skin-fields, .toolbar-fields")) return [...group.querySelectorAll<HTMLElement>(":scope > .ui-section")]
       if (group === documentFieldsGroup) {

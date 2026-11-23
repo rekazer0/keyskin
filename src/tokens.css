@@ -266,7 +266,7 @@
   /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
   :root { --tool-tile-min-width: 76px; --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-workspace-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-navigation-height)); --mobile-inspector-split: min(calc(var(--mobile-workspace-height) / 2), 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --style-card-width: 128px; --style-reference-height: 64px; --style-reference-meta-width: 48px; }
   :root { --ai-chat-input-min-height: var(--control-height-lg); --ai-chat-input-max-height: 30vh; --ai-chat-input-footer: calc(var(--control-height-lg) + var(--space-sm)); --ai-chat-send-size: var(--control-height-lg); }
-  :root:has(#resource-inspector:not([hidden]) #resource-list-view:not([hidden])) { --mobile-preview-height: 0px; }
+  :root[data-mobile-resource-list="true"] { --mobile-preview-height: 0px; }
   :root[data-keyboard-open="true"]:has(#mobile-key-preview:not([hidden])) { --mobile-preview-height: 148px; }
 }
 
@@ -799,5 +799,20 @@
 @media (min-width: 761px) {
   :root.macos[data-window-material-kind="glass"][data-window-material="on"] {
     --titlebar-backdrop-filter: none;
+  }
+}
+
+/* Old Android WebView does not support CSS comparison functions or color-mix. */
+@media (max-width: 760px) {
+  @supports not (width: max(1px, 2px)) {
+    :root {
+      --safe-area-top: var(--browser-occlusion-top, 0px);
+      --safe-area-bottom: var(--browser-occlusion-bottom, 0px);
+      --mobile-inspector-split: calc(var(--mobile-workspace-height) / 2);
+      --mobile-simulation-height: 34vh;
+    }
+  }
+  @supports not (color: color-mix(in srgb, currentColor, transparent)) {
+    :root { --mobile-navigation-surface: var(--panel); --mobile-navigation-filter: none; --focus-ring: 0 0 0 3px var(--accent); }
   }
 }

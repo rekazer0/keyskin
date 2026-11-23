@@ -144,6 +144,7 @@ export function wireMobileExport(): void {
   const selected = () => mobileExportFormats.find(input => input.checked)
   const syncSelection = () => {
     const input = selected()
+    for (const choice of mobileExportFormats) choice.closest("label")!.toggleAttribute("data-checked", choice === input)
     const exporting = shareDialog.open && !!input && input.value !== currentChoice()
     saveButton.hidden = exporting
     exportDetails.hidden = !exporting
@@ -168,6 +169,8 @@ export function wireMobileExport(): void {
   for (const input of [...exportTargets, adbShareButton, dirty]) observer.observe(input, { attributes: true, attributeFilter: ["disabled", "hidden"] })
   observer.observe(documentName, { childList: true, characterData: true, subtree: true })
   const operationOpen = () => shareDialog.contains(fileOperationDialog) && fileOperationDialog.open
+  new MutationObserver(() => shareDialog.toggleAttribute("data-share-operation", operationOpen()))
+    .observe(fileOperationDialog, { attributes: true, attributeFilter: ["open"] })
   const close = () => {
     if (operationOpen()) {
       if (!fileOperationClose.disabled) void closeDialog(fileOperationDialog).then(() => shareTitle.focus({ preventScroll: true }))

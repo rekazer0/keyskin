@@ -10,7 +10,7 @@ import { selectChoice } from "./mobile-layout"
 type Overview = NonNullable<typeof appState.layoutOverview>
 
 const layoutButtons = () => Array.from(files.querySelectorAll<HTMLButtonElement>(
-  `.sidebar-overview :is(.nav-layout, [data-overview-group="数字与符号"] .nav-item)`,
+  `.sidebar-overview .nav-layout, .sidebar-overview [data-overview-group="数字与符号"] .nav-item`,
 ))
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 // getAnimations() 会先刷新样式，刚改的过渡也会被等到；时长为 0（减弱动效）时立即完成。

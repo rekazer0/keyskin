@@ -18,7 +18,7 @@ export function renderKeyGeometry(hasSelection: boolean, showPadding: boolean, r
   const fields = group.querySelector(".geometry-fields")!
   fields.append(padding)
   padding.hidden = !hasSelection || !showPadding
-  group.querySelectorAll(":scope > :is(.mobile-geometry-detail, .ui-geometry-preview, [data-key-touch])").forEach(node => node.remove())
+  group.querySelectorAll(":scope > .mobile-geometry-detail, :scope > .ui-geometry-preview, :scope > [data-key-touch]").forEach(node => node.remove())
   const sections = appState.selectedKeySections
   const keys = hasSelection ? preview.keys.filter(key => sections.includes(key.section)) : []
   const baidu = (appState.archive?.format === "bdi" || appState.archive?.format === "bds") && !sections.some(isListCell)
