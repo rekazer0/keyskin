@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { strToU8, zipSync } from 'fflate'
 import { AtlasResolver } from '../src/atlas.ts'
+import { IniDocument } from '../src/ini.ts'
+import { withTileHeader } from '../src/tiles.ts'
 import { SkinArchive } from '../src/skin.ts'
 
 for (const format of ['bdi', 'bds']) {
@@ -56,3 +58,11 @@ for (const format of ['bdi', 'bds']) {
     assert.equal(archive.revision, 0)
   })
 }
+
+test('TIL headers cover the highest slice index and preserve the alpha mode', () => {
+  const slice = '[IMG38]\r\nSOURCE_RECT=0,0,1,1\r\n'
+  const repaired = withTileHeader(IniDocument.parse(`\uFEFF${slice}`))
+  assert.equal(repaired.toString(), `\uFEFF[GLOBAL]\r\nUSE_ALPHA=1\r\nTILE_NUM=38\r\n\r\n${slice}`)
+  const existing = withTileHeader(IniDocument.parse(`[GLOBAL]\r\nUSE_ALPHA=2\r\nTILE_NUM=35\r\n\r\n${slice}`))
+  assert.equal(existing.toString(), `[GLOBAL]\r\nUSE_ALPHA=2\r\nTILE_NUM=38\r\n\r\n${slice}`)
+})

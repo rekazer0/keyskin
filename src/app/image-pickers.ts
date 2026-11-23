@@ -21,7 +21,7 @@ import { resourceImagePaths } from "../resources.ts"
 import { theme, orientation, pickerDialog, pickerFrame } from "./dom"
 import { nativePickerWindow, pickerEmitter, pickerListener } from "../picker-channel.ts"
 import { WHOLE_IMAGE_INDEX } from "../slice-picker-canvas.ts"
-import { type TileRect, nextTileIndex, tileSlices, updateTileSlice } from "../tiles.ts"
+import { type TileRect, nextTileIndex, tileSlices, updateTileSlice, withTileHeader } from "../tiles.ts"
 import { ssfPackage, ssfThemeFolder } from "./ssf-documents"
 
 function selectedStyleImageSections(source: "BACK_STYLE" | "FORE_STYLE"): { document: IniDocument; path: string; sections: string[] } | undefined {
@@ -272,8 +272,9 @@ export async function applyImageSliceSelection(index: number, newStyle = false):
         const tiles = IniDocument.parse(before ? archive.getText(tilePath) : "")
         index = nextTileIndex(tiles)
         updateTileSlice(tiles, { index, source })
-        if (before) commitText(tilePath, archive.getText(tilePath), tiles.toString())
-        else commitBytes(tilePath, undefined, new TextEncoder().encode(tiles.toString()))
+        const after = withTileHeader(tiles).toString()
+        if (before) commitText(tilePath, archive.getText(tilePath), after)
+        else commitBytes(tilePath, undefined, new TextEncoder().encode(after))
       }
       appState.pickerSlices = [{ index, source }]
       appState.pickerSelectedIndex = index

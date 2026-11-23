@@ -3,7 +3,7 @@ import type { JsonObject } from "../palm/sxi-ini.ts"
 import { type BdaTileUsage } from "./types"
 import { appState } from "./state"
 import { currentBdaAppearance } from "./bda-documents"
-import { type TileSlice, type TileRect, nextTileIndex, tilePreviewDestination, tilePreviewInnerRect, tileSlices, type TilePoint, updateTileSlice, removeTileSlice, moveTileRect, duplicateTileSlice } from "../tiles.ts"
+import { type TileSlice, type TileRect, nextTileIndex, tilePreviewDestination, tilePreviewInnerRect, tileSlices, type TilePoint, updateTileSlice, removeTileSlice, moveTileRect, duplicateTileSlice, withTileHeader } from "../tiles.ts"
 import { bdaStyleID } from "../bda.ts"
 import { updateBdaImageInnerRect } from "../bda-encode.ts"
 import { sourceName, workspaceImage, atlasCanvas, tilePreviewWrap, tilePreview, tileInspector, bdaTileUsage, tileSourceFieldsGroup, tileInnerTitle, newTileButton, duplicateTileButton, deleteTileButton, moveTileButton, tileTitle, tileSourceFields, tileInnerFields, resourceGallery } from "./dom"
@@ -519,8 +519,10 @@ export function commitTile(slice: TileSlice, coalesce = false): void {
   }
   const before = appState.tileDocument.toString()
   updateTileSlice(appState.tileDocument, slice)
-  writeTileText(appState.tilePath, before, appState.tileDocument.toString(), coalesce)
-  setSourceValue(appState.tileDocument.toString())
+  appState.tileDocument = withTileHeader(appState.tileDocument)
+  const after = appState.tileDocument.toString()
+  writeTileText(appState.tilePath, before, after, coalesce)
+  setSourceValue(after)
   appState.slices = tileSlices(appState.tileDocument)
   appState.selectedTileIndex = slice.index
   updateSourceHighlight()
@@ -559,7 +561,7 @@ export async function autoSliceSelectedImage(): Promise<void> {
     const before = appState.tileDocument.toString()
     for (const slice of appState.slices) removeTileSlice(appState.tileDocument, slice.index)
     cells.forEach((source, index) => updateTileSlice(appState.tileDocument, { index: index + 1, source }))
-    writeTileText(appState.tilePath, before, appState.tileDocument.toString())
+    writeTileText(appState.tilePath, before, withTileHeader(appState.tileDocument).toString())
     loadTiles(path)
     appState.selectedTileIndex = 1
     updateSourceHighlight()
@@ -625,6 +627,7 @@ export async function deleteSelectedTile(): Promise<void> {
   if (!removeTileSlice(appState.tileDocument, appState.selectedTileIndex)) return
   // 工具书 V6 p43：切片序号禁止跳号；删中间切片后顺延重排，并同步同目录 css 中 *_IMG=素材名,序号 的引用。
   const shifted = new Map([...appState.tileDocument.renumberSections("IMG")].map(([from, to]) => [from.slice(3), to.slice(3)]))
+  appState.tileDocument = withTileHeader(appState.tileDocument)
   const changes: Array<Extract<Change, { kind: "text" }>> = [{ kind: "text", path: appState.tilePath, before, after: appState.tileDocument.toString() }]
   const directory = appState.selectedResourcePath.slice(0, appState.selectedResourcePath.lastIndexOf("/") + 1)
   const stem = appState.selectedResourcePath.slice(directory.length).replace(/\.png$/i, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")

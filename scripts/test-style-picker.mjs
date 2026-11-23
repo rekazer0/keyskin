@@ -281,7 +281,7 @@ try {
       const after = await snapshot(page, format)
       const afterSlices = await imageSlices()
       assert.deepEqual(afterSlices.slices, [{ index: 1, source: [0, 0, 2, 2] }], '无切片时自动创建整图切片')
-      if (format === 'bds' && toStyle) assert.match(afterSlices.text, /USE_ALPHA=1\nTILE_NUM=1/, '保留已有切片文件的设置')
+      if (format === 'bds') assert.match(afterSlices.text, /^\[GLOBAL\]\nUSE_ALPHA=1\nTILE_NUM=1\n/, '新建或更新切片文件时写入有效表头')
       assert.equal(after.undo, before.undo + 1, '切片、样式与引用合为一步撤销')
       assert.equal(after.image[state === 'pressed' ? 'hl' : 'normal'], 'unsliced,1')
       assert.deepEqual(await page.evaluate(async ({ id, state }) => {

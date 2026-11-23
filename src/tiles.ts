@@ -72,7 +72,6 @@ export function updateTileSlice(document: IniDocument, slice: TileSlice): void {
         { key: "INNER_RECT", value: slice.inner.join(",") },
       ] : []),
     ])
-    syncTileCount(document)
     return
   }
   document.set(section, "SOURCE_RECT", slice.source.join(","))
@@ -86,10 +85,17 @@ export function updateTileSlice(document: IniDocument, slice: TileSlice): void {
   }
 }
 
-// 工具书 V6 p43：[GLOBAL] TILE_NUM 必须与切片数量一致。
-function syncTileCount(document: IniDocument): void {
-  if (document.get("GLOBAL", "TILE_NUM") === undefined) return
-  document.set("GLOBAL", "TILE_NUM", String(document.sections().filter((name) => tileSectionIndex(name) !== undefined).length))
+/** TILE_NUM is the highest readable IMG index, even if some indices are unused. */
+export function withTileHeader(document: IniDocument): IniDocument {
+  const count = document.sections().reduce((max, name) => Math.max(max, tileSectionIndex(name) ?? 0), 0)
+  if (!document.hasSection("GLOBAL")) {
+    const text = document.toString()
+    const eol = text.match(/\r\n|\n|\r/)?.[0] ?? "\n"
+    return IniDocument.parse(text.replace(/^\uFEFF?/, (bom) => `${bom}[GLOBAL]${eol}USE_ALPHA=1${eol}TILE_NUM=${count}${eol}${eol}`))
+  }
+  if (document.get("GLOBAL", "USE_ALPHA") === undefined) document.set("GLOBAL", "USE_ALPHA", "1")
+  document.set("GLOBAL", "TILE_NUM", String(count))
+  return document
 }
 
 export function boundedTileRect(
@@ -112,9 +118,7 @@ export function tileSliceAt(slices: readonly TileSlice[], point: TilePoint): Til
 }
 
 export function removeTileSlice(document: IniDocument, index: number): boolean {
-  const removed = document.removeSections(document.sections().filter((name) => tileSectionIndex(name) === index))
-  if (removed) syncTileCount(document)
-  return removed
+  return document.removeSections(document.sections().filter((name) => tileSectionIndex(name) === index))
 }
 
 function tileSectionIndex(section: string): number | undefined {

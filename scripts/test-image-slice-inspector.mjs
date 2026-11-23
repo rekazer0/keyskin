@@ -9,10 +9,18 @@ import { bdaAnimatedSkinBytes } from "../tests/helpers/bda-animation-fixture.mjs
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
 import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 
 const archive = SkinArchive.open(bdsFixture())
 for (const path of archive.names().filter(path => archive.isImage(path))) {
   archive.setBytes(path, encodePng({ width: 32, height: 16, data: new Uint8Array(32 * 16 * 4).fill(0x80) }))
+}
+
+const grid = { width: 35, height: 25, data: new Uint8Array(35 * 25 * 4) }
+for (let y = 0; y < grid.height; y++) {
+  for (let x = 0; x < grid.width; x++) {
+    if (x % 5 < 4 && y % 5 < 4) grid.data[(y * grid.width + x) * 4 + 3] = 255
+  }
 }
 
 const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41924, strictPort: false, hmr: false } })
@@ -26,6 +34,7 @@ try {
       const errors = []
       page.on("pageerror", error => errors.push(error.message))
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+      await dismissStartupDisclaimer(page)
       await page.locator("#browser-open").setInputFiles({ name: "切片.bds", mimeType: "application/octet-stream", buffer: Buffer.from(archive.toBytes("bds")) })
       await page.waitForFunction(() => !document.querySelector("#open").disabled && (!document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled))
       const close = page.locator("#file-operation-dialog[open] #file-operation-close")
@@ -124,10 +133,51 @@ try {
       await dialog.waitFor({ state: 'hidden' })
       assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false)
       await page.screenshot({ path: `.ui-current/image-slice-inspector-${engine.name()}.png` })
+      await page.locator('#resource-upload-input').setInputFiles({ name: 'grid.png', mimeType: 'image/png', buffer: Buffer.from(encodePng(grid)) })
+      const gridCard = page.locator('#resource-gallery .ui-image-card[data-path$="/grid.png"]')
+      await gridCard.dblclick()
+      await dialog.locator('#atlas-auto-slice').click()
+      await dialog.getByText('有未保存的切片修改').waitFor()
+      await save.click()
+      await dialog.waitFor({ state: 'hidden' })
+      const gridPath = await gridCard.getAttribute('data-path')
+      const readGridTil = () => page.evaluate(async (path) => {
+        const { appState } = await import('/src/app/state.ts')
+        return appState.archive.getText(path.replace(/\.png$/, '.til'))
+      }, gridPath)
+      const til = await readGridTil()
+      assert.match(til, /^\[GLOBAL\]\nUSE_ALPHA=1\nTILE_NUM=35\n/)
+      assert.match(til, /\[IMG35\]\nSOURCE_RECT=30,20,4,4/)
+
+      await gridCard.dblclick()
+      await dialog.locator('#new-tile').click()
+      const { x, y, width: w, height: h } = await dialog.locator('#atlas-canvas').boundingBox()
+      await page.mouse.move(x + w / 5, y + h / 5)
+      await page.mouse.down()
+      await page.mouse.move(x + w * 2 / 5, y + h * 2 / 5)
+      await page.mouse.up()
+      await dialog.getByText('有未保存的切片修改').waitFor()
+      assert.equal(await readGridTil(), til, 'new slice and count stay in the draft until saved')
+      await save.click()
+      await dialog.waitFor({ state: 'hidden' })
+      const added = await readGridTil()
+      assert.match(added, /^\[GLOBAL\]\nUSE_ALPHA=1\nTILE_NUM=36\n/)
+      assert.match(added, /\[IMG36\]\nSOURCE_RECT=7,5,7,5/)
+
+      await page.locator('#image-resource-slices [data-slice-index="36"]').dblclick()
+      await dialog.locator('#duplicate-tile').click()
+      await save.click()
+      await dialog.waitFor({ state: 'hidden' })
+      const duplicated = await readGridTil()
+      assert.match(duplicated, /^\[GLOBAL\]\nUSE_ALPHA=1\nTILE_NUM=37\n/)
+      assert.match(duplicated, /\[IMG37\]\nSOURCE_RECT=7,5,7,5/)
+      await page.keyboard.press('ControlOrMeta+z')
+      assert.equal(await readGridTil(), added, 'undo restores the slice and count together')
       for (const [format, bytes] of Object.entries({ bdi: archive.toBytes("bdi"), bda: bdaAnimatedSkinBytes(), sxi: sxiAnimationFixture(), ssf: ssfFixture() })) {
         const other = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" })
         other.on("pageerror", error => errors.push(`${format}: ${error.message}`))
         await other.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+        await dismissStartupDisclaimer(other)
         await other.locator("#browser-open").setInputFiles({ name: `切片.${format}`, mimeType: "application/octet-stream", buffer: Buffer.from(bytes) })
         await other.waitForFunction(() => !document.querySelector("#open").disabled && (!document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled))
         const operationClose = other.locator("#file-operation-dialog[open] #file-operation-close")

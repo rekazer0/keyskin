@@ -1,5 +1,5 @@
 import { IniDocument } from "./ini.ts"
-import { nextTileIndex, updateTileSlice, type TileRect, type TileSlice } from "./tiles.ts"
+import { nextTileIndex, updateTileSlice, withTileHeader, type TileRect, type TileSlice } from "./tiles.ts"
 
 export { nextTileIndex } from "./tiles.ts"
 
@@ -66,9 +66,9 @@ export function planLayoutImage(target: LayoutImageTarget, keys: readonly Layout
 }
 
 function layoutImageTileDocument(plan: LayoutImagePlan, alphaMode: LayoutImageAlphaMode): IniDocument {
-  const tiles = IniDocument.parse(`[GLOBAL]\r\nUSE_ALPHA=${alphaMode}\r\nTILE_NUM=${plan.slices.length}\r\n\r\n`)
+  const tiles = IniDocument.parse(`[GLOBAL]\r\nUSE_ALPHA=${alphaMode}\r\n\r\n`)
   for (const slice of plan.slices) updateTileSlice(tiles, slice)
-  return tiles
+  return withTileHeader(tiles)
 }
 
 export function layoutImageTileBytes(plan: LayoutImagePlan, alphaMode: LayoutImageAlphaMode): Uint8Array {
