@@ -997,16 +997,16 @@ body {
 /* —— 样式引用卡（检查器，styleReferenceCard()）：左侧可输入的编号与类型图标，右侧正常 | 按下两格预览或单格内容 —— */
 .ui-style-ref-list { display: grid; gap: var(--space-xs); min-width: 0; }
 .ui-style-ref-list > input { display: none; }
-.ui-style-ref { position: relative; display: grid; grid-template-columns: var(--style-reference-meta-width) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: var(--style-reference-height); min-width: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--panel); }
-.ui-style-ref:has(> .ui-style-ref-meta > .ui-style-ref-name) { grid-template-columns: minmax(var(--style-reference-meta-width), 7fr) minmax(0, 13fr); }
-.ui-style-ref-meta { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; justify-items: center; gap: var(--space-xs); min-width: 0; padding: 0 var(--space-xs); }
+.ui-style-ref { --_meta-width: var(--style-reference-meta-width); position: relative; display: grid; grid-template-columns: var(--_meta-width) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: var(--style-reference-height); min-width: 0; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--panel); }
+.ui-style-ref:has(> .ui-style-ref-meta > .ui-style-ref-name) { --_meta-width: minmax(var(--style-reference-meta-width), 35%); }
+.ui-style-ref-meta { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; justify-items: center; gap: var(--space-2xs); min-width: 0; padding: 0 var(--space-xs); }
 .ui-style-ref-meta::after { content: ""; position: absolute; inset-block: var(--space-xs); right: 0; width: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none; }
 .ui-style-ref-meta > input { position: relative; z-index: 1; width: 100%; min-width: 0; height: auto; padding: 0; border: 0; outline: 0; border-radius: var(--radius-sm); background: none; color: var(--text); font: var(--font-weight-semibold) var(--font-size-lg) var(--font-ui); text-align: center; }
 .ui-style-ref-meta > input:focus-visible { color: var(--accent); }
 /* 搜狗与图片卡写的是文件名而不是编号：等宽小字、截断 */
 .ui-style-ref-meta > input.ui-style-ref-name { font: var(--font-weight-medium) var(--font-size-xs) var(--font-mono); text-overflow: ellipsis; }
 .ui-style-ref-meta .ui-style-card-kind { margin-left: 0; }
-.ui-style-ref > .ui-style-ref-meta :is(.ui-style-card-kind, .ui-style-ref-action) > .ui-icon { width: var(--icon-size-xs); height: var(--icon-size-xs); margin-top: var(--space-2xs); }
+.ui-style-ref > .ui-style-ref-meta :is(.ui-style-card-kind, .ui-style-ref-action) > .ui-icon { width: var(--icon-size-xs); height: var(--icon-size-xs); }
 .ui-style-ref-action { display: grid; place-items: center; padding: 0; border: 0; background: none; color: var(--tertiary); }
 .ui-style-ref-meta:has(> .ui-style-ref-action) { border-radius: var(--radius-sm); transition: background-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
 .ui-style-ref-states { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-2xs); min-width: 0; min-height: 0; padding: var(--space-2xs); }
@@ -1053,6 +1053,11 @@ body {
   .ui-style-ref > .ui-style-remove:enabled:hover { width: calc(var(--space-2xl) + var(--space-md)); background: var(--state-danger); color: var(--on-accent); opacity: 1; }
 }
 @media (hover: none) { .ui-style-remove { opacity: 0.5; } }
+@media (max-width: 760px) and (hover: none) {
+  .ui-style-ref { grid-template-columns: var(--_meta-width) minmax(0, 1fr) auto; }
+  .ui-style-ref > .ui-style-remove:not([hidden]) { position: static; width: var(--mobile-control-height); border-inline-start: 1px solid var(--line-soft); background: var(--panel); color: var(--secondary); opacity: 1; }
+  .ui-style-ref > .ui-style-remove:enabled:is(:focus-visible, :active) { width: var(--mobile-control-height); }
+}
 /* 字段标签右端的追加按钮（多张前景、粒子图片、前景动画、BDA 前景层） */
 .ui-style-ref-append { margin-left: auto; }
 /* 新建样式的虚线卡，只放 plus：样式网格末尾（styleAddCard()，和相邻卡片等高） */

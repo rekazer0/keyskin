@@ -2918,6 +2918,9 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 @media (max-width: 760px) and (orientation: portrait) {
   :root[data-mobile-resource-list="true"] .titlebar { display: none; }
   :root[data-mobile-resource-list="true"] body.app-window main { height: calc(var(--viewport-height) - var(--mobile-navigation-height)); }
+  :root[data-mobile-resource-list="true"] .source #resource-list-view > .resource-filters { display: grid; grid-template-columns: minmax(calc(var(--mobile-control-height) * 2), 1fr) minmax(0, 2fr); }
+  .source .resource-filters > .resource-filter-options { grid-column: 1 / -1; }
+  .source #resource-list-view .resource-filters > .ui-search { min-width: 0; min-height: var(--mobile-control-height); }
 }
 
 @media (max-width: 760px) and (orientation: portrait) {

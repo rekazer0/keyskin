@@ -326,6 +326,13 @@ export function wireResourcePage(): void {
     group.append(new Option("", value))
   }
   category.addEventListener("change", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-choice="${category.value}"]`)?.click())
+  const filterToggle = $("#mobile-resource-filters-toggle")
+  const filterOptions = $("#resource-filter-options")
+  filterToggle.addEventListener("click", () => {
+    const expanded = filterOptions.hasAttribute("data-collapsed")
+    filterOptions.toggleAttribute("data-collapsed", !expanded)
+    filterToggle.setAttribute("aria-expanded", String(expanded))
+  })
   const redraw = () => { if (appState.resourceCatalog) renderCatalog(); else renderResourceInspector() }
   $("#resource-create-style").addEventListener("click", () => {
     if (appState.resourceInspectorMode !== "style") { resourceUploadButton.click(); return }
