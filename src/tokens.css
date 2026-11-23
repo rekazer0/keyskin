@@ -116,8 +116,7 @@
   --ai-typewriter-ink: #624B3F;
   --ai-typewriter-accent: #A95743;
   --ai-chat-input-max-height: 60vh;
-  --ai-chat-input-footer: 40px;
-  --ai-chat-send-size: 28px;
+  --ai-chat-input-footer: calc(var(--control-height-lg) + var(--space-md));
 
   /* 图标：只用 Lucide（src/icons.ts），描边 1.5 */
   --icon-size-xs: 12px;
@@ -267,7 +266,7 @@
   :root, :root.macos { --titlebar-height: calc(48px + var(--safe-area-top)); }
   /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
   :root { --tool-tile-min-width: 76px; --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-workspace-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-navigation-height)); --mobile-inspector-split: min(calc(var(--mobile-workspace-height) / 2), 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --style-card-width: 128px; --style-reference-height: 72px; --style-reference-meta-width: 48px; }
-  :root { --ai-chat-input-min-height: var(--control-height-lg); --ai-chat-input-max-height: 30vh; --ai-chat-input-footer: calc(var(--control-height-lg) + var(--space-sm)); --ai-chat-send-size: var(--control-height-lg); }
+  :root { --ai-chat-input-min-height: var(--control-height-lg); --ai-chat-input-max-height: 30vh; }
   :root:has(#resource-inspector:not([hidden]) #resource-list-view:not([hidden])) { --mobile-preview-height: 0px; }
   :root[data-keyboard-open="true"]:has(#mobile-key-preview:not([hidden])) { --mobile-preview-height: 148px; }
 }

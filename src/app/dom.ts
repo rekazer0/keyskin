@@ -408,6 +408,8 @@ export const aiDesignStatus = $("#ai-design-status")
 
 export const aiDesignChat = $("#ai-design-chat")
 
+export const aiDesignSend = $("#ai-design-send") as HTMLButtonElement
+
 export const aiDesignModel = $("#ai-design-model") as HTMLSelectElement
 
 export const aiDesignThinking = $("#ai-design-thinking") as HTMLSelectElement

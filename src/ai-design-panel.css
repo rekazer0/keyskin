@@ -139,16 +139,17 @@
 #ai-design-panel .ai-design-toolbar {
   position: absolute;
   z-index: 1;
-  left: 21px;
-  right: 56px;
-  bottom: 21px;
+  inset-inline: calc(var(--space-lg) + var(--space-2xs) + var(--space-xs));
+  bottom: calc(var(--space-lg) + var(--space-2xs) + var(--space-xs));
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 28px;
+  height: var(--control-height-lg);
   pointer-events: none;
 }
-#ai-design-panel .ai-design-toolbar > * { pointer-events: auto; }
+#ai-design-panel .ai-design-toolbar > :not(:disabled) { pointer-events: auto; }
+#ai-design-send { flex: none; margin-inline-start: auto; }
+#ai-design-send [data-pen-icon="square"] { fill: currentColor; width: var(--icon-size-xs); height: var(--icon-size-xs); }
 #ai-design-chat[data-draft] + .ai-design-toolbar { display: none; }
 #ai-design-panel .ai-design-toolbar select {
   max-width: 100%;
@@ -349,7 +350,6 @@
   #ai-design-panel .ai-context { align-items: center; }
   #ai-design-panel .ai-scope { height: var(--control-height-lg); }
   #ai-design-panel .ai-design-composer { min-height: 0; }
-  #ai-design-panel .ai-design-toolbar { bottom: calc(var(--space-lg) + var(--space-xs)); height: var(--control-height-lg); right: calc(var(--space-lg) + var(--control-height-lg) + var(--space-sm)); }
   #ai-design-panel .ai-design-toolbar :is(select, .ai-design-settings) { height: var(--control-height-lg); }
   #ai-design-panel .ai-draft-actions > button { min-height: var(--control-height-lg); }
   #ai-design-panel .ai-design-composer:has(#ai-design-chat[data-draft]) { display: none; }

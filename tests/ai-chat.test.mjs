@@ -20,11 +20,13 @@ async function setup(run) {
   })
   vm.runInContext(code, context)
   const chat = { closest: () => null, clearMessages() {}, focusInput() {}, disableSubmitButton() {} }
-  const controller = await context.connectAiChat(chat, run)
+  const attributes = new Map()
+  const send = { dataset: {}, getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value) }
+  const controller = await context.connectAiChat(chat, run, send)
   const responses = []
   let closes = 0
   const signals = { onOpen() {}, onClose() { closes++ }, onResponse: async ({ text }) => responses.push(text), stopClicked: {} }
-  return { chat, controller, responses, signals, closes: () => closes }
+  return { chat, controller, send, responses, signals, closes: () => closes }
 }
 const flush = () => new Promise(resolve => setImmediate(resolve))
 test('native stream preserves markdown and appends summary once', async () => {

@@ -102,7 +102,6 @@ function configureAppearance(chat: DeepChat): void {
   const lineStrong = "var(--line-strong)"
   const accent = "var(--accent)"
   const accentSoft = "var(--accent-soft)"
-  const onAccent = "var(--on-accent)"
   const hover = "var(--hover)"
   const ok = "var(--state-ok)"
   const danger = "var(--state-danger)"
@@ -259,10 +258,8 @@ function configureAppearance(chat: DeepChat): void {
       background: color-mix(in srgb, ${text} 6%, transparent); }
     .message-bubble a { color: ${accent}; }
 
-    /* The submit glyph is stroke-drawn; deep-chat's own rule fills it and colourises
-       it with a filter, which turns the arrow into a grey blob. */
-    #submit-icon { width: 14px !important; height: 14px !important; filter: none !important;
-      fill: none !important; stroke: currentColor; stroke-width: 1.5; }
+    /* The visible composer action is a native KeySkin button outside the shadow root. */
+    .input-button[role="button"] { visibility: hidden; }
     #text-input:focus-visible { outline: none; }
     /* Pasted / dropped attachments sit above the text, inside the composer. */
     #text-input-container { flex-wrap: wrap; transition: border-color ${fast}, box-shadow ${fast}; }
@@ -288,9 +285,6 @@ function configureAppearance(chat: DeepChat): void {
     #text-input-container:hover .ai-resize::after, .ai-resize:focus-visible::after,
     .ai-resize[data-dragging]::after { opacity: 1; }
     .ai-resize:focus-visible { outline: none; }
-    .input-button { display: grid !important; place-items: center; padding: 0 !important; margin: 0 !important; }
-    .input-button > svg { width: 14px !important; height: 14px !important; fill: none !important;
-      stroke: currentColor !important; filter: none !important; }
     #text-input:empty::before { font-weight: 400; }
     #scroll-button { padding: 8px; border: 1px solid ${line}; border-radius: ${radiusFull};
       background: ${control}; box-shadow: var(--shadow-md); }
@@ -333,25 +327,7 @@ function configureAppearance(chat: DeepChat): void {
       },
     },
   }
-  const button = { borderRadius: radiusMd, boxSizing: "border-box", width: "var(--ai-chat-send-size)", height: "var(--ai-chat-send-size)", bottom: "6px", right: "6px", boxShadow: "none" }
-  chat.submitButtonStyles = {
-    position: "inside-end",
-    tooltip: { text: "发送；生成时点击可停止" },
-    submit: {
-      // A symmetric arrow sits optically centred, unlike the default paper plane.
-      svg: { content: iconMarkup("arrow-up", 14) },
-      container: {
-        default: { ...button, backgroundColor: accent, color: onAccent },
-        hover: { backgroundColor: `color-mix(in srgb, ${accent} 88%, ${text})`, transform: "none" },
-      },
-    },
-    disabled: {
-      container: { default: { ...button, backgroundColor: sunken, border: `1px solid ${line}`, color: muted, cursor: "not-allowed" } },
-    },
-    stop: {
-      container: { default: { ...button, border: `1px solid ${lineStrong}`, backgroundColor: sunken, color: secondary } },
-    },
-  }
+  chat.submitButtonStyles = { position: "inside-end" }
   chat.focusMode = { smoothScroll: true, streamAutoScroll: true, fade: false }
   chat.scrollButton = { smoothScroll: true }
   chat.errorMessages = { displayServiceErrorMessages: false }
@@ -384,10 +360,31 @@ function resizeGrip(input: HTMLElement): HTMLElement {
   return grip
 }
 
-export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promise<AiChatController> {
+export async function connectAiChat(element: HTMLElement, run: AiChatRun, sendButton: HTMLButtonElement): Promise<AiChatController> {
   await customElements.whenDefined("deep-chat")
   const chat = element as DeepChat
   configureAppearance(chat)
+
+  let activeController: AbortController | undefined
+  let submitEnabled = true
+  const inputElement = () => chat.shadowRoot?.querySelector<HTMLElement>("#text-input")
+  const validateInput = (text?: string) => Boolean(text?.trim()) && (text?.length ?? 0) <= 8_000
+  const syncSendButton = () => {
+    const running = Boolean(activeController)
+    const label = running ? "停止生成" : "发送消息"
+    if (sendButton.getAttribute("aria-label") !== label) {
+      sendButton.setAttribute("aria-label", label)
+      sendButton.title = label
+      sendButton.innerHTML = iconMarkup(running ? "square" : "arrow-up", 16)
+    }
+    sendButton.disabled = activeController ? activeController.signal.aborted : !submitEnabled || !validateInput(inputElement()?.innerText)
+    sendButton.dataset.variant = running || sendButton.disabled ? "filled" : "primary"
+  }
+  // Keep clicks and Enter on the same deep-chat submission and cancellation paths.
+  sendButton.onclick = () => {
+    chat.shadowRoot?.querySelector<HTMLElement>('.input-button[role="button"]')?.click()
+    syncSendButton()
+  }
 
   let attachments: File[] = []
   let attachmentStrip: HTMLElement | undefined
@@ -426,7 +423,7 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
   }
 
   chat.onComponentRender = () => {
-    const input = chat.shadowRoot?.querySelector<HTMLElement>("#text-input")
+    const input = inputElement()
     input?.setAttribute("aria-label", "描述你想要的皮肤效果")
     const box = chat.shadowRoot?.querySelector<HTMLElement>("#text-input-container")
     if (input && box && !box.querySelector(".ai-resize")) box.prepend(resizeGrip(input))
@@ -440,6 +437,7 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
       // but :empty fails, so the placeholder never comes back.
       input.addEventListener("input", () => {
         if (input.textContent === "" && input.childNodes.length) input.replaceChildren()
+        syncSendButton()
       })
       // Capture phase: deep-chat's own paste handler only keeps plain text.
       input.addEventListener("paste", (event) => {
@@ -463,7 +461,7 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
         addAttachments(files)
       })
     }
-    chat.shadowRoot?.querySelector(".input-button[role=button]")?.setAttribute("aria-label", "发送消息；生成时点击停止")
+    syncSendButton()
     const suggestions = [...chat.shadowRoot?.querySelectorAll<HTMLButtonElement>("[data-ai-prompt]") ?? []]
     const presets = new Set(suggestions.map((button) => button.dataset.aiPrompt))
     suggestions.forEach((button) => {
@@ -484,10 +482,8 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
     })
   }
   chat.requestBodyLimits = { maxMessages: 1, totalMessagesMaxCharLength: 8_000 }
-  chat.validateInput = (text) => Boolean(text?.trim()) && (text?.length ?? 0) <= 8_000
+  chat.validateInput = validateInput
 
-  let activeController: AbortController | undefined
-  let submitEnabled = true
   let closeActive: (() => void) | undefined
   let generation = 0
 
@@ -630,6 +626,7 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
 
       signals.stopClicked.listener = () => controller.abort()
       signals.onOpen()
+      syncSendButton()
       if (files.length) appendStep("reading", `附带 ${files.length} 个附件：${files.map((file) => file.name || "粘贴的图片").join("、")}`)
 
       void run(prompt, {
@@ -666,7 +663,10 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
         await signals.onResponse({ text: `${streamed ? "\n\n" : ""}${message}` })
       }).finally(() => {
         if (activeController === controller) activeController = undefined
-        if (isCurrent()) close()
+        if (isCurrent()) {
+          close()
+          syncSendButton()
+        }
       })
     },
   }
@@ -688,7 +688,7 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
       for (const { group, position, node } of snapshot.timelines) groups[group]?.insertBefore(node, groups[group]!.children[position] ?? null)
       attachments = [...snapshot.attachments]
       paintAttachments()
-      const input = chat.shadowRoot?.querySelector<HTMLElement>("#text-input")
+      const input = inputElement()
       if (input) {
         input.innerText = snapshot.input
         input.dispatchEvent(new Event("input", { bubbles: true }))
@@ -711,14 +711,15 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
       // the inline style instead would leave deep-chat's flag stuck at "hidden"
       // and the welcome plate would then stay on top of the next conversation.
       chat.clearMessages(true)
-      const input = chat.shadowRoot?.querySelector<HTMLElement>("#text-input")
+      const input = inputElement()
       if (input) {
         input.innerText = ""
         input.dispatchEvent(new Event("input", { bubbles: true }))
       }
+      syncSendButton()
     },
     setInput: (text) => {
-      const input = chat.shadowRoot?.querySelector<HTMLElement>("#text-input")
+      const input = inputElement()
       if (!input || activeController) return
       input.innerText = text.slice(0, 8_000)
       input.dispatchEvent(new Event("input", { bubbles: true }))
@@ -730,6 +731,7 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun): Promi
       if (enabled === submitEnabled) return
       submitEnabled = enabled
       chat.disableSubmitButton(!enabled)
+      syncSendButton()
     },
   }
 }

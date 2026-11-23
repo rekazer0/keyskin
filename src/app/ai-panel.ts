@@ -2,7 +2,7 @@ import { SkinArchive } from "../skin.ts"
 import { type AiSkinEditableFile, type AiSkinDraftChange } from "../ai-skin-workspace.ts"
 import { bdaConfigPath } from "../bda.ts"
 import { bdaDecodedSourceEditable, decodedBdaEditorSource, applyDecodedBdaSource } from "../bda-source.ts"
-import { theme, orientation, previewCanvas, selectedKeyName, aiContextKey, aiContextPreview, aiDesignModel, aiDesignPanel, aiDesignStatus, documentName, layout, device, aiDesignThinking, aiDraftPanel, aiDesignChat, aiDraftFiles, aiDraftSummary, aiNewSession, aiDraftApply, aiDraftCancel, aiModelSettings, aiDesignIntensity, aiDesignScope, $ } from "./dom"
+import { theme, orientation, previewCanvas, selectedKeyName, aiContextKey, aiContextPreview, aiDesignModel, aiDesignPanel, aiDesignStatus, documentName, layout, device, aiDesignThinking, aiDraftPanel, aiDesignChat, aiDesignSend, aiDraftFiles, aiDraftSummary, aiNewSession, aiDraftApply, aiDraftCancel, aiModelSettings, aiDesignIntensity, aiDesignScope, $ } from "./dom"
 import { appState } from "./state"
 import { preferredPath, refreshBdaLayout } from "./bda-documents"
 import { genConfigPath, styleConfigPath, effectiveKeyValue } from "./config-context"
@@ -605,7 +605,7 @@ export function applyAiDesignDraft(): void {
 
 export function ensureAiChat(): Promise<AiChatController> {
   appState.aiChatInitialization ??= import("../ai-chat.ts")
-    .then(({ connectAiChat }) => connectAiChat(aiDesignChat, runAiDesignRequest))
+    .then(({ connectAiChat }) => connectAiChat(aiDesignChat, runAiDesignRequest, aiDesignSend))
     .catch((error) => { appState.aiChatInitialization = undefined; throw error })
   return appState.aiChatInitialization.then((controller) => {
     appState.aiChatController = controller

@@ -57,6 +57,8 @@ try {
     select.replaceChildren(...appState.savedModels.map((model, index) => new Option(model.model, String(index))))
     select.hidden = false
     document.querySelector('#ai-design-thinking').hidden = false
+    document.querySelector('#ai-design-intensity').hidden = false
+    document.querySelector('.ai-design-toolbar .ai-design-settings').hidden = true
     syncAiDesignThinking()
     await ensureAiChat()
     document.querySelector('[data-inspector-tab="ai"]').hidden = false
@@ -72,6 +74,10 @@ try {
   assert.equal(await thinking.inputValue(), 'medium')
   await page.locator('#ai-design-chat .ai-resize').waitFor()
   assert.equal(await page.locator('#ai-sessions').isVisible(), false)
+  const composer = page.locator('#ai-design-chat #text-input-container')
+  const send = page.getByRole('button', { name: '发送消息', exact: true })
+  assert.ok(await send.isDisabled(), 'empty composer must not advertise an active send action')
+  await composer.screenshot({ path: '/tmp/keyskin-ai-composer-empty.png' })
 
   // The welcome starts at the top even in a tall inspector; choosing a sample only fills the composer.
   const welcome = page.locator('#ai-design-chat .ai-welcome')
@@ -91,7 +97,9 @@ try {
     return appState.archive.names().map(path => [path, Array.from(appState.archive.getBytes(path))])
   })
   await page.locator('#ai-design-chat #text-input').fill('分析当前设计')
-  await page.locator('#ai-design-chat #text-input').press('Enter')
+  assert.equal(await send.getAttribute('data-variant'), 'primary')
+  await composer.screenshot({ path: '/tmp/keyskin-ai-composer-send.png' })
+  await send.click()
   await page.waitForFunction(() => document.querySelector('#ai-design-status').textContent.includes('不能修改皮肤'))
   assert.deepEqual(await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
@@ -121,6 +129,22 @@ try {
     const { appState } = await import('/src/app/state.ts')
     return !appState.aiDesignDraft && !appState.aiDraftPreview
   }), true)
+
+  await page.waitForFunction(() => document.querySelector('#ai-design-send').getAttribute('aria-label') === '发送消息')
+  await page.evaluate(() => { window.designStarted = false })
+  await page.locator('#ai-design-chat #text-input').fill('测试停止生成')
+  await page.locator('#ai-design-chat #text-input').press('Enter')
+  await page.waitForFunction(() => window.designStarted)
+  const stop = page.getByRole('button', { name: '停止生成', exact: true })
+  assert.equal(await stop.getAttribute('data-variant'), 'filled')
+  await composer.screenshot({ path: '/tmp/keyskin-ai-composer-stop.png' })
+  await stop.focus()
+  await stop.press('Space')
+  assert.ok(await stop.isDisabled(), 'stop is disabled while cancellation settles')
+  await page.evaluate(() => window.finishDesign())
+  await page.getByRole('status').filter({ hasText: '已停止 · 未应用任何修改' }).waitFor()
+  await send.waitFor()
+  assert.ok(await send.isDisabled())
 
   // Exercise real deep-chat messages, timeline nodes, attachments and typed input across switches.
   await page.evaluate(async () => {
@@ -280,6 +304,14 @@ try {
   await page.getByRole('dialog', { name: '清理 AI 历史？' }).getByRole('button', { name: '清理记录', exact: true }).click()
   await page.waitForFunction(async () => (await import('/src/app/state.ts')).appState.aiSessions.length === 1)
   if (await page.locator('#ai-sessions').isVisible()) await page.locator('#ai-sessions-close').click()
+  await page.setViewportSize({ width: 320, height: 568 })
+  await chat.locator('#text-input').fill('调整配色')
+  const touch = await send.boundingBox()
+  const input = await composer.boundingBox()
+  const model = await page.locator('#ai-design-model').boundingBox()
+  assert.ok(touch.width >= 44 && touch.height >= 44)
+  assert.ok(touch.x >= model.x + model.width && touch.x + touch.width < input.x + input.width)
+  await composer.screenshot({ path: '/tmp/keyskin-ai-composer-mobile-dark.png' })
   await page.setViewportSize({ width: 1440, height: 1000 })
 
   // A desktop settings instance uses API results for subscriptions as well as API-key providers.
@@ -306,7 +338,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#image-model-status').textContent.includes('test API unavailable'))
   assert.equal(await page.locator('#refresh-image-model-list').isDisabled(), false)
   assert.deepEqual(errors, [])
-  console.log('PASS: model efforts/default, preview read-only and mode switch, session title/icon/dismiss/transcript/input/attachments/context/keyboard, subscription image API list and errors')
+  console.log('PASS: model efforts/default, preview read-only and mode switch, send and stop controls, session title/icon/dismiss/transcript/input/attachments/context/keyboard, subscription image API list and errors')
 } finally {
   await browser?.close()
   await server.close()
