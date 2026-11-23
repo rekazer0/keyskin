@@ -63,7 +63,7 @@ export const appState = {
   sourceWorkspacePendingArchive: undefined as SkinArchive | undefined,
   stopSourceWatch: undefined as UnwatchFn | undefined,
   sourceAutosaveTimer: undefined as number | undefined,
-  sourceAutosaveQueue: Promise.resolve(),
+  sourceSyncQueue: Promise.resolve(),
   sourceWriteSnapshotTimer: undefined as number | undefined,
   sourceWatchTimer: undefined as number | undefined,
   selectedPath: "",

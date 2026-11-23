@@ -206,7 +206,7 @@ pub async fn read_source_workspace<R: Runtime>(
 pub async fn read_source_workspace_archive<R: Runtime>(
     app: &AppHandle<R>,
     uri: String,
-) -> Result<String, String> {
+) -> Result<serde_json::Value, String> {
     app.state::<NativeShare<R>>()
         .0
         .run_mobile_plugin_async("readSourceWorkspaceArchive", WorkspacePayload { uri })

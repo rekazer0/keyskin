@@ -72,6 +72,7 @@ export function updateTileSlice(document: IniDocument, slice: TileSlice): void {
         { key: "INNER_RECT", value: slice.inner.join(",") },
       ] : []),
     ])
+    syncTileCount(document)
     return
   }
   document.set(section, "SOURCE_RECT", slice.source.join(","))
@@ -83,11 +84,21 @@ export function updateTileSlice(document: IniDocument, slice: TileSlice): void {
     // 工具书 V6 p44：有 SCALE 无 INNER_RECT 属于错误写法。
     document.remove(section, "SCALE")
   }
+  syncTileCount(document)
+}
+
+function highestTileIndex(document: IniDocument): number {
+  return document.sections().reduce((max, name) => Math.max(max, tileSectionIndex(name) ?? 0), 0)
+}
+
+// 工具书 V6 p43：TILE_NUM 与最高切片编号一致；改动切片后立即同步，调用方不必再包一层。
+function syncTileCount(document: IniDocument): void {
+  if (document.hasSection("GLOBAL")) document.set("GLOBAL", "TILE_NUM", String(highestTileIndex(document)))
 }
 
 /** TILE_NUM is the highest readable IMG index, even if some indices are unused. */
 export function withTileHeader(document: IniDocument): IniDocument {
-  const count = document.sections().reduce((max, name) => Math.max(max, tileSectionIndex(name) ?? 0), 0)
+  const count = highestTileIndex(document)
   if (!document.hasSection("GLOBAL")) {
     const text = document.toString()
     const eol = text.match(/\r\n|\n|\r/)?.[0] ?? "\n"
@@ -118,7 +129,9 @@ export function tileSliceAt(slices: readonly TileSlice[], point: TilePoint): Til
 }
 
 export function removeTileSlice(document: IniDocument, index: number): boolean {
-  return document.removeSections(document.sections().filter((name) => tileSectionIndex(name) === index))
+  const removed = document.removeSections(document.sections().filter((name) => tileSectionIndex(name) === index))
+  if (removed) syncTileCount(document)
+  return removed
 }
 
 function tileSectionIndex(section: string): number | undefined {

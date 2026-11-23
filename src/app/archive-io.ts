@@ -6,6 +6,7 @@ import { ask } from "./ask.ts"
 import { appState } from "./state"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
+import { prefixedSourcePath } from "../source-tree.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { buildSxiZipAsync } from "../palm/palm-export.ts"
 import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
@@ -27,7 +28,7 @@ import { bdaAvailableLayoutPaths, preferredPath, isBdaLayoutPath } from "./bda-d
 import { selectFile } from "./navigation"
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
-import { type SourceFilePayload, type ChosenFileData, type BrowserSaveFileHandle } from "./types"
+import { type SourceFilePayload, type BrowserSaveFileHandle } from "./types"
 import { readFile, writeFile } from "@tauri-apps/plugin-fs"
 import { convertBdaArchive } from "../bda-convert.ts"
 import { flushNumberInputWheel } from "../number-input-wheel.ts"
@@ -195,7 +196,7 @@ function startSourceWorkspace(archive: SkinArchive, path: string, name: string):
       workspace = await create(null)
       showStatus("自定义源码目录不可用，本次已保存到内置目录")
     }
-    recordRecentFile(path, name, workspace)
+    recordRecentFile(path, documentName.textContent, workspace)
     if (!stillPending()) return
     const pendingPaths = [...pendingSourcePaths]
     await activateSourceWorkspace(workspace)
@@ -239,39 +240,30 @@ function themeFolderPrefix(name: string, files: readonly { path: string }[]): st
 }
 /** skinPath 非空时表示从最近皮肤打开：保存仍写回原皮肤文件，并沿用这个源码目录。 */
 export async function loadSourceWorkspace(path: string, skinPath = ""): Promise<boolean> {
+  let files: Array<{ path: string; data: string | Uint8Array }>
+  let name: string
   if (isAndroidTauri() && path.startsWith("content://")) {
-    const encoded = await invoke<string>("open_source_workspace_archive", { path })
-    const decodedPath = decodeURIComponent(path)
-    const directoryName = decodedPath.split(/[\\/:]/).filter(Boolean).pop()?.toLowerCase() ?? ""
-    const name = decodedPath.split(/[\\/]/).filter(Boolean).pop() || "皮肤源码"
-    const files = SkinArchive.open(decodeBase64Archive(encoded)).sourceFiles()
-    const sourcePrefix = themeFolderPrefix(directoryName, files)
-    await loadArchive(sourceArchiveFromFiles(files), skinPath, false, path, skinPath ? "" : name, sourcePrefix)
-    return true
+    const result = await invoke<{ name: string; archive: string }>("open_source_workspace_archive", { path })
+    files = (await SkinArchive.openAsync(decodeBase64Archive(result.archive))).sourceFiles()
+    name = result.name || "皮肤源码"
+  } else {
+    if (skinPath && showSkinLoadProgress(await invoke<number>("skin_file_size", { path: skinPath }).catch(() => 0))) {
+      updateFileOperationProgress(2, "正在读取源码目录…")
+      await waitForInterfacePaint()
+    }
+    files = await invoke<SourceFilePayload[]>("open_source_workspace", { path })
+    name = path.split(/[\\/]/).filter(Boolean).pop() || "皮肤源码"
   }
-  // 整个源码目录读完才知道大小，先按皮肤包大小决定是否立即弹出进度，免得点了半天没反应。
-  if (skinPath && showSkinLoadProgress(await invoke<number>("skin_file_size", { path: skinPath }).catch(() => 0))) {
-    updateFileOperationProgress(2, "正在读取源码目录…")
-    await waitForInterfacePaint()
-  }
-  const files = await invoke<SourceFilePayload[]>("open_source_workspace", { path })
-  const directoryName = path.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() ?? ""
-  const sourcePrefix = themeFolderPrefix(directoryName, files)
+  const sourcePrefix = themeFolderPrefix(name.toLowerCase(), files)
   const sourceFiles = files
     .filter((file) => !file.path.endsWith("/.DS_Store") && file.path !== ".DS_Store")
     .filter((file) => file.path.includes("/") || !/\.(?:bdi|bds|bda)$/i.test(file.path))
     .map((file) => ({
-      path: sourcePrefix
-        && file.path !== "Info.txt"
-        && file.path !== "demo.png"
-        && !file.path.startsWith(sourcePrefix)
-        ? `${sourcePrefix}${file.path}`
-        : file.path,
-      data: decodeBase64Archive(file.data),
+      path: prefixedSourcePath(file.path, sourcePrefix),
+      data: typeof file.data === "string" ? decodeBase64Archive(file.data) : file.data,
     }))
   if (!sourceFiles.length) throw new Error("源码文件夹为空")
   const sourceArchive = sourceArchiveFromFiles(sourceFiles)
-  const name = path.split(/[\\/]/).pop() || "皮肤源码"
   await loadArchive(sourceArchive, skinPath, false, path, skinPath ? "" : name, sourcePrefix)
   return true
 }
@@ -571,17 +563,11 @@ export async function writeNativePath(path: string, bytes: Uint8Array): Promise<
   showFileOperationResult(`保存位置：${path}`)
 }
 
-/**
- * Asks for the destination before producing the bytes: browsers only open the save picker while the
- * click's user activation is still live (about 5 s), and packaging or converting a skin can outlast it.
- * A producer that resolves to undefined cancels the save.
- */
 export async function writeToChosenFile(
   filename: string,
-  data: ChosenFileData,
+  bytes: Uint8Array,
   description = "文件",
 ): Promise<string | undefined> {
-  const produce = () => data instanceof Uint8Array ? Promise.resolve(data) : data()
   const extension = filename.match(/\.([^.\\/]+)$/)?.[1]
   if (isTauri()) {
     let path: string | null
@@ -597,8 +583,6 @@ export async function writeToChosenFile(
       throw error
     }
     if (!path) return
-    const bytes = await produce()
-    if (!bytes) return
     await writeNativePath(path, bytes)
     return path
   }
@@ -609,7 +593,7 @@ export async function writeToChosenFile(
       types?: Array<{ description: string; accept: Record<string, string[]> }>
     }) => Promise<BrowserSaveFileHandle>
   }).showSaveFilePicker
-  const downloadBytes = async (bytes: Uint8Array, retry = false) => {
+  const downloadBytes = async (retry = false) => {
     updateFileOperationProgress(90, "正在准备下载…")
     const link = document.createElement("a")
     const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/octet-stream" }))
@@ -645,11 +629,7 @@ export async function writeToChosenFile(
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
     return filename
   }
-  if (!picker) {
-    const bytes = await produce()
-    if (bytes) return downloadBytes(bytes)
-    return
-  }
+  if (!picker) return downloadBytes()
   let file: BrowserSaveFileHandle | undefined
   const pick = async () => {
     try {
@@ -671,17 +651,6 @@ export async function writeToChosenFile(
     if (!await waitForTap(`${filename} 已生成，轻点“保存”选择保存位置`, "保存", pick)) return
   } else if (!await pick()) return
   if (!file) return
-  let bytes: Uint8Array | undefined
-  try {
-    bytes = await produce()
-  } catch (error) {
-    await (file as BrowserSaveFileHandle & { remove?: () => Promise<void> }).remove?.().catch(() => undefined)
-    throw error
-  }
-  if (!bytes) {
-    await (file as BrowserSaveFileHandle & { remove?: () => Promise<void> }).remove?.().catch(() => undefined)
-    return
-  }
   updateFileOperationProgress(90, "正在写入文件…")
   let writable: Awaited<ReturnType<BrowserSaveFileHandle["createWritable"]>> | undefined
   try {
@@ -690,7 +659,7 @@ export async function writeToChosenFile(
     await writable.close()
   } catch (error) {
     await writable?.abort?.().catch(() => undefined)
-    if (error instanceof DOMException && error.name === "InvalidStateError") return downloadBytes(bytes, true)
+    if (error instanceof DOMException && error.name === "InvalidStateError") return downloadBytes(true)
     throw error
   }
   showFileOperationResult(`文件：${file.name}\n保存位置：浏览器中选择的文件夹`)
@@ -706,7 +675,7 @@ async function downloadArchive(format: ExportFormat, suggestedName: string): Pro
   // Downloads are handed to the browser. On mobile, the host may silently discard them.
   if (!isAndroidWeb() && !isIOSWeb() && !exported.converted && appState.archive === exported.archive) {
     appState.currentPath = path
-    documentName.textContent = suggestedName
+    documentName.textContent = path
     exported.archive.markSaved(exported.document, format, exported.revision)
     appState.unsavedNew = false
     updateDirty()

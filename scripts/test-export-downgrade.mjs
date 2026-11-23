@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { dismissStartupDisclaimer } from '../tests/helpers/open-editor-template.mjs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { SkinArchive } from '../src/skin.ts'
@@ -44,6 +45,7 @@ try {
       }
     })
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await dismissStartupDisclaimer(page)
     await page.locator('#browser-open').setInputFiles({ name: '降级.bds', mimeType: 'application/octet-stream', buffer: Buffer.from(archive.toBytes()) })
     await page.waitForFunction(() => !document.querySelector('#open').disabled)
     await page.waitForFunction(() => !document.querySelector('#file-operation-dialog').open)

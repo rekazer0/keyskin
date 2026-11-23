@@ -18,7 +18,8 @@ test("startup welcome screen pages desktop and mobile skins and keeps template p
 
 test("recent skins reopen from their stored source workspace", () => {
   assert.match(main, /recordRecentFile\(path, documentName\.textContent, workspace\)/)
-  assert.match(main, /return await loadSourceWorkspace\(item\.source, item\.path\)/)
-  const lib = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8")
-  assert.match(lib, /const SOURCE_LIMIT: usize = 9;/)
+  assert.match(main, /const workspace = sourceDirectoryEnabledBySettings\(\) \? recentSourceForPath\(path\) : undefined/)
+  assert.match(main, /return await loadSourceWorkspace\(workspace, path\)/)
+  assert.match(main, /source: source \|\| recentSourceForPath\(path\)/)
+  assert.match(main, /sourceLimit: fileRetentionLimit\(\)/)
 })

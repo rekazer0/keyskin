@@ -320,7 +320,7 @@ export class SkinArchive {
   }
 
   static fromSourceFiles(files: Array<{ path: string; data: Uint8Array }>): SkinArchive {
-    return SkinArchive.open(zipSync(Object.fromEntries(files.map((file) => [file.path, file.data])), { level: 0 }))
+    return SkinArchive.fromFiles(new Map(files.map(({ path, data }) => [path, data])))
   }
 
   /** 转换器已经持有文件时直接建档，避免为了创建对象先压缩、再整包解压。 */

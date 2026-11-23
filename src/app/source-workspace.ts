@@ -1,5 +1,5 @@
 import { appState } from "./state"
-import { resolveSourceArchivePath, type SourceWriteSnapshot, writePendingSourcePaths, consumeSourceWriteSnapshot } from "../source-tree.ts"
+import { sourcePathLookup, type SourceWriteSnapshot, writePendingSourcePaths, consumeSourceWriteSnapshot } from "../source-tree.ts"
 import { sourceWriteSnapshots, pendingSourcePaths, pendingSourceWatchPaths, isAndroidTauri, isTauri, LAST_SOURCE_WORKSPACE_KEY, sourceDirectoryEnabledBySettings } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
 import { type SourceFilePayload, type SourceChangePayload } from "./types"
@@ -22,14 +22,6 @@ function sourcePathForWorkspace(path: string): string {
   return appState.sourceWorkspacePrefix && path.startsWith(appState.sourceWorkspacePrefix)
     ? path.slice(appState.sourceWorkspacePrefix.length)
     : path
-}
-
-function sourcePathForArchive(path: string): string {
-  return resolveSourceArchivePath(
-    path,
-    appState.sourceWorkspacePrefix,
-    appState.archive?.sourcePaths() ?? [],
-  )
 }
 
 function sourceWriteKey(path: string): string {
@@ -99,10 +91,11 @@ export async function flushSourceAutosave(): Promise<void> {
   if (appState.archive && appState.sourceWorkspacePath && pendingSourcePaths.size) {
     const workspace = appState.sourceWorkspacePath
     const value = appState.archive
-    appState.sourceAutosaveQueue = appState.sourceAutosaveQueue.catch(() => {}).then(() =>
+    appState.sourceSyncQueue = appState.sourceSyncQueue.catch(() => {}).then(() =>
       writePendingSourcePaths(pendingSourcePaths, async (paths) => {
+        const resolvePath = sourcePathLookup(value.sourcePaths(), appState.sourceWorkspacePrefix)
         const changes: SourceChangePayload[] = paths.map((path) => {
-          const archivePath = sourcePathForArchive(path)
+          const archivePath = resolvePath(path)
           const canonical = value.canonicalSourcePath(archivePath)
           const bytes = value.getSourceBytes(archivePath)
           const data = bytes && value.isBdaConfig(canonical) ? bdaWorkspaceData(canonical, bytes) : bytes
@@ -113,7 +106,7 @@ export async function flushSourceAutosave(): Promise<void> {
       }),
     )
   }
-  await appState.sourceAutosaveQueue
+  await appState.sourceSyncQueue
 }
 
 export function scheduleSourceAutosave(paths: string[]): void {
@@ -131,63 +124,48 @@ export function scheduleSourceAutosave(paths: string[]): void {
 }
 
 async function refreshExternalSourceFiles(workspace: string, paths: string[]): Promise<void> {
-  if (!appState.archive || workspace !== appState.sourceWorkspacePath || !paths.length) return
-  const changes = await invoke<SourceChangePayload[]>("read_source_changes", {
-    path: workspace,
-    changedPaths: paths,
-  })
-  if (!appState.archive || workspace !== appState.sourceWorkspacePath) return
-  let changed = false
-  const affected = new Set<string>()
-  const ignoredChanges = new Set(changes.filter((change) => {
-    const data = change.data ? new Uint8Array(change.data) : null
-    return consumeSourceWriteSnapshot(sourceWriteSnapshots, sourceWriteKey(change.path), data)
+  const archive = appState.archive
+  if (!archive || workspace !== appState.sourceWorkspacePath || !paths.length) return
+  const changes = await invoke<SourceChangePayload[]>("read_source_changes", { path: workspace, changedPaths: paths })
+  if (appState.archive !== archive || workspace !== appState.sourceWorkspacePath || !changes.length) return
+  const files = archive.sourcePaths()
+  const resolvePath = sourcePathLookup(files, appState.sourceWorkspacePrefix)
+  const pending = new Set([...pendingSourcePaths].map(sourceWriteKey))
+  const ignored = new Set(changes.filter(change => {
+    const key = sourceWriteKey(change.path)
+    return pending.has(key) || (sourceWriteSnapshots.has(key) && consumeSourceWriteSnapshot(
+      sourceWriteSnapshots, key, change.data ? new Uint8Array(change.data) : null,
+    ))
   }))
-  if (appState.aiDraftPreview && changes.some((change) => !ignoredChanges.has(change))) {
+  if (appState.aiDraftPreview && changes.some(change => !ignored.has(change))) {
     discardAiDesignDraft("源码文件在外部被修改，AI 草稿已丢弃")
   }
-  const directorySnapshots = changes.filter((change) => change.directory && !ignoredChanges.has(change))
-  const presentPaths = new Set(changes.filter((change) => !change.directory && change.data).map((change) => sourcePathForArchive(change.path)))
-  for (const snapshot of directorySnapshots) {
-    const archiveSnapshotPath = sourcePathForArchive(snapshot.path).replace(/\/$/, "")
-    const prefix = archiveSnapshotPath ? `${archiveSnapshotPath}/` : ""
-    const removed = appState.archive.sourcePaths()
-      .filter((file) => (file === archiveSnapshotPath || file.startsWith(prefix)) && !presentPaths.has(file))
-      .map((file) => appState.archive!.canonicalSourcePath(file))
-    for (const canonical of removed) {
-      appState.archive.delete(canonical)
-      affected.add(canonical)
-      changed = true
-    }
-  }
+  const affected = new Set<string>()
+  const present = new Set(changes.filter(change => !change.directory && change.data).map(change => resolvePath(change.path)))
   for (const change of changes) {
-    if (change.directory || ignoredChanges.has(change)) continue
-    pendingSourcePaths.delete(change.path)
-    const data = change.data ? new Uint8Array(change.data) : null
-    if (change.data) {
-      const canonical = appState.archive.canonicalSourcePath(sourcePathForArchive(change.path))
-      const before = appState.archive.getBytes(canonical)
-      const after = before && appState.archive.isBdaConfig(canonical)
-        ? applyDecodedBdaSource(canonical, before, new TextDecoder().decode(data!))
-        : data!
+    if (ignored.has(change)) continue
+    if (change.directory || !change.data) {
+      // 整目录通知也包含还没落盘的文件；从磁盘消失不一定意味着用户在外部删除了它。
+      const dir = change.path && resolvePath(change.path).replace(/\/$/, "")
+      for (const file of files) {
+        if (dir && file !== dir && !file.startsWith(`${dir}/`)) continue
+        if (present.has(file) || pending.has(sourceWriteKey(sourcePathForWorkspace(file)))) continue
+        const canonical = archive.canonicalSourcePath(file)
+        archive.delete(canonical)
+        affected.add(canonical)
+      }
+    } else {
+      const canonical = archive.canonicalSourcePath(resolvePath(change.path))
+      const before = archive.getBytes(canonical)
+      const data = new Uint8Array(change.data)
+      const after = before && archive.isBdaConfig(canonical)
+        ? applyDecodedBdaSource(canonical, before, new TextDecoder().decode(data)) : data
       if (before && before.length === after.length && before.every((byte, index) => byte === after[index])) continue
-      appState.archive.setBytes(canonical, after)
+      archive.setBytes(canonical, after)
       affected.add(canonical)
-      changed = true
-      continue
-    }
-    const archivePath = sourcePathForArchive(change.path).replace(/\/$/, "")
-    const prefix = archivePath ? `${archivePath}/` : ""
-    const removed = appState.archive.sourcePaths()
-      .filter((file) => file === archivePath || file.startsWith(prefix))
-      .map((file) => appState.archive!.canonicalSourcePath(file))
-    for (const canonical of removed) {
-      appState.archive.delete(canonical)
-      affected.add(canonical)
-      changed = true
     }
   }
-  if (!changed) return
+  if (!affected.size) return
   appState.undoStack = []
   appState.redoStack = []
   updateHistoryButtons()
@@ -221,7 +199,11 @@ function queueSourceWatch(paths: string[], workspace: string): void {
     appState.sourceWatchTimer = undefined
     const changed = [...pendingSourceWatchPaths]
     pendingSourceWatchPaths.clear()
-    void refreshExternalSourceFiles(workspace, changed).catch((error) => showError(error, "刷新外部源码"))
+    const archive = appState.archive
+    // 同一工作区的读写排队，较早的目录快照不能在新一轮写回后覆盖编辑。
+    appState.sourceSyncQueue = appState.sourceSyncQueue.catch(() => {}).then(async () => {
+      if (appState.archive === archive) await refreshExternalSourceFiles(workspace, changed)
+    }).catch(error => showError(error, "刷新外部源码"))
   }, 80)
 }
 
@@ -233,6 +215,8 @@ export async function activateSourceWorkspace(path: string, prefix = ""): Promis
   sourceWriteSnapshots.clear()
   if (appState.sourceWriteSnapshotTimer !== undefined) clearTimeout(appState.sourceWriteSnapshotTimer)
   appState.sourceWriteSnapshotTimer = undefined
+  if (appState.sourceWatchTimer !== undefined) clearTimeout(appState.sourceWatchTimer)
+  appState.sourceWatchTimer = undefined
   pendingSourceWatchPaths.clear()
   appState.sourceWorkspacePath = path
   appState.sourceWorkspacePrefix = prefix

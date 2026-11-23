@@ -100,7 +100,9 @@ page.on('pageerror', (error) => errors.push(error.message))
 await acceptAskDialogs(page)
 
 const open = async (name, bytes) => {
+  const replacing = await page.evaluate(async () => Boolean((await import('/src/app/state.ts')).appState.archive))
   await page.locator('#browser-open').setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
+  if (replacing) await page.getByRole('dialog', { name: '是否导出当前皮肤？', exact: true }).getByRole('button', { name: '不导出', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
   if (await close.isVisible().catch(() => false)) await close.click()

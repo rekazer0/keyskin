@@ -32,7 +32,7 @@ function harness(t) {
     legacyAnimationStates: new Map(), animationPlayback: 0, keys, selected: new Set(),
     mode: 'preview', panelWidth: 200, panelHeight: 100, panelAnimationStyle: '7',
     legacyPanelAnimationStartedAt: 0, draw() {}, fitCanvas() {},
-    cancelPointerInteraction() {}, layoutItems: () => keys, scenes: new Map(), visualCache: new Map(),
+    cancelPointerInteraction() {}, layoutItems: () => keys, scenes: new Map(), builtScenes: new WeakSet(), visualCache: new Map(),
     canvas: { setPointerCapture() {} }, point: () => ({ x: 50, y: 50 }), hit: () => keys[0],
     onSelect() {}, onEvent() {},
   })
@@ -195,6 +195,52 @@ test('native layout identity clears old press only when changing boards', (t) =>
   assert.equal(preview.nativePress, press)
   preview.setDocument(undefined, 'palm-b')
   assert.equal(preview.nativePress, undefined)
+})
+
+test('a late native scene cannot replace the press on the new board', async (t) => {
+  const { preview, frames, advance } = harness(t)
+  const raf = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = window.requestAnimationFrame
+  t.after(() => { if (raf) globalThis.requestAnimationFrame = raf; else delete globalThis.requestAnimationFrame })
+  const old = Promise.withResolvers()
+  const animated = { effects: { pressDuration: () => 300 } }
+  preview.setScene(() => old.promise)
+  const stale = playAnimation(preview, keys[0])
+  preview.setDocument(undefined, 'new-board')
+  preview.setScene(async () => animated)
+  await playAnimation(preview, keys[1])
+  const current = preview.nativePress
+  assert.equal(current.section, 'KEY2')
+  old.resolve(animated)
+  await stale
+  assert.equal(preview.nativePress, current)
+  assert.equal(frames.size, 1, 'only the current press ticks')
+  advance(300)
+  assert.equal(preview.nativePress, undefined)
+  assert.equal(frames.size, 0)
+})
+
+test('two presses awaiting one scene only sample the most recent key', async (t) => {
+  const { preview } = harness(t)
+  const scene = Promise.withResolvers()
+  preview.setScene(() => scene.promise)
+  const presses = keys.map(key => playAnimation(preview, key))
+  const sampled = []
+  scene.resolve({ effects: { pressDuration(section) { sampled.push(section); return 0 } } })
+  await Promise.all(presses)
+  assert.deepEqual(sampled, ['KEY2'])
+})
+
+test('replacing a pending native scene without another press leaves playback idle', async (t) => {
+  const { preview, frames } = harness(t)
+  const old = Promise.withResolvers()
+  preview.setScene(() => old.promise)
+  const press = playAnimation(preview, keys[0])
+  preview.setScene(async () => ({ keys: [] }))
+  old.resolve({ effects: { pressDuration() { assert.fail('retired scene sampled') } } })
+  await press
+  assert.equal(preview.nativePress, undefined)
+  assert.equal(frames.size, 0)
 })
 
 test('a panel SHOW_ANIM particle effect plays when the panel appears and keeps its time over a refresh', (t) => {

@@ -38,7 +38,7 @@ export function openActionMenu(row: HTMLElement, x: number, y: number, label: st
     document.removeEventListener("pointerdown", outside, true)
     menu.remove()
   })
-  const host = native ? document.body : row.closest("dialog[open]") ?? document.body
+  const host = row.closest("dialog[open]") ?? document.body
   host.append(menu)
   if (native) menu.showPopover()
   menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - menu.offsetWidth))}px`

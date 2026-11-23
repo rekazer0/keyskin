@@ -8,6 +8,7 @@ export async function dismissStartupDisclaimer(page) {
 // Drive the real single-click template entry on each layout.
 export async function openEditorTemplate(page, template = 'default-android', { preview = false } = {}) {
   await page.waitForSelector('.template-card', { state: 'attached' })
+  await dismissStartupDisclaimer(page)
   if (await page.locator('#mobile-welcome-new').isVisible()) {
     await page.locator('#mobile-welcome-new').click()
     await page.locator(`#new-project-dialog [data-template="${template}"]`).click()

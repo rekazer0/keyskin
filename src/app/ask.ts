@@ -67,8 +67,16 @@ export function bindDialog(dialog: HTMLDialogElement, cancel: () => void = () =>
     event.preventDefault()
     cancel()
   })
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) cancel()
+  const onBackdrop = (event: MouseEvent) => {
+    if (event.target !== dialog) return false
+    const { left, right, top, bottom } = dialog.getBoundingClientRect()
+    return event.clientX < left || event.clientX >= right || event.clientY < top || event.clientY >= bottom
+  }
+  let pressedBackdrop = false
+  dialog.addEventListener("pointerdown", event => { pressedBackdrop = onBackdrop(event) }, true)
+  dialog.addEventListener("click", event => {
+    if (pressedBackdrop && onBackdrop(event)) cancel()
+    pressedBackdrop = false
   })
   dialog.addEventListener("submit", (event) => {
     if (event.defaultPrevented || (event.target as Element).closest("dialog") !== dialog) return

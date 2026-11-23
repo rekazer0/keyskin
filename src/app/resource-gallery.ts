@@ -20,12 +20,20 @@ function resourceCard(path: string): HTMLElement | undefined {
 
 /** 重建网格后只保留仍可见的选择，避免筛选后误下载或删除隐藏项。 */
 export function syncResourceSelection(): void {
+  const previous = appState.selectedResourceGalleryPath
   const visible = new Set(resourcePaths())
   appState.selectedResourceGalleryPaths = appState.selectedResourceGalleryPaths.filter(path => visible.has(path))
   if (!appState.selectedResourceGalleryPaths.includes(appState.selectedResourceGalleryPath)) {
     appState.selectedResourceGalleryPath = appState.selectedResourceGalleryPaths.at(-1) ?? ""
   }
+  const primary = appState.selectedResourceGalleryPath
+  if (!visible.has(appState.resourceSelectionAnchor)) appState.resourceSelectionAnchor = primary
   applyResourceSelection()
+  if (appState.resourceInspectorMode === "style" && previous !== primary) {
+    appState.selectedStyleID = ""
+    resourceDetail.hidden = true
+    if (primary) resourceCard(primary)?.dispatchEvent(new Event("resource-preview"))
+  }
 }
 
 function applyResourceSelection(): void {

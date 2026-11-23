@@ -65,6 +65,7 @@ try {
   assert.equal(await page.locator("#file-operation-result").textContent(), "文件：保存反馈.bds\n保存位置：浏览器中选择的文件夹")
   assert.equal(await page.locator("#file-operation-result").isVisible(), true)
   assert.equal(await page.locator("#event-log").textContent(), "保存完成")
+  assert.equal(await page.locator("#document-name").textContent(), "保存反馈.bds", "use the name actually chosen in the save picker")
   await close.click()
   await dialog.waitFor({ state: "hidden" })
 

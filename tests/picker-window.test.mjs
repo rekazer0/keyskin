@@ -87,7 +87,7 @@ test("没有切片时整张图可选中，应用由主窗口统一处理", () =>
   const canvas = readFileSync(new URL("../src/slice-picker-canvas.ts", import.meta.url), "utf8")
   assert.match(canvas, /slices\.length \? slices : \[\{ index: WHOLE_IMAGE_INDEX, source: \[0, 0, image\.naturalWidth, image\.naturalHeight\] \}\]/)
   assert.match(script, /tileSliceAt\(pickableSlices\(imagePayload\.slices, image\), point\)/)
-  assert.match(main, /void applyImageSliceSelection\(index\)/)
+  assert.match(main, /void applyImageSliceSelection\(index(?:, newStyle)?\)/)
   // 底部说明栏已删除，画布区域铺满窗口。
   assert.doesNotMatch(html, /picker-meta/)
 })

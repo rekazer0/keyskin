@@ -597,7 +597,7 @@ async fn open_source_workspace(
 async fn open_source_workspace_archive(
     app: tauri::AppHandle,
     path: String,
-) -> Result<String, String> {
+) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "android")]
     if path.starts_with("content://") {
         return tauri_plugin_native_share::read_source_workspace_archive(&app, path).await;

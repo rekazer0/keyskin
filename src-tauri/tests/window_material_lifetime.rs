@@ -60,7 +60,9 @@ fn main() {
     assert_eq!(sidebar.frame(), rect(0.0, 80.0, 720.0));
     assert_eq!(body.frame(), rect(80.0, 1200.0, 720.0));
     window_material::sync_material(&root, Some(0));
-    assert_eq!(effects(), [body.clone()]);
+    let compact = effects();
+    assert_eq!(compact.len(), 1);
+    assert_eq!(compact[0], *body);
     assert_eq!(
         body.frame(),
         root.bounds(),

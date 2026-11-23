@@ -498,9 +498,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
   }
 
   private fun sourceArchive(root: DocumentFile): String {
-    val prefix = root.name?.lowercase()?.takeIf { it == "dark" || it == "light" }?.let { "$it/" } ?: ""
     val archivePaths = mutableSetOf<String>()
-    var fileCount = 0
     var totalBytes = 0L
     val output = ByteArrayOutputStream()
     ZipOutputStream(output).use { zip ->
@@ -513,19 +511,12 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
             add(entry, relative)
           } else if (entry.isFile && name !in setOf(SOURCE_MARKER, ".keyskin-files.json", ".DS_Store")) {
             safeParts(relative)
-            fileCount += 1
-            if (fileCount > MAX_SOURCE_FILES) throw IllegalArgumentException("Skin source contains too many files")
+            if (!archivePaths.add(relative)) throw IllegalArgumentException("Skin source contains duplicate paths")
+            if (archivePaths.size > MAX_SOURCE_FILES) throw IllegalArgumentException("Skin source contains too many files")
             val bytes = activity.contentResolver.openInputStream(entry.uri)!!.use { it.readBytes() }
             totalBytes += bytes.size
             if (totalBytes > MAX_SOURCE_BYTES) throw IllegalArgumentException("Skin source exceeds 256 MB")
-            val archivePath = if (
-              prefix.isNotEmpty()
-              && relative != "Info.txt"
-              && relative != "demo.png"
-              && !relative.startsWith(prefix)
-            ) "$prefix$relative" else relative
-            if (!archivePaths.add(archivePath)) throw IllegalArgumentException("Skin source contains duplicate paths")
-            zip.putNextEntry(ZipEntry(archivePath))
+            zip.putNextEntry(ZipEntry(relative))
             zip.write(bytes)
             zip.closeEntry()
           }
@@ -533,7 +524,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       }
       add(root, "")
     }
-    if (fileCount == 0) throw IllegalArgumentException("Skin source directory is empty")
+    if (archivePaths.isEmpty()) throw IllegalArgumentException("Skin source directory is empty")
     if (output.size() > MAX_ARCHIVE_BYTES) throw IllegalArgumentException("Skin source archive exceeds 64 MB")
     return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
   }
@@ -638,7 +629,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
     runSourceIO(invoke, "Unable to read source workspace") {
       val args = invoke.parseArgs(WorkspaceArgs::class.java)
       val workspace = directory(args.uri)
-      sourceArchive(workspace).also {
+      mapOf("name" to workspace.name.orEmpty(), "archive" to sourceArchive(workspace)).also {
         runCatching { sourceMarker(workspace)?.let { marker -> writeBytes(marker, SOURCE_MARKER_CONTENT.toByteArray()) } }
       }
     }

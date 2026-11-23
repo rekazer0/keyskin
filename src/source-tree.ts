@@ -1,12 +1,14 @@
-export function resolveSourceArchivePath(
-  path: string,
-  workspacePrefix: string,
-  archivePaths: readonly string[],
-): string {
-  const rootMetadata = /^(?:info\.txt|demo\.png)$/i.test(path)
-  const candidate = workspacePrefix && !rootMetadata ? `${workspacePrefix}${path}` : path
-  const normalized = candidate.toLowerCase()
-  return archivePaths.find((existing) => existing.toLowerCase() === normalized) ?? candidate
+export function prefixedSourcePath(path: string, prefix: string): string {
+  return /^(?:info\.txt|demo\.png)$/i.test(path) ? path : prefix + path
+}
+
+export function sourcePathLookup(paths: readonly string[], prefix: string): (path: string) => string {
+  const exact = new Set(paths)
+  const folded = new Map(paths.map(path => [path.toLowerCase(), path]))
+  return path => {
+    const candidate = prefixedSourcePath(path, prefix)
+    return exact.has(candidate) ? candidate : folded.get(candidate.toLowerCase()) ?? candidate
+  }
 }
 
 export type SourceWriteSnapshot = Uint8Array | null

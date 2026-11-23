@@ -35,23 +35,24 @@ const WARNING_GROUP = 4
  */
 export function summarizeWarnings(warnings: readonly string[]): string[] {
   const unique = [...new Set(warnings)]
-  const groups = new Map<string, string[]>()
+  const counts = new Map<string, number>()
   const groupOf = (warning: string) => {
     const match = WARNING_SUBJECT.exec(warning)
     return match && `${/^(?:ANIM|STYLE)/.test(match[1]) ? match[1].replace(/\d+$/, "") : "["}\0${match[2]}${match[3]}`
   }
   for (const warning of unique) {
     const group = groupOf(warning)
-    if (group) groups.set(group, [...(groups.get(group) ?? []), warning])
+    if (group) counts.set(group, (counts.get(group) ?? 0) + 1)
   }
   const listed = new Set<string>()
   return unique.flatMap((warning) => {
     const group = groupOf(warning)
-    const members = group ? groups.get(group)! : []
-    if (!group || members.length < WARNING_GROUP) return [warning]
+    if (!group) return [warning]
+    const count = counts.get(group)!
+    if (count < WARNING_GROUP) return [warning]
     if (listed.has(group)) return []
     listed.add(group)
     const [, subject, gap, rest] = WARNING_SUBJECT.exec(warning)!
-    return [`${subject} 等 ${members.length} 处${rest.startsWith("的") ? "" : gap}${rest}`]
+    return [`${subject} 等 ${count} 处${rest.startsWith("的") ? "" : gap}${rest}`]
   })
 }

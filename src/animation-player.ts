@@ -119,6 +119,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   let timer = 0
   let lastFrame = -Infinity
   let thumbnailVisible = false
+  let thumbnailMeasured = false
   let disposed = false
   let thumbnailObserver: IntersectionObserver | undefined
   let thumbnailResize: ResizeObserver | undefined
@@ -441,12 +442,21 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   })
   lanes.addEventListener("pointermove", (event) => { if (lanes.hasPointerCapture(event.pointerId)) scrubTo(event) })
 
-  if (thumbnail) {
-    const syncThumbnail = () => {
-      if (disposed || !root.isConnected) return
-      if (thumbnailVisible && !document.hidden) { ensureLoaded(); start() }
-      else stop()
+  const syncThumbnail = () => {
+    if (disposed || !root.isConnected) return
+    if (!thumbnailVisible || document.hidden) {
+      if (timer) stop()
+    } else if (loading) ensureLoaded()
+    else if (!timer) {
+      if (!thumbnailMeasured) {
+        measure()
+        thumbnailMeasured = true
+      }
+      draw()
+      start()
     }
+  }
+  if (thumbnail) {
     thumbnailObserver = new IntersectionObserver(entries => {
       thumbnailVisible = Boolean(entries[0]?.isIntersecting)
       syncThumbnail()
@@ -487,7 +497,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   })
   renderLanes()
   update()
-  queueMicrotask(() => { if (root.isConnected) draw() })
+  if (!thumbnail) queueMicrotask(() => { if (root.isConnected) draw() })
   const load = async () => {
     nativeScene = await native?.()
     if (disposed) return
@@ -535,14 +545,17 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       }
     }))
     if (disposed) return
-    measure()
     loading = false
     if (!root.isConnected) return
+    if (!thumbnail) measure()
     renderLanes()
-    draw()
     update()
     controls?.sync()
-    if (resume || thumbnail && thumbnailVisible && !document.hidden) start()
+    if (thumbnail) syncThumbnail()
+    else {
+      draw()
+      if (resume) start()
+    }
   }
   let loadStarted = false
   const ensureLoaded = () => {

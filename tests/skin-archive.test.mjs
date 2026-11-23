@@ -34,6 +34,16 @@ test('直接从文件建档保持格式、隔离输入，首次同步和异步�
   assert.throws(() => SkinArchive.fromFiles(new Map(Array.from({ length: 5001 }, (_, i) => [`file${i}`, new Uint8Array()]))), /过多文件/)
 })
 
+test('unpacked source files use the unpacked byte limit, not a temporary ZIP limit', () => {
+  const tile = new Uint8Array(1024 * 1024).fill(7)
+  const files = Array.from({ length: 65 }, (_, i) => ({ path: `light/res/tile${i}.png`, data: tile }))
+  const archive = SkinArchive.fromSourceFiles(files)
+  tile[0] = 0
+  assert.equal(archive.format, 'bds')
+  assert.equal(archive.sourceByteLength(), 65 * 1024 * 1024)
+  assert.equal(archive.getBytes('light/skin/res/tile64.png')[0], 7)
+})
+
 function sampleArchive() {
   return zipSync({
     'Info.txt': strToU8('AtomSkinName=test'),

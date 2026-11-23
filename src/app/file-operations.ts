@@ -367,12 +367,13 @@ export async function runFileOperation(
       durationMs: Math.round(performance.now() - started),
     })
     const downloadRequested = fileOperationDialog.dataset.resultKind === "download-requested"
-    showStatus(completed ? downloadRequested ? "已发起下载" : `${action}完成` : `${action}已取消`)
+    const result = downloadRequested ? "已发起下载" : `${action}完成`
+    showStatus(completed ? result : `${action}已取消`)
     if (completed && exporting) {
       showFileOperationProgress()
       fileOperationDialog.dataset.outcome = "success"
       fileOperationClose.textContent = inline ? "完成" : "继续编辑"
-      fileOperationTitle.textContent = downloadRequested ? "已发起下载" : action === "保存" ? "皮肤已保存" : action === "另存为" ? "另存为完成" : "皮肤已导出"
+      fileOperationTitle.textContent = result
       fileOperationIcon.replaceChildren(createIcon("check", 20))
       updateFileOperationProgress(100, fileOperationDialog.dataset.resultFile ?? `${action}完成`)
     } else if (appState.fileOperationProgressVisible) {

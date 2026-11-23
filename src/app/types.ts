@@ -93,8 +93,6 @@ export type BrowserSaveFileHandle = {
   createWritable(): Promise<{ write(data: Uint8Array): Promise<void>; close(): Promise<void>; abort?(): Promise<void> }>
 }
 
-export type ChosenFileData = Uint8Array | (() => Promise<Uint8Array | undefined>)
-
 export interface RecentFile {
   path: string
   name: string

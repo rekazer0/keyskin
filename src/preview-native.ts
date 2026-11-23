@@ -11,7 +11,15 @@ const LONGEST_PRESS = 3000
 const PANEL_FRAME = 40
 
 export async function playNativePress(self: Preview, key: PreviewItem): Promise<void> {
-  const effects = (self.drawnScene ?? await self.sceneForState())?.effects
+  const playback = ++self.animationPlayback
+  let scene = self.drawnScene
+  if (!scene) {
+    const pending = self.sceneForState()
+    scene = await pending?.catch(() => undefined)
+    // While building, another press, board change, or scene refresh can supersede this request.
+    if (!scene || playback !== self.animationPlayback || pending !== self.sceneForState()) return
+  }
+  const effects = scene.effects
   if (!effects) return
   const seed = Math.floor(Math.random() * 1_000_000)
   const duration = Math.min(LONGEST_PRESS, effects.pressDuration(key.section, seed))
