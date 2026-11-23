@@ -1,14 +1,14 @@
 import { IniDocument } from "./ini.ts"
 
 const functionCodeDescriptions: Record<string, string> = {
-  F1: "切换到符号面板", F3: "切换到拇指/全键盘", F4: "返回", F5: "切换到软键盘",
-  F6: "切换到数字面板", F7: "切换到表情面板", F8: "隐藏面板", F9: "查看更多候选字",
-  F10: "切换小写和首字母大写", F11: "切换小写和大写锁定", F12: "切换到网络面板",
-  F13: "一键换皮肤", F14: "面板切换功能容器", F15: "切换到中文输入状态",
-  F16: "切换到英文输入状态", F17: "切换到拨号界面", F21: "菜单", F22: "候选字上翻",
-  F23: "候选字下翻", F24: "中文输入方式选择菜单", F25: "切换字母/联想",
+  F1: "切换到符号面板", F3: "切换 9 键 / 26 键", F4: "返回", F5: "切换到软键盘",
+  F6: "切换到数字键盘", F7: "切换到表情面板", F8: "隐藏面板", F9: "查看更多候选字",
+  F10: "切换小写 / 首字母大写", F11: "切换小写 / 大写锁定", F12: "切换到网络面板",
+  F13: "一键换皮肤", F14: "面板切换入口", F15: "切换到中文输入",
+  F16: "切换到英文输入", F17: "切换到拨号键盘", F21: "菜单", F22: "候选列表上一页",
+  F23: "候选列表下一页", F24: "中文输入方式选择菜单", F25: "切换字母 / 联想",
   F26: "候选字单字/全部切换", F27: "锁定符号面板", F28: "修改英文排序",
-  F29: "候选条上翻页", F30: "候选条下翻页", F31: "Logo 菜单", F32: "弹出预备的列表",
+  F29: "候选栏上一页", F30: "候选栏下一页", F31: "Logo 菜单", F32: "弹出预备的列表",
   F36: "退格", F37: "删除", F38: "空格", F39: "回车", F40: "清除输入码",
   F41: "Tab", F42: "Home", F43: "End", F44: "剪切", F45: "复制", F46: "粘贴",
   F47: "全选", F48: "清空", F49: "光标上移", F50: "光标下移", F51: "光标左移",
@@ -186,6 +186,13 @@ function previewPageTarget(
   const suffix = currentName.match(/(?:^|[_-])(9|14|26)(?:\.ini)?$/i)?.[1]
   const explicit = value.match(/^Z\+([A-Za-z0-9_-]+)$/)
   if (explicit) return existing(explicit[1])
+  if (value === "F3") {
+    const pair = currentName.match(/^((?:py|def|en)_)(9|26)(s?)(_[a-z0-9_]+)?\.ini$/i)
+    if (!pair) return
+    const [, family, size, shift, variant = ""] = pair
+    const peer = `${family}${size === "9" ? "26" : "9"}${shift}`
+    return existing(peer + variant) ?? existing(peer) ?? existing(`${peer}_new`)
+  }
   if (value === "F4" || value === "F15") return existing(baseName)
   if (value === "F6") return firstMatching(
     suffix ? [`num_${suffix}`] : ["num_9", "num_26"],
@@ -223,7 +230,7 @@ export function previewPageTransition(
     ((value === "F6" || value === "F16") &&
       requestedTarget?.toLowerCase() === currentName.toLowerCase())
   const enteringTransientPage =
-    !returnsToOrigin && Boolean(requestedTarget)
+    value !== "F3" && !returnsToOrigin && Boolean(requestedTarget)
   const nextReturnName = enteringTransientPage ? currentName : returnName
   return {
     target: returnsToOrigin

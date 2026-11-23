@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { previewPageTransition } from '../src/actions.ts'
+import { actionDescription, previewPageTransition } from '../src/actions.ts'
 
 const LAYOUTS = [
   'py_9.ini', 'py_26.ini', 'bh.ini',
@@ -8,6 +8,26 @@ const LAYOUTS = [
   'num_9.ini', 'num_26.ini',
   'symbol.ini', 'sym_9_cn.ini', 'sym_26_cn.ini',
 ]
+
+test('F3 switches 9/26 within the same keyboard family without overwriting the return layout', () => {
+  assert.equal(actionDescription('F3'), '切换 9 键 / 26 键')
+  for (const [nine, full] of [
+    ['py_9.ini', 'py_26.ini'],
+    ['def_9.ini', 'def_26_new.ini'],
+    ['en_9s_h.ini', 'en_26s_h.ini'],
+    ['en_9.ini', 'en_26.ini'],
+  ]) {
+    const layouts = [...LAYOUTS, nine, full]
+    assert.deepEqual(previewPageTransition('F3', nine, 'py_9.ini', layouts), { target: full, returnName: 'py_9.ini' })
+    assert.deepEqual(previewPageTransition('F3', full, 'py_9.ini', layouts), { target: nine, returnName: 'py_9.ini' })
+  }
+  assert.equal(previewPageTransition('F3', 'py_9_acs.ini', 'py_9.ini', LAYOUTS).target, 'py_26.ini')
+})
+
+test('F3 stays on the current board when there is no matching counterpart', () => {
+  const layouts = ['py_9.ini', 'en_26.ini', 'num_26.ini']
+  assert.deepEqual(previewPageTransition('F3', 'py_9.ini', 'py_9.ini', layouts), { target: undefined, returnName: 'py_9.ini' })
+})
 
 test('F16 opens the 26-key English board from a 9-key Chinese board', () => {
   assert.deepEqual(

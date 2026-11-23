@@ -524,6 +524,10 @@ function handlePreviewEvent(event: PreviewEvent): void {
       return
     }
   }
+  if (code === "F3") {
+    eventLog.textContent += " → 当前布局没有可切换的 9 键 / 26 键布局"
+    return
+  }
   if (code === "F36") {
     if (appState.simulatedComposition) {
       setSimulatedComposition(Array.from(appState.simulatedComposition).slice(0, -1).join(""))
