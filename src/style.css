@@ -2855,6 +2855,18 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   :root[data-mobile-page="edit"][data-mobile-mode="edit"][data-mobile-resource="false"] main:has(#quick-inspector:not([hidden])):not(:has(#source-editor:not([hidden]))) {
     --_inspector-navigation-inset: var(--mobile-navigation-height);
   }
+  /* Continue the current surface behind the floating navigation without moving its content. */
+  body.app-window > main::after {
+    content: "";
+    position: fixed;
+    inset: auto 0 0;
+    height: var(--mobile-navigation-height);
+    background: var(--_bottom-surface, var(--window));
+    pointer-events: none;
+  }
+  :root[data-mobile-welcome="false"]:not([data-mobile-resource="true"], [data-mobile-settings-open]) main { --_bottom-surface: var(--panel); }
+  :root[data-mobile-source]:not([data-mobile-settings-open]) main { --_bottom-surface: var(--source-background); }
+  :root[data-mobile-page="ai"]:not([data-mobile-settings-open]) main { --_bottom-surface: var(--material-panel); }
   body:not(:has(.canvas-wrap.empty)) #mobile-project-toggle { display: grid; place-items: center; }
   .titlebar { gap: var(--space-2xs); padding-inline: var(--space-sm); }
   body:has(.canvas-wrap.empty) .titlebar { display: none; }
@@ -2887,11 +2899,18 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   .welcome-recent .recent-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-home); background: var(--panel); overflow: hidden; }
   main > aside > .pane-heading { flex-wrap: wrap; padding: var(--space-lg); }
   :root[data-mobile-resource="true"] main > .workspace { visibility: hidden; pointer-events: none; }
-  :root[data-mobile-mode="preview"][data-mobile-welcome="false"] body:not(:has(.canvas-wrap.empty)) main > .workspace { height: 100%; }
+  :root[data-mobile-preview="true"]:not([data-mobile-settings-open]) body.app-window main {
+    height: calc(var(--viewport-height) - var(--titlebar-height));
+  }
+  :root[data-mobile-preview="true"]:not([data-mobile-settings-open]) main::after { content: none; }
+  :root[data-mobile-mode="preview"][data-mobile-welcome="false"] body:not(:has(.canvas-wrap.empty)) main > .workspace { height: 100%; grid-template-rows: minmax(0, 1fr); }
   :root[data-mobile-mode="preview"] main > .source, :root[data-mobile-mode="preview"] #mobile-inspector-resize { visibility: hidden; pointer-events: none; }
-  :root[data-mobile-mode="preview"][data-mobile-welcome="false"] .mobile-preview-return { display: flex; position: absolute; bottom: var(--space-sm); left: var(--space-sm); right: var(--space-sm); min-height: var(--mobile-control-height); }
+  :root[data-mobile-mode="preview"][data-mobile-welcome="false"] .mobile-preview-return { display: flex; position: absolute; bottom: calc(var(--mobile-navigation-height) + var(--space-sm)); left: var(--space-sm); right: var(--space-sm); min-height: var(--mobile-control-height); }
   :root[data-mobile-mode="preview"] .device-shell { margin-bottom: 0; }
-  :root[data-mobile-mode="preview"][data-mobile-welcome="false"] .canvas-wrap { padding-top: calc(var(--mobile-simulation-height) + var(--space-xl)); padding-bottom: calc(var(--mobile-control-height) + var(--space-xl)); }
+  :root[data-mobile-preview="true"] .canvas-wrap {
+    padding-top: calc(var(--mobile-simulation-height) + var(--space-xl));
+    padding-bottom: calc(var(--mobile-control-height) + var(--space-xl) + var(--mobile-navigation-height));
+  }
   .canvas-wrap > .mobile-simulation { position: absolute; inset: var(--space-lg) var(--space-lg) auto; height: var(--mobile-simulation-height); padding: 0; gap: var(--space-lg); color: var(--text); }
   .mobile-simulation .simulation-heading { color: var(--secondary); font-size: var(--font-size-xs); }
   .mobile-simulation #simulated-output { color: var(--text); font: var(--font-size-page) var(--font-ui); font-weight: 600; padding: var(--space-xl) 0; }
