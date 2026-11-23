@@ -197,7 +197,8 @@ export function wireAnimationDrop(): void {
     if (candidateArea.contains(event.target)) {
       event.stopPropagation(); pickAnimationKeys([])
       canvasWrap.dataset.animationComponent = toolbarStrip.contains(event.target) && candidateComposition.hidden ? "SWITCH" : "CAND"
-    } else if (event.target === previewCanvas && !preview.hit(preview.point(event)) && !appState.animationKeys.length) canvasWrap.dataset.animationComponent = "PANEL"
-    else delete canvasWrap.dataset.animationComponent
+    } else if (event.target === previewCanvas && !preview.hit(preview.point(event)) && !appState.animationKeys.length && !canvasWrap.dataset.animationComponent) {
+      canvasWrap.dataset.animationComponent = "PANEL"
+    } else delete canvasWrap.dataset.animationComponent
   }, true)
 }

@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { sxiAnimationFixture } from '../tests/helpers/sxi-animation-fixture.mjs'
+import { dismissStartupDisclaimer } from '../tests/helpers/open-editor-template.mjs'
 import { bdsFixture } from '../tests/helpers/baidu-fixture.mjs'
 
 const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0, hmr: false } })
@@ -33,7 +34,9 @@ const drag = async (to, label, count = 1) => {
 }
 const key = i => position('#preview', (i === 1 ? 60 : 170)/1080, 60/600)
 try {
+  await page.addInitScript(() => localStorage.setItem('onboarding-tour-v1', 'done'))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles({name:'drop.bds', mimeType:'application/octet-stream', buffer:Buffer.from(bdsFixture())})
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close'); if (await close.isVisible()) await close.click()
@@ -54,6 +57,14 @@ try {
     if(section==='CAND') await page.evaluate(async()=>{ (await import('/src/app/canvas-interaction.ts')).setSimulatedComposition('ni'); (await import('/src/app/preview-render.ts')).refreshSimulationState() })
     const to = await position(selector); await page.mouse.click(to.x,to.y)
     await card.focus(); await page.keyboard.press('Alt+Enter'); await dialog.waitFor(); assert.match(await dialog.innerText(),new RegExp(label)); await page.keyboard.press('Escape'); await dialog.waitFor({state:'detached'})
+    if (section === 'CAND') {
+      const blank = await position('#preview')
+      await page.mouse.click(blank.x, blank.y)
+      assert.equal(await page.locator('.canvas-wrap').getAttribute('data-animation-component'), null, 'empty panel space clears CAND without selecting PANEL')
+      await card.focus(); await page.keyboard.press('Alt+Enter')
+      assert.equal(await dialog.count(), 0, 'cleared selection cannot receive a keyboard binding')
+      await page.mouse.click(to.x, to.y)
+    }
     await drag(to,label); await dialog.getByRole('button',{name:'应用',exact:true}).click(); await dialog.waitFor({state:'detached'})
     const result = await snapshot(); assert.match(result[section==='PANEL'?0:1],new RegExp(`\\[${section}\\][^\\[]*ANIM_STYLE=`)); assert.match(result[2],/SHOW_ANIM=1/)
   }

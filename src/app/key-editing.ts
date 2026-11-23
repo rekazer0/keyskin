@@ -3,8 +3,9 @@ import { appState } from "./state"
 import { preview, source, toolbarPreview } from "./canvas-interaction"
 import { normalizeKeySections } from "../ini.ts"
 import { canvasEditable, commitText, updateDirty } from "./edit-history"
-import { setSourceValue, scrollSelectedSource } from "./config-context"
+import { isToolbarPath, setSourceValue, scrollSelectedSource } from "./config-context"
 import { populateKeyInspector, updateSelectedKey } from "./key-inspector"
+import { selectFile } from "./navigation"
 import { updateSourceHighlight, updateInspectorView } from "./source-panel"
 import { refreshPreview, syncCandidateSelection } from "./preview-render"
 import { type LayoutRect, isListCell, listCellRect, applyLayoutAction as transformLayout, type LayoutAction, mergeLayoutRects, setExactGap, moveRects, translatedTouchRect } from "../layout.ts"
@@ -91,7 +92,9 @@ export async function deleteSelectedKeys(): Promise<void> {
 
 /** 取消按键、工具栏与候选栏的选择，检查器回到所在面板的属性。 */
 export function selectParentObject(): void {
-  source.commit()
+  // A selected .cnd file implies whole-bar selection even after the explicit selection is cleared.
+  if (appState.layoutPath && isToolbarPath(appState.selectedPath)) selectFile(appState.layoutPath, appState.sidebarView, "document", true)
+  else source.commit()
   appState.selectedKeySections = []
   appState.selectedToolbarSections = []
   appState.selectedCandidate = false

@@ -469,7 +469,7 @@ export function wireCanvasAndInspector(): void {
       candidateArea.contains(target) ||
       target.closest("canvas, button, input, select, label, [role=button]")
     ) return
-    if (appState.selectedKeySections.length || appState.selectedToolbarSections.length || appState.selectedCandidate) selectParentObject()
+    if (appState.selectedKeySections.length || appState.selectedToolbarSections.length || appState.selectedCandidate || candidateArea.getAttribute("aria-selected") === "true") selectParentObject()
   })
   canvasWrap.addEventListener("pointerup", finishPreviewPan)
   canvasWrap.addEventListener("pointercancel", finishPreviewPan)

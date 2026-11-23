@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
 
 const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 0, hmr: false } })
@@ -11,7 +12,9 @@ try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme })
     const errors = []
     page.on("pageerror", error => errors.push(error.message))
+    await page.addInitScript(() => localStorage.setItem("onboarding-tour-v1", "done"))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await dismissStartupDisclaimer(page)
     await page.locator("#browser-open").setInputFiles({ name: "source-selection.bds", mimeType: "application/octet-stream", buffer: Buffer.from(bdsFixture()) })
     await page.waitForFunction(() => !document.querySelector("#open").disabled && !document.querySelector("#file-operation-dialog").open)
     await page.getByRole("button", { name: "编辑模式", exact: true }).click()
@@ -63,6 +66,14 @@ try {
         await page.mouse.move(target.x, target.y, { steps: 5 })
         await page.mouse.up()
         assert.deepEqual(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedKeySections), ["KEY1", "KEY2"], "reverse drag from empty space selects both keys instead of panning")
+      } else {
+        await page.locator('.canvas-wrap').click({ position: { x: 8, y: 8 } })
+        assert.equal(await page.locator('#candidate-area').getAttribute('aria-selected'), 'false', 'clicking outside the keyboard clears the candidate outline')
+        assert.equal(await page.evaluate(async () => {
+          const { appState } = await import('/src/app/state.ts')
+          return appState.selectedPath === appState.layoutPath && !appState.selectedCandidate
+        }), true, 'clearing the candidate returns to the panel source')
+        assert.equal(await page.locator('#source-editor').isVisible(), true)
       }
     }
     assert.deepEqual(await page.evaluate(async () => [...(await import("/src/app/state.ts")).appState.archive.changed]), before, "canvas selection does not edit files")
