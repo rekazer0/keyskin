@@ -2,12 +2,14 @@ import { type RecentFile, type RecentThumb } from "./types"
 import { appState } from "./state"
 import { runFileOperation, showError, showStatus } from "./file-operations"
 import { prepareDocumentReplacement, updateDirty } from "./edit-history"
-import { loadNativePath, loadSourceWorkspace } from "./archive-io"
+import { loadNativePath } from "./archive-io"
+import { activateSourceWorkspace, flushSourceAutosave } from "./source-workspace"
 import { newDocument } from "./new-document"
 import { builtInProjectTemplateExtension } from "../operations"
 import { symbolSpan, createIcon } from "../icons"
-import { isTauri, sourceDirectoryEnabledBySettings, mobilePortraitQuery } from "./canvas-interaction"
+import { isTauri, mobilePortraitQuery, LAST_SOURCE_WORKSPACE_KEY } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
+import { readFile } from "@tauri-apps/plugin-fs"
 import { canvasWrap, mode, welcomeScroller, $ } from "./dom"
 import { selectChoice } from "./mobile-layout"
 import { selectFile } from "./navigation"
@@ -58,13 +60,17 @@ function readRecentFiles(): RecentFile[] {
   }
 }
 
+export function recentSourceForPath(path: string): string | undefined {
+  return readRecentFiles().find(item => item.path === path)?.source
+}
+
 export function recordRecentTemplate(id: string, name: string): void {
   recordRecentFile(templatePrefix + id, name)
 }
 
 export function recordRecentFile(path: string, name: string, source = "", replacedTemplateId = ""): void {
-  if (!path || path.startsWith("content://")) return
-  const next = [{ path, name, at: Date.now(), source: source || undefined }, ...readRecentFiles().filter(
+  if (!path) return
+  const next = [{ path, name, at: Date.now(), source: source || recentSourceForPath(path) }, ...readRecentFiles().filter(
     (item) => item.path !== path && item.path !== templatePrefix + replacedTemplateId,
   )]
   const limit = fileRetentionLimit()
@@ -103,13 +109,7 @@ function openRecentFile(item: RecentFile): void {
   void runFileOperation("打开", async () => {
     if (template !== undefined) return newDocument(template)
     if (!(await prepareDocumentReplacement("open"))) return false
-    if (!item.source || !sourceDirectoryEnabledBySettings()) return loadNativePath(item.path)
-    try {
-      return await loadSourceWorkspace(item.source, item.path)
-    } catch {
-      // 源码目录被删或被清理时退回原皮肤包，并重新生成源码目录。
-      return loadNativePath(item.path)
-    }
+    return loadNativePath(item.path)
   })
 }
 
@@ -131,7 +131,7 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   card.dataset.variant = "recent"
   card.dataset.recent = item.path
   const template = recentTemplateId(item.path)
-  if (template === undefined) card.title = `打开 ${item.name}\n${item.path}`
+  if (template === undefined) card.title = `打开 ${item.name}\n${item.path}${item.source ? `\n源码目录：${item.source}` : ""}`
   const preview = document.createElement("span")
   preview.className = "template-preview"
   preview.ariaHidden = "true"
@@ -148,11 +148,11 @@ function recentCard(item: RecentFile): HTMLButtonElement {
   const meta = document.createElement("span")
   meta.className = "template-meta"
   const format = document.createElement("em")
-  format.textContent = template === undefined ? recentFormatLabel(item.path) : builtInProjectTemplateExtension(template)
+  format.textContent = template === undefined ? recentFormatLabel(item.path.startsWith("content://") ? item.name : item.path) : builtInProjectTemplateExtension(template)
   const time = document.createElement("span")
   time.textContent = formatRecentTime(item.at)
   meta.append(time)
-  const folder = template === undefined ? recentFolderLabel(item.path) : "内置模板"
+  const folder = template !== undefined ? "内置模板" : item.path.startsWith("content://") ? "" : recentFolderLabel(item.path)
   if (folder) {
     const place = document.createElement("span")
     place.className = "recent-card-folder"
@@ -180,10 +180,13 @@ const recentPreviewMaxBytes = 64 * 1024 * 1024
 
 async function readRecentPreviewBytes(path: string): Promise<Uint8Array> {
   if (!isTauri()) throw new Error("仅在桌面应用中生成本地预览")
-  if (await invoke<number>("skin_file_size", { path }) > recentPreviewMaxBytes) {
+  const size = path.startsWith("content://")
+    ? (await invoke<number[]>("skin_file_stamp", { path }))[0]!
+    : await invoke<number>("skin_file_size", { path })
+  if (size > recentPreviewMaxBytes) {
     throw new Error("皮肤文件过大，暂不生成预览")
   }
-  return new Uint8Array(await invoke<ArrayBuffer>("read_file", { path }))
+  return path.startsWith("content://") ? readFile(path) : new Uint8Array(await invoke<ArrayBuffer>("read_file", { path }))
 }
 
 function welcomeVisible(): boolean {
@@ -374,23 +377,45 @@ function syncRecentSelection(): void {
 
 async function deleteRecentFiles(paths: ReadonlySet<string>, trigger: HTMLElement): Promise<void> {
   if (!isTauri() || appState.recentDeleting || appState.fileOperationRunning) return
-  const items = readRecentFiles().filter(item => paths.has(item.path))
-  if (!items.length) return
-  const files = items.filter(item => recentTemplateId(item.path) === undefined)
-  const scope = files.length === items.length ? "删除皮肤文件及其记录" : files.length
-    ? "删除皮肤文件及其记录；内置模板只移除记录" : "仅移除打开记录，不删除内置模板"
-  const targets = items.map(item => recentTemplateId(item.path) !== undefined ? item.name : item.path)
-  const detail = `${scope}。此操作不可撤销。${files.some(item => item.path === appState.currentPath) ? "当前文档保留在编辑器中，下次保存需选择位置。" : ""}\n\n${targets.join("\n")}`
   appState.recentDeleting = true
   let deleted = 0
   const failures: string[] = []
   try {
+    // A newly opened or saved skin may still be creating its source directory.
+    await appState.sourceWorkspaceCreation
+    const recent = readRecentFiles()
+    const items = recent.filter(item => paths.has(item.path))
+    if (!items.length) return
+    const files = items.filter(item => recentTemplateId(item.path) === undefined)
+    const skins = files.map(({ path, source }) => ({
+      path,
+      source: source && !recent.some(other => other.path !== path && other.source === source) ? source : undefined,
+    }))
+    const scope = files.length ? `删除皮肤文件${skins.some(item => item.source) ? "、关联的编辑器源码目录" : ""}及其记录${files.length < items.length ? "；内置模板只移除记录" : ""}`
+      : "仅移除打开记录，不删除内置模板"
+    const targets = items.flatMap(item => {
+      const source = skins.find(skin => skin.path === item.path)?.source
+      const label = recentTemplateId(item.path) !== undefined || item.path.startsWith("content://") ? item.name : item.path
+      return source ? [label, `源码目录：${source}`] : [label]
+    })
+    const detail = `${scope}。此操作不可撤销。${files.some(item => item.path === appState.currentPath) ? "当前文档保留在编辑器中，下次保存需选择位置。" : ""}\n\n${targets.join("\n")}`
     if (!await confirmDeletion(items.length === 1 ? `删除「${items[0]!.name}」？` : `删除 ${items.length} 项皮肤？`, detail)) return
     syncRecentSelection()
     let results: (string | null)[] | null = files.length ? null : []
     if (files.length) await runFileOperation("删除皮肤", async () => {
-      results = await invoke<(string | null)[] | null>("delete_skin_files", { paths: files.map(item => item.path) })
-      return results !== null
+      const workspace = appState.sourceWorkspacePath
+      const prefix = appState.sourceWorkspacePrefix
+      const active = skins.findIndex(item => item.source && item.source === workspace)
+      if (active >= 0) {
+        await flushSourceAutosave()
+        await activateSourceWorkspace("")
+      }
+      try {
+        results = await invoke<(string | null)[] | null>("delete_skin_files", { skins })
+        return results !== null
+      } finally {
+        if (active >= 0 && results?.[active] !== null) await activateSourceWorkspace(workspace, prefix)
+      }
     })
     if (!results) return
     const status = results
@@ -402,6 +427,8 @@ async function deleteRecentFiles(paths: ReadonlySet<string>, trigger: HTMLElemen
         failures.push(`${item.name}：${error}`)
         continue
       }
+      if (item.source && item.source === localStorage.getItem(LAST_SOURCE_WORKSPACE_KEY)
+          && skins.some(skin => skin.source === item.source)) localStorage.removeItem(LAST_SOURCE_WORKSPACE_KEY)
       if (appState.currentPath === item.path) {
         appState.currentPath = ""
         appState.unsavedNew = true

@@ -20,7 +20,7 @@ import { bakeExportedFonts, offerBakedFontRestore } from "./font-bake-export"
 import { completeBdsPackage } from "../bds-package.ts"
 import { invokeBinary } from "../native-binary.ts"
 import { updateHistoryButtons, updateDirty, prepareDocumentReplacement } from "./edit-history"
-import { fileRetentionLimit, recordRecentFile } from "./recent-files"
+import { fileRetentionLimit, recentSourceForPath, recordRecentFile } from "./recent-files"
 import { dismissLayoutOverview } from "./layout-overview"
 import { renderFiles } from "./file-tree"
 import { bdaAvailableLayoutPaths, preferredPath, isBdaLayoutPath } from "./bda-documents"
@@ -90,13 +90,6 @@ export async function loadArchive(
   const bdaWarnings = bdaCompatibilityWarnings(nextArchive)
   if (bdaWarnings.length) clientLog.info("bda.compatibility.warning", { warnings: bdaWarnings.join("；") })
   updateFileOperationProgress(55, "正在建立编辑工作区…")
-  let nextSourceWorkspace = existingSourceWorkspace
-  let pendingSourceDirectory: string | null | undefined
-  const sourceDirectoryActive = sourceDirectoryEnabledBySettings()
-  const configuredDirectory = sourceDirectoryActive ? localStorage.getItem("source-directory") || null : null
-  if (isTauri() && sourceDirectoryActive && !nextSourceWorkspace && (!isAndroidTauri() || configuredDirectory)) {
-    pendingSourceDirectory = configuredDirectory
-  }
   releaseKeySound()
   keySoundBuffers.clear()
   await flushSourceAutosave()
@@ -122,7 +115,6 @@ export async function loadArchive(
   appState.aiChatController?.clear()
   aiSessions.hidden = true
   aiNewSession.setAttribute("aria-expanded", "false")
-  if (pendingSourceDirectory !== undefined) appState.sourceWorkspacePendingArchive = nextArchive
   appState.sourceTransfer = undefined
   const availableThemes = availableSkinThemes()
   if (!availableThemes.includes(theme.value)) theme.value = availableThemes[0] ?? "light"
@@ -173,42 +165,8 @@ export async function loadArchive(
   applyModeState()
   setMobilePane("canvas")
   updateFileOperationProgress(92, "正在连接源码工作区…")
-  await activateSourceWorkspace(nextSourceWorkspace, sourcePrefix)
-  if (pendingSourceDirectory !== undefined) {
-    const pendingArchive = nextArchive
-    void (async () => {
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
-      const createWorkspace = (directory: string | null) => invoke<string>("create_source_workspace", {
-        directory,
-        name: displayName || documentNameForPath(path, nextArchive),
-        files: sourceFilesPayload(nextArchive),
-        sourceLimit: fileRetentionLimit(),
-      })
-      try {
-        return await createWorkspace(pendingSourceDirectory)
-      } catch (error) {
-        if (isAndroidTauri() || !pendingSourceDirectory) throw error
-        const workspace = await createWorkspace(null)
-        showStatus("自定义源码目录不可用，本次已保存到内置目录")
-        return workspace
-      }
-    })().then(async (workspace) => {
-      if (appState.archive !== pendingArchive || appState.sourceWorkspacePendingArchive !== pendingArchive) return
-      const pendingPaths = [...pendingSourcePaths]
-      await activateSourceWorkspace(workspace, sourcePrefix)
-      if (appState.archive !== pendingArchive || appState.sourceWorkspacePendingArchive !== pendingArchive) return
-      if (!isNew && path && appState.currentPath === path) recordRecentFile(path, documentName.textContent, workspace)
-      pendingPaths.forEach((changedPath) => pendingSourcePaths.add(changedPath))
-      await flushSourceAutosave()
-      appState.sourceWorkspacePendingArchive = undefined
-      showStatus(isAndroidTauri() ? "源码已保存到授权目录" : "源码工作区已就绪")
-    }).catch((error) => {
-      if (appState.archive !== pendingArchive || appState.sourceWorkspacePendingArchive !== pendingArchive) return
-      appState.sourceWorkspacePendingArchive = undefined
-      pendingSourcePaths.clear()
-      showError(error, "保存源码到授权目录")
-    })
-  }
+  await activateSourceWorkspace(existingSourceWorkspace, sourcePrefix)
+  if (!isNew && path && !existingSourceWorkspace) startSourceWorkspace(nextArchive, path, documentName.textContent)
   updateDirty()
   clientLog.info("archive.load.finish", {
     format: nextArchive.format,
@@ -216,6 +174,46 @@ export async function loadArchive(
     durationMs: Math.round(performance.now() - started),
   })
 }
+function startSourceWorkspace(archive: SkinArchive, path: string, name: string): void {
+  if (!isTauri() || !sourceDirectoryEnabledBySettings()) return
+  const directory = localStorage.getItem("source-directory") || null
+  if (isAndroidTauri() && !directory) return
+  appState.sourceWorkspacePendingArchive = archive
+  const stillPending = () => appState.archive === archive && appState.sourceWorkspacePendingArchive === archive
+  const creation = (async () => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+    if (!stillPending()) return
+    const files = sourceFilesPayload(archive)
+    const create = (directory: string | null) => invoke<string>("create_source_workspace", {
+      directory, name, files, sourceLimit: fileRetentionLimit(),
+    })
+    let workspace: string
+    try {
+      workspace = await create(directory)
+    } catch (error) {
+      if (isAndroidTauri() || !directory) throw error
+      workspace = await create(null)
+      showStatus("自定义源码目录不可用，本次已保存到内置目录")
+    }
+    recordRecentFile(path, name, workspace)
+    if (!stillPending()) return
+    const pendingPaths = [...pendingSourcePaths]
+    await activateSourceWorkspace(workspace)
+    if (!stillPending()) return
+    pendingPaths.forEach((changedPath) => pendingSourcePaths.add(changedPath))
+    await flushSourceAutosave()
+    showStatus(isAndroidTauri() ? "源码已保存到授权目录" : "源码工作区已就绪")
+  })().catch((error) => {
+    if (!stillPending()) return
+    pendingSourcePaths.clear()
+    showError(error, "保存源码到授权目录")
+  }).finally(() => {
+    if (stillPending()) appState.sourceWorkspacePendingArchive = undefined
+    if (appState.sourceWorkspaceCreation === creation) appState.sourceWorkspaceCreation = undefined
+  })
+  appState.sourceWorkspaceCreation = creation
+}
+
 export async function openNative(): Promise<boolean> {
   const path = isAndroidTauri() ? await pickAndroidSkinFile() : await open({
     multiple: false,
@@ -235,18 +233,20 @@ async function pickAndroidSkinFile(initialUri?: string): Promise<string | undefi
     throw error
   }
 }
+function themeFolderPrefix(name: string, files: readonly { path: string }[]): string {
+  if (name !== "light" && name !== "dark" || files.some(file => /^(light|dark)\//.test(file.path))) return ""
+  return files.some(file => /^(?:skin\/)?(?:port|land)\//.test(file.path)) ? `${name}/` : ""
+}
 /** skinPath 非空时表示从最近皮肤打开：保存仍写回原皮肤文件，并沿用这个源码目录。 */
 export async function loadSourceWorkspace(path: string, skinPath = ""): Promise<boolean> {
   if (isAndroidTauri() && path.startsWith("content://")) {
     const encoded = await invoke<string>("open_source_workspace_archive", { path })
     const decodedPath = decodeURIComponent(path)
     const directoryName = decodedPath.split(/[\\/:]/).filter(Boolean).pop()?.toLowerCase() ?? ""
-    const sourcePrefix = directoryName === "dark" || directoryName === "light"
-      ? `${directoryName}/`
-      : ""
     const name = decodedPath.split(/[\\/]/).filter(Boolean).pop() || "皮肤源码"
-    const packed = SkinArchive.open(decodeBase64Archive(encoded))
-    await loadArchive(sourceArchiveFromFiles(packed.sourceFiles()), skinPath, false, path, skinPath ? "" : name, sourcePrefix)
+    const files = SkinArchive.open(decodeBase64Archive(encoded)).sourceFiles()
+    const sourcePrefix = themeFolderPrefix(directoryName, files)
+    await loadArchive(sourceArchiveFromFiles(files), skinPath, false, path, skinPath ? "" : name, sourcePrefix)
     return true
   }
   // 整个源码目录读完才知道大小，先按皮肤包大小决定是否立即弹出进度，免得点了半天没反应。
@@ -256,9 +256,7 @@ export async function loadSourceWorkspace(path: string, skinPath = ""): Promise<
   }
   const files = await invoke<SourceFilePayload[]>("open_source_workspace", { path })
   const directoryName = path.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() ?? ""
-  const sourcePrefix = directoryName === "dark" || directoryName === "light"
-    ? `${directoryName}/`
-    : ""
+  const sourcePrefix = themeFolderPrefix(directoryName, files)
   const sourceFiles = files
     .filter((file) => !file.path.endsWith("/.DS_Store") && file.path !== ".DS_Store")
     .filter((file) => file.path.includes("/") || !/\.(?:bdi|bds|bda)$/i.test(file.path))
@@ -302,6 +300,15 @@ export async function openSkinBytes(bytes: Uint8Array, path: string): Promise<bo
 
 export async function loadNativePath(path: string): Promise<boolean> {
   if (!isSupportedSkinPath(path)) throw new Error(UNSUPPORTED_SKIN_MESSAGE)
+  await appState.sourceWorkspaceCreation
+  const workspace = sourceDirectoryEnabledBySettings() ? recentSourceForPath(path) : undefined
+  if (workspace) {
+    try {
+      return await loadSourceWorkspace(workspace, path)
+    } catch {
+      // The source directory may have been moved or pruned; reopen the original skin.
+    }
+  }
   const bytes = path.startsWith("content://")
     ? await readFile(path)
     : await readNativeSkinFile(path)
@@ -501,6 +508,7 @@ async function exportForSave(format: ExportFormat) {
 
 async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: string): Promise<boolean> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
+  await appState.sourceWorkspaceCreation
   const exported = await exportForSave(format)
   if (!exported) return false
   let path = appState.currentPath
@@ -527,12 +535,17 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
   }
   if (!exported.converted && appState.archive === exported.archive) {
     const firstSave = appState.unsavedNew
+    const changedPath = appState.currentPath !== path
     appState.currentPath = path
     appState.unsavedNew = false
     // The written file's baked images are not part of the document; the next save starts from the document again.
     exported.archive.markSaved(exported.document, format, exported.revision)
     documentName.textContent = documentNameForPath(path, exported.archive)
-    if (firstSave) recordRecentFile(path, documentName.textContent, appState.sourceWorkspacePath, appState.currentTemplateId)
+    if (firstSave || changedPath) {
+      if (changedPath && !firstSave) await activateSourceWorkspace("")
+      recordRecentFile(path, documentName.textContent, appState.sourceWorkspacePath, appState.currentTemplateId)
+      if (!appState.sourceWorkspacePath) startSourceWorkspace(exported.archive, path, documentName.textContent)
+    }
     appState.currentTemplateId = ""
     updateDirty()
   }

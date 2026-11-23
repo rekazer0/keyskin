@@ -31,10 +31,12 @@ struct WorkspacePayload {
 
 #[cfg(target_os = "android")]
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CreateWorkspacePayload {
     uri: String,
     name: String,
     files: serde_json::Value,
+    source_limit: Option<usize>,
 }
 
 #[cfg(target_os = "android")]
@@ -138,13 +140,47 @@ pub async fn create_source_workspace<R: Runtime>(
     uri: String,
     name: String,
     files: serde_json::Value,
+    source_limit: Option<usize>,
 ) -> Result<String, String> {
     app.state::<NativeShare<R>>()
         .0
         .run_mobile_plugin_async(
             "createSourceWorkspace",
-            CreateWorkspacePayload { uri, name, files },
+            CreateWorkspacePayload {
+                uri,
+                name,
+                files,
+                source_limit,
+            },
         )
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "android")]
+pub async fn delete_skin_file<R: Runtime>(
+    app: &AppHandle<R>,
+    uri: String,
+    source: Option<String>,
+) -> Result<(), String> {
+    app.state::<NativeShare<R>>()
+        .0
+        .run_mobile_plugin_async(
+            "deleteSkinFile",
+            serde_json::json!({ "uri": uri, "source": source }),
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "android")]
+pub async fn skin_file_stamp<R: Runtime>(
+    app: &AppHandle<R>,
+    uri: String,
+) -> Result<[u64; 2], String> {
+    app.state::<NativeShare<R>>()
+        .0
+        .run_mobile_plugin_async("skinFileStamp", WorkspacePayload { uri })
         .await
         .map_err(|error| error.to_string())
 }

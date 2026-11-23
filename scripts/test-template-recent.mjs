@@ -8,6 +8,7 @@ const browser = await chromium.launch()
 const url = `http://127.0.0.1:${server.httpServer.address().port}/`
 const template = 'official-android-bds'
 const savedPath = '/tmp/自定义皮肤.bds'
+const workspacePath = '/tmp/sources/自定义皮肤'
 
 try {
   for (const mobile of [false, true]) {
@@ -17,9 +18,10 @@ try {
     } : { viewport: { width: 1440, height: 1000 } })
     const errors = []
     page.on('pageerror', error => errors.push(error.stack))
-    await page.addInitScript(({ template, savedPath }) => {
+    await page.addInitScript(({ template, savedPath, workspacePath, mobile }) => {
       localStorage.setItem('onboarding-tour-v1', 'done')
-      localStorage.setItem('source-directory-enabled', 'false')
+      localStorage.setItem('source-directory-enabled', String(!mobile))
+      window.workspaceNames = []
       window.nativeReadPaths = []
       window.__TAURI_INTERNALS__ = {
         metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
@@ -29,6 +31,12 @@ try {
           if (command === 'plugin:window|scale_factor') return 1
           if (command === 'choose_project_template') return template
           if (command === 'plugin:dialog|save') return savedPath
+          if (command === 'prepare_source_directory') return '/tmp/sources'
+          if (command === 'create_source_workspace') {
+            window.workspaceNames.push(args.name)
+            return workspacePath
+          }
+          if (command === 'plugin:fs|watch') return 1
           if (command === 'write_binary_file') window.savedSkinSize = args.byteLength
           if (['skin_file_stamp', 'skin_file_size', 'read_file'].includes(command)) {
             window.nativeReadPaths.push(args.path)
@@ -37,7 +45,7 @@ try {
           return null
         },
       }
-    }, { template, savedPath })
+    }, { template, savedPath, workspacePath, mobile })
     await page.goto(url)
     const home = page.locator(mobile ? '#mobile-navigation [data-mobile-page=home]' : '[data-workspace-page=files]')
     const create = page.locator(mobile ? '#mobile-welcome-new' : `#new-project-form [data-template="${template}"]`)
@@ -66,6 +74,7 @@ try {
     await ready()
     assert.equal(await page.locator('#document-name').textContent(), '未命名.bds')
     assert.equal((await records()).length, 1, 'reopening a template record does not duplicate it')
+    assert.deepEqual(await page.evaluate(() => window.workspaceNames), [], 'unsaved templates do not create unnamed folders')
     if (!mobile) {
       await page.evaluate(async () => {
         const { runFileOperation } = await import('/src/app/file-operations.ts')
@@ -74,7 +83,9 @@ try {
       })
       await page.locator('#file-operation-dialog[data-outcome=success]').getByRole('button', { name: '继续编辑' }).click()
       assert.ok(await page.evaluate(() => window.savedSkinSize > 0))
+      await page.waitForFunction(workspace => JSON.parse(localStorage.getItem('recent-files'))[0]?.source === workspace, workspacePath)
       assert.deepEqual((await records()).map(({ path }) => path), [savedPath])
+      assert.deepEqual(await page.evaluate(() => window.workspaceNames), ['自定义皮肤.bds'])
       await home.click()
       assert.equal(await recent.locator('.template-name').textContent(), '自定义皮肤.bds')
     }

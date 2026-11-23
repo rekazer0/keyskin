@@ -63,14 +63,17 @@ try {
   const retention = await page.evaluate(async bytes => {
     const { mockIPC, clearMocks } = await import('/node_modules/@tauri-apps/api/mocks.js')
     const { appState } = await import('/src/app/state.ts')
-    const { openSkinBytes } = await import('/src/app/archive-io.ts')
+    const { loadNativePath, openSkinBytes } = await import('/src/app/archive-io.ts')
     const { applySourceDirectory } = await import('/src/app/source-workspace.ts')
     const calls = []
     mockIPC((command, args) => {
       if (command === 'prepare_source_directory') return args.path
+      if (command === 'open_source_workspace') return calls.find(call => call.workspace === args.path)?.files
+      if (command === 'skin_file_size') return 1
       if (command === 'create_source_workspace') {
-        calls.push({ directory: args.directory, sourceLimit: args.sourceLimit })
-        return `/test/custom/workspace-${calls.length}`
+        const workspace = `${args.directory}/${args.name.replace(/\.ssf$/, '')}`
+        calls.push({ ...args, workspace })
+        return workspace
       }
       if (command === 'plugin:fs|watch') return 1
       if (command === 'plugin:window|get_all_windows') return []
@@ -90,7 +93,14 @@ try {
         while (appState.sourceWorkspacePendingArchive) await new Promise(resolve => setTimeout(resolve, 10))
         historySizes.push(JSON.parse(localStorage.getItem('recent-files')).length)
       }
-      return { initialLimit, calls, historySizes: historySizes.slice(1) }
+      await loadNativePath('/test/custom-0.ssf')
+      await appState.sourceWorkspaceCreation
+      return {
+        initialLimit,
+        calls: calls.map(({ directory, sourceLimit, name }) => ({ directory, sourceLimit, name })),
+        historySizes: historySizes.slice(1),
+        reopenedWorkspace: appState.sourceWorkspacePath,
+      }
     } finally {
       appState.stopSourceWatch?.()
       clearMocks()
@@ -98,7 +108,8 @@ try {
   }, [...ssfFixture()])
   assert.deepEqual(retention, {
     initialLimit: 27,
-    calls: [27, 2, 0].map(sourceLimit => ({ directory: '/test/custom', sourceLimit })),
+    calls: [27, 2, 0].map((sourceLimit, index) => ({ directory: '/test/custom', sourceLimit, name: `custom-${[5, 2, 0][index]}.ssf` })),
+    reopenedWorkspace: '/test/custom/custom-0',
     historySizes: [2, 3],
   })
   await page.evaluate(() => {

@@ -56,11 +56,18 @@ class CreateWorkspaceArgs {
   lateinit var uri: String
   lateinit var name: String
   var files: List<SourceFileArg> = emptyList()
+  var sourceLimit: Int? = null
 }
 
 @InvokeArg
 class PickSkinFileArgs {
   var initialUri: String? = null
+}
+
+@InvokeArg
+class DeleteSkinArgs {
+  lateinit var uri: String
+  var source: String? = null
 }
 
 @InvokeArg
@@ -99,6 +106,8 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       )),
     )
     private const val MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
+    private const val SOURCE_MARKER = ".keyskin-source"
+    private const val SOURCE_MARKER_CONTENT = "KeySkin source workspace\n"
     private const val MAX_SOURCE_FILES = 4096
     private const val MAX_SOURCE_BYTES = 256L * 1024 * 1024
   }
@@ -467,7 +476,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       val relative = if (path.isEmpty()) name else "$path/$name"
       if (entry.isDirectory) {
         readFiles(entry, relative, output)
-      } else if (entry.isFile && name !in setOf(".keyskin-source", ".keyskin-files.json", ".DS_Store")) {
+      } else if (entry.isFile && name !in setOf(SOURCE_MARKER, ".keyskin-files.json", ".DS_Store")) {
         val bytes = activity.contentResolver.openInputStream(entry.uri)!!.use { it.readBytes() }
         output.add(mapOf("path" to relative, "data" to bytes.map { it.toInt() and 0xff }))
       }
@@ -488,7 +497,7 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
           val relative = if (path.isEmpty()) name else "$path/$name"
           if (entry.isDirectory) {
             add(entry, relative)
-          } else if (entry.isFile && name !in setOf(".keyskin-source", ".keyskin-files.json", ".DS_Store")) {
+          } else if (entry.isFile && name !in setOf(SOURCE_MARKER, ".keyskin-files.json", ".DS_Store")) {
             safeParts(relative)
             fileCount += 1
             if (fileCount > MAX_SOURCE_FILES) throw IllegalArgumentException("Skin source contains too many files")
@@ -515,16 +524,88 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
     return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
   }
 
+  private fun skinDocument(path: String): DocumentFile {
+    val uri = Uri.parse(path)
+    require(DocumentsContract.isDocumentUri(activity, uri)) { "请选择本地皮肤文件" }
+    return DocumentFile.fromSingleUri(activity, uri) ?: throw IllegalArgumentException("皮肤文件不可用")
+  }
+
+  private fun documentExists(uri: Uri): Boolean = activity.contentResolver
+    .query(uri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)
+    ?.use { it.moveToFirst() } ?: throw IllegalStateException("无法检查文件是否存在")
+
+  private fun sourceMarker(folder: DocumentFile): DocumentFile? {
+    val marker = folder.findFile(SOURCE_MARKER)?.takeIf { it.isFile } ?: return null
+    val expected = SOURCE_MARKER_CONTENT.toByteArray()
+    return activity.contentResolver.openInputStream(marker.uri)!!.use { input ->
+      if (expected.all { input.read() == it.toInt() } && input.read() == -1) marker else null
+    }
+  }
+
+  private fun managedSourceForDeletion(path: String): DocumentFile? {
+    val uri = Uri.parse(path)
+    require(DocumentsContract.isTreeUri(uri) && DocumentsContract.isDocumentUri(activity, uri) &&
+      DocumentsContract.getTreeDocumentId(uri) != DocumentsContract.getDocumentId(uri)) { "不是有效的源码目录路径" }
+    if (!documentExists(uri)) return null
+    return directory(path).takeIf { sourceMarker(it) != null }
+  }
+
+  @Command
+  fun deleteSkinFile(invoke: Invoke) {
+    runSourceIO(invoke, "无法删除皮肤文件") {
+      val args = invoke.parseArgs(DeleteSkinArgs::class.java)
+      val file = skinDocument(args.uri)
+      val workspace = args.source?.let { managedSourceForDeletion(it) }
+      if (documentExists(file.uri)) {
+        require(file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in
+          setOf("bdi", "bds", "bda", "ssf", "mssf", "sxi")) { "只可删除可访问的本地皮肤文件" }
+        check(DocumentsContract.deleteDocument(activity.contentResolver, file.uri)) { "提供程序不允许删除该文件" }
+      }
+      if (workspace != null) check(workspace.delete()) { "无法删除源码目录：${workspace.name}" }
+      null
+    }
+  }
+
+  @Command
+  fun skinFileStamp(invoke: Invoke) {
+    runSourceIO(invoke, "无法读取皮肤文件信息") {
+      val file = skinDocument(invoke.parseArgs(WorkspaceArgs::class.java).uri)
+      check(file.isFile) { "皮肤文件不可用" }
+      listOf(file.length(), file.lastModified())
+    }
+  }
+
+  private fun pruneSourceWorkspaces(root: DocumentFile, current: DocumentFile, limit: Int) {
+    val older = root.listFiles().filter { it.uri != current.uri && it.isDirectory }.mapNotNull { folder ->
+      folder.findFile(SOURCE_MARKER)?.takeIf { it.isFile }?.let { folder to it.lastModified() }
+    }.sortedWith(compareBy({ it.second }, { it.first.name }))
+    older.take((older.size + 1 - limit).coerceAtLeast(0)).forEach { (folder, _) ->
+      check(folder.delete()) { "无法删除旧源码目录：${folder.name}" }
+    }
+  }
+
   @Command
   fun createSourceWorkspace(invoke: Invoke) {
     runSourceIO(invoke, "Unable to create source workspace") {
       val args = invoke.parseArgs(CreateWorkspaceArgs::class.java)
       val root = directory(args.uri)
-      val stem = args.name.substringAfterLast('/').substringBeforeLast('.').replace(Regex("[^A-Za-z0-9_-]"), "-").take(48).ifEmpty { "skin" }
-      val workspace = root.createDirectory("${System.currentTimeMillis()}-$stem")
+      val names = root.listFiles().mapNotNull { it.name }.toSet()
+      var name = args.name
+      var suffix = 2
+      while (name in names) name = "${args.name} (${suffix++})"
+      val workspace = root.createDirectory(name)
         ?: throw IllegalStateException("Unable to create source workspace")
-      writeNewFiles(workspace, args.files)
-      workspace.uri.toString()
+      try {
+        writeNewFiles(workspace, args.files)
+        val marker = workspace.createFile("application/octet-stream", SOURCE_MARKER)
+          ?: throw IllegalStateException("无法标记源码目录")
+        writeBytes(marker, SOURCE_MARKER_CONTENT.toByteArray())
+        args.sourceLimit?.let { limit -> pruneSourceWorkspaces(root, workspace, limit) }
+        workspace.uri.toString()
+      } catch (error: Exception) {
+        workspace.delete()
+        throw error
+      }
     }
   }
 
@@ -542,7 +623,10 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
   fun readSourceWorkspaceArchive(invoke: Invoke) {
     runSourceIO(invoke, "Unable to read source workspace") {
       val args = invoke.parseArgs(WorkspaceArgs::class.java)
-      sourceArchive(directory(args.uri))
+      val workspace = directory(args.uri)
+      sourceArchive(workspace).also {
+        runCatching { sourceMarker(workspace)?.let { marker -> writeBytes(marker, SOURCE_MARKER_CONTENT.toByteArray()) } }
+      }
     }
   }
 

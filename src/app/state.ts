@@ -59,6 +59,7 @@ export const appState = {
   currentTemplateId: "",
   sourceWorkspacePath: "",
   sourceWorkspacePrefix: "",
+  sourceWorkspaceCreation: undefined as Promise<void> | undefined,
   sourceWorkspacePendingArchive: undefined as SkinArchive | undefined,
   stopSourceWatch: undefined as UnwatchFn | undefined,
   sourceAutosaveTimer: undefined as number | undefined,

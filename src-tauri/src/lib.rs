@@ -3,7 +3,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 #[cfg(target_os = "windows")]
 use tauri::window::{Effect, EffectsBuilder};
 use tauri::Manager;
@@ -28,6 +28,7 @@ const MAX_ARCHIVE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_SOURCE_FILES: usize = 4096;
 const SOURCE_MARKER: &str = ".keyskin-source";
+const SOURCE_MARKER_CONTENT: &[u8] = b"KeySkin source workspace\n";
 const SOURCE_MANIFEST: &str = ".keyskin-files.json";
 const RELEASES_URL: &str = "https://github.com/rekazer0/keyskin/releases";
 const CLIENT_LOG_FILE: &str = "client.jsonl";
@@ -423,19 +424,55 @@ fn workspace_name(name: &str) -> String {
     let cleaned: String = stem
         .chars()
         .map(|value| {
-            if value.is_alphanumeric() || value == '-' || value == '_' {
-                value
-            } else {
+            if value.is_control()
+                || value == '/'
+                || (cfg!(any(windows, target_os = "android")) && "<>:\"\\|?*".contains(value))
+            {
                 '-'
+            } else {
+                value
             }
         })
         .collect();
-    let cleaned = cleaned.trim_matches('-');
-    if cleaned.is_empty() {
-        "skin".into()
+    let cleaned = if cfg!(windows) {
+        cleaned.trim_end_matches([' ', '.'])
     } else {
-        cleaned.chars().take(48).collect()
+        cleaned.as_str()
+    };
+    if cleaned.trim_matches([' ', '.']).is_empty() {
+        return "skin".into();
     }
+    let device = cleaned
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    if cfg!(windows)
+        && (matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || device
+                .strip_prefix("COM")
+                .or_else(|| device.strip_prefix("LPT"))
+                .is_some_and(|number| {
+                    "0123456789¹²³".contains(number) && number.chars().count() == 1
+                }))
+    {
+        return format!("_{cleaned}");
+    }
+    cleaned.into()
+}
+
+fn create_workspace_directory(root: &Path, name: &str) -> Result<PathBuf, String> {
+    let mut workspace = root.join(name);
+    for suffix in 2.. {
+        match fs::create_dir(&workspace) {
+            Ok(()) => return Ok(workspace),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                workspace = root.join(format!("{name} ({suffix})"));
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    unreachable!()
 }
 
 fn prune_source_workspaces(root: &Path, current: &Path, limit: usize) -> Result<(), String> {
@@ -490,7 +527,9 @@ async fn create_source_workspace(
     files: Vec<EncodedSourceFile>,
     source_limit: i32,
 ) -> Result<String, String> {
-    let source_limit = usize::try_from(source_limit).map_err(|_| "保留数量不能小于 0".to_string())?;
+    let name = workspace_name(&name);
+    let source_limit =
+        usize::try_from(source_limit).map_err(|_| "保留数量不能小于 0".to_string())?;
     #[cfg(target_os = "android")]
     if let Some(uri) = directory
         .as_deref()
@@ -507,20 +546,9 @@ async fn create_source_workspace(
     }
     let files = decode_source_files(files)?;
     let root = source_root(&app, directory)?;
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
-        .as_millis();
-    let base = format!("{timestamp}-{}", workspace_name(&name));
-    let mut workspace = root.join(&base);
-    let mut suffix = 2;
-    while workspace.exists() {
-        workspace = root.join(format!("{base}-{suffix}"));
-        suffix += 1;
-    }
-    fs::create_dir(&workspace).map_err(|error| error.to_string())?;
+    let workspace = create_workspace_directory(&root, &name)?;
     let result = (|| {
-        fs::write(workspace.join(SOURCE_MARKER), b"KeySkin source workspace\n")
+        fs::write(workspace.join(SOURCE_MARKER), SOURCE_MARKER_CONTENT)
             .map_err(|error| error.to_string())?;
         write_source_files(&workspace, &files)?;
         prune_source_workspaces(&root, &workspace, source_limit)?;
@@ -555,8 +583,9 @@ async fn open_source_workspace(
     }
     source_paths(&files)?;
     let marker = directory.join(SOURCE_MARKER);
-    if marker.is_file() {
-        let _ = fs::write(marker, b"KeySkin source workspace\n");
+    if fs::symlink_metadata(&marker).is_ok_and(|metadata| metadata.is_file()) {
+        let _ =
+            fs::File::open(marker).and_then(|file| file.set_modified(std::time::SystemTime::now()));
     }
     app.fs_scope()
         .allow_directory(&directory, true)
@@ -815,7 +844,13 @@ async fn skin_file_size(path: String) -> Result<u64, String> {
 
 /// 最近打开缩略图的缓存戳：大小 + 修改时间(ms)，任一变化即视为文件已改。
 #[tauri::command]
-async fn skin_file_stamp(path: String) -> Result<[u64; 2], String> {
+async fn skin_file_stamp(app: tauri::AppHandle, path: String) -> Result<[u64; 2], String> {
+    #[cfg(target_os = "android")]
+    if path.starts_with("content://") {
+        return tauri_plugin_native_share::skin_file_stamp(&app, path).await;
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = app;
     let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
     let modified = metadata
         .modified()
@@ -849,17 +884,68 @@ fn checked_skin_path(path: &Path) -> Result<Option<PathBuf>, String> {
     }
 }
 
+// A recent entry may also point at a manually selected source directory. Only
+// remove editor-created workspaces, and never follow a substituted symlink.
+fn managed_source_for_deletion(path: &Path) -> Result<Option<PathBuf>, String> {
+    fn check(path: &Path) -> Result<Option<PathBuf>, std::io::Error> {
+        let marker = path.join(SOURCE_MARKER);
+        if !path.is_absolute()
+            || path.file_name().is_none()
+            || !fs::symlink_metadata(path)?.is_dir()
+            || fs::canonicalize(path)? != path
+        {
+            return Err(std::io::Error::other("不是有效的源码目录路径"));
+        }
+        let metadata = fs::symlink_metadata(&marker)?;
+        if !metadata.is_file()
+            || metadata.len() != SOURCE_MARKER_CONTENT.len() as u64
+            || fs::read(&marker)? != SOURCE_MARKER_CONTENT
+        {
+            return Ok(None);
+        }
+        Ok(Some(path.to_path_buf()))
+    }
+    match check(path) {
+        Ok(path) => Ok(path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("无法检查源码目录 {}：{error}", path.display())),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct SkinDeletion {
+    path: String,
+    source: Option<String>,
+}
+
+fn delete_local_skin(path: Option<PathBuf>, source: Option<PathBuf>) -> Result<(), String> {
+    if let Some(path) = path {
+        fs::remove_file(&path).map_err(|error| error.to_string())?;
+    }
+    if let Some(source) = source {
+        fs::remove_dir_all(&source)
+            .map_err(|error| format!("无法删除源码目录 {}：{error}", source.display()))?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn delete_skin_files(
     window: tauri::WebviewWindow,
-    paths: Vec<String>,
+    skins: Vec<SkinDeletion>,
 ) -> Result<Option<Vec<Option<String>>>, String> {
     if window.label() != "main" {
         return Err("只能在主窗口删除皮肤".into());
     }
-    let candidates = paths
+    let candidates = skins
         .iter()
-        .map(|path| checked_skin_path(Path::new(path)))
+        .map(|skin| {
+            #[cfg(target_os = "android")]
+            if skin.path.starts_with("content://") {
+                return Ok(None);
+            }
+            checked_skin_path(Path::new(&skin.path))
+        })
         .collect::<Vec<_>>();
     {
         use tauri::scope::fs::Pattern;
@@ -901,13 +987,29 @@ async fn delete_skin_files(
             return Ok(None);
         }
     }
-    let mut errors = Vec::with_capacity(paths.len());
-    for candidate in candidates {
+    let mut errors = Vec::with_capacity(skins.len());
+    for (skin, candidate) in skins.into_iter().zip(candidates) {
+        #[cfg(target_os = "android")]
+        if skin.path.starts_with("content://") {
+            errors.push(
+                tauri_plugin_native_share::delete_skin_file(
+                    window.app_handle(),
+                    skin.path,
+                    skin.source,
+                )
+                .await
+                .err(),
+            );
+            continue;
+        }
         errors.push(
             candidate
-                .and_then(|path| match path {
-                    Some(path) => fs::remove_file(path).map_err(|error| error.to_string()),
-                    None => Ok(()),
+                .and_then(|path| {
+                    let source = match skin.source {
+                        Some(source) => managed_source_for_deletion(Path::new(&source))?,
+                        None => None,
+                    };
+                    delete_local_skin(path, source)
                 })
                 .err(),
         );
@@ -2032,6 +2134,46 @@ mod tests {
             assert!(super::checked_skin_path(&link).is_err());
         }
         fs::remove_dir_all(root).expect("cleanup fixtures");
+    }
+
+    #[test]
+    fn skin_deletion_removes_only_its_managed_workspace() {
+        use super::{
+            checked_skin_path, create_workspace_directory, delete_local_skin,
+            managed_source_for_deletion, workspace_name, SOURCE_MARKER_CONTENT,
+        };
+
+        let root =
+            std::env::temp_dir().join(format!("keyskin-delete-workspace-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).unwrap();
+        let root = fs::canonicalize(&root).unwrap();
+        let name = workspace_name("花奏 风和.test.bds");
+        assert_eq!(name, "花奏 风和.test");
+        let user_folder = create_workspace_directory(&root, &name).unwrap();
+        let workspace = create_workspace_directory(&root, &name).unwrap();
+        assert_eq!(workspace, root.join(format!("{name} (2)")));
+        fs::write(user_folder.join(SOURCE_MARKER), b"not an editor marker").unwrap();
+        fs::write(workspace.join(SOURCE_MARKER), SOURCE_MARKER_CONTENT).unwrap();
+        let original = root.join("花奏 风和.test.bds");
+        fs::write(&original, b"skin").unwrap();
+        #[cfg(unix)]
+        {
+            let link = root.join("linked-source");
+            std::os::unix::fs::symlink(&workspace, &link).unwrap();
+            assert!(managed_source_for_deletion(&link).is_err());
+        }
+        assert_eq!(managed_source_for_deletion(&user_folder).unwrap(), None);
+        delete_local_skin(
+            checked_skin_path(&original).unwrap(),
+            managed_source_for_deletion(&workspace).unwrap(),
+        )
+        .unwrap();
+        assert!(!original.exists());
+        assert!(!workspace.exists());
+        assert!(user_folder.is_dir());
+        assert_eq!(managed_source_for_deletion(&workspace).unwrap(), None);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

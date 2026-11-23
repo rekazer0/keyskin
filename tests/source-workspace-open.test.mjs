@@ -6,7 +6,7 @@ import { declarations, run } from './helpers/app-source.mjs'
 import { ssfFixture } from './helpers/ssf-fixture.mjs'
 
 function workspaceContext(files, loadArchive) {
-  return run(declarations('loadSourceWorkspace', 'decodeBase64Archive', 'sourceArchiveFromFiles'), {
+  return run(declarations('loadSourceWorkspace', 'themeFolderPrefix', 'decodeBase64Archive', 'sourceArchiveFromFiles'), {
     SkinArchive, Uint8Array, TextDecoder, atob,
     isAndroidTauri: () => false,
     showSkinLoadProgress: () => false,
@@ -44,4 +44,13 @@ test('theme source folders retain their prefix and empty folders still fail', as
   await context.loadSourceWorkspace('/source/dark')
   const empty = workspaceContext(encoded({ '.DS_Store': new Uint8Array() }), () => assert.fail('Empty folders must not replace the document'))
   await assert.rejects(empty.loadSourceWorkspace('/empty'), /源码文件夹为空/)
+})
+
+
+test('a full skin workspace named dark does not become a single-theme folder', async () => {
+  const context = workspaceContext(encoded({ 'light/skin/port/main.ini': strToU8('[PANEL]') }), async (archive, path, isNew, workspace, name, prefix) => {
+    assert.equal(prefix, '')
+    assert.ok(archive.names().includes('light/skin/port/main.ini'))
+  })
+  await context.loadSourceWorkspace('/source/dark', '/dark.bds')
 })
