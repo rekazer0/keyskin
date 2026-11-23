@@ -477,8 +477,9 @@ export function wireFilesAndSettings(): void {
   })
   undoButton.addEventListener("click", undo)
   redoButton.addEventListener("click", redo)
-  // 手机文件选择器无法可靠识别自定义扩展名，改由 change 里校验扩展名。
-  if (isIOSWeb() || isAndroidWeb()) browserOpen.removeAttribute("accept")
+  // Android 请求文档而不是媒体；用宽泛的 MIME 类型兼容自定义扩展名。
+  if (isAndroidWeb()) browserOpen.accept = "application/*"
+  else if (isIOSWeb()) browserOpen.removeAttribute("accept")
   browserOpen.addEventListener("change", async () => {
     const file = browserOpen.files?.[0]
     if (file) {

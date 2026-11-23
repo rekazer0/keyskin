@@ -33,7 +33,8 @@ try {
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
       await page.waitForSelector('.template-card', { state: 'attached' })
       const input = page.locator('#browser-open')
-      assert.equal(await input.getAttribute('accept'), platform === 'desktop' ? '.bdi,.bds,.bda,.ssf,.mssf,.sxi' : null)
+      const accept = { Android: 'application/*', iPhone: null, desktop: '.bdi,.bds,.bda,.ssf,.mssf,.sxi' }
+      assert.equal(await input.getAttribute('accept'), accept[platform])
       if (platform === 'Android') {
         const picker = page.waitForEvent('filechooser')
         await page.locator('#mobile-welcome-open').click()
@@ -49,7 +50,7 @@ try {
         assert.equal(await page.locator('#document-name').textContent(), '安卓搜狗.ssf')
 
         // Even when the phone exposes a save picker, its provider can abort without showing UI.
-        await input.setInputFiles({ name: '安卓百度.bds', mimeType: 'application/octet-stream', buffer: Buffer.from(bdsFixture()) })
+        await input.setInputFiles({ name: '安卓百度.bds', mimeType: 'application/zip', buffer: Buffer.from(bdsFixture()) })
         await page.getByRole('button', { name: '不导出', exact: true }).click()
         await page.waitForFunction(() => document.querySelector('#document-name').textContent === '安卓百度.bds' && !document.querySelector('#open').disabled)
         await page.evaluate(() => {
