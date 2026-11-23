@@ -91,7 +91,7 @@
 .atlas-workspace .atlas-stretch:not([hidden]):has(input:not(:checked)) ~ :is(#tile-inner-title, .geometry-fields) { display: none; }
 .atlas-surface.atlas-panning, .atlas-surface.atlas-panning #atlas-canvas { cursor: grabbing; }
 .resource-workspace #resource-gallery { display: grid; flex: 1; align-content: start; align-items: start; gap: var(--space-sm); min-height: 0; overflow: auto; overscroll-behavior: contain; scroll-padding-block: var(--space-sm); padding: var(--space-sm) var(--space-md) var(--space-lg); }
-.resource-workspace #resource-gallery[data-kind="sound"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.resource-workspace #resource-gallery[data-kind="sound"] { display: flex; flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }
 
 /* 弱分隔线独立绘制，不改变面板外形或控件尺寸。 */
 .atlas-workspace .atlas-stretch::before {

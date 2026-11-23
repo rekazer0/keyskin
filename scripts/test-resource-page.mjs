@@ -5,7 +5,7 @@ import { createServer } from "vite"
 import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
 import { bdaAnimatedSkinBytes } from "../tests/helpers/bda-animation-fixture.mjs"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
-import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
+import { ssfFixture, wav } from "../tests/helpers/ssf-fixture.mjs"
 import { SkinArchive } from "../src/skin.ts"
 
 const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41909, strictPort: false, hmr: false } })
@@ -14,7 +14,9 @@ const browser = await chromium.launch()
 mkdirSync(".ui-current", { recursive: true })
 const baidu = SkinArchive.open(bdsFixture())
 const stylesPath = "light/res/default.css"
-baidu.setText(stylesPath, `${baidu.getText(stylesPath)}\n[STYLE7]\nNM_IMG=btn,0\nHL_IMG=btn, 0\n`)
+baidu.setText(stylesPath, `${baidu.getText(stylesPath)}\n[STYLE7]\nNM_IMG=btn,0\nHL_IMG=btn, 0\nPRESS_SOUND_PATH=click.wav\n[STYLE8]\nPRESS_SOUND_PATH=soft.wav\n`)
+baidu.setBytes("light/skin/res/click.wav", wav(8000))
+baidu.setBytes("light/skin/res/soft.wav", wav(8000))
 const fixtures = { bds: baidu.toBytes("bds"), bdi: baidu.toBytes("bdi"), bda: bdaAnimatedSkinBytes(), sxi: sxiAnimationFixture(), ssf: ssfFixture() }
 const optionCount = cards => cards.evaluateAll(options => Number(options[0]?.getAttribute("aria-setsize") ?? options.length))
 try {
@@ -35,6 +37,37 @@ try {
     await page.locator(".workspace #resource-list-view").waitFor()
     assert.equal(await page.locator('[data-workspace-page="resources"]').getAttribute("aria-current"), "page")
     assert.equal(await page.locator('[data-resource-page="style"]').isDisabled(), format === "ssf")
+    if (["bds", "bdi"].includes(format)) {
+      await page.locator('[data-resource-page="sound"]').click()
+      const files = page.getByRole("listbox", { name: "音效文件" })
+      assert.deepEqual(await files.getByRole("option").locator("strong").allTextContents(), ["click.wav", "soft.wav"])
+      assert.ok(await files.evaluate(list => list.clientWidth === list.closest("#resource-gallery").clientWidth), "音效列表撑满资源栏，不因容器查询而收缩")
+      await files.getByRole("option", { name: /click.wav/ }).click()
+      const preview = page.locator("#sound-resource-detail")
+      await preview.getByRole("img", { name: /click.wav 波形，时长/ }).waitFor()
+      await preview.getByRole("button", { name: "试听音效" }).click()
+      await preview.getByRole("button", { name: "停止试听" }).waitFor()
+      await preview.getByRole("button", { name: "停止试听" }).click()
+      await files.getByRole("option", { name: /click.wav/ }).press("ArrowDown")
+      assert.equal(await files.getByRole("option", { name: /soft.wav/ }).getAttribute("aria-selected"), "true")
+      if (format === "bdi") await page.screenshot({ path: `.ui-current/resource-audio-${colorScheme}.png` })
+
+      await page.getByRole("button", { name: /^音效样式/ }).click()
+      const cards = page.locator('#resource-gallery [role="option"]')
+      assert.equal(await optionCount(cards), 2)
+      assert.equal(await page.locator('[data-resource-style-count="sound"]').textContent(), "2")
+      for (const [id, file] of [[7, "click.wav"], [8, "soft.wav"]]) {
+        const card = page.locator(`#resource-gallery [data-style-id="${id}"]`)
+        assert.equal(await card.getAttribute("data-style-kind"), "sound")
+        assert.equal(await card.locator(".ui-style-sound-info > strong").textContent(), file)
+        assert.equal(await card.getByRole("button", { name: "试听", exact: true }).isEnabled(), true)
+      }
+      if (format === "bdi") await page.screenshot({ path: `.ui-current/resource-sound-styles-${colorScheme}.png` })
+      await page.locator("#resource-search").fill("click.wav")
+      assert.equal(await optionCount(cards), 1)
+      await page.locator("#resource-search").fill("")
+      await page.locator('[data-resource-page="style"]').click()
+    }
     if (format !== "ssf") {
       await page.locator('#resource-gallery [role="option"]').first().waitFor()
       assert.equal(await optionCount(page.locator('#resource-gallery [role="option"]')), Number(await page.locator('[data-resource-count="style"]').textContent()), "全部样式展示所有类型")

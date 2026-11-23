@@ -365,8 +365,14 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
     : [String(asObject(palmStyle(styleID)?.s_1)?.text ?? "")]
   const categories = appState.styleUsageFilter !== "all" ? styleLibraryCategories() : undefined
   const styleIDs = sortResources(availableStyleIDs().filter((styleID) => {
-    return resourceStyleMatchesUsage(styleID) && styleMatches({ kind: category === "all" ? "all" : styleKind(styleID, stylesDocument), sound: category === "sound" && Boolean(styleSoundFile(styleID, stylesDocument)),
-      categories: categories?.get(styleID) ?? [], search: query ? [styleID, ...notes(styleID)].join(" ") : "" }, category, appState.styleUsageFilter, query)
+    if (!resourceStyleMatchesUsage(styleID)) return false
+    const sound = category === "sound" ? styleSoundFile(styleID, stylesDocument) : undefined
+    return styleMatches({
+      kind: category === "all" ? "all" : styleKind(styleID, stylesDocument),
+      sound: Boolean(sound),
+      categories: categories?.get(styleID) ?? [],
+      search: query ? [styleID, ...notes(styleID), sound].join(" ") : "",
+    }, category, appState.styleUsageFilter, query)
   }))
   listHeader("样式", styleIDs.length)
   resourceUploadButton.hidden = true
@@ -384,7 +390,7 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
   const names = appState.archive.names()
   appendResourceCards(styleIDs.map(id => `STYLE${id}`), index => {
     const styleID = styleIDs[index]
-    const kind = styleKind(styleID, stylesDocument)
+    const kind = category === "sound" ? "sound" : styleKind(styleID, stylesDocument)
     const soundFilename = styleSoundFile(styleID, stylesDocument)
     const soundPath = soundFilename ? soundPathForFilename(names, theme.value, orientation.value, soundFilename) : undefined
     const button = styleCard({
@@ -398,7 +404,7 @@ async function renderStyleResourceGallery(galleryCanvas: ReturnType<typeof thumb
       },
       animation: () => stylesDocument ? styleAnimationPlayers(styleID, stylesDocument, true) : [],
       summary: kind === "anim" && stylesDocument ? styleAnimationSummary(styleID, stylesDocument) : undefined,
-      sound: soundFilename ? () => keySoundSample(soundFilename, soundPath) : undefined,
+      sound: soundFilename || kind === "sound" ? () => keySoundSample(soundFilename, soundPath) : undefined,
     })
     button.classList.add("resource-item", "style-resource-item")
     button.dataset.path = `STYLE${styleID}`

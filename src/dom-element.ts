@@ -172,7 +172,8 @@ export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElemen
     // 嵌套的列表框（例如资源网格里的音效列表）已经处理过这次按键。
     if (event.defaultPrevented) return
     if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return
-    if (list.getAttribute("aria-orientation") === "horizontal" && ["ArrowDown", "ArrowUp"].includes(event.key)) return
+    const orientation = list.getAttribute("aria-orientation")
+    if (orientation === "horizontal" && ["ArrowDown", "ArrowUp"].includes(event.key)) return
     const model = windowed?.()
     const options = model ? [] : [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter(option => !option.hidden)
     const length = model?.length ?? options.length
@@ -180,7 +181,7 @@ export function bindListboxKeys(list: HTMLElement, onSelect: (option: HTMLElemen
     const focused = options.indexOf(document.activeElement as HTMLElement)
     const index = model?.current ?? (focused >= 0 ? focused : options.findIndex(option => option.getAttribute("aria-selected") === "true"))
     let columns = model?.columns ?? 1
-    if (!model && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+    if (!model && !orientation && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       const top = options[0]!.offsetTop
       const rowEnd = options.findIndex((option) => option.offsetTop !== top)
       columns = rowEnd < 0 ? options.length : rowEnd || 1

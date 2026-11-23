@@ -40,6 +40,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void, 
   const list = element("div", "ui-sound-list")
   list.setAttribute("role", "listbox")
   list.setAttribute("aria-label", "音效文件")
+  list.setAttribute("aria-orientation", "vertical")
   list.setAttribute("aria-multiselectable", "true")
   const detail = element("section", "ui-sound-preview")
   detail.setAttribute("aria-label", "音效试听")
