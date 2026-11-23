@@ -1,7 +1,7 @@
 {
   "name": "keyskin",
   "private": true,
-  "version": "2.0.31",
+  "version": "2.0.41",
   "type": "module",
   "scripts": {
     "dev": "vite",

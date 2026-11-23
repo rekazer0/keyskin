@@ -1796,7 +1796,7 @@ dependencies = [
 
 [[package]]
 name = "keyskin"
-version = "2.0.31"
+version = "2.0.41"
 dependencies = [
  "base64 0.22.1",
  "objc2",
