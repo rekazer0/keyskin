@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
@@ -12,6 +13,7 @@ try {
     const errors = []
     page.on("pageerror", error => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await dismissStartupDisclaimer(page)
     await page.locator("#browser-open").setInputFiles({ name: "Dock.bds", mimeType: "application/octet-stream", buffer: Buffer.from(mobilePenFixture()) })
     await page.waitForFunction(() => !document.querySelector("#open").disabled && !document.querySelector("#save").disabled)
     const close = page.locator("#file-operation-dialog[open] #file-operation-close")

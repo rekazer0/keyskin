@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import { chromium } from "playwright"
@@ -25,6 +26,7 @@ try {
     const errors = []
     page.on("pageerror", error => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await dismissStartupDisclaimer(page)
     await page.locator("#browser-open").setInputFiles({ name: `资源.${format}`, mimeType: "application/octet-stream", buffer: Buffer.from(bytes) })
     await page.waitForFunction(() => !document.querySelector("#open").disabled && (!document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled))
     const close = page.locator("#file-operation-dialog[open] #file-operation-close")

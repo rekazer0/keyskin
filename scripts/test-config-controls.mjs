@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -19,6 +20,7 @@ const value = (section, key) => page.evaluate(async ({section, key}) => (await i
 const history = () => page.evaluate(async () => (await import('/src/app/state.ts')).appState.undoStack.length)
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles({ name: 'controls.bds', mimeType: 'application/octet-stream', buffer: Buffer.from(archive.toBytes('bds')) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')

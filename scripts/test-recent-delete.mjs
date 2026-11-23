@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -18,6 +19,7 @@ try {
     page.on('pageerror', error => errors.push(error.message))
     await page.addInitScript(() => localStorage.setItem('onboarding-tour-v1', 'done'))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await dismissStartupDisclaimer(page)
     await page.waitForSelector('#mobile-welcome-open, #welcome-recent-open', { state: 'attached' })
     const paths = mobile ? ['content://provider/document/skin-a', 'content://provider/document/skin-b'] : ['/tmp/皮肤A.bds', '/tmp/皮肤B.bds']
     const sources = mobile ? ['content://provider/tree/sources/document/skin-a', 'content://provider/tree/sources/document/skin-b'] : ['/tmp/sources/皮肤A', '/tmp/sources/皮肤B']

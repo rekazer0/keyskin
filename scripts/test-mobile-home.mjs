@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
-import { openEditorTemplate } from '../tests/helpers/open-editor-template.mjs'
+import { dismissStartupDisclaimer, openEditorTemplate } from '../tests/helpers/open-editor-template.mjs'
 
 const root = new URL('..', import.meta.url).pathname
 const output = `${root}.ui-current/mobile-home`
@@ -25,6 +25,7 @@ const closeDialog = async () => {
 }
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#mobile-welcome-new').waitFor()
   assert.equal(await page.locator('.mobile-welcome-hero h1').textContent(), '键设')
   for (const selector of ['.titlebar', '.preview-toolbar', '.preview-zoom-control', '#layout-overview-toggle']) {
@@ -205,6 +206,7 @@ try {
   // 用同一个测试服务走客户端预览域名，覆盖有最近记录时真正可点的设置入口。
   await page.route('http://127.0.0.1:4173/**', async route => route.fulfill({ response: await route.fetch({ url: route.request().url().replace(':4173/', `:${server.httpServer.address().port}/`) }) }))
   await page.goto('http://127.0.0.1:4173/')
+  await dismissStartupDisclaimer(page)
   await page.locator('#mobile-navigation [data-settings-entry=settings]').click()
   await settings.getByRole('button', { name: '文件', exact: true }).click()
   assert.equal(await page.locator('#recent-history-limit').isVisible(), true)

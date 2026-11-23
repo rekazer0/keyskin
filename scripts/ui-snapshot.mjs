@@ -1,4 +1,4 @@
-import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
+import { dismissStartupDisclaimer, openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 // UI regression snapshots for the design-system refactor.
 //   node scripts/ui-snapshot.mjs save      记录基线（.ui-baseline/）
 //   node scripts/ui-snapshot.mjs compare   与基线比对，打印每个界面里变化的元素与属性
@@ -69,6 +69,7 @@ async function withPage(run, { viewport = { width: 1440, height: 900 }, colorSch
   page.on("pageerror", (error) => errors.push(error.message))
   await page.addInitScript(() => localStorage.clear())
   await page.goto(url)
+  await dismissStartupDisclaimer(page)
   await page.addStyleTag({ content: "*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}" })
   try { await run(page) } finally { await context.close() }
   if (errors.length) console.log(`  page errors: ${errors.join(" | ")}`)

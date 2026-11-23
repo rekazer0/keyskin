@@ -1,3 +1,10 @@
+export async function dismissStartupDisclaimer(page) {
+  const dialog = page.getByRole('dialog', { name: '免责声明' })
+  if (!await dialog.isVisible()) return
+  await dialog.getByRole('button', { name: '我知道了' }).click()
+  await dialog.waitFor({ state: 'detached' })
+}
+
 // Drive the real single-click template entry on each layout.
 export async function openEditorTemplate(page, template = 'default-android', { preview = false } = {}) {
   await page.waitForSelector('.template-card', { state: 'attached' })

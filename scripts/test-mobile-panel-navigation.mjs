@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
-import { openEditorTemplate } from '../tests/helpers/open-editor-template.mjs'
+import { dismissStartupDisclaimer, openEditorTemplate } from '../tests/helpers/open-editor-template.mjs'
 
 const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 0, hmr: false } })
 await server.listen()
@@ -23,6 +23,7 @@ try {
     }
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   const aiEntry = page.locator('#mobile-navigation [data-mobile-page="ai"]')
   const model = { provider: 'openai', protocol: 'openai-chat', apiUrl: 'https://api.example.test/v1', apiKey: 'test', model: 'test-model' }
   for (const [configurations, visible] of [[[], false], [[{ ...model, kind: 'image' }], false], [[model], true]]) {

@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
 import { createServer } from "vite"
@@ -9,6 +10,7 @@ try {
   for (const colorScheme of ["light", "dark"]) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme })
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await dismissStartupDisclaimer(page)
     const open = () => page.locator('#workspace-navigation [data-settings-entry="settings"]').click()
     const fill = async (id, value) => {
       const field = page.locator(`#${id}`)

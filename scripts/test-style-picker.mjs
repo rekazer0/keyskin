@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createServer } from 'vite'
@@ -15,6 +16,7 @@ const picker = page => page.frameLocator('#picker-frame')
 const referenceInput = format => format === 'sxi' ? '#document-fields input[data-document-style-key="BACK_STYLE"]' : '#quick-inspector input[data-key-field="BACK_STYLE"]'
 async function open(page, name, buffer) {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(buffer) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
