@@ -13,9 +13,10 @@
 
 ### PC 端
 
-<img width="1440" height="900" alt="image" src="https://github.com/user-attachments/assets/7a9c95d3-261a-4963-a33c-c9758ec7de1a" />
-<img width="1440" height="900" alt="image" src="https://github.com/user-attachments/assets/bf8b3055-e6fd-4252-a8d5-21a3d3c079b8" />
-<img width="1440" height="900" alt="image" src="https://github.com/user-attachments/assets/f6c00a0c-f0cb-43f0-8686-b5bddd8df832" />
+<img width="1486" height="933" alt="image" src="https://github.com/user-attachments/assets/ce925c21-de60-4013-927a-af3fb42aea15" />
+<img width="1486" height="933" alt="image" src="https://github.com/user-attachments/assets/d3d06640-bc4d-4fb6-8388-c4adbb195d62" />
+<img width="1486" height="933" alt="image" src="https://github.com/user-attachments/assets/68daaf5b-d5b9-4e50-9d75-b359fd20336c" />
+
 
 
 ### 移动端
