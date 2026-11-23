@@ -18,7 +18,7 @@ try {
     } : { viewport: { width: 1440, height: 1000 } })
     const errors = []
     page.on('pageerror', error => errors.push(error.stack))
-    await page.addInitScript(({ template, savedPath, workspacePath, mobile }) => {
+    await page.addInitScript(({ savedPath, workspacePath, mobile }) => {
       localStorage.setItem('onboarding-tour-v1', 'done')
       localStorage.setItem('source-directory-enabled', String(!mobile))
       window.workspaceNames = []
@@ -29,7 +29,6 @@ try {
         invoke: async (command, args) => {
           if (['take_opened_files', 'model_oauth_accounts', 'plugin:window|get_all_windows'].includes(command)) return []
           if (command === 'plugin:window|scale_factor') return 1
-          if (command === 'choose_project_template') return template
           if (command === 'plugin:dialog|save') return savedPath
           if (command === 'prepare_source_directory') return '/tmp/sources'
           if (command === 'create_source_workspace') {
@@ -45,7 +44,7 @@ try {
           return null
         },
       }
-    }, { template, savedPath, workspacePath, mobile })
+    }, { savedPath, workspacePath, mobile })
     await page.goto(url)
     const home = page.locator(mobile ? '#mobile-navigation [data-mobile-page=home]' : '[data-workspace-page=files]')
     const create = page.locator(mobile ? '#mobile-welcome-new' : `#new-project-form [data-template="${template}"]`)
@@ -54,6 +53,16 @@ try {
     const ready = () => page.waitForFunction(() => !document.querySelector('#open').disabled)
     const records = () => page.evaluate(() => JSON.parse(localStorage.getItem('recent-files') || '[]'))
     await create.click()
+    if (mobile) {
+      const dialog = page.locator('#new-project-dialog')
+      await dialog.waitFor()
+      await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+      await dialog.waitFor({ state: 'hidden' })
+      assert.equal((await records()).length, 0, 'cancel does not create a template record')
+      assert.equal(await editor.count(), 0, 'cancel does not create a document')
+      await create.click()
+      await dialog.locator(`[data-template="${template}"]`).click()
+    }
     await editor.waitFor()
     await ready()
     await page.evaluate(async () => { window.originalArchive = (await import('/src/app/state.ts')).appState.archive })

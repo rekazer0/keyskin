@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 // 替换键盘样式 for `.sxi`: the slices of the chosen picture become a tile map in the theme's shared
 // `info` (the picture itself is `<theme>/skin/res/<name>.png`), and new styles in `ss_1` show them on
 // the board, its keys or the candidate bar. The old styles are cloned, never changed, so other boards
@@ -62,7 +63,7 @@ export function applySxiLayoutImage(text: string, pointer: readonly string[], pl
   let next = Math.max(0, ...STYLE_TABLES.flatMap((table) => Object.keys(asObject(asObject(struct[table] ?? null)?.ss_1 ?? null) ?? {})).map(Number).filter(Number.isFinite)) + 1
   const style = (from: Json | undefined, images: JsonObject): number => {
     const source = from === undefined ? undefined : asObject(own?.[String(from)] ?? styles[String(from)] ?? null)
-    const model: JsonObject = source ? structuredClone(source) : { f: 0 }
+    const model: JsonObject = source ? cloneJson(source) : { f: 0 }
     const id = next++
     model.id = `STYLE${id}`
     model.s_2 = { ...asObject(model.s_2 ?? null), ...images }

@@ -60,7 +60,7 @@ function emptyRow(row: HTMLElement): boolean {
 }
 
 function focusFirstControl(container: HTMLElement): void {
-  Array.from(container.querySelectorAll<HTMLElement>('.ui-field :is(input:not([type=hidden]), select, textarea, button):not(:disabled)'))
+  Array.from(container.querySelectorAll<HTMLElement>('.ui-field input:not([type=hidden]):not(:disabled), .ui-field select:not(:disabled), .ui-field textarea:not(:disabled), .ui-field button:not(:disabled)'))
     .find(control => control.getClientRects().length > 0)?.focus()
 }
 

@@ -23,7 +23,6 @@
     "fs:allow-unwatch",
     "native-share:allow-pickSourceDirectory",
     "native-share:allow-pickSkinFile",
-    "native-share:allow-chooseProjectTemplate",
     "native-share:allow-createSourceWorkspace",
     "native-share:allow-readSourceWorkspace",
     "native-share:allow-applySourceChanges",

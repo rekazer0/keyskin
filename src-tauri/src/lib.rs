@@ -744,6 +744,20 @@ fn path_is_directory(path: String) -> bool {
 }
 
 #[tauri::command]
+fn observe_window_insets(
+    app: tauri::AppHandle,
+    handler: tauri::ipc::Channel<serde_json::Value>,
+) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    return tauri_plugin_native_share::observe_window_insets(&app, handler);
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, handler);
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn pick_source_directory(app: tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "android")]
     return tauri_plugin_native_share::pick_source_directory(&app);
@@ -765,17 +779,6 @@ async fn pick_skin_file(
     {
         let _ = (app, initial_uri);
         Err("SAF file selection is only available on Android".into())
-    }
-}
-
-#[tauri::command]
-async fn choose_project_template(app: tauri::AppHandle) -> Result<String, String> {
-    #[cfg(target_os = "android")]
-    return tauri_plugin_native_share::choose_project_template(&app).await;
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = app;
-        Err("native project template selection is only available on Android".into())
     }
 }
 
@@ -2122,11 +2125,17 @@ mod tests {
         fs::create_dir_all(root.join("folder.bds")).expect("create fixture directory");
         let skin = root.join("肤色.BDS");
         fs::write(&skin, b"skin").expect("create test skin");
-        assert_eq!(super::checked_skin_path(&skin).unwrap(), Some(fs::canonicalize(&skin).unwrap()));
+        assert_eq!(
+            super::checked_skin_path(&skin).unwrap(),
+            Some(fs::canonicalize(&skin).unwrap())
+        );
         assert!(super::checked_skin_path(&root.join("folder.bds")).is_err());
         assert!(super::checked_skin_path(&root.join("not-a-skin.txt")).is_err());
         assert!(super::checked_skin_path(std::path::Path::new("relative.bds")).is_err());
-        assert_eq!(super::checked_skin_path(&root.join("missing.bds")).unwrap(), None);
+        assert_eq!(
+            super::checked_skin_path(&root.join("missing.bds")).unwrap(),
+            None
+        );
         #[cfg(unix)]
         {
             let link = root.join("link.bds");
@@ -2406,9 +2415,9 @@ pub fn run() {
         apply_source_changes,
         read_source_changes,
         path_is_directory,
+        observe_window_insets,
         pick_source_directory,
         pick_skin_file,
-        choose_project_template,
         start_source_observer,
         stop_source_observer
     ]);
@@ -2453,9 +2462,9 @@ pub fn run() {
         apply_source_changes,
         read_source_changes,
         path_is_directory,
+        observe_window_insets,
         pick_source_directory,
         pick_skin_file,
-        choose_project_template,
         start_source_observer,
         stop_source_observer
     ]);

@@ -6,12 +6,26 @@ import { createIcon } from "../icons"
 import { bindDialog } from "./ask"
 import { closeDialog } from "../motion"
 import { appState } from "./state"
-import { mobilePortraitQuery } from "./canvas-interaction"
+import { Channel, invoke } from "@tauri-apps/api/core"
+import { isAndroidTauri, mobilePortraitQuery } from "./canvas-interaction"
 import { setMobilePane, selectChoice } from "./mobile-layout"
 import { selectFile } from "./navigation"
 import { nativeSettings, showSettingsPage } from "./preferences"
 import { setGuidesVisible } from "./preview-render"
-import { $, canvasWrap, mode, theme, orientation, device, settingsWorkspace, files, mobileAppMore, resourceInspector, resourceListTitle, newButton, inspectorTabs, workspaceImageFigure, skinFieldsGroup, simulatedOutput, mobileProjectDialog, mobileProjectToggle, sidebarPane, workspacePane, welcomeScroller } from "./dom"
+import { $, canvasWrap, mode, theme, orientation, device, settingsWorkspace, files, mobileAppMore, resourceInspector, resourceListTitle, newButton, inspectorTabs, workspaceImageFigure, skinFieldsGroup, simulatedOutput, mobileProjectDialog, mobileProjectToggle, sidebarPane, workspacePane, welcomeScroller, sourceEditor, documentName, inspectorSourceToggle, quickInspector } from "./dom"
+
+function wireAndroidInsets(root: HTMLElement): void {
+  if (!isAndroidTauri()) return
+  const handler = new Channel<Record<string, number>>()
+  handler.onmessage = overlap => {
+    for (const edge of ["top", "bottom", "left", "right"]) {
+      const value = overlap[edge] ?? 0
+      root.style.setProperty(`--android-overlap-${edge}`, `${value / window.devicePixelRatio}px`)
+    }
+    root.dispatchEvent(new CustomEvent("android-ime-overlap", { detail: (overlap.ime ?? 0) / window.devicePixelRatio }))
+  }
+  void invoke("observe_window_insets", { handler }).catch(() => {})
+}
 
 /** 手机导航只组织现有视图，文件编辑和提交仍走各自模块。 */
 export function wireMobileStudio(): void {
@@ -34,7 +48,16 @@ export function wireMobileStudio(): void {
     retry.textContent = action === "保存" ? "重试保存" : action === "另存为" ? "重试另存为" : "重试导出"
   }).observe(operationDialog, { attributes: true, subtree: true, attributeFilter: ["data-outcome", "data-stage", "disabled"] })
   const root = document.documentElement
+  wireAndroidInsets(root)
   const nav = $("#mobile-navigation")
+  const navButtons = Array.from(nav.querySelectorAll<HTMLButtonElement>("button"))
+  const recentViewport = $("#recent-viewport")
+  const recent = $(".welcome-recent")
+  const syncRecentEmpty = () => $(".welcome-main").classList.toggle("mobile-recent-empty", recent.hasAttribute("data-platform-hidden") || recentViewport.hidden)
+  const recentObserver = new MutationObserver(syncRecentEmpty)
+  recentObserver.observe(recentViewport, { attributes: true, attributeFilter: ["hidden"] })
+  recentObserver.observe(recent, { attributes: true, attributeFilter: ["data-platform-hidden"] })
+  syncRecentEmpty()
   const resourceTheme = $("#resource-theme")
   const themeHome = resourceTheme.parentElement!
   const createResource = $("#resource-create-style")
@@ -66,22 +89,29 @@ export function wireMobileStudio(): void {
   sourceReturn.textContent = "返回属性"
   sourceReturn.addEventListener("click", () => inspectorTabs.querySelector<HTMLButtonElement>('[data-inspector-tab="properties"]')!.click())
   $(".inspector-view-controls").append(sourceReturn)
+  let showFullSource = false
   const syncNavigation = () => {
     if (!mobilePortraitQuery.matches) return
-    const page = !settingsWorkspace.hidden ? "settings" : root.dataset.mobilePage
-    for (const button of nav.querySelectorAll<HTMLButtonElement>("button")) {
+    const settings = !settingsWorkspace.hidden
+    root.toggleAttribute("data-mobile-settings-open", settings)
+    const page = settings ? "settings" : root.dataset.mobilePage
+    for (const button of navButtons) {
       const current = (button.dataset.mobilePage ?? button.dataset.settingsEntry) === page ? "page" : null
-      if (button.ariaCurrent !== current) button.ariaCurrent = current
+      if (button.getAttribute("aria-current") === current) continue
+      if (current) button.setAttribute("aria-current", current)
+      else button.removeAttribute("aria-current")
     }
   }
   new MutationObserver(syncNavigation).observe(settingsWorkspace, { attributes: true, attributeFilter: ["hidden"] })
-  const openResource = () => {
-    if (!appState.resourceConfigActive) openResources()
-    inspectorTabs.querySelector<HTMLButtonElement>('[data-inspector-tab="properties"]')?.click()
-    setMobilePane("inspector")
+  const showInspector = (tab: "ai" | "properties") => {
+    const button = inspectorTabs.querySelector<HTMLButtonElement>(`[data-inspector-tab="${tab}"]`)
+    // Switching inspector tabs already opens the pane; an unchanged tab just needs to be shown.
+    if (appState.inspectorTab !== tab && button && !button.disabled) button.click()
+    else setMobilePane("inspector")
   }
   for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) button.addEventListener("click", () => {
     const page = button.dataset.mobilePage!
+    showFullSource = false
     if (page === "home") {
       $("#recent-files").click()
       welcomeScroller?.scrollTo({ top: 0 })
@@ -90,11 +120,12 @@ export function wireMobileStudio(): void {
     if (button.hidden || !appState.archive) return
     canvasWrap.classList.remove("empty")
     selectChoice(mode, "edit")
-    if (page === "resources") openResource()
-    else {
+    if (page === "resources") {
+      if (!appState.resourceConfigActive) openResources()
+      showInspector("properties")
+    } else {
       if (appState.layoutPath && appState.selectedPath !== appState.layoutPath) selectFile(appState.layoutPath)
-      inspectorTabs.querySelector<HTMLButtonElement>(`[data-inspector-tab="${page === "ai" ? "ai" : "properties"}"]`)?.click()
-      setMobilePane("inspector")
+      showInspector(page === "ai" ? "ai" : "properties")
     }
   })
   if (!nativeSettings) $(".mobile-welcome-empty h2").textContent = "网页版不记录最近打开的皮肤"
@@ -160,7 +191,7 @@ export function wireMobileStudio(): void {
   previewReturn.type = "button"
   previewReturn.dataset.variant = "primary"
   previewReturn.append(createIcon("pen-line"), "开始编辑")
-  previewReturn.addEventListener("click", () => selectChoice(mode, "edit"))
+  previewReturn.addEventListener("click", () => navButtons.find(button => button.dataset.mobilePage === "edit")?.click())
   canvasWrap.append(previewReturn)
   const settingsIndex = () => {
     settingsWorkspace.dataset.mobileSettings = "index"
@@ -189,7 +220,9 @@ export function wireMobileStudio(): void {
     })
     accents.append(button)
   }
-  accentInput.closest(".settings-row")!.append(accents)
+  const accentRow = accentInput.closest(".settings-row")!
+  accentRow.classList.add("mobile-settings-accent-row")
+  accentRow.append(accents)
   const modelNotice = element("section", "ui-section mobile-model-notice")
   modelNotice.append(Object.assign(element("h3"), { textContent: "在桌面应用中配置模型" }), Object.assign(element("p", "ui-field-note"), { textContent: "AI 设计需要桌面应用与已授权的模型服务。普通编辑和本地改色无需上传。" }))
   if (!nativeSettings) settingsWorkspace.querySelector("[data-settings-panel=model]")!.prepend(modelNotice)
@@ -207,7 +240,9 @@ export function wireMobileStudio(): void {
   modelPage.dataset.mobileUnavailable = String(!modelLink.hidden)
   wireMobileSettings()
   const sync = () => {
-    const mobilePreview = mobilePortraitQuery.matches && mode.value === "preview" && !canvasWrap.classList.contains("empty")
+    const empty = canvasWrap.classList.contains("empty")
+    if (empty || appState.inspectorTab !== "source") showFullSource = false
+    const mobilePreview = mobilePortraitQuery.matches && mode.value === "preview" && !empty && !showFullSource
     if (mobilePreview && simulation.parentElement !== canvasWrap) canvasWrap.append(simulation)
     else if (!mobilePreview && simulation.parentElement !== simulationHome) simulationHome.insertBefore(simulation, simulationNext)
     simulation.classList.toggle("mobile-simulation", mobilePreview)
@@ -224,17 +259,22 @@ export function wireMobileStudio(): void {
       nav.hidden = true
       return
     }
-    $("#document-name").dataset.mobileName = $("#document-name").textContent?.replace(/\.(?:bdi|bds|bda|ssf|mssf|sxi)$/i, "")
-    const empty = canvasWrap.classList.contains("empty")
+    const name = documentName.textContent?.replace(/\.(?:bdi|bds|bda|ssf|mssf|sxi)$/i, "") ?? ""
+    if (documentName.dataset.mobileName !== name) documentName.dataset.mobileName = name
     nav.hidden = false
-    for (const button of nav.querySelectorAll<HTMLButtonElement>("[data-mobile-page]")) {
+    for (const button of navButtons) {
+      if (!button.dataset.mobilePage) continue
       const disabled = appState.fileOperationRunning || button.dataset.mobilePage !== "home" && !appState.archive
       if (button.disabled !== disabled) button.disabled = disabled
     }
     root.dataset.mobileWelcome = String(empty)
     root.dataset.mobileMode = mode.value
-    aiContext.textContent = `键设 Chat · ${$("#document-name").dataset.mobileName || "当前皮肤"} · ${appState.archive?.format.toUpperCase() ?? ""}`
-    const metadata = !empty && !mobilePreview && !skinFieldsGroup.hidden && !$("#quick-inspector").hidden
+    const aiDescription = [`键设 Chat`, name, appState.archive?.format.toUpperCase()].filter(Boolean).join(" · ")
+    if (aiContext.textContent !== aiDescription) aiContext.textContent = aiDescription
+    const fullSource = showFullSource && !sourceEditor.hidden && !appState.resourceConfigActive
+    root.toggleAttribute("data-mobile-source", fullSource)
+    root.toggleAttribute("data-mobile-source-return", !sourceEditor.hidden && (fullSource || quickInspector.hidden || inspectorSourceToggle.hidden))
+    const metadata = !empty && !mobilePreview && !skinFieldsGroup.hidden && !quickInspector.hidden
     const library = !empty && !mobilePreview && !resourceInspector.hidden && appState.resourceConfigActive
     root.dataset.mobileResource = String(library || metadata)
     root.dataset.mobileResourceList = String(library && !$("#resource-list-view").hidden)
@@ -242,12 +282,13 @@ export function wireMobileStudio(): void {
     if (detail) {
       if (workspaceImageFigure.parentElement !== $("#image-resource-detail")) $("#image-resource-detail").prepend(workspaceImageFigure)
     } else if (workspaceImageFigure.parentElement !== figureHome && !workspaceImageFigure.closest("#atlas-editor-dialog")) figureHome.append(workspaceImageFigure)
-    routeTitle.textContent = metadata ? "皮肤信息" : detail ? "图片与切片" : resourceListTitle.textContent
+    const title = fullSource ? "源代码" : metadata ? "皮肤信息" : detail ? "图片与切片" : resourceListTitle.textContent
+    if (routeTitle.textContent !== title) routeTitle.textContent = title
     root.dataset.mobileAnimation = String(appState.animationDesignMode !== "all")
     const page = empty ? "home" : mobilePreview ? "edit" : appState.inspectorTab === "ai" ? "ai" : appState.resourceConfigActive || appState.animationDesignMode !== "all" ? "resources" : "edit"
     if (root.dataset.mobilePage !== page) root.dataset.mobilePage = page
     syncNavigation()
-    if (!empty && mode.value === "preview") root.dataset.mobilePreview = "true"
+    if (mobilePreview) root.dataset.mobilePreview = "true"
     else delete root.dataset.mobilePreview
   }
   const observer = new MutationObserver(sync)
@@ -259,7 +300,8 @@ export function wireMobileStudio(): void {
   observer.observe(resourceInspector, { attributes: true, attributeFilter: ["hidden"] })
   observer.observe(inspectorTabs, { attributes: true, subtree: true, attributeFilter: ["aria-selected"] })
   observer.observe(root, { attributes: true, attributeFilter: ["data-mobile-pane"] })
-  observer.observe($("#document-name"), { childList: true, characterData: true, subtree: true })
+  for (const view of [sourceEditor, inspectorSourceToggle, quickInspector]) observer.observe(view, { attributes: true, attributeFilter: ["hidden"] })
+  observer.observe(documentName, { childList: true, characterData: true, subtree: true })
   mode.addEventListener("change", sync)
   files.addEventListener("click", event => {
     if (!mobilePortraitQuery.matches) return
@@ -269,7 +311,10 @@ export function wireMobileStudio(): void {
     }
     queueMicrotask(sync)
   })
-  mobileAppMore.addEventListener("click", () => queueMicrotask(sync))
+  mobileAppMore.addEventListener("click", (event) => {
+    if ((event.target as Element).closest("[data-mobile-action=mobile-source-view]")) showFullSource = true
+    queueMicrotask(sync)
+  })
   mobilePortraitQuery.addEventListener("change", sync)
   sync()
 }

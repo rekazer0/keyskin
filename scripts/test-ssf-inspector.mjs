@@ -15,6 +15,7 @@ files['1080/status1/26keyq.png'] = encodePng(patterned)
 files['1080/status1/phoneSkin.ini'] = strToU8(strFromU8(files['1080/status1/phoneSkin.ini'])
   .replace('[Key_Q]\n', '[Key_Q]\nFG_STYLE=FGStyle_Qwerty\n')
   .replace('[SMA_Key26Bg_Q]\n', '[SMA_Key26Bg_Q]\nDISABLED=26keyq.png,2,96,3,139\nNORMAL_ON=26keyq.png,2,96,3,139\nPRESSED_ON=26keyq_press.png,2,96,3,139\n')
+  .replace('TEXT_COLOR=0xFF112233', 'TEXT_COLOR=0x7F112233')
   .replace('[TextStyle_Qwerty]', '[Key_W]\nFG_STYLE=FGStyle_Qwerty\n[FGStyle_Qwerty]\nLABEL_STYLE=TextStyle_Qwerty\nLABEL_POSITION=0,0,1,1\n[TextStyle_Qwerty]'))
 // The phone installs only the folder nearest its width, so a 720 copy must receive the same edits.
 for (const name of Object.keys(files)) if (name.startsWith('1080/status1/')) files[name.replace('1080/', '720/')] = files[name]
@@ -294,9 +295,6 @@ try {
   assert.equal(await read(skin, 'SMA_Key26Bg_Backspace_Qwerty', 'PRESSED'), undefined)
   // Colour alpha edits preserve the exact RGB value and reset without rounding the original alpha.
   await selectKey('q')
-  // 色块 + 不透明度 %：色值在点色块弹出的浮层里。
-  await row('TEXT_COLOR').locator('.ui-color-field').first().locator('.ui-swatch').click()
-  await change(row('TEXT_COLOR').locator('.ui-color-field').first().locator('.ui-color-popover input[type=text]'), '0x7F112233')
   await selectKey('w')
   await change(row('TEXT_COLOR').locator('.ui-color-field').first().locator('input[type=number]'), '25')
   assert.equal(await read(skin, 'TextStyle_Qwerty', 'TEXT_COLOR'), '0x40112233')
@@ -326,8 +324,7 @@ try {
   assert.equal(await read(skin, 'FGStyle_Key_Q', 'LABEL_STYLE'), 'TextStyle_Key_Q')
   assert.equal(await read(skin, 'FGStyle_Key_Q', 'LABEL_POSITION'), '0,0,1,1')
   assert.equal(await read(skin, 'TextStyle_Key_Q', 'TEXT_COLOR'), '0x7F112233')
-  await row('TEXT_COLOR').locator('.ui-color-field').first().locator('.ui-swatch').click()
-  await change(row('TEXT_COLOR').locator('.ui-color-field').first().locator('.ui-color-popover input[type=text]'), '0x7F556677')
+  await row('TEXT_COLOR').locator('.ui-color-field').first().locator('input[type=color]').fill('#556677')
   // Size and bold are offered before the style has them.
   assert.match(await row('TEXT_SIZE').locator('input[type=number]').getAttribute('placeholder'), /^未设置/)
   const addSize = row('TEXT_SIZE').locator('[data-config-add]:visible')
@@ -345,7 +342,7 @@ try {
     assert.equal(await read(twin, section, key), value, `720 copy: [${section}] ${key}`)
   }
   await selectKey('w', true)
-  assert.equal(await row('TEXT_COLOR').locator('.ui-color-field').first().locator('.ui-color-popover input[type=text]').getAttribute('placeholder'), '混合')
+  assert.equal(await row('TEXT_COLOR').locator('.ui-color-field').first().locator('input[type=text]').getAttribute('placeholder'), '混合')
   assert.equal(await row('TEXT_COLOR').locator('.ui-color-field').first().locator('input[type=number]').getAttribute('placeholder'), '混合')
   await change(row('TEXT_COLOR').locator('.ui-color-field').first().locator('input[type=number]'), '50')
   assert.equal(await read(skin, 'TextStyle_Key_Q', 'TEXT_COLOR'), '0x80556677')
@@ -364,8 +361,16 @@ try {
   const addText = space.locator(':scope > h3 [data-config-section-add]:visible')
   if (await addText.count()) await addText.click()
   await space.getByRole('button', { name: '添加颜色正常', exact: true }).click()
-  await change(space.locator('[data-document-key~="TEXT_COLOR"] .ui-color-field').first().locator('.ui-color-popover input[type=text]'), '#336699')
+  const spaceColor = space.locator('[data-document-key~="TEXT_COLOR"] .ui-color-field').first()
+  const spaceHex = spaceColor.locator('input[type=text]')
+  assert.equal(await spaceHex.getAttribute('placeholder'), '未设置')
+  assert.equal(await spaceHex.evaluate(input => input === document.activeElement), true)
+  assert.equal(await read(skin, 'TextStyle_Space_Label', 'TEXT_COLOR'), undefined)
+  await spaceHex.fill('#336699')
+  await spaceHex.press('Enter')
   assert.equal(await read(skin, 'TextStyle_Space_Label', 'TEXT_COLOR'), '0xFF336699')
+  await spaceColor.getByRole('button', { name: '清除颜色正常', exact: true }).click()
+  assert.equal(await read(skin, 'TextStyle_Space_Label', 'TEXT_COLOR'), undefined)
   await page.locator('#selected-key').click()
   await page.keyboard.press('Escape')
   for (const theme of ['light', 'dark']) for (const orientation of ['port', 'land']) for (const board of ['py_26', 'en_26']) {

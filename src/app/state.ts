@@ -214,9 +214,7 @@ export const appState = {
   */
   inspectorGroupKey: "",
   singlePageInspectorContext: "",
-  mobileInspectorCategory: "appearance",
   mobileInspectorContext: "",
-  mobileAppearancePressed: false,
   mobilePickerPreviewRequest: 0,
   mobilePickerBitmap: undefined as ImageBitmap | undefined,
   cachedVisualResolver: undefined as { key: readonly unknown[]; resolver: VisualResolver } | undefined,

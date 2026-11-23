@@ -231,16 +231,17 @@ export class IniDocument {
   }
 
   /**
-   * 把 [PREFIX数字] 段按原序号顺序重排为连续序号（工具书 V6：KEY/IMG 等序号段禁止跳号），
-   * 起始序号保持 0 或 1。返回 旧段名→新段名 的映射（仅含改名的段）。
+   * 按原序号重编号时保留 0 或 1 起点；按文件顺序重编号时从 1 起算。
+   * 不移动段。返回 旧段名→新段名 的映射（仅含改名的段）。
    */
-  renumberSections(prefix: string): Map<string, string> {
-    const pattern = new RegExp(`^${prefix}(\\d+)$`)
+  renumberSections(prefix: string, order: "index" | "file" = "index"): Map<string, string> {
+    const pattern = new RegExp(`^${prefix}(\\d+)$`, order === "file" ? "i" : "")
     const numbered = this.sections().flatMap((section) => {
       const match = section.match(pattern)
       return match ? [{ section, index: Number(match[1]) }] : []
-    }).sort((a, b) => a.index - b.index)
-    const start = Math.min(1, numbered[0]?.index ?? 1)
+    })
+    if (order === "index") numbered.sort((a, b) => a.index - b.index)
+    const start = order === "file" ? 1 : Math.min(1, numbered[0]?.index ?? 1)
     const renamed = new Map<string, string>()
     numbered.forEach(({ section }, offset) => {
       const next = `${prefix}${start + offset}`

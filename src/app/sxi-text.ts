@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 // The 文字 group of a Palm candidate bar: its text styles read and written in skin.json. A bar without a style of its own gets one on its first edit.
 
 import { PalmBoard } from "../palm/palm-board.ts"
@@ -56,7 +57,7 @@ export function writePalmText(text: PalmText, property: PalmTextProperty, value:
     if (!ids.length && text.create) {
       const { owner, field, list, copyFrom } = text.create
       const seed = copyFrom ? asObject(palmStyle(copyFrom, skin)?.s_1) : undefined
-      const id = addPalmStyle(skin, palmTheme(), { s_1: seed ? structuredClone(seed) : {} })
+      const id = addPalmStyle(skin, palmTheme(), { s_1: seed ? cloneJson(seed) : {} })
       let model = skin as JsonObject
       for (const step of owner) {
         const next = asObject(palmValue(model, [step])) ?? {}

@@ -817,13 +817,10 @@ await check("file: a Sogou .ssf lists only its own files: preview switching, pro
   const candidateColor = () => page.locator("#candidate-words").evaluate((node) => node.style.color)
   assert.equal(await candidateColor(), "rgb(1, 2, 3)")
   // A Sogou property is written to the skin's own INI and the canvas redraws from it.
-  // 色块 + 不透明度 %：色值在点色块弹出的浮层里。
   const colorRow = page.locator('#document-fields [data-inspector-group-label="候选字"] .ui-color-field').first()
-  await colorRow.locator(".ui-swatch").click()
-  const colorValue = colorRow.locator(".ui-color-popover input[type=text]")
-  assert.equal(await colorValue.inputValue(), "0xFF010203")
-  await colorValue.fill("0xFFFF0000")
-  await colorValue.press("Enter")
+  const colorValue = colorRow.locator("input[type=color]")
+  assert.equal(await colorValue.inputValue(), "#010203")
+  await colorValue.fill("#ff0000")
   await page.waitForFunction(() => document.querySelector("#candidate-words")?.style.color === "rgb(255, 0, 0)", null, { timeout: 15000 })
   assert.equal(await page.locator("#dirty").isVisible(), true)
   // The board's source is its phoneSkin.ini, edited in place.

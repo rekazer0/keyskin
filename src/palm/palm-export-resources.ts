@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 // Palm Android looks up styles globally and images by basename, even for orientation overrides.
 import { remapPalmLayoutStyles } from "./palm-style-edit.ts"
 import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
@@ -5,7 +6,7 @@ import { asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 type Resource = { path: string; bytes?: Uint8Array; directory: boolean }
 
 export function separateOrientationResources(skin: JsonObject, entries: Resource[]): void {
-  const shared = structuredClone(asObject(skin.s_info) ?? {})
+  const shared = cloneJson(asObject(skin.s_info) ?? {})
   skin.s_info = shared
   const styles = asObject(shared.ss_1) ?? {}
   const tiles = asObject(shared.info) ?? {}
@@ -47,7 +48,7 @@ export function separateOrientationResources(skin: JsonObject, entries: Resource
       if (!hasImage) continue
       const next = nextStyle++
       remap.set(id, next)
-      const copy = structuredClone(style)
+      const copy = cloneJson(style)
       copy.id = `STYLE${next}`
       const images = asObject(copy.s_2)
       for (const state of ["normal", "hl"]) {

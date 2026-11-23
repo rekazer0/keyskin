@@ -85,23 +85,26 @@
         <details id="mobile-app-more" class="toolbar-more mobile-app-more">
           <summary class="ui-icon-button" aria-label="更多" title="更多"><span data-icon="ellipsis" aria-hidden="true"></span></summary>
           <div class="ui-menu" role="menu" aria-label="更多" data-tauri-drag-region="false">
-            <div class="ui-pane-header"><h2>更多操作</h2><button class="ui-icon-button" type="button" role="menuitem" data-mobile-menu-close aria-label="关闭更多"><span data-icon="x" aria-hidden="true"></span></button></div>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="layout-overview-toggle"><span data-icon="grid-2x2" aria-hidden="true"></span><span>全局预览</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="toggle-guides" aria-pressed="false"><span data-icon="crosshair" aria-hidden="true"></span><span>辅助线与安全区</span><input class="ui-switch" type="checkbox" role="switch" tabindex="-1" aria-label="辅助线与安全区" aria-hidden="true"></button>
+            <div class="ui-pane-header"><h2>更多</h2><button class="ui-icon-button" type="button" role="menuitem" data-mobile-menu-close aria-label="关闭更多"><span data-icon="x" aria-hidden="true"></span></button></div>
+            <div class="ui-menu-group-label" aria-hidden="true">文件</div>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-export-open" aria-haspopup="dialog" aria-controls="share-dialog" disabled><span data-icon="download" aria-hidden="true"></span><span>分享与导出…</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-source-view"><span data-icon="code-xml" aria-hidden="true"></span><span>源代码</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
+            <div class="ui-menu-group-label" aria-hidden="true">工作模式与画布</div>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mode"><span data-icon="mouse-pointer-2" aria-hidden="true"></span><span>工作模式</span><small id="mobile-mode-label">交互预览</small></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-canvas-options"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>画布选项…</span></button>
             <button class="ui-list-item" type="button" role="menuitemcheckbox" data-mobile-action="canvas-gestures" aria-checked="false"><span data-icon="hand" aria-hidden="true"></span><span>双指缩放与平移</span><small aria-hidden="true">关闭</small></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="preview-zoom-fit"><span data-icon="scan" aria-hidden="true"></span><span>适配画布</span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-preview-theme"><span data-icon="sun-moon" aria-hidden="true"></span><span>皮肤明暗状态</span><small id="mobile-skin-theme-label">浅色</small></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-source-view"><span data-icon="code-xml" aria-hidden="true"></span><span>源代码</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
+            <div class="ui-menu-group-label" aria-hidden="true">工具</div>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="panel-scale"><span data-icon="copy" aria-hidden="true"></span><span>面板复制</span><small>布局与分辨率</small></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="replace-layout-image"><span data-icon="image" aria-hidden="true"></span><span>替换键盘样式</span><small>背景与按键</small></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="adapt-ios26"><span data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26</span><small>透明背景 · 可撤销</small></button>
-            <hr class="ui-menu-separator">
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="workspace-tools-open" aria-haspopup="dialog" aria-controls="workspace-tools-dialog" disabled><span data-icon="wrench" aria-hidden="true"></span><span>工具…</span></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-export-open" aria-haspopup="dialog" aria-controls="share-dialog" disabled><span data-icon="download" aria-hidden="true"></span><span>分享与导出…</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
+            <div class="ui-menu-group-label" aria-hidden="true">偏好</div>
             <button class="ui-list-item" type="button" role="menuitem" data-settings-entry="settings"><span data-icon="settings" aria-hidden="true"></span><span>设置</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-settings-entry="about"><span data-icon="info" aria-hidden="true"></span><span>关于</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="layout-overview-toggle"><span data-icon="grid-2x2" aria-hidden="true"></span><span>全局预览</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="toggle-guides" aria-pressed="false"><span data-icon="crosshair" aria-hidden="true"></span><span>辅助线与安全区</span><input class="ui-switch" type="checkbox" role="switch" tabindex="-1" aria-label="辅助线与安全区" aria-hidden="true"></button>
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-preview-theme"><span data-icon="sun-moon" aria-hidden="true"></span><span>皮肤明暗状态</span><small id="mobile-skin-theme-label">浅色</small></button>
           </div>
         </details>
         <div class="window-controls" aria-label="窗口">
@@ -115,7 +118,7 @@
       </div>
     </header>
 
-    <nav id="mobile-navigation" class="ui-mobile-navigation" aria-label="工作区导航">
+    <nav id="mobile-navigation" class="ui-mobile-navigation" aria-label="工作区导航" hidden>
       <button class="ui-button" type="button" data-mobile-page="home" aria-current="page"><span data-icon="house" aria-hidden="true"></span><span>首页</span></button>
       <button class="ui-button" type="button" data-mobile-page="edit" disabled><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>编辑</span></button>
       <button class="ui-button" type="button" data-mobile-page="resources"><span data-icon="layers" aria-hidden="true"></span><span>资源</span></button>
@@ -411,7 +414,6 @@
               </div>
               <button id="inspector-source-toggle" class="ui-icon-button ui-inspector-source-toggle" data-variant="filled" data-size="lg" type="button" title="查看源代码" aria-label="查看源代码" aria-controls="source-editor" aria-pressed="false" data-icon="code-xml" hidden></button>
             </div>
-            <div id="mobile-property-tabs"></div>
           </div>
           <div id="animation-object-heading" class="ui-inspector-object animation-object-header"></div>
         </div>
@@ -591,6 +593,11 @@
               <div><h1>资源</h1><p id="mobile-resource-summary" class="ui-field-note"></p></div>
               <button id="mobile-resource-filters-toggle" class="ui-icon-button" data-variant="filled" type="button" aria-label="筛选和排序" title="筛选和排序" aria-controls="resource-filter-options" aria-expanded="false" data-icon="sliders-horizontal"></button>
             </header>
+            <nav id="mobile-resource-tabs" class="ui-segmented" data-variant="underline" role="group" aria-label="资源类型" hidden>
+              <button type="button" data-mobile-resource-kind="style" aria-pressed="false">样式 <span class="ui-badge"></span></button>
+              <button type="button" data-mobile-resource-kind="image" aria-pressed="false">图片 <span class="ui-badge"></span></button>
+              <button type="button" data-mobile-resource-kind="sound" aria-pressed="false">音效 <span class="ui-badge"></span></button>
+            </nav>
             <header class="ui-pane-header" id="resource-page-heading">
               <h2 id="resource-list-title">图片</h2>
               <span id="resource-count" class="ui-badge" data-variant="pill"></span>
@@ -947,6 +954,13 @@
                 <img class="settings-about-logo" src="./src-tauri/icons/128x128@2x.png" alt="" />
                 <h3 class="settings-about-title">键设 KeySkin<span class="ui-badge">v2.0.0</span></h3>
                 <p class="settings-group-note">百度、搜狗与手心输入法皮肤可视化编辑器。支持读取、编辑和导出百度 BDI/BDS/BDA、搜狗 SSF 与手心 SXI 皮肤，并可在这些格式间转换导出。Beta 版本：功能基本完整，可能仍有问题，欢迎反馈。</p>
+              </section>
+              <section class="settings-group" aria-labelledby="about-disclaimer-title">
+                <h3 id="about-disclaimer-title">免责声明</h3>
+                <p class="settings-group-note">键设（KeySkin）的宗旨是帮助皮肤作者和用户把创意做成自己的输入法皮肤。本编辑器仅用于皮肤制作与编辑的技术学习和交流，不提供或分发未经授权的皮肤资源。</p>
+                <p class="settings-group-note">我们支持正版输入法和原版皮肤，尊重创作者的劳动成果。请通过官方或作者授权的渠道获取皮肤，保留作者署名，并遵守相应的授权条款。</p>
+                <p class="settings-group-note">未经权利人授权，请勿二次修改他人的皮肤，也请勿传播原版或修改后的皮肤。此类未经授权的行为属于用户个人行为，与本软件无关。</p>
+                <p class="settings-group-note">如您认为键设侵犯了您的合法权益，请加入官方 QQ 技术交流群（群号：228040912）联系我们。我们会第一时间核实，并在确认后立即下架相关内容。感谢您的理解与支持。</p>
               </section>
               <section class="settings-group">
                 <div id="about-update" class="settings-row" data-current-version="2.0.0"><span>版本更新<small id="update-status" aria-live="polite">正在检查更新…</small><a id="download-update" href="https://github.com/rekazer0/keyskin/releases" target="_blank" rel="noreferrer" hidden>查看最新版本</a></span><button id="check-update" class="ui-button" type="button">检查更新</button></div>

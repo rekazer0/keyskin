@@ -368,7 +368,7 @@ function itemFromSection(document: IniDocument, section: string): PreviewItem | 
     rect,
     touchRect: parseTouchRect(document.get(section, "TOUCH_RECT")),
     padding: parsePadding(document.get(section, "PADDING")),
-    editable: true,
+    editable: section !== "CAND",
     show: value("SHOW"),
     center,
     up: value("UP"),
@@ -527,17 +527,12 @@ export function previewItems(
     const item = itemFromSection(document, section)
     return item ? [item] : []
   })
-  if (real.length) return [...real, ...list]
-
-  const sections = document.sections().filter((section) =>
-    /^(CAND|SWITCH|PANEL|LIST|MORE|ICON\d+|TIP\d+)$/.test(section),
-  )
-  if (!sections.length) return list
-  return [...sections.flatMap((section) => {
-    if (
-      /^TIP\d+$/.test(section) ||
-      !persistVisible(document.get(section, "PERSIST"), persistentOnly)
-    ) return []
+  // A CAND VIEW_RECT and ICON POS/SIZE can coexist in the same file.
+  const sections = real.length
+    ? document.sections().filter((section) => /^ICON\d+$/.test(section) && !real.some((item) => item.section === section))
+    : document.sections().filter((section) => /^(CAND|SWITCH|PANEL|LIST|MORE|ICON\d+)$/.test(section))
+  return [...real, ...sections.flatMap((section) => {
+    if (!persistVisible(document.get(section, "PERSIST"), persistentOnly)) return []
     const backStyle = document.get(section, "BACK_STYLE")?.split(",")[0] ?? ""
     // CAND.FORE_STYLE styles runtime candidate words; it is not a static
     // foreground for the whole candidate bar.

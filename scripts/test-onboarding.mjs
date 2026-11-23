@@ -50,6 +50,7 @@ async function withPage(viewport, mobile, run) {
   await page.goto(baseURL)
   await page.waitForSelector(".template-card")
   try {
+    await page.getByRole("dialog", { name: "免责声明" }).getByRole("button", { name: "我知道了" }).click()
     await run(page)
     assert.deepEqual(errors, [], "page errors")
   } finally {

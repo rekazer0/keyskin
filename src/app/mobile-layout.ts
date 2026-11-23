@@ -15,8 +15,7 @@ import { updateSourceSearchStatus } from "./source-panel"
 import { syncAiDesignContext } from "./ai-panel"
 import { syncMobileKeyPreview } from "./mobile-key-preview"
 import { workspacePane, mobileProjectDialog, mobileProjectToggle } from "./dom"
-import { syncMobilePropertyGroups } from "./mobile-inspector"
-import { syncMobileKeyAnimation } from "./mobile-key-animation"
+import { resizeMobileInspector, syncMobileInspectorDock } from "./mobile-inspector"
 import { closeDialog, playEnter, playRotation } from "../motion"
 import { layoutConversionButton } from "./dom"
 
@@ -59,9 +58,11 @@ export function syncSegmentedControls(): void {
 }
 
 export function syncMobileInspectorHeader(): void {
-  mobileInspectorSelection.textContent = selectedKeyName.textContent
   sourceHeading.dataset.mobileKeyTools = appState.selectedKeySections.length ? "on" : "off"
+  inspectorPane.dataset.mobilePanelObject = String(appState.selectedPath === appState.layoutPath
+    && !appState.selectedKeySections.length && !appState.selectedCandidate && !appState.selectedToolbarSections.length)
   syncMobileKeyPreview()
+  mobileInspectorSelection.textContent = selectedKeyName.textContent
 }
 
 function mobileInspectorGroupLabel(group: HTMLElement): string {
@@ -100,14 +101,10 @@ export function setMobileInspectorGroup(id: string, scroll = true): void {
   const current = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
     .find((group) => group.dataset.mobileInspectorGroup === id)
   appState.inspectorGroupKey = current ? mobileInspectorGroupKey(current) : ""
-  if (mobilePortraitQuery.matches && current?.dataset.mobileCategory) {
-    const changed = appState.mobileInspectorCategory !== current.dataset.mobileCategory
-    appState.mobileInspectorCategory = current.dataset.mobileCategory
-    if (changed) syncMobileKeyAnimation()
-  }
   // 分类栏只定位同一列内的分组，不切换或隐藏属性。
   revealActiveRailButton()
   if (scroll) {
+    if (mobilePortraitQuery.matches && document.documentElement.dataset.mobilePanel === "peek") resizeMobileInspector(50)
     scrollToSinglePageInspectorGroup()
     playEnter(current)
   }
@@ -127,13 +124,6 @@ function revealActiveRailButton(): void {
   const rail = mobileInspectorGroups.parentElement
   const button = mobileInspectorGroups.querySelector<HTMLElement>('button[aria-pressed="true"]')
   if (!rail || !button) return
-  if (mobilePortraitQuery.matches) {
-    const view = mobileInspectorGroups.getBoundingClientRect()
-    const box = button.getBoundingClientRect()
-    if (box.left < view.left) mobileInspectorGroups.scrollLeft += box.left - view.left
-    else if (box.right > view.right) mobileInspectorGroups.scrollLeft += box.right - view.right
-    return
-  }
   const view = rail.getBoundingClientRect()
   const box = button.getBoundingClientRect()
   // 第一项连同上面的筛选按钮一起露出来
@@ -191,8 +181,8 @@ export function syncMobileInspectorGroups(): void {
   const combinedBda = appState.archive?.format === "bda" && appState.selectedKeySections.length > 0 && !appState.selectedCandidate
   if (combinedBda && keyTypographyFieldsGroup.parentElement !== bdaConfigFieldsGroup) bdaConfigFieldsGroup.append(keyTypographyFieldsGroup)
   else if (!combinedBda && keyTypographyFieldsGroup.parentElement !== quickInspector) quickInspector.insertBefore(keyTypographyFieldsGroup, quickInspector.querySelector(".key-gesture-fields"))
-  let groups = Array.from(quickInspector.querySelectorAll<HTMLElement>(":scope > :is(.ui-section, .skin-fields, .toolbar-fields, .document-fields, .bda-config-fields)"))
-    .filter((group) => !group.hidden)
+  let groups = (Array.from(quickInspector.children) as HTMLElement[])
+    .filter(group => !group.hidden && group.matches(".ui-section, .skin-fields, .toolbar-fields, .document-fields, .bda-config-fields"))
     .flatMap((group) => {
       if (group.matches(".skin-fields, .toolbar-fields")) return [...group.querySelectorAll<HTMLElement>(":scope > .ui-section")]
       if (group === documentFieldsGroup) {
@@ -203,13 +193,15 @@ export function syncMobileInspectorGroups(): void {
       }
       return [group]
     })
-  syncMobilePropertyGroups(groups)
+  const changedObject = syncMobileInspectorDock()
+  const arrange = changedObject && mobilePortraitQuery.matches && groups.find(group => group.id === "inspector-multi-layout")
+  if (arrange) appState.inspectorGroupKey = mobileInspectorGroupKey(arrange)
   const managed = Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))
   if (appState.archive?.format !== "bda" && groups.length === managed.length && groups.every((group, index) =>
     group === managed[index] && mobileInspectorGroupLabel(group) === mobileInspectorGroups.children[index]?.querySelector(".inspector-group-label")?.textContent,
   )) return
   for (const group of Array.from(quickInspector.querySelectorAll<HTMLElement>(".mobile-inspector-managed"))) {
-    group.classList.remove("mobile-inspector-managed", "mobile-inspector-active")
+    group.classList.remove("mobile-inspector-managed")
     delete group.dataset.mobileInspectorGroup
   }
   const selectedBdaKey = appState.archive?.format === "bda" && appState.selectedKeySections.length > 0 && !appState.selectedCandidate
@@ -255,7 +247,6 @@ export function syncMobileInspectorGroups(): void {
     text.textContent = label
     button.append(groupIcon(label), text)
     button.title = railCodes.has(group) ? `${label}（${railCodes.get(group)}）` : label
-    button.dataset.mobileCategory = group.dataset.mobileCategory
     button.dataset.mobileInspectorGroup = group.dataset.mobileInspectorGroup
     button.addEventListener("click", () => setMobileInspectorGroup(group.dataset.mobileInspectorGroup ?? "0"))
     return button
@@ -336,9 +327,6 @@ export function applyModeState(): void {
       field.disabled = true
     }
     for (const button of layoutActionButtons) button.disabled = true
-  }
-  for (const field of [...keyFields, ...toolbarFields, ...gapFields, ...skinFields]) {
-    if (field.hasAttribute("data-number-slider")) field.dispatchEvent(new Event("inspector-slider-sync"))
   }
   updatePanelToolButtons()
   updateSourceFileActions()

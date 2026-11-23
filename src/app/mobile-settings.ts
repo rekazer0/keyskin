@@ -75,6 +75,10 @@ export function wireMobileSettings(): void {
   project.append(Object.assign(element("span"), { textContent: "项目主页（GitHub）" }), createIcon("arrow-up-right"))
   about.append(project)
   link(about, "帮助与反馈", () => open("about"))
+  link(about, $("#about-disclaimer-title").textContent!, () => {
+    open("about")
+    $("#about-disclaimer-title").scrollIntoView({ block: "start" })
+  })
   const footer = element("p", "ui-field-note mobile-settings-note")
   footer.textContent = `键设 KeySkin ${$("#about-update").dataset.currentVersion}`
   overview.append(footer)

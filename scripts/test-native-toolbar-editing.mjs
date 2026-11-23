@@ -48,7 +48,7 @@ for (const format of ['bdi', 'bds']) {
     source: 'light/skin/res/replacement.png', count: format === 'bdi' ? 3 : 4 })
 }
 const insetEdges = nativeToolbarFixture()
-insetEdges.setText('light/skin/port/cand1.cnd', '[CAND]\nBACK_STYLE=1\n[ICON1]\nSIZE=109,109\nPOS=20,-54\nANCHOR_TYPE=4\nFIX_SIZE=30,30\nFORE_STYLE=2\nKEY=F31\n[ICON2]\nSIZE=780,58\nPOS=-390,43\nANCHOR_TYPE=2\nKEY=F14\n[ICON3]\nSIZE=109,109\nPOS=-129,-54\nANCHOR_TYPE=6\nFIX_SIZE=30,30\nFORE_STYLE=2\nKEY=F8\n')
+insetEdges.setText('light/skin/port/cand1.cnd', '[CAND]\nBACK_STYLE=1\nVIEW_RECT=0,0,1125,124\n[ICON1]\nSIZE=109,109\nPOS=20,-54\nANCHOR_TYPE=4\nFIX_SIZE=30,30\nFORE_STYLE=2\nKEY=F31\n[ICON2]\nSIZE=780,58\nPOS=-390,43\nANCHOR_TYPE=2\nKEY=F14\n[ICON3]\nSIZE=109,109\nPOS=-129,-54\nANCHOR_TYPE=6\nFIX_SIZE=30,30\nFORE_STYLE=2\nKEY=F8\n')
 fixtures.unshift({ format: 'bdi', bytes: insetEdges.toBytes(), selectionOnly: true, insetEdges: true })
 const palm = unzipSync(readFileSync(new URL('../public/templates/palm-harmony.sxi', import.meta.url)))
 palm['light/skin/res/replacement.png'] = replacement
@@ -58,7 +58,7 @@ await server.listen()
 const browser = await chromium.launch()
 try {
   for (const fixture of fixtures) {
-    const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
+    const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, hasTouch: Boolean(fixture.insetEdges) })
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
@@ -95,6 +95,14 @@ try {
     }
     if (fixture.insetEdges) {
       await page.waitForFunction(async () => Boolean((await import('/src/app/canvas-interaction.ts')).toolbarPreview.drawnScene?.keys.length))
+      const background = await page.evaluate(async () => {
+        const { toolbarPreview: p } = await import('/src/app/canvas-interaction.ts')
+        if (p.hit({ x: p.panelWidth * 0.01, y: p.panelHeight * 0.15 })) throw new Error('Expected a gap between toolbar buttons')
+        const box = p.canvas.getBoundingClientRect()
+        return { x: box.x + box.width * 0.01, y: box.y + box.height * 0.15 }
+      })
+      await page.mouse.click(background.x, background.y)
+      await check([], true)
       for (const part of [parts[0], parts.at(-1)]) {
         await page.mouse.click(part.x, part.y)
         await check([part], false)
@@ -116,8 +124,10 @@ try {
         assert.deepEqual(selection.bottom, selection.orange, `${part.section}: visible bottom selection border`)
         assert.equal(selection.sourceWidth, 109, 'selection leaves the authored size intact')
       }
+      await page.touchscreen.tap(background.x, background.y)
+      await check([], true)
     }
-    if (parts.length && !fixture.insetEdges) {
+    if (parts.length) {
       assert.ok(parts.length >= 3)
       const click = p => page.mouse.click(p.x, p.y)
       await click(parts[0]); await check(parts.slice(0, 1), false)
@@ -134,7 +144,7 @@ try {
       await click(parts[0]); await check(parts.slice(1), false)
       await click(parts[0]); await check(parts, true)
       await page.keyboard.up('Control')
-    } else if (!parts.length) {
+    } else {
       await page.locator('#toolbar-preview').click(); await check([], true)
     }
     assert.deepEqual(await page.evaluate(async () => {

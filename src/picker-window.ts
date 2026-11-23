@@ -1,3 +1,4 @@
+import "./webview-compat"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { LogicalSize } from "@tauri-apps/api/dpi"
 import { bindSlicePickerZoom, drawSlicePicker, MAX_SLICE_ZOOM, MIN_SLICE_ZOOM, pickableSlices, slicePickerLabel } from "./slice-picker-canvas.ts"
@@ -534,6 +535,7 @@ function renderLibrary(): void {
   libraryDuplicate.disabled = true
   libraryToolbar.hidden = chooser || !payload?.canAdd || !payload.editable
   const sound = Boolean(payload?.soundOnly)
+  libraryView.dataset.soundOnly = String(sound)
   libraryImport.hidden = chooser || !payload || sound || Boolean(payload.ssfAnimation)
   libraryImport.disabled = !payload?.editable || !payload.imagesCompatible
   libraryNew.hidden = chooser || !payload || Boolean(payload.imageSelection) || sound || Boolean(payload.ssfAnimation)
@@ -732,38 +734,40 @@ canvas.addEventListener("keydown", (event) => {
 })
 
 // Start the handshake only after the native or frame listeners are registered.
-await onMain<NativeImagePickerPayload>("image-picker-data", (payload) => showImage(payload))
-await onMain("image-picker-show-list", () => showResourceList())
-await onMain<StyleLibraryPayload>("style-library-data", (payload) => showStyleLibrary(payload))
-await onMain<{ path: string }>("style-library-imported", ({ path }) => {
-  libraryMode = "images"
-  libraryFilter = "all"
-  clearSearch()
-  renderLibrary()
-  const index = libraryItems.findIndex(card => card.key === path)
-  if (index < 0) return
-  libraryScroll.scrollTop = Math.floor(index / libraryColumns) * libraryPitch
-  renderLibraryWindow()
-  libraryCardAt(index)?.click()
-})
-await onMain<StyleLibraryPreview>("style-library-preview-data", payload => {
-  if (library?.session !== payload.session) return
-  const style = library.styles.find(style => style.styleID === payload.styleID)
-  if (style) {
-    style.visuals = payload.visuals
-    style.animationSections = payload.animationSections
-  }
-  if (payload.animationText) library.animationText = payload.animationText
-  Object.assign(library.animationFiles, payload.animationFiles)
-  Object.assign(library.particleVisuals, payload.particleVisuals)
-  previewRequests.get(payload.styleID)?.done()
-})
-await onMain<{ session: string; key: string; dataURL?: string }>("style-library-image-data", payload => {
-  if (library?.session === payload.session) imageRequests.get(payload.key)?.done(payload.dataURL)
-})
-await onMain<ResourcePayload>("image-picker-resources-data", (payload) => {
-  resources = payload
-  resourcesLoaded = true
-  if (view === "resources") renderLibrary()
-})
-void emitMain("picker-window-ready")
+void (async () => {
+  await onMain<NativeImagePickerPayload>("image-picker-data", (payload) => showImage(payload))
+  await onMain("image-picker-show-list", () => showResourceList())
+  await onMain<StyleLibraryPayload>("style-library-data", (payload) => showStyleLibrary(payload))
+  await onMain<{ path: string }>("style-library-imported", ({ path }) => {
+    libraryMode = "images"
+    libraryFilter = "all"
+    clearSearch()
+    renderLibrary()
+    const index = libraryItems.findIndex(card => card.key === path)
+    if (index < 0) return
+    libraryScroll.scrollTop = Math.floor(index / libraryColumns) * libraryPitch
+    renderLibraryWindow()
+    libraryCardAt(index)?.click()
+  })
+  await onMain<StyleLibraryPreview>("style-library-preview-data", payload => {
+    if (library?.session !== payload.session) return
+    const style = library.styles.find(style => style.styleID === payload.styleID)
+    if (style) {
+      style.visuals = payload.visuals
+      style.animationSections = payload.animationSections
+    }
+    if (payload.animationText) library.animationText = payload.animationText
+    Object.assign(library.animationFiles, payload.animationFiles)
+    Object.assign(library.particleVisuals, payload.particleVisuals)
+    previewRequests.get(payload.styleID)?.done()
+  })
+  await onMain<{ session: string; key: string; dataURL?: string }>("style-library-image-data", payload => {
+    if (library?.session === payload.session) imageRequests.get(payload.key)?.done(payload.dataURL)
+  })
+  await onMain<ResourcePayload>("image-picker-resources-data", (payload) => {
+    resources = payload
+    resourcesLoaded = true
+    if (view === "resources") renderLibrary()
+  })
+  void emitMain("picker-window-ready")
+})()

@@ -286,7 +286,6 @@ function stretchField(targets: SsfLocation[], key: string): HTMLElement {
       input.min = String(minimum[index])
       input.max = Number.isFinite(maximum[index]) ? String(maximum[index]) : ""
       input.step = "1"
-      input.dispatchEvent(new Event("inspector-slider-sync"))
     }
   }
   const update = (values: string[], previewOnly = false) => {
@@ -317,7 +316,6 @@ function stretchField(targets: SsfLocation[], key: string): HTMLElement {
   row.addEventListener("ssf-stretch-preview", () => update(inputs.map((input) => input.value), true))
   for (const input of inputs) {
     input.disabled = true
-    input.dispatchEvent(new Event("inspector-slider-sync"))
   }
   // Decode before editing, so commits stay synchronous and retain the numeric gesture's undo token.
   void Promise.all(targets.map((target) => imageVisual(stateImage(ssfDocument(target.path), target.section, key)))).then((images) => {
@@ -335,7 +333,6 @@ function stretchField(targets: SsfLocation[], key: string): HTMLElement {
         if (mixed) input.placeholder = "混合"
       }
       input.disabled = !isEditing() || !Number.isFinite(width) || !Number.isFinite(height)
-      input.dispatchEvent(new Event("inspector-slider-sync"))
     }
   })
   const constrain = (event: Event) => {
@@ -600,7 +597,6 @@ function markMixed(row: HTMLElement, targets: SsfLocation[], keys: string[]): vo
       else { input.value = ""; input.placeholder = "混合" }
     }
   }
-  for (const input of inputs) input.dispatchEvent(new Event("inspector-slider-sync"))
 }
 
 /** Rows of one section: its image pairs as cards, then every other value. */

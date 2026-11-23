@@ -1,3 +1,4 @@
+import { cloneJson } from "./clone-json.ts"
 import { IniDocument } from "./ini.ts"
 import type { SkinArchive } from "./skin.ts"
 import type { ConversionLayout } from "./layout-conversion.ts"
@@ -50,7 +51,7 @@ export function sxiConversionText(skin: JsonObject, current: ConversionLayout): 
     const value = asObject((current.board!.keys as JsonObject[])[Number(key.section)].b)?.base_f
     return (Array.isArray(value) ? value : [value]).flatMap(id => available.find(style => style.id === String(id)) ?? [])
   })
-  const font = structuredClone([...preferred, ...available].map(({ model }) => asObject(model?.s_1)).find(text => text && text.for_back !== true) ?? {})
+  const font = cloneJson([...preferred, ...available].map(({ model }) => asObject(model?.s_1)).find(text => text && text.for_back !== true) ?? {})
   delete font.text
   font.f_s ??= Math.round(Math.min(...current.keys[0].rect.slice(2)) * 0.4)
   font.c_normal ??= theme === "night" ? "FFFFFFFF" : "FF000000"

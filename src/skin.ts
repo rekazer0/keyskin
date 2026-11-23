@@ -7,7 +7,7 @@ import { adaptIosToolbarGeometry } from "./ios-toolbar-geometry.ts"
 import { adaptBdiPanels } from "./bdi-panel-export.ts"
 import { bdiPinyinListSymbols } from "./preview-items.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
-import { parseZip, patchZip, zipArchiveAsync, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, view, addZipEntry } from "./skin-zip.ts"
+import { parseZip, patchZip, zipArchiveAsync, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, isZipEntryEncrypted, addZipEntry } from "./skin-zip.ts"
 
 const TEXT_EXTENSIONS = new Set(["ini", "css", "til", "cnd", "pop", "txt", "plist"])
 
@@ -198,6 +198,25 @@ function sortIosTiles(files: Map<string, Uint8Array>): void {
   }
 }
 
+const tileTextDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })
+
+/** Give each slice its iOS ordinal as the Android section name, without moving its contents. */
+function bdiTilesForAndroid(path: string, bytes: Uint8Array): Uint8Array {
+  let text: string
+  try { text = tileTextDecoder.decode(bytes) }
+  catch { throw new Error(`无法转换 ${path}：切片表不是有效的 UTF-8 文本`) }
+  if (text.includes("\0")) throw new Error(`无法转换 ${path}：切片表含有无效字符`)
+  const document = IniDocument.parse(text)
+  if (!document.renumberSections("IMG", "file").size) return bytes
+  const count = document.sections().filter((section) => /^IMG\d+$/.test(section)).length
+  if (document.hasSection("GLOBAL")) {
+    document.set("GLOBAL", "TILE_NUM", String(count))
+    return strToU8(document.toString())
+  }
+  const eol = text.match(/\r\n|\n|\r/)?.[0] ?? "\n"
+  return strToU8(document.toString().replace(/^\uFEFF?/, (bom) => `${bom}[GLOBAL]${eol}TILE_NUM=${count}${eol}${eol}`))
+}
+
 /** BDA and SSF each have their own configuration format; only BDI and BDS repackage into each other. */
 function assertRepackable(from: ExportFormat, to: ExportFormat | undefined): void {
   if (!to || to === from) return
@@ -211,6 +230,7 @@ export class SkinArchive {
   private originals: Map<string, Uint8Array>
   private sourceBytes: Uint8Array
   private sourceZip?: ReturnType<typeof parseZip>
+  private readonly sourceZipNeededRepair: boolean
   private layout: PackageLayout
   private bdaRoots?: Map<BdaTheme, string>
   private sxiNested: boolean
@@ -221,10 +241,11 @@ export class SkinArchive {
   /** Bumped whenever file contents or paths change, so callers can skip redundant redraws. */
   revision = 0
 
-  private constructor(files: Map<string, Uint8Array>, sourceBytes: Uint8Array, formatHint?: ExportFormat) {
+  private constructor(files: Map<string, Uint8Array>, sourceBytes: Uint8Array, formatHint?: ExportFormat, sourceZipNeededRepair = false) {
     this.files = files
     this.originals = new Map(files)
     this.sourceBytes = sourceBytes.slice()
+    this.sourceZipNeededRepair = sourceZipNeededRepair
     const info = packageInfo(files, formatHint)
     this.layout = info.layout
     this.bdaRoots = info.bdaRoots
@@ -267,7 +288,7 @@ export class SkinArchive {
       if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
       files.set(name, unpacked[name])
     }
-    return new SkinArchive(files, sourceBytes, formatHint)
+    return new SkinArchive(files, sourceBytes, formatHint, sourceBytes !== bytes)
   }
 
   static async openAsync(
@@ -293,7 +314,7 @@ export class SkinArchive {
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
       }
     }
-    const archive = new SkinArchive(files, sourceBytes, formatHint)
+    const archive = new SkinArchive(files, sourceBytes, formatHint, sourceBytes !== bytes)
     onProgress?.(1)
     return archive
   }
@@ -335,7 +356,7 @@ export class SkinArchive {
     return total
   }
   zipEncryptedPaths(): string[] {
-    return this.sourceZip?.entries.filter((entry) => view(entry.central).getUint16(8, true) & 1).map((entry) => entry.name) ?? []
+    return this.sourceZip?.entries.filter(isZipEntryEncrypted).map((entry) => entry.name) ?? []
   }
 
   normalizedBytes(): Uint8Array {
@@ -523,6 +544,10 @@ export class SkinArchive {
   }
 
   private packagedFiles(format: ExportFormat, notes?: string[]): Record<string, Uint8Array> {
+    const bdiToBds = format === "bds" && this.format === "bdi"
+    if (bdiToBds && (this.sourceZipNeededRepair || (this.sourceBytes.length && !this.sourceZip) || this.zipEncryptedPaths().length)) {
+      throw new Error("BDI 转 BDS 仅支持未加密且 ZIP 结构完整的原始皮肤包")
+    }
     const output = new Map<string, Uint8Array>()
     const promoted = this.needsThemeRepack()
     const single = this.layout.endsWith("single") && !promoted
@@ -534,7 +559,8 @@ export class SkinArchive {
       const source = this.getBytes(path)
       if (!destination || !source) continue
       let data = source
-      if (format === "bds" && this.format === "bdi" && /\/py_9\.ini$/i.test(path)) {
+      if (bdiToBds && /\.til$/i.test(path)) data = bdiTilesForAndroid(path, data)
+      if (bdiToBds && /\/py_9\.ini$/i.test(path)) {
         const layout = IniDocument.parse(strFromU8(data))
         const general = this.getBytes(path.replace(/py_9\.ini$/i, "gen.ini"))
         const symbols = bdiPinyinListSymbols(path, layout, general && IniDocument.parse(strFromU8(general)))
@@ -573,7 +599,7 @@ export class SkinArchive {
       }
     }
 
-    if (format === "bds" && this.format === "bdi") {
+    if (bdiToBds) {
       adaptIosToolbarGeometry(output)
       adaptBdiPanels(output, notes)
     }

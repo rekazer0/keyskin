@@ -61,6 +61,9 @@ export function installSafeAreaLock(root: HTMLElement = document.documentElement
   let baselineViewportHeight = window.visualViewport?.height ?? window.innerHeight
   let keyboardWasOpen = false
   let restoreTimers: number[] = []
+  let frameRequest = 0
+  let shouldReveal = false
+  let androidImeOverlap = 0
 
   const restoreAfterKeyboard = () => {
     const active = document.activeElement
@@ -79,28 +82,42 @@ export function installSafeAreaLock(root: HTMLElement = document.documentElement
       layoutWidth: window.innerWidth,
     })
     baselineViewportHeight = Math.max(baselineViewportHeight, frame.height)
+    const visibleHeight = Math.min(frame.height, Math.max(1, window.innerHeight - androidImeOverlap))
     const focusedInput = isTextInput(document.activeElement)
     const viewportShrunk = isKeyboardViewportOpen({
-      viewportHeight: frame.height,
+      viewportHeight: visibleHeight,
       baselineHeight: baselineViewportHeight,
     })
-    const keyboardOpen = viewportShrunk && (focusedInput || keyboardWasOpen)
+    const keyboardOpen = androidImeOverlap > 0 || viewportShrunk && (focusedInput || keyboardWasOpen)
     // visualViewport reports controls that overlap the layout viewport. Browser
     // chrome already excluded by dvh needs no extra inset. Ignore keyboard and
     // pinch-zoom geometry; neither describes browser controls.
     const browserOverlay = !keyboardOpen && (viewport?.scale ?? 1) === 1
     root.style.setProperty("--browser-occlusion-top", `${browserOverlay ? frame.offsetTop : 0}px`)
     root.style.setProperty("--browser-occlusion-bottom", `${browserOverlay ? Math.max(0, window.innerHeight - frame.height - frame.offsetTop) : 0}px`)
-    root.dataset.keyboardOpen = keyboardOpen ? "true" : "false"
+    if (root.dataset.keyboardOpen !== String(keyboardOpen)) root.dataset.keyboardOpen = String(keyboardOpen)
+    const keyboardHeight = keyboardOpen ? `${Math.round(visibleHeight)}px` : ""
+    if (root.style.getPropertyValue("--keyboard-viewport-height") !== keyboardHeight) root.style.setProperty("--keyboard-viewport-height", keyboardHeight)
     if (reveal && keyboardOpen) revealFocusedInput()
     if (keyboardWasOpen && !keyboardOpen) restoreAfterKeyboard()
     keyboardWasOpen = keyboardOpen
   }
   const schedule = () => {
-    window.requestAnimationFrame(() => sync(false))
+    if (frameRequest) return
+    frameRequest = window.requestAnimationFrame(() => {
+      frameRequest = 0
+      const reveal = shouldReveal
+      shouldReveal = false
+      sync(reveal)
+    })
   }
   const reveal = () => {
-    window.requestAnimationFrame(() => sync(true))
+    shouldReveal = true
+    schedule()
+  }
+  const onAndroidIme: EventListener = event => {
+    androidImeOverlap = (event as CustomEvent<number>).detail
+    reveal()
   }
   const resetOrientation = () => {
     baselineViewportHeight = window.visualViewport?.height ?? window.innerHeight
@@ -113,6 +130,7 @@ export function installSafeAreaLock(root: HTMLElement = document.documentElement
     [window, "orientationchange", resetOrientation],
     [document, "focusin", reveal],
     [document, "focusout", schedule],
+    [root, "android-ime-overlap", onAndroidIme],
   ]
   const viewport = window.visualViewport
   if (viewport) listeners.push([viewport, "resize", reveal], [viewport, "scroll", reveal])
@@ -121,6 +139,8 @@ export function installSafeAreaLock(root: HTMLElement = document.documentElement
   return () => {
     for (const [target, type, listener] of listeners) target.removeEventListener(type, listener)
     for (const timer of restoreTimers) window.clearTimeout(timer)
+    window.cancelAnimationFrame(frameRequest)
+    root.style.removeProperty("--keyboard-viewport-height")
     root.style.removeProperty("--browser-occlusion-top")
     root.style.removeProperty("--browser-occlusion-bottom")
     delete root.dataset.keyboardOpen

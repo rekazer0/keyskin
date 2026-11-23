@@ -1,5 +1,5 @@
 import { type AnimationStyleItem, type AnimationStyleList } from "../animation-inspector.ts"
-import { section, wireNumberSlider } from "./property-rows"
+import { section } from "./property-rows"
 import { PALM_ANIMATION_EVENTS } from "../palm/sxi-animation.ts"
 import { element } from "../dom-element.ts"
 import { styleCard } from "../style-card.ts"
@@ -85,7 +85,6 @@ export function populateAnimationStyleInspector(): void {
         writeSxiValue([target], ["s_5", event], input.value === "" ? undefined : Number(input.value))
       })
       control.append(input)
-      wireNumberSlider(input)
       if (animation !== undefined) {
         const button = element("button", "ui-button")
         button.type = "button"

@@ -76,7 +76,6 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 })
   await toolbar.screenshot({ path: "/tmp/keyskin-preview-toggles.png" })
   await page.setViewportSize({ width: 390, height: 844 })
-  assert.equal(await page.locator(".preview-toolbar .preview-choice:visible").count(), 0, "phone keeps secondary controls in menu")
   const more = page.locator('#mobile-app-more > summary')
   await more.tap()
   await page.locator('[data-mobile-action="mobile-canvas-options"]').tap()
@@ -86,6 +85,7 @@ try {
   await options.waitFor({ state: 'detached' })
   const edit = page.locator('.mobile-preview-return')
   if (await edit.isVisible()) await edit.tap()
+  assert.equal(await toolbar.locator('.preview-choice:visible').count(), 2, 'phone shows both preview choices in edit mode')
   const gesture = page.getByRole('menuitemcheckbox', { name: '双指缩放与平移' })
   const touch = await page.context().newCDPSession(page)
   const view = () => page.evaluate(async () => {

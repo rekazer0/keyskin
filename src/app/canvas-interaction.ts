@@ -273,7 +273,11 @@ export function selectCandidateBar(inputRegion = false, sections: string[] = [],
   if (mobilePortraitQuery.matches) setMobilePane("inspector")
 }
 
-export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections) => {
+export const toolbarPreview = new Preview(toolbarCanvas, handlePreviewEvent, (sections, background) => {
+  if (background) {
+    selectCandidateBar()
+    return
+  }
   const { panelWidth, panelHeight } = toolbarPreview
   const parts = toolbarPreview.keys.filter(({ editable, rect }) => editable &&
     rect.x < panelWidth && rect.x + rect.width > 0 && rect.y < panelHeight && rect.y + rect.height > 0)

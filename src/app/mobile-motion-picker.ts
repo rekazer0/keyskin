@@ -21,8 +21,9 @@ export function openMobileMotionPicker(input: HTMLInputElement, openLibrary: () 
   const selection = `${appState.selectedPath}|${appState.selectedKeySections.join(",")}`
   const path = legacyAnimationConfigPath()
   const config = path && archive.isText(path) ? IniDocument.parse(archive.getText(path)) : undefined
+  const ids = availableStyleIDs().filter(id => styleKind(id, styles) === "anim")
   let chosen = input.value.trim() || "0"
-  let duration = ""
+  const durations = new Map<string, string>()
   let section = ""
   const dialog = element("dialog", "ui-dialog ui-mobile-sheet ui-mobile-motion-picker")
   dialog.setAttribute("aria-label", "选择动画")
@@ -30,7 +31,7 @@ export function openMobileMotionPicker(input: HTMLInputElement, openLibrary: () 
   form.method = "dialog"
   const header = element("header", "ui-dialog-header")
   const title = element("div")
-  title.append(Object.assign(element("h2"), { textContent: "选择动画" }), Object.assign(element("p", "ui-field-note"), { textContent: "当前皮肤的动画样式" }))
+  title.append(Object.assign(element("h2"), { textContent: "选择动画" }), Object.assign(element("p", "ui-field-note"), { textContent: `${ids.length} 个动画样式` }))
   const library = Object.assign(element("button", "ui-button"), { type: "button", textContent: "全部样式" })
   library.addEventListener("click", () => closeDialog(dialog, "library"))
   header.append(title, library)
@@ -47,11 +48,10 @@ export function openMobileMotionPicker(input: HTMLInputElement, openLibrary: () 
     }
     const sources = chosen && styleAnimationSources(chosen, styles)?.sections
     section = sources && sources.length === 1 ? sources[0] : ""
-    duration = section && config?.get(section, "DURATION") || ""
+    const duration = durations.get(section) ?? (section && config?.get(section, "DURATION") || "")
     parameters.replaceChildren()
-    if (duration && Number.isFinite(Number(duration))) parameters.append(field({ key: "motion-duration", label: "时长", spec: { kind: "number", value: duration, min: 0, unit: "ms", step: 1, range: "duration" }, commit: value => { duration = String(value) } }), Object.assign(element("p", "ui-field-note"), { textContent: "修改时长会影响所有引用此动画的按键" }))
+    if (duration && Number.isFinite(Number(duration))) parameters.append(field({ key: "motion-duration", label: "时长", spec: { kind: "number", value: duration, min: 0, unit: "ms", step: 1, range: "duration" }, commit: value => { durations.set(section, String(value)) } }), Object.assign(element("p", "ui-field-note"), { textContent: "修改时长会影响所有引用此动画的按键" }))
   }
-  const ids = availableStyleIDs().filter(id => styleKind(id, styles) === "anim")
   for (const id of [...ids, "0"]) {
     const card = id === "0" ? element("button", "ui-list-item") : animationStyleCard({ id, title: styles.get(`STYLE${id}`, "INFO") || `样式 ${id}`, count: styleAnimationSources(id, styles)?.sections.length ?? 0, detail: styleAnimationSummary(id, styles) })
     if (card instanceof HTMLButtonElement) { card.type = "button"; card.textContent = "无" }
@@ -68,8 +68,8 @@ export function openMobileMotionPicker(input: HTMLInputElement, openLibrary: () 
   const apply = Object.assign(element("button", "ui-button"), { textContent: "应用", value: "apply" })
   apply.dataset.variant = "primary"
   footer.append(cancel, apply)
-  body.append(list, parameters)
-  form.append(header, body, footer)
+  body.append(list)
+  form.append(header, body, parameters, footer)
   dialog.append(form)
   bindDialog(dialog)
   dialog.addEventListener("close", () => {
@@ -78,7 +78,8 @@ export function openMobileMotionPicker(input: HTMLInputElement, openLibrary: () 
     if (current && dialog.returnValue === "library") openLibrary()
     if (current && dialog.returnValue === "apply") {
       const depth = appState.undoStack.length
-      if (path && section && duration !== "" && config && Number(duration) >= 0 && Number.isFinite(Number(duration))) {
+      const duration = durations.get(section)
+      if (path && section && duration && config && Number(duration) >= 0 && Number.isFinite(Number(duration))) {
         const before = archive.getText(path)
         const after = writeLegacyAnimationFields(before, section, { DURATION: duration })
         if (after !== before) commitText(path, before, after)
@@ -97,6 +98,7 @@ export function openMobileMotionPicker(input: HTMLInputElement, openLibrary: () 
   sync()
   document.body.append(dialog)
   dialog.showModal()
-  cancel.focus()
+  list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" })
+  cancel.focus({ preventScroll: true })
   cancel.addEventListener("click", event => { event.preventDefault(); void closeDialog(dialog, "cancel") })
 }

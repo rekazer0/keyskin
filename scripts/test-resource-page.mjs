@@ -35,6 +35,7 @@ try {
     const initial = await page.evaluate(async () => [...(await import("/src/app/state.ts")).appState.archive.changed])
     await page.locator('[data-workspace-page="resources"]').click()
     await page.locator(".workspace #resource-list-view").waitFor()
+    assert.equal(await page.locator("#mobile-resource-tabs").isVisible(), false, "电脑资源页不显示手机分类栏")
     assert.equal(await page.locator('[data-workspace-page="resources"]').getAttribute("aria-current"), "page")
     assert.equal(await page.locator('[data-resource-page="style"]').isDisabled(), format === "ssf")
     if (["bds", "bdi"].includes(format)) {

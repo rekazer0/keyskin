@@ -15,10 +15,10 @@ import { isEditing } from "./edit-history"
 import { resourceInventoryItems } from "./resource-inventory"
 import { availableSkinThemes, usesSkinThemeDirectories } from "./config-context"
 import { selectChoice } from "./mobile-layout"
-import { openResources } from "./resource-navigation"
+import { openResources, resourceNavigationPath } from "./resource-navigation"
 import { fontSample } from "./font-picker"
 import { skinFontField } from "./skin-fonts"
-import { releaseKeySound } from "./canvas-interaction"
+import { mobilePortraitQuery, releaseKeySound } from "./canvas-interaction"
 import { field, section } from "./property-rows"
 import { releaseOnRemove } from "../dom-lifecycle"
 
@@ -95,7 +95,7 @@ function resourceFonts(): string[] {
 export function updateResourcePage(title: string, count: number): void {
   appState.resourceCatalog = ""
   resourceListView.querySelector(".resource-actions")!.prepend(resourceUploadButton)
-  $(document.body.classList.contains("resource-workspace") ? "#resource-page-heading" : ".resource-actions").append(resourceDownloadButton)
+  $(document.body.classList.contains("resource-workspace") || mobilePortraitQuery.matches ? "#resource-page-heading" : ".resource-actions").append(resourceDownloadButton)
   $("#resource-catalog").hidden = true
   resourceGallery.hidden = false
   const archive = appState.archive
@@ -142,7 +142,7 @@ export function updateResourcePage(title: string, count: number): void {
   setText("#resource-page-description", `${total.toLocaleString()} 个${title}${kind === "style" ? ` · ${counts.all.toLocaleString()} 个资源` : ""}${count !== total ? ` · 筛出 ${count.toLocaleString()} 项` : ""}`)
   const create = $<HTMLButtonElement>("#resource-create-style")
   create.hidden = false
-  create.lastChild!.textContent = kind === "style" ? "新建资源" : kind === "image" ? "上传" : "添加"
+  create.lastChild!.textContent = kind === "style" ? (mobilePortraitQuery.matches ? "新建样式" : "新建资源") : kind === "image" ? "上传" : "添加"
   create.disabled = !isEditing() || kind === "style" && !canAddStyle()
 }
 
@@ -280,6 +280,8 @@ export function renderResourceCatalogSearch(): boolean {
 }
 
 function syncMobileResourceCategory(): void {
+  const tabs = $("#mobile-resource-tabs")
+  tabs.hidden = !mobilePortraitQuery.matches
   const select = $<HTMLSelectElement>("#mobile-resource-category")
   for (const button of $("#resource-page-tabs").querySelectorAll<HTMLButtonElement>("[data-resource-choice]")) {
     const value = button.dataset.resourceChoice!
@@ -288,8 +290,17 @@ function syncMobileResourceCategory(): void {
     const count = button.querySelector("small")?.textContent
     const text = count ? `${label} (${count})` : label
     if (option.text !== text) option.text = text
+    const pressed = button.getAttribute("aria-pressed") === "true"
     option.disabled = button.disabled
-    if (button.ariaPressed === "true" && select.value !== value) select.value = value
+    if (pressed && select.value !== value) select.value = value
+    if (tabs.hidden) continue
+    const kind = button.dataset.resourcePage as "style" | "image" | "sound" | undefined
+    if (!kind) continue
+    const tab = tabs.querySelector<HTMLButtonElement>(`[data-mobile-resource-kind="${kind}"]`)!
+    tab.disabled = !resourceNavigationPath(kind)
+    option.disabled = tab.disabled
+    tab.setAttribute("aria-pressed", String(!appState.resourceCatalog && appState.resourceInspectorMode === kind))
+    tab.querySelector(".ui-badge")!.textContent = count ?? ""
   }
 }
 
@@ -326,6 +337,10 @@ export function wireResourcePage(): void {
     group.append(new Option("", value))
   }
   category.addEventListener("change", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-choice="${category.value}"]`)?.click())
+  for (const tab of $("#mobile-resource-tabs").querySelectorAll<HTMLButtonElement>("button")) {
+    tab.addEventListener("click", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-page="${tab.dataset.mobileResourceKind}"]`)?.click())
+  }
+  mobilePortraitQuery.addEventListener("change", syncMobileResourceCategory)
   const filterToggle = $("#mobile-resource-filters-toggle")
   const filterOptions = $("#resource-filter-options")
   filterToggle.addEventListener("click", () => {

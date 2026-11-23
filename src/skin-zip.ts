@@ -27,6 +27,11 @@ type ZipEntry = {
 export const view = (bytes: Uint8Array) =>
   new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 
+export function isZipEntryEncrypted(entry: ZipEntry): boolean {
+  const localFlags = entry.local.byteLength >= 8 ? view(entry.local).getUint16(6, true) : 0
+  return Boolean((localFlags | view(entry.central).getUint16(8, true)) & ENCRYPTION_FLAGS)
+}
+
 function findEnd(bytes: Uint8Array): number {
   const data = view(bytes)
   for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65_557); offset--) {
@@ -232,7 +237,7 @@ function changedLocal(entry: ZipEntry, data: Uint8Array): {
   const localView = view(entry.local)
   if (entry.local.length < 30) throw new Error(`ZIP 条目的文件头不完整：${entry.name}`)
   const flags = localView.getUint16(6, true)
-  if ((flags | view(entry.central).getUint16(8, true)) & ENCRYPTION_FLAGS) {
+  if (isZipEntryEncrypted(entry)) {
     throw new Error(`无法重写标记为加密的 ZIP 条目：${entry.name}。请使用未加密的原始皮肤包`)
   }
   const nameLength = localView.getUint16(26, true)

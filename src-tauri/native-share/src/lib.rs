@@ -79,6 +79,20 @@ pub fn share_file<R: Runtime>(
 }
 
 #[cfg(target_os = "android")]
+pub fn observe_window_insets<R: Runtime>(
+    app: &AppHandle<R>,
+    handler: Channel<serde_json::Value>,
+) -> Result<(), String> {
+    app.state::<NativeShare<R>>()
+        .0
+        .run_mobile_plugin(
+            "observeWindowInsets",
+            serde_json::json!({ "handler": handler }),
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "android")]
 pub fn pick_source_directory<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
     app.state::<NativeShare<R>>()
         .0
@@ -101,15 +115,6 @@ pub async fn pick_skin_file<R: Runtime>(
     app.state::<NativeShare<R>>()
         .0
         .run_mobile_plugin_async("pickSkinFile", PickSkinFilePayload { initial_uri })
-        .await
-        .map_err(|error| error.to_string())
-}
-
-#[cfg(target_os = "android")]
-pub async fn choose_project_template<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
-    app.state::<NativeShare<R>>()
-        .0
-        .run_mobile_plugin_async("chooseProjectTemplate", ())
         .await
         .map_err(|error| error.to_string())
 }

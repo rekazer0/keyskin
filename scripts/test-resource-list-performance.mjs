@@ -17,10 +17,39 @@ mkdirSync(output, { recursive: true })
 const server = await createServer({ logLevel: "error", server: { host: "127.0.0.1", port: 41977, strictPort: false, hmr: false } })
 await server.listen()
 const results = []
+async function checkMobileGrid(browser) {
+  for (const width of [320, 393, 540]) {
+    const page = await browser.newPage({ viewport: { width, height: 960 }, isMobile: true, hasTouch: true, reducedMotion: "reduce" })
+    try {
+      await page.addInitScript(() => localStorage.setItem("onboarding-tour-v1", "done"))
+      await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+      await page.locator("#browser-open").setInputFiles({ name: "large.bds", mimeType: "application/octet-stream", buffer: fixture })
+      await page.locator('#mobile-navigation [data-mobile-page="resources"]').tap()
+      const gallery = page.locator("#resource-gallery")
+      const at = position => gallery.locator(`[aria-posinset="${position}"]`)
+      async function checkPair(position) {
+        const first = await at(position).boundingBox()
+        const second = await at(position + 1).boundingBox()
+        assert.ok(first && second && Math.abs(first.y - second.y) < 1 && first.x + first.width <= second.x && second.x + second.width <= width,
+          `${width}px: styles ${position} and ${position + 1} share a two-column row within the viewport`)
+      }
+      await at(1).waitFor()
+      await checkPair(1)
+      await at(1).press("ArrowDown")
+      assert.equal(await at(3).getAttribute("aria-selected"), "true", `${width}px: ArrowDown advances two styles`)
+      await gallery.evaluate(grid => { grid.scrollTop = grid.scrollHeight })
+      await at(6246).waitFor()
+      await checkPair(6245)
+    } finally { await page.close() }
+  }
+  console.log("Mobile virtual resource grid: two columns at 320, 393 and 540 px")
+}
+
 try {
   for (const engine of [chromium, webkit]) {
     const browser = await engine.launch()
     try {
+      if (engine === chromium) await checkMobileGrid(browser)
       const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, reducedMotion: "reduce" })
       const errors = []
       page.on("pageerror", error => errors.push(error.message))

@@ -1,4 +1,4 @@
-import { element, iconButton } from "./dom-element.ts"
+import { bindListboxKeys, element, iconButton } from "./dom-element.ts"
 import { closeDialog } from "./motion.ts"
 import { bindDialog } from "./app/ask.ts"
 import { wheelZoomFactor } from "./wheel-zoom"
@@ -16,6 +16,7 @@ type AtlasState = {
   height: number
   slices: TileSlice[]
   selected?: TileSlice
+  selectMobileSlice?(index: number): void
   dirty: boolean
   editable: boolean
   bda: boolean
@@ -63,6 +64,13 @@ export function createAtlasWorkspace(actions: {
   const body = element("div", "ui-dialog-body")
   const stage = element("div", "ui-image-editor-preview")
   const controls = element("div", "ui-image-editor-controls")
+  const sliceList = element("div", "ui-resource-grid mobile-atlas-slices")
+  sliceList.setAttribute("role", "listbox")
+  sliceList.setAttribute("aria-label", "图片切片")
+  sliceList.hidden = true
+  bindListboxKeys(sliceList, row => { row.click(); row.focus() })
+  controls.append(sliceList)
+  let sliceSignature = ""
   const wrap = element("div", "atlas-surface ui-checker")
   wrap.dataset.size = "lg"
   stage.append(wrap)
@@ -133,7 +141,7 @@ export function createAtlasWorkspace(actions: {
   let state: AtlasState | undefined
   let zoomValue = 1
   let fitted = true
-  let desktopActive = false
+  let editorActive = false
   let lastPath = ""
   let panX = 0
   let panY = 0
@@ -141,13 +149,16 @@ export function createAtlasWorkspace(actions: {
     if (panX === x && panY === y) return
     panX = x
     panY = y
-    image.style.translate = canvas.style.translate = `${Math.round(x)}px ${Math.round(y)}px`
+    if (dialog.dataset.mobileAtlas === "true" && !CSS.supports("translate", "0")) {
+      image.style.transform = canvas.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`
+    } else image.style.translate = canvas.style.translate = `${Math.round(x)}px ${Math.round(y)}px`
     actions.redraw()
   }
   const resize = () => {
-    if (!desktopActive || !state?.width || !state.height) return
+    if (!editorActive || !state?.width || !state.height) return
     if (fitted) {
-      zoomValue = Math.max(0.01, Math.min(1, (wrap.clientWidth - 64) / state.width, (wrap.clientHeight - 64) / state.height))
+      const inset = dialog.dataset.mobileAtlas === "true" ? parseFloat(getComputedStyle(figure).paddingLeft) * 2 : 64
+      zoomValue = Math.max(0.01, Math.min(1, (wrap.clientWidth - inset) / state.width, (wrap.clientHeight - inset) / state.height))
       setPan(0, 0)
     }
     image.style.width = canvas.style.width = `${Math.round(state.width * zoomValue)}px`
@@ -174,7 +185,7 @@ export function createAtlasWorkspace(actions: {
   zoom.append(button("atlas-zoom-out", "缩小", "minus", () => zoomBy(1 / 1.2)), fit, button("atlas-zoom-in", "放大", "plus", () => zoomBy(1.2)))
   stage.append(zoom)
   wrap.addEventListener("wheel", event => {
-    if (!desktopActive) return
+    if (!editorActive) return
     event.preventDefault()
     zoomBy(wheelZoomFactor(event), { x: event.clientX, y: event.clientY })
   }, { passive: false })
@@ -195,13 +206,13 @@ export function createAtlasWorkspace(actions: {
     wrap.classList.add("atlas-panning")
   }
   wrap.addEventListener("pointerdown", event => {
-    if (!desktopActive || !(event.button === 1 || event.button === 0 && spaceHeld)) return
+    if (!editorActive || !(event.button === 1 || event.button === 0 && spaceHeld)) return
     event.preventDefault()
     event.stopPropagation()
     startPan(event)
   }, { capture: true })
   wrap.addEventListener("pointerdown", event => {
-    if (!desktopActive || pan || event.button !== 0 || event.pointerType === "touch" || canvas.hasPointerCapture(event.pointerId)) return
+    if (!editorActive || pan || event.button !== 0 || event.pointerType === "touch" || canvas.hasPointerCapture(event.pointerId)) return
     candidate = { id: event.pointerId, x: event.clientX, y: event.clientY }
   })
   wrap.addEventListener("pointermove", event => {
@@ -221,6 +232,7 @@ export function createAtlasWorkspace(actions: {
   observer.observe(wrap)
   observer.observe(canvas.parentElement!)
   const media = matchMedia("(min-width: 761px) and (min-height: 601px), (min-width: 951px)")
+  const portrait = matchMedia("(max-width: 760px) and (orientation: portrait)")
   let finishing = false
   dialog.addEventListener("close", () => {
     finishing = true
@@ -233,7 +245,32 @@ export function createAtlasWorkspace(actions: {
     state = next
     form.dataset.readonly = String(!next.editable)
     desktopEditor = isDesktopEditor()
-    desktopActive = desktopEditor && next.active && Boolean(next.path)
+    const mobileEditor = portrait.matches && Boolean(next.selectMobileSlice)
+    editorActive = (desktopEditor || mobileEditor) && next.active && Boolean(next.path)
+    if (mobileEditor && editorActive) dialog.dataset.mobileAtlas = "true"
+    else delete dialog.dataset.mobileAtlas
+    sliceList.hidden = !mobileEditor || !editorActive || !next.slices.length
+    if (!sliceList.hidden) {
+      const signature = next.slices.map(({ index, source }) => `${index}:${source[2]}:${source[3]}`).join("|")
+      if (signature !== sliceSignature) {
+        sliceSignature = signature
+        sliceList.replaceChildren(...next.slices.map(({ index, source }) => {
+          const option = Object.assign(element("button", "ui-list-item"), { type: "button" })
+          option.dataset.sliceIndex = String(index)
+          option.setAttribute("role", "option")
+          const text = element("span", "ui-list-item-text")
+          text.append(Object.assign(element("strong"), { textContent: `IMG${index}` }), Object.assign(element("small"), { textContent: `${source[2]} × ${source[3]}` }))
+          option.append(text)
+          option.addEventListener("click", () => state?.selectMobileSlice?.(index))
+          return option
+        }))
+      }
+      for (const option of sliceList.querySelectorAll<HTMLButtonElement>("button")) {
+        const selected = Number(option.dataset.sliceIndex) === next.selected?.index
+        option.setAttribute("aria-selected", String(selected))
+        option.tabIndex = selected || !next.selected && option === sliceList.firstElementChild ? 0 : -1
+      }
+    }
     extras.hidden = !desktopEditor || !next.active || !next.preview
     save.disabled = !next.editable
     const message = next.dirty ? "有未保存的切片修改" : ""
@@ -251,7 +288,7 @@ export function createAtlasWorkspace(actions: {
       listHome.prepend(list)
       list.hidden = next.active && Boolean(next.path) || next.styleActive && next.styleSelected
     }
-    if (desktopActive) {
+    if (editorActive) {
       if (figure.parentElement !== wrap) wrap.append(figure)
       if (inspector.parentElement !== controls) controls.append(inspector)
       if (toolbar.parentElement !== stage) stage.prepend(toolbar)
@@ -260,7 +297,7 @@ export function createAtlasWorkspace(actions: {
         dialog.returnValue = ""
         dialog.showModal()
       }
-      list.hidden = false
+      if (desktopEditor) list.hidden = false
     } else {
       if (dialog.open) discard()
       if (figure.parentElement === wrap) figureHome.append(figure)
@@ -269,6 +306,7 @@ export function createAtlasWorkspace(actions: {
       canvas.style.removeProperty("width")
       canvas.style.removeProperty("height")
       canvas.style.removeProperty("translate")
+      canvas.style.removeProperty("transform")
       image.removeAttribute("style")
       if (viewport.width !== 1) viewport.width = 1
       if (viewport.height !== 1) viewport.height = 1
@@ -290,10 +328,11 @@ export function createAtlasWorkspace(actions: {
   }
   const syncLayout = () => { if (state) { update(state); actions.redraw() } }
   media.addEventListener("change", syncLayout)
+  portrait.addEventListener("change", syncLayout)
   new MutationObserver(() => {
     if (desktopEditor !== isDesktopEditor()) syncLayout()
   }).observe(canvasWrap, { attributes: true, attributeFilter: ["class"] })
-  return { update, viewportCanvas: () => desktopActive ? viewport : undefined }
+  return { update, viewportCanvas: () => editorActive ? viewport : undefined }
 }
 
 /** 新建图片：.ui-dialog，校验错误显示在框内，通过前不关闭。 */

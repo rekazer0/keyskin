@@ -162,6 +162,13 @@ function reloadPalmSlices(selected = appState.selectedTileIndex, path = appState
   updateDirty()
 }
 
+function selectMobileAtlasSlice(index: number): void {
+  appState.selectedTileIndex = index
+  populateTileInspector()
+  drawAtlas()
+  syncAtlasWorkspace()
+}
+
 export function syncAtlasWorkspace(): void {
   if (appState.resourceConfigActive && appState.resourceInspectorMode === "image" && appState.inspectorTab === "properties" && appState.selectedResourcePath) sourceName.textContent = appState.selectedResourcePath
   const slice = appState.movingTile ?? appState.slices.find(item => item.index === appState.selectedTileIndex)
@@ -175,6 +182,7 @@ export function syncAtlasWorkspace(): void {
     width: workspaceImage.naturalWidth,
     height: workspaceImage.naturalHeight,
     slices: appState.slices, selected: slice, editable: isEditing(), bda: appState.archive?.format === "bda",
+    selectMobileSlice: appState.bdaSliceReturn ? undefined : selectMobileAtlasSlice,
     guides: appState.guidesVisible, dirty: Boolean(appState.atlasEdits?.size),
   })
 }

@@ -27,6 +27,13 @@ try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   await page.locator('#mobile-welcome-new').waitFor()
   assert.equal(await page.locator('.mobile-welcome-hero h1').textContent(), '键设')
+  for (const selector of ['.titlebar', '.preview-toolbar', '.preview-zoom-control', '#layout-overview-toggle']) {
+    assert.equal(await page.locator(`${selector}:visible`).count(), 0, `${selector} must not appear on the mobile home`)
+  }
+  const canvas = await page.locator('.canvas-wrap.empty').boundingBox()
+  const welcome = await page.locator('.canvas-wrap.empty .empty-state').boundingBox()
+  assert.deepEqual(welcome, canvas, 'the welcome view fills the canvas without a scroll gutter')
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth && document.documentElement.scrollHeight === innerHeight))
   assert.equal(await page.locator('.mobile-welcome-empty h2').textContent(), '网页版不记录最近打开的皮肤')
   assert.equal(await page.locator('.mobile-welcome-empty').isVisible(), true)
   assert.equal(await page.locator('.welcome-main .template-card:visible').count(), 0)

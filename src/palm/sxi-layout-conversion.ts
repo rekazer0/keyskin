@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 import { conversionKeyText, conversionLetterForeground, scaledConversionRect, type ConversionMatch, type ConversionLayout, type LayoutRect } from "../layout-conversion.ts"
 import { actionValue, asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 import { encodeSkinJson, parseSkinJson, setSxiFragment, sxiAddressPointer } from "./sxi-json.ts"
@@ -10,7 +11,7 @@ const jsonRect = (rect: LayoutRect): Json => [rect.slice(0, 2), rect.slice(2)]
 export function convertSxiLayout(text: string, current: ConversionLayout, template: ConversionLayout, matches: ConversionMatch[], listSource?: ConversionLayout): string {
   const skin = parseSkinJson(text)
   const textStyle = sxiConversionText(skin, current)
-  const board = structuredClone(current.board!)
+  const board = cloneJson(current.board!)
   const offsets: JsonObject = { ...asObject(board.offset) }
   const fixes: JsonObject = { ...asObject(board.key_fix) }
   const ids = new Map<string, string>()
@@ -31,7 +32,7 @@ export function convertSxiLayout(text: string, current: ConversionLayout, templa
     const table = field === "offset" ? { ...asObject(layout.global?.offset), ...asObject(layout.board?.offset) } : asObject(layout.board?.key_fix) ?? {}
     const value = table[String(id)]
     if (value !== undefined) {
-      const copy = structuredClone(value)
+      const copy = cloneJson(value)
       if (field === "key_fix") remap(layout, asObject(copy)!)
       ;(field === "offset" ? offsets : fixes)[allocated] = copy
     }
@@ -45,7 +46,7 @@ export function convertSxiLayout(text: string, current: ConversionLayout, templa
   board.keys = matches.map((match, index) => {
     const { layout, key, letters, glyph, fallback } = match
     const keys = layout.board!.keys as Json[]
-    const copy = structuredClone(asObject(keys[Number(key.section)])!)
+    const copy = cloneJson(asObject(keys[Number(key.section)])!)
     if (!fallback && !letters && glyph === undefined) remap(layout, copy)
     copy.id = String(index + 1)
     const geometry = template.keys[index]
@@ -92,7 +93,7 @@ export function convertSxiLayout(text: string, current: ConversionLayout, templa
   })
   const list = template.list
   const source = listSource ?? current
-  const ownList = structuredClone(asObject(source.board?.list) ?? asObject(source.global?.list) ?? {})
+  const ownList = cloneJson(asObject(source.board?.list) ?? asObject(source.global?.list) ?? {})
   remap(source, ownList)
   ownList.count = list?.count ?? 0
   if (list) {

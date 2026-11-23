@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 // Android NinePatchDrawable keeps atlas borders in device pixels; bake them at the layout's scale.
 import { decodePng, encodePng, MAX_PIXELS, nineSliceImage, type RgbaImage } from "../ssf/ssf-png.ts"
 import { fingerprint } from "../ssf/ssf-cache.ts"
@@ -92,7 +93,7 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
       const { id: _id, ...appearance } = style
       const key = `${JSON.stringify(appearance)}:${width}:${height}:${remap}`
       if (variants.has(key)) { base.base_b = variants.get(key); return }
-      const copy = structuredClone(style)
+      const copy = cloneJson(style)
       const outputImages = asObject(copy.s_2)!
       if (remap) outputImages.normal = images.hl
       let changed = remap
@@ -163,7 +164,7 @@ export function* bakeBackgroundsSteps(theme: JsonObject, entries: Resource[], re
         for (let at = 1; at < tips.length; at += 2) {
           const fix = asObject(fixes[String(tips[at])])
           if (asObject(fix?.b)?.base_b === undefined) continue
-          const copy = structuredClone(fix!)
+          const copy = cloneJson(fix!)
           yield* replace(asObject(copy.b), width, height)
           if (asObject(copy.b)?.base_b === asObject(fix?.b)?.base_b) continue
           fixes[String(nextFix)] = copy

@@ -646,5 +646,4 @@ export const sourceStyleProxy = document.createElement("input")
 export const welcomeScroller = document.querySelector<HTMLElement>(".welcome-main")
 
 export const mobileInspectorResize = $("#mobile-inspector-resize") as HTMLButtonElement
-export const mobilePropertyTabs = $("#mobile-property-tabs")
 export const mobileSkinThemeLabel = $("#mobile-skin-theme-label")

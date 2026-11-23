@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 import { openMobileMotionPicker } from "./mobile-motion-picker"
 import { appState } from "./state"
 import { bdaStyleRef, bdaStyleID } from "../bda.ts"
@@ -138,7 +139,7 @@ export function duplicateStyle(styleID: string): string | undefined {
   if (!canAddStyle() || !isEditing() || !availableStyleIDs().includes(styleID)) return
   let id: string | undefined
   if (appState.archive?.format === "sxi") editSxi((skin) => {
-    const model = structuredClone(palmStyle(styleID, skin) ?? {}) as JsonObject
+    const model = cloneJson(palmStyle(styleID, skin) ?? {}) as JsonObject
     delete model.id
     id = addPalmStyle(skin, palmTheme(), model)
   })
@@ -282,7 +283,7 @@ export function createImageStyleReference(target: HTMLInputElement, currentID: s
     id = bdaStyleID(added.ref)
   } else if (appState.archive?.format === "sxi") {
     editSxi(skin => {
-      const model = structuredClone(palmStyle(currentID, skin) ?? {}) as JsonObject
+      const model = cloneJson(palmStyle(currentID, skin) ?? {}) as JsonObject
       delete model.id
       model.s_2 = { ...asObject(model.s_2), [property === "HL_IMG" ? "hl" : "normal"]: value }
       id = addPalmStyle(skin, palmTheme(), model)

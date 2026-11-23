@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 // The open Palm board's keys on the canvas, edited in skin.json: their rects for the layout tools
 // (move, align, distribute, gaps, swap, merge), copies and deletions. Each edit is one undo step.
 
@@ -71,7 +72,7 @@ export function copyPalmKeys(sections: readonly string[]): string[] {
       const key = keyOf(keys, section)
       if (!key) continue
       while (ids.has(String(next))) next += 1
-      const copy = structuredClone(key)
+      const copy = cloneJson(key)
       copy.id = typeof key.id === "number" ? next : String(next)
       ids.add(String(next))
       for (const field of ["rect", "hit_rect"]) {

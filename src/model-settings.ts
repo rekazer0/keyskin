@@ -1,3 +1,4 @@
+import { cloneJson } from "./clone-json.ts"
 import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai"
 import { ANTHROPIC_MODELS } from "@earendil-works/pi-ai/providers/anthropic.models"
 import { OPENAI_CODEX_MODELS } from "@earendil-works/pi-ai/providers/openai-codex.models"
@@ -224,7 +225,6 @@ export function initializeModelSettings(section: HTMLElement, options: {
   })
   imageProvider.replaceChildren(new Option("不使用", ""), ...IMAGE_MODEL_PRESETS.map((preset) => new Option(preset.label, preset.id)))
 
-  const clone = <T extends object>(items: T[]) => structuredClone(items)
   const notify = () => section.dispatchEvent(new Event("change", { bubbles: true }))
   const setStatus = (message: string, state: Status = "idle") => {
     statusText.textContent = message
@@ -684,9 +684,9 @@ export function initializeModelSettings(section: HTMLElement, options: {
   async function persist(models: ModelConfiguration[]): Promise<void> {
     const state = await invoke<ModelConfigurationState>("save_model_configuration", { configurations: models })
     for (const key of LEGACY_KEYS) localStorage.removeItem(key)
-    saved = clone(models)
+    saved = cloneJson(models)
     pathText.textContent = pathText.title = state.path
-    options.onSaved(clone(saved))
+    options.onSaved(cloneJson(saved))
   }
 
   async function load(): Promise<void> {
@@ -717,10 +717,10 @@ export function initializeModelSettings(section: HTMLElement, options: {
         }
       }
       draft = groupModelConfigurations(chatModels(saved))
-      imageDraft = structuredClone(savedImage())
+      imageDraft = cloneJson(savedImage())
       active = draft.length ? 0 : -1
       render()
-      options.onSaved(clone(saved))
+      options.onSaved(cloneJson(saved))
       if (statusText.dataset.state !== "success") setStatus(saved.length ? "" : "尚未配置模型")
     } catch (error) {
       loadError = `读取配置失败：${String(error)}`
@@ -732,7 +732,7 @@ export function initializeModelSettings(section: HTMLElement, options: {
   return {
     begin(): void {
       draft = groupModelConfigurations(chatModels(saved))
-      imageDraft = structuredClone(savedImage())
+      imageDraft = cloneJson(savedImage())
       apiKey.type = imageApiKey.type = "password"
       syncKeyToggle(toggleKey, apiKey)
       syncKeyToggle(toggleImageKey, imageApiKey)

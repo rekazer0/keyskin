@@ -296,7 +296,7 @@ export function selectResourceImage(path: string): void {
   tileModeButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.tileMode === appState.tileMode)))
   showImage(path)
   loadTiles(path)
-  if (appState.slices.length && (document.body.classList.contains("resource-workspace") || appState.slices.length === 1 && matchMedia("(max-width: 760px) and (orientation: portrait)").matches)) {
+  if (appState.slices.length && (document.body.classList.contains("resource-workspace") || mobilePortraitQuery.matches)) {
     appState.selectedTileIndex = appState.slices[0].index
     populateTileInspector()
     drawAtlas()
@@ -632,6 +632,13 @@ resourceGallery.addEventListener("resource-selection-change", () => {
   else clearImageBrowser()
 })
 
+function focusSelectedResourceCard(): void {
+  const path = appState.selectedResourceGalleryPath
+  if (!path) return
+  selectGalleryItem(path)
+  resourceGallery.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`)?.focus({ preventScroll: true })
+}
+
 export function showResourceList(): void {
   resourceListView.hidden = false
   resourceDetail.hidden = true
@@ -639,9 +646,11 @@ export function showResourceList(): void {
   if (appState.resourceInspectorMode === "style") {
     appState.selectedStyleID = ""
     renderResourceInspector()
+    if (mobilePortraitQuery.matches) focusSelectedResourceCard()
     return
   }
   setDrawingTile(false)
+  const restoreFocus = mobilePortraitQuery.matches && appState.resourceInspectorMode === "image" && Boolean(appState.selectedResourcePath)
   appState.selectedResourcePath = ""
   hideImageWorkspace()
   appState.movingTile = undefined
@@ -650,6 +659,7 @@ export function showResourceList(): void {
   sourceName.textContent = appState.selectedPath
   populateTileInspector()
   syncAtlasWorkspace()
+  if (restoreFocus) focusSelectedResourceCard()
   if (appState.resourceInspectorMode === "image" && browsingResources()) {
     if (appState.selectedResourceGalleryPath) showImageBrowser(appState.selectedResourceGalleryPath)
     else clearImageBrowser()

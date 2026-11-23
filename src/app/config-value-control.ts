@@ -1,6 +1,6 @@
 import { element } from "../dom-element.ts"
 import { baiduConfigControl, baiduConfigSumParts, baiduConfigTokens } from "../baidu-config-controls.ts"
-import { fieldCaption, fieldControl, wireNumberSlider, type FieldSpec } from "./property-rows"
+import { fieldCaption, fieldControl, type FieldSpec } from "./property-rows"
 
 type Config = NonNullable<ReturnType<typeof baiduConfigControl>>
 
@@ -90,7 +90,6 @@ export function syncSkinConfigControl(input: HTMLInputElement): void {
   const previous = input.closest<HTMLElement>("[data-config-control]")
   if (previous) { previous.before(input); previous.remove() }
   input.type = "text"
-  if (input.hasAttribute("data-number-slider")) input.previousElementSibling?.toggleAttribute("hidden", true)
   const key = input.dataset.skinField ?? ""
   const label = input.parentElement?.querySelector("span")?.textContent?.trim() ?? key
   const row = input.parentElement
@@ -103,7 +102,5 @@ export function syncSkinConfigControl(input: HTMLInputElement): void {
     input.min = "0"
     input.step = "1"
     input.setAttribute("aria-label", label)
-    if (!input.hasAttribute("data-number-slider")) wireNumberSlider(input)
-    else input.previousElementSibling?.toggleAttribute("hidden", false)
   }
 }

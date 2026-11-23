@@ -4,7 +4,7 @@ import { appState } from "./state"
 import { resourceDetail, resourceGallery, resourceSelectionActions } from "./dom"
 import { updateResourceActionButtons } from "./resource-inspector"
 import { startResourceDrag } from "./resource-transfer"
-import { releaseKeySound } from "./canvas-interaction"
+import { mobilePortraitQuery, releaseKeySound } from "./canvas-interaction"
 
 function resourceCards(): HTMLElement[] {
   return [...resourceGallery.querySelectorAll<HTMLElement>('.resource-item[role="option"]')]
@@ -96,7 +96,12 @@ export function bindResourceCard(card: HTMLElement, path: string, open: () => vo
   card.tabIndex = path === (appState.selectedResourceGalleryPath || resourceWindow?.paths[0]) ? 0 : -1
   if (appState.selectedResourceGalleryPaths.includes(path)) card.setAttribute("aria-selected", "true")
   card.dataset.path = path
-  card.addEventListener("click", event => chooseResourceCard(card, event))
+  card.addEventListener("click", event => {
+    chooseResourceCard(card, event)
+    if (mobilePortraitQuery.matches && appState.resourceInspectorMode !== "sound" && event.detail
+      && !event.metaKey && !event.ctrlKey && !event.shiftKey
+      && !(event.target instanceof Element && event.target.closest("button, input, audio") && event.target !== card)) open()
+  })
   if (preview) card.addEventListener("resource-preview", preview)
   card.addEventListener("dblclick", event => {
     if (event.target instanceof Element && event.target.closest("button, input, audio") && event.target !== card) return

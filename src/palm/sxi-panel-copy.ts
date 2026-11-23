@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 // 面板复制 for `.sxi`: a part of skin.json is copied by its address ("skin.json/default/port_layout/b/
 // full26Pinyin"; an address folder such as "skin.json/default/port_layout/" is the whole part). A theme or
 // orientation folder of the package (`light/skin/`, `light/skin/port/`) is that theme or orientation:
@@ -127,7 +128,7 @@ export function applySxiCopies(text: string, parts: readonly SxiCopy[], xRatio =
   const skin = parseSkinJson(text)
   const values = parts.map(({ source }) => sxiFragment(skin, source))
   for (const [index, { source, target }] of parts.entries()) {
-    let value = values[index] === undefined ? undefined : structuredClone(values[index])
+    let value = values[index] === undefined ? undefined : cloneJson(values[index])
     if (value !== undefined && (xRatio !== 1 || yRatio !== 1)) value = scaleSxiPart(value, xRatio, yRatio)
     if (value !== undefined && folders) value = withMovedResources(value, source, folders)
     setPart(skin, target, value)

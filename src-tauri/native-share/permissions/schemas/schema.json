@@ -307,18 +307,6 @@
           "markdownDescription": "Denies the applySourceChanges command without any pre-configured scope."
         },
         {
-          "description": "Enables the chooseProjectTemplate command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-chooseProjectTemplate",
-          "markdownDescription": "Enables the chooseProjectTemplate command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the chooseProjectTemplate command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-chooseProjectTemplate",
-          "markdownDescription": "Denies the chooseProjectTemplate command without any pre-configured scope."
-        },
-        {
           "description": "Enables the createSourceWorkspace command without any pre-configured scope.",
           "type": "string",
           "const": "allow-createSourceWorkspace",

@@ -1,3 +1,4 @@
+import { cloneJson } from "../clone-json.ts"
 import { confirmDeletion } from "./ask"
 // Palm skin.json `ss_2` in the shared animation inspector (DESIGN.md §10「动画资源」): the list of
 // animations in the current view, then the selected one's player, parameter sections, dedicated
@@ -547,7 +548,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
       run: (kind) => editSxi((current) => appendAnimation(current, pointer, (id) => newAnimation(kind, id))),
     },
     duplicate: () => entry && editSxi((current) => appendAnimation(current, pointer, (next) => {
-      const wrap = structuredClone(asObject(sxiValue(current, [...pointer, entry.id])) ?? {})
+      const wrap = cloneJson(asObject(sxiValue(current, [...pointer, entry.id])) ?? {})
       wrap.id = `ANIM${next}`
       return wrap
     })),

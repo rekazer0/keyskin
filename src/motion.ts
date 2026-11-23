@@ -103,10 +103,17 @@ export function closeDialog(dialog: HTMLDialogElement, value?: string): Promise<
   const fade = { ...options, fill: "forwards" as const }
   const travel = getComputedStyle(dialog).getPropertyValue("--_dialog-travel").trim()
   // 仅淡出的弹窗不声明 transform，避免把内部的固定定位元素移离视口坐标。
-  const animations = [
-    dialog.animate([{ offset: 1, opacity: 0, ...(travel && travel !== "none" ? { transform: travel } : {}) }], fade),
-    dialog.animate([{ offset: 1, opacity: 0 }], { ...fade, pseudoElement: "::backdrop" }),
-  ]
+  const animations: Animation[] = []
+  try {
+    animations.push(dialog.animate([{ offset: 1, opacity: 0, ...(travel && travel !== "none" ? { transform: travel } : {}) }], fade))
+    animations.push(dialog.animate([{ offset: 1, opacity: 0 }], { ...fade, pseudoElement: "::backdrop" }))
+  } catch (error) {
+    // WebView 74 rejects partial keyframes. Never block a dialog handoff for an animation.
+    if (!(error instanceof DOMException)) throw error
+    for (const animation of animations) animation.cancel()
+    dialog.close(value)
+    return Promise.resolve()
+  }
   const finished = new Promise<void>(resolve => {
     // 窗口隐藏、节点被移除或外部取消动画，也必须结束关闭流程。
     const finish = () => {

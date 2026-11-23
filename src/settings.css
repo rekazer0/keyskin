@@ -287,8 +287,8 @@
   #settings-workspace [data-accent="purple"] { background: var(--accent-preset-purple); }
   #settings-workspace [data-accent="coral"] { background: var(--accent-preset-coral); }
   #settings-workspace [data-accent="slate"] { background: var(--accent-preset-slate); }
-  #settings-workspace .settings-row:has(.mobile-accent-presets) > .settings-color { display: none; }
-  #settings-workspace [data-settings-panel="appearance"] > :has(#settings-material-title), #settings-workspace [data-settings-panel="appearance"] > :has(#settings-chrome-title) { display: none; }
+  #settings-workspace .mobile-settings-accent-row > .settings-color { display: none; }
+  #settings-workspace [data-settings-panel="appearance"] > :is([aria-labelledby="settings-material-title"], [aria-labelledby="settings-chrome-title"]) { display: none; }
 }
 
 @media (max-width: 760px) and (orientation: portrait) {
@@ -313,7 +313,7 @@
   #settings-workspace .mobile-settings-rows > :last-child { border-bottom: 0; }
   .mobile-settings-rows > .ui-list-item > :first-child { flex: 1; }
   .mobile-settings-rows > .ui-list-item > small { color: var(--secondary); font-size: var(--font-size-xs); }
-  #settings-workspace .mobile-settings-rows .settings-row:has(.mobile-accent-presets) { gap: var(--space-xs); }
+  #settings-workspace .mobile-settings-rows .mobile-settings-accent-row { gap: var(--space-xs); }
   #settings-workspace .mobile-settings-rows .settings-row:has(.settings-range) { flex-wrap: wrap; }
   #settings-workspace .mobile-settings-rows .settings-range { flex-basis: 100%; width: 100%; }
   #settings-workspace .mobile-settings-rows .settings-range input { flex: 1; min-width: 0; height: var(--mobile-control-height); }

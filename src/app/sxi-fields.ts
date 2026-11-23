@@ -221,7 +221,6 @@ function partsRow(block: SxiBlock, path: string[], label: string, affixes: strin
   row.querySelectorAll<HTMLInputElement>('input:not([type="range"])').forEach((input, index) => {
     if (mixedParts[index]) {
       input.placeholder = "混合"
-      input.dispatchEvent(new Event("inspector-slider-sync"))
     }
   })
   return row
@@ -269,7 +268,6 @@ function rectRows(block: SxiBlock, path: string[], labels: [string, string], val
       for (const input of row.querySelectorAll<HTMLInputElement>('input:not([type="range"])')) {
         input.value = ""
         input.placeholder = "同按键"
-        input.dispatchEvent(new Event("inspector-slider-sync"))
       }
     }
     return row

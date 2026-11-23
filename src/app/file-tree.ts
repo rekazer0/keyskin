@@ -457,7 +457,7 @@ export function renderFiles(): void {
     }
     if (layoutGroups.includes(group)) decorateLayoutGroup(body)
   }
-  const layoutCount = overview.querySelectorAll('.nav-group:not([data-overview-group="键盘组件"]) :is(.nav-layout, .nav-component)').length
+  const layoutCount = overview.querySelectorAll('.nav-group:not([data-overview-group="键盘组件"]) .nav-layout, .nav-group:not([data-overview-group="键盘组件"]) .nav-component').length
   sidebarLayoutCount.textContent = `共 ${layoutCount} 个布局`
   const sourceFiles = document.createElement("div")
   sourceFiles.className = "raw-files"

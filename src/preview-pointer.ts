@@ -65,7 +65,7 @@ export function pointerDown(self: Preview, event: PointerEvent): void {
     if (self.mode === "edit") {
       self.selected.clear()
       self.mobileMultiSelect = false
-      self.onSelect([])
+      notifySelection(self, true)
       void self.draw()
     }
     return
@@ -213,7 +213,7 @@ export function pointerUp(self: Preview, event: PointerEvent): void {
     if (!touch.key) {
       self.selected.clear()
       self.mobileMultiSelect = false
-      notifySelection(self)
+      notifySelection(self, true)
       void self.draw()
       return
     }
@@ -291,9 +291,9 @@ function playPressedKey(self: Preview, key: PreviewItem): void {
     : key)
 }
 
-function notifySelection(self: Preview): void {
+function notifySelection(self: Preview, background = false): void {
   if (self.animationView) self.onAnimationKeys([...self.selected])
-  else self.onSelect([...self.selected])
+  else self.onSelect([...self.selected], background)
 }
 
 function holdSelection(self: Preview, key: PreviewItem): void {

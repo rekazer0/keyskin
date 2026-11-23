@@ -7,9 +7,11 @@ import { layoutLabel } from "./file-tree"
 export function syncMobileKeyPreview(pressed = false): void {
   const layoutName = appState.layoutPath && /\.ini$/i.test(appState.layoutPath)
     ? layoutLabel(appState.layoutPath.split("/").pop()!) : layout.selectedOptions[0]?.textContent ?? "画布"
-  if (!appState.selectedKeySections.length && appState.selectedPath === appState.layoutPath && /\.ini$/i.test(appState.layoutPath)) {
-    selectedKeyName.textContent = layoutLabel(appState.layoutPath.split("/").pop()!)
-    selectedKeyContext.textContent = "轻点上方按键，开始编辑"
+  if (!appState.selectedKeySections.length && appState.selectedPath === appState.layoutPath && appState.layoutPath && !appState.selectedCandidate && !appState.selectedToolbarSections.length) {
+    selectedKeyName.textContent = layoutName
+    const { width, height } = preview.logicalSize()
+    selectedKeyContext.textContent = mobilePortraitQuery.matches && appState.archive
+      ? `${width} × ${height} · ${appState.archive.format.toUpperCase()} · 点按选择按键` : "轻点上方按键，开始编辑"
   }
   if (appState.animationDesignMode !== "all") {
     const title = document.querySelector<HTMLElement>("#document-fields")?.dataset.mobileAnimationLabel
@@ -21,10 +23,9 @@ export function syncMobileKeyPreview(pressed = false): void {
     || !key || appState.selectedPath !== appState.layoutPath
   if (mobileKeyPreview.hidden || !key) return
   selectedKeyContext.textContent = `${layoutName} · ${section}`
-  const label = key.show || key.center
-  if (/^[\p{L}\p{N}]$/u.test(label)) selectedKeyName.textContent = `按键 ${label}`
+  const label = key.show.trim() || (/^[\p{L}\p{N}]$/u.test(key.center) ? key.center : "")
+  if (label) selectedKeyName.textContent = `按键 ${label}`
   if (pressed) preview.flashPress(key)
-  else preview.cancelPointerInteraction()
   void preview.whenDrawn().then(() => {
     if (appState.selectedKeySections.length !== 1 || appState.selectedKeySections[0] !== section || mobileKeyPreview.hidden || !preview.keys.includes(key)) return
     const { rect } = key

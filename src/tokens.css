@@ -145,8 +145,10 @@
   background: transparent;
   --browser-occlusion-top: 0px;
   --browser-occlusion-bottom: 0px;
-  --safe-area-top: max(env(safe-area-inset-top, 0px), var(--browser-occlusion-top));
-  --safe-area-bottom: max(env(safe-area-inset-bottom, 0px), var(--browser-occlusion-bottom));
+  --safe-area-top: max(env(safe-area-inset-top, 0px), var(--browser-occlusion-top), var(--android-overlap-top, 0px));
+  --safe-area-bottom: max(env(safe-area-inset-bottom, 0px), var(--browser-occlusion-bottom), var(--android-overlap-bottom, 0px));
+  --safe-area-left: max(env(safe-area-inset-left, 0px), var(--android-overlap-left, 0px));
+  --safe-area-right: max(env(safe-area-inset-right, 0px), var(--android-overlap-right, 0px));
   --titlebar-height: calc(54px + var(--safe-area-top));
   /* 夸克等 Chrome 100 内核不认 dvh，整条声明会被丢弃，先给 vh 兜底 */
   --viewport-height: 100vh;
@@ -254,6 +256,8 @@
 
 /* Windows 顶栏上方留一条空白，高度随之加高 */
 :root.windows {
+  --safe-area-left: max(env(safe-area-inset-left, 0px), var(--android-overlap-left, 0px));
+  --safe-area-right: max(env(safe-area-inset-right, 0px), var(--android-overlap-right, 0px));
   --titlebar-height: calc(54px + var(--space-sm) + var(--safe-area-top));
 }
 
@@ -267,8 +271,37 @@
   /* 手机：控件抬到手指尺寸（44 触控目标）。与桌面同名同档，不另起一套控件 */
   :root { --tool-tile-min-width: 76px; --control-height-sm: 28px; --control-height-md: 36px; --control-height-lg: 44px; --mobile-workspace-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-navigation-height)); --mobile-inspector-split: min(calc(var(--mobile-workspace-height) / 2), 324px); --mobile-page-gutter: 12px; --mobile-preview-height: var(--mobile-inspector-split); --style-card-width: 128px; --style-reference-height: 72px; --style-reference-meta-width: 48px; }
   :root { --ai-chat-input-min-height: var(--control-height-lg); --ai-chat-input-max-height: 30vh; }
-  :root:has(#resource-inspector:not([hidden]) #resource-list-view:not([hidden])) { --mobile-preview-height: 0px; }
-  :root[data-keyboard-open="true"]:has(#mobile-key-preview:not([hidden])) { --mobile-preview-height: 148px; }
+  :root[data-mobile-resource-list="true"] { --mobile-preview-height: 0px; }
+  :root[data-mobile-dock="true"] {
+    --mobile-dock-grip-inset: var(--space-md);
+    --_mobile-dock-peek: calc(var(--space-xl) + var(--mobile-control-height) + var(--space-xs));
+    --_mobile-dock-max-canvas: max(0px, calc(var(--mobile-workspace-height) - var(--_mobile-dock-peek)));
+    --_mobile-dock-min-canvas: min(calc(var(--mobile-control-height) * 2), var(--_mobile-dock-max-canvas));
+    --_mobile-dock-target: var(--mobile-inspector-split);
+    --mobile-preview-height: clamp(var(--_mobile-dock-min-canvas), var(--_mobile-dock-drag, var(--_mobile-dock-target)), var(--_mobile-dock-max-canvas));
+  }
+  :root[data-mobile-dock="true"][data-mobile-panel="expanded"] { --_mobile-dock-target: calc(var(--mobile-workspace-height) * .32); }
+  :root[data-mobile-dock="true"][data-mobile-panel="peek"] { --_mobile-dock-target: var(--_mobile-dock-max-canvas); }
+}
+
+/* Chromium 74 支持 calc，但不支持 min/max/clamp。 */
+@media (max-width: 760px), (max-width: 950px) and (max-height: 600px) and (orientation: landscape) {
+  @supports not (width: max(1px, 2px)) {
+    :root {
+      --safe-area-top: var(--android-overlap-top, var(--browser-occlusion-top, 0px));
+      --safe-area-bottom: var(--android-overlap-bottom, var(--browser-occlusion-bottom, 0px));
+      --safe-area-left: var(--android-overlap-left, env(safe-area-inset-left, 0px));
+      --safe-area-right: var(--android-overlap-right, env(safe-area-inset-right, 0px));
+      --mobile-inspector-split: calc(var(--mobile-workspace-height) / 2);
+      --mobile-simulation-height: 34vh;
+    }
+    :root[data-mobile-dock="true"] {
+      --mobile-dock-grip-inset: var(--space-xl);
+      --_mobile-dock-max-canvas: calc(var(--mobile-workspace-height) - var(--_mobile-dock-peek));
+      --_mobile-dock-min-canvas: calc(var(--mobile-control-height) * 2);
+      --mobile-preview-height: var(--_mobile-dock-drag, var(--_mobile-dock-target));
+    }
+  }
 }
 
 :root[data-app-theme="dark"] {
@@ -448,7 +481,7 @@
     --mobile-picker-height: 60%;
     --mobile-motion-sheet-height: 540px;
     --mobile-navigation-height: calc(var(--mobile-primary-height) + var(--space-md) * 2 + var(--safe-area-bottom));
-    --mobile-navigation-surface: color-mix(in srgb, var(--panel) 76%, transparent);
+    --mobile-navigation-surface: var(--panel);
     --mobile-navigation-filter: blur(20px);
     --mobile-document-title-width: 180px;
     --mobile-control-height: 44px;
@@ -493,6 +526,16 @@
     --material-control: #242932;
     --canvas: #0B0C0E;
     --canvas-surface: #0B0C0E;
+  }
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  @supports (color: color-mix(in srgb, currentColor, transparent)) {
+    :root { --mobile-navigation-surface: color-mix(in srgb, var(--panel) 76%, transparent); }
+  }
+  :root[data-keyboard-open="true"] { --mobile-navigation-height: 0px; --viewport-height: var(--keyboard-viewport-height, 100vh); }
+  @supports not (background: color-mix(in srgb, currentColor, transparent)) {
+    :root { --mobile-navigation-surface: var(--panel); --mobile-navigation-filter: none; --focus-ring: 0 0 0 3px var(--accent); }
   }
 }
 

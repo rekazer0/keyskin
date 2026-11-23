@@ -27,7 +27,7 @@ export type PreviewEvent = {
 export class Preview {
   readonly canvas: HTMLCanvasElement
   readonly onEvent: (event: PreviewEvent) => void
-  readonly onSelect: (sections: string[]) => void
+  readonly onSelect: (sections: string[], background?: boolean) => void
   readonly onMove: (sections: string[], deltaX: number, deltaY: number) => void
   readonly toolbarSlots: boolean
   readonly hintCanvas?: HTMLCanvasElement
@@ -105,7 +105,6 @@ export class Preview {
    */
   private draftSections = new Set<string>()
   private pressed?: { section: string; timeout: number }
-  private appearancePressed?: string
   mobileMultiSelect = false
   selectionAnchor?: string
   guides = false
@@ -165,7 +164,7 @@ export class Preview {
   constructor(
     canvas: HTMLCanvasElement,
     onEvent: (event: PreviewEvent) => void,
-    onSelect: (sections: string[]) => void,
+    onSelect: Preview["onSelect"],
     toolbarSlots = false,
     onMove: (sections: string[], deltaX: number, deltaY: number) => void = () => {},
     hintCanvas?: HTMLCanvasElement,
@@ -305,17 +304,11 @@ export class Preview {
   }
 
   keyPressed(key: PreviewItem): boolean {
-    if (this.appearancePressed && key.sections.includes(this.appearancePressed)) return true
     if (!this.pressed) return false
     return this.pressed.section === key.section ||
       key.sections.includes(this.pressed.section)
   }
 
-  setAppearanceState(section?: string): void {
-    if (this.appearancePressed === section) return
-    this.appearancePressed = section
-    void this.draw()
-  }
   setDraftVisual(draft?: Preview["draftVisual"]): void {
     if (!draft && !this.draftVisual) return
     this.draftVisual = draft

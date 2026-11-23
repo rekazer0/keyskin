@@ -1,12 +1,11 @@
-import { confirmDeletion } from "../ask"
+import { ask, bindDialog, confirmDeletion } from "../ask"
 import { renameResourceImage } from "../image-rename"
 import { ssfPackage, ssfTheme } from "../ssf-documents"
 import { settingsWorkspace, aiDesignChat, pickerDialog, pickerFrame, theme, orientation, $, inspectorResizeHandle, resourceGallery, resourceUploadButton, resourceUploadInput, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceDetail, resourceBackButton, device, clearSimulationButton, simulatedOutput, toolbarMenus, windowMaterial, mode } from "../dom"
-import { bindDialog } from "../ask.ts"
 import { closeDialog } from "../../motion.ts"
 import { applyImageSliceSelection, resourcePickerPayload, selectImageResource, emitPickerView, emitToPicker, onPickerEvent } from "../image-pickers"
 import { appState } from "../state"
-import { isTauri, isAndroidTauri, playSoundPath, syncDeviceControlIcon, clearSimulatedOutput } from "../canvas-interaction"
+import { isTauri, isAndroidTauri, mobilePortraitQuery, playSoundPath, syncDeviceControlIcon, clearSimulatedOutput } from "../canvas-interaction"
 import { listen } from "@tauri-apps/api/event"
 import { emitStyleLibrary, emitStyleLibraryPreview, emitStyleLibraryImage, applyStyleLibrarySelection, editStyleLibrarySelection, addStyleFromLibrary, duplicateStyle } from "../style-picker"
 import { canvasEditable, isEditing, updateDirty, commitBatch, redo, undo, hasUnsavedChanges, prepareDocumentReplacement } from "../edit-history"
@@ -35,15 +34,29 @@ import { invoke } from "@tauri-apps/api/core"
 import { onBackButtonPress } from "@tauri-apps/api/app"
 import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { setSourceDropTarget, sourceDropFolder, commitSourceUploads } from "../source-files"
-import { updateSourceHighlight, updateInspectorView } from "../source-panel"
+import { closeSourceFind, updateSourceHighlight, updateInspectorView } from "../source-panel"
 import { initInspectorShell } from "../../inspector-shell.ts"
 import { resourceWindow } from "../resource-grid-window"
 import { bindListboxKeys } from "../../dom-element.ts"
 import { startOnboarding, startOnboardingOnFirstLaunch } from "../onboarding"
+import { resizeMobileInspector } from "../mobile-inspector"
+import { closeLayoutOverview } from "../layout-overview"
 import { clearMobilePickerPreview, previewMobilePickerSelection } from "../mobile-picker-preview"
+
+const DISCLAIMER_SHOWN_KEY = "keyskin-disclaimer-shown"
+
+async function showStartupDisclaimer(): Promise<void> {
+  try { if (localStorage.getItem(DISCLAIMER_SHOWN_KEY)) return } catch {}
+  const title = $("#about-disclaimer-title")
+  const detail = [...title.parentElement!.querySelectorAll("p")].map((paragraph) => paragraph.textContent).join("\n\n")
+  const closed = ask({ title: title.textContent!, detail, actions: [{ value: "close", label: "我知道了", variant: "primary" }] })
+  try { localStorage.setItem(DISCLAIMER_SHOWN_KEY, "1") } catch {}
+  await closed
+}
 
 /** 样式图片资源、面板缩放、模拟输入与启动时的初始状态。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireResourcesAndStartup(): void {
+  const disclaimer = showStartupDisclaimer()
   void onPickerEvent("picker-window-ready", () => {
     appState.pickerFrameReady = true
     void emitPickerView(appState.pickerRequestedView)
@@ -318,16 +331,40 @@ export function wireResourcesAndStartup(): void {
     event.preventDefault()
     event.returnValue = ""
   })
-  // 安卓没有窗口关闭事件，返回键先收起最上层弹窗，再走未保存确认后退出。
+  // 系统返回只退一层；仅在首页退出时询问未保存修改。
   if (isAndroidTauri()) {
+    let backing = false
     void onBackButtonPress(async () => {
-      const dialog = [...document.querySelectorAll<HTMLDialogElement>("dialog[open]")].at(-1)
+      if (backing) return
+      const dialog = document.activeElement?.closest<HTMLDialogElement>("dialog[open]") ?? Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]")).at(-1)
       if (dialog) {
         if (dialog.dispatchEvent(new Event("cancel", { cancelable: true }))) dialog.close()
         return
       }
-      if (!settingsWorkspace.hidden) { settingsWorkspace.dispatchEvent(new Event("settings-request-exit")); return }
-      if (await prepareDocumentReplacement()) void invoke("quit_app")
+      const menu = toolbarMenus.find(menu => menu.open)
+      if (menu) { menu.open = false; return }
+      if (!settingsWorkspace.hidden) {
+        if (mobilePortraitQuery.matches && settingsWorkspace.dataset.mobileSettings === "detail") $(".mobile-settings-back").click()
+        else settingsWorkspace.dispatchEvent(new Event("settings-request-exit"))
+        return
+      }
+      if (mobilePortraitQuery.matches) {
+        const root = document.documentElement
+        if (appState.layoutOverview) { closeLayoutOverview(); return }
+        if (appState.inspectorTab === "source" && appState.sourceFindVisible) { closeSourceFind(); return }
+        if (root.dataset.mobilePage === "resources" && !resourceDetail.hidden) { resourceBackButton.click(); return }
+        if (root.dataset.mobilePage !== "home") {
+          const returningToEditor = root.dataset.mobilePage !== "edit" || appState.inspectorTab === "source"
+          if (returningToEditor) $("#mobile-navigation [data-mobile-page=edit]").click()
+          else if (mode.value === "edit" && root.dataset.mobilePanel !== "peek") resizeMobileInspector(root.dataset.mobilePanel === "expanded" ? 50 : 90)
+          else $("#mobile-navigation [data-mobile-page=home]").click()
+          return
+        }
+      }
+      backing = true
+      try {
+        if (await prepareDocumentReplacement()) await invoke("quit_app")
+      } finally { backing = false }
     })
   }
   if (isTauri()) {
@@ -419,12 +456,14 @@ export function wireResourcesAndStartup(): void {
     })()
     void listen<string[]>("opened", async (event) => {
       const path = event.payload[0]
+      await disclaimer
       if (path && (await prepareDocumentReplacement("open"))) {
         void runFileOperation("打开", () => loadNativePath(path))
       }
     })
     void invoke<string[]>("take_opened_files")
       .then(async (paths) => {
+        await disclaimer
         if (paths[0]) {
           await runFileOperation("打开", () => loadNativePath(paths[0]))
           return
@@ -448,5 +487,5 @@ export function wireResourcesAndStartup(): void {
   initInspectorShell()
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-start-tour]")) button.addEventListener("click", startOnboarding)
   // 电脑版与安卓版首次打开时自动播放使用教程
-  if (isTauri()) requestAnimationFrame(startOnboardingOnFirstLaunch)
+  if (isTauri()) void disclaimer.then(() => requestAnimationFrame(startOnboardingOnFirstLaunch))
 }

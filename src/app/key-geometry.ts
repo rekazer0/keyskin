@@ -1,8 +1,7 @@
 import { element } from "../dom-element.ts"
-import { releaseOnRemove } from "../dom-lifecycle.ts"
 import { isListCell } from "../layout.ts"
 import type { Rect } from "../preview-items.ts"
-import { mobilePortraitQuery, preview } from "./canvas-interaction"
+import { preview } from "./canvas-interaction"
 import { keyLayoutFieldsGroup, quickInspector } from "./dom"
 import { canvasEditable } from "./edit-history"
 import { geometryPreview } from "./geometry-preview"
@@ -18,7 +17,7 @@ export function renderKeyGeometry(hasSelection: boolean, showPadding: boolean, r
   const fields = group.querySelector(".geometry-fields")!
   fields.append(padding)
   padding.hidden = !hasSelection || !showPadding
-  group.querySelectorAll(":scope > :is(.mobile-geometry-detail, .ui-geometry-preview, [data-key-touch])").forEach(node => node.remove())
+  group.querySelectorAll(":scope > .ui-geometry-preview, :scope > [data-key-touch]").forEach(node => node.remove())
   const sections = appState.selectedKeySections
   const keys = hasSelection ? preview.keys.filter(key => sections.includes(key.section)) : []
   const baidu = (appState.archive?.format === "bdi" || appState.archive?.format === "bds") && !sections.some(isListCell)
@@ -31,20 +30,8 @@ export function renderKeyGeometry(hasSelection: boolean, showPadding: boolean, r
     const editable = canvasEditable() && showPadding && editableRects.length === keys.length
     const geometry = geometryPreview(editable ? editableRects : keys.map(key => key.rect), editable
       ? rects => resizeSelectedKeys(rects.map((rect, index) => ({ ...rect, section: editableRects[index].section }))) : undefined)
-    const detail = element("details", "ui-disclosure mobile-geometry-detail")
-    detail.append(Object.assign(element("summary", "ui-button"), { textContent: showPadding ? "内边距与缩放" : "几何预览" }))
-    heading.after(detail, geometry)
-    const sync = () => {
-      const mobile = mobilePortraitQuery.matches
-      if (mobile) detail.append(geometry)
-      else detail.after(geometry)
-      if (showPadding) (mobile ? detail : geometry.querySelector(".ui-geometry-box")!).append(padding)
-      detail.hidden = !mobile
-      detail.open = false
-    }
-    sync()
-    mobilePortraitQuery.addEventListener("change", sync)
-    releaseOnRemove(detail, () => mobilePortraitQuery.removeEventListener("change", sync))
+    heading.after(geometry)
+    if (showPadding) geometry.querySelector(".ui-geometry-box")!.append(padding)
   }
   if (key && appState.layoutDocument) renderTouchRect(key.section, key.rect, Boolean(key.touchRect), refresh)
 }

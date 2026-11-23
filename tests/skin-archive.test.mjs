@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { deflateSync, strToU8, zipSync } from 'fflate'
 import { SkinArchive } from "../src/skin.ts"
 import { readArchiveEntry } from "../src/skin-zip.ts"
+import { AtlasResolver } from "../src/atlas.ts"
+import { encodePng } from "../src/ssf/ssf-png.ts"
 
 const LOCAL_SIGNATURE = 0x04034b50
 const CENTRAL_SIGNATURE = 0x02014b50
@@ -331,6 +333,58 @@ test('sxi thumbnails use the root preview.png over per-appearance demo images', 
     'preview.png': strToU8('sxi-preview'),
   }, { level: 0 })
   assert.equal(await (await archiveDemoImage(bytes)).text(), 'sxi-preview')
+})
+
+test('BDI → BDS preserves the normal, pressed and panel artwork of an out-of-order atlas', async () => {
+  const til = '\uFEFF[GLOBAL]\r\nTILE_NUM=12\r\n[IMG12]\r\nSOURCE_RECT=0,0,1,1\r\n[IMG3]\r\nSOURCE_RECT=1,0,1,1\r\n[IMG1]\r\nSOURCE_RECT=0,1,2,1\r\n'
+  const view = '[PANEL]\nSIZE=2,1\nBACK_STYLE=2\n[KEY1]\nVIEW_RECT=0,0,1,1\nBACK_STYLE=1\nCENTER=a\n'
+  const css = '[STYLE1]\nNM_IMG=atlas,1\nHL_IMG=atlas,2\n[STYLE2]\nNM_IMG=atlas,3\n'
+  const png = encodePng({ width: 2, height: 2, data: new Uint8Array([
+    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 255, 255,
+  ]) })
+  const path = 'light/skin/res/atlas'
+  const source = SkinArchive.open(zipSync({
+    'skin/Info.txt': strToU8('Name=plain synthetic atlas'),
+    'skin/light/skin/port/py_26.ini': strToU8(view),
+    'skin/light/skin/res/default.css': strToU8(css),
+    [`skin/${path}.til`]: strToU8(til),
+    [`skin/${path}.png`]: png,
+  }), 'bdi')
+  const rects = (archive) => {
+    const atlas = new AtlasResolver(archive, 'light', 'port')
+    return [atlas.sourceRect('1', false), atlas.sourceRect('1', true), atlas.sourceRect('2', false)]
+  }
+  assert.deepEqual(rects(source), [[0, 0, 1, 1], [1, 0, 1, 1], [0, 1, 2, 1]])
+  for (const bytes of [source.toBytes('bds'), await source.toBytesAsync('bds')]) {
+    const result = SkinArchive.open(bytes, 'bds')
+    assert.deepEqual(rects(result), rects(source))
+    assert.deepEqual(result.getBytes(`${path}.png`), png)
+    assert.equal(result.getText('light/skin/port/py_26.ini'), view)
+    assert.equal(result.getText('light/skin/res/default.css'), css)
+    assert.deepEqual(result.getBytes(`${path}.til`), strToU8(
+      '\uFEFF[GLOBAL]\r\nTILE_NUM=3\r\n[IMG1]\r\nSOURCE_RECT=0,0,1,1\r\n[IMG2]\r\nSOURCE_RECT=1,0,1,1\r\n[IMG3]\r\nSOURCE_RECT=0,1,2,1\r\n',
+    ))
+  }
+  assert.deepEqual(source.getBytes(`${path}.til`), strToU8(til))
+})
+
+test('BDI → BDS refuses ZIP entries marked as encrypted, without repackaging them', async () => {
+  for (const [flag, central] of [[1, true], [1, false], [64, true]]) {
+    const bytes = zipSync({ 'skin/port/py_26.ini': strToU8('[PANEL]\nSIZE=10,10\n') }, { level: 0 })
+    const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    const offset = central ? header.getUint32(bytes.length - 6, true) + 8 : 6
+    header.setUint16(offset, header.getUint16(offset, true) | flag, true)
+    const source = SkinArchive.open(bytes, 'bdi')
+    assert.throws(() => source.toBytes('bds'), /未加密/)
+    await assert.rejects(source.toBytesAsync('bds'), /未加密/)
+  }
+})
+
+test('BDI → BDS does not export a ZIP opened through directory repair', async () => {
+  const bytes = zipSync({ 'skin/port/py_26.ini': strToU8('[PANEL]\nSIZE=10,10\n') })
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint16(bytes.length - 14, 0, true)
+  const source = await SkinArchive.openAsync(bytes, 'bdi')
+  await assert.rejects(source.toBytesAsync('bds'), /ZIP 结构完整/)
 })
 
 test('BDS → BDI writes .til slices in IMG order, since iOS numbers them by position', async () => {

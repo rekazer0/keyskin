@@ -5,7 +5,7 @@
  * 重置时把那个值交回 commit。
  */
 import { drawVisualPreview, type Visual } from "../atlas.ts"
-import { element } from "../dom-element.ts"
+import { element, iconButton } from "../dom-element.ts"
 import { fontControl, type FontChoice } from "./font-picker.ts"
 import { createIcon } from "../icons.ts"
 import { styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
@@ -15,6 +15,7 @@ import { soundControl } from "./sound-field.ts"
 type Choice = readonly [value: string, label: string, icon?: string]
 type Bounds = { min: number; max: number; step?: number }
 type ColorCodec = "argb" | "0xargb" | "#rgb"
+type ColorOptions = { codec: ColorCodec; details?: boolean; clearable?: boolean }
 
 /** 有自然范围的数值一张表：同一种值在所有格式里是同一个滑块范围。 */
 const RANGES = {
@@ -38,10 +39,10 @@ export type FieldSpec =
   | { kind: "parts"; affixes: readonly string[]; values: readonly string[]; columns?: number; expression?: boolean; step?: number; unit?: string; options?: readonly Choice[] }
   | { kind: "switch"; checked: boolean }
   /** ≤4 项分段（都有图标时纯图标），grid3 是 3×3 图标格，更多项或 select 用下拉；当前值不在选项里时总是下拉。 */
-  | { kind: "choice"; value: string; options: readonly Choice[]; layout?: "grid3" | "select" | "labeled" | "wrap"; unset?: boolean; mobileRange?: keyof typeof RANGES }
+  | { kind: "choice"; value: string; options: readonly Choice[]; layout?: "grid3" | "select" | "labeled" | "wrap"; unset?: boolean }
   | { kind: "flags"; values: readonly string[]; options: readonly Choice[]; keepOne?: string }
-  | { kind: "color"; value: string; codec: ColorCodec; details?: boolean }
-  | { kind: "colorPair"; values: readonly [string, string]; codec: ColorCodec; details?: boolean }
+  | ({ kind: "color"; value: string } & ColorOptions)
+  | ({ kind: "colorPair"; values: readonly [string, string] } & ColorOptions)
   /** 样式编号（逗号分隔）：bindFieldServices 的 decorateStyle 把输入框换成引用卡列表。 */
   | { kind: "style"; value: string; reference: string }
   | { kind: "image"; value: string; placeholder?: string; suggestions?: readonly string[]; load(): Promise<Visual | undefined> | undefined; pick?(): void }
@@ -202,24 +203,17 @@ export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit
       input.addEventListener("change", () => send(input.checked, {}))
       return input
     }
-    case "choice": {
-      const change = (value: string) => send(value, {})
-      const choices = choiceControl(state.mixed ? { ...spec, value: "", layout: "select" } : spec, label, disabled, change, placeholder)
-      if (!spec.mobileRange) return choices
-      const control = element("span", "ui-number-choices")
-      control.append(choices, numberControl({ kind: "number", value: state.mixed ? "" : spec.value, range: spec.mobileRange }, label, placeholder, disabled, change))
-      return control
-    }
+    case "choice": return choiceControl(state.mixed ? { ...spec, value: "", layout: "select" } : spec, label, disabled, (value) => send(value, {}), placeholder)
     case "flags": return flagsControl(spec, label, disabled, (values) => send(values, {}))
-    case "color": return colorControl(spec.value, spec.codec, label, disabled, Boolean(state.mixed), (value, merge) => send(value, { merge }), undefined, spec.details)
+    case "color": return colorControl(spec.value, spec, label, disabled, Boolean(state.mixed), (value, merge) => send(value, { merge }))
     case "colorPair": {
       const pair = element("span", "ui-field-pair")
       if (spec.details) pair.dataset.variant = "colors"
-      spec.values.forEach((value, index) => pair.append(colorControl(value, spec.codec, `${label}${index ? "按下" : "正常"}`, disabled, Boolean(state.mixed) && !value, (next, merge) => {
+      spec.values.forEach((value, index) => pair.append(colorControl(value, spec, `${label}${index ? "按下" : "正常"}`, disabled, Boolean(state.mixed) && !value, (next, merge) => {
         const values = [...spec.values]
         values[index] = next
         send(values, { index, merge })
-      }, index ? "按下" : "正常", spec.details)))
+      }, index ? "按下" : "正常")))
       return pair
     }
     case "style": {
@@ -292,12 +286,9 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
   if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
   if (input.type !== "number") return box
   const bounds = spec.range && RANGES[spec.range]
-  if (!bounds) {
-    wireNumberSlider(input)
-    return box
-  }
+  if (!bounds) return box
   const wrap = element("span", "ui-slider-field")
-  wireNumberSlider(input, { bounds: () => bounds, desktop: wrap })
+  wrap.append(numberSlider(input, bounds))
   wrap.append(box)
   return wrap
 }
@@ -321,7 +312,6 @@ function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string
       input.setAttribute("aria-label", `${label}${affix}`)
     } else input = numberInput(value, `${label}${affix}`, placeholder, disabled, spec.expression, spec.step)
     box.append(input)
-    if (input instanceof HTMLInputElement && input.type === "number") wireNumberSlider(input)
     if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
     pair.append(box)
     input.addEventListener("change", () => {
@@ -334,10 +324,7 @@ function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string
   return pair
 }
 
-/** 手机用滑块显示并编辑同一个值；有明确范围的字段也在桌面保留滑块。 */
-export function wireNumberSlider(input: HTMLInputElement, options: {
-  bounds?: () => Partial<Bounds>; desktop?: HTMLElement; commit?: "input" | "change"
-} = {}): void {
+function numberSlider(input: HTMLInputElement, bounds: Bounds): HTMLElement {
   const control = element("span", "ui-number-slider")
   const range = element("input", "ui-slider")
   range.type = "range"
@@ -346,15 +333,12 @@ export function wireNumberSlider(input: HTMLInputElement, options: {
   let accepted = input.value
   const sync = () => {
     accepted = input.value
-    const bounds = options.bounds?.()
     const value = Number(accepted) || 0
-    // 没有格式边界的字段保留正负值和大值，不把已存数据压进固定区间。
-    const span = Math.max(100, 2 ** Math.ceil(Math.log2(Math.abs(value) || 1) + 1))
+    const { min, max } = bounds
     const decimals = input.value.split(".")[1]?.length ?? 0
-    const min = bounds?.min ?? (input.min !== "" ? Number(input.min) : -span)
-    const step = bounds?.step ?? (Number(input.step) || 10 ** -decimals)
+    const step = bounds.step ?? (Number(input.step) || 10 ** -decimals)
     range.min = String(Math.min(min, input.value ? value : min))
-    range.max = String(Math.max(bounds?.max ?? (input.max !== "" ? Number(input.max) : span), input.value ? value : min))
+    range.max = String(Math.max(max, input.value ? value : min))
     // 当前值不恰好落在粗步长上时，保留原值及其精度。
     const ticks = (value - Number(range.min)) / step
     range.step = String(input.value && Math.abs(ticks - Math.round(ticks)) > 1e-8 ? 10 ** -decimals : step)
@@ -372,7 +356,7 @@ export function wireNumberSlider(input: HTMLInputElement, options: {
       const selector = `.ui-number-slider > input[aria-label="${CSS.escape(range.getAttribute("aria-label")!)}"]`
       const index = document.activeElement === range && inspector ? Array.from(inspector.querySelectorAll(selector)).indexOf(range) : -1
       input.value = range.value
-      input.dispatchEvent(new Event(options.commit ?? "change", { bubbles: true }))
+      input.dispatchEvent(new Event("change", { bubbles: true }))
       // 动态属性提交后会重建这一行，方向键仍应继续调节同一滑块。
       if (index >= 0 && !range.isConnected && document.activeElement === document.body) {
         inspector?.querySelectorAll<HTMLInputElement>(selector)[index]?.focus({ preventScroll: true })
@@ -384,12 +368,10 @@ export function wireNumberSlider(input: HTMLInputElement, options: {
     input.value = accepted
     sync()
   })
-  for (const event of ["input", "change", "inspector-slider-sync"]) input.addEventListener(event, sync)
-  input.dataset.numberSlider = ""
+  for (const event of ["input", "change"]) input.addEventListener(event, sync)
   control.append(range)
-  if (options.desktop) options.desktop.append(control)
-  else input.before(control)
   sync()
+  return control
 }
 
 /** 仍自己拼行的检查器（搜狗、手心）用的一排带前缀的数值框；`onChange` 拿到全部格子的值。 */
@@ -471,12 +453,13 @@ function flagsControl(spec: Extract<FieldSpec, { kind: "flags" }>, label: string
   return group
 }
 
-/* —— 颜色：色块 + 不透明度 %，点色块弹出取色与色值 —— */
+/* —— 颜色：原生取色、十六进制输入、不透明度 % —— */
 type Rgba = { rgb: string; alpha: number }
+const COLOR_PREFIX = /^(?:0x|#)/i
 
 /** 存储写法（codec）：BDS / 手心 / BDA 是 AARRGGBB，搜狗是 0xAARRGGBB，手心动画是 #RRGGBB；读时都接受 6 / 8 位与 # / 0x 前缀。 */
 function decodeColor(value: string): Rgba | undefined {
-  const hex = value.trim().replace(/^(?:0x|#)/i, "")
+  const hex = value.trim().replace(COLOR_PREFIX, "")
   if (!/^[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(hex)) return
   const argb = (hex.length === 6 ? `FF${hex}` : hex).toUpperCase()
   return { rgb: argb.slice(2), alpha: Number.parseInt(argb.slice(0, 2), 16) }
@@ -488,19 +471,16 @@ function encodeColor(codec: ColorCodec, { rgb, alpha }: Rgba): string {
   return codec === "0xargb" ? `0x${argb}` : argb
 }
 
-let openPopover: { close(): void } | undefined
-
-function colorControl(value: string, codec: ColorCodec, label: string, disabled: boolean, mixed: boolean, commit: (value: string, merge: (current: string) => string) => void, state?: string, details = false): HTMLElement {
+function colorControl(value: string, { codec, details, clearable = true }: ColorOptions, label: string, disabled: boolean, mixed: boolean, commit: (value: string, merge: (current: string) => string) => void, state?: string): HTMLElement {
   const current = mixed ? undefined : decodeColor(value)
   const root = element("span", "ui-color-field")
-  const swatch = element("button", "ui-swatch ui-checker")
-  swatch.type = "button"
-  swatch.disabled = disabled
-  swatch.setAttribute("aria-label", label)
-  swatch.setAttribute("aria-haspopup", "dialog")
-  swatch.setAttribute("aria-expanded", "false")
-  // 正常 | 按下两个色块只有位置区分：悬停提示写清这是哪个状态、当前是什么颜色。
-  swatch.title = `${state ? `${state} · ` : ""}${mixed ? "混合" : value || "未设置"}`
+  const swatch = element("span", "ui-swatch ui-checker")
+  const picker = element("input")
+  picker.type = "color"
+  picker.disabled = disabled
+  picker.value = `#${current?.rgb ?? "000000"}`
+  picker.setAttribute("aria-label", `${label}取色`)
+  picker.title = `${state ? `${state} · ` : ""}${mixed ? "混合" : value || "未设置"}`
   const fill = element("canvas")
   fill.width = fill.height = 1
   fill.setAttribute("aria-hidden", "true")
@@ -511,17 +491,53 @@ function colorControl(value: string, codec: ColorCodec, label: string, disabled:
       context.fillRect(0, 0, 1, 1)
     }
   }
-  swatch.append(fill)
+  swatch.append(fill, picker)
   root.append(swatch)
   if (details) {
     root.dataset.variant = "labeled"
     if (state) root.prepend(Object.assign(element("span", "ui-color-caption"), { textContent: state }))
-    root.append(Object.assign(element("span", "ui-color-value"), { textContent: mixed ? "混合" : current ? `#${current.rgb}` : "未设置" }))
   }
   // 只改被改的分量：色相变时保留原透明度的精确字节，多目标时各自保留另一半。
   const write = (part: Partial<Rgba>) => {
     const merge = (other: string) => encodeColor(codec, { rgb: "000000", alpha: 255, ...decodeColor(other), ...part })
     commit(merge(mixed ? "" : value), merge)
+  }
+  picker.addEventListener("change", () => write({ rgb: picker.value.slice(1).toUpperCase() }))
+  const clearColor = () => commit("", () => "")
+  const code = details ? textInput(current ? `#${current.rgb}` : "", `${label}色值`, mixed ? "混合" : "未设置", disabled) : undefined
+  if (code) {
+    const box = element("span", "ui-input")
+    box.dataset.mono = ""
+    code.spellcheck = false
+    code.autocapitalize = "off"
+    code.defaultValue = code.value
+    code.addEventListener("input", () => code.setCustomValidity(""))
+    code.addEventListener("change", () => {
+      const hex = code.value.trim()
+      if (!hex && clearable) return clearColor()
+      const parsed = decodeColor(hex)
+      code.setCustomValidity(parsed ? "" : "请输入 6 位 RGB 或 8 位 ARGB 十六进制色值")
+      if (!parsed) { code.reportValidity(); return }
+      code.defaultValue = code.value = `#${parsed.rgb}`
+      write(hex.replace(COLOR_PREFIX, "").length === 8 ? parsed : { rgb: parsed.rgb })
+    })
+    code.addEventListener("keydown", (event) => {
+      if (event.isComposing) return
+      if (event.key === "Enter") { event.preventDefault(); code.blur() }
+      if (event.key === "Escape" && code.value !== code.defaultValue) {
+        event.preventDefault()
+        code.value = code.defaultValue
+        code.setCustomValidity("")
+      }
+    })
+    box.append(code)
+    root.append(box)
+  }
+  if (clearable && (value || mixed)) {
+    const clear = iconButton("x", `清除${label}`, clearColor)
+    clear.dataset.size = "sm"
+    clear.disabled = disabled
+    root.append(clear)
   }
   if (codec !== "#rgb") {
     const box = element("span", "ui-input")
@@ -540,61 +556,14 @@ function colorControl(value: string, codec: ColorCodec, label: string, disabled:
       else write({ alpha: Math.round(percent * 255 / 100) })
     })
     box.append(alpha, Object.assign(element("span", "ui-input-affix"), { textContent: "%" }))
-    wireNumberSlider(alpha)
     root.append(box)
   }
-  const popover = element("div", "ui-menu ui-color-popover")
-  popover.hidden = true
-  popover.setAttribute("role", "dialog")
-  popover.setAttribute("aria-label", label)
-  const picker = element("input")
-  picker.type = "color"
-  picker.disabled = disabled
-  picker.value = `#${current?.rgb ?? "000000"}`
-  picker.setAttribute("aria-label", `${label}取色`)
-  picker.addEventListener("change", () => write({ rgb: picker.value.slice(1).toUpperCase() }))
-  const hex = element("span", "ui-input")
-  const text = textInput(value, `${label}色值`, mixed ? "混合" : "未设置", disabled)
-  text.spellcheck = false
-  text.addEventListener("change", () => {
-    const entered = text.value.trim()
-    const parsed = decodeColor(entered)
-    if (!entered) commit("", () => "")
-    else if (parsed) commit(encodeColor(codec, parsed), () => encodeColor(codec, parsed))
-    else text.value = value
-  })
-  hex.append(text)
-  popover.append(picker, hex)
-  root.append(popover)
-  const outside = (event: PointerEvent) => { if (!root.contains(event.target as Node)) close() }
-  const close = () => {
-    popover.hidden = true
-    swatch.setAttribute("aria-expanded", "false")
-    document.removeEventListener("pointerdown", outside, true)
-    if (openPopover?.close === close) openPopover = undefined
-  }
-  swatch.addEventListener("click", (event) => {
-    event.preventDefault()
-    if (!popover.hidden) return close()
-    openPopover?.close()
-    openPopover = { close }
-    popover.hidden = false
-    swatch.setAttribute("aria-expanded", "true")
-    document.addEventListener("pointerdown", outside, true)
-    text.focus()
-  })
-  popover.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return
-    event.stopPropagation()
-    close()
-    swatch.focus()
-  })
-  if (details && state && !mixed && !value.trim()) {
+  if (code && state && !mixed && !value.trim()) {
     root.dataset.configPending = ""
     const add = styleReferenceAddButton(`添加${label}`, () => {
       root.removeAttribute("data-config-pending")
       add.remove()
-      swatch.click()
+      code.focus()
     }, disabled)
     root.append(add)
   }

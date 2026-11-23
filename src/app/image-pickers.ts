@@ -49,8 +49,8 @@ function selectedStyleImageSections(source: "BACK_STYLE" | "FORE_STYLE"): { docu
   return sections.length ? { document, path, sections } : undefined
 }
 
-export function updateSelectedImageReference(target: StyleImagePickerTarget | undefined, value: string): boolean {
-  if (!appState.archive || !target) return false
+function updateSelectedImageReference(target: StyleImagePickerTarget, value: string): boolean {
+  if (!appState.archive) return false
   if (target.selectReference) {
     if (!isEditing()) return false
     clearImageSlicePicker()

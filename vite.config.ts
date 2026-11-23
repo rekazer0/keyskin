@@ -15,14 +15,14 @@ export default defineConfig({
           // 核心编辑器
           editor: ["@codemirror/commands", "@codemirror/lang-json", "@codemirror/language", "@codemirror/state", "@codemirror/view"],
           // AI 功能
-          ai: ["@earendil-works/pi-agent-core", "@earendil-works/pi-ai", "deep-chat"],
+          ai: ["@earendil-works/pi-agent-core", "@earendil-works/pi-ai"],
           // 音频处理
           audio: ["@wasm-audio-decoders/ogg-vorbis"],
         },
       },
     },
     // 旧 Android WebView 兼容目标；运行时 API 由入口按需补齐。
-    target: ["es2022", "chrome89"],
+    target: ["es2022", "chrome74"],
     minify: "esbuild",
     cssMinify: true,
     cssCodeSplit: true,

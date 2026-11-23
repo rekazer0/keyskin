@@ -178,12 +178,12 @@ function stylePreview(
 }
 
 function colorField(label: string, value: number, disabled: boolean, onChange: (value: string) => void): HTMLElement {
-  return field({ key: label, label, editable: !disabled, spec: { kind: "color", value: bdaColorHex(value), codec: "argb" }, commit: (next) => { if (next) onChange(next) } })
+  return field({ key: label, label, editable: !disabled, spec: { kind: "color", value: bdaColorHex(value), codec: "argb", clearable: false }, commit: (next) => { if (next) onChange(next) } })
 }
 
 /** 正常 | 按下两个色块一行（DESIGN.md §10）。 */
 function colorPairField(label: string, values: [number | undefined, number | undefined], disabled: boolean, onChange: (property: "NM_COLOR" | "HL_COLOR", value: string) => void): HTMLElement {
-  return field({ key: "NM_COLOR HL_COLOR", label, editable: !disabled, spec: { kind: "colorPair", values: [bdaColorHex(values[0] ?? 0), bdaColorHex(values[1] ?? 0)], codec: "argb" },
+  return field({ key: "NM_COLOR HL_COLOR", label, editable: !disabled, spec: { kind: "colorPair", values: [bdaColorHex(values[0] ?? 0), bdaColorHex(values[1] ?? 0)], codec: "argb", clearable: false },
     commit: (next, { index = 0 }) => { if (next[index]) onChange(index ? "HL_COLOR" : "NM_COLOR", next[index]) } })
 }
 

@@ -11,9 +11,12 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
 import android.util.Base64
+import android.webkit.WebView
 import androidx.annotation.Keep
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.activity.result.ActivityResult
 import androidx.documentfile.provider.DocumentFile
 import app.tauri.annotation.ActivityCallback
@@ -37,6 +40,11 @@ class ShareFileArgs {
   lateinit var path: String
   lateinit var name: String
   lateinit var mimeType: String
+}
+
+@InvokeArg
+class ObserveInsetsArgs {
+  lateinit var handler: Channel
 }
 
 @InvokeArg
@@ -117,7 +125,51 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
   private val sourceExecutor = Executors.newSingleThreadExecutor()
   private val sourcePollExecutor = Executors.newSingleThreadScheduledExecutor()
 
+  private var appWebView: WebView? = null
+
+  override fun load(webView: WebView) {
+    appWebView = webView
+  }
+
+  @Command
+  fun observeWindowInsets(invoke: Invoke) {
+    val args = invoke.parseArgs(ObserveInsetsArgs::class.java)
+    activity.runOnUiThread {
+      val view = appWebView
+      if (view == null) {
+        invoke.reject("WebView is unavailable")
+        return@runOnUiThread
+      }
+      val decor = activity.window.decorView
+      var last: Map<String, Int>? = null
+      fun send(insets: WindowInsetsCompat) {
+        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        val position = IntArray(2)
+        view.getLocationInWindow(position)
+        val bottomGap = decor.height - position[1] - view.height
+        val result = mapOf(
+          "top" to (bars.top - position[1]).coerceAtLeast(0),
+          "bottom" to (bars.bottom - bottomGap).coerceAtLeast(0),
+          "left" to (bars.left - position[0]).coerceAtLeast(0),
+          "right" to (bars.right - (decor.width - position[0] - view.width)).coerceAtLeast(0),
+          "ime" to (insets.getInsets(WindowInsetsCompat.Type.ime()).bottom - bottomGap).coerceAtLeast(0),
+        )
+        if (result != last) {
+          last = result
+          args.handler.sendObject(result)
+        }
+      }
+      ViewCompat.setOnApplyWindowInsetsListener(view) { target, insets ->
+        send(insets)
+        ViewCompat.onApplyWindowInsets(target, insets)
+      }
+      ViewCompat.getRootWindowInsets(view)?.let(::send)
+      invoke.resolve()
+    }
+  }
+
   override fun onDestroy(activity: AppCompatActivity) {
+    appWebView = null
     try {
       clearSourceObserver()
     } finally {
@@ -126,44 +178,6 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
       sourceExecutor.shutdown()
       super.onDestroy(activity)
     }
-  }
-
-  @Command
-  fun chooseProjectTemplate(invoke: Invoke) {
-    val names = arrayOf(
-      "百度官方 Android BDA 默认皮肤\n官方 1080p 横竖屏样式与资源",
-      "百度官方 Android BDS 默认皮肤\n官方旧格式 480px 横竖屏布局",
-      "OPPO皮肤加下滑功能\n互联网整理 BDS 皮肤",
-      "OPPO默认双色皮肤\n互联网整理 BDS 皮肤",
-      "IQOO提取圆角黑色\n互联网整理 BDS 皮肤",
-      "小米默认皮肤(统一颜色键盘版3)_适配圆角模糊\n互联网整理 BDS 皮肤",
-      "华为提取上滑符号1080\n互联网整理 BDS 皮肤",
-      "手心输入法-鸿蒙内置皮肤\n互联网整理 SXI 皮肤",
-    )
-    val ids = arrayOf(
-      "default-android",
-      "official-android-bds",
-      "oppo-swipe-down",
-      "oppo-dual-color",
-      "iqoo-rounded-black",
-      "xiaomi-unified-rounded-blur",
-      "huawei-swipe-symbols-1080",
-      "palm-harmony",
-    )
-    var selected = 0
-    AlertDialog.Builder(activity)
-      .setTitle("新建皮肤")
-      .setSingleChoiceItems(names, selected) { _, index -> selected = index }
-      .setNegativeButton("取消") { _, _ ->
-        invoke.reject("project template selection cancelled")
-      }
-      .setPositiveButton("创建皮肤") { _, _ ->
-        invoke.resolveObject(ids[selected])
-      }
-      .setOnCancelListener {
-        invoke.reject("project template selection cancelled")
-      }
-      .show()
   }
 
   private fun runSourceIO(invoke: Invoke, fallbackMessage: String, operation: () -> Any?) {

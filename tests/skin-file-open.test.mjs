@@ -70,8 +70,10 @@ test('opening another skin offers export for saved and unsaved skins and preserv
 
 test('saving a read-only Android skin asks for write access and writes back to the granted file', async () => {
   const original = 'content://provider/document/42'
+  const authorized = 'content://provider/tree/42'
   const writes = []
   const picks = []
+  const workspaceUpdates = []
   let marked = false
   const archive = { markSaved: () => { marked = true } }
   const context = run(declarations('saveNative'), {
@@ -86,15 +88,19 @@ test('saving a read-only Android skin asks for write access and writes back to t
       if (path === original) throw 'Permission Denial: writing ExternalStorageProvider uri'
     },
     ask: async () => 'grant',
-    pickAndroidSkinFile: async (initialUri) => { picks.push(initialUri); return 'content://provider/tree/42' },
+    pickAndroidSkinFile: async (initialUri) => { picks.push(initialUri); return authorized },
     documentName: {},
     documentNameForPath: () => '皮肤.bdi',
+    activateSourceWorkspace: async (path) => workspaceUpdates.push(['reset', path]),
+    recordRecentFile: (path) => workspaceUpdates.push(['recent', path]),
+    startSourceWorkspace: (_archive, path) => workspaceUpdates.push(['start', path]),
     updateDirty: () => {},
   })
   assert.equal(await context.saveNative(false, 'bdi', '皮肤.bdi'), true)
   assert.deepEqual(picks, [original])
-  assert.deepEqual(writes, [original, 'content://provider/tree/42'])
-  assert.equal(context.currentPath, 'content://provider/tree/42')
+  assert.deepEqual(writes, [original, authorized])
+  assert.equal(context.currentPath, authorized)
+  assert.deepEqual(workspaceUpdates, [['reset', ''], ['recent', authorized], ['start', authorized]])
   assert.ok(marked)
 })
 
@@ -109,6 +115,7 @@ test('Android content URIs open ZIP SSF, encrypted SSF and Baidu skins by their 
     let loaded = false
     const context = run(declarations('loadNativePath', 'openSkinBytes', 'isSupportedSkinPath', 'UNSUPPORTED_SKIN_MESSAGE'), {
       isSsfPath, looksLikeSsf, ssfDocumentBytes,
+      sourceDirectoryEnabledBySettings: () => false,
       readFile: async (uri) => { assert.equal(uri, path); return bytes },
       readNativeSkinFile: () => assert.fail('content URIs must use the filesystem plugin'),
       loadArchive: async (data, uri) => {
