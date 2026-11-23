@@ -17,7 +17,7 @@ import { bdaAppearancePart, bdaBasePath, textDocument, currentBdaAppearance } fr
 import { firstExistingPath } from "../resources.ts"
 import { parseColor, pngBitmap, type Visual, type VisualResolver } from "../atlas.ts"
 import { isConfiguredSymbolLayout } from "../actions.ts"
-import { resolveCandidateRect, resolveCandidateInputStyle, candidateInputBackgroundStyle, inputBarBox, type InputBarMetrics } from "../candidate-style.ts"
+import { resolveCandidateRect, resolveCandidateInputStyle, candidateInputBackgroundStyle, candidateBarBackgroundStyle, candidateInlineBackgroundStyle, inputBarBox, type InputBarMetrics } from "../candidate-style.ts"
 import { drawInputBarBackground, setCanvasSize } from "../preview-draw.ts"
 import { bdaStyleID } from "../bda.ts"
 import { devicePreviewTransparent, inputBarInKeyboard, toolbarDevicePointWidth } from "./preview-render"
@@ -273,6 +273,7 @@ export function applyCandidateSpacing(
 export function hideCandidateInputBar(): void {
   appState.candidateInputBar = undefined
   candidateInputBackgroundCanvas.hidden = true
+  candidateBackgroundCanvas.removeAttribute("data-shared-input-background")
 }
 
 /** Sizes the input code bar around the typed code and paints its background, in skin units. */
@@ -303,13 +304,14 @@ export function fitCandidateInputBar(): void {
 }
 
 /** The input code bar at `metrics`, its background the resolved `backgroundStyle`; hidden at height 0. */
-export function showCandidateInputBar(resolver: VisualResolver, metrics: InputBarMetrics, width: number, backgroundStyle: string | Visual): void {
+export function showCandidateInputBar(resolver: VisualResolver, metrics: InputBarMetrics, width: number, backgroundStyle: string | Visual, shared = false): void {
   if (metrics.height <= 0) {
     hideCandidateInputBar()
     return
   }
   const bar: NonNullable<typeof appState.candidateInputBar> = { metrics, candidateWidth: width, visual: typeof backgroundStyle === "string" ? undefined : backgroundStyle }
   appState.candidateInputBar = bar
+  candidateBackgroundCanvas.toggleAttribute("data-shared-input-background", shared)
   candidateInputBackgroundCanvas.hidden = !backgroundStyle
   fitCandidateInputBar()
   if (typeof backgroundStyle === "string" && backgroundStyle) {
@@ -358,14 +360,26 @@ export function refreshToolbarPreview(
   const pointWidth = toolbarDevicePointWidth()
   toolbarPreview.setDevicePointWidth(pointWidth)
   const nativeToolbar = hasIosToolbarGeometry(gen, document)
+  const inKeyboard = inputBarInKeyboard()
+  const ios = appState.archive.format === "bdi" && inKeyboard
   // shortcut: native iOS toolbar height is calibrated against iPhone screenshots; recheck when its layout changes.
-  const scale = appState.archive.format === "bdi" && inputBarInKeyboard() && nativeToolbar
+  const scale = ios && nativeToolbar
     ? iosToolbarScale(width, pointWidth) : 1
   const height = candidateRect.height * scale
   const inputGeneral = bdaPanel?.input?.textStyle
     ? IniDocument.parse(`[INPUT]\nFORE_STYLE=${bdaStyleID(bdaPanel.input.textStyle)}\n`)
     : gen
-  const inputStyle = resolveCandidateInputStyle(inputGeneral, resolver, width, document, inputBarInKeyboard())
+  const backgroundStyle = appState.archive.format === "bda"
+    ? bdaStyleID(bdaPanel?.backStyle)
+    : candidateBarBackgroundStyle(gen, document)
+  // An authored CAND image spans the iOS input row unless SCAND supplies its own background.
+  const image = ios && !candidateInlineBackgroundStyle(gen, document) && resolver.sourceSize?.(backgroundStyle, false)
+  const sharesCandidate = Boolean(image && image.width > 0 && image.height > 0)
+  const inputBackgroundStyle = sharesCandidate ? "" : bdaPanel?.input
+    ? bdaStyleID(bdaPanel.input.backStyle)
+    : candidateInputBackgroundStyle(gen, document, inKeyboard,
+      appState.archive.format === "bds" ? appState.layoutDocument : undefined)
+  const inputStyle = resolveCandidateInputStyle(inputGeneral, resolver, width, document, inKeyboard, inputBackgroundStyle)
   const hasInlineStyle = [document, gen].some((config) =>
     config?.get("SCAND", "BACK_STYLE") || config?.get("SCAND", "INPUT_STYLE"),
   )
@@ -373,12 +387,9 @@ export function refreshToolbarPreview(
     ? new SsfLook(ssfDocumentPackage(appState.archive), theme.value === "dark" ? "dark" : "light", [], width) : undefined
   const ssfInput = ssfLook?.inputBar()
   const ssfInputSize = ssfInput && pngSize(ssfInput.bytes)
-  const inputHeight = ssfInputSize ? ssfInputSize[1] : !composing && appState.archive.format === "bdi" && inputBarInKeyboard() && !hasInlineStyle
+  const inputHeight = ssfInputSize ? ssfInputSize[1] : !composing && ios && !hasInlineStyle
     ? 0 : inputStyle.height * scale
-  const backgroundStyle = appState.archive?.format === "bda"
-    ? bdaStyleID(bdaPanel?.backStyle)
-    : document.get("CAND", "BACK_STYLE")?.split(",")[0] ??
-      gen?.get("SCAND", "BACK_STYLE")?.split(",")[0] ?? ""
+  const sharedInput = sharesCandidate && inputHeight > 0
   candidateBackgroundCanvas.hidden = false
   candidateBackgroundPreview.setResolver(resolver)
   candidateBackgroundPreview.setTheme(theme.value === "dark" ? "dark" : "light")
@@ -386,15 +397,13 @@ export function refreshToolbarPreview(
   candidateBackgroundPreview.setPanel(
     backgroundStyle,
     width,
-    height,
+    sharedInput ? height + inputHeight : height,
   )
   candidateBackgroundPreview.setDocument(undefined)
-  const inputBackgroundStyle = bdaPanel?.input
-    ? bdaStyleID(bdaPanel.input.backStyle)
-    : candidateInputBackgroundStyle(gen, document, inputBarInKeyboard(),
-      appState.archive.format === "bds" ? appState.layoutDocument : undefined)
-  showCandidateInputBar(resolver, { ...inputStyle, height: inputHeight, fullWidth: Boolean(ssfInput) }, width,
-    ssfLook ? { color: parseColor(ssfLook.color("ComposingView", "BG_COLOR") ?? ssfLook.color("VPA_Bar", "BG_COLOR")) } : inputBackgroundStyle)
+  const inputBackground = ssfLook
+    ? { color: parseColor(ssfLook.color("ComposingView", "BG_COLOR") ?? ssfLook.color("VPA_Bar", "BG_COLOR")) }
+    : inputBackgroundStyle
+  showCandidateInputBar(resolver, { ...inputStyle, height: inputHeight, fullWidth: Boolean(ssfInput) }, width, inputBackground, sharedInput)
   const inputBar = appState.candidateInputBar
   if (ssfInput) void pngBitmap(ssfInput.bytes).then((image) => {
     if (!inputBar || appState.candidateInputBar !== inputBar || !image) return

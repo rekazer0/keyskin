@@ -119,6 +119,19 @@ export function resolveCandidateInputTextVisual(
   return { ...input, ...userFont, fontSize: input?.fontSize ?? visual.fontSize }
 }
 
+/** Explicit iOS input row background, independent of the Android INPUT popup. */
+export function candidateInlineBackgroundStyle(general: IniDocument | undefined, candidate?: IniDocument): string {
+  return backgroundStyle(candidate?.get("SCAND", "BACK_STYLE"), general?.get("SCAND", "BACK_STYLE"))
+}
+
+function backgroundStyle(...values: Array<string | undefined>): string {
+  return values.map((value) => value?.split(",")[0].trim() ?? "").find(Boolean) ?? ""
+}
+
+export function candidateBarBackgroundStyle(general: IniDocument | undefined, candidate?: IniDocument): string {
+  return backgroundStyle(candidate?.get("CAND", "BACK_STYLE"), general?.get("CAND", "BACK_STYLE"), general?.get("SCAND", "BACK_STYLE"))
+}
+
 /** iOS draws the inline row with SCAND; Android's popup uses INPUT. */
 export function candidateInputBackgroundStyle(
   general: IniDocument | undefined,
@@ -126,13 +139,11 @@ export function candidateInputBackgroundStyle(
   inKeyboard = false,
   layout?: IniDocument,
 ): string {
-  return [
-    !inKeyboard ? layout?.get("INPUT", "BACK_STYLE") : undefined,
-    inKeyboard ? candidate?.get("SCAND", "BACK_STYLE") : undefined,
+  return backgroundStyle(
+    inKeyboard ? candidateInlineBackgroundStyle(general, candidate) : layout?.get("INPUT", "BACK_STYLE"),
     candidate?.get("INPUT", "BACK_STYLE"),
-    inKeyboard ? general?.get("SCAND", "BACK_STYLE") : undefined,
     general?.get("INPUT", "BACK_STYLE"),
-  ].map((value) => value?.split(",")[0].trim() ?? "").find(Boolean) ?? ""
+  )
 }
 
 // 百度真机候选字使用用户字体（含字重），皮肤样式只提供字号与颜色。编辑器无法得知用户字体，
@@ -160,12 +171,11 @@ export function resolveCandidateInputStyle(
   width: number,
   candidate?: IniDocument,
   inKeyboard = false,
+  backgroundStyle = candidateInputBackgroundStyle(general, candidate, inKeyboard),
 ): CandidateInputStyle {
   const foregroundStyle = candidateInputForegroundStyle(general, candidate)
   const fontSize = resolveCandidateInputTextVisual(general, resolver, candidate, inKeyboard)?.fontSize
-  const background = inKeyboard
-    ? resolver.sourceSize?.(candidateInputBackgroundStyle(general, candidate, true), false)
-    : undefined
+  const background = inKeyboard && backgroundStyle ? resolver.sourceSize?.(backgroundStyle, false) : undefined
   return { foregroundStyle, ...inputBarMetrics(fontSize, width, background) }
 }
 

@@ -3,7 +3,7 @@ import { deviceSpec } from "./devices.ts"
 import { IniDocument } from "./ini.ts"
 import { appendStyle } from "./ios-toolbar.ts"
 import { adaptIosPanelBackgrounds, separateBdsBackgroundSlices } from "./ios-toolbar-background.ts"
-import { resolveCandidateRect } from "./candidate-style.ts"
+import { candidateBarBackgroundStyle, resolveCandidateRect } from "./candidate-style.ts"
 import { resolvePanelConfig } from "./keyboard.ts"
 import { parseXmlPlist } from "./palm/palm-plist.ts"
 import { previewItems, type Rect } from "./preview-items.ts"
@@ -99,7 +99,7 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
       const cropped = cropImage(decoded, source[0], source[1], source[2], source[3])
       return destination ? resizeImage(cropped, ...destination) : cropped
     }
-    const back = (cand.get("CAND", "BACK_STYLE") ?? gen.get("CAND", "BACK_STYLE") ?? gen.get("SCAND", "BACK_STYLE"))?.split(",")[0].trim()
+    const back = candidateBarBackgroundStyle(gen, cand)
     const entries = css.entries(`STYLE${back}`).map(({ key, value }) => ({ key, value }))
     if ((source === "bdi" || joined.size) && width * height <= MAX_PIXELS && Number.isInteger(width)) {
       const saveImage = (output: RgbaImage, key: string) => {
@@ -110,7 +110,8 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
         return `${name},1`
       }
       let hasImage = false
-      const bake = nativeGeometry
+      // Only materialise existing artwork when adapting a whole-panel background, not authored separate bars.
+      const bake = joined.size > 0
       for (const entry of entries.filter(({ key }) => key === "NM_IMG" || key === "HL_IMG")) {
         const output = image(entry.value, bake ? [width, height] : undefined)
         if (!output) continue

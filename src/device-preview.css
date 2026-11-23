@@ -488,6 +488,14 @@
   grid-row: 2 / 4;
 }
 
+/* On the bare canvas the input row sits just above the candidate grid. */
+.device-shell.canvas-only #candidate-background[data-shared-input-background] {
+  position: absolute;
+  grid-row: auto;
+  bottom: 0;
+  height: calc(100% + var(--candidate-input-height, 0px));
+}
+
 .keyboard-accessories {
   display: flex;
   align-items: center;

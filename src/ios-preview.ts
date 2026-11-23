@@ -106,7 +106,17 @@ export async function iosDefaultToolbarScene(
   }) }
 }
 
-/** The same stretched picture supplies both canvases; the candidate bar paints its own style over it. */
+/** Contiguous slices already divide the artwork at the candidate/panel boundary. */
+export function hasSeparateIosPanelBackground(resolver: VisualResolver, panelStyle: string, candidateStyle: string): boolean {
+  const path = resolver.imagePath?.(panelStyle, false)
+  if (!path || path !== resolver.imagePath?.(candidateStyle, false)) return false
+  const panel = resolver.sourceRect?.(panelStyle, false)
+  const candidate = resolver.sourceRect?.(candidateStyle, false)
+  return Boolean(panel && candidate && candidate[3] > 0 && panel[0] === candidate[0]
+    && panel[2] === candidate[2] && panel[1] === candidate[1] + candidate[3])
+}
+
+/** The candidate style can paint over the shared panel image, or be its own band. */
 export async function iosCandidateBackground(
   resolver: VisualResolver,
   panelStyle: string,
@@ -115,10 +125,13 @@ export async function iosCandidateBackground(
   panelHeight: number,
   candidateHeight: number,
   inputHeight: number,
+  sharedInput = false,
 ): Promise<NativeScene> {
   const [panel, candidate] = await Promise.all([resolver.resolve(panelStyle, false), resolver.resolve(candidateStyle, false)])
   const background: SceneLayer[] = []
-  if (panel?.image) background.push({ kind: "image", visual: panel, rect: { x: 0, y: -inputHeight, width, height: inputHeight + candidateHeight + panelHeight } })
-  if (candidate) background.push({ kind: "image", visual: candidate, rect: { x: 0, y: 0, width, height: candidateHeight } })
+  if (panel?.image && !hasSeparateIosPanelBackground(resolver, panelStyle, candidateStyle)) {
+    background.push({ kind: "image", visual: panel, rect: { x: 0, y: sharedInput ? 0 : -inputHeight, width, height: inputHeight + candidateHeight + panelHeight } })
+  }
+  if (candidate) background.push({ kind: "image", visual: candidate, rect: { x: 0, y: 0, width, height: candidateHeight + (sharedInput ? inputHeight : 0) } })
   return { background, keys: [] }
 }

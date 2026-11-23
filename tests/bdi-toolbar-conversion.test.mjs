@@ -53,12 +53,12 @@ test('adding toolbar artwork to a legacy BDI preserves layout dimensions across 
   }
 })
 
-test('BDI → BDS writes point-calibrated heights and complete edge artwork into the package', async () => {
+test('BDI → BDS calibrates toolbar geometry and preserves authored candidate artwork', async () => {
   const source = fixture()
   const before = source.toBytes()
   const converted = SkinArchive.open(await source.toBytesAsync('bds'), 'bds')
   const generatedTiles = converted.names().filter(path => /\/res\/keyskin_.*\.til$/.test(path))
-  assert.equal(generatedTiles.length, 20, 'both themes and orientations include the background and both edge image states')
+  assert.equal(generatedTiles.length, 16, 'only edge icons are baked, in both states and orientations')
   for (const path of generatedTiles) {
     const tiles = IniDocument.parse(converted.getText(path))
     assert.equal(tiles.get('GLOBAL', 'TILE_NUM'), '1', `${path}: Android requires the slice count to load IMG1`)
@@ -78,9 +78,10 @@ test('BDI → BDS writes point-calibrated heights and complete edge artwork into
     const edge = decodePng(converted.getBytes(`${root}res/${name}.png`))
     assert.ok(edge.height <= height)
     assert.ok(Math.abs(edge.width / edge.height - 136 / 110) < 0.03, 'source artwork keeps its aspect ratio')
-    const [back] = css.get(`STYLE${cand.get('CAND', 'BACK_STYLE')}`, 'NM_IMG').split(',')
-    const image = decodePng(converted.getBytes(`${root}res/${back}.png`))
-    assert.deepEqual([image.width, image.height], [1125, height], 'Android receives a completed background at the exported height')
+    assert.equal(cand.get('CAND', 'BACK_STYLE'), '1')
+    assert.equal(css.get('STYLE1', 'NM_IMG'), 'bar,1')
+    assert.deepEqual(converted.getBytes(`${root}res/bar.png`), source.getBytes(`${root}res/bar.png`))
+    assert.equal(converted.getText(`${root}res/bar.til`), source.getText(`${root}res/bar.til`))
     assert.equal(cand.get('ICON4', 'POS'), '-1500,-30', 'deliberately off-screen controls stay hidden')
     assert.equal(converted.getText(`${root}${orientation}/py_26.ini`), source.getText(`${root}${orientation}/py_26.ini`))
   }

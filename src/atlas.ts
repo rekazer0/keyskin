@@ -47,6 +47,7 @@ export type VisualResolver = {
   ready?(): Promise<void>
   resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined>
   imagePath?(styleID: string, highlighted: boolean): string | undefined
+  sourceRect?(styleID: string, highlighted: boolean): [number, number, number, number] | undefined
   sourceSize?(styleID: string, highlighted: boolean): { width: number; height: number } | undefined
   resolveResource?(resourceID: string): Promise<Visual | undefined>
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined
@@ -444,21 +445,22 @@ export class AtlasResolver {
       : `IMG${index}`
   }
 
-  sourceSize(styleID: string, highlighted: boolean): { width: number; height: number } | undefined {
-    if (!this.styles) return
-    const spec = resolveVisualSpec(this.styles, styleID, highlighted)
-    if (!spec?.imageName || !Number.isInteger(spec.tile)) return
-    const tilePath = this.resourceRoots
-      .map((root) => `${root}/${spec.imageName}.til`)
-      .find((candidate) => this.archive.getBytes(candidate) !== undefined)
-    if (!tilePath) return
+  sourceRect(styleID: string, highlighted: boolean): [number, number, number, number] | undefined {
+    const spec = this.styles && resolveVisualSpec(this.styles, styleID, highlighted)
+    const path = this.imagePath(styleID, highlighted)
+    if (!path) return
+    const tilePath = path.replace(/\.png$/, ".til")
     let tiles = this.tiles.get(tilePath)
     if (!tiles) {
       tiles = IniDocument.parse(this.archive.getText(tilePath))
       this.tiles.set(tilePath, tiles)
     }
-    const section = this.tileSection(tiles, spec.tile!)
-    const source = numbers(section === undefined ? undefined : tiles.get(section, "SOURCE_RECT"))
+    const section = this.tileSection(tiles, spec!.tile!)
+    return numbers(section === undefined ? undefined : tiles.get(section, "SOURCE_RECT"))
+  }
+
+  sourceSize(styleID: string, highlighted: boolean): { width: number; height: number } | undefined {
+    const source = this.sourceRect(styleID, highlighted)
     return source ? { width: source[2], height: source[3] } : undefined
   }
 
