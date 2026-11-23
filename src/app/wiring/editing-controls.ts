@@ -11,7 +11,7 @@ import { resourceSourceToggle } from "../dom"
 import { resizeMobileInspector } from "../mobile-inspector"
 import { updateSelectedKey, updateKeyboard, updateToolbar, updateSkinInfo, populateKeyInspector } from "../key-inspector"
 import { scrollSelectedSource } from "../config-context"
-import { applyExactGap, moveMixedCoordinate, applyLayoutAction, copySelectedKeys, deleteSelectedKeys } from "../key-editing"
+import { applyExactGap, applyLayoutAction, copySelectedKeys, deleteSelectedKeys } from "../key-editing"
 import { shouldClearMixedInput } from "../../mixed-input.ts"
 import { syncCandidateSelection, updateDevicePreview, refreshPreview, setGuidesVisible } from "../preview-render"
 import { setMobilePane, syncSegmentedControls, applyModeState, selectChoice, setMobileInspectorGroup, requestEditMode } from "../mobile-layout"
@@ -114,15 +114,9 @@ export function wireEditingControls(): void {
   for (const field of gapFields) {
     field.addEventListener("change", () => applyExactGap(field))
   }
-  // Mixed coordinate wheel edits share the document-level gesture scheduler/history.
   quickInspector.addEventListener("keydown", (event) => {
     const field = event.target
     if (!(field instanceof HTMLInputElement)) return
-    const direction = (event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0) * (event.shiftKey ? 10 : 1)
-    if (moveMixedCoordinate(field, direction, event.repeat)) {
-      event.preventDefault()
-      return
-    }
     if (!shouldClearMixedInput(event.key, field.placeholder, field.disabled)) return
     event.preventDefault()
     field.value = ""

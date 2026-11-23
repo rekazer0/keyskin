@@ -648,13 +648,13 @@ export function updateToolbar(field: HTMLInputElement): void {
   updateDirty()
 }
 
-export function updateSelectedKey(field: HTMLInputElement): void {
+export function updateSelectedKey(field: HTMLInputElement, delta?: number): void {
   const name = field.dataset.keyField ?? ""
   if (appState.archive?.format === "bda" || appState.archive?.format === "ssf") return
   if (!appState.archive || !appState.layoutDocument || !appState.selectedKeySections.length) return
   const rectNames = ["x", "y", "width", "height"]
   // Clearing a number (or a mixed one) or typing "-" leaves an empty value: that is no number, not 0.
-  if ((rectNames.includes(name) || name.startsWith("PADDING.")) && !field.value.trim()) return
+  if (delta === undefined && (rectNames.includes(name) || name.startsWith("PADDING.")) && !field.value.trim()) return
   if (appState.selectedKeySections.length === 1 && isListCell(appState.selectedKeySections[0])) {
     // LIST 候选栏单元：几何字段写回定义处（布局或 gen.ini），其余写回布局的 [LIST]
     if (rectNames.includes(name)) {
@@ -687,10 +687,11 @@ export function updateSelectedKey(field: HTMLInputElement): void {
   for (const section of preview.expandSections(appState.selectedKeySections)) {
     if (rectIndex >= 0) {
       const rect = appState.layoutDocument.get(section, "VIEW_RECT")?.split(",").map(Number)
-      const value = Number(field.value)
-      if (!rect || rect.length !== 4 || !Number.isFinite(value)) continue
+      if (!rect || rect.length !== 4) continue
+      const value = delta === undefined ? Math.round(Number(field.value)) : Math.max(Number(field.min), rect[rectIndex] + delta)
+      if (!Number.isFinite(value)) continue
       // Only the edited number is rounded: Palm keys keep fractional positions (9.5) that must not move.
-      rect[rectIndex] = Math.round(value)
+      rect[rectIndex] = value
       appState.layoutDocument.set(section, "VIEW_RECT", rect.join(","))
     } else {
       const target = name === "STAT_STYLE" ? section : effectiveKeySection(section)

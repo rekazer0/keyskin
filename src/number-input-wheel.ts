@@ -126,13 +126,22 @@ export function installNumberInputWheel(root: NumberInputRoot = document, option
     nudge(wheel.target, wheel.deltaY < 0 ? 1 : -1)
     finishWhenIdle()
   }, { passive: false })
-  // Shift + ↑/↓ 一次改 10（Figma、Blender 的习惯）；不带 Shift 时交给原生输入框。
+  const keyboardSteps = (key: KeyboardEvent, field: HTMLInputElement): number => {
+    if (key.defaultPrevented || key.isComposing || key.ctrlKey || key.metaKey || key.altKey) return 0
+    const mixed = options.isMixed?.(field)
+    if (mixed && key.key === "+") return 1
+    if (mixed && key.key === "-") return -1
+    if (!mixed && !key.shiftKey) return 0
+    return (key.key === "ArrowUp" ? 1 : key.key === "ArrowDown" ? -1 : 0) * (key.shiftKey ? SHIFT_STEPS : 1)
+  }
   root.addEventListener("keydown", (event) => {
     const key = event as KeyboardEvent
-    if (!key.shiftKey || key.defaultPrevented || (key.key !== "ArrowUp" && key.key !== "ArrowDown")) return
-    if (!isEditableNumberInput(key.target)) return
+    const field = key.target
+    if (!isEditableNumberInput(field)) return
+    const steps = keyboardSteps(key, field)
+    if (!steps) return
     key.preventDefault()
-    nudge(key.target, key.key === "ArrowUp" ? SHIFT_STEPS : -SHIFT_STEPS)
+    nudge(field, steps)
     flush()
     finishWhenIdle()
   })
@@ -187,7 +196,10 @@ export function installNumberInputWheel(root: NumberInputRoot = document, option
   root.addEventListener("pointerdown", finish, true)
   root.addEventListener("keydown", (event) => {
     const key = event as KeyboardEvent
-    if (isEditableNumberInput(key.target) && (key.key === "Shift" || key.shiftKey && (key.key === "ArrowUp" || key.key === "ArrowDown"))) return
+    if (isEditableNumberInput(key.target)) {
+      const steps = keyboardSteps(key, key.target)
+      if (key.key === "Shift" || steps && (key.repeat || Math.abs(steps) === SHIFT_STEPS)) return
+    }
     finish()
   }, true)
   root.addEventListener("focusout", () => { if (!dispatchSession) finish() }, true)

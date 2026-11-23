@@ -4,11 +4,10 @@ import { preview, source, toolbarPreview } from "./canvas-interaction"
 import { normalizeKeySections } from "../ini.ts"
 import { canvasEditable, commitText, updateDirty } from "./edit-history"
 import { setSourceValue, scrollSelectedSource } from "./config-context"
-import { populateKeyInspector } from "./key-inspector"
+import { populateKeyInspector, updateSelectedKey } from "./key-inspector"
 import { updateSourceHighlight, updateInspectorView } from "./source-panel"
 import { refreshPreview, syncCandidateSelection } from "./preview-render"
 import { type LayoutRect, isListCell, listCellRect, applyLayoutAction as transformLayout, type LayoutAction, mergeLayoutRects, setExactGap, moveRects, translatedTouchRect } from "../layout.ts"
-import { mixedCoordinateDelta } from "../mixed-input.ts"
 import { copyPalmKeys, deletePalmKeys, mergePalmKeys, palmKeyRects, writePalmKeyRects } from "./sxi-keys"
 
 /** A Palm board has no layout document: its keys are edited in skin.json (sxi-keys.ts). */
@@ -236,16 +235,15 @@ export function isTextEditingTarget(target: EventTarget | null): boolean {
   return Boolean(keyEventElement(target)?.closest("input, textarea, select, button, [contenteditable]"))
 }
 
-export function moveMixedCoordinate(field: HTMLInputElement, direction: number, coalesce = false): boolean {
-  if (!canvasEditable()) return false
-  const delta = mixedCoordinateDelta(
-    field.dataset.keyField ?? "",
-    field.placeholder,
-    field.disabled,
-    direction,
-  )
-  if (!delta) return false
-  const distance = Math.abs(direction)
-  moveSelectedKeys(delta[0] * distance, delta[1] * distance, appState.selectedKeySections, coalesce)
-  return true
+export function isMixedKeyGeometry(field: HTMLInputElement): boolean {
+  return canvasEditable() && field.value === "" && field.placeholder === "混合"
+    && ["x", "y", "width", "height"].includes(field.dataset.keyField ?? "")
+}
+
+export function nudgeMixedKeyGeometry(field: HTMLInputElement, steps: number): void {
+  if (!isMixedKeyGeometry(field)) return
+  const name = field.dataset.keyField
+  if (name === "x" || name === "y") {
+    moveSelectedKeys(name === "x" ? steps : 0, name === "y" ? steps : 0)
+  } else updateSelectedKey(field, steps)
 }

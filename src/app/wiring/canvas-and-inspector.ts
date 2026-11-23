@@ -3,8 +3,7 @@ import { installSafeAreaLock } from "../../safe-area.ts"
 import { isTauri, scrollbarIdleTimers, source, schedulePointerCoordinates, syncMobileShareLabel, syncUndoButtons, mobilePortraitQuery, preview, toolbarPreview, keyboardFields } from "../canvas-interaction"
 import { installNumberInputWheel } from "../../number-input-wheel.ts"
 import { wheelZoomFactor } from "../../wheel-zoom.ts"
-import { mixedCoordinateDelta } from "../../mixed-input.ts"
-import { keyEventElement, moveSelectedKeys, selectParentObject } from "../key-editing"
+import { isMixedKeyGeometry, keyEventElement, nudgeMixedKeyGeometry, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility, syncInspectorSourceToggle, toggleInspectorSource, updateSourceHighlight } from "../source-panel"
 import { settingsWorkspace, sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode } from "../dom"
@@ -88,13 +87,7 @@ export function wireCanvasAndInspector(): void {
   })
   mobilePreviewOverview.addEventListener("click", () => layoutOverviewToggle.click())
   preview.onAnimationKeys = pickAnimationKeys
-  installNumberInputWheel(document, {
-    isMixed: (field) => Boolean(mixedCoordinateDelta(field.dataset.keyField ?? "", field.placeholder, field.disabled, 1)),
-    moveMixed: (field, steps) => {
-      const delta = mixedCoordinateDelta(field.dataset.keyField ?? "", field.placeholder, field.disabled, steps)
-      if (delta) moveSelectedKeys(delta[0] * Math.abs(steps), delta[1] * Math.abs(steps))
-    },
-  })
+  installNumberInputWheel(document, { isMixed: isMixedKeyGeometry, moveMixed: nudgeMixedKeyGeometry })
   document.addEventListener("scroll", (event) => {
     if (!(event.target instanceof HTMLElement)) return
     const target = event.target
