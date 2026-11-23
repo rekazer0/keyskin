@@ -3,7 +3,7 @@ import { ANTHROPIC_MODELS } from "@earendil-works/pi-ai/providers/anthropic.mode
 import { OPENAI_CODEX_MODELS } from "@earendil-works/pi-ai/providers/openai-codex.models"
 import { invoke } from "@tauri-apps/api/core"
 import { bindMenuKeys } from "./dom-element"
-import { IMAGE_MODEL_PRESETS, MODEL_PROVIDER_PRESETS, imageModelPreset, modelProviderPreset, type ModelProtocol } from "./model-providers"
+import { IMAGE_MODEL_PRESETS, MODEL_PROVIDER_PRESETS, MODEL_THINKING_LEVELS, imageModelPreset, modelProviderPreset, type ModelProtocol } from "./model-providers"
 
 export interface ModelConfiguration {
   provider: string
@@ -14,6 +14,7 @@ export interface ModelConfiguration {
   /** "image" marks the single image-generation model used by AI design. */
   kind?: "image"
   thinkingLevels?: ModelThinkingLevel[]
+  thinkingOverride?: ModelThinkingLevel[]
 }
 
 interface ModelConfigurationState {
@@ -36,6 +37,13 @@ interface ModelProvider {
   apiUrl: string
   apiKey: string
   models: string[]
+  thinkingOverrides?: Map<string, string>
+}
+
+function parseThinkingOverride(text = ""): ModelThinkingLevel[] | undefined {
+  const entries = text.trim().toLowerCase().split(/[\s,，]+/).filter(Boolean)
+  return entries.every((entry) => MODEL_THINKING_LEVELS.includes(entry as ModelThinkingLevel))
+    ? MODEL_THINKING_LEVELS.filter((level) => entries.includes(level)) : undefined
 }
 
 function presetProvider(id = "openai"): ModelProvider {
@@ -64,17 +72,21 @@ export function modelHost(url: string): string {
 /** Groups saved entries that share a service, endpoint and key, keeping first-seen order. */
 export function groupModelConfigurations(models: ModelConfiguration[]): ModelProvider[] {
   const groups = new Map<string, ModelProvider>()
-  for (const { model, ...service } of models) {
+  for (const { model, thinkingLevels: _detected, thinkingOverride, ...service } of models) {
     const key = `${service.provider}\n${service.apiUrl}\n${service.apiKey}`
-    const group = groups.get(key) ?? { ...service, models: [] }
+    const group: ModelProvider = groups.get(key) ?? { ...service, models: [] }
     groups.set(key, group)
     if (model && !group.models.includes(model)) group.models.push(model)
+    if (model && thinkingOverride?.length) (group.thinkingOverrides ??= new Map()).set(model, thinkingOverride.join(", "))
   }
   return [...groups.values()]
 }
 
 export function flattenModelProviders(providers: ModelProvider[]): ModelConfiguration[] {
-  return providers.flatMap(({ models, ...service }) => models.map((model) => ({ ...service, model })))
+  return providers.flatMap(({ models, thinkingOverrides, ...service }) => models.map((model) => {
+    const thinkingOverride = parseThinkingOverride(thinkingOverrides?.get(model))
+    return { ...service, model, ...(thinkingOverride?.length ? { thinkingOverride } : {}) }
+  }))
 }
 
 /** What still keeps one provider from being saved, for its row in the list. */
@@ -102,6 +114,7 @@ export function validateModelProviders(providers: ModelProvider[], accounts: Rea
     if (!preset.subscription && !provider.apiKey) return { index, message: "请填写 API 密钥" }
     if (!provider.models.length) return { index, message: "请至少选择一个模型" }
     for (const model of flattenModelProviders([provider])) {
+      if (!parseThinkingOverride(provider.thinkingOverrides?.get(model.model))) return { index, message: `模型 ${model.model} 的思考等级无效` }
       const key = modelConfigurationKey(model)
       if (seen.has(key)) return { index, message: `模型 ${model.model} 已在相同服务商和地址下存在` }
       seen.add(key)
@@ -142,6 +155,8 @@ export function initializeModelSettings(section: HTMLElement, options: {
   const choices = $<HTMLUListElement>("model-choices")
   const name = $<HTMLInputElement>("model-name")
   const addModel = $<HTMLButtonElement>("model-name-add")
+  const thinkingModel = $<HTMLSelectElement>("model-thinking-target")
+  const thinkingOverride = $<HTMLInputElement>("model-thinking-override")
   const choiceCount = $<HTMLElement>("model-choices-count")
   const toggleKey = $<HTMLButtonElement>("toggle-model-api-key")
   const toggleImageKey = $<HTMLButtonElement>("toggle-image-model-api-key")
@@ -319,7 +334,22 @@ export function initializeModelSettings(section: HTMLElement, options: {
 
   function renderChoiceCount(group: ModelProvider): void {
     choiceCount.textContent = `已选 ${group.models.length} / ${choiceModels(group).length}`
+    const selected = thinkingModel.value
+    thinkingModel.replaceChildren(...group.models.map((model) => new Option(model, model)))
+    if (group.models.includes(selected)) thinkingModel.value = selected
+    thinkingModel.disabled = thinkingOverride.disabled = group.models.length === 0
+    syncThinkingOverride()
   }
+
+  function syncThinkingOverride(): void {
+    thinkingOverride.value = current()?.thinkingOverrides?.get(thinkingModel.value) ?? ""
+  }
+  thinkingModel.addEventListener("change", syncThinkingOverride)
+  thinkingOverride.addEventListener("input", () => {
+    const group = current()
+    if (!group || !thinkingModel.value) return
+    (group.thinkingOverrides ??= new Map()).set(thinkingModel.value, thinkingOverride.value)
+  })
 
   function renderEditor(): void {
     const group = current()
@@ -545,6 +575,7 @@ export function initializeModelSettings(section: HTMLElement, options: {
       protocol: next.protocol,
       apiUrl: apiUrl.value.trim(),
       models: untouched ? (next.model ? [next.model] : []) : group.models,
+      thinkingOverrides: undefined,
     })
     renderChoices()
   })
@@ -606,7 +637,7 @@ export function initializeModelSettings(section: HTMLElement, options: {
       setStatus("请在桌面应用中连接模型服务")
       return
     }
-    const { models: _models, ...service } = group
+    const { models: _models, thinkingOverrides: _overrides, ...service } = group
     setBusy(true)
     setStatus(pending, "busy")
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -720,7 +751,8 @@ export function initializeModelSettings(section: HTMLElement, options: {
     dirty(): boolean {
       // Compare normalized forms: grouping may reorder or merge saved entries.
       const savedNormalized = [...flattenModelProviders(groupModelConfigurations(chatModels(saved))), ...(savedImage() ? [savedImage()] : [])]
-      return JSON.stringify(allModels()) !== JSON.stringify(savedNormalized)
+      return draft.some((group) => group.models.some((model) => !parseThinkingOverride(group.thinkingOverrides?.get(model))))
+        || JSON.stringify(allModels()) !== JSON.stringify(savedNormalized)
     },
     async save(): Promise<void> {
       if (!options.desktop) throw new Error("请在桌面应用中保存模型配置")

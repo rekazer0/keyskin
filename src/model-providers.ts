@@ -1,4 +1,16 @@
+import type { Api, ModelThinkingLevel } from "@earendil-works/pi-ai"
+
 export type ModelProtocol = "anthropic" | "openai-chat" | "openai-responses" | "openai-codex" | "google"
+
+export const MODEL_THINKING_LEVELS: readonly ModelThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+export const MODEL_APIS: Record<ModelProtocol, Api> = {
+  anthropic: "anthropic-messages",
+  "openai-chat": "openai-completions",
+  "openai-responses": "openai-responses",
+  "openai-codex": "openai-codex-responses",
+  google: "google-generative-ai",
+}
 
 interface ModelProviderPreset {
   id: string
@@ -19,7 +31,7 @@ export const MODEL_PROVIDER_PRESETS: readonly ModelProviderPreset[] = [
   { id: "openai-compatible", label: "OpenAI 兼容格式", protocol: "openai-chat", apiUrl: "", model: "" },
   { id: "openai-responses", label: "OpenAI Responses 格式", protocol: "openai-responses", apiUrl: "https://api.openai.com/v1", model: "gpt-5" },
   { id: "xai-subscription", label: "xAI 订阅 (Grok)", protocol: "openai-chat", apiUrl: "https://api.x.ai/v1", model: "grok-4" },
-  { id: "deepseek", label: "DeepSeek", protocol: "openai-chat", apiUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+  { id: "deepseek", label: "DeepSeek", protocol: "openai-chat", apiUrl: "https://api.deepseek.com/v1", model: "deepseek-flash" },
   { id: "google", label: "Google", protocol: "google", apiUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-pro" },
   { id: "kimi-api", label: "Kimi API", protocol: "openai-chat", apiUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k" },
   { id: "kimi-coding-plan", label: "Kimi Coding Plan", protocol: "anthropic", apiUrl: "https://api.kimi.com/coding/v1", model: "kimi-for-coding" },

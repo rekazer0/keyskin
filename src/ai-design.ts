@@ -18,7 +18,7 @@ import { Channel, invoke } from "@tauri-apps/api/core"
 import { AI_DESIGN_DIRECTIONS, SUBAGENT_GUIDE, SUBAGENT_RULES, aiDesignSystemPrompt, contextText, type AiDesignIntensity, type AiDesignProject } from "./ai-design-prompt.ts"
 import { AiSkinImages, base64 } from "./ai-skin-images.ts"
 import { AiSkinWorkspace, type AiSkinDraftChange } from "./ai-skin-workspace.ts"
-import { modelProviderPreset, type ModelProtocol } from "./model-providers.ts"
+import { MODEL_APIS, modelProviderPreset, type ModelProtocol } from "./model-providers.ts"
 import { modelThinking, modelThinkingLevel } from "./model-thinking.ts"
 import type { ModelConfiguration } from "./model-settings.ts"
 
@@ -90,14 +90,6 @@ function normalizedUrl(value: string): string {
   return value.trim().replace(/\/+$/, "")
 }
 
-function modelApi(protocol: ModelProtocol): Api {
-  if (protocol === "anthropic") return "anthropic-messages"
-  if (protocol === "google") return "google-generative-ai"
-  if (protocol === "openai-responses") return "openai-responses"
-  if (protocol === "openai-codex") return "openai-codex-responses"
-  return "openai-completions"
-}
-
 function apiStreams(protocol: ModelProtocol): ProviderStreams {
   if (protocol === "anthropic") return anthropicMessagesApi()
   if (protocol === "google") return googleGenerativeAIApi()
@@ -107,19 +99,20 @@ function apiStreams(protocol: ModelProtocol): ProviderStreams {
 }
 
 function configuredModel(config: AiDesignConfiguration, thinkingLevel: ThinkingLevel): Model<Api> {
-  const api = modelApi(config.protocol)
+  const api = MODEL_APIS[config.protocol]
   const id = config.model.trim()
-  // Subscription models keep pi-ai's compat flags (adaptive thinking, effort names); the rest is ours.
-  const { known, levels, thinkingLevelMap } = modelThinking(config)
+  // Keep pi-ai's wire settings only for the protocol they describe.
+  const { known, compat, reasoning, thinkingLevelMap } = modelThinking(config)
   return {
     ...known,
     id,
     name: id,
     api,
+    compat,
     provider: "keyskin",
     // Settings keep the /v1 that model listing needs; the Anthropic SDK adds /v1/messages itself.
     baseUrl: api === "anthropic-messages" ? normalizedUrl(config.apiUrl).replace(/\/v1$/, "") : normalizedUrl(config.apiUrl),
-    reasoning: levels.some((level) => level !== "off"),
+    reasoning,
     thinkingLevelMap,
     input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

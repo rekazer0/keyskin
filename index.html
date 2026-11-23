@@ -900,6 +900,8 @@
                       <ul id="model-choices" class="model-choices" aria-label="可用模型"></ul>
                     </div>
                   </div>
+                  <label class="settings-row"><span>思考等级配置</span><span class="ui-input ui-select"><select id="model-thinking-target" aria-label="选择要配置思考等级的模型"></select></span></label>
+                  <label class="settings-row"><span>自定义思考等级<small>留空自动识别，填写后覆盖自动识别；用逗号分隔</small></span><input id="model-thinking-override" type="text" autocomplete="off" spellcheck="false" placeholder="off, minimal, low, medium, high, xhigh, max" maxlength="120"></label>
                   <div class="model-editor-footer"><p id="model-configuration-status" role="status" aria-live="polite"></p><button id="test-model-connection" class="ui-button" type="button">测试连接</button></div>
                 </div>
               </section>

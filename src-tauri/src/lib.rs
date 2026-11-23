@@ -49,6 +49,8 @@ struct ModelConfiguration {
     /// "image" marks the image-generation model; empty for chat models.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    thinking_override: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -1213,6 +1215,16 @@ fn validate_model_configuration(configuration: &ModelConfiguration) -> Result<()
     if !matches!(configuration.kind.as_str(), "" | "image") {
         return Err("模型类型无效".into());
     }
+    if configuration.thinking_override.len() > 7
+        || configuration.thinking_override.iter().any(|level| {
+            !matches!(
+                level.as_str(),
+                "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+            )
+        })
+    {
+        return Err("模型思考等级无效".into());
+    }
     Ok(())
 }
 
@@ -1443,11 +1455,52 @@ async fn fetch_model_thinking_levels(
     app: tauri::AppHandle,
     configuration: ModelConfiguration,
 ) -> Result<Option<Vec<String>>, String> {
-    if configuration.provider != "chatgpt-subscription" {
+    if configuration.provider == "chatgpt-subscription" {
+        return model_oauth::subscription_thinking_levels(
+            app,
+            configuration.provider,
+            &configuration.model,
+        )
+        .await;
+    }
+    let url = model_list_url(&configuration)?;
+    if configuration.protocol != "openai-chat"
+        || url.scheme() != "https"
+        || url.host_str() != Some("api.deepseek.com")
+        || url.port().is_some()
+    {
         return Ok(None);
     }
-    model_oauth::subscription_thinking_levels(app, configuration.provider, &configuration.model)
-        .await
+    let bytes = request_model_api(&configuration, url, None).await?;
+    parse_deepseek_thinking_levels(&configuration.model, &bytes)
+}
+
+fn parse_deepseek_thinking_levels(
+    model: &str,
+    bytes: &[u8],
+) -> Result<Option<Vec<String>>, String> {
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "模型列表响应不是有效 JSON")?;
+    let entries = value["data"].as_array().ok_or("响应中没有模型列表")?;
+    let entry = entries
+        .iter()
+        .find(|entry| entry["id"].as_str() == Some(model));
+    let Some(levels) = entry.and_then(|entry| entry["effort"]["supported_levels"].as_array())
+    else {
+        return Ok(None);
+    };
+    let efforts: Vec<String> = levels
+        .iter()
+        .filter_map(|level| {
+            let level = level.as_str()?;
+            matches!(
+                level,
+                "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+            )
+            .then(|| level.to_string())
+        })
+        .collect();
+    Ok((!efforts.is_empty()).then(|| std::iter::once("off".into()).chain(efforts).collect()))
 }
 
 fn zhipu_connection_probe_body(model: &str) -> serde_json::Value {
@@ -1641,6 +1694,7 @@ mod tests {
             model: "model-a".into(),
             api_key: "secret".into(),
             kind: String::new(),
+            thinking_override: Vec::new(),
         }
     }
 
@@ -1658,6 +1712,7 @@ mod tests {
         );
         let mut second = configuration.clone();
         second.model = "model-b".into();
+        second.thinking_override = vec!["low".into(), "max".into()];
         let profiles = vec![configuration.clone(), second];
         super::save_model_profiles_path(&path, profiles.clone()).unwrap();
         assert_eq!(super::read_model_profiles(&path).unwrap(), profiles);
@@ -1676,6 +1731,25 @@ mod tests {
         super::save_model_profiles_path(&path, Vec::new()).unwrap();
         assert!(!path.exists());
         fs::remove_dir_all(root).expect("cleanup model config");
+    }
+
+    #[test]
+    fn deepseek_thinking_levels_follow_the_selected_model() {
+        let bytes = br#"{"data":[{"id":"deepseek-flash","effort":{"supported_levels":["low","high","max","future"]}},{"id":"other","effort":{"supported_levels":["medium"]}},{"id":"no-metadata"}]}"#;
+        assert_eq!(
+            super::parse_deepseek_thinking_levels("deepseek-flash", bytes)
+                .unwrap()
+                .unwrap(),
+            vec!["off", "low", "high", "max"]
+        );
+        assert_eq!(
+            super::parse_deepseek_thinking_levels("no-metadata", bytes).unwrap(),
+            None
+        );
+        assert_eq!(
+            super::parse_deepseek_thinking_levels("missing", bytes).unwrap(),
+            None
+        );
     }
 
     #[test]

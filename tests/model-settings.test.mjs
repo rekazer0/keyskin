@@ -23,6 +23,21 @@ test('saved models group by provider account and flatten back in order', () => {
   assert.equal(groupModelConfigurations([model(), model({ apiKey: 'other' })]).length, 2)
 })
 
+test('custom thinking levels persist per model, not per provider account', () => {
+  const saved = [model({ thinkingLevels: ['low'], thinkingOverride: ['off', 'high'] }), model({ model: 'gpt-5-mini' })]
+  const groups = groupModelConfigurations(saved)
+  const flat = flattenModelProviders(groups)
+  assert.deepEqual([...flat[0].thinkingOverride], ['off', 'high'])
+  assert.equal(flat[0].thinkingLevels, undefined)
+  assert.equal(flat[1].thinkingOverride, undefined)
+  groups[0].thinkingOverrides.set('gpt-5-mini', 'MAX，low, low')
+  assert.deepEqual([...flattenModelProviders(groups)[1].thinkingOverride], ['low', 'max'])
+  groups[0].thinkingOverrides.set('gpt-5-mini', 'unknown')
+  assert.match(validateModelProviders(groups).message, /gpt-5-mini 的思考等级无效/)
+  groups[0].thinkingOverrides.set('gpt-5-mini', '')
+  assert.equal(flattenModelProviders(groups)[1].thinkingOverride, undefined)
+})
+
 test('provider validation points at the first incomplete or duplicate entry', () => {
   assert.equal(validateModelProviders([group(), group({ provider: 'deepseek' })]), undefined)
   assert.equal(validateModelProviders([]), undefined)

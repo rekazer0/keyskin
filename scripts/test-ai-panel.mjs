@@ -38,10 +38,17 @@ try {
     window.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label: 'main' } }, invoke: async (command, args) => {
       window.modelCalls.push({ command, args })
       if (command === 'plugin:window|set_theme') return
-      if (command === 'fetch_model_thinking_levels') return ['low', 'medium', 'high', 'xhigh']
+      if (command === 'fetch_model_thinking_levels') return args.configuration.model === 'deepseek-flash'
+        ? ['off', 'low', 'high', 'max'] : ['low', 'medium', 'high', 'xhigh']
       if (command === 'model_oauth_accounts') return [{ provider: 'chatgpt-subscription', email: 'test@example.com' }]
-      if (command === 'load_model_configuration') return { path: 'test.json', configurations: [
+      if (command === 'save_model_configuration') {
+        window.savedModelConfigurations = args.configurations
+        return { path: 'test.json', configurations: args.configurations }
+      }
+      if (command === 'load_model_configuration') return { path: 'test.json', configurations: window.savedModelConfigurations ?? [
         { provider: 'chatgpt-subscription', protocol: 'openai-codex', apiUrl: 'https://chatgpt.com/backend-api/codex', apiKey: '', model: 'gpt-image-test', kind: 'image' },
+        { provider: 'openai-compatible', protocol: 'openai-chat', apiUrl: 'https://example.com/v1', apiKey: 'test', model: 'custom-test' },
+        { provider: 'openai-compatible', protocol: 'openai-chat', apiUrl: 'https://example.com/v1', apiKey: 'test', model: 'another-model' },
       ] }
       if (command === 'fetch_model_list') {
         if (window.failImageList) throw new Error('test API unavailable')
@@ -52,6 +59,8 @@ try {
     appState.savedModels = [
       { provider: 'chatgpt-subscription', protocol: 'openai-codex', model: 'account-model', apiUrl: '', apiKey: '' },
       { provider: 'openai', protocol: 'openai-chat', model: 'gpt-4o', apiUrl: '', apiKey: '' },
+      { provider: 'deepseek', protocol: 'openai-chat', model: 'deepseek-flash', apiUrl: 'https://api.deepseek.com/v1', apiKey: 'test' },
+      { provider: 'openai-compatible', protocol: 'openai-chat', model: 'custom-test', apiUrl: 'https://example.com/v1', apiKey: 'test', thinkingOverride: ['off', 'xhigh'] },
     ]
     const select = document.querySelector('#ai-design-model')
     select.replaceChildren(...appState.savedModels.map((model, index) => new Option(model.model, String(index))))
@@ -70,6 +79,12 @@ try {
   assert.equal(await thinking.inputValue(), 'medium')
   await page.locator('#ai-design-model').selectOption('1')
   assert.deepEqual(await thinking.locator('option').allTextContents(), ['off'])
+  await page.locator('#ai-design-model').selectOption('2')
+  assert.deepEqual(await thinking.locator('option').allTextContents(), ['off', 'low', 'high', 'max'])
+  assert.equal(await thinking.inputValue(), 'high')
+  await page.locator('#ai-design-model').selectOption('3')
+  assert.deepEqual(await thinking.locator('option').allTextContents(), ['off', 'xhigh'])
+  assert.equal(await thinking.inputValue(), 'xhigh')
   await page.locator('#ai-design-model').selectOption('0')
   assert.equal(await thinking.inputValue(), 'medium')
   await page.locator('#ai-design-chat .ai-resize').waitFor()
@@ -321,13 +336,24 @@ try {
     const section = old.cloneNode(true)
     old.replaceWith(section)
     const { initializeModelSettings } = await import('/src/model-settings.ts')
-    initializeModelSettings(section, { desktop: true, icon: () => document.createElement('span'), onSaved() {} })
+    window.desktopModelSettings = initializeModelSettings(section, { desktop: true, icon: () => document.createElement('span'), onSaved() {} })
     document.querySelector('#workspace-navigation [data-settings-entry=settings]').click()
     document.querySelector('#settings-model-nav').hidden = false
     ;(await import('/src/app/preferences.ts')).showSettingsPage('model')
     section.hidden = false
   })
   await page.waitForFunction(() => document.querySelector('#image-model-name').value === 'gpt-image-test')
+  const thinkingTarget = page.locator('#model-thinking-target')
+  const thinkingOverride = page.locator('#model-thinking-override')
+  await thinkingTarget.selectOption('custom-test')
+  await thinkingOverride.fill('off, high, max')
+  await thinkingTarget.selectOption('another-model')
+  assert.equal(await thinkingOverride.inputValue(), '')
+  await page.evaluate(() => window.desktopModelSettings.save())
+  assert.deepEqual(await page.evaluate(() => window.savedModelConfigurations.find(model => model.model === 'custom-test').thinkingOverride), ['off', 'high', 'max'])
+  await page.evaluate(() => window.desktopModelSettings.begin())
+  await thinkingTarget.selectOption('custom-test')
+  assert.equal(await thinkingOverride.inputValue(), 'off, high, max')
   await page.locator('#refresh-image-model-list').click()
   await page.waitForFunction(() => document.querySelector('#image-model-status').textContent.includes('2 个生图模型'))
   assert.deepEqual(await page.locator('#image-model-options option').evaluateAll(items => items.map(item => item.value)), ['gpt-image-official', 'gpt-image-next'])

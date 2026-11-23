@@ -648,17 +648,21 @@ export function syncAiDesignThinking(): void {
   if (!configuration) return
   let preferred = "medium"
   try { preferred = localStorage.getItem("ai-thinking-level") || "medium" } catch {}
-  const { levels } = modelThinking(configuration)
-  aiDesignThinking.replaceChildren(...levels.map((level) => new Option(level, level)))
+  const { levels, identified } = modelThinking(configuration)
+  aiDesignThinking.replaceChildren(...levels.map((level) => new Option(identified ? level : "未识别", level)))
   aiDesignThinking.value = modelThinkingLevel(configuration, preferred)
-  aiDesignThinking.title = "模型支持的思考等级"
+  aiDesignThinking.title = identified ? "模型支持的思考等级" : "未识别思考等级，可在设置中为此模型自定义"
   syncAiDesignControls()
   const key = modelConfigurationKey(configuration)
-  if (!isTauri() || configuration.provider !== "chatgpt-subscription" || configuration.thinkingLevels || appState.aiThinkingRequests.has(key)) return
+  if (!isTauri() || configuration.thinkingOverride?.length || configuration.thinkingLevels || appState.aiThinkingRequests.has(key)) return
+  const subscription = configuration.provider === "chatgpt-subscription"
+  const deepseek = configuration.protocol === "openai-chat" && modelHost(configuration.apiUrl) === "api.deepseek.com" && /^https:\/\//i.test(configuration.apiUrl)
+  if (!subscription && !deepseek) return
   appState.aiThinkingRequests.add(key)
-  appState.aiThinkingPending.add(configuration)
-  aiDesignThinking.title = "正在从官方接口获取模型思考等级"
-  syncAiDesignControls()
+  if (subscription) {
+    appState.aiThinkingPending.add(configuration)
+    syncAiDesignControls()
+  }
   void invoke<ThinkingLevel[] | null>("fetch_model_thinking_levels", { configuration }).then((supported) => {
     if (supported?.length) configuration.thinkingLevels = supported
     if (appState.savedModels[Number(aiDesignModel.value)] !== configuration) return
