@@ -28,3 +28,6 @@ export const ANDROID_TOOLBAR_ICONS: ReadonlyArray<readonly [number, string, stri
   [68, "最近使用", "history"], [69, "次遇新版", "smile-plus"], [70, "超会写", "sparkles"],
   [71, "文字整理", "list-checks"], [72, "撤销整理", "undo-2"],
 ]
+
+// Reference Android client toolbar when the skin provides no function artwork. The actual list is a device preference.
+export const ANDROID_BUILTIN_TOOLBAR = [26, 31, 27] as const

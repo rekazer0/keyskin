@@ -63,8 +63,9 @@ type VisualSpec = {
   borderColor?: string
 }
 
-function numbers(value: string | undefined): [number, number, number, number] | undefined {
-  const parsed = value?.split(",").map(Number)
+function tileRect(value: string | undefined, android: boolean): [number, number, number, number] | undefined {
+  // Android uses the leading integer, even on legacy tiles such as SOURCE_RECT=0,32日,32日,32.
+  const parsed = value?.split(",").map((part) => android ? Number.parseInt(part, 10) : Number(part))
   if (!parsed || parsed.length !== 4 || parsed.some((item) => !Number.isFinite(item))) return
   return parsed as [number, number, number, number]
 }
@@ -456,7 +457,7 @@ export class AtlasResolver {
       this.tiles.set(tilePath, tiles)
     }
     const section = this.tileSection(tiles, spec!.tile!)
-    return numbers(section === undefined ? undefined : tiles.get(section, "SOURCE_RECT"))
+    return tileRect(section === undefined ? undefined : tiles.get(section, "SOURCE_RECT"), this.androidKeyLayers)
   }
 
   sourceSize(styleID: string, highlighted: boolean): { width: number; height: number } | undefined {
@@ -500,9 +501,9 @@ export class AtlasResolver {
     }
     const section = this.tileSection(tiles, spec.tile!)
     if (section === undefined) return { color: spec.color, borderColor: spec.borderColor }
-    const source = numbers(tiles.get(section, "SOURCE_RECT"))
+    const source = tileRect(tiles.get(section, "SOURCE_RECT"), this.androidKeyLayers)
     if (!source) return { color: spec.color, borderColor: spec.borderColor }
-    const absoluteInner = numbers(tiles.get(section, "INNER_RECT"))
+    const absoluteInner = tileRect(tiles.get(section, "INNER_RECT"), this.androidKeyLayers)
     // 工具书 V6 p162：无 INNER_RECT 或宽高为 0 时不拉伸。
     const inner = absoluteInner && absoluteInner[2] > 0 && absoluteInner[3] > 0
       ? ([
@@ -555,7 +556,7 @@ export class AtlasResolver {
     // 缺图保留默认功能位，画布和检查器使用默认图标，查看时不创建资源。
     const functions = all ? ANDROID_TOOLBAR_ICONS : ANDROID_TOOLBAR_ICONS.slice(0, 6)
     const sources = functions.map(([index, label, defaultIcon]) => {
-      const source = numbers(tiles.get(`IMG${index}`, "SOURCE_RECT"))
+      const source = tileRect(tiles.get(`IMG${index}`, "SOURCE_RECT"), true)
       const valid = image && source && source.every(Number.isInteger) && source[0] >= 0 && source[1] >= 0 && source[2] > 0 && source[3] > 0 && source[0] + source[2] <= image.width && source[1] + source[3] <= image.height
       return { source: valid ? source : undefined, label, defaultIcon, index }
     }).slice(0, Math.max(0, limit ?? Number.POSITIVE_INFINITY))

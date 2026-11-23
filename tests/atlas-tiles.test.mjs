@@ -33,3 +33,26 @@ for (const format of ['bdi', 'bds']) {
     assert.equal(archive.revision, 0)
   })
 }
+
+for (const format of ['bdi', 'bds']) {
+  test(`${format} handles legacy numeric suffixes according to the platform`, async () => {
+    const prefix = format === 'bdi' ? 'skin/' : ''
+    const til = '[IMG1]\nSOURCE_RECT=0,32日,32日,32\nINNER_RECT=4日,36,24,24\n[IMG2]\nSOURCE_RECT=0,日,32,32\n'
+    const archive = SkinArchive.open(zipSync({
+      [`${prefix}res/default.css`]: strToU8('[STYLE1]\nNM_IMG=toolbar,1\n[STYLE2]\nNM_IMG=toolbar,2\n'),
+      [`${prefix}res/toolbar.png`]: new Uint8Array(),
+      [`${prefix}res/toolbar.til`]: strToU8(til),
+    }), format)
+    const resolver = new AtlasResolver(archive, 'light', 'port')
+    resolver.bitmap = async () => ({ width: 32, height: 64 })
+    const android = format === 'bds'
+    const expected = android ? [0, 32, 32, 32] : undefined
+    assert.deepEqual(resolver.sourceRect('1', false), expected)
+    const visual = await resolver.resolve('1', false)
+    assert.deepEqual(visual.source, expected)
+    assert.deepEqual(visual.inner, android ? [4, 4, 24, 24] : undefined)
+    assert.equal(resolver.sourceRect('2', false), undefined)
+    assert.equal(archive.getText('light/skin/res/toolbar.til'), til)
+    assert.equal(archive.revision, 0)
+  })
+}

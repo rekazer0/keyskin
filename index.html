@@ -593,11 +593,6 @@
               <div><h1>资源</h1><p id="mobile-resource-summary" class="ui-field-note"></p></div>
               <button id="mobile-resource-filters-toggle" class="ui-icon-button" data-variant="filled" type="button" aria-label="筛选和排序" title="筛选和排序" aria-controls="resource-filter-options" aria-expanded="false" data-icon="sliders-horizontal"></button>
             </header>
-            <nav id="mobile-resource-tabs" class="ui-segmented" data-variant="underline" role="group" aria-label="资源类型" hidden>
-              <button type="button" data-mobile-resource-kind="style" aria-pressed="false">样式 <span class="ui-badge"></span></button>
-              <button type="button" data-mobile-resource-kind="image" aria-pressed="false">图片 <span class="ui-badge"></span></button>
-              <button type="button" data-mobile-resource-kind="sound" aria-pressed="false">音效 <span class="ui-badge"></span></button>
-            </nav>
             <header class="ui-pane-header" id="resource-page-heading">
               <h2 id="resource-list-title">图片</h2>
               <span id="resource-count" class="ui-badge" data-variant="pill"></span>
@@ -625,9 +620,7 @@
             <div class="resource-filters">
               <span class="ui-input ui-select" hidden><select id="resource-category" aria-label="样式分类"></select></span>
               <label class="ui-input ui-search"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="resource-search" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="搜索图片" autocomplete="off" spellcheck="false"></label>
-              <div class="mobile-resource-classification">
-                <span class="ui-input ui-select"><select id="mobile-resource-category" aria-label="资源分类"></select></span>
-              </div>
+              <span class="ui-input ui-select mobile-resource-classification"><select id="mobile-resource-category" aria-label="资源分类"></select></span>
               <div id="resource-filter-options" class="resource-filter-options" data-collapsed>
                 <span class="ui-input ui-select" hidden><select id="resource-usage-filter" aria-label="使用情况"><option value="all">全部状态</option><option value="used">使用中</option><option value="unused">未使用</option></select></span>
                 <span id="resource-sort-field" class="ui-input ui-select"><select id="resource-sort" aria-label="资源排序"><option value="name">名称升序</option><option value="descending">名称降序</option></select></span>

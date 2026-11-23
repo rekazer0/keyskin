@@ -15,6 +15,7 @@ import { pointerDown } from "./preview-pointer.ts"
 import { pointerMove } from "./preview-pointer.ts"
 import { pointerUp } from "./preview-pointer.ts"
 import { defaultToolbarIcon } from "./preview-draw.ts"
+import { ANDROID_BUILTIN_TOOLBAR } from "./android-toolbar.ts"
 import { candidateWordsForeground } from "./candidate-style.ts"
 
 export type PreviewEvent = {
@@ -128,6 +129,8 @@ export class Preview {
   bdaHints = false
   /** 手机键盘的 pt 宽：iOS 按 @3x 图的 pt 尺寸画工具栏图标，不随面板缩放。 */
   devicePointWidth?: number
+  /** Android nine-slice key borders keep their source size in device pixels. */
+  devicePixelWidth?: number
   readonly legacyAnimationStates = new Map<string, { key: PreviewItem; startedAt: number; duration: number }>()
   get legacyAnimationState(): { key: PreviewItem; startedAt: number } | undefined {
     return [...this.legacyAnimationStates.values()].at(-1)
@@ -402,7 +405,11 @@ export class Preview {
   resolveToolbar(): Promise<Visual[]> {
     if (!this.toolbarImagesCache) {
       this.toolbarImagesCache = this.toolbarSlots && !this.persistentOnly
-        ? (this.resolver?.resolveToolbarImages() ?? Promise.resolve([])).then((visuals) => Promise.all(visuals.map(async (visual) => {
+        ? (this.resolver?.resolveToolbarImages() ?? Promise.resolve([])).then((visuals) =>
+          this.resolver?.androidKeyLayers && visuals.every((visual) => !visual.image)
+            ? ANDROID_BUILTIN_TOOLBAR.flatMap((index) => visuals.find((visual) => visual.atlas?.index === index) ?? [])
+            : visuals,
+        ).then((visuals) => Promise.all(visuals.map(async (visual) => {
           if (visual.image || !visual.defaultIcon) return visual
           const size = Math.min(this.panelWidth / 18, this.panelHeight * 0.45)
           const color = this.resolver?.resolveText(candidateWordsForeground(this.document, this.offsets), false)?.color

@@ -280,8 +280,6 @@ export function renderResourceCatalogSearch(): boolean {
 }
 
 function syncMobileResourceCategory(): void {
-  const tabs = $("#mobile-resource-tabs")
-  tabs.hidden = !mobilePortraitQuery.matches
   const select = $<HTMLSelectElement>("#mobile-resource-category")
   for (const button of $("#resource-page-tabs").querySelectorAll<HTMLButtonElement>("[data-resource-choice]")) {
     const value = button.dataset.resourceChoice!
@@ -291,16 +289,9 @@ function syncMobileResourceCategory(): void {
     const text = count ? `${label} (${count})` : label
     if (option.text !== text) option.text = text
     const pressed = button.getAttribute("aria-pressed") === "true"
-    option.disabled = button.disabled
-    if (pressed && select.value !== value) select.value = value
-    if (tabs.hidden) continue
     const kind = button.dataset.resourcePage as "style" | "image" | "sound" | undefined
-    if (!kind) continue
-    const tab = tabs.querySelector<HTMLButtonElement>(`[data-mobile-resource-kind="${kind}"]`)!
-    tab.disabled = !resourceNavigationPath(kind)
-    option.disabled = tab.disabled
-    tab.setAttribute("aria-pressed", String(!appState.resourceCatalog && appState.resourceInspectorMode === kind))
-    tab.querySelector(".ui-badge")!.textContent = count ?? ""
+    option.disabled = kind ? !resourceNavigationPath(kind) : button.disabled
+    if (pressed && select.value !== value) select.value = value
   }
 }
 
@@ -337,10 +328,6 @@ export function wireResourcePage(): void {
     group.append(new Option("", value))
   }
   category.addEventListener("change", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-choice="${category.value}"]`)?.click())
-  for (const tab of $("#mobile-resource-tabs").querySelectorAll<HTMLButtonElement>("button")) {
-    tab.addEventListener("click", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-page="${tab.dataset.mobileResourceKind}"]`)?.click())
-  }
-  mobilePortraitQuery.addEventListener("change", syncMobileResourceCategory)
   const filterToggle = $("#mobile-resource-filters-toggle")
   const filterOptions = $("#resource-filter-options")
   filterToggle.addEventListener("click", () => {

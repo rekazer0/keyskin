@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { dismissStartupDisclaimer } from '../tests/helpers/open-editor-template.mjs'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -47,6 +48,7 @@ const snapshot = () => page.evaluate(async () => {
 })
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#mobile-welcome-new').waitFor()
   assert.equal(await page.locator('.mobile-welcome-hero h1').textContent(), '键设')
   assert.equal(await page.locator('#mobile-navigation button:visible').count(), 4)
@@ -128,6 +130,9 @@ try {
   await category.selectOption('style')
   assert.ok((await page.locator('#resource-gallery').boundingBox()).height > 160, 'style cards retain usable screen space')
   assert.ok(await page.locator('#resource-gallery .ui-style-card').first().isVisible(), 'real style cards are visible')
+  const filters = page.getByRole('button', { name: '筛选和排序' })
+  assert.equal(await filters.getAttribute('aria-expanded'), 'false')
+  await filters.tap()
   const usage = page.getByRole('combobox', { name: '使用情况' })
   const styleCount = await page.locator('#resource-gallery .ui-style-card').count()
   assert.ok((await usage.boundingBox()).height >= 44, '使用情况保留手机触控高度')
@@ -141,11 +146,7 @@ try {
   await page.locator('#style-resource-detail').waitFor()
   await page.locator('#resource-back').tap()
   assert.equal(await style.evaluate(card => document.activeElement === card), true, 'style detail returns to the tapped card')
-  const resourceTab = kind => page.locator(`#mobile-resource-tabs [data-mobile-resource-kind=${kind}]`)
-  assert.ok((await resourceTab('style').boundingBox()).height >= 44)
-  assert.equal(await resourceTab('style').getAttribute('aria-pressed'), 'true')
-  await resourceTab('image').tap()
-  assert.equal(await category.inputValue(), 'image', 'quick tabs stay in sync with the full classification')
+  await category.selectOption('image')
   assert.equal(await usage.isVisible(), false, '图片列表不显示样式使用情况')
   await capture('resources-images')
   const image = page.locator('#resource-gallery .ui-image-card').first()
@@ -177,8 +178,7 @@ try {
   await atlas.waitFor({ state: 'hidden' })
   assert.deepEqual(await draft(), beforeAtlas, 'reading/cancelling image details never writes the archive')
   assert.equal(await image.evaluate(card => document.activeElement === card), true, 'closing image details restores focus')
-  await resourceTab('sound').tap()
-  assert.equal(await category.inputValue(), 'sound')
+  await category.selectOption('sound')
   await capture('resources-sounds')
   assert.equal(await page.locator('#mobile-navigation [data-mobile-page=ai]').isVisible(), false)
   await page.locator('#mobile-navigation [data-settings-entry=settings]').click()

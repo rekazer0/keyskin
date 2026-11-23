@@ -219,11 +219,14 @@ export function refreshNativeScenes(draft?: SsfPackage): void {
       const rect = { x: 0, y: 0, width, height }
       const [normal, highlight] = await Promise.all([resolver.resolve(panelStyle, false), resolver.resolve(panelStyle, true)])
       const background: SceneLayer[] = []
-      // Android layers distinct CAND images in the same bounds; don't paint the NM_IMG fallback twice.
-      if (normal?.image && highlight?.image &&
-        (normal.image !== highlight.image || normal.source?.join() !== highlight.source?.join())) {
-        background.push({ kind: "image", rect, visual: { ...normal, color: highlight.color, borderColor: undefined } })
-        background.push({ kind: "image", rect, visual: { ...highlight, color: undefined } })
+      // Android keeps NM_IMG under a distinct CAND highlight, including when the highlight slice is missing.
+      if (normal?.image && (normal.image !== highlight?.image || normal.source?.join() !== highlight?.source?.join())) {
+        background.push({ kind: "image", rect, visual: {
+          ...normal,
+          color: highlight?.color ?? normal.color,
+          borderColor: highlight?.image ? undefined : highlight?.borderColor ?? normal.borderColor,
+        } })
+        if (highlight?.image) background.push({ kind: "image", rect, visual: { ...highlight, color: undefined } })
       } else if (highlight) background.push({ kind: "image", rect, visual: highlight })
       return { background, keys: [] }
     })

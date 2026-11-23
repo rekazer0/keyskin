@@ -125,6 +125,7 @@ export async function paintPreview(self: Preview): Promise<void> {
   const visible = visiblePreviewItems(self.keys, self.skinState)
   const stateDocument = self.stateDocument
   const android = self.resolver?.androidKeyLayers
+  const nineSlicePixelScale = android && self.devicePixelWidth ? self.devicePixelWidth / self.panelWidth : 1
   const keys = previewDrawOrder(
     stateDocument ? visible.map((key) => effectivePreviewItem(stateDocument, key, self.skinState ?? 0)) : visible,
     self.panelWidth, self.panelHeight, self.legacyAnimationState?.key.section, android,
@@ -279,7 +280,8 @@ export async function paintPreview(self: Preview): Promise<void> {
     const hasForeground = foregrounds.some(Boolean) || styleTexts.some(Boolean)
     if (shouldDrawItemBackground(key, self.panelStyle, self.panelWidth, self.panelHeight)) {
       withTransform(context, area, backScale, backTranslation, backRotation, backOpacity, () => {
-        drawVisual(context, visual?.back, area, true)
+        const back = visual?.back
+        drawVisual(context, back?.inner && nineSlicePixelScale !== 1 ? { ...back, nineSlicePixelScale } : back, area, true)
       })
     }
     for (const [layer, fore] of foregrounds.entries()) {

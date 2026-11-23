@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { dismissStartupDisclaimer } from '../tests/helpers/open-editor-template.mjs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -35,6 +36,7 @@ try {
       localStorage.setItem('onboarding-tour-v1', 'done')
     })
     await page.goto(url)
+    await dismissStartupDisclaimer(page)
     await page.locator('#mobile-welcome-open').waitFor()
     assert.equal(await page.locator('.titlebar:visible, .preview-zoom-control:visible').count(), 0)
     const chooser = page.waitForEvent('filechooser')
@@ -73,11 +75,12 @@ try {
       assert.match(strFromU8(files[layout]), /\[KEY1\]\s+VIEW_RECT=26,20,93,128/)
       await page.keyboard.press('Escape')
       await page.locator('#file-operation-dialog[open]').waitFor({ state: 'hidden' })
+      await page.waitForFunction(() => document.activeElement?.id === 'share-title')
       await page.keyboard.press('Escape')
       await page.locator('#share-dialog').waitFor({ state: 'hidden' })
     } else await project.locator('#mobile-files-close').tap()
     await page.locator('#mobile-navigation [data-mobile-page=resources]').tap()
-    await page.locator('#mobile-resource-tabs').waitFor()
+    await page.locator('#mobile-resource-category').waitFor()
     await page.locator('#mobile-navigation [data-mobile-page=edit]').tap()
     await page.locator('#mobile-app-more > summary').tap()
     await page.locator('#mobile-app-more [data-mobile-action=mobile-source-view]').tap()

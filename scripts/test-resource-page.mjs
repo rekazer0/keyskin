@@ -37,7 +37,7 @@ try {
     const initial = await page.evaluate(async () => [...(await import("/src/app/state.ts")).appState.archive.changed])
     await page.locator('[data-workspace-page="resources"]').click()
     await page.locator(".workspace #resource-list-view").waitFor()
-    assert.equal(await page.locator("#mobile-resource-tabs").isVisible(), false, "电脑资源页不显示手机分类栏")
+    assert.equal(await page.locator("#mobile-resource-category").isVisible(), false, "电脑资源页不显示手机分类栏")
     assert.equal(await page.locator('[data-workspace-page="resources"]').getAttribute("aria-current"), "page")
     assert.equal(await page.locator('[data-resource-page="style"]').isDisabled(), format === "ssf")
     if (["bds", "bdi"].includes(format)) {
@@ -132,6 +132,7 @@ try {
     await page.locator('#mobile-navigation [data-mobile-page="resources"]').click()
     const mobileCategory = page.getByRole("combobox", { name: "资源分类" })
     assert.ok((await mobileCategory.boundingBox()).height >= 44, "分类保留 44px 触控高度")
+    assert.equal(await page.getByRole("group", { name: "资源类型", exact: true }).count(), 0, "手机不重复显示资源类型标签")
     assert.equal(await mobileCategory.locator('option[value="style"]').isDisabled(), format === "ssf")
     if (format !== "ssf") {
       await mobileCategory.selectOption("style:image")
@@ -168,6 +169,11 @@ try {
       const dark = page.locator('[data-resource-theme="dark"]')
       const light = page.locator('[data-resource-theme="light"]')
       const confirm = page.getByRole("dialog", { name: "创建深色目录？" })
+      const heading = await page.locator(".mobile-resource-heading").boundingBox()
+      const appearance = await page.getByRole("group", { name: "皮肤外观" }).boundingBox()
+      assert.ok(appearance.y >= heading.y + heading.height && appearance.y + appearance.height <= (await mobileCategory.boundingBox()).y)
+      assert.equal(appearance.width, heading.width, "手机皮肤外观独占标题下方一行")
+      assert.ok((await dark.boundingBox()).height >= 44, "外观保留 44px 触控高度")
       const snapshot = () => page.evaluate(async () => {
         const { appState } = await import("/src/app/state.ts")
         const { archive, undoStack } = appState
@@ -178,8 +184,7 @@ try {
           copied: paths.every(path => archive.getBytes(path)?.toString() === archive.getBytes(path.replace(/^light\//, "dark/"))?.toString()),
         }
       })
-      await page.setViewportSize({ width: 1440, height: 900 })
-      await page.locator('[data-resource-page="style"]').click()
+      await mobileCategory.selectOption("style")
       await page.locator("#resource-search").fill("STYLE2")
       await dark.click()
       await confirm.waitFor()
@@ -201,7 +206,11 @@ try {
       await light.click()
       await dark.click()
       assert.equal(await confirm.count(), 0, "已有目录直接切换，无需再确认")
+      assert.equal(await mobileCategory.inputValue(), "style", "切换外观保留资源分类")
       assert.deepEqual(await snapshot(), created)
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.locator('[data-workspace-page="resources"]').click()
+      await page.locator("#resource-page-sidebar #resource-theme").waitFor()
       await page.locator("#desktop-undo").click()
       assert.equal(await light.getAttribute("aria-pressed"), "true", "撤销后回到仍存在的外观")
       assert.deepEqual(await snapshot(), { undo: 0, dark: 0, copied: false })

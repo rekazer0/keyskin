@@ -2837,7 +2837,6 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 #mobile-project-toggle,
 .mobile-page-heading,
 .mobile-preview-return,
-#mobile-resource-tabs,
 #mobile-welcome-new { display: none; }
 @media (max-width: 760px) and (orientation: portrait) {
   body.app-window main { height: var(--mobile-workspace-height); }
@@ -2866,6 +2865,12 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   }
   .preview-toolbar .ui-icon-button { --_height: var(--mobile-control-height); }
   .preview-toolbar .ui-select { height: var(--mobile-control-height); }
+  /* Compact the visible surface without shrinking the touch targets. */
+  .preview-toolbar :is(.ui-icon-button, .ui-select) {
+    border-block: var(--space-xs) solid transparent;
+    background-clip: padding-box;
+  }
+  .preview-toolbar .ui-select > select { height: inherit; }
   @media (min-width: 361px) { .preview-toolbar .ui-input-affix { display: inline-flex; } }
   :root:not([data-mobile-mode="edit"]) .preview-toolbar { display: none; }
   .canvas-wrap.empty { padding: 0; overflow: hidden; }
@@ -2939,9 +2944,6 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
   :root[data-mobile-resource-list="true"] body.app-window main { height: calc(var(--viewport-height) - var(--mobile-navigation-height)); }
   :root[data-mobile-resource-list="true"] .source > .pane-heading { display: none; }
   :root[data-mobile-resource-list="true"] .source #resource-list-view { gap: var(--space-sm); }
-  #mobile-resource-tabs:not([hidden]) { display: flex; flex: none; order: 1; height: auto; }
-  #mobile-resource-tabs > button { flex: 1; min-height: var(--mobile-control-height); min-width: 0; }
-  #mobile-resource-tabs .ui-badge { color: inherit; }
   .source #resource-list-view > #resource-page-heading { display: flex; flex: none; order: 3; gap: var(--space-sm); min-height: var(--mobile-control-height); padding: 0; }
   .source #resource-page-heading > #resource-create-style { flex: none; }
   .source #resource-page-heading > #resource-create-style:not([hidden]) { white-space: nowrap; }
