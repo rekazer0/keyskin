@@ -14,13 +14,21 @@ test('corner resizing stays in the image and clips nine-slice bounds', () => {
 })
 
 test('nine-slice toggle, duplicate, and resize survive TIL serialization', () => {
-  const doc = IniDocument.parse('')
+  const doc = IniDocument.parse('[IMG1]\nSOURCE_RECT=10,20,100,80\n')
   const slice = { index: 1, source: [10, 20, 100, 80], inner: [30, 40, 60, 40] }
   updateTileSlice(doc, slice)
+  assert.equal(doc.get('IMG1', 'SCALE'), '1,1,1,1,1')
   const copied = duplicateTileSlice(slice, 2)
   updateTileSlice(doc, copied)
   updateTileSlice(doc, { index: 1, source: slice.source })
-  const restored = tileSlices(IniDocument.parse(doc.toString()))
-  assert.equal(restored[0].inner, undefined)
-  assert.deepEqual(restored[1], copied)
+  const restored = IniDocument.parse(doc.toString())
+  assert.equal(restored.get('IMG1', 'SCALE'), undefined)
+  assert.equal(restored.get('IMG2', 'SCALE'), '1,1,1,1,1')
+  assert.deepEqual(tileSlices(restored), [{ index: 1, source: slice.source }, copied])
+})
+
+test('editing a nine-slice preserves its existing SCALE', () => {
+  const doc = IniDocument.parse('[IMG1]\nSOURCE_RECT=10,20,100,80\nSCALE=1,2,3,4,5\nINNER_RECT=30,40,60,40\n')
+  updateTileSlice(doc, { index: 1, source: [10, 20, 100, 80], inner: [31, 40, 59, 40] })
+  assert.equal(doc.get('IMG1', 'SCALE'), '1,2,3,4,5')
 })

@@ -89,7 +89,7 @@ try {
       const saved = await savedState()
       await page.waitForFunction(() => document.querySelector('#image-resource-slices [data-slice-index="1"]')?.title === '10, 0, 9, 10')
       assert.equal(saved.undo, before.undo + 1)
-      assert.match(saved.til, /SOURCE_RECT=10,0,9,10\nINNER_RECT=12,2,5,6/)
+      assert.match(saved.til, /\[IMG1\]\nSOURCE_RECT=10,0,9,10\nSCALE=1,1,1,1,1\nINNER_RECT=12,2,5,6/)
       await page.keyboard.press('ControlOrMeta+z')
       await page.waitForFunction(() => document.querySelector('#image-resource-slices [data-slice-index="1"]')?.title === '10, 0, 10, 10')
       assert.deepEqual(await savedState(), before)

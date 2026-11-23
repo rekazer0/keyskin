@@ -60,19 +60,26 @@ export function nextTileIndex(document: IniDocument): number {
   return index
 }
 
+const defaultTileScale = "1,1,1,1,1"
+
 export function updateTileSlice(document: IniDocument, slice: TileSlice): void {
   const section = document.sections().find((name) => tileSectionIndex(name) === slice.index) ?? `IMG${slice.index}`
   if (!document.sections().includes(section)) {
     document.appendSection(section, [
       { key: "SOURCE_RECT", value: slice.source.join(",") },
-      ...(slice.inner ? [{ key: "INNER_RECT", value: slice.inner.join(",") }] : []),
+      ...(slice.inner ? [
+        { key: "SCALE", value: defaultTileScale },
+        { key: "INNER_RECT", value: slice.inner.join(",") },
+      ] : []),
     ])
     syncTileCount(document)
     return
   }
   document.set(section, "SOURCE_RECT", slice.source.join(","))
-  if (slice.inner) document.set(section, "INNER_RECT", slice.inner.join(","))
-  else {
+  if (slice.inner) {
+    if (document.get(section, "SCALE") === undefined) document.set(section, "SCALE", defaultTileScale)
+    document.set(section, "INNER_RECT", slice.inner.join(","))
+  } else {
     document.remove(section, "INNER_RECT")
     // 工具书 V6 p44：有 SCALE 无 INNER_RECT 属于错误写法。
     document.remove(section, "SCALE")
