@@ -8,8 +8,7 @@ import { appState } from "./state"
  */
 const documents = new Map<string, { bytes: Uint8Array; text: string; document: IniDocument }>()
 
-export function cachedIniDocument(path: string): IniDocument | undefined {
-  const archive = appState.archive
+export function cachedIniDocument(path: string, archive = appState.archive): IniDocument | undefined {
   if (!archive?.isText(path)) return undefined
   const bytes = archive.getBytes(path)!
   const cached = documents.get(path)

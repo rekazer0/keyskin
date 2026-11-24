@@ -198,11 +198,42 @@ export function phoneForegroundLayers(visuals: Array<Visual | undefined>): Array
   return visuals.map(phoneForegroundVisual)
 }
 
-function drawNineSlice(    context: CanvasRenderingContext2D,
-  visual: Visual,
-  destination: Rect,
-): void {
-  drawNineSliceImage(context, visual, destination)
+// The bitmap is immutable; editing artwork produces a new bitmap, and editing a tile changes its coordinates.
+const nineSliceImageIDs = new WeakMap<ImageBitmap, number>()
+const nineSliceRasters = new Map<string, HTMLCanvasElement>()
+const nineSliceBudget = 4 * 1024 * 1024
+let nineSliceImageID = 0
+let nineSlicePixels = 0
+
+function drawNineSlice(context: CanvasRenderingContext2D, visual: Visual, destination: Rect): void {
+  const image = visual.image!
+  const scale = visual.nineSlicePixelScale ?? 1
+  const width = Math.max(1, Math.round(destination.width * scale))
+  const height = Math.max(1, Math.round(destination.height * scale))
+  const pixels = (width + 2) * (height + 2)
+  // An oversized skin panel shouldn't flush the small, frequently reused keycaps.
+  if (pixels > nineSliceBudget / 2) return drawNineSliceImage(context, visual, destination)
+
+  let id = nineSliceImageIDs.get(image)
+  if (id === undefined) nineSliceImageIDs.set(image, id = ++nineSliceImageID)
+  const key = `${id}:${visual.source}:${visual.inner}:${width}:${height}`
+  const raster = nineSliceRasters.get(key)
+  if (raster) {
+    nineSliceRasters.delete(key)
+    nineSliceRasters.set(key, raster)
+    context.drawImage(raster, 0, 0, width, height, destination.x, destination.y, destination.width, destination.height)
+    return
+  }
+  while (nineSlicePixels + pixels > nineSliceBudget || nineSliceRasters.size >= 128) {
+    const [oldKey, old] = nineSliceRasters.entries().next().value!
+    nineSliceRasters.delete(oldKey)
+    nineSlicePixels -= old.width * old.height
+  }
+  const buffer = document.createElement("canvas")
+  setCanvasSize(buffer, width + 2, height + 2)
+  drawNineSliceImage(context, visual, destination, () => buffer)
+  nineSliceRasters.set(key, buffer)
+  nineSlicePixels += pixels
 }
 
 export function drawVisual(

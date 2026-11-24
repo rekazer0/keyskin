@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { constrainedCanvasSize, drawNineSliceImage } from "../src/preview-draw.ts"
+import { constrainedCanvasSize, drawNineSliceImage, drawVisual } from "../src/preview-draw.ts"
 
 // Model the shared scratch canvas: resizing or clearing wipes it and drawing replaces pixels.
 function setup() {
@@ -66,6 +66,34 @@ test('device pixels stretch a narrow band even when source and layout sizes matc
   assert.deepEqual(centre(frames[0]), [62, 84, 2, 17, 52, 64, 2, 17])
   assert.deepEqual(centre(frames[1]), [62, 84, 2, 17, 52, 64, 108, 168])
   assert.deepEqual(frames[1].args, [0, 0, 212, 302, 13, 12, 106, 151])
+})
+
+test('reuses a raster at different positions but not after its pixels change', (t) => {
+  let painted = 0
+  const previousDocument = globalThis.document
+  globalThis.document = { createElement: () => ({
+    width: 0, height: 0,
+    getContext: () => ({ drawImage: () => painted++, clearRect() {} }),
+  }) }
+  t.after(() => {
+    if (previousDocument === undefined) delete globalThis.document
+    else globalThis.document = previousDocument
+  })
+  const drawn = []
+  const context = { drawImage: (buffer, ...args) => drawn.push({ buffer, args }) }
+  const visual = { image: {}, source: [10, 20, 106, 151], inner: [52, 64, 2, 17] }
+  const destination = { x: 0, y: 0, width: 120, height: 150 }
+  drawVisual(context, visual, destination, true)
+  drawVisual(context, { ...visual }, { ...destination, x: 140 }, true)
+  assert.equal(painted, 9)
+  assert.equal(drawn[0].buffer, drawn[1].buffer)
+  assert.equal(drawn[1].args[4], 140)
+  for (const change of [
+    { image: {} }, { source: [4, 8, 106, 151] }, { inner: [12, 64, 2, 17] }, { nineSlicePixelScale: 2 },
+  ]) drawVisual(context, { ...visual, ...change }, destination, true)
+  drawVisual(context, visual, { ...destination, width: 121 }, true)
+  assert.equal(painted, 54)
+  assert.equal(new Set(drawn.map(({ buffer }) => buffer)).size, 6)
 })
 
 test('thumbnail backing size stays within its pixel budget', () => {

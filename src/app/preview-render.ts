@@ -5,6 +5,7 @@ import { setSimulatedComposition, toolbarPreview, currentDeviceValue, deviceGeom
 import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, candidateBackgroundCanvas, candidateInputBackgroundCanvas, previewCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, mobilePreviewGuides, mobilePreviewState, toggleGuides, sidebarLayoutSize } from "./dom"
 import { candidatePreview } from "../simulation.ts"
 import { isConfiguredSymbolLayout, knownSkinStates, skinStateLabel } from "../actions.ts"
+import { cachedIniDocument } from "./style-document"
 import { textDocument, visualResolver, currentBdaAppearance, bdaBasePath, bdaAvailableLayoutPaths } from "./bda-documents"
 import { genConfigPath, keyboardContext, refreshToolbarPreview, legacyAnimationConfigPath, styleConfigPath, toolbarConfigPath, isToolbarPath, layoutSource } from "./config-context"
 import { deviceSpec, keyboardPreviewGeometry, showsKeyboardAccessories } from "../devices.ts"
@@ -55,30 +56,35 @@ function renderCandidateState(): boolean {
     language,
     skinState.value ? Number(skinState.value) : undefined,
   )
-  candidateComposition.hidden = !state.composing
-  candidateInput.hidden = !state.input && !inputBarInKeyboard()
-  candidateInputText.textContent = state.input
-  candidateWords.replaceChildren(...state.candidates.map((value) => {
-    const item = document.createElement("span")
-    item.textContent = value
-    return item
-  }))
-  const firstCandidate = candidateWords.firstElementChild as HTMLElement | null
-  if (firstCandidate) {
-    applyCandidateTextVisual(firstCandidate, appState.firstCandidateTextVisual, appState.candidateTextWidth)
+  const inputHidden = !state.input && !inputBarInKeyboard()
+  if (candidateComposition.hidden === state.composing) candidateComposition.hidden = !state.composing
+  if (candidateInput.hidden !== inputHidden) candidateInput.hidden = inputHidden
+  if (candidateInputText.textContent !== state.input) candidateInputText.textContent = state.input
+  while (candidateWords.childElementCount > state.candidates.length) candidateWords.lastElementChild!.remove()
+  for (const [index, value] of state.candidates.entries()) {
+    let item = candidateWords.children[index] as HTMLElement | undefined
+    if (!item) {
+      item = document.createElement("span")
+      if (!index) applyCandidateTextVisual(item, appState.firstCandidateTextVisual, appState.candidateTextWidth)
+      candidateWords.append(item)
+    }
+    if (item.textContent !== value) item.textContent = value
   }
   return state.composing
 }
 
 export function refreshSimulationState(): boolean {
   const composing = renderCandidateState()
-  const gen = textDocument(genConfigPath())
+  const path = genConfigPath()
+  const gen = cachedIniDocument(path, layoutSource()) ?? (appState.archive?.format === "bda" ? textDocument(path) : undefined)
   const symbolPanel = isConfiguredSymbolLayout(appState.layoutPath, gen)
   // 真机（百度安卓 13.3）：[CAND] TYPE=3 的候选栏叠在面板顶部，没有候选时整条隐藏。
   const overlay = gen?.get("CAND", "TYPE")?.trim() === "3"
   deviceShell.toggleAttribute("data-candidate-overlay", overlay)
-  candidateArea.hidden = symbolPanel || (overlay && !composing)
-  toolbarStrip.hidden = symbolPanel || !toolbarStrip.dataset.path
+  const areaHidden = symbolPanel || (overlay && !composing)
+  const toolbarHidden = symbolPanel || !toolbarStrip.dataset.path
+  if (candidateArea.hidden !== areaHidden) candidateArea.hidden = areaHidden
+  if (toolbarStrip.hidden !== toolbarHidden) toolbarStrip.hidden = toolbarHidden
   toolbarPreview.setPersistentOnly(composing)
   return composing
 }
@@ -338,41 +344,27 @@ export function refreshPreview(): void {
 }
 
 export function refreshSimulationPreview(): void {
+  const wasComposing = !candidateComposition.hidden
+  const wasHidden = candidateArea.hidden
   const composing = refreshSimulationState()
-  if (!appState.archive || !appState.activeKeyboardGeometry) return
-  applyDeviceKeyboardGeometry(
-    appState.activeKeyboardGeometry.panelWidth,
-    appState.activeKeyboardGeometry.panelHeight,
-    appState.activeKeyboardGeometry.candidateHeight,
-    appState.activeKeyboardGeometry.candidateInputHeight,
-  )
-  updateCanvasCandidateGeometry(appState.activeKeyboardGeometry.candidateHeight)
-  // A Palm bar keeps its size while composing; its icons follow the composition by themselves.
-  const resolver = appState.archive.format === "sxi" ? undefined : visualResolver()
+  const archive = appState.archive
+  const geometry = appState.activeKeyboardGeometry
+  // Letters within the same composition only change text. The input ResizeObserver fits its bar.
+  if (!archive || !geometry || (wasComposing === composing && wasHidden === candidateArea.hidden)) return
+  // Palm only changes the visible icons. Other formats can change bar height on composition boundaries.
+  const resolver = archive.format === "sxi" ? undefined : visualResolver()
   if (!resolver) return
   const toolbarSize = refreshToolbarPreview(composing, resolver)
-  const symbolPanel = candidateArea.hidden
-  const candidateHeight = symbolPanel
-    ? 0
-    : overlaidCandidateHeight(toolbarSize?.height ?? appState.activeKeyboardGeometry.candidateHeight, appState.activeKeyboardGeometry.panelHeight)
-  const candidateInputHeight = symbolPanel
-    ? 0
-    : (toolbarSize?.inputHeight ?? appState.activeKeyboardGeometry.candidateInputHeight)
-  if (
-    candidateHeight !== appState.activeKeyboardGeometry.candidateHeight ||
-    candidateInputHeight !== appState.activeKeyboardGeometry.candidateInputHeight
-  ) {
-    appState.activeKeyboardGeometry.candidateHeight = candidateHeight
-    appState.activeKeyboardGeometry.candidateInputHeight = candidateInputHeight
-    applyDeviceKeyboardGeometry(
-      appState.activeKeyboardGeometry.panelWidth,
-      appState.activeKeyboardGeometry.panelHeight,
-      candidateHeight,
-      candidateInputHeight,
-    )
+  const candidateHeight = candidateArea.hidden ? 0
+    : overlaidCandidateHeight(toolbarSize?.height ?? geometry.candidateHeight, geometry.panelHeight)
+  const candidateInputHeight = candidateArea.hidden ? 0 : (toolbarSize?.inputHeight ?? geometry.candidateInputHeight)
+  if (candidateHeight !== geometry.candidateHeight || candidateInputHeight !== geometry.candidateInputHeight) {
+    geometry.candidateHeight = candidateHeight
+    geometry.candidateInputHeight = candidateInputHeight
+    applyDeviceKeyboardGeometry(geometry.panelWidth, geometry.panelHeight, candidateHeight, candidateInputHeight)
     updateCanvasCandidateGeometry(candidateHeight)
   }
-  if (appState.archive.format === "bdi") refreshNativeScenes()
+  if (archive.format === "bdi") refreshNativeScenes()
 }
 
 // 每次切换布局都会把全部布局文件重新解析（BDA 还要按当前布局逐个合成）来统计皮肤状态；内容不变时复用结果。
