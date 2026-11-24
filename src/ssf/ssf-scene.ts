@@ -34,7 +34,7 @@ export class SsfStyles {
   readonly keys: IniDocument
   private readonly archive: SkinArchive
   private readonly pixelScale: number
-  private readonly fonts: Promise<void>[] = []
+  private readonly fonts: Promise<boolean>[] = []
 
   constructor(archive: SkinArchive, pkg: SsfPackage, theme: SsfTheme, pixelScale = 1) {
     this.archive = archive

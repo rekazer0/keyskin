@@ -69,14 +69,14 @@ export function fontSearchDirectories(stylePath: string): string[] {
 
 /** 把引用解析成归档里真实存在的字体路径（大小写不敏感，可补 .ttf/.otf/.ttc）。 */
 export function resolveFontReference(
-  names: readonly string[],
+  names: readonly string[] | ReadonlyMap<string, string>,
   reference: string,
   baseDirectories: readonly string[],
   options: { extensions?: boolean } = {},
 ): string | undefined {
   if (!reference.trim()) return
   const candidates = options.extensions ? fontNameCandidates(reference) : [reference.trim().replace(/^['"]|['"]$/g, "")]
-  const byLowercase = new Map(names.map((name) => [name.toLowerCase(), name]))
+  const byLowercase = "get" in names ? names : new Map(names.map((name) => [name.toLowerCase(), name]))
   for (const candidate of candidates) {
     for (const directory of baseDirectories) {
       const path = normalizeArchivePath(directory, candidate)

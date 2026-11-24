@@ -2,7 +2,7 @@
 // 只有写出去的皮肤包被改写；打开带切片的皮肤时询问是否还原成文字。
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
-import { canvasFontFamily, embeddedFontPath, fontWeight, isTransparentColor, loadEmbeddedFont, parseColor, withTextShadow } from "../atlas.ts"
+import { canvasFontFamily, embeddedFontPath, fontWeight, isTransparentColor, loadEmbeddedFont, parseColor, releaseEmbeddedFonts, withTextShadow } from "../atlas.ts"
 import { fontSearchDirectories, resolveFontReference, skinStylePaths, themeOfPath } from "../font-files.ts"
 import {
   bakeableStyles,
@@ -110,7 +110,11 @@ async function bakeStyle(archive: SkinArchive, path: string): Promise<void> {
  * 与背景、图集合用同一份导出副本，全部处理完才打包。
  */
 export async function bakeExportedFonts(archive: SkinArchive): Promise<void> {
-  for (const path of skinStylePaths(archive.names())) await bakeStyle(archive, path)
+  try {
+    for (const path of skinStylePaths(archive.names())) await bakeStyle(archive, path)
+  } finally {
+    releaseEmbeddedFonts(archive)
+  }
 }
 
 /** 皮肤里是否有导出时切过的字体图片。 */

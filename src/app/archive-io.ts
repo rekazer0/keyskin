@@ -6,6 +6,7 @@ import { ask } from "./ask.ts"
 import { appState } from "./state"
 import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
+import { releaseEmbeddedFonts } from "../atlas.ts"
 import { prefixedSourcePath } from "../source-tree.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
 import { buildSxiZipAsync } from "../palm/palm-export.ts"
@@ -98,6 +99,7 @@ export async function loadArchive(
   appState.sourceWorkspacePendingArchive = undefined
   appState.assetURL = releaseImagePreviewURL(appState.assetURL)
   clearImageSlicePicker()
+  if (appState.archive && appState.archive !== nextArchive) releaseEmbeddedFonts(appState.archive)
   appState.archive = nextArchive
   appState.resourceStyleType = "all"
   appState.resourceUsageFilter = "all"

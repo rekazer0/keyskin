@@ -16,7 +16,7 @@ import { resourceInventoryItems } from "./resource-inventory"
 import { availableSkinThemes, usesSkinThemeDirectories } from "./config-context"
 import { selectChoice } from "./mobile-layout"
 import { openResources, resourceNavigationPath } from "./resource-navigation"
-import { fontSample } from "./font-picker"
+import { fontSample, lazyFontSample } from "./font-picker"
 import { skinFontField } from "./skin-fonts"
 import { mobilePortraitQuery, releaseKeySound } from "./canvas-interaction"
 import { field, section } from "./property-rows"
@@ -211,7 +211,8 @@ function renderCatalog(): void {
     if (row.dataset.font === "true") {
       const field = skinFontField(appState.selectedResourceCatalogItem.split("/")[0])
       const detail = $("#style-detail-fields")
-      const sample = fontSample({ value: appState.selectedResourceCatalogItem, label: row.querySelector("strong")!.textContent!, ...loadEmbeddedFont(archive, appState.selectedResourceCatalogItem) })
+      const path = appState.selectedResourceCatalogItem
+      const sample = fontSample({ value: path, label: row.querySelector("strong")!.textContent!, load: () => loadEmbeddedFont(archive, path) })
       sample.dataset.size = "lg"
       detail.replaceChildren(section("字体预览", [sample]), ...field ? [field] : [])
     } else {
@@ -256,7 +257,7 @@ function renderCatalog(): void {
     const text = element("span", "ui-list-item-text")
     const mode = item.id.startsWith("dark/") ? "深色" : item.id.startsWith("light/") ? "浅色" : ""
     text.append(Object.assign(element("strong"), { textContent: item.title }), Object.assign(element("small"), { textContent: item.font && mode ? `${mode} · ${item.detail}` : item.detail }))
-    if (item.font) row.append(fontSample({ value: item.id, label: item.title, ...loadEmbeddedFont(archive, item.id) }))
+    if (item.font) row.append(lazyFontSample({ value: item.id, label: item.title, load: preview => loadEmbeddedFont(archive, item.id, preview) }, true))
     else row.append(createIcon(item.icon, 20))
     row.append(text)
     row.addEventListener("click", () => choose(row))

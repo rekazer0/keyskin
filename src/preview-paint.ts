@@ -46,16 +46,6 @@ export async function paintPreview(self: Preview): Promise<void> {
   const drawID = ++self.drawID
   const isDragging = Boolean(self.editDrag)
 
-  // 拖拽时跳过 resolver 的 ready 等待，使用已缓存的数据
-  if (!isDragging) {
-    try {
-      await self.resolver?.ready?.()
-    } catch (error) {
-      console.warn("预览解析准备失败:", error)
-      return
-    }
-  }
-
   // A native scene (Palm, Sogou) replaces the resolver's panel, key and toolbar visuals.
   // A running animation keeps the painted scene while the next one (a press refreshes it) builds.
   const next = self.sceneForState()
@@ -218,6 +208,16 @@ export async function paintPreview(self: Preview): Promise<void> {
         ])
       : Promise.resolve([undefined, undefined]),
   ])
+  // 拖拽时跳过 resolver 的 ready 等待，使用已缓存的数据
+  if (!isDragging) {
+    try {
+      await self.resolver?.ready?.()
+    } catch (error) {
+      console.warn("预览解析准备失败:", error)
+      return
+    }
+  }
+
   if (drawID !== self.drawID) return
   const context = beginCanvas(self)
   if (!context) return

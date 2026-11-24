@@ -56,15 +56,18 @@ function replaceText(changes: Change[], path: string, text: string, after: strin
 /** 字体候选与画布使用同一个文件解析器；系统字体仍可直接输入。 */
 export function skinFontChoices(inherited = "", sourcePath = styleConfigPath()): FontChoice[] {
   const archive = appState.archive
+  const files = archive?.names() ?? []
+  const paths = new Map(files.map(path => [path.toLowerCase(), path]))
+  const pkg = archive?.format === "ssf" ? ssfPackage() : undefined
   const make = (value: string, label = value): FontChoice => {
     const reference = value || inherited
-    const path = archive && (archive.format === "ssf" ? ssfPackage()?.path(ssfTheme(), reference)
-      : isFontFile(reference) && archive.getBytes(reference) ? reference : embeddedFontPath(archive.names(), sourcePath, reference, true))
-    return { value, label, detail: path, ...(path && archive ? loadEmbeddedFont(archive, path) : { family: reference || undefined }),
+    const path = archive && (archive.format === "ssf" ? pkg?.path(ssfTheme(), reference)
+      : isFontFile(reference) && archive.getBytes(reference) ? reference : embeddedFontPath(paths, sourcePath, reference, true))
+    return { value, label, detail: path, ...(path && archive ? { load: preview => loadEmbeddedFont(archive, path, preview) } : { family: reference || undefined }),
       missing: Boolean(reference && !path && isFontFile(reference)) }
   }
   if (archive?.format === "sxi" || archive?.format === "bda") return SYSTEM_FONTS.map(choice => make(choice.value, choice.label))
-  const names = [...new Set(skinFontFiles(archive?.names() ?? []).filter(path => !["bdi", "bds"].includes(archive?.format ?? "") || themeOfPath(path) === themeOfPath(sourcePath)).map(path => path.split("/").pop()!))]
+  const names = [...new Set(skinFontFiles(files).filter(path => !["bdi", "bds"].includes(archive?.format ?? "") || themeOfPath(path) === themeOfPath(sourcePath)).map(path => path.split("/").pop()!))]
   return [make("", inherited ? "继承皮肤字体" : "系统默认"), ...names.map(name => make(name))]
 }
 

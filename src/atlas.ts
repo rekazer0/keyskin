@@ -245,7 +245,7 @@ function resolveTextVisual(
   styles: IniDocument,
   foreground: string,
   highlighted: boolean,
-  defaultFontName?: string,
+  fontForSection?: (section: string) => string | undefined,
 ): TextVisual | undefined {
   const result: TextVisual = {}
   const visited = new Set<string>()
@@ -257,14 +257,16 @@ function resolveTextVisual(
       if (!styles.hasSection(section) || visited.has(section)) continue
       visited.add(section)
       const fontSize = Number(styles.get(section, "FONT_SIZE"))
-      const fontName = styles.get(section, "FONT_NAME")?.trim()
       const clearType = Number(styles.get(section, "FONT_CLEARTYPE"))
       const color = parseColor(
         (highlighted ? styles.get(section, "HL_COLOR") : undefined) ??
           styles.get(section, "NM_COLOR"),
       )
       if (result.fontSize === undefined && Number.isFinite(fontSize)) result.fontSize = fontSize
-      if (result.fontName === undefined && fontName) result.fontName = fontName
+      if (result.fontName === undefined) {
+        const fontName = fontForSection?.(section)
+        if (fontName) result.fontName = fontName
+      }
       if (result.clearType === undefined && Number.isFinite(clearType)) result.clearType = clearType
       const shadowSize = Number(styles.get(section, "BORDER_SIZE"))
       const shadowColor = parseColor(styles.get(section, "BORDER_COLOR"))
@@ -275,19 +277,11 @@ function resolveTextVisual(
       if (result.weight === undefined && weight) result.weight = weight
     }
   }
-  if (result.fontName === undefined && defaultFontName) result.fontName = defaultFontName
+  if (result.fontName === undefined) {
+    const fallback = fontForSection?.("GLOBAL")
+    if (fallback) result.fontName = fallback
+  }
   return Object.keys(result).length ? result : undefined
-}
-
-function resolveStyleTextVisual(
-  styles: IniDocument,
-  styleID: string,
-  highlighted: boolean,
-  defaultFontName?: string,
-): StyleTextVisual | undefined {
-  const text = styles.get(`STYLE${styleID.trim()}`, "SHOW")
-  if (!text) return
-  return { text, ...resolveTextVisual(styles, styleID, highlighted, defaultFontName) }
 }
 
 function resolveVisualSpec(
@@ -329,15 +323,24 @@ export function pngBitmap(bytes: Uint8Array): Promise<ImageBitmap | undefined> {
   return image
 }
 
-type EmbeddedFont = { family: string; ready: Promise<void> }
+export type EmbeddedFont = { family: string; ready: Promise<boolean> }
+type CachedFont = { bytes: Uint8Array; font: EmbeddedFont; face?: FontFace; viewers?: number }
 
 let embeddedFontID = 0
 // 字体缓存按归档里的字节对象复用：同一份字体只加载一次；重新导入同名文件后字节对象变了，
 // 这里会加载新的 FontFace，预览不会继续用旧字形。
-const embeddedFonts = new WeakMap<SkinArchive, Map<string, { bytes: Uint8Array; font: EmbeddedFont }>>()
+const embeddedFonts = new WeakMap<SkinArchive, Map<string, CachedFont>>()
+
+export function releaseEmbeddedFonts(archive: SkinArchive): void {
+  const cache = embeddedFonts.get(archive)
+  if (!cache) return
+  for (const { face } of cache.values()) if (face) document.fonts.delete(face)
+  cache.clear()
+  embeddedFonts.delete(archive)
+}
 
 export function embeddedFontPath(
-  names: readonly string[],
+  names: readonly string[] | ReadonlyMap<string, string>,
   stylePath: string,
   reference: string | undefined,
   extensions = false,
@@ -347,7 +350,7 @@ export function embeddedFontPath(
   return resolveFontReference(names, clean, fontSearchDirectories(stylePath), { extensions })
 }
 
-export function loadEmbeddedFont(archive: SkinArchive, path: string): EmbeddedFont | undefined {
+export function loadEmbeddedFont(archive: SkinArchive, path: string, preview?: AbortSignal): EmbeddedFont | undefined {
   const bytes = archive.getBytes(path)
   if (!bytes) return
   let cache = embeddedFonts.get(archive)
@@ -355,20 +358,35 @@ export function loadEmbeddedFont(archive: SkinArchive, path: string): EmbeddedFo
     cache = new Map()
     embeddedFonts.set(archive, cache)
   }
-  const cached = cache.get(path)
-  if (cached?.bytes === bytes) return cached.font
-
-  const family = `BdiEmbeddedFont${++embeddedFontID}`
-  const data = new Uint8Array(bytes.byteLength)
-  data.set(bytes)
-  const ready = (async () => {
-    if (typeof FontFace === "undefined" || typeof document === "undefined") return
-    const face = await new FontFace(family, data.buffer).load()
-    document.fonts.add(face)
-  })().catch(() => {})
-  const result = { family, ready }
-  cache.set(path, { bytes, font: result })
-  return result
+  let entry = cache.get(path)
+  if (entry?.bytes !== bytes) {
+    if (entry?.face) document.fonts.delete(entry.face)
+    const family = `BdiEmbeddedFont${++embeddedFontID}`
+    const ready = Promise.resolve().then(async () => {
+      if (typeof FontFace === "undefined" || typeof document === "undefined" || cache.get(path) !== next) return false
+      const face = await new FontFace(family, bytes.slice().buffer).load()
+      if (cache.get(path) !== next || archive.getBytes(path) !== bytes) return false
+      document.fonts.add(face)
+      next.face = face
+      return true
+    }).catch(() => false)
+    const next: CachedFont = { bytes, font: { family, ready }, viewers: preview ? 0 : undefined }
+    cache.set(path, next)
+    entry = next
+  }
+  // A list sample only borrows the face. Actual keyboard/selected fonts stay cached for the document.
+  if (!preview) entry.viewers = undefined
+  else if (entry.viewers !== undefined) {
+    const borrowed = entry
+    const fonts = cache
+    borrowed.viewers!++
+    preview.addEventListener("abort", () => {
+      if (fonts.get(path) !== borrowed || borrowed.viewers === undefined || --borrowed.viewers) return
+      if (borrowed.face) document.fonts.delete(borrowed.face)
+      fonts.delete(path)
+    }, { once: true })
+  }
+  return entry.font
 }
 
 export class AtlasResolver {
@@ -377,8 +395,10 @@ export class AtlasResolver {
   private readonly resourceRoots: string[]
   private readonly styles?: IniDocument
   private readonly tiles = new Map<string, IniDocument>()
-  private readonly embeddedFontFamily?: string
-  private readonly embeddedFontReady: Promise<void>
+  private readonly stylePath?: string
+  private fontPaths?: Map<string, string>
+  private readonly fontFamilies = new Map<string, string | undefined>()
+  private readonly pendingFonts = new Set<Promise<boolean>>()
 
   get androidKeyLayers(): boolean { return this.archive.format === "bds" }
 
@@ -392,46 +412,34 @@ export class AtlasResolver {
     const path = [
       ...this.resourceRoots.map((root) => `${root}/default.css`),
     ].find((candidate) => archive.getBytes(candidate) !== undefined)
+    this.stylePath = path
     if (path) this.styles = IniDocument.parse(archive.getText(path))
-    const fontPath = path && this.styles
-      ? embeddedFontPath(archive.names(), path, this.styles.get("GLOBAL", "FONT_PATH"))
-      : undefined
-    const embeddedFont = fontPath ? loadEmbeddedFont(archive, fontPath) : undefined
-    this.embeddedFontFamily = embeddedFont?.family
-    const fonts = [embeddedFont?.ready]
-    // Android 的旧 CSS 引擎只解析 [GLOBAL] FONT_PATH（CssLoader.t()），[STYLE*] 的 FONT_NAME 和
-    // 样式级 FONT_PATH 都没有分支（StyleParam.v()），GLOBAL 字体也不作用于按键文字。导出 BDS 时按
-    // 下面同样的规则把按键文字切成图片（font-bake-export.ts），所以 BDS 预览的就是导出后的样子：
-    // 指向皮肤字体文件的 FONT_PATH / FONT_NAME 生效，系统字体名无法切片，不生效。
-    if (path && this.styles) {
-      // [STYLE*] FONT_PATH：皮肤里已经写了才支持，内嵌字体优先于 FONT_NAME。
-      for (const { section, key, value } of this.styles.entries()) {
-        if (key !== "FONT_PATH" || section === "GLOBAL") continue
-        const source = embeddedFontPath(archive.names(), path, value)
-        const font = source && loadEmbeddedFont(archive, source)
-        if (!font) continue
-        this.styles.set(section, "FONT_NAME", font.family)
-        fonts.push(font.ready)
-      }
-      // FONT_NAME 可以写 benxu、DROIDSANSFALLBACK.ttf 或系统字体名；只有落到归档文件才内嵌，
-      // BDI 的系统字体名保持原样，由 canvasFontFamily 走系统字体回退。
-      for (const { section, key, value } of this.styles.entries()) {
-        if (key !== "FONT_NAME" || section === "GLOBAL" || value.startsWith("BdiEmbeddedFont")) continue
-        const source = embeddedFontPath(archive.names(), path, value, true)
-        const font = source && loadEmbeddedFont(archive, source)
-        if (!font) {
-          if (archive.format === "bds") this.styles.remove(section, key)
-          continue
-        }
-        this.styles.set(section, key, font.family)
-        fonts.push(font.ready)
-      }
-    }
-    this.embeddedFontReady = Promise.all(fonts).then(() => {})
   }
 
-  ready(): Promise<void> {
-    return this.embeddedFontReady
+  // 只解析实际绘制的样式；其余布局或未用样式不解码字体。FONT_PATH 优先于 FONT_NAME。
+  private fontForSection = (section: string): string | undefined => {
+    if (!this.stylePath || !this.styles) return
+    if (this.fontFamilies.has(section)) return this.fontFamilies.get(section)
+    const path = this.styles.get(section, "FONT_PATH")
+    const name = section === "GLOBAL" ? undefined : this.styles.get(section, "FONT_NAME")?.trim()
+    const find = (value: string | undefined, extensions = false) => {
+      if (!value) return
+      this.fontPaths ??= new Map(this.archive.names().map(file => [file.toLowerCase(), file]))
+      return embeddedFontPath(this.fontPaths, this.stylePath!, value, extensions)
+    }
+    const source = find(path) ?? find(name, true)
+    const font = source ? loadEmbeddedFont(this.archive, source) : undefined
+    if (font) {
+      this.pendingFonts.add(font.ready)
+      void font.ready.then(() => this.pendingFonts.delete(font.ready))
+    }
+    const family = font?.family ?? (this.archive.format === "bds" ? undefined : name)
+    this.fontFamilies.set(section, family)
+    return family
+  }
+
+  async ready(): Promise<void> {
+    if (this.pendingFonts.size) await Promise.all(this.pendingFonts)
   }
 
   private bitmap(path: string): Promise<ImageBitmap | undefined> | undefined {
@@ -573,12 +581,13 @@ export class AtlasResolver {
 
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined {
     if (!this.styles) return
-    return resolveTextVisual(this.styles, foreground, highlighted, this.embeddedFontFamily)
+    return resolveTextVisual(this.styles, foreground, highlighted, this.fontForSection)
   }
 
   resolveListText(foreground: string, highlighted: boolean): TextVisual | undefined {
-    const visual = this.resolveText(foreground, highlighted)
-    if (!visual || this.archive.format !== "bds") return visual
+    if (!this.styles || this.archive.format !== "bds") return this.resolveText(foreground, highlighted)
+    const visual = resolveTextVisual(this.styles, foreground, highlighted)
+    if (!visual) return
     // SubList.n()/u(): LIST has its own user-font paint; fixed NAMES use 1.2× text size.
     // shortcut: runtime skin-font injection depends on the phone's font settings; preview the default paint.
     return { ...visual, fontName: undefined, weight: undefined, fontSize: visual.fontSize === undefined ? undefined : visual.fontSize * 1.2 }
@@ -586,6 +595,7 @@ export class AtlasResolver {
 
   resolveStyleText(styleID: string, highlighted: boolean): StyleTextVisual | undefined {
     if (!this.styles) return
-    return resolveStyleTextVisual(this.styles, styleID, highlighted, this.embeddedFontFamily)
+    const text = this.styles.get(`STYLE${styleID.trim()}`, "SHOW")
+    if (text) return { text, ...this.resolveText(styleID, highlighted) }
   }
 }

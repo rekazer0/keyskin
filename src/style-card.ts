@@ -60,9 +60,9 @@ export function styleFilterButtons(options: readonly (readonly [string, string])
 }
 
 export async function textStyleSample(canvas: HTMLCanvasElement, resolver: VisualResolver, styleID: string, highlighted: boolean): Promise<void> {
-  await resolver.ready?.()
   const text = resolver.resolveStyleText?.(styleID, highlighted)
   const visual = text ?? resolver.resolveText(styleID, highlighted)
+  await resolver.ready?.()
   const context = canvas.getContext("2d")
   if (!context) return
   context.clearRect(0, 0, canvas.width, canvas.height)

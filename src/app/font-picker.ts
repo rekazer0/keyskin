@@ -1,4 +1,4 @@
-import { canvasFontFamily, retinaThumbnail } from "../atlas.ts"
+import { canvasFontFamily, retinaThumbnail, type EmbeddedFont } from "../atlas.ts"
 import { bindListboxKeys, element, emptyState, searchField } from "../dom-element.ts"
 import { releaseOnRemove } from "../dom-lifecycle.ts"
 import { bindDialog } from "./ask.ts"
@@ -8,7 +8,14 @@ export const SYSTEM_FONTS = [
   { value: "", label: "系统默认" }, { value: "sans-serif", label: "无衬线" }, { value: "serif", label: "衬线" }, { value: "monospace", label: "等宽" },
 ]
 
-export type FontChoice = { value: string; label: string; detail?: string; family?: string; ready?: Promise<void>; missing?: boolean }
+export type FontChoice = { value: string; label: string; detail?: string; family?: string; load?: (preview?: AbortSignal) => EmbeddedFont | undefined; missing?: boolean }
+
+export async function resolveFontChoice(choice: FontChoice, preview?: AbortSignal): Promise<{ family?: string; loaded: boolean }> {
+  if (choice.missing) return { loaded: false }
+  if (!choice.load) return { family: choice.family, loaded: true }
+  const font = choice.load(preview)
+  return font && await font.ready ? { family: font.family, loaded: true } : { loaded: false }
+}
 
 /** 可手输名称，也可点字形预览选择；两种操作共用同一个字段。 */
 export function fontControl(spec: { value: string; choices: FontChoice[]; placeholder?: string }, label: string, commit: (value: string) => void, state: { editable: boolean; mixed?: boolean }): HTMLElement {
@@ -39,38 +46,66 @@ export function fontControl(spec: { value: string; choices: FontChoice[]; placeh
 }
 
 /** 字形直接用预览画布已加载的字体，避免把皮肤字体应用到编辑器界面。 */
-async function drawFontSample(canvas: HTMLCanvasElement, choice: FontChoice, sample = "键设 Aa 123"): Promise<void> {
+async function drawFontSample(canvas: HTMLCanvasElement, choice: FontChoice, resolved: ReturnType<typeof resolveFontChoice>, sample = "键设 Aa 123"): Promise<void> {
   canvas.setAttribute("aria-busy", "true")
-  let failed = false
-  try { await choice.ready } catch { failed = true }
-  if (!canvas.isConnected) return
-  const loaded = !failed && !choice.missing && (!choice.ready || Array.from(document.fonts).some(face => face.family === choice.family && face.status === "loaded"))
-  const context = retinaThumbnail(canvas, canvas.clientWidth || 240, canvas.clientHeight || 48).getContext("2d")
+  const { family, loaded } = await resolved
+  if (!canvas.isConnected || !canvas.clientWidth || !canvas.clientHeight) return
+  const context = retinaThumbnail(canvas, canvas.clientWidth, canvas.clientHeight).getContext("2d")
   if (!context) return
   const style = getComputedStyle(canvas)
   const text = loaded ? sample : "无法预览"
   context.clearRect(0, 0, canvas.width, canvas.height)
   context.fillStyle = style.getPropertyValue(loaded ? "--text" : "--tertiary").trim()
   const size = Number.parseFloat(style.getPropertyValue("--font-size-xl")) * canvas.height / (canvas.clientHeight || 48)
-  context.font = `${size}px ${canvasFontFamily(loaded ? choice.family : undefined)}`
+  context.font = `${size}px ${canvasFontFamily(family)}`
   const fit = Math.min(1, canvas.width * 0.9 / Math.max(1, context.measureText(text).width))
-  context.font = `${size * fit}px ${canvasFontFamily(loaded ? choice.family : undefined)}`
+  context.font = `${size * fit}px ${canvasFontFamily(family)}`
   context.textAlign = "center"
   context.textBaseline = "middle"
   context.fillText(text, canvas.width / 2, canvas.height / 2)
-  canvas.dataset.fontFamily = loaded ? choice.family ?? "system-ui" : ""
+  canvas.dataset.fontFamily = loaded ? family ?? "system-ui" : ""
   canvas.setAttribute("aria-label", `${choice.label}：${text}`)
   canvas.setAttribute("aria-busy", "false")
 }
 
-export function fontSample(choice: FontChoice, sample?: string): HTMLCanvasElement {
+export function fontSample(choice: FontChoice, sample?: string, transient = false): HTMLCanvasElement {
   const canvas = element("canvas", "ui-font-sample")
+  canvas.width = canvas.height = 0
   canvas.setAttribute("role", "img")
-  const resize = new ResizeObserver(() => { void drawFontSample(canvas, choice, sample) })
+  const lifetime = transient ? new AbortController() : undefined
+  let font: ReturnType<typeof resolveFontChoice> | undefined
+  const resize = new ResizeObserver(() => {
+    if (!canvas.isConnected || !canvas.clientWidth || !canvas.clientHeight) return
+    font ??= resolveFontChoice(choice, lifetime?.signal)
+    void drawFontSample(canvas, choice, font, sample)
+  })
   resize.observe(canvas)
-  releaseOnRemove(canvas, () => { resize.disconnect(); canvas.width = canvas.height = 0 })
-  void drawFontSample(canvas, choice, sample)
+  releaseOnRemove(canvas, () => { lifetime?.abort(); resize.disconnect(); canvas.width = canvas.height = 0 })
   return canvas
+}
+
+const visibleSamples = new WeakMap<Element, () => HTMLCanvasElement>()
+const fontSampleObserver = new IntersectionObserver(entries => {
+  for (const { target, isIntersecting } of entries) {
+    if (!target.isConnected) continue
+    const create = visibleSamples.get(target)
+    if (isIntersecting && create && !target.firstChild) target.append(create())
+    else if (!isIntersecting) target.replaceChildren()
+  }
+})
+
+/** 只保留可见行的画布；占位与样本同高，滚动时列表不跳动。 */
+export function lazyFontSample(choice: FontChoice, large = false): HTMLElement {
+  const slot = element("span", "ui-font-sample")
+  if (large) slot.dataset.size = "lg"
+  visibleSamples.set(slot, () => {
+    const canvas = fontSample(choice, undefined, true)
+    if (large) canvas.dataset.size = "lg"
+    return canvas
+  })
+  fontSampleObserver.observe(slot)
+  releaseOnRemove(slot, () => fontSampleObserver.unobserve(slot))
+  return slot
 }
 
 /** 单击选中、确认后写回；取消、搜索和方向键浏览不会修改文档。 */
@@ -102,16 +137,17 @@ function openFontPicker(title: string, choices: FontChoice[], current: string | 
   }
   const render = (query = "") => {
     const visible = choices.filter(choice => `${choice.label} ${choice.detail ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
+    const selectedVisible = visible.some(choice => choice.value === selected)
     list.replaceChildren(...visible.map((choice, index) => {
       const row = element("button", "ui-list-item ui-font-option")
       row.type = "button"
       row.dataset.fontValue = choice.value
       row.setAttribute("role", "option")
       row.setAttribute("aria-selected", String(choice.value === selected))
-      row.tabIndex = choice.value === selected || index === 0 && !visible.some(choice => choice.value === selected) ? 0 : -1
+      row.tabIndex = choice.value === selected || index === 0 && !selectedVisible ? 0 : -1
       row.title = choice.detail ?? choice.label
       const name = Object.assign(element("strong"), { textContent: choice.label })
-      row.append(fontSample(choice), name)
+      row.append(lazyFontSample(choice), name)
       if (choice.detail) row.append(Object.assign(element("small"), { textContent: choice.detail }))
       row.addEventListener("click", () => choose(row))
       row.addEventListener("dblclick", () => apply.click())
@@ -121,7 +157,7 @@ function openFontPicker(title: string, choices: FontChoice[], current: string | 
       return row
     }))
     if (!visible.length) list.append(emptyState("search-x"))
-    apply.disabled = !visible.some(choice => choice.value === selected)
+    apply.disabled = !selectedVisible
   }
   const search = searchField({ label: "搜索字体", onInput: render })
   bindListboxKeys(list, choose)

@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -9,6 +10,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage()
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   const progress = await page.evaluate(async (bytes) => {
     const { SkinArchive } = await import('/src/skin.ts')
     const { IniDocument } = await import('/src/ini.ts')
