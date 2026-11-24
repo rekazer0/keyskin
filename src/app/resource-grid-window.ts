@@ -104,7 +104,11 @@ function windowPages(paths: string[], card: (index: number) => HTMLElement, extr
     mount(page)
     return page.children[index % perPage] as HTMLElement
   }
-  const resize = new ResizeObserver(layout)
+  let resizeFrame = 0
+  const resize = new ResizeObserver(() => {
+    if (resizeFrame) return
+    resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; layout() })
+  })
   grid.addEventListener("focusout", releaseBlurredPage)
   grid.addEventListener("resource-selection-change", syncTabStop)
   resize.observe(grid)
@@ -119,6 +123,7 @@ function windowPages(paths: string[], card: (index: number) => HTMLElement, extr
     dispose() {
       visibility.disconnect()
       resize.disconnect()
+      cancelAnimationFrame(resizeFrame)
       grid.removeEventListener("focusout", releaseBlurredPage)
       grid.removeEventListener("resource-selection-change", syncTabStop)
     },

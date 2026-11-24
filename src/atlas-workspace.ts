@@ -228,7 +228,11 @@ export function createAtlasWorkspace(actions: {
   const endPan = () => { candidate = undefined; pan = undefined; wrap.classList.remove("atlas-panning") }
   wrap.addEventListener("pointerup", endPan)
   wrap.addEventListener("pointercancel", endPan)
-  const observer = new ResizeObserver(() => { resize(); actions.redraw() })
+  let resizeFrame = 0
+  const observer = new ResizeObserver(() => {
+    if (!editorActive || resizeFrame) return
+    resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); actions.redraw() })
+  })
   observer.observe(wrap)
   observer.observe(canvas.parentElement!)
   const media = matchMedia("(min-width: 761px) and (min-height: 601px), (min-width: 951px)")

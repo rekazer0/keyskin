@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { chromium, webkit } from "playwright"
 import { createServer } from "vite"
 import { strToU8, strFromU8, unzipSync, zipSync } from "fflate"
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
 import { wav } from "../tests/helpers/ssf-fixture.mjs"
 
@@ -23,6 +24,7 @@ async function checkMobileGrid(browser) {
     try {
       await page.addInitScript(() => localStorage.setItem("onboarding-tour-v1", "done"))
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+      await dismissStartupDisclaimer(page)
       await page.locator("#browser-open").setInputFiles({ name: "large.bds", mimeType: "application/octet-stream", buffer: fixture })
       await page.locator('#mobile-navigation [data-mobile-page="resources"]').tap()
       const gallery = page.locator("#resource-gallery")
@@ -68,6 +70,7 @@ try {
         } })
       })
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+      await dismissStartupDisclaimer(page)
       assert.equal(await page.evaluate(async () => {
         const { createIcon } = await import("/src/icons.ts")
         const first = createIcon("palette", 14)
@@ -199,6 +202,8 @@ try {
         return changes
       })
       assert.ok(selectionChanges <= 4, "selection updates only the old and new rows")
+      await page.keyboard.press("ArrowDown")
+      assert.equal(await list.getByRole("option").nth(21).getAttribute("aria-selected"), "true", "inventory Down advances one row")
       await list.getByRole("option").last().scrollIntoViewIfNeeded()
       await page.waitForFunction(() => document.querySelector('dialog[open] [data-inventory-id="style:7239"] small')?.textContent.includes("未使用"))
       assert.ok(await list.locator(".ui-list-item-text").count() < 150, "scrolling renders the visible rows")
@@ -210,7 +215,10 @@ try {
       await dialog.getByRole("searchbox").fill("1.00 s")
       assert.equal(await list.getByRole("option").count(), 12, "metadata remains searchable")
       await page.screenshot({ path: `${output}/${engine.name()}-inventory.png` })
-      await dialog.getByRole("button", { name: "关闭", exact: true }).last().click()
+      await dialog.getByRole("searchbox").fill("样式 7239")
+      await list.getByRole("option").press("Enter")
+      await dialog.waitFor({ state: "hidden" })
+      assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedStyleID), "7239")
       assert.deepEqual(errors, [])
       results.push({ engine: engine.name(), styles, keyboard, search, inventory, metadata })
       console.log(JSON.stringify(results.at(-1)))

@@ -99,6 +99,7 @@ export function openResourceInventory(): void {
   const list = element("div", "ui-listbox")
   list.setAttribute("role", "listbox")
   list.setAttribute("aria-label", "资源清单")
+  list.setAttribute("aria-orientation", "vertical")
   const summary = element("p", "ui-field-note")
   const footer = element("footer", "ui-dialog-footer")
   const status = element("span", "ui-dialog-status")
@@ -152,14 +153,6 @@ export function openResourceInventory(): void {
       row.tabIndex = selected === item.id ? 0 : -1
       if (index < 32) fillRow(row, item)
       else { deferredRows.set(row, item); rowObserver.observe(row) }
-      row.addEventListener("click", () => choose(row))
-      const open = () => {
-        if (!item.open || appState.archive !== archive) return
-        closeDialog(dialog)
-        item.open()
-      }
-      row.addEventListener("dblclick", open)
-      row.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); open() } })
       return row
     }))
     if (!shown.length) list.append(emptyState("search-x"))
@@ -194,6 +187,22 @@ export function openResourceInventory(): void {
     refresh()
   })
   const search = searchField({ label: "搜索资源清单", onInput(value) { query = value.trim().toLowerCase(); render() } })
+  const inventoryRow = (event: Event) => (event.target as Element).closest<HTMLElement>("[data-inventory-id]")
+  const openRow = (event: Event) => {
+    const row = inventoryRow(event)
+    if (!row) return
+    event.preventDefault()
+    const item = items.find(item => item.id === row.dataset.inventoryId)
+    if (!item?.open || appState.archive !== archive) return
+    closeDialog(dialog)
+    item.open()
+  }
+  list.addEventListener("click", event => {
+    const row = inventoryRow(event)
+    if (row) choose(row)
+  })
+  list.addEventListener("dblclick", openRow)
+  list.addEventListener("keydown", event => { if (event.key === "Enter") openRow(event) })
   bindListboxKeys(list, choose)
   body.append(search, filters, summary, list)
   form.append(header, body, footer)
