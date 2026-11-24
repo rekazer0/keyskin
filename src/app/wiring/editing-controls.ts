@@ -30,14 +30,13 @@ import { revealSourceFile } from "../source-files"
 import { type BdaAppearanceStyleGroup } from "../../bda.ts"
 import { tileSliceAt, boundedTileRect, moveTileRect } from "../../tiles.ts"
 import { resizeTileSlice } from "../../tiles"
-import { runFileOperation, adaptArchiveForIos26 } from "../file-operations"
+import { runFileOperation, adaptArchiveForIos26, showError } from "../file-operations"
 import { openPanelCopyDialog, updatePanelCopyForm, copyPanel } from "../panel-copy"
 import { openLayoutImageDialog, acceptLayoutImageFile, syncLayoutImageConfig, updateLayoutImageForm, applyLayoutImage, layoutImageScopeText } from "../layout-image-replace"
 import { type LayoutImageTarget } from "../../layout-image.ts"
 import { type LayoutImageConfig } from "../types"
 import { inspectorSourceToggle } from "../dom"
 import { layoutConversionButton, mobileLayoutImageTarget, mobileLayoutImageConfig, mobilePanelScaleMode } from "../dom"
-import { openLayoutConversionDialog } from "../layout-conversion"
 
 /** 源码编辑器、属性字段、主题与方向、资源与键盘图替换。只在启动时由 main.ts 按顺序调用一次。 */
 export function wireEditingControls(): void {
@@ -402,7 +401,12 @@ export function wireEditingControls(): void {
     activateSkinState(state)
   })
   panelScaleButton.addEventListener("click", openPanelCopyDialog)
-  layoutConversionButton.addEventListener("click", openLayoutConversionDialog)
+  layoutConversionButton.addEventListener("click", () => {
+    const archive = appState.archive
+    void import("../layout-conversion").then(({ openLayoutConversionDialog }) => {
+      if (archive === appState.archive) openLayoutConversionDialog()
+    }).catch(error => showError(error, "加载布局转换"))
+  })
   // 适配走撤销栈，不再确认（DESIGN.md §7）。
   adaptIos26Button.addEventListener("click", () => void runFileOperation("适配 iOS 26", adaptArchiveForIos26))
   replaceLayoutImageButton.addEventListener("click", openLayoutImageDialog)

@@ -22,7 +22,7 @@ import { type SourceTransfer } from "./types"
 import { type BdaAppearanceStyleGroup } from "../bda.ts"
 import { type BdaTileUsage } from "./types"
 import { type TileRect } from "../tiles.ts"
-import { createAtlasWorkspace } from "../atlas-workspace"
+import { type createAtlasWorkspace } from "../atlas-workspace"
 import { type createAnimationWorkspace } from "../animation-workspace"
 import { type VisualResolver } from "../atlas.ts"
 import { type SourceEditorValueRange } from "../lazy-source-editor.ts"
@@ -99,6 +99,7 @@ export const appState = {
   // shortcut: sessions stay in memory for this skin, persist them if cross-restart history is needed.
   aiSessions: [] as AiSession[],
   aiSessionId: "",
+  aiThinking: undefined as typeof import("../model-thinking.ts") | undefined,
   aiThinkingRequests: new Set<string>(),
   aiThinkingPending: new Set<ModelConfiguration>(),
   aiDesignConversation: [] as AiDesignConversation,

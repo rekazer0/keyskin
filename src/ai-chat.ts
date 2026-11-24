@@ -1,3 +1,4 @@
+import "./ai-design-panel.css"
 import "deep-chat"
 import type { DeepChat } from "deep-chat"
 import { iconMarkup } from "./icons"

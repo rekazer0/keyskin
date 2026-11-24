@@ -28,12 +28,15 @@ try {
         changes: [{ path: file.path, syntax: file.syntax, before: file.text, after: file.text + '\\n; AI draft\\n' }] };
     }`,
   }))
+  const thinkingRequests = []
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/src/model-thinking.ts') thinkingRequests.push(request.url())
+  })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   await openEditorTemplate(page, 'official-android-bds')
   await page.waitForFunction(() => !document.querySelector('#open').disabled && !document.querySelector('#file-operation-dialog').open)
   await page.evaluate(async () => {
     const { appState } = await import('/src/app/state.ts')
-    const { syncAiDesignThinking, ensureAiChat } = await import('/src/app/ai-panel.ts')
     window.modelCalls = []
     window.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label: 'main' } }, invoke: async (command, args) => {
       window.modelCalls.push({ command, args })
@@ -68,12 +71,13 @@ try {
     document.querySelector('#ai-design-thinking').hidden = false
     document.querySelector('#ai-design-intensity').hidden = false
     document.querySelector('.ai-design-toolbar .ai-design-settings').hidden = true
-    syncAiDesignThinking()
-    await ensureAiChat()
     document.querySelector('[data-inspector-tab="ai"]').hidden = false
   })
+  assert.equal(thinkingRequests.length, 0, 'opening a skin does not load model thinking catalogs')
   await page.locator('[data-inspector-tab="ai"]').dispatchEvent("click")
+  await page.locator('#ai-design-chat .ai-resize').waitFor()
   await page.waitForFunction(() => !document.querySelector('#ai-design-thinking').disabled)
+  assert.equal(thinkingRequests.length, 1, 'opening AI loads the catalog once')
   const thinking = page.locator('#ai-design-thinking')
   assert.deepEqual(await thinking.locator('option').allTextContents(), ['low', 'medium', 'high', 'xhigh'])
   assert.equal(await thinking.inputValue(), 'medium')
@@ -87,7 +91,6 @@ try {
   assert.equal(await thinking.inputValue(), 'xhigh')
   await page.locator('#ai-design-model').selectOption('0')
   assert.equal(await thinking.inputValue(), 'medium')
-  await page.locator('#ai-design-chat .ai-resize').waitFor()
   assert.equal(await page.locator('#ai-sessions').isVisible(), false)
   const composer = page.locator('#ai-design-chat #text-input-container')
   const send = page.getByRole('button', { name: '发送消息', exact: true })

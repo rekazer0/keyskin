@@ -13,6 +13,23 @@ const outDir = await mkdtemp(join(tmpdir(), 'keyskin-compat-'))
 let server, browser
 try {
   await build({ logLevel: 'error', build: { outDir } })
+  const manifest = JSON.parse(await readFile(join(outDir, '.vite', 'manifest.json'), 'utf8'))
+  const startup = new Set()
+  function collectImports(id) {
+    if (startup.has(id)) return
+    startup.add(id)
+    for (const dependency of manifest[id].imports ?? []) collectImports(dependency)
+  }
+  collectImports('index.html')
+  for (const module of [
+    'src/ai-chat.ts', 'src/model-thinking.ts', 'src/ai-design.ts',
+    'src/atlas-workspace.ts', 'src/animation-workspace.ts', 'src/app/layout-conversion.ts', 'src/update.ts',
+    'src/palm/palm-export.ts', 'src/palm/ssf-sxi-convert.ts', 'src/bda-convert.ts', 'src/ssf/baidu-to-ssf.ts',
+  ]) {
+    const entry = manifest[module]
+    assert.ok(entry?.isDynamicEntry, `${module} must have an on-demand entry`)
+    assert.ok(![...startup].some(id => manifest[id].file === entry.file), `${module} must not load at startup`)
+  }
   server = await preview({ logLevel: 'error', build: { outDir }, preview: { host: '127.0.0.1', port: 4193, strictPort: false } })
   const url = `http://127.0.0.1:${server.httpServer.address().port}/`
   browser = await chromium.launch()

@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { readFileSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -53,6 +54,7 @@ page.on('pageerror', error => errors.push(error.message))
 const file = (name, bytes) => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
 const openSkin = async (name, bytes) => {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles(file(name, bytes))
   await page.waitForFunction(async () => {
     const { appState } = await import('/src/app/state.ts')
@@ -60,8 +62,8 @@ const openSkin = async (name, bytes) => {
   })
 }
 const openDialog = async () => {
-  await page.locator('.pen-file-menu > summary').click()
-  await page.locator('#layout-conversion').click()
+  await page.locator("#workspace-tools-open").click()
+  await page.locator('[data-workspace-tool="layout-conversion"]').click()
   await page.locator('#layout-conversion-dialog').waitFor({ state: 'visible' })
   await page.waitForFunction(() => document.querySelector('#layout-conversion-template')?.options.length > 0 && !document.querySelector('#layout-conversion-layout').disabled)
 }

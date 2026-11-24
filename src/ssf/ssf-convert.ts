@@ -1,19 +1,11 @@
 // Entry points for Sogou skin documents and conversion, kept apart from the editor so they can be tested directly.
 
 import { zipSync } from "fflate"
-import { convertBdaArchive } from "../bda-convert.ts"
-import { applyLegacyBaiduMotion } from "../legacy-to-bda-motion.ts"
 import { SkinArchive } from "../skin.ts"
 import { withDirectoryEntries } from "../skin-zip.ts"
-import { convertBaiduToSsf } from "./baidu-to-ssf.ts"
 import { isSkinContainer } from "./ssf-container.ts"
-import { sogouKeySizes } from "./ssf-key-sizes.ts"
 import { SsfPackage, unpackSsf } from "./ssf-package.ts"
-import { syncKeyStateTips } from "./ssf-state-tips.ts"
 import { copySsfSkeleton } from "./ssf-skeleton.ts"
-import { convertSsfToBaidu } from "./ssf-to-baidu.ts"
-import { convertSsfToBda } from "./ssf-to-bda.ts"
-import { adaptSsfNativeToolbar } from "./ssf-native-toolbar.ts"
 
 /** The Sogou canvas/BDI/BDS skeleton and the native BDA template. */
 export type SsfTemplates = { bda: SkinArchive; sogou: SkinArchive }
@@ -62,9 +54,13 @@ export async function convertSsfDocument(
   const pkg = documentPackage(archive)
   if (format === "bda") {
     await report(0.2, "正在转换按键样式…")
+    const { convertSsfToBda } = await import("./ssf-to-bda.ts")
     const { archive: converted, warnings } = convertSsfToBda(pkg, templates.bda)
     if ([...pkg.files.keys()].some(path => /(^|\/)anim\.ini$/i.test(path))) {
       await report(0.6, "正在转换按键动效…")
+      const [{ convertSsfToBaidu }, { applyLegacyBaiduMotion }] = await Promise.all([
+        import("./ssf-to-baidu.ts"), import("../legacy-to-bda-motion.ts"),
+      ])
       const legacy = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution))
       await report(0.85, "正在写入动效配置…")
       const motionWarnings = applyLegacyBaiduMotion(legacy.archive, converted)
@@ -75,6 +71,9 @@ export async function convertSsfDocument(
     return { bytes: converted.toBytes(), warnings }
   }
   await report(0.25, `正在转换为 ${format.toUpperCase()}…`)
+  const [{ convertSsfToBaidu }, { syncKeyStateTips }, { adaptSsfNativeToolbar }] = await Promise.all([
+    import("./ssf-to-baidu.ts"), import("./ssf-state-tips.ts"), import("./ssf-native-toolbar.ts"),
+  ])
   // Keep the SSF canvas geometry and artwork; the toolbar moves into Baidu's native F14 container and logo icons.
   const { archive: converted, warnings } = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution), format)
   syncKeyStateTips(converted)
@@ -96,6 +95,9 @@ export async function convertSsfDocument(
 
 /** Reuse the BDA template for static appearance; map motion directly from the Baidu source. */
 export async function convertLegacyToBda(archive: SkinArchive, template: SkinArchive): Promise<Converted> {
+  const [{ convertBaiduToSsf }, { convertSsfToBda }, { applyLegacyBaiduMotion }] = await Promise.all([
+    import("./baidu-to-ssf.ts"), import("./ssf-to-bda.ts"), import("../legacy-to-bda-motion.ts"),
+  ])
   const ssf = await convertBaiduToSsf(archive, { animations: false })
   const bda = convertSsfToBda(await SsfPackage.open(ssf.bytes), template)
   const motionWarnings = applyLegacyBaiduMotion(archive, bda.archive)
@@ -105,9 +107,11 @@ export async function convertLegacyToBda(archive: SkinArchive, template: SkinArc
 /** Converts any editable Baidu skin to `.ssf`; BDA goes through the official BDS base layout first. */
 export async function exportSsf(archive: SkinArchive, bdaBase: SkinArchive | undefined, sogouTemplate?: SkinArchive): Promise<Converted> {
   // 官方骨架决定每个按键类的显示尺寸：按它缩图，包里不再存客户端用不到的分辨率。
-  const options = sogouTemplate ? { keySizes: sogouKeySizes(sogouTemplate) } : undefined
+  const { convertBaiduToSsf } = await import("./baidu-to-ssf.ts")
+  const options = sogouTemplate ? { keySizes: (await import("./ssf-key-sizes.ts")).sogouKeySizes(sogouTemplate) } : undefined
   if (archive.format !== "bda") return convertBaiduToSsf(archive, options)
   if (!bdaBase) throw new Error("无法加载 BDA 官方基础布局")
+  const { convertBdaArchive } = await import("../bda-convert.ts")
   const converted = convertBdaArchive(archive, bdaBase)
   const result = await convertBaiduToSsf(converted.archive, options)
   // BDA-only panels (split / one-handed landscape boards) have no Sogou counterpart either.

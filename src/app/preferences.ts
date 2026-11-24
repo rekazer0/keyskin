@@ -2,7 +2,6 @@ import { checkUpdateButton, updateStatus, downloadUpdate, aboutUpdate, settingsW
 import { crossfade, playEnter } from "../motion"
 import { isTauri, mobileLayoutQuery, mobilePortraitQuery, settingsPages, settingsNavItems, preview, toolbarPreview, source } from "./canvas-interaction"
 import { invoke } from "@tauri-apps/api/core"
-import { checkForUpdate } from "../update.ts"
 import { initializeSourceDirectory } from "./source-workspace"
 import { type CanvasBackground, canvasBackgroundValues } from "../canvas-background.ts"
 import { getCurrentWindow } from "@tauri-apps/api/window"
@@ -21,6 +20,7 @@ export async function refreshUpdateStatus(): Promise<void> {
   updateStatus.textContent = "正在检查更新…"
   downloadUpdate.hidden = true
   try {
+    const { checkForUpdate } = await import("../update.ts")
     const fetcher = isTauri()
       ? async () => new Response(await invoke<string>("fetch_release_page"), { status: 200 })
       : fetch

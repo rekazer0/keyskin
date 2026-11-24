@@ -8,7 +8,7 @@ import { confirmDeletion } from "./app/ask.ts"
 import { bindListActionKeys, bindListboxKeys, element, emptyState, iconButton, listToolbar } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 import { animationPlayer, type AnimationPlayerOptions } from "./animation-player.ts"
-import { animationWorkspaceHosts } from "./animation-workspace.ts"
+import { appState } from "./app/state"
 import { styleCard } from "./style-card.ts"
 import { section } from "./app/property-rows.ts"
 import { openAnimationPresets, type AnimationPreset } from "./animation-presets.ts"
@@ -282,7 +282,7 @@ function styleListBox(view: AnimationResourceView, fill = false): HTMLElement | 
   return optionBox({ owner: view.listOwner!, context: view.listContext!, source: view.listSource, items: styles.items, selected: styles.selected, label: `${styles.noun}列表`,
     empty: `没有引用${noun}的${styles.noun}`, dataKey: "styleId",
     row: (item, selected) => styleOption(styles, item, selected, noun),
-    onSelect: (id) => { styles.onSelect(id); if (!styles.card) animationWorkspaceHosts()?.show("animations") }, fill })
+    onSelect: (id) => { styles.onSelect(id); if (!styles.card) appState.animationWorkspace?.hosts?.show("animations") }, fill })
 }
 
 /** 「按键 N 的动效 | 全部」与取消选中按键的按钮。 */
@@ -351,7 +351,7 @@ function styleSection(view: AnimationResourceView): HTMLElement | undefined {
 type ListActions = Pick<AnimationResourceView, "create" | "duplicate" | "remove" | "editable"> & { noun: string; current?: string }
 
 const listActions = (view: AnimationResourceView, desktop = false) => {
-  const noun = desktop && animationWorkspaceHosts()?.allTypes ? "动画" : MODE_NOUN[view.mode]
+  const noun = desktop && appState.animationWorkspace?.hosts?.allTypes ? "动画" : MODE_NOUN[view.mode]
   const toolbar = actionsToolbar({ ...view, noun, duplicate: desktop ? undefined : view.duplicate, current: view.items.find((item) => item.id === view.selected)?.title }) ??
     (!desktop && view.presets?.items.length ? element("div", "ui-list-toolbar") : undefined)
   if (desktop && toolbar) toolbar.dataset.variant = "animation-library"
@@ -461,7 +461,7 @@ function stageContent(view: AnimationResourceView, item: AnimationListItem | und
 /** Fills `container` with the list, and the selected animation's preview and parameters. */
 export function renderAnimationResource(container: HTMLElement, view: AnimationResourceView): void {
   const item = view.items.find((candidate) => candidate.id === view.selected)
-  const hosts = animationWorkspaceHosts()
+  const hosts = appState.animationWorkspace?.hosts
   view.listOwner = container
   view.listContext = JSON.stringify([view.mode, hosts?.allTypes, view.context, view.listContext])
   const showingSource = shell?.showingSource()

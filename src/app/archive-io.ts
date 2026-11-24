@@ -9,8 +9,6 @@ import { SkinArchive } from "../skin.ts"
 import { releaseEmbeddedFonts } from "../atlas.ts"
 import { prefixedSourcePath } from "../source-tree.ts"
 import { exportFormatFromPath, exportName, skinFileName, summarizeWarnings, type ExportFormat } from "../export.ts"
-import { buildSxiZipAsync } from "../palm/palm-export.ts"
-import { convertSsfSxi } from "../palm/ssf-sxi-convert.ts"
 import { bdaCompatibilityWarnings, bdaPlatform, type BdaPlatform, convertBdaPlatform } from "../bda-platform.ts"
 import { releaseImagePreviewURL } from "../image-preview.ts"
 import { clearImageSlicePicker } from "./image-pickers"
@@ -31,12 +29,10 @@ import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { type SourceFilePayload, type BrowserSaveFileHandle } from "./types"
 import { readFile, writeFile } from "@tauri-apps/plugin-fs"
-import { convertBdaArchive } from "../bda-convert.ts"
 import { flushNumberInputWheel } from "../number-input-wheel.ts"
 import { loadBdaBase } from "../operations.ts"
 import { isSsfPath, looksLikeSsf } from "../ssf/ssf-package.ts"
 import { convertLegacyToBda, convertSsfDocument, exportSsf, ssfDocumentBytes } from "../ssf/ssf-convert.ts"
-import { convertSxiToBaidu, convertSxiToBda } from "../palm/sxi-to-baidu.ts"
 import { rebuildSsfPreview, ssfTemplates } from "./ssf-preview"
 import { isSsfBoardPath } from "./ssf-documents"
 import { isSxiBoardAddress, preferredPalmBoard, sxiPointer } from "./sxi-documents"
@@ -381,6 +377,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   if (appState.archive.format === "ssf" && format === "sxi" || appState.archive.format === "sxi" && format === "ssf") {
     const report = conversionProgress(22, 78, `正在转换为${exportTargetLabel(format)}…`)
     await report(0.2)
+    const { convertSsfSxi } = await import("../palm/ssf-sxi-convert.ts")
     const result = await convertSsfSxi(
       appState.archive,
       appState.archive.format === "ssf" ? await ssfTemplates() : undefined,
@@ -397,6 +394,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     if (appState.archive.format === "bda") {
       if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
       await report(0.45, "正在转换 BDA 配置…")
+      const { convertBdaArchive } = await import("../bda-convert.ts")
       const converted = convertBdaArchive(appState.archive, appState.bdaBase)
       source = converted.archive
       warnings.push(...converted.warnings)
@@ -405,6 +403,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     // 打包流程本身每隔几毫秒让出主线程，进度更新不必再等两帧，否则大皮肤会多等一两秒。
     const start = source === appState.archive ? 0.2 : 0.45
     const update = percentProgress(22, 78, "正在导出手心皮肤…")
+    const { buildSxiZipAsync } = await import("../palm/palm-export.ts")
     const result = await buildSxiZipAsync(source, async (fraction, detail) => update(start + fraction * (1 - start), detail))
     return { bytes: result.bytes, converted: true, warnings: [...warnings, ...result.warnings] }
   }
@@ -416,7 +415,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const result = appState.archive.format === "ssf"
       ? await convertSsfDocument(appState.archive, format, templates, (fraction, detail) => report(0.15 + fraction * 0.8, detail))
       : appState.archive.format === "sxi"
-        ? await convertSxiToBda(appState.archive, templates.bda)
+        ? await (await import("../palm/sxi-to-baidu.ts")).convertSxiToBda(appState.archive, templates.bda)
         : await convertLegacyToBda(appState.archive, templates.bda)
     if (appState.archive.format === "bdi" || appState.archive.format === "bds") {
       result.warnings.unshift("新版 BDA 使用官方面板布局，原皮肤的按键位置、自定义布局和手势可能无法保留")
@@ -434,6 +433,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   }
   if (appState.archive.format === "sxi" && (format === "bdi" || format === "bds")) {
     await conversionProgress(22, 80, `正在转换为 ${format.toUpperCase()}…`)(0.2)
+    const { convertSxiToBaidu } = await import("../palm/sxi-to-baidu.ts")
     return { ...await convertSxiToBaidu(appState.archive, format), converted: true }
   }
   if (format === "ssf") {
@@ -465,6 +465,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
   const report = conversionProgress(22, 80, "正在转换 BDA 配置…")
   await report(0.2)
+  const { convertBdaArchive } = await import("../bda-convert.ts")
   const result = convertBdaArchive(appState.archive, appState.bdaBase, format)
   await report(0.6, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
   const soundWarnings: string[] = []

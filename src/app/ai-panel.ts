@@ -30,7 +30,6 @@ import { palmTileSlices } from "../palm/palm-style-edit.ts"
 import { tileSlices } from "../tiles.ts"
 import { invoke } from "@tauri-apps/api/core"
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core"
-import { modelThinking, modelThinkingLevel } from "../model-thinking"
 import { recordAiApplication, syncAiSessionControls } from "./ai-sessions"
 
 /** Files a panel-scoped request may change: a Sogou look keeps every key class in its own folder. */
@@ -604,14 +603,17 @@ export function applyAiDesignDraft(): void {
 }
 
 export function ensureAiChat(): Promise<AiChatController> {
-  appState.aiChatInitialization ??= import("../ai-chat.ts")
-    .then(({ connectAiChat }) => connectAiChat(aiDesignChat, runAiDesignRequest, aiDesignSend))
+  appState.aiChatInitialization ??= Promise.all([import("../ai-chat.ts"), import("../model-thinking.ts")])
+    .then(async ([{ connectAiChat }, thinking]) => {
+      const controller = await connectAiChat(aiDesignChat, runAiDesignRequest, aiDesignSend)
+      appState.aiThinking = thinking
+      appState.aiChatController = controller
+      syncAiDesignThinking()
+      syncAiDesignControls()
+      return controller
+    })
     .catch((error) => { appState.aiChatInitialization = undefined; throw error })
-  return appState.aiChatInitialization.then((controller) => {
-    appState.aiChatController = controller
-    syncAiDesignControls()
-    return controller
-  })
+  return appState.aiChatInitialization
 }
 
 export function syncAiDesignControls(): void {
@@ -643,9 +645,10 @@ export function rememberAiDesignModel(): void {
   syncAiDesignThinking()
 }
 
-export function syncAiDesignThinking(): void {
+function syncAiDesignThinking(): void {
   const configuration = appState.savedModels[Number(aiDesignModel.value)]
-  if (!configuration) return
+  if (!configuration || !appState.aiThinking) return
+  const { modelThinking, modelThinkingLevel } = appState.aiThinking
   let preferred = "medium"
   try { preferred = localStorage.getItem("ai-thinking-level") || "medium" } catch {}
   const { levels, identified } = modelThinking(configuration)

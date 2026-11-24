@@ -4,6 +4,7 @@
  * 播放条默认按内容高度停靠，拖动上边缘可以改高（双击恢复默认），高度与位置只影响窗口，不写进皮肤。
  * 窄屏仍在检查器里自上而下排列，由 animation-inspector.ts 决定。
  */
+import "./animation-workspace.css"
 import { element, emptyState, paneHeader, searchField } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
 
@@ -36,13 +37,6 @@ type AnimationWorkspaceHosts = {
 }
 
 type AnimationList = "animations" | "styles"
-
-const shared: { hosts?: AnimationWorkspaceHosts } = {}
-
-/** Where the animation inspector puts its list and player, or nothing on narrow windows and other views. */
-export function animationWorkspaceHosts(): AnimationWorkspaceHosts | undefined {
-  return shared.hosts
-}
 
 export function createAnimationWorkspace(actions: { relayout(): void; changeMode(particle: boolean): void; changeLayout(option: HTMLButtonElement): void }) {
   const sidebar = document.querySelector<HTMLElement>(".sidebar")!
@@ -303,11 +297,12 @@ export function createAnimationWorkspace(actions: { relayout(): void; changeMode
 
   const media = matchMedia("(min-width: 761px) and (min-height: 601px), (min-width: 951px)")
   let wanted = false
+  let activeHosts: AnimationWorkspaceHosts | undefined
   const apply = () => {
     const active = wanted && media.matches
     document.body.classList.toggle("animation-workspace", active)
-    if (active === Boolean(shared.hosts)) return
-    shared.hosts = active ? hosts : undefined
+    if (active === Boolean(activeHosts)) return
+    activeHosts = active ? hosts : undefined
     if (active) {
       zoomOut.after(zoomValue)
       syncZoom()
@@ -335,14 +330,15 @@ export function createAnimationWorkspace(actions: { relayout(): void; changeMode
   })
   /** Called before each inspector rebuild: on while 动效设计 / 粒子设计 is shown without a key selection. */
   return {
+    get hosts() { return activeHosts },
     showAll() {
-      if (!shared.hosts || allTypes) return
+      if (!activeHosts || allTypes) return
       filters[0].button.click()
     },
     update(active: boolean, path?: string) {
       wanted = active
       apply()
-      if (path && shared.hosts) syncLayouts(path)
+      if (path && activeHosts) syncLayouts(path)
     },
   }
 }

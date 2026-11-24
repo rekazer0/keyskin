@@ -15,8 +15,6 @@ import { refreshPreview, setGuidesVisible, updateDevicePreview, refreshSimulatio
 import { renderResourceInspector, selectResourceImage, uploadResourceImage, hideImageWorkspace, updateResourceActionButtons } from "../resource-inspector"
 import { wireResourceSelection } from "../resource-gallery"
 import { wireResourceTransfer, downloadResourceSelection, resourceDropTarget, uploadResourceFiles, deleteCatalogFont } from "../resource-transfer"
-import { createAtlasWorkspace } from "../../atlas-workspace"
-import { createAnimationWorkspace } from "../../animation-workspace"
 import { selectFile } from "../navigation"
 import { populateKeyInspector } from "../key-inspector"
 import { autoSliceSelectedImage, drawAtlas, finishAtlasEdits, scheduleAtlasDraw, commitTile, moveSelectedTile, deleteSelectedTile, populateTileInspector, nextSliceIndex } from "../tile-editing"
@@ -26,7 +24,7 @@ import { showStatus, runFileOperation, showError } from "../file-operations"
 import { resourceRootPath, setLayoutImageBytes, openLayoutImageDialog, syncLayoutImageConfig } from "../layout-image-replace"
 import { isSupportedSkinPath, loadDroppedPath, loadDroppedSourceWorkspace, loadNativePath, restoreLastSourceWorkspace } from "../archive-io"
 import { canvasBackgroundFromDevice } from "../../canvas-background.ts"
-import { applyCanvasBackground, applyWindowMaterialWithRetry, handleWindowMaterialError, sourceDirectoryInitialization, refreshUpdateStatus } from "../preferences"
+import { applyCanvasBackground, applyWindowMaterialWithRetry, handleWindowMaterialError, sourceDirectoryInitialization } from "../preferences"
 import { syncAiDesignContext } from "../ai-panel"
 import { isTextEditingTarget, moveSelectedKeys, deleteSelectedKeys } from "../key-editing"
 import { getCurrentWindow } from "@tauri-apps/api/window"
@@ -120,101 +118,127 @@ export function wireResourcesAndStartup(): void {
       resourceRenameButton.click()
     }
   })
-  appState.animationWorkspace = createAnimationWorkspace({
-    relayout: () => populateKeyInspector(),
-    changeMode: particle => selectFile(appState.selectedPath, "overview", particle ? "particle" : "motion"),
-    changeLayout: option => {
-      const path = appState.selectedPath
-      const category = appState.animationWorkspaceMode
-      option.click()
-      selectFile(path, "overview", category)
-    },
-  })
-  appState.atlasWorkspace = createAtlasWorkspace({
-    begin: () => { appState.atlasEdits = new Map() },
-    finish: save => finishAtlasEdits(save, () => {
-      if (appState.selectedResourcePath) resourceBackButton.click()
-    }),
-    autoSlice: () => { void autoSliceSelectedImage() },
-    guides: () => setGuidesVisible(!appState.guidesVisible),
-    redraw: scheduleAtlasDraw,
-    stretch: enabled => {
-      const slice = appState.slices.find(item => item.index === appState.selectedTileIndex)
-      if (!slice || !isEditing() || appState.archive?.format === "bda") return
-      const [x, y, width, height] = slice.source
-      const left = Math.floor(width / 4), top = Math.floor(height / 4)
-      commitTile({ index: slice.index, source: slice.source, ...(enabled ? { inner: [x + left, y + top, width - left * 2, height - top * 2] as TileRect } : {}) })
-    },
-    copy: () => {
-      const path = appState.selectedResourceGalleryPath
-      if (!appState.archive?.isImage(path) || !isEditing()) return
-      const base = path.replace(/\.png$/i, "")
-      let target = `${base}_copy`
-      for (let index = 2; appState.archive.getBytes(`${target}.png`) || appState.archive.getBytes(`${target}.til`); index++) target = `${base}_copy${index}`
-      const changes: Change[] = ["png", "til"].flatMap(extension => {
-        const bytes = appState.archive!.getBytes(`${base}.${extension}`)
-        return bytes ? [{ kind: "bytes" as const, path: `${target}.${extension}`, after: bytes.slice() }] : []
-      })
-      commitBatch(changes)
-      renderResourceInspector()
-      selectResourceImage(`${target}.png`)
-      updateDirty()
-    },
-    // 校验失败返回错误文字，由对话框在框内显示（DESIGN.md §7）。
-    create: (name, width, height) => {
-      if (!appState.archive || !isEditing()) return "交互预览中无法编辑"
-      if (!/^[^\\/:*?"<>|]+\.png$/i.test(name) || name.startsWith(".")) return "请输入有效的 PNG 文件名"
-      const size = [width, height]
-      if (size.some(n => !Number.isInteger(n) || n < 1 || n > 8192)) return "宽高必须是 1 至 8192 的整数"
-      const base = appState.selectedResourceGalleryPath.substring(0, appState.selectedResourceGalleryPath.lastIndexOf("/")) || resourceRootPath()
-      const path = `${base}/${name}`
-      if (appState.archive.getBytes(path)) return "同名图片已存在"
-      const targetArchive = appState.archive
-      const canvas = document.createElement("canvas")
-      canvas.width = size[0]; canvas.height = size[1]
-      canvas.toBlob(blob => {
-        if (!blob) return
-        void runFileOperation("新建图片", async () => {
-          const bytes = new Uint8Array(await blob.arrayBuffer())
-          if (appState.archive !== targetArchive || !isEditing()) return false
-          commitBatch([{ kind: "bytes", path, after: bytes }])
-          renderResourceInspector()
-          selectResourceImage(path)
-          updateDirty()
-          return true
+  let loadingAnimation: Promise<void> | undefined
+  let showAllAnimations = false
+  appState.animationWorkspace = {
+    hosts: undefined,
+    showAll() { showAllAnimations = true },
+    update(active) {
+      if (!active) { showAllAnimations = false; return }
+      loadingAnimation ??= import("../../animation-workspace").then(({ createAnimationWorkspace }) => {
+        const workspace = createAnimationWorkspace({
+          relayout: () => populateKeyInspector(),
+          changeMode: particle => selectFile(appState.selectedPath, "overview", particle ? "particle" : "motion"),
+          changeLayout: option => {
+            const path = appState.selectedPath
+            const category = appState.animationWorkspaceMode
+            option.click()
+            selectFile(path, "overview", category)
+          },
         })
-      }, "image/png")
-    },
-    import: files => {
-      if (!appState.archive || !isEditing() || !files.length) return
-      const targetArchive = appState.archive
-      const base = appState.selectedResourceGalleryPath.substring(0, appState.selectedResourceGalleryPath.lastIndexOf("/")) || resourceRootPath()
-      void runFileOperation("导入图片目录", async () => {
-        const changes: Array<Extract<Change, { kind: "bytes" }>> = []
-        const paths = new Set<string>()
-        for (const file of files) {
-          const relative = file.webkitRelativePath.split("/").slice(1).join("/") || file.name
-          if (relative.split("/").some(part => part === ".." || !part)) throw new Error("无效的资源路径")
-          const path = `${base}/${relative}`
-          if (paths.has(path)) throw new Error(`目录中存在重名资源：${relative}`)
-          paths.add(path)
-          const bytes = new Uint8Array(await file.arrayBuffer())
-          if (/\.png$/i.test(file.name)) {
-            const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }))
-            bitmap.close()
-          }
-          changes.push({ kind: "bytes", path, before: targetArchive.getBytes(path)?.slice(), after: bytes })
+        appState.animationWorkspace = workspace
+        if (appState.animationDesignMode !== "all") {
+          populateKeyInspector()
+          if (showAllAnimations) workspace.showAll()
         }
-        if (appState.archive !== targetArchive || !isEditing()) return false
-        commitBatch(changes)
-        renderResourceInspector()
-        const image = changes.find(change => /\.png$/i.test(change.path))
-        if (image) selectResourceImage(image.path)
-        updateDirty()
-        return true
-      })
+      }).catch(error => { loadingAnimation = undefined; showError(error, "加载动效设计") })
     },
-  })
+  }
+  let loadingAtlas: Promise<void> | undefined
+  appState.atlasWorkspace = {
+    viewportCanvas: () => undefined,
+    update(state) {
+      if (!state.active && !state.styleActive && !state.soundActive) return
+      loadingAtlas ??= import("../../atlas-workspace").then(({ createAtlasWorkspace }) => {
+        appState.atlasWorkspace = createAtlasWorkspace({
+          begin: () => { appState.atlasEdits = new Map() },
+          finish: save => finishAtlasEdits(save, () => {
+            if (appState.selectedResourcePath) resourceBackButton.click()
+          }),
+          autoSlice: () => { void autoSliceSelectedImage() },
+          guides: () => setGuidesVisible(!appState.guidesVisible),
+          redraw: scheduleAtlasDraw,
+          stretch: enabled => {
+            const slice = appState.slices.find(item => item.index === appState.selectedTileIndex)
+            if (!slice || !isEditing() || appState.archive?.format === "bda") return
+            const [x, y, width, height] = slice.source
+            const left = Math.floor(width / 4), top = Math.floor(height / 4)
+            commitTile({ index: slice.index, source: slice.source, ...(enabled ? { inner: [x + left, y + top, width - left * 2, height - top * 2] as TileRect } : {}) })
+          },
+          copy: () => {
+            const path = appState.selectedResourceGalleryPath
+            if (!appState.archive?.isImage(path) || !isEditing()) return
+            const base = path.replace(/\.png$/i, "")
+            let target = `${base}_copy`
+            for (let index = 2; appState.archive.getBytes(`${target}.png`) || appState.archive.getBytes(`${target}.til`); index++) target = `${base}_copy${index}`
+            const changes: Change[] = ["png", "til"].flatMap(extension => {
+              const bytes = appState.archive!.getBytes(`${base}.${extension}`)
+              return bytes ? [{ kind: "bytes" as const, path: `${target}.${extension}`, after: bytes.slice() }] : []
+            })
+            commitBatch(changes)
+            renderResourceInspector()
+            selectResourceImage(`${target}.png`)
+            updateDirty()
+          },
+          // 校验失败返回错误文字，由对话框在框内显示（DESIGN.md §7）。
+          create: (name, width, height) => {
+            if (!appState.archive || !isEditing()) return "交互预览中无法编辑"
+            if (!/^[^\\/:*?"<>|]+\.png$/i.test(name) || name.startsWith(".")) return "请输入有效的 PNG 文件名"
+            const size = [width, height]
+            if (size.some(n => !Number.isInteger(n) || n < 1 || n > 8192)) return "宽高必须是 1 至 8192 的整数"
+            const base = appState.selectedResourceGalleryPath.substring(0, appState.selectedResourceGalleryPath.lastIndexOf("/")) || resourceRootPath()
+            const path = `${base}/${name}`
+            if (appState.archive.getBytes(path)) return "同名图片已存在"
+            const targetArchive = appState.archive
+            const canvas = document.createElement("canvas")
+            canvas.width = size[0]; canvas.height = size[1]
+            canvas.toBlob(blob => {
+              if (!blob) return
+              void runFileOperation("新建图片", async () => {
+                const bytes = new Uint8Array(await blob.arrayBuffer())
+                if (appState.archive !== targetArchive || !isEditing()) return false
+                commitBatch([{ kind: "bytes", path, after: bytes }])
+                renderResourceInspector()
+                selectResourceImage(path)
+                updateDirty()
+                return true
+              })
+            }, "image/png")
+          },
+          import: files => {
+            if (!appState.archive || !isEditing() || !files.length) return
+            const targetArchive = appState.archive
+            const base = appState.selectedResourceGalleryPath.substring(0, appState.selectedResourceGalleryPath.lastIndexOf("/")) || resourceRootPath()
+            void runFileOperation("导入图片目录", async () => {
+              const changes: Array<Extract<Change, { kind: "bytes" }>> = []
+              const paths = new Set<string>()
+              for (const file of files) {
+                const relative = file.webkitRelativePath.split("/").slice(1).join("/") || file.name
+                if (relative.split("/").some(part => part === ".." || !part)) throw new Error("无效的资源路径")
+                const path = `${base}/${relative}`
+                if (paths.has(path)) throw new Error(`目录中存在重名资源：${relative}`)
+                paths.add(path)
+                const bytes = new Uint8Array(await file.arrayBuffer())
+                if (/\.png$/i.test(file.name)) {
+                  const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }))
+                  bitmap.close()
+                }
+                changes.push({ kind: "bytes", path, before: targetArchive.getBytes(path)?.slice(), after: bytes })
+              }
+              if (appState.archive !== targetArchive || !isEditing()) return false
+              commitBatch(changes)
+              renderResourceInspector()
+              const image = changes.find(change => /\.png$/i.test(change.path))
+              if (image) selectResourceImage(image.path)
+              updateDirty()
+              return true
+            })
+          },
+        })
+        drawAtlas()
+      }).catch(error => { loadingAtlas = undefined; showError(error, "加载资源工作区") })
+    },
+  }
   resourceUploadButton.addEventListener("click", () => {
     if (!appState.archive || !isEditing()) return
     resourceUploadInput.value = ""
@@ -482,7 +506,6 @@ export function wireResourcesAndStartup(): void {
   updateDevicePreview()
   updateSourceHighlight()
   updateInspectorView()
-  void refreshUpdateStatus()
   // 检查器外壳：搜索 / 状态作用域 / 常驻动作条 / 分区折叠
   initInspectorShell()
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-start-tour]")) button.addEventListener("click", startOnboarding)

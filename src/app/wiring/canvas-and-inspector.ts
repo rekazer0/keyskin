@@ -24,7 +24,7 @@ import { populateKeyInspector, renameDocumentTitle } from "../key-inspector"
 import { runFileOperation } from "../file-operations"
 import { sourceTargetFolder, commitSourceUploads, sourceSelection, setSourceTransfer } from "../source-files"
 import { writeToChosenFile } from "../archive-io"
-import { rememberAiDesignModel, syncAiDesignThinking, setAiDesignScope } from "../ai-panel"
+import { rememberAiDesignModel, setAiDesignScope } from "../ai-panel"
 import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
 import { syncMobileKeyPreview } from "../mobile-key-preview"
@@ -139,7 +139,6 @@ export function wireCanvasAndInspector(): void {
     syncSidebarProjectName()
     new MutationObserver(syncSidebarProjectName).observe(documentName, { childList: true, characterData: true, subtree: true })
   }
-  syncAiDesignThinking()
   aiDesignThinking.addEventListener("change", () => localStorage.setItem("ai-thinking-level", aiDesignThinking.value))
   aiDesignIntensity.value = localStorage.getItem("ai-design-intensity") || "balanced"
   if (!aiDesignIntensity.value) aiDesignIntensity.value = "balanced"
