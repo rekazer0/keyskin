@@ -85,21 +85,25 @@ export function fontSample(choice: FontChoice, sample?: string, transient = fals
 }
 
 const visibleSamples = new WeakMap<Element, () => HTMLCanvasElement>()
-const fontSampleObserver = new IntersectionObserver(entries => {
-  for (const { target, isIntersecting } of entries) {
-    if (!target.isConnected) continue
-    const create = visibleSamples.get(target)
-    if (isIntersecting && create && !target.firstChild) target.append(create())
-    else if (!isIntersecting) target.replaceChildren()
-  }
-})
+let fontSampleObserver: IntersectionObserver | undefined
+function sampleObserver(): IntersectionObserver {
+  fontSampleObserver ??= new IntersectionObserver(entries => {
+    for (const { target, isIntersecting } of entries) {
+      if (!target.isConnected) continue
+      const create = visibleSamples.get(target)
+      if (isIntersecting && create && !target.firstChild) target.append(create())
+      else if (!isIntersecting) target.replaceChildren()
+    }
+  })
+  return fontSampleObserver
+}
 
 /** 只保留可见行的画布；占位与样本同高，滚动时列表不跳动。 */
 export function lazyFontSample(choice: FontChoice): HTMLElement {
   const slot = element("span", "ui-font-sample")
   visibleSamples.set(slot, () => fontSample(choice, undefined, true))
-  fontSampleObserver.observe(slot)
-  releaseOnRemove(slot, () => fontSampleObserver.unobserve(slot))
+  sampleObserver().observe(slot)
+  releaseOnRemove(slot, () => fontSampleObserver?.unobserve(slot))
   return slot
 }
 

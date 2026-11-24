@@ -585,8 +585,7 @@ export class AtlasResolver {
 
   resolveListText(foreground: string, highlighted: boolean): TextVisual | undefined {
     if (!this.styles || this.archive.format !== "bds") return this.resolveText(foreground, highlighted)
-    const visual = resolveTextVisual(this.styles, foreground, highlighted)
-    if (!visual) return
+    const visual = resolveTextVisual(this.styles, foreground, highlighted) ?? {}
     // SubList.n()/u(): LIST has its own user-font paint; fixed NAMES use 1.2× text size.
     // shortcut: runtime skin-font injection depends on the phone's font settings; preview the default paint.
     return { ...visual, fontName: undefined, weight: undefined, fontSize: visual.fontSize === undefined ? undefined : visual.fontSize * 1.2 }
