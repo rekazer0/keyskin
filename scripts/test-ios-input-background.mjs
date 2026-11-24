@@ -24,10 +24,13 @@ try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.addInitScript(() => new MutationObserver(() => {
-    document.querySelector('dialog[open]:not([id]):has(button[value="restore"]) button[value="cancel"]')?.click()
-    document.querySelector('dialog[open]:not([id]):has(button[value="export"]) button[value="discard"]')?.click()
-  }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] }))
+  await page.addInitScript(() => {
+    localStorage.setItem('keyskin-disclaimer-shown', '1')
+    new MutationObserver(() => {
+      document.querySelector('dialog[open]:not([id]):has(button[value="restore"]) button[value="cancel"]')?.click()
+      document.querySelector('dialog[open]:not([id]):has(button[value="export"]) button[value="discard"]')?.click()
+    }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] })
+  })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
   const openSkin = async (name, bytes) => {
     await page.locator('#browser-open').setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
@@ -50,41 +53,57 @@ try {
     await Promise.all([preview.whenDrawn(), candidateBackgroundPreview.whenDrawn()])
     const background = candidateBackgroundPreview.canvas
     const input = document.querySelector('#candidate-input')
+    const panel = document.querySelector('#panel-viewport')
+    const bar = document.querySelector('#candidate-area')
     const pixel = canvas => Array.from(canvas.getContext('2d').getImageData(0, 0, 1, 1).data)
     return { inset: preview.panelTopInset, panelTop: pixel(preview.canvas), barTop: pixel(background),
+      inputHeight: input.getBoundingClientRect().height, inputText: input.textContent,
+      backgroundLayers: candidateBackgroundPreview.drawnScene?.background.length,
       shared: background.hasAttribute('data-shared-input-background'),
       offset: background.getBoundingClientRect().top - input.getBoundingClientRect().top,
+      gap: panel.getBoundingClientRect().top - bar.getBoundingClientRect().bottom,
       inputHidden: document.querySelector('#candidate-input-background').hidden }
   })
   await openSkin('sliced-background.bdi', fixture())
   for (const device of ['canvas-checkerboard', 'iphone-17-pro-max', 'pixel-10-pro']) {
     await page.locator('#device').selectOption(device)
+    const ios = device !== 'pixel-10-pro'
+    const idle = await inspect()
+    assert.equal(idle.inputText, '')
+    assert.equal(idle.inputHeight > 0, ios, `${device}: the input row is visible without composing only on iOS`)
     await compose('ni')
     const rows = await inspect()
-    assert.equal(rows.inset, 0, `${device}: the panel uses its entire authored slice`)
-    assert.deepEqual(rows.panelTop, [50, 50, 100, 255])
-    const ios = device !== 'pixel-10-pro'
+    assert.equal(rows.inputText, 'ni')
+    assert.equal(rows.inset, ios ? 74 : 0, `${device}: iOS extends the panel image behind both rows even for adjacent slices`)
+    assert.ok(Math.abs(rows.panelTop[0] - (ios ? 104 : 50)) <= 1, `${device}: panel starts at the expected source row (${rows.panelTop})`)
+    assert.ok(Math.abs(rows.gap) < 1, `${device}: candidate bar meets the panel (${rows.gap})`)
+    assert.equal(rows.backgroundLayers, ios ? 2 : 1, `${device}: the candidate slice overlays the panel image only on iOS`)
     assert.equal(rows.shared, ios, `${device}: only iOS shares the background`)
     assert.equal(rows.inputHidden, ios, `${device}: only Android paints the gray fill`)
     if (ios) {
+      assert.equal(rows.inputHeight, idle.inputHeight, `${device}: typing does not resize the input row`)
       assert.ok(Math.abs(rows.offset) < 1.5, `${device}: the artwork starts at the input row (${rows.offset})`)
       assert.deepEqual(rows.barTop, [0, 50, 100, 255])
-      await compose('')
-      assert.equal((await inspect()).shared, false, 'clearing composition restores the single candidate row')
+      assert.deepEqual(idle, { ...rows, inputText: '' }, `${device}: idle and composing use the same background geometry`)
     }
+    await compose('')
+    assert.deepEqual(await inspect(), idle, `${device}: clearing input restores the idle state`)
   }
   await page.locator('#device').selectOption('canvas-checkerboard')
   await openSkin('explicit-input-background.bdi', fixture('[SCAND]\nBACK_STYLE=5\n'))
-  await compose('ni')
   const explicit = await inspect()
+  assert.ok(explicit.inputHeight > 0)
   assert.equal(explicit.shared, false)
   assert.equal(explicit.inputHidden, false, 'an explicit iOS SCAND background still takes priority')
   if (process.env.BDI_INPUT_SAMPLE) {
     await openSkin('input-sample.bdi', readFileSync(process.env.BDI_INPUT_SAMPLE))
+    const idle = await inspect()
+    assert.ok(idle.inputHeight > 0, 'sample skin has an input row before typing')
     await compose('j')
     const sample = await inspect()
-    assert.equal(sample.inset, 0)
+    assert.equal(sample.inset, 74)
     assert.equal(sample.shared, true)
+    assert.deepEqual(idle, { ...sample, inputText: '' })
     const input = await page.locator('#candidate-input').boundingBox()
     const panel = await page.locator('#panel-viewport').boundingBox()
     await page.screenshot({ path: '/tmp/keyskin-ios-input.png', clip: { x: input.x, y: input.y, width: panel.width, height: panel.y + panel.height - input.y } })

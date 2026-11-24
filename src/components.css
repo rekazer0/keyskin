@@ -233,6 +233,7 @@ body:has(.ui-dialog[open][data-toolbar-spotlight="true"]) .ui-pinned-toolbar,
 .ui-empty[aria-busy="true"] { overflow: hidden; }
 .ui-empty[aria-busy="true"]::after,
 .ui-image-card-preview[aria-busy="true"]::after,
+.ui-resource-catalog-item > .ui-font-sample:has(> canvas[aria-busy="true"])::after,
 .template-preview:empty::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 6%, transparent), transparent); transform: translateX(-100%); animation: ui-shimmer calc(var(--duration-slow) * 4) var(--ease-standard) var(--motion-repeat); }
 @keyframes ui-shimmer { to { transform: translateX(100%) } }
 
@@ -558,6 +559,7 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 }
 .ui-field:has(> .ui-field-actions) { grid-template-columns: var(--_label-width, 64px) minmax(0, 1fr) auto; }
 .ui-field > :first-child { color: var(--secondary); font-size: var(--font-size-sm); }
+.ui-field .ui-switch { justify-self: end; }
 .ui-field[data-stack] { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
 .ui-field:has(> .ui-field-pair[data-columns="4"]) { container-type: inline-size; grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
 .ui-field-pair { display: grid; grid-template-columns: repeat(var(--_columns, 2), minmax(0, 1fr)); gap: var(--space-sm); }
@@ -627,8 +629,16 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 @media (hover: hover) { .ui-tool-grid > .ui-list-item:hover { background: var(--hover); } }
 .ui-tool-grid .ui-list-item-text > strong { font-weight: var(--font-weight-medium); }
 .ui-tool-grid .ui-list-item-text > small { white-space: normal; line-height: 1.4; }
-@media (max-width: 390px) and (orientation: portrait) {
-  .ui-tool-grid .ui-list-item-text > small { display: none; }
+@media (max-width: 760px) and (orientation: portrait) {
+  .ui-tool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-tool-grid > .ui-list-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: calc(var(--mobile-control-height) + var(--space-md));
+    aspect-ratio: auto;
+    text-align: start;
+  }
+  .ui-tool-grid .ui-list-item-text { flex: 1; gap: var(--space-2xs); }
 }
 @media (hover: hover) { .ui-list-item:hover { background: var(--hover); } }
 .ui-list-item:is([aria-selected="true"], [aria-current="true"], [aria-pressed="true"], :has(> input:checked)) { background: var(--accent-soft); color: var(--accent); }
@@ -930,11 +940,20 @@ body {
 .ui-resource-sidebar > footer { display: flex; align-items: center; gap: var(--space-xs); padding-top: var(--space-md); margin-top: auto; position: relative; border-top: 1px solid transparent; color: var(--tertiary); }
 .ui-resource-sidebar > footer > small { flex: 1; min-width: 0; font-size: var(--font-size-xs); }
 .ui-resource-sidebar > footer > .ui-button { color: var(--accent); padding-inline: var(--space-xs); }
-.ui-resource-catalog { display: grid; grid-column: 1 / -1; grid-row: 3; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--style-card-width)), 1fr)); align-content: start; gap: var(--space-md); min-height: 0; height: 100%; overflow: auto; }
+.ui-resource-catalog { display: grid; grid-column: 1 / -1; grid-row: 3; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--style-card-width)), 1fr)); grid-auto-rows: max-content; align-content: start; gap: var(--space-md); min-height: 0; height: 100%; overflow: auto; }
 .ui-resource-catalog[hidden] { display: none; }
 .ui-resource-catalog-item { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-md); padding: var(--space-md); }
 .ui-resource-catalog-item > .ui-icon { align-self: center; width: var(--control-height-lg); height: var(--control-height-lg); margin: var(--space-xl); color: var(--secondary); }
-.ui-resource-catalog-item > .ui-font-sample { width: 100%; min-height: calc(var(--control-height-lg) * 3); }
+.ui-resource-catalog-item[data-font="true"] { display: grid; align-content: start; gap: 0; padding: 0; overflow: hidden; }
+.ui-resource-catalog-item > .ui-font-sample { position: relative; height: calc(var(--control-height-lg) * 2); overflow: hidden; background: var(--panel); }
+.ui-resource-catalog-item > .ui-font-sample > canvas { height: 100%; }
+.ui-resource-catalog-item[data-font="true"] > .ui-list-item-text { padding: var(--space-sm); }
+.ui-resource-catalog-item .ui-list-item-text > strong { overflow: hidden; font-family: var(--font-mono); font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.ui-resource-catalog > .ui-empty { grid-column: 1 / -1; }
+@media (max-width: 760px) and (orientation: portrait) {
+  .ui-resource-catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-resource-catalog-item[data-font="true"] .ui-list-item-text > small { display: none; }
+}
 .ui-resource-grid-page { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; gap: inherit; align-items: inherit; }
 .ui-resource-grid-page > .ui-style-card { content-visibility: visible; }
 .ui-resource-grid[data-variant="cards"] .ui-style-card { grid-template-rows: auto auto; }
@@ -1132,7 +1151,7 @@ body {
   .ui-mobile-sidebar .pane-heading > .sidebar-view-control { grid-column: 1 / -1; min-height: calc(var(--mobile-control-height) + 1px); }
   .ui-mobile-sidebar #mobile-files-close { width: var(--mobile-control-height); height: var(--mobile-control-height); }
   :root[data-keyboard-open="true"] .ui-mobile-navigation { display: none; }
-  .ui-menu-group-label { padding: var(--space-sm) var(--space-sm) var(--space-xs); color: var(--secondary); font-size: var(--font-size-xs); font-weight: 600; }
+  .ui-menu-group-label { padding: var(--space-sm) var(--space-md) var(--space-2xs); color: var(--secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
   .ui-menu-group-label:not(.ui-pane-header + *) { border-top: 1px solid var(--line-soft); }
   .ui-mobile-navigation > button:not([hidden]) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-xs); min-width: 0; height: var(--mobile-control-height); padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--tertiary); font-size: var(--font-size-xs); line-height: 1; }
   .ui-mobile-navigation > button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }

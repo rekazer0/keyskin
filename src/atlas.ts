@@ -47,7 +47,6 @@ export type VisualResolver = {
   ready?(): Promise<void>
   resolve(styleID: string, highlighted: boolean): Promise<Visual | undefined>
   imagePath?(styleID: string, highlighted: boolean): string | undefined
-  sourceRect?(styleID: string, highlighted: boolean): [number, number, number, number] | undefined
   sourceSize?(styleID: string, highlighted: boolean): { width: number; height: number } | undefined
   resolveResource?(resourceID: string): Promise<Visual | undefined>
   resolveText(foreground: string, highlighted: boolean): TextVisual | undefined

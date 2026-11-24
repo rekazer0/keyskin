@@ -289,6 +289,7 @@ export function setMobilePane(pane: "canvas" | "layout" | "inspector"): void {
       mobileProjectDialog.append(sidebarPane)
       mobileProjectDialog.showModal()
       mobileProjectToggle.setAttribute("aria-expanded", "true")
+      updateSourceFileActions()
     }
     return
   }

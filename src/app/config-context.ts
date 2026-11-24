@@ -380,15 +380,12 @@ export function refreshToolbarPreview(
     : candidateInputBackgroundStyle(gen, document, inKeyboard,
       appState.archive.format === "bds" ? appState.layoutDocument : undefined)
   const inputStyle = resolveCandidateInputStyle(inputGeneral, resolver, width, document, inKeyboard, inputBackgroundStyle)
-  const hasInlineStyle = [document, gen].some((config) =>
-    config?.get("SCAND", "BACK_STYLE") || config?.get("SCAND", "INPUT_STYLE"),
-  )
   const ssfLook = appState.archive.format === "ssf"
     ? new SsfLook(ssfDocumentPackage(appState.archive), theme.value === "dark" ? "dark" : "light", [], width) : undefined
   const ssfInput = ssfLook?.inputBar()
   const ssfInputSize = ssfInput && pngSize(ssfInput.bytes)
-  const inputHeight = ssfInputSize ? ssfInputSize[1] : !composing && ios && !hasInlineStyle
-    ? 0 : inputStyle.height * scale
+  // The inline iOS input row keeps its height even when the input code is empty.
+  const inputHeight = ssfInputSize?.[1] ?? inputStyle.height * scale
   const sharedInput = sharesCandidate && inputHeight > 0
   candidateBackgroundCanvas.hidden = false
   candidateBackgroundPreview.setResolver(resolver)

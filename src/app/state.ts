@@ -138,6 +138,8 @@ export const appState = {
   pickerFrameReady: false,
   selectedFileButton: undefined as HTMLElement | undefined,
   sourceTransfer: undefined as SourceTransfer | undefined,
+  sourceSearchResults: undefined as string[] | undefined,
+  sourceMultiselect: false,
   sourceSearchFolders: undefined as Set<string> | undefined,
   sourceSelectionAnchor: undefined as HTMLElement | undefined,
   sidebarView: "overview" as "overview" | "source",

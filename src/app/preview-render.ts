@@ -493,7 +493,7 @@ export function scheduleFitCanvasPreview(): void {
 }
 
 export function finishPreviewPan(): void {
-  const pointerId = appState.previewPanStart?.pointerId
+  const pointerId = (appState.previewPanStart ?? appState.previewPanCandidate)?.pointerId
   flushPreviewPan()
   appState.previewPanCandidate = undefined
   appState.previewPanStart = undefined

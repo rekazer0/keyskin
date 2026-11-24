@@ -1,6 +1,6 @@
 import { bindMenuKeys, element } from "../dom-element"
 
-export function openActionMenu(row: HTMLElement, x: number, y: number, label: string, actions: Iterable<HTMLButtonElement>): void {
+export function openActionMenu(row: HTMLElement, x: number, y: number, label: string, actions: Iterable<HTMLButtonElement>, above = false): void {
   const native = typeof HTMLElement.prototype.showPopover === "function"
   const previous = document.querySelector<HTMLDetailsElement>('.ui-menu[data-variant="context"][open]')
   if (previous) {
@@ -42,6 +42,6 @@ export function openActionMenu(row: HTMLElement, x: number, y: number, label: st
   host.append(menu)
   if (native) menu.showPopover()
   menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - menu.offsetWidth))}px`
-  menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - menu.offsetHeight))}px`
+  menu.style.top = `${Math.max(0, Math.min(y - (above ? menu.offsetHeight : 0), window.innerHeight - menu.offsetHeight))}px`
   items.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus()
 }

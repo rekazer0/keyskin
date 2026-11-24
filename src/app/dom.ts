@@ -225,6 +225,11 @@ export const sourceFileSearchToggle = $("#source-file-search-toggle") as HTMLBut
 
 export const sourceFileSearch = $("#source-file-search") as HTMLInputElement
 
+export const sourceMultiselect = $("#source-multiselect") as HTMLButtonElement
+export const sourceFileMore = $("#source-file-more") as HTMLButtonElement
+export const sourceUploadReplace = $("#source-upload-replace") as HTMLButtonElement
+export const sourceReplaceInput = $("#source-replace-input") as HTMLInputElement
+
 export const sourceUploadButton = $("#source-upload") as HTMLButtonElement
 
 export const sourceDownloadButton = $("#source-download") as HTMLButtonElement

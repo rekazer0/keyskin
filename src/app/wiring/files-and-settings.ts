@@ -1,4 +1,4 @@
-import { ask, confirmDeletion } from "../ask"
+import { ask } from "../ask"
 import { wireSourceFileMenu } from "../source-file-menu"
 import { wireAiSessions } from "../ai-sessions"
 import { openShareDialog, wireMobileExport } from "../mobile-export"
@@ -6,14 +6,14 @@ import { wirePinnedToolbar } from "../pinned-toolbar"
 import { wireAdbShare } from "../adb-share"
 import { sourceEditPath } from "../ssf-documents"
 import { requestEditMode, setMobilePane } from "../mobile-layout"
-import { sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, workspaceExport, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, settingsEntryButtons, settingsWorkspace, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
+import { sourcePasteButton, sourceMoveButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, workspaceExport, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, settingsEntryButtons, settingsWorkspace, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
-import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, sourceSelections, sourcePaths, setSidebarView, revealSourceFile } from "../source-files"
+import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, setSidebarView, revealSourceFile } from "../source-files"
 import { type Change } from "../../history.ts"
 import { preview, source, scheduleSelectionInspectorSync, isTauri, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
 import { startNewDocument, wireNewProjectChooser } from "../new-document"
-import { runFileOperation, readBrowserSkinFile, showImage, showStatus, showError } from "../file-operations"
+import { runFileOperation, readBrowserSkinFile, showImage, showError } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
 import { renderRecentFiles, wireRecentPage } from "../recent-files"
 import { dismissLayoutOverview } from "../layout-overview"
@@ -32,7 +32,7 @@ import { commitSxiSourceEdit, isSxiSourcePath } from "../sxi-documents"
 import { scheduleSourceInputHighlight, applySourceColorPicker, selectKeyFromSourceOffset } from "../source-panel"
 import { IniDocument } from "../../ini.ts"
 import { tileSlices } from "../../tiles.ts"
-import { bindListActionKeys, bindMenuKeys } from "../../dom-element.ts"
+import { bindMenuKeys } from "../../dom-element.ts"
 import { populateTileInspector, drawAtlas } from "../tile-editing"
 import { type SourceEditorCursorMove } from "../../lazy-source-editor.ts"
 import { keyEventElement } from "../key-editing"
@@ -43,7 +43,7 @@ export function wireFilesAndSettings(): void {
   wireAdbShare()
   wireSourceFileMenu()
   wireSourceFileSearch()
-  for (const button of [sourceUploadButton, sourcePasteButton, sourceMoveButton, sourceDeleteButton]) {
+  for (const button of [sourcePasteButton, sourceMoveButton]) {
     button.addEventListener("click", (event) => {
       if (isEditing()) return
       event.stopImmediatePropagation()
@@ -97,23 +97,6 @@ export function wireFilesAndSettings(): void {
   })
   sourceMoveButton.addEventListener("click", () => {
     setSourceTransfer("move")
-  })
-  bindListActionKeys(files, sourceDeleteButton.parentElement!)
-  sourceDeleteButton.addEventListener("click", async () => {
-    const archive = appState.archive
-    const selected = sourceSelections()
-    if (!archive || !selected.length || !isEditing()) return
-    const paths = [...new Set(selected.flatMap(sourcePaths))]
-    if (!paths.length) return
-    const revision = archive.revision
-    if (!await confirmDeletion(`删除 ${selected.length} 项源文件？`) || appState.archive !== archive || archive.revision !== revision || !isEditing()) return
-    commitBatch(paths.map((path) => ({
-      kind: "bytes",
-      path,
-      before: archive.getBytes(path)?.slice(),
-    })))
-    refreshAfterSourceMutation()
-    showStatus(`已删除 ${selected.length} 项，可撤销`)
   })
   for (const menu of toolbarMenus) {
     bindMenuKeys(menu)

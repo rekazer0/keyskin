@@ -73,7 +73,6 @@
 .atlas-surface { position: relative; display: grid; place-items: center; flex: 1; min-height: 0; overflow: hidden; }
 .atlas-workspace #workspace-image-figure { width: 100%; height: 100%; max-height: none; padding: var(--space-2xl); box-sizing: border-box; overflow: visible; }
 .atlas-workspace #atlas-zoom { display: flex; right: var(--space-md); bottom: var(--space-md); }
-#workspace-image { display: none; }
 .atlas-workspace #workspace-image:has(+ #atlas-canvas:not([hidden])) { display: block; grid-area: 1 / 1; max-width: none; max-height: none; pointer-events: none; }
 .atlas-workspace #workspace-image[data-sampling="nearest"] { image-rendering: pixelated; }
 .atlas-workspace #atlas-canvas { grid-area: 1 / 1; max-width: none; max-height: none; touch-action: none; box-shadow: var(--shadow-sm); background: transparent; }

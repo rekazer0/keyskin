@@ -57,7 +57,7 @@ export function openRenameDialog(name: string, commit: (name: string) => void): 
  */
 export function bindDialog(dialog: HTMLDialogElement, cancel: () => void = () => closeDialog(dialog, "cancel")): void {
   const header = dialog.querySelector(".ui-dialog-header")
-  if (header && dialog.dataset.variant !== "operation" && !dialog.matches(".picker-dialog, .ui-mobile-sheet, .ui-image-editor")) {
+  if (header && dialog.dataset.variant !== "operation" && !dialog.matches('.picker-dialog, .ui-mobile-sheet, .ui-image-editor, [data-variant="tools"]')) {
     const back = iconButton("arrow-left", "返回上一页", cancel)
     back.classList.add("ui-mobile-back")
     header.prepend(back)

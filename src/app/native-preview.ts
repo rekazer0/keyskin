@@ -6,7 +6,7 @@
 import { AtlasResolver, type TextVisual } from "../atlas.ts"
 import { candidateWordsForeground, inputBarMetrics } from "../candidate-style.ts"
 import { IniDocument } from "../ini.ts"
-import { hasSeparateIosPanelBackground, iosCandidateBackground, iosDefaultToolbarScene, iosToolbarImageScene } from "../ios-preview.ts"
+import { iosCandidateBackground, iosDefaultToolbarScene, iosToolbarImageScene } from "../ios-preview.ts"
 import { hasIosToolbarGeometry, implicitIosToolbarRect } from "../ios-toolbar-geometry.ts"
 import { previewItems } from "../preview-items.ts"
 import type { NativeScene, SceneLayer } from "../native-scene.ts"
@@ -241,8 +241,7 @@ export function refreshNativeScenes(draft?: SsfPackage): void {
   const height = toolbarPreview.panelHeight
   const inputHeight = appState.candidateInputBar?.metrics.height ?? 0
   const sharedInput = candidateBackgroundCanvas.hasAttribute("data-shared-input-background")
-  const separatePanel = hasSeparateIosPanelBackground(resolver, preview.panelStyle, candidateBackgroundPreview.panelStyle)
-  preview.setPanelTopInset(separatePanel ? 0 : height + inputHeight)
+  preview.setPanelTopInset(height + inputHeight)
   const nativeFunctions = candidate.sections().some((section) => candidate.get(section, "KEY")?.trim() === "F14")
   const items = [...new Map([
     ...previewItems(candidate, width, height, general),

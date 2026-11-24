@@ -6,7 +6,7 @@ import { wheelZoomFactor } from "../../wheel-zoom.ts"
 import { isMixedKeyGeometry, keyEventElement, nudgeMixedKeyGeometry, selectParentObject } from "../key-editing"
 import { closeLayoutOverview, fitLayoutOverview, fitLiveKeyboard, openLayoutOverview, panLayoutOverview, stepLayout, zoomLayoutOverview } from "../layout-overview"
 import { renderSourceValueThumbnail, updateSourceFindVisibility, syncInspectorSourceToggle, toggleInspectorSource, updateSourceHighlight } from "../source-panel"
-import { settingsWorkspace, sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, sourceUploadButton, sourceUploadInput, sourceDownloadButton, sourceCopyButton, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode } from "../dom"
+import { settingsWorkspace, sidebarProjectName, documentName, aiDesignThinking, aiDesignIntensity, aiDesignScope, aiDesignModel, canvasWrap, deviceShell, toolbarStrip, previewCanvas, toolbarCanvas, editorCrosshair, previewCoordinates, previewCoordinateX, previewCoordinateY, mobileUndoButton, undoButton, mobileRedoButton, redoButton, quickInspector, mobileInspectorGroups, bdaInspectorStateButtons, bdaConfigFieldsGroup, files, previewZoomOut, previewZoomFit, previewZoomIn, layoutOverview, layoutOverviewToggle, toolbarMenus, previewPanelViewport, candidateArea, candidateInputText, styleDetailImageButtons, workspaceImage, sourceStyleProxy, toolbarFields, keyFields, mobilePreviewDevice, mobilePreviewState, mobilePreviewOverview, mobilePreviewOrientation, mobilePreviewTheme, device, deviceControl, skinState, skinStateControl, orientation, theme, mode } from "../dom"
 import { appState } from "../state"
 import { hydrateIcons } from "../../icons"
 import { hydrateShortcuts } from "../../dom-element"
@@ -21,9 +21,6 @@ import { bindAnimationInspectorShell } from "../../animation-inspector.ts"
 import { bindFieldServices } from "../property-rows"
 import { pickAnimationKeys } from "../animation-resource"
 import { populateKeyInspector, renameDocumentTitle } from "../key-inspector"
-import { runFileOperation } from "../file-operations"
-import { sourceTargetFolder, commitSourceUploads, sourceSelection, setSourceTransfer } from "../source-files"
-import { writeToChosenFile } from "../archive-io"
 import { rememberAiDesignModel, setAiDesignScope } from "../ai-panel"
 import { wireWindowControls } from "../window-controls"
 import { initDisclosureReveal, initSegmentSlide } from "../../motion"
@@ -324,13 +321,19 @@ export function wireCanvasAndInspector(): void {
   layoutOverview.addEventListener("pointerup", endOverviewPan)
   layoutOverview.addEventListener("pointercancel", endOverviewPan)
   layoutOverview.addEventListener("click", (event) => { if (!deviceShell.contains(event.target as Node)) event.stopPropagation() })
+  const canSpacePan = () => isEditing() && !appState.layoutOverview && !deviceShell.hidden &&
+    !canvasWrap.classList.contains("empty") && canvasWrap.offsetParent !== null
+  const clearSpacePan = () => canvasWrap.classList.remove("preview-space-pan")
+  window.addEventListener("keyup", (event) => { if (event.code === "Space") clearSpacePan() })
+  mode.addEventListener("change", clearSpacePan)
   // ⌘/Ctrl + 方向键切换布局；全局预览里方向键切换当前格子，空格进入该布局，进入后 Esc 回到全局预览。
   // 捕获阶段处理，不让按键移动选中的按键。
   window.addEventListener("keydown", (event) => {
     const step = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, [number, number]>)[event.key]
     if (!settingsWorkspace.hidden || event.isComposing || document.querySelector("dialog[open]")) return
-    if (keyEventElement(event.target)?.closest("#ai-sessions")) return
-    const typing = Boolean(keyEventElement(event.target)?.closest("input, textarea, select, [contenteditable], .cm-editor"))
+    const target = keyEventElement(event.target)
+    if (target?.closest("#ai-sessions")) return
+    const typing = Boolean(target?.closest("input, textarea, select, [contenteditable], .cm-editor"))
     if (appState.layoutOverview) {
       if (typing) return
       if (event.key === " ") void closeLayoutOverview()
@@ -343,6 +346,12 @@ export function wireCanvasAndInspector(): void {
       void openLayoutOverview()
     } else if (step && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && appState.archive && !typing) {
       stepLayout(...step)
+    } else if (
+      event.code === "Space" && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey &&
+      !typing && (!target?.matches(":focus-visible") || canvasWrap.matches(":hover")) &&
+      !toolbarMenus.some((menu) => menu.open) && canSpacePan()
+    ) {
+      canvasWrap.classList.add("preview-space-pan")
     } else return
     event.preventDefault()
     event.stopPropagation()
@@ -389,20 +398,18 @@ export function wireCanvasAndInspector(): void {
   canvasWrap.addEventListener("pointerup", endTouch, { capture: true })
   canvasWrap.addEventListener("pointercancel", endTouch, { capture: true })
   window.addEventListener("blur", () => {
+    clearSpacePan()
     touches.clear()
     pinch = undefined
     finishPreviewPan()
     if (editorCrosshair.checked) previewCoordinates.hidden = true
   })
-  canvasWrap.addEventListener("pointerdown", (event) => {
-    if (
-      event.button !== 0 ||
-      preview.marquee?.pointerId === event.pointerId ||
-      appState.previewPanLocked ||
-      event.pointerType === "touch" ||
-      deviceShell.hidden ||
+  const preparePreviewPan = (event: PointerEvent, spacePan = false) => {
+    if (event.button !== 0 || event.pointerType === "touch" || deviceShell.hidden) return
+    if (!spacePan && (
+      preview.marquee?.pointerId === event.pointerId || appState.previewPanLocked ||
       canvasEditable() && appState.keyMode === "move" && previewPanelViewport.contains(event.target as Node)
-    ) return
+    )) return
     appState.previewPanCandidate = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -411,7 +418,20 @@ export function wireCanvasAndInspector(): void {
       panY: appState.previewPanY,
     }
     canvasWrap.classList.add("preview-pan-ready")
-  })
+    if (spacePan) {
+      // Capture before the keyboard starts marquee selection or moves a key.
+      event.preventDefault()
+      event.stopPropagation()
+      appState.canvasWrapClickStart = undefined
+      canvasWrap.setPointerCapture(event.pointerId)
+    }
+  }
+  canvasWrap.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && canvasWrap.classList.contains("preview-space-pan") && canSpacePan()) {
+      preparePreviewPan(event, true)
+    }
+  }, { capture: true })
+  canvasWrap.addEventListener("pointerdown", (event) => { if (!event.defaultPrevented) preparePreviewPan(event) })
   canvasWrap.addEventListener("pointermove", (event) => {
     if (canvasEditable() && appState.keyMode === "move" && previewPanelViewport.contains(event.target as Node)) return
     if (!appState.previewPanStart && appState.previewPanCandidate?.pointerId === event.pointerId) {
@@ -501,33 +521,5 @@ export function wireCanvasAndInspector(): void {
       event.preventDefault()
       renameDocumentTitle()
     }
-  })
-  sourceUploadButton.addEventListener("click", () => {
-    if (!appState.archive || !isEditing()) return
-    sourceUploadInput.value = ""
-    sourceUploadInput.click()
-  })
-  sourceUploadInput.addEventListener("change", () => {
-    void runFileOperation("上传文件", async () => {
-      if (!appState.archive || !sourceUploadInput.files?.length) return false
-      const folder = sourceTargetFolder()
-      const uploads = await Promise.all(Array.from(sourceUploadInput.files).map(async (file) => ({
-        name: file.name,
-        bytes: new Uint8Array(await file.arrayBuffer()),
-      })))
-      return commitSourceUploads(uploads, folder)
-    })
-  })
-  sourceDownloadButton.addEventListener("click", () => {
-    void runFileOperation("下载文件", async () => {
-      const selection = sourceSelection()
-      if (!appState.archive || !selection || selection.folder) return false
-      const bytes = appState.archive.getBytes(selection.path)
-      if (!bytes) return false
-      return Boolean(await writeToChosenFile(selection.path.split("/").pop() ?? "download", bytes))
-    })
-  })
-  sourceCopyButton.addEventListener("click", () => {
-    setSourceTransfer("copy")
   })
 }

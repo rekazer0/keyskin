@@ -33,7 +33,7 @@
     </nav>
     <dialog id="workspace-tools-dialog" class="ui-dialog" data-variant="tools" aria-labelledby="workspace-tools-title">
       <form method="dialog">
-      <header class="ui-dialog-header"><div><h2 id="workspace-tools-title">工具</h2><p id="workspace-tools-context"></p><p>单击使用；拖到顶部固定，拖回工具区取消固定。</p></div></header>
+      <header class="ui-dialog-header"><div><h2 id="workspace-tools-title">工具</h2><p id="workspace-tools-context"></p><p>拖到顶部固定，拖回工具区取消固定。</p></div></header>
       <div class="ui-dialog-body" data-layout="stack">
         <div class="ui-tool-grid">
           <button class="ui-list-item" type="button" data-workspace-tool="panel-scale" aria-label="面板复制"><span data-icon="arrow-left-right" aria-hidden="true"></span><span class="ui-list-item-text"><strong>面板复制</strong><small>复制布局并适配目标尺寸</small></span></button>
@@ -94,11 +94,8 @@
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="mobile-canvas-options"><span data-icon="sliders-horizontal" aria-hidden="true"></span><span>画布选项…</span></button>
             <button class="ui-list-item" type="button" role="menuitemcheckbox" data-mobile-action="canvas-gestures" aria-checked="false"><span data-icon="hand" aria-hidden="true"></span><span>双指缩放与平移</span><small aria-hidden="true">关闭</small></button>
             <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="preview-zoom-fit"><span data-icon="scan" aria-hidden="true"></span><span>适配画布</span></button>
-            <div class="ui-menu-group-label" aria-hidden="true">工具</div>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="panel-scale"><span data-icon="copy" aria-hidden="true"></span><span>面板复制</span><small>布局与分辨率</small></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="replace-layout-image"><span data-icon="image" aria-hidden="true"></span><span>替换键盘样式</span><small>背景与按键</small></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="adapt-ios26"><span data-icon="smartphone" aria-hidden="true"></span><span>适配 iOS 26</span><small>透明背景 · 可撤销</small></button>
-            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="workspace-tools-open" aria-haspopup="dialog" aria-controls="workspace-tools-dialog" disabled><span data-icon="wrench" aria-hidden="true"></span><span>工具…</span></button>
+            <hr class="ui-menu-separator">
+            <button class="ui-list-item" type="button" role="menuitem" data-mobile-action="workspace-tools-open" aria-haspopup="dialog" aria-controls="workspace-tools-dialog" disabled><span data-icon="wrench" aria-hidden="true"></span><span>工具</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
             <div class="ui-menu-group-label" aria-hidden="true">偏好</div>
             <button class="ui-list-item" type="button" role="menuitem" data-settings-entry="settings"><span data-icon="settings" aria-hidden="true"></span><span>设置</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
             <button class="ui-list-item" type="button" role="menuitem" data-settings-entry="about"><span data-icon="info" aria-hidden="true"></span><span>关于</span><span data-icon="chevron-right" aria-hidden="true"></span></button>
@@ -185,17 +182,21 @@
             <button type="button" data-sidebar-view="source" aria-pressed="false"><span class="system-symbol" data-icon="code-xml" aria-hidden="true"></span><span>源文件</span></button>
           </div>
         </div>
-        <div id="source-file-toolbar" class="source-file-toolbar" aria-label="源文件操作" hidden>
+        <label id="source-file-search-box" class="ui-input ui-search" hidden><input id="source-file-search" type="text" role="searchbox" placeholder="搜索" aria-label="搜索文件" enterkeyhint="search" autocomplete="off" spellcheck="false"></label>
+        <div id="source-file-toolbar" class="source-file-toolbar" role="group" aria-label="源文件操作" hidden>
           <button id="source-file-search-toggle" class="ui-icon-button" type="button" title="搜索文件" aria-label="搜索文件" aria-expanded="false" aria-controls="source-file-search-box"><span class="icon system-symbol" data-icon="search" aria-hidden="true"></span></button>
-          <label id="source-file-search-box" class="ui-input ui-search" hidden><input id="source-file-search" type="text" role="searchbox" placeholder="搜索" aria-label="搜索文件" enterkeyhint="search" autocomplete="off" spellcheck="false"></label>
+          <button id="source-multiselect" class="ui-icon-button" data-source-mobile type="button" title="多选" aria-label="多选" aria-pressed="false" disabled><span data-icon="list-checks" aria-hidden="true"></span></button>
           <button id="source-upload" class="ui-icon-button" type="button" title="上传文件" aria-label="上传文件"><span class="icon system-symbol" data-icon="upload" aria-hidden="true"></span></button>
+          <button id="source-upload-replace" class="ui-icon-button" data-source-overflow type="button" title="上传并替换…" aria-label="上传并替换" disabled><span data-icon="arrow-left-right" aria-hidden="true"></span></button>
           <button id="source-download" class="ui-icon-button" type="button" title="下载选中文件" aria-label="下载选中文件" disabled><span class="icon system-symbol" data-icon="download" aria-hidden="true"></span></button>
-          <button id="source-copy" class="ui-icon-button" type="button" title="复制" aria-label="复制" disabled><span class="icon system-symbol" data-icon="copy" aria-hidden="true"></span></button>
-          <button id="source-paste" class="ui-icon-button" type="button" title="粘贴" aria-label="粘贴" disabled><span class="icon system-symbol" data-icon="clipboard-paste" aria-hidden="true"></span></button>
-          <button id="source-move" class="ui-icon-button" type="button" title="剪切" aria-label="剪切" disabled><span class="icon system-symbol" data-icon="scissors" aria-hidden="true"></span></button>
-          <button id="source-rename" class="ui-icon-button" type="button" title="重命名…" aria-label="重命名" disabled><span class="icon system-symbol" data-icon="pencil-line" aria-hidden="true"></span></button>
+          <button id="source-copy" class="ui-icon-button" data-source-overflow type="button" title="复制" aria-label="复制" disabled><span class="icon system-symbol" data-icon="copy" aria-hidden="true"></span></button>
+          <button id="source-paste" class="ui-icon-button" data-source-overflow type="button" title="粘贴" aria-label="粘贴" disabled><span class="icon system-symbol" data-icon="clipboard-paste" aria-hidden="true"></span></button>
+          <button id="source-move" class="ui-icon-button" data-source-overflow type="button" title="剪切" aria-label="剪切" disabled><span class="icon system-symbol" data-icon="scissors" aria-hidden="true"></span></button>
+          <button id="source-rename" class="ui-icon-button" data-source-overflow type="button" title="重命名…" aria-label="重命名" disabled><span class="icon system-symbol" data-icon="pencil-line" aria-hidden="true"></span></button>
           <button id="source-delete" class="ui-icon-button" type="button" data-list-action="remove" title="删除" aria-label="删除" disabled><span class="icon system-symbol" data-icon="trash-2" aria-hidden="true"></span></button>
+          <button id="source-file-more" class="ui-icon-button" data-source-mobile type="button" title="更多源文件操作" aria-label="更多源文件操作" aria-haspopup="menu"><span data-icon="ellipsis" aria-hidden="true"></span></button>
           <input id="source-upload-input" type="file" multiple hidden>
+          <input id="source-replace-input" type="file" hidden>
         </div>
         <div id="files"></div>
         <div class="ui-sidebar-summary" role="status"><span data-icon="info" aria-hidden="true"></span><span id="sidebar-layout-count"></span><span aria-hidden="true">·</span><span id="sidebar-layout-size"></span></div>
@@ -591,7 +592,6 @@
           <div id="resource-list-view">
             <header class="mobile-resource-heading">
               <div><h1>资源</h1><p id="mobile-resource-summary" class="ui-field-note"></p></div>
-              <button id="mobile-resource-filters-toggle" class="ui-icon-button" data-variant="filled" type="button" aria-label="筛选和排序" title="筛选和排序" aria-controls="resource-filter-options" aria-expanded="false" data-icon="sliders-horizontal"></button>
             </header>
             <header class="ui-pane-header" id="resource-page-heading">
               <h2 id="resource-list-title">图片</h2>
@@ -621,6 +621,7 @@
               <span class="ui-input ui-select" hidden><select id="resource-category" aria-label="样式分类"></select></span>
               <label class="ui-input ui-search"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="resource-search" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="搜索图片" autocomplete="off" spellcheck="false"></label>
               <span class="ui-input ui-select mobile-resource-classification"><select id="mobile-resource-category" aria-label="资源分类"></select></span>
+              <button id="mobile-resource-filters-toggle" class="ui-icon-button" data-variant="filled" type="button" aria-label="筛选和排序" title="筛选和排序" aria-controls="resource-filter-options" aria-expanded="false" data-icon="sliders-horizontal"></button>
               <div id="resource-filter-options" class="resource-filter-options" data-collapsed>
                 <span class="ui-input ui-select" hidden><select id="resource-usage-filter" aria-label="使用情况"><option value="all">全部状态</option><option value="used">使用中</option><option value="unused">未使用</option></select></span>
                 <span id="resource-sort-field" class="ui-input ui-select"><select id="resource-sort" aria-label="资源排序"><option value="name">名称升序</option><option value="descending">名称降序</option></select></span>

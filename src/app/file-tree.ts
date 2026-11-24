@@ -15,7 +15,7 @@ import { bdaAppearancePath, bdaConfigPaths } from "../bda.ts"
 import { decodeBdaAppearance } from "../bda-decode.ts"
 import { toolbarConfigPath, legacyAnimationConfigPath } from "./config-context"
 import { firstExistingPath } from "../resources.ts"
-import { selectSourceRow, visibleSourceRows, filterSourceFiles, updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView, setRowSelected } from "./source-files"
+import { selectSourceRow, visibleSourceRows, isSourceMultiselect, filterSourceFiles, updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView, setRowSelected } from "./source-files"
 import { isSoundPath, soundMimeType } from "../sounds.ts"
 import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
@@ -551,7 +551,7 @@ export function renderFiles(): void {
         selectSourceRow(folderSummary, event)
       })
       folderSummary.addEventListener("dblclick", (event) => {
-        if (disclosure.contains(event.target as Node)) return
+        if (isSourceMultiselect() || disclosure.contains(event.target as Node)) return
         event.preventDefault()
         folder.open = !folder.open
       })
@@ -581,18 +581,33 @@ export function renderFiles(): void {
       const label = document.createElement("span")
       label.className = "nav-label"
       label.textContent = path.split("/").pop() ?? path
-      button.append(label)
+      const text = document.createElement("span")
+      text.className = "ui-list-item-text source-file-label"
+      text.append(label)
+      const slash = path.lastIndexOf("/")
+      if (slash >= 0) {
+        const folder = document.createElement("small")
+        folder.textContent = path.slice(0, slash + 1)
+        text.append(folder)
+      }
+      button.append(text)
       button.title = path
       button.dataset.path = path
       button.draggable = true
-      button.addEventListener("click", (event) => {
-        if (event.ctrlKey || event.metaKey || event.shiftKey) { selectSourceRow(button, event); return }
+      const open = () => {
         if (appState.archive?.isText(path) || appState.archive?.isImage(path) || appState.archive?.isBdaConfig(path)) {
           appState.animationDesignMode = "all"
           selectFile(path, "source")
           if (mobilePortraitQuery.matches) setMobilePane("inspector")
         } else selectSourceRow(button)
         updateSourceFileActions()
+      }
+      button.addEventListener("click", event => {
+        if (mobilePortraitQuery.matches || event.ctrlKey || event.metaKey || event.shiftKey) selectSourceRow(button, event)
+        else open()
+      })
+      button.addEventListener("dblclick", event => {
+        if (mobilePortraitQuery.matches && !isSourceMultiselect() && !event.ctrlKey && !event.metaKey && !event.shiftKey) open()
       })
       button.addEventListener("dragstart", (event) => {
         const bytes = appState.archive?.getBytes(path)
@@ -646,7 +661,7 @@ export function renderFiles(): void {
     selectSourceRow(rootSummary, event)
   })
   rootSummary.addEventListener("dblclick", (event) => {
-    if (rootDisclosure.contains(event.target as Node)) return
+    if (isSourceMultiselect() || rootDisclosure.contains(event.target as Node)) return
     event.preventDefault()
     rootFolder.open = !rootFolder.open
   })
@@ -717,8 +732,11 @@ export function renderFiles(): void {
       }
       case "Enter":
       case " ":
-        if (event.ctrlKey || event.metaKey || event.shiftKey) { selectSourceRow(current, event); break }
-        current.dispatchEvent(new MouseEvent(current.matches("summary") ? "dblclick" : "click", { bubbles: true }))
+        if (event.ctrlKey || event.metaKey || event.shiftKey || isSourceMultiselect() || mobilePortraitQuery.matches && event.key === " ") {
+          selectSourceRow(current, event)
+          break
+        }
+        current.dispatchEvent(new MouseEvent(mobilePortraitQuery.matches || current.matches("summary") ? "dblclick" : "click", { bubbles: true }))
         break
       default:
         return

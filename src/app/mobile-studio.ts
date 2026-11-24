@@ -248,7 +248,7 @@ export function wireMobileStudio(): void {
     simulation.classList.toggle("mobile-simulation", mobilePreview)
     simulatedOutput.placeholder = mobilePreview ? "" : simulationPlaceholder
     if (mobilePortraitQuery.matches) {
-      if (resourceTheme.parentElement === themeHome) $(".mobile-resource-heading").after(resourceTheme)
+      if (resourceTheme.parentElement === themeHome) $(".mobile-resource-heading").append(resourceTheme)
       if (createResource.parentElement !== $(".resource-actions")) $(".resource-actions").prepend(createResource)
     } else {
       if (resourceTheme.parentElement !== themeHome) themeHome.insertBefore(resourceTheme, $("#resource-page-tabs"))

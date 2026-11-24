@@ -5,7 +5,7 @@
  * 重置时把那个值交回 commit。
  */
 import { drawVisualPreview, type Visual } from "../atlas.ts"
-import { element, iconButton } from "../dom-element.ts"
+import { element } from "../dom-element.ts"
 import { fontControl, type FontChoice } from "./font-picker.ts"
 import { createIcon } from "../icons.ts"
 import { styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
@@ -532,12 +532,6 @@ function colorControl(value: string, { codec, details, clearable = true }: Color
     })
     box.append(code)
     root.append(box)
-  }
-  if (clearable && (value || mixed)) {
-    const clear = iconButton("x", `清除${label}`, clearColor)
-    clear.dataset.size = "sm"
-    clear.disabled = disabled
-    root.append(clear)
   }
   if (codec !== "#rgb") {
     const box = element("span", "ui-input")

@@ -178,7 +178,7 @@ function renderCatalog(): void {
   resourceCount.textContent = String(visible.length)
   setText("#resource-page-description", `${entries.length.toLocaleString()} 项${query ? ` · 筛出 ${visible.length.toLocaleString()} 项` : ""}`)
   $<HTMLButtonElement>("#resource-create-style").hidden = true
-  resourceListView.querySelector(".resource-filters")!.append(resourceUploadButton, resourceDownloadButton)
+  $(mobilePortraitQuery.matches ? "#resource-page-heading" : ".resource-filters").append(resourceUploadButton, resourceDownloadButton)
   resourceSelectionActions.querySelector<HTMLElement>(".ui-list-toolbar")!.hidden = true
   resourceUploadButton.hidden = catalog !== "font"
   resourceUploadButton.disabled = !canEditFonts
@@ -202,7 +202,7 @@ function renderCatalog(): void {
   syncMobileResourceCategory()
   const choose = (row: HTMLElement, focus = true) => {
     appState.selectedResourceCatalogItem = row.dataset.catalogId!
-    if (focus) row.focus({ preventScroll: true })
+    if (focus) row.focus()
     for (const option of host.querySelectorAll<HTMLElement>('[role="option"]')) {
       option.setAttribute("aria-selected", String(option === row))
       option.tabIndex = option === row ? 0 : -1
@@ -257,7 +257,7 @@ function renderCatalog(): void {
     const text = element("span", "ui-list-item-text")
     const mode = item.id.startsWith("dark/") ? "深色" : item.id.startsWith("light/") ? "浅色" : ""
     text.append(Object.assign(element("strong"), { textContent: item.title }), Object.assign(element("small"), { textContent: item.font && mode ? `${mode} · ${item.detail}` : item.detail }))
-    if (item.font) row.append(lazyFontSample({ value: item.id, label: item.title, load: preview => loadEmbeddedFont(archive, item.id, preview) }, true))
+    if (item.font) row.append(lazyFontSample({ value: item.id, label: item.title, load: preview => loadEmbeddedFont(archive, item.id, preview) }))
     else row.append(createIcon(item.icon, 20))
     row.append(text)
     row.addEventListener("click", () => choose(row))

@@ -26,7 +26,7 @@ try {
     try {
       for (const width of [1440, 393]) {
         const mobile = width < 500
-        const page = await browser.newPage({ viewport: { width, height: 850 }, reducedMotion: "reduce" })
+        const page = await browser.newPage({ viewport: { width, height: 850 }, hasTouch: mobile, reducedMotion: "reduce" })
         const errors = []
         page.on("pageerror", error => errors.push(error.message))
         await page.addInitScript(() => {
@@ -75,6 +75,21 @@ try {
         await fonts.first().locator("canvas").waitFor({ state: "detached" })
         const scrolled = await counts()
         assert.ok(scrolled.canvases < rows / 2 && scrolled.faces < rows / 2 && scrolled.loads > initial.loads, JSON.stringify(scrolled))
+        assert.ok(await fonts.last().evaluate(card => {
+          const preview = card.querySelector(".ui-font-sample").getBoundingClientRect()
+          const caption = card.querySelector("strong").getBoundingClientRect()
+          return preview.bottom <= caption.top && caption.bottom <= card.getBoundingClientRect().bottom
+        }), "font preview and filename fit inside the same card")
+        if (mobile) {
+          const toggle = page.getByRole("button", { name: "筛选和排序" })
+          const search = page.getByRole("searchbox", { name: "搜索字体" })
+          assert.equal((await toggle.boundingBox()).y, (await search.boundingBox()).y)
+          await toggle.tap()
+          await page.locator("#resource-sort").selectOption("descending")
+          assert.equal(await fonts.first().locator("strong").textContent(), "Font-179.ttf")
+          await toggle.tap()
+          assert.equal(await page.locator("#resource-sort").isVisible(), false)
+        }
         await page.locator("#resource-search").fill("Font-179")
         assert.equal(await fonts.count(), 1)
         await fonts.first().click()

@@ -95,14 +95,9 @@ const fontSampleObserver = new IntersectionObserver(entries => {
 })
 
 /** 只保留可见行的画布；占位与样本同高，滚动时列表不跳动。 */
-export function lazyFontSample(choice: FontChoice, large = false): HTMLElement {
+export function lazyFontSample(choice: FontChoice): HTMLElement {
   const slot = element("span", "ui-font-sample")
-  if (large) slot.dataset.size = "lg"
-  visibleSamples.set(slot, () => {
-    const canvas = fontSample(choice, undefined, true)
-    if (large) canvas.dataset.size = "lg"
-    return canvas
-  })
+  visibleSamples.set(slot, () => fontSample(choice, undefined, true))
   fontSampleObserver.observe(slot)
   releaseOnRemove(slot, () => fontSampleObserver.unobserve(slot))
   return slot

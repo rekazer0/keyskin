@@ -1,10 +1,11 @@
 import { emptyState, searchField } from "../dom-element"
 import { appState } from "./state"
-import { sidebarViewButtons, files, sourceFileToolbar, sourceFileSearchToggle, sourceFileSearch, sourceUploadButton, sourceDownloadButton, sourceCopyButton, sourcePasteButton, sourceMoveButton, sourceRenameButton, sourceDeleteButton } from "./dom"
+import { sidebarViewButtons, files, sourceFileToolbar, sourceFileSearchToggle, sourceFileSearch, sourceMultiselect, sourceUploadReplace, sourceUploadButton, sourceDownloadButton, sourceCopyButton, sourcePasteButton, sourceMoveButton, sourceRenameButton, sourceDeleteButton } from "./dom"
 import { isEditing, updateDirty, commitBatch } from "./edit-history"
 import { type SourceTransfer, type SourceUpload } from "./types"
 import { renderFiles } from "./file-tree"
 import { selectFile } from "./navigation"
+import { mobilePortraitQuery } from "./canvas-interaction"
 import { refreshPreview } from "./preview-render"
 
 /** 左侧栏的行：源文件树是 tree（aria-selected），概览是导航（aria-current）。 */
@@ -28,6 +29,7 @@ export function setSidebarView(view: "overview" | "source"): void {
   files.querySelector<HTMLElement>(".sidebar-overview")?.toggleAttribute("hidden", view !== "overview")
   files.querySelector<HTMLElement>(".raw-files")?.toggleAttribute("hidden", view !== "source")
   sourceFileToolbar.hidden = view !== "source"
+  sourceFileSearch.closest("label")!.hidden = view !== "source" || sourceFileSearchToggle.ariaExpanded !== "true"
   updateSourceFileActions()
 }
 
@@ -53,7 +55,7 @@ export function visibleSourceRows(): HTMLElement[] {
 
 export function selectSourceRow(row: HTMLElement, event?: MouseEvent | KeyboardEvent): void {
   const rows = visibleSourceRows()
-  const additive = Boolean(event?.ctrlKey || event?.metaKey)
+  const additive = isSourceMultiselect() || Boolean(event?.ctrlKey || event?.metaKey)
   const anchor = rows.indexOf(appState.sourceSelectionAnchor ?? appState.selectedFileButton!)
   const index = rows.indexOf(row)
   const selected = new Set(additive ? rows.filter(item => item.getAttribute("aria-selected") === "true") : [])
@@ -75,17 +77,36 @@ export function selectSourceRow(row: HTMLElement, event?: MouseEvent | KeyboardE
   updateSourceFileActions()
 }
 
+export function isSourceMultiselect(): boolean {
+  return mobilePortraitQuery.matches && appState.sourceMultiselect
+}
+
+export function sourceActionScope(): { paths: string[]; searching: boolean; allResults: boolean } {
+  const results = mobilePortraitQuery.matches ? appState.sourceSearchResults : undefined
+  if (results && !isSourceMultiselect()) return { paths: results, searching: true, allResults: true }
+  const paths = new Set(sourceSelections().flatMap(sourcePaths))
+  return { paths: results ? results.filter(path => paths.has(path)) : [...paths], searching: results !== undefined, allResults: false }
+}
+
 export function updateSourceFileActions(): void {
   const selected = sourceSelections()
   const selection = selected.length === 1 ? selected[0] : undefined
   const available = Boolean(appState.archive) && !appState.fileOperationRunning
   sourceUploadButton.disabled = !available
-  sourceDownloadButton.disabled = appState.fileOperationRunning || !selection || selection.folder
+  const bulk = mobilePortraitQuery.matches && (appState.sourceSearchResults !== undefined || isSourceMultiselect())
+  const { paths, allResults } = bulk ? sourceActionScope() : { paths: [], allResults: false }
+  sourceMultiselect.disabled = !available
+  sourceUploadReplace.disabled = !available || !selection || selection.folder
+  sourceDownloadButton.disabled = !available || (bulk ? !paths.length : !selection || selection.folder)
   sourceCopyButton.disabled = appState.fileOperationRunning || !selected.length
   sourcePasteButton.disabled = !available || !appState.sourceTransfer?.files.length
   sourceMoveButton.disabled = !available || !selected.length
   sourceRenameButton.disabled = !available || !selection
-  sourceDeleteButton.disabled = !available || !selected.length
+  sourceDeleteButton.disabled = !available || !(bulk ? paths.length : selected.length)
+  sourceDownloadButton.title = allResults ? "下载搜索结果" : "下载选中文件"
+  sourceDeleteButton.title = allResults ? "删除搜索结果" : "删除"
+  sourceDownloadButton.ariaLabel = sourceDownloadButton.title
+  sourceDeleteButton.ariaLabel = sourceDeleteButton.title
   sourceCopyButton.setAttribute("aria-pressed", String(appState.sourceTransfer?.mode === "copy"))
   sourceMoveButton.setAttribute("aria-pressed", String(appState.sourceTransfer?.mode === "move"))
 }
@@ -219,11 +240,12 @@ export function revealSourceFile(path: string): void {
 export function filterSourceFiles(): void {
   const query = sourceFileSearch.value.trim().toLocaleLowerCase()
   const folders = () => [...files.querySelectorAll<HTMLDetailsElement>(".raw-folder")]
-  if (query) {
+  const results = query ? appState.archive?.names().filter(path => !path.endsWith("/") && path.toLocaleLowerCase().includes(query)) ?? [] : undefined
+  appState.sourceSearchResults = results
+  files.toggleAttribute("data-source-filtered", Boolean(query))
+  if (results) {
     appState.sourceSearchFolders ??= new Set(folders().filter(folder => folder.open).map(folder => folder.dataset.folderPath ?? ""))
-    for (const path of appState.archive?.names() ?? []) {
-      if (!path.endsWith("/") && path.toLocaleLowerCase().includes(query)) ensureSourcePathRendered(path)
-    }
+    for (const path of results) ensureSourcePathRendered(path)
   }
   for (const row of files.querySelectorAll<HTMLElement>(".source-file-row")) {
     row.hidden = Boolean(query) && !row.dataset.path?.toLocaleLowerCase().includes(query)
@@ -247,10 +269,15 @@ export function filterSourceFiles(): void {
 
 export function wireSourceFileSearch(): void {
   const field = searchField({ input: sourceFileSearch, label: "搜索文件", onInput: filterSourceFiles })
+  const positionToolbar = () => {
+    if (mobilePortraitQuery.matches && sourceFileSearchToggle.ariaExpanded === "true") files.after(sourceFileToolbar)
+    else files.before(sourceFileToolbar)
+  }
   const toggle = (open: boolean) => {
     sourceFileSearchToggle.setAttribute("aria-expanded", String(open))
     sourceFileSearchToggle.title = open ? "收起搜索" : "搜索文件"
     sourceFileSearchToggle.setAttribute("aria-label", sourceFileSearchToggle.title)
+    positionToolbar()
     if (open) {
       field.prepend(sourceFileSearchToggle)
       field.hidden = false
@@ -264,6 +291,18 @@ export function wireSourceFileSearch(): void {
     }
   }
   sourceFileSearchToggle.addEventListener("click", () => toggle(field.hidden))
+  sourceMultiselect.addEventListener("click", () => {
+    appState.sourceMultiselect = !appState.sourceMultiselect
+    sourceMultiselect.ariaPressed = String(appState.sourceMultiselect)
+    if (!appState.sourceMultiselect) {
+      for (const row of files.querySelectorAll<HTMLElement>('.raw-files [aria-selected="true"]')) setRowSelected(row, false)
+    }
+    updateSourceFileActions()
+  })
+  mobilePortraitQuery.addEventListener("change", () => {
+    positionToolbar()
+    updateSourceFileActions()
+  })
   field.addEventListener("keydown", event => {
     if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return
     event.preventDefault()
