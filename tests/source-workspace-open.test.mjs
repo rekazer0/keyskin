@@ -68,7 +68,7 @@ test('Android document provider names, not opaque URIs, determine theme paths fo
       const sync = run(declarations('sourcePathForWorkspace', 'scheduleSourceAutosave', 'flushSourceAutosave'), {
         archive, sourceWorkspacePath: source, sourceWorkspacePrefix: sourcePrefix,
         window: { setTimeout: () => 1 }, clearTimeout() {}, pendingSourcePaths: new Set(),
-        writePendingSourcePaths, sourcePathLookup, rememberSourceWrite() {}, sourceSyncQueue: Promise.resolve(),
+        writePendingSourcePaths, sourcePathLookup, rememberSourceWrite() {}, updateDirty() {}, sourceSyncQueue: Promise.resolve(),
         invoke: async (command, payload) => { assert.equal(command, 'apply_source_changes'); written = payload },
       })
       const canonical = archive.canonicalSourcePath(prefix + paths[0])
@@ -86,6 +86,28 @@ test('Android document provider names, not opaque URIs, determine theme paths fo
     }
     assert.equal(await context.loadSourceWorkspace(workspace), true)
   }
+})
+
+test('failed source writes stay unsaved even when the skin package is clean', async () => {
+  const archive = SkinArchive.fromFiles(new Map([['Info.txt', strToU8('Name=test')]]))
+  const pendingSourcePaths = new Set()
+  const context = run(declarations('sourcePathForWorkspace', 'scheduleSourceAutosave', 'flushSourceAutosave', 'hasUnsavedChanges', 'updateDirty'), {
+    archive, sourceWorkspacePath: '/source', sourceWorkspacePrefix: '', pendingSourcePaths,
+    dirty: {}, mobileDocumentStatus: {}, shareDocumentStatus: {},
+    window: { setTimeout: () => 1 }, clearTimeout() {},
+    writePendingSourcePaths, sourcePathLookup, rememberSourceWrite() {}, sourceSyncQueue: Promise.resolve(),
+    invoke: async () => { throw new Error('write failed') },
+  })
+  // Undoing back to the package baseline still needs to update the source folder.
+  context.scheduleSourceAutosave(['Info.txt'])
+  assert.equal(archive.changed.size, 0)
+  assert.equal(context.dirty.hidden, false)
+  await assert.rejects(context.flushSourceAutosave(), /write failed/)
+  assert.deepEqual([...pendingSourcePaths], ['Info.txt'])
+  assert.equal(context.dirty.hidden, false)
+  context.invoke = async () => {}
+  await context.flushSourceAutosave()
+  assert.equal(context.dirty.hidden, true)
 })
 
 test('full directory notifications keep pending local edits, additions and deletions while applying external changes', async () => {

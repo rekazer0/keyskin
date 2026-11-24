@@ -1,5 +1,5 @@
 import { exportTargets, isAndroidTauri } from "./canvas-interaction"
-import { $, mobileExportOpen, mobileShareButton, shareDialog, mobileExportFormats, documentName, dirty, adbShareButton, saveButton, fileOperationDialog, fileOperationClose, shareTitle, shareDocumentName, shareDocumentStatus, shareDocumentFormat, shareAdbAction, shareExport, shareExportName, shareResourceCheck } from "./dom"
+import { $, mobileExportOpen, mobileShareButton, shareDialog, mobileExportFormats, documentName, adbShareButton, saveButton, fileOperationDialog, fileOperationClose, shareTitle, shareDocumentName, shareDocumentFormat, shareAdbAction, shareExport, shareExportName, shareResourceCheck } from "./dom"
 import { currentExportFormat, saveArchive } from "./archive-io"
 import { runFileOperation } from "./file-operations"
 import { type ExportFormat, exportName } from "../export.ts"
@@ -161,12 +161,11 @@ export function wireMobileExport(): void {
     for (const input of exportTargets) input.closest("label")!.setAttribute("aria-disabled", String(input.disabled))
     shareAdbAction.hidden = adbShareButton.hidden
     shareDocumentName.textContent = documentName.textContent
-    shareDocumentStatus.textContent = dirty.hidden ? "所有修改已保存" : "有未保存的修改"
     shareDocumentFormat.textContent = appState.archive?.format.toUpperCase() ?? ""
     syncSelection()
   }
   const observer = new MutationObserver(sync)
-  for (const input of [...exportTargets, adbShareButton, dirty]) observer.observe(input, { attributes: true, attributeFilter: ["disabled", "hidden"] })
+  for (const input of [...exportTargets, adbShareButton]) observer.observe(input, { attributes: true, attributeFilter: ["disabled", "hidden"] })
   observer.observe(documentName, { childList: true, characterData: true, subtree: true })
   const operationOpen = () => shareDialog.contains(fileOperationDialog) && fileOperationDialog.open
   new MutationObserver(() => shareDialog.toggleAttribute("data-share-operation", operationOpen()))

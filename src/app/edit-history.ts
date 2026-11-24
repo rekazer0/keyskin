@@ -1,10 +1,10 @@
-import { canvasWrap, mode, theme, resourceSearch, dirty, undoButton, redoButton, sourceName, documentName, mobileDocumentStatus } from "./dom"
+import { canvasWrap, mode, theme, resourceSearch, dirty, undoButton, redoButton, sourceName, documentName, mobileDocumentStatus, shareDocumentStatus } from "./dom"
 import { appState } from "./state"
 import { ask } from "./ask"
 import { flushNumberInputWheel, numberInputGesture } from "../number-input-wheel.ts"
 import { flushSourceAutosave, scheduleSourceAutosave } from "./source-workspace"
 import { showError } from "./file-operations"
-import { recordChange, mobilePortraitQuery } from "./canvas-interaction"
+import { recordChange, mobilePortraitQuery, pendingSourcePaths } from "./canvas-interaction"
 import { saveArchive, currentExportFormat } from "./archive-io"
 import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
@@ -39,12 +39,14 @@ export function canvasEditable(): boolean {
 }
 
 export function hasUnsavedChanges(): boolean {
+  if (appState.sourceWorkspacePath) return appState.sourceWriteInProgress || pendingSourcePaths.size > 0
   return appState.unsavedNew || Boolean(appState.archive?.changed.size)
 }
 
 export async function prepareDocumentReplacement(intent: "open" | "leave" = "leave"): Promise<boolean> {
   flushNumberInputWheel()
   try {
+    await appState.sourceWorkspaceCreation
     await flushSourceAutosave()
   } catch (error) {
     showError(error, "自动保存源码")
@@ -53,7 +55,9 @@ export async function prepareDocumentReplacement(intent: "open" | "leave" = "lea
   if (intent === "open" && appState.archive) {
     const decision = await ask({
       title: "是否导出当前皮肤？",
-      detail: `打开其他皮肤将关闭 ${documentName.textContent || "当前皮肤"}，未保存的修改将不会保留。`,
+      detail: appState.sourceWorkspacePath
+        ? `打开其他皮肤将关闭 ${documentName.textContent || "当前皮肤"}。修改会保留在本地源码文件夹，导出可另生成皮肤包。`
+        : `打开其他皮肤将关闭 ${documentName.textContent || "当前皮肤"}，未保存的修改将不会保留。`,
       actions: [{ value: "cancel", label: "取消" }, { value: "discard", label: "不导出" }, { value: "export", label: "去分享导出", variant: "primary" }],
     })
     if (decision === "export") {
@@ -76,9 +80,16 @@ export async function prepareDocumentReplacement(intent: "open" | "leave" = "lea
 }
 
 export function updateDirty(): void {
-  dirty.hidden = !appState.unsavedNew && !appState.archive?.changed.size
-  mobileDocumentStatus.textContent = !appState.archive ? "本地编辑 · 文件仅在本机处理"
-    : !dirty.hidden ? `${appState.archive.format.toUpperCase()} · 有未保存的修改` : `${appState.archive.format.toUpperCase()} · 已保存在本机`
+  const unsaved = hasUnsavedChanges()
+  const workspace = Boolean(appState.sourceWorkspacePath)
+  const saveStatus = workspace
+    ? unsaved ? "尚未写入本地源码文件夹" : "已写入本地源码文件夹"
+    : unsaved ? "有未保存的修改" : "已保存在本机"
+  dirty.hidden = !unsaved
+  if (unsaved) dirty.title = saveStatus
+  if (shareDocumentStatus.textContent !== saveStatus) shareDocumentStatus.textContent = saveStatus
+  const status = appState.archive ? `${appState.archive.format.toUpperCase()} · ${saveStatus}` : "本地编辑 · 文件仅在本机处理"
+  if (mobileDocumentStatus.textContent !== status) mobileDocumentStatus.textContent = status
 }
 
 export function updateHistoryButtons(): void {

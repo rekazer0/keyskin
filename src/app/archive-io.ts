@@ -4,7 +4,7 @@ import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResul
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
-import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, pendingSourcePaths, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
+import { releaseKeySound, keySoundBuffers, sourceDirectoryEnabledBySettings, isTauri, isAndroidTauri, exportTargets, LAST_SOURCE_WORKSPACE_KEY, isIOSWeb, isAndroidWeb, syncMobileShareLabel, mobilePortraitQuery } from "./canvas-interaction"
 import { SkinArchive } from "../skin.ts"
 import { releaseEmbeddedFonts } from "../atlas.ts"
 import { prefixedSourcePath } from "../source-tree.ts"
@@ -196,15 +196,12 @@ function startSourceWorkspace(archive: SkinArchive, path: string, name: string):
     }
     recordRecentFile(path, documentName.textContent, workspace)
     if (!stillPending()) return
-    const pendingPaths = [...pendingSourcePaths]
-    await activateSourceWorkspace(workspace)
+    await activateSourceWorkspace(workspace, "", true)
     if (!stillPending()) return
-    pendingPaths.forEach((changedPath) => pendingSourcePaths.add(changedPath))
     await flushSourceAutosave()
     showStatus(isAndroidTauri() ? "源码已保存到授权目录" : "源码工作区已就绪")
   })().catch((error) => {
     if (!stillPending()) return
-    pendingSourcePaths.clear()
     showError(error, "保存源码到授权目录")
   }).finally(() => {
     if (stillPending()) appState.sourceWorkspacePendingArchive = undefined
@@ -531,6 +528,7 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
   if (!exported.converted && appState.archive === exported.archive) {
     const firstSave = appState.unsavedNew
     const changedPath = appState.currentPath !== path
+    if (changedPath && appState.sourceWorkspacePath) await flushSourceAutosave()
     appState.currentPath = path
     appState.unsavedNew = false
     // The written file's baked images are not part of the document; the next save starts from the document again.

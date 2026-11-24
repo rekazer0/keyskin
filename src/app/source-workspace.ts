@@ -82,8 +82,8 @@ export function sourceArchiveFromFiles(files: Array<{ path: string; data: Uint8A
   }))
 }
 
-export async function flushSourceAutosave(): Promise<void> {
-  if (appState.aiDraftPreview) discardAiDesignDraft("保存源码前已丢弃未应用的 AI 草稿")
+export async function flushSourceAutosave(force = true): Promise<void> {
+  if (force && appState.aiDraftPreview) discardAiDesignDraft("保存源码前已丢弃未应用的 AI 草稿")
   if (appState.sourceAutosaveTimer !== undefined) {
     clearTimeout(appState.sourceAutosaveTimer)
     appState.sourceAutosaveTimer = undefined
@@ -91,20 +91,32 @@ export async function flushSourceAutosave(): Promise<void> {
   if (appState.archive && appState.sourceWorkspacePath && pendingSourcePaths.size) {
     const workspace = appState.sourceWorkspacePath
     const value = appState.archive
-    appState.sourceSyncQueue = appState.sourceSyncQueue.catch(() => {}).then(() =>
-      writePendingSourcePaths(pendingSourcePaths, async (paths) => {
-        const resolvePath = sourcePathLookup(value.sourcePaths(), appState.sourceWorkspacePrefix)
-        const changes: SourceChangePayload[] = paths.map((path) => {
-          const archivePath = resolvePath(path)
-          const canonical = value.canonicalSourcePath(archivePath)
-          const bytes = value.getSourceBytes(archivePath)
-          const data = bytes && value.isBdaConfig(canonical) ? bdaWorkspaceData(canonical, bytes) : bytes
-          return { path, data: data ? Array.from(data) : null, directory: false }
+    appState.sourceSyncQueue = appState.sourceSyncQueue.catch(() => {}).then(async () => {
+      if (appState.archive !== value || appState.sourceWorkspacePath !== workspace || !pendingSourcePaths.size) return
+      // A draft may have opened while this write was waiting in the queue.
+      if (appState.aiDraftPreview) {
+        if (!force) return scheduleSourceAutosave([])
+        discardAiDesignDraft("保存源码前已丢弃未应用的 AI 草稿")
+      }
+      appState.sourceWriteInProgress = true
+      try {
+        await writePendingSourcePaths(pendingSourcePaths, async (paths) => {
+          const resolvePath = sourcePathLookup(value.sourcePaths(), appState.sourceWorkspacePrefix)
+          const changes: SourceChangePayload[] = paths.map((path) => {
+            const archivePath = resolvePath(path)
+            const canonical = value.canonicalSourcePath(archivePath)
+            const bytes = value.getSourceBytes(archivePath)
+            const data = bytes && value.isBdaConfig(canonical) ? bdaWorkspaceData(canonical, bytes) : bytes
+            return { path, data: data ? Array.from(data) : null, directory: false }
+          })
+          for (const change of changes) rememberSourceWrite(change.path, change.data ? new Uint8Array(change.data) : null)
+          await invoke("apply_source_changes", { path: workspace, changes })
         })
-        for (const change of changes) rememberSourceWrite(change.path, change.data ? new Uint8Array(change.data) : null)
-        await invoke("apply_source_changes", { path: workspace, changes })
-      }),
-    )
+      } finally {
+        appState.sourceWriteInProgress = false
+        if (appState.archive === value) updateDirty()
+      }
+    })
   }
   await appState.sourceSyncQueue
 }
@@ -112,15 +124,11 @@ export async function flushSourceAutosave(): Promise<void> {
 export function scheduleSourceAutosave(paths: string[]): void {
   if (!appState.archive || (!appState.sourceWorkspacePath && appState.sourceWorkspacePendingArchive !== appState.archive)) return
   for (const path of paths) pendingSourcePaths.add(sourcePathForWorkspace(appState.archive.sourcePath(path)))
-  if (!appState.sourceWorkspacePath || appState.sourceAutosaveTimer !== undefined) return
+  if (paths.length) updateDirty()
+  if (!appState.sourceWorkspacePath || !pendingSourcePaths.size || appState.sourceAutosaveTimer !== undefined) return
   appState.sourceAutosaveTimer = window.setTimeout(() => {
-    // Never write a previewed draft to disk; retry once the draft is resolved.
-    if (appState.aiDraftPreview) {
-      appState.sourceAutosaveTimer = undefined
-      return scheduleSourceAutosave([])
-    }
-    void flushSourceAutosave().catch((error) => showError(error, "自动保存源码"))
-  }, 3 * 60_000)
+    void flushSourceAutosave(false).catch((error) => showError(error, "自动保存源码"))
+  }, 500)
 }
 
 async function refreshExternalSourceFiles(workspace: string, paths: string[]): Promise<void> {
@@ -207,11 +215,11 @@ function queueSourceWatch(paths: string[], workspace: string): void {
   }, 80)
 }
 
-export async function activateSourceWorkspace(path: string, prefix = ""): Promise<void> {
+export async function activateSourceWorkspace(path: string, prefix = "", keepPending = false): Promise<void> {
   appState.stopSourceWatch?.()
   appState.stopSourceWatch = undefined
   if (isAndroidTauri()) await invoke("stop_source_observer").catch(() => {})
-  pendingSourcePaths.clear()
+  if (!keepPending) pendingSourcePaths.clear()
   sourceWriteSnapshots.clear()
   if (appState.sourceWriteSnapshotTimer !== undefined) clearTimeout(appState.sourceWriteSnapshotTimer)
   appState.sourceWriteSnapshotTimer = undefined
@@ -220,6 +228,7 @@ export async function activateSourceWorkspace(path: string, prefix = ""): Promis
   pendingSourceWatchPaths.clear()
   appState.sourceWorkspacePath = path
   appState.sourceWorkspacePrefix = prefix
+  if (appState.archive) updateDirty()
   if (!isTauri() || !path) return
   if (isAndroidTauri() && path.startsWith("content://")) {
     const handler = new Channel<string>()

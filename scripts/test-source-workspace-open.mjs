@@ -30,17 +30,24 @@ try {
     const { appState } = await import('/src/app/state.ts')
     const { SkinArchive } = await import('/src/skin.ts')
     const { encodeBase64 } = await import('/src/app/source-workspace.ts')
-    mockIPC((command) => {
+    const { commitText, prepareDocumentReplacement } = await import('/src/app/edit-history.ts')
+    const writeStarted = Promise.withResolvers()
+    const writeFinished = Promise.withResolvers()
+    mockIPC((command, args) => {
       if (command === 'open_source_workspace') return files
       if (command === 'skin_file_size') return 1
       if (command === 'plugin:fs|watch') return 1
       if (command === 'plugin:window|get_all_windows') return []
+      if (command === 'apply_source_changes') {
+        writeStarted.resolve(args)
+        return writeFinished.promise
+      }
     })
     try {
       await loadSourceWorkspace('/test/source', '/test/皮肤.ssf')
       const archive = appState.archive
       const saved = SkinArchive.open(archive.toBytes('ssf'), 'ssf')
-      return {
+      const opened = {
         workspace: appState.sourceWorkspacePath,
         path: appState.currentPath,
         format: archive.format,
@@ -49,6 +56,20 @@ try {
         names: archive.names(),
         files: saved.sourceFiles().map((file) => ({ path: file.path, data: encodeBase64(file.data) })),
       }
+      const badge = document.querySelector('#dirty')
+      const shareStatus = document.querySelector('#share-document-status')
+      const path = 'phoneTheme.ini'
+      const edited = archive.getText(path).replace('源码中修改的名称', '编辑器自动保存')
+      commitText(path, archive.getText(path), edited)
+      const queuedDirty = !badge.hidden
+      const write = await Promise.race([writeStarted.promise, new Promise((_, reject) => setTimeout(() => reject(new Error('源码未自动写入')), 3000))])
+      const writingDirty = !badge.hidden
+      writeFinished.resolve()
+      await appState.sourceSyncQueue
+      return { ...opened, autosave: {
+        queuedDirty, writingDirty, savedDirty: !badge.hidden, status: shareStatus.textContent,
+        write, packageDirty: archive.changed.size, canLeave: await prepareDocumentReplacement(),
+      } }
     } finally {
       appState.stopSourceWatch?.()
       clearMocks()
@@ -62,6 +83,11 @@ try {
   // The skeleton the canvas draws is a separate package; the skin holds only its own files.
   assert.deepEqual(result.names, payload.map((file) => file.path).sort())
   assert.deepEqual(result.files.sort((a, b) => a.path.localeCompare(b.path)), payload.sort((a, b) => a.path.localeCompare(b.path)))
+  assert.deepEqual(result.autosave, {
+    queuedDirty: true, writingDirty: true, savedDirty: false, status: '已写入本地源码文件夹',
+    write: { path: '/test/source', changes: [{ path: 'phoneTheme.ini', data: [...strToU8('[General]\nskin_name=编辑器自动保存\n')], directory: false }] },
+    packageDirty: 1, canLeave: true,
+  })
   const retention = await page.evaluate(async bytes => {
     const { mockIPC, clearMocks } = await import('/node_modules/@tauri-apps/api/mocks.js')
     const { appState } = await import('/src/app/state.ts')
