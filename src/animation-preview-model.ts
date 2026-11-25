@@ -9,7 +9,7 @@ type PreviewLane = { label: string; start: number; duration: number; passes: num
 export type PreviewClip = {
   tracks: Track[]
   particles: Array<{ emitter: LegacyParticleEmitter; start: number; duration: number }>
-  images: Array<{ file?: string; resources?: Array<{ id: string; duration: number }>; start: number; duration: number; passes: number; offset: Pair }>
+  images: Array<{ file?: string; media?: { kind: "gif" | "video"; placeholder?: string; lane: number }; resources?: Array<{ id: string; duration: number }>; start: number; duration: number; passes: number; offset: Pair; tracks?: Track[] }>
   lanes: PreviewLane[]
   duration: number
   notes: string[]
@@ -30,7 +30,9 @@ const LOOP_PASSES = 1
 export function mergeClip(target: PreviewClip, child: PreviewClip, offset: number): void {
   target.tracks.push(...child.tracks.map((track) => ({ ...track, start: track.start + offset })))
   target.particles.push(...child.particles.map((item) => ({ ...item, start: item.start + offset })))
-  target.images.push(...child.images.map((item) => ({ ...item, start: item.start + offset })))
+  target.images.push(...child.images.map((item) => ({ ...item, start: item.start + offset,
+    media: item.media && { ...item.media, lane: item.media.lane + target.lanes.length },
+  })))
   target.lanes.push(...child.lanes.map((lane) => ({ ...lane, start: lane.start + offset })))
   target.duration = Math.max(target.duration, offset + child.duration)
   target.notes.push(...child.notes)
@@ -184,6 +186,7 @@ export function bdaPreviewClip(animation: BdaAnimation, id: string, ancestors: s
       mergeClip(clip, child, effect.delay + (effect.buildMode === 1 ? Math.max(0, clip.duration - effect.delay) : 0))
     }
     if (!effect.items.length) clip.notes.push("组合里没有子效果")
+    if (effect.buildMode === 1 && clip.images.some(item => item.media)) clip.notes.push("GIF 和视频的时长在加载后取得，接续顺序请在真机验证")
     if (effect.repeatCount > 1) clip.notes.push("组合按一次播放预览，整体重复以真机为准")
   } else if (effect.kind === "emitter") {
     const emitter = bdaParticleEmitter(effect)
@@ -202,6 +205,13 @@ export function bdaPreviewClip(animation: BdaAnimation, id: string, ancestors: s
     clip.lanes.push({ label: `${prefix}图片序列`, start: 0, duration: total, passes: repeat.passes, unbounded: repeat.unbounded })
     if (!resources.length) clip.notes.push("图片序列还没有帧")
     if (effect.repeatMode === 1) clip.notes.push("往返播放按正向预览")
+  } else if (effect.kind === "frame" || effect.kind === "video") {
+    const repeat = clipPasses(effect.repeatCount, false, clip)
+    clip.images.push({ file: effect.resource?.resourceID || undefined,
+      media: { kind: effect.kind === "frame" ? "gif" : "video", placeholder: effect.placeholder?.resourceID, lane: 0 },
+      start: 0, duration: 0, passes: repeat.passes, offset: [0, 0] })
+    clip.lanes.push({ label: `${prefix}${BDA_LABELS[effect.kind]}`, start: 0, duration: 0, passes: repeat.passes, unbounded: repeat.unbounded })
+    if (effect.startRepeatFrame) clip.notes.push("预览从第一帧重复，重复起始帧以真机为准")
   } else if (!("from" in effect)) {
     clip.notes.push(`${BDA_LABELS[effect.kind]}暂不支持桌面预览，请在真机验证；参数仍可编辑`)
   } else {

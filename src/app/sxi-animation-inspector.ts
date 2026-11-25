@@ -15,6 +15,7 @@ import {
 } from "../animation-inspector.ts"
 import { decodeFrames } from "../native-motion.ts"
 import { palmPreviewClip } from "../palm/palm-preview-clip.ts"
+import { sxiDirectEdit } from "../palm/sxi-animation-direct.ts"
 import { PalmStyles } from "../palm/palm-styles.ts"
 import { visualResolver } from "./bda-documents"
 import {
@@ -508,6 +509,8 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
   const resolver = visualResolver()
   const references = entry && animationReferences(skin, pointer, entry.id)
   const family = entry && animationFamilyInfo(entry.kind)
+  const readFile = resolver instanceof PalmStyles ? (file: string) => resolver.bytes(file) : undefined
+  const clip = entry && palmPreviewClip(table, entry.id, { readFile })
   renderAnimationResource(container, {
     listSource: appState.archive,
     mode: appState.animationDesignMode,
@@ -520,8 +523,7 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
     selected,
     keyFilter,
     styles: { noun: "样式", icon: "paintbrush", items: styleItems, selected: selectedAnimationStyle(), onSelect: selectAnimationStyle, card: animationStyleCard, ...animationStyleActions(entry && /^\d+$/.test(entry.id) ? Number(entry.id) : undefined) },
-    thumbnail: id => ({ clip: palmPreviewClip(table, id), key: `${appState.selectedPath}|${id}`, resolver,
-      readFile: resolver instanceof PalmStyles ? file => resolver.bytes(file) : undefined }),
+    thumbnail: id => ({ clip: palmPreviewClip(table, id, { readFile }), key: `${appState.selectedPath}|${id}`, resolver, readFile }),
     styleFilter,
     editable: isEditing(),
     presets: {
@@ -563,11 +565,13 @@ export function populateSxiAnimationInspector(container: HTMLElement): boolean {
         if (neighbour) rememberAnimation(neighbour.id)
       }),
     },
-    player: entry && {
-      clip: palmPreviewClip(table, entry.id),
+    player: entry && clip && {
+      clip,
+      direct: isEditing() ? sxiDirectEdit(table, entry.id, clip,
+        (key, value) => commit([...pointer, entry.id, entry.kind], [key], value)) : undefined,
       key: `${SXI_SKIN_PATH}|${pointer.join(".")}|${entry.id}`,
       resolver,
-      readFile: resolver instanceof PalmStyles ? (file) => resolver.bytes(file) : undefined,
+      readFile,
       keyboard: keyboardPlayback((key) => keyPlaysStyle(key, pressStyleCache.get(entry.id) ?? pressStyles(skin, pointer, entry.id, pressStyleCache))),
     },
     warnings: entry && baseNeedsFix(entry.kind, entry.model)

@@ -125,6 +125,14 @@ test('BDA effects preview their midpoints, groups compose children, unsupported 
   const lottie = bdaPreviewClip(animation, 'lottie:fun')
   assert.equal(lottie.tracks.length + lottie.images.length + lottie.particles.length, 0)
   assert.match(lottie.notes.join(' '), /Lottie暂不支持/)
+  animation.effects.set('frame:gif', { kind: 'frame', key: 'gif', resource: { resourceID: 'spark' }, repeatCount: 1 })
+  animation.effects.set('video:movie', { kind: 'video', key: 'movie', resource: { resourceID: 'movie' }, repeatCount: 1 })
+  animation.effects.get('group:both').items.push({ kind: 'frame', key: 'gif' }, { kind: 'video', key: 'movie' })
+  const mediaGroup = bdaPreviewClip(animation, 'group:both')
+  assert.deepEqual(mediaGroup.images.map(item => [item.start, mediaGroup.lanes[item.media.lane].label]), [
+    [250, 'gif · GIF 帧动画'], [250, 'movie · 视频'],
+  ])
+  assert.match(mediaGroup.notes.join(' '), /接续顺序请在真机验证/)
 })
 
 test('particle lifetime lanes use the same deterministic sample as the stage', async () => {

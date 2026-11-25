@@ -1,52 +1,49 @@
-import { IniDocument } from "./ini.ts"
 import { element } from "./dom-element.ts"
 import { animationEasing } from "./preview-animation.ts"
-import { animationHandlePoint, animationHandleValue, animationHandles, moveAnimationHandle, type AnimationHandle } from "./animation-direct-model.ts"
-import { LEGACY_ANIMATION_INTPOL_OPTIONS, writeLegacyAnimationFields } from "./legacy-animation.ts"
+import { animationHandlePoint, animationHandleValue, type AnimationHandle } from "./animation-direct-model.ts"
+import { LEGACY_ANIMATION_INTPOL_OPTIONS } from "./legacy-animation.ts"
+import type { PreviewClip } from "./animation-preview-model.ts"
 import type { Rect } from "./preview-items.ts"
 
-export type AnimationDirectEdit = { text: string; section: string; editable: boolean; commit(text: string): void }
+export type AnimationDirectEdit = {
+  handles: AnimationHandle[]
+  pivot?: readonly number[]
+  delay?: number
+  curve?: { codes: string; commit(value: string): void }
+  preview(handle: AnimationHandle, value: number): PreviewClip
+  commit(handle: AnimationHandle, value: number): void
+}
 
 type StageAPI = {
   stage: HTMLElement; timeline: HTMLElement; lanes: HTMLElement; docked?: boolean; key: Rect
   fit(): number
-  duration(): number
+  extent(): number
   stop(): void
-  preview(text: string, at: number): void
+  preview(clip: PreviewClip | undefined, at: number): void
 }
 
-/** Gesture drafts stay inside the component. Only pointerup/change reaches the document history. */
+/** Gesture drafts stay inside the component. Only pointerup or keyup reaches document history. */
 export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI): { sync(): void } {
-  let text = edit.text
-  let before: string | undefined
-  let active: HTMLElement | undefined
-  const doc = () => IniDocument.parse(text)
-  const pivot = (document = doc()) => {
-    const raw = document.get(edit.section, "PIVOT")
-    const values = (raw ?? document.get(edit.section, "PIVOT_PX") ?? "50,50").split(",").map((value) => Number(value) / (raw !== undefined ? 100 : document.get(edit.section, "PIVOT_PX") !== undefined ? 108 : 100))
-    return values.length === 2 && values.every(Number.isFinite) ? values : [0.5, 0.5]
-  }
-  const handles = animationHandles(doc(), edit.section)
+  const { handles, pivot = [0.5, 0.5], delay = 0 } = edit
+  let draft: { node: HTMLElement; handle: AnimationHandle; value: number; pointer?: number } | undefined
   const overlay = element("div", "ui-animation-handles")
   api.stage.append(overlay)
   const nodes = new Map<HTMLElement, AnimationHandle>()
-  const tail = handles.find((handle) => handle.field === "DURATION")
-  const extent = tail ? Math.max(400, api.duration() * 1.5) : api.duration()
   const fields = element("div", "ui-animation-direct-fields")
   let curve: HTMLCanvasElement | undefined
-  const curveCodes = api.docked ? undefined : doc().get(edit.section, "INTPOL")
-  if (curveCodes !== undefined && !handles.some((handle) => handle.field === "VELOCITY")) {
+  const curveEdit = api.docked ? undefined : edit.curve
+  const curveCodes = curveEdit?.codes
+  if (curveEdit && curveCodes !== undefined && !handles.some((handle) => handle.field === "VELOCITY")) {
     curve = element("canvas", "ui-animation-curve")
     curve.width = 320; curve.height = 96
     curve.setAttribute("aria-label", "插值曲线")
     const wrap = element("label", "ui-input ui-select")
     const select = element("select")
     select.setAttribute("aria-label", "运动曲线")
-    select.disabled = !edit.editable
     select.append(...LEGACY_ANIMATION_INTPOL_OPTIONS.map(([value, label]) => new Option(label, value)))
     if (curveCodes.includes(",") || !LEGACY_ANIMATION_INTPOL_OPTIONS.some(([value]) => value === curveCodes)) select.append(new Option(`当前 ${curveCodes}`, curveCodes))
     select.value = curveCodes
-    select.addEventListener("change", () => edit.commit(writeLegacyAnimationFields(text, edit.section, { INTPOL: select.value })))
+    select.addEventListener("change", () => curveEdit.commit(select.value))
     wrap.append(select)
     fields.append(curve, wrap)
   }
@@ -56,7 +53,7 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
     context.clearRect(0, 0, curve.width, curve.height)
     context.strokeStyle = style.getPropertyValue("--line").trim()
     context.beginPath(); context.moveTo(8, 8); context.lineTo(8, 88); context.lineTo(312, 88); context.stroke()
-    for (const [axis, code] of (doc().get(edit.section, "INTPOL") ?? "0").split(",").entries()) {
+    for (const [axis, code] of (curveCodes ?? "0").split(",").entries()) {
       context.strokeStyle = style.getPropertyValue(axis ? "--secondary" : "--accent").trim()
       context.beginPath()
       for (let index = 0; index <= 80; index++) {
@@ -67,9 +64,9 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
     }
   }
   const sync = () => {
-    const document = doc(), current = animationHandles(document, edit.section), origin = pivot(document)
+    const current = handles.map(handle => draft?.handle === handle ? { ...handle, value: draft.value } : handle)
     const axisY = api.docked && current.find(handle => handle.label.endsWith(" Y"))
-    const axisYPoint = axisY ? animationHandlePoint(axisY, api.key, origin) : undefined
+    const axisYPoint = axisY ? animationHandlePoint(axisY, api.key, pivot) : undefined
     for (const [node, original] of nodes) {
       const handle = current.find((item) => item.field === original.field && item.index === original.index)!
       node.setAttribute("aria-valuenow", String(handle.value))
@@ -77,9 +74,9 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
       node.title = `${handle.label} · ${handle.value} ${handle.unit}`
       const short = handle.field === "DURATION" ? "单程" : handle.label.startsWith("缩放") || handle.label.startsWith("位移") ? handle.label.slice(-1) : handle.label.startsWith("方向") ? `角${handle.index ? "上" : "下"}` : handle.label.startsWith("速度") ? `速${handle.index ? "上" : "下"}` : handle.label
       node.textContent = `${short} ${handle.value}${handle.unit}`
-      if (handle.field === "DURATION") node.style.left = `${Math.min(98, (Number(document.get(edit.section, "DELAY") ?? 0) + handle.value) / extent * 100)}%`
+      if (handle.field === "DURATION") node.style.left = `${Math.min(98, (delay + handle.value) / api.extent() * 100)}%`
       else if (handle.label !== "终止透明度") {
-        const point = animationHandlePoint(handle, api.key, origin)
+        const point = animationHandlePoint(handle, api.key, pivot)
         // Shift X only along the axis that doesn't affect its drag value.
         if (axisYPoint && handle.label.endsWith(" X")) node.dataset.offset = point[1] <= axisYPoint[1] ? "up" : "down"
         node.style.left = `${(160 + (point[0] - 160) * api.fit()) / 320 * 100}%`
@@ -88,28 +85,42 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
     }
     drawCurve()
   }
-  const sample = () => {
-    const document = doc(), time = handles.some((handle) => handle.field === "VELOCITY") ? 400 : Number(document.get(edit.section, "DELAY") ?? 0) + Number(document.get(edit.section, "DURATION") ?? 0) * 0.999
-    api.preview(text, time)
+  const sample = (value: number) => {
+    if (!draft || !Number.isFinite(value)) return
+    const { handle } = draft
+    const next = Math.max(handle.min ?? -Infinity, Math.min(handle.max ?? Infinity, Math.round(value * 100) / 100))
+    if (next === draft.value) return
+    draft.value = next
+    const clip = edit.preview(handle, next)
+    const particle = clip.particles[0]
+    const time = particle ? particle.start + Math.min(400, particle.duration / 2) : delay + (clip.lanes[0]?.duration ?? 0) * 0.999
+    api.preview(clip, time)
     sync()
   }
   const cancel = () => {
-    if (before === undefined) return
-    text = before; before = undefined; active = undefined
-    api.preview(text, 0); sync()
+    if (!draft) return
+    const { node, pointer } = draft
+    draft = undefined
+    if (pointer !== undefined && node.hasPointerCapture(pointer)) node.releasePointerCapture(pointer)
+    api.preview(undefined, 0); sync()
   }
   const finish = (node: HTMLElement) => {
-    if (before === undefined) return
-    const original = before; before = undefined; active = undefined
-    if (text !== original) {
-      edit.commit(text)
-      // A parameter commit rebuilds the player; restore keyboard access to the equivalent handle.
-      requestAnimationFrame(() => document.querySelector<HTMLElement>(`.ui-animation-handle[data-field="${node.dataset.field}"][data-index="${node.dataset.index}"]`)?.focus())
-    }
+    if (draft?.node !== node) return
+    const { handle, value } = draft
+    draft = undefined
+    if (value === handle.value) { api.preview(undefined, 0); sync(); return }
+    const focused = document.activeElement === node
+    const host = api.stage.closest("#animation-stage, #document-fields, #bda-config-fields")
+    edit.commit(handle, value)
+    // A parameter commit rebuilds the player; restore keyboard access to the equivalent handle.
+    if (focused) requestAnimationFrame(() => {
+      if (document.activeElement !== document.body) return
+      host?.querySelector<HTMLElement>(`.ui-animation-handle[data-field="${node.dataset.field}"][data-index="${node.dataset.index}"]`)?.focus({ preventScroll: true })
+    })
   }
   for (const handle of handles) {
     const node = element("button", "ui-button ui-animation-handle")
-    node.type = "button"; node.disabled = !edit.editable
+    node.type = "button"
     node.dataset.field = handle.field; node.dataset.index = String(handle.index)
     node.setAttribute("role", "slider"); node.setAttribute("aria-label", handle.label)
     if (handle.min !== undefined) node.setAttribute("aria-valuemin", String(handle.min))
@@ -119,35 +130,37 @@ export function animationDirectControls(edit: AnimationDirectEdit, api: StageAPI
     else if (handle.label === "终止透明度") fields.append(node)
     else overlay.append(node)
     node.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || draft) return
       event.preventDefault(); event.stopPropagation(); api.stop()
-      node.focus(); before = text; active = node; node.setPointerCapture(event.pointerId)
+      node.focus(); draft = { node, handle, value: handle.value, pointer: event.pointerId }; node.setPointerCapture(event.pointerId)
     })
     node.addEventListener("pointermove", (event) => {
-      if (before === undefined || active !== node || !node.hasPointerCapture(event.pointerId)) return
+      if (draft?.node !== node || draft.pointer !== event.pointerId || !node.hasPointerCapture(event.pointerId)) return
       const box = (handle.field === "DURATION" ? api.lanes : overlay).getBoundingClientRect()
       if (!box.width || !box.height) return
       let value: number
-      if (handle.field === "DURATION") value = (event.clientX - box.left) / box.width * extent - Number(doc().get(edit.section, "DELAY") ?? 0)
-      else if (handle.label === "终止透明度") value = (event.clientX - box.left) / box.width * 255
-      else value = animationHandleValue(handle, [160 + ((event.clientX - box.left) / box.width * 320 - 160) / api.fit(), 80 + ((event.clientY - box.top) / box.height * 160 - 80) / api.fit()], api.key, pivot())
-      text = moveAnimationHandle(text, edit.section, handle, Math.round(value))
-      sample()
+      if (handle.field === "DURATION") value = (event.clientX - box.left) / box.width * api.extent() - delay
+      else if (handle.label === "终止透明度") value = (event.clientX - box.left) / box.width * (handle.max ?? 255)
+      else value = animationHandleValue(handle, [160 + ((event.clientX - box.left) / box.width * 320 - 160) / api.fit(), 80 + ((event.clientY - box.top) / box.height * 160 - 80) / api.fit()], api.key, pivot)
+      sample(Math.round(value))
     })
-    node.addEventListener("pointerup", (event) => { event.stopPropagation(); finish(node) })
-    node.addEventListener("pointercancel", cancel)
-    node.addEventListener("lostpointercapture", cancel)
+    node.addEventListener("pointerup", (event) => {
+      if (draft?.pointer !== event.pointerId) return
+      event.stopPropagation(); finish(node)
+    })
+    const cancelPointer = (event: PointerEvent) => { if (draft?.pointer === event.pointerId) cancel() }
+    node.addEventListener("pointercancel", cancelPointer)
+    node.addEventListener("lostpointercapture", cancelPointer)
     node.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") { event.stopPropagation(); cancel(); return }
+      if (event.key === "Escape" && draft?.node === node) { event.stopPropagation(); cancel(); return }
       if (!["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp"].includes(event.key)) return
       event.preventDefault(); event.stopPropagation(); api.stop()
-      before ??= text
-      active = node
-      const current = animationHandles(doc(), edit.section).find((item) => item.field === handle.field && item.index === handle.index)!
-      text = moveAnimationHandle(text, edit.section, handle, current.value + (["ArrowRight", "ArrowUp"].includes(event.key) ? 1 : -1) * handle.step * (event.shiftKey ? 10 : 1))
-      sample()
+      draft ??= { node, handle, value: handle.value }
+      if (draft.node !== node || draft.pointer !== undefined) return
+      sample(draft.value + (["ArrowRight", "ArrowUp"].includes(event.key) ? 1 : -1) * handle.step * (event.shiftKey ? 10 : 1))
     })
-    node.addEventListener("keyup", (event) => { if (event.key.startsWith("Arrow")) finish(node) })
-    node.addEventListener("blur", () => { if (before !== undefined && active === node) finish(node) })
+    node.addEventListener("keyup", (event) => { if (event.key.startsWith("Arrow") && draft?.pointer === undefined) finish(node) })
+    node.addEventListener("blur", () => { if (draft?.node === node) draft.pointer === undefined ? finish(node) : cancel() })
   }
   if (fields.childElementCount) api.timeline.append(fields)
   sync()

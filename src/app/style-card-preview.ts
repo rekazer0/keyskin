@@ -37,6 +37,7 @@ export function palmStyleAnimationStates(id: string) {
   const table = { ...asObject(asObject(themed?.s_info)?.ss_2), ...local }
   const animations = [...new Set(Object.values(asObject(palmStyle(id)?.s_5) ?? {}).map(String))]
   const resolver = visualResolver()
+  const readFile = resolver instanceof PalmStyles ? (file: string) => resolver.bytes(file) : undefined
   if (!animations.length) {
     const content = element("span")
     content.append(createIcon("image-off", 16))
@@ -47,8 +48,7 @@ export function palmStyleAnimationStates(id: string) {
     return {
       label: `更换动画 ${animation}`,
       content: animationPlayer({
-        clip: palmPreviewClip(table, animation), key: `${path}|${animation}`, resolver, thumbnail: true,
-        readFile: resolver instanceof PalmStyles ? file => resolver.bytes(file) : undefined,
+        clip: palmPreviewClip(table, animation, { readFile }), key: `${path}|${animation}`, resolver, thumbnail: true, readFile,
       }),
       onClick: (edit: boolean) => {
         if (edit) return openAnimation(path, Boolean(asObject(table[animation])?.a4), animation)

@@ -53,7 +53,7 @@ type ConfigEditorOptions = {
   onDesignWidth: (value: number) => void
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
-  onAnimationPreset?: (key: string, fields: Record<string, number>) => void
+  onAnimationFields: (key: string, fields: Record<string, number>) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
   keyboardPlayback?: (effectID: string) => KeyboardPlayback
   animationView: BdaAnimationView
@@ -498,7 +498,7 @@ export function renderBdaConfigEditor(container: HTMLElement, options: ConfigEdi
       onDesignWidth: options.onDesignWidth,
       onAnimationFrame: options.onAnimationFrame,
       onAnimationEffect: options.onAnimationEffect,
-      onAnimationPreset: options.onAnimationPreset,
+      onAnimationFields: options.onAnimationFields,
       onPickAnimationResource: options.onPickAnimationResource,
       keyboardPlayback: options.keyboardPlayback,
     })

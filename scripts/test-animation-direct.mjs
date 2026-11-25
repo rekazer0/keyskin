@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { dismissStartupDisclaimer } from '../tests/helpers/open-editor-template.mjs'
 import { bdsFixture } from '../tests/helpers/baidu-fixture.mjs'
 import { SkinArchive } from '../src/skin.ts'
 
@@ -45,6 +46,7 @@ const drag = async (name, dx, dy = 0, cancel = false) => {
 }
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles({ name: 'animation-test.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(bytes) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')

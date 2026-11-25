@@ -4,7 +4,9 @@
  * 解析、类型清理、时间轴和引用关系都在 src/legacy-animation.ts；每次编辑通过 commitText 写回一个撤销步骤。
  */
 import { IniDocument } from "../ini.ts"
-import { iniPreviewClip } from "../animation-preview-model.ts"
+import { iniPreviewClip, PREVIEW_KEY_SIZE } from "../animation-preview-model.ts"
+import { animationHandles, moveAnimationHandle } from "../animation-direct-model.ts"
+import type { AnimationDirectEdit } from "../animation-direct-controls.ts"
 import { animationPlayer } from "../animation-player.ts"
 import { ANIMATION_PRESETS } from "../animation-presets.ts"
 import {
@@ -307,6 +309,22 @@ function legacyPlayerArtwork(styles: ReadonlySet<string>) {
   }
 }
 
+function legacyDirectEdit(text: string, document: IniDocument, section: string): AnimationDirectEdit | undefined {
+  const handles = animationHandles(document, section)
+  const codes = document.get(section, "INTPOL")
+  if (!handles.length && codes === undefined) return
+  const percent = document.get(section, "PIVOT"), pixels = document.get(section, "PIVOT_PX")
+  const pivot = (percent ?? pixels ?? "50,50").split(",").map(value => Number(value) / (percent === undefined && pixels !== undefined ? PREVIEW_KEY_SIZE : 100))
+  return {
+    handles,
+    pivot: pivot.length === 2 && pivot.every(Number.isFinite) ? pivot : undefined,
+    delay: Number(document.get(section, "DELAY")) || 0,
+    curve: codes === undefined ? undefined : { codes, commit: value => edit(current => writeLegacyAnimationFields(current, section, { INTPOL: value })) },
+    preview: (handle, value) => iniPreviewClip(IniDocument.parse(moveAnimationHandle(text, section, handle, value)), section, { fillBefore: true }),
+    commit: (handle, value) => edit(current => moveAnimationHandle(current, section, handle, value)),
+  }
+}
+
 /* —— 对外入口 —— */
 export function populateLegacyAnimationInspector(container: HTMLElement): boolean {
   if (!isLegacyAnimationDocument()) return false
@@ -410,7 +428,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
       key: `${appState.selectedPath}|${entry.section}`,
       ...legacyPlayerArtwork(boundStyles(entry.section)),
       keyboard: keyboardPlayback(key => plays(entry.section, key)),
-      direct: isEditing() ? { text, section: entry.section, editable: true, commit: (next) => edit(() => next) } : undefined,
+      direct: isEditing() ? legacyDirectEdit(text, appState.selectedDocument!, entry.section) : undefined,
     },
     warnings: entry?.category !== undefined && entry.category !== kindCategory(entry.kind)
       ? [animationWarning(`CATEGORY=${entry.category} 与识别出的${legacyAnimationKindLabel(entry.kind)}不一致，已按内容编辑。`, {

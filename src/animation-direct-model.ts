@@ -12,7 +12,11 @@ export function animationHandles(document: IniDocument, section: string): Animat
   const add = (field: string, labels: string[], unit: string, step = 1, min?: number, max?: number) => {
     const parts = legacyAnimationValueParts(document.get(section, field) ?? "")
     if (parts.length !== labels.length || parts.some((part) => !part.trim() || !Number.isFinite(Number(part)))) return
-    labels.forEach((label, index) => handles.push({ field, index, label, value: Number(parts[index]), step, unit, min, max }))
+    const range = field === "VELOCITY" || field === "VELOCITY_DIRECTION"
+    labels.forEach((label, index) => handles.push({ field, index, label, value: Number(parts[index]), step, unit,
+      min: range && index === 1 ? Math.max(min ?? -Infinity, Number(parts[0])) : min,
+      max: range && index === 0 ? Number(parts[1]) : max,
+    }))
   }
   if (entry.kind === "particle") {
     add("VELOCITY_DIRECTION", ["方向下限", "方向上限"], "°")
@@ -36,8 +40,7 @@ export function moveAnimationHandle(text: string, section: string, handle: Anima
   const current = animationHandles(document, section).find((item) => item.field === handle.field && item.index === handle.index)
   if (!current) return text
   const parts = legacyAnimationValueParts(document.get(section, handle.field)!)
-  let next = Math.max(current.min ?? -Infinity, Math.min(current.max ?? Infinity, value))
-  if (handle.field === "VELOCITY" || handle.field === "VELOCITY_DIRECTION") next = handle.index === 0 ? Math.min(next, Number(parts[1])) : Math.max(next, Number(parts[0]))
+  const next = Math.max(current.min ?? -Infinity, Math.min(current.max ?? Infinity, value))
   parts[handle.index] = String(Math.round(next * 100) / 100)
   return writeLegacyAnimationFields(text, section, { [handle.field]: parts.join(",") })
 }

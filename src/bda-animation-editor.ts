@@ -17,6 +17,8 @@ import type {
 } from "./bda.ts"
 import { element } from "./dom-element.ts"
 import { bdaPreviewClip } from "./animation-preview-model.ts"
+import { BdaResolver } from "./bda-resolver.ts"
+import { bdaDirectEdit } from "./bda-animation-direct.ts"
 import type { KeyboardPlayback } from "./animation-player.ts"
 import {
   comboList, renderAnimationResource,
@@ -49,7 +51,7 @@ type BdaAnimationEditorOptions = {
   onDesignWidth: (value: number) => void
   onAnimationFrame: (sequence: string, frame: number, property: "resourceID" | "duration", value: string | number) => void
   onAnimationEffect: (key: string, property: string, value: string | number | boolean) => void
-  onAnimationPreset?: (key: string, fields: Record<string, number>) => void
+  onAnimationFields: (key: string, fields: Record<string, number>) => void
   onPickAnimationResource: (sequence: string, frame: number) => void
   /** The player's keyboard for an effect: plays it on a keyboard key bound to it. */
   keyboardPlayback?: (effectID: string) => KeyboardPlayback
@@ -408,12 +410,16 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
   const styleFilter = target && { label: target.title, clear: () => view.targets!.onSelect(undefined) }
   const selected = view.select(items)
   const effect = effects.find((candidate) => effectID(candidate) === selected)
+  const clip = selected && effect ? bdaPreviewClip(animation, selected) : undefined
   const sections = effect ? effectSections(effect, animation, options) : []
   if (effect) keyRows(sections, effectID(effect))
   const width = animation.designWidth !== undefined
     ? numberRow("设计宽度", animation.designWidth, options.editable, options.onDesignWidth, { min: 1 })
     : valueRow("设计宽度", "未设置")
   width.dataset.inspectorRowKey = JSON.stringify(["bda-animation", "designWidth"])
+  const resolver = options.resolver
+  const media = resolver instanceof BdaResolver ? resolver.media.bind(resolver) : undefined
+  const player = (id: string, sample = bdaPreviewClip(animation, id)) => ({ clip: sample, key: `${options.path}|${id}`, resolver, resourceParticles: true, media })
   renderAnimationResource(container, {
     listSource: view.source,
     mode: view.mode,
@@ -428,24 +434,23 @@ export function renderBdaAnimationEditor(container: HTMLElement, options: BdaAni
     styles: view.targets && { noun: "目标", icon: "crosshair", items: targetItems, selected: view.targets.selected, onSelect: view.targets.onSelect,
       card: item => styleCard({ id: item.id, label: item.title, kind: "anim", kindLabel: "目标", kindIcon: "crosshair", summary: item.detail,
         animation: () => [...targetEffects.get(item.id) ?? []].map(id => animationPlayer({
-          clip: bdaPreviewClip(animation, id), key: `${options.path}|${id}`, resolver: options.resolver, resourceParticles: true, thumbnail: true,
+          ...player(id), thumbnail: true,
         })),
       }),
     },
-    thumbnail: id => ({ clip: bdaPreviewClip(animation, id), key: `${options.path}|${id}`, resolver: options.resolver, resourceParticles: true }),
+    thumbnail: id => player(id),
     styleFilter,
     editable: options.editable,
-    presets: effect && options.onAnimationPreset ? {
+    presets: effect ? {
       items: ANIMATION_PRESETS.filter(preset => bdaPresetFields(preset, effect.kind)),
-      apply: preset => options.onAnimationPreset!(effectID(effect), bdaPresetFields(preset, effect.kind)!),
+      apply: preset => options.onAnimationFields(effectID(effect), bdaPresetFields(preset, effect.kind)!),
     } : undefined,
     onSelect: view.onSelect,
     listRows: [width],
-    player: effect && {
-      clip: bdaPreviewClip(animation, effectID(effect)),
-      key: `${options.path}|${effectID(effect)}`,
-      resolver: options.resolver,
-      resourceParticles: true,
+    player: effect && clip && {
+      ...player(effectID(effect), clip),
+      direct: options.editable ? bdaDirectEdit(animation, effectID(effect), clip,
+        fields => options.onAnimationFields(effectID(effect), fields)) : undefined,
       keyboard: options.keyboardPlayback?.(effectID(effect)),
     },
     sections,

@@ -537,7 +537,7 @@ export function populateBdaConfigInspector(): void {
     soundSample: filename => keySoundSample(filename, soundPathForFilename(appState.archive!.names(), theme.value, orientation.value, filename)),
     onSoundChange: (key, ios, filename) => update(updateBdaKeySound(bytes, key, filename ? { type: bdaSoundResourceType(filename), resourceID: filename } : undefined, ios)),
     onAnimationEffect: (effectID, property, value) => update(updateBdaAnimationEffect(bytes, effectID, property, value)),
-    onAnimationPreset: (effectID, fields) => {
+    onAnimationFields: (effectID, fields) => {
       let after = bytes
       for (const [property, value] of Object.entries(fields)) after = updateBdaAnimationEffect(after, effectID, property, value)
       update(after)

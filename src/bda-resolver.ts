@@ -65,6 +65,23 @@ export class BdaResolver implements VisualResolver {
     }
   }
 
+  media(resourceID: string, kind: "gif" | "video"): { bytes: Uint8Array; mime: string } | undefined {
+    const name = resourceID.replaceAll("\\", "/").split("/").pop()
+    if (!name) return
+    const types = kind === "gif" ? [["gif", "image/gif"]] : [["mp4", "video/mp4"], ["webm", "video/webm"], ["mov", "video/quicktime"]]
+    for (const archive of [this.archive, this.fallback]) {
+      if (!archive) continue
+      for (const directory of [`${this.theme}/skin/${this.orientation}/res`, `${this.theme}/skin/res`, "light/skin/res"]) {
+        for (const [extension, mime] of types) {
+          if (name.includes(".") && !name.toLowerCase().endsWith(`.${extension}`)) continue
+          const file = name.toLowerCase().endsWith(`.${extension}`) ? name : `${name}.${extension}`
+          const bytes = archive.getBytes(`${directory}/${file}`)
+          if (bytes) return { bytes, mime }
+        }
+      }
+    }
+  }
+
   private bitmap(archive: SkinArchive, path: string): Promise<ImageBitmap | undefined> {
     return pngBitmap(archive.getBytes(path)!)
   }
