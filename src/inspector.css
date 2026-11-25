@@ -185,7 +185,6 @@
 .source .ui-section:has(.ui-typography-preview) { --_label: var(--inspector-typography-label-width); }
 .source .ui-section:has(.ui-typography-preview) .ui-field[data-supported="false"] > .document-field-caption { color: var(--tertiary); }
 .source .typography-content-fields { padding-bottom: var(--space-lg); }
-.source .ui-section:has(.ui-typography-preview) .ui-field[data-typography="font"] { grid-template-columns: var(--_label) minmax(0, 1fr); }
 .source .ui-section:has(.ui-typography-preview) .ui-field[data-typography="color"] > .document-field-caption { padding-top: var(--space-md); }
 
 /* —— 属性行：标签列固定宽度，控件占满 —— */
