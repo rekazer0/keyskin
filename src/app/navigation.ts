@@ -38,8 +38,11 @@ export function selectFile(
   if (path !== appState.selectedPath || (resourceMode === "motion" || resourceMode === "particle") && resourceMode !== appState.animationDesignMode) appState.animationStyleEditing = false
   appState.bdaSliceReturn = undefined
   if (path !== appState.selectedPath) source.commit()
-  appState.selectedToolbarSections = []
-  appState.selectedCandidate = false
+  // 原地刷新（撤销、同步源码）不是换对象，不要短暂切回整页并重拍属性基线。
+  if (!preserveInspectorView || path !== appState.selectedPath) {
+    appState.selectedToolbarSections = []
+    appState.selectedCandidate = false
+  }
   const previousInspectorTab = appState.inspectorTab
   const preserveCurrentInspectorView = preserveInspectorView || path === appState.selectedPath
   if (path !== appState.selectedPath) appState.sourceHistoryHighlight = undefined

@@ -1,3 +1,4 @@
+import { expandMobileInspector } from "../tests/helpers/open-editor-template.mjs"
 import { confirmDeletion } from "../tests/helpers/ask-dialogs.mjs"
 // 手心 (.sxi) 动画检查器：打开一份带全部 9 类动画的皮肤，从列表选中每一个动画，像用户一样读写分组字段、
 // 组合轨道与浮动物体；检查 skin.json（及其导出的 anim.ini）、撤销重做、改动标记与重置、筛选、只读模式，
@@ -217,6 +218,7 @@ try {
   await change(input("三段播放速率"), "1,2,3")
   await waitFor("103", "af2.psr", [1, 2, 3])
   await show("105")
+  await row("显示层级").getByRole("button", { name: "添加显示层级", exact: true }).click()
   await row("显示层级").getByRole("button", { name: "下层", exact: true }).click()
   await waitFor("105", "a10.l", 0)
 
@@ -265,13 +267,13 @@ try {
 
   // 浮动物体：改颜色、加一个、改文件名、删掉新的和原有的，重置后全部回来
   await show("107")
-  await row("液体颜色").locator(".ui-swatch").click()
-  await change(page.locator('input[aria-label="液体颜色色值"]'), "#FF8800")
+  await row("液体颜色").getByLabel("液体颜色取色", { exact: true }).fill("#ff8800")
   await waitFor("107", "a12.surface_color", "#FF8800")
   await fields.getByRole("button", { name: "添加浮动物体", exact: true }).click()
   await waitFor("107", "a12.floaters.1.file", "")
   const secondFloater = fields.locator(".animation-floater").nth(1)
   assert.equal(await secondFloater.locator("h4").textContent(), "物体 2")
+  await secondFloater.getByRole("button", { name: "添加图片文件", exact: true }).click()
   await change(secondFloater.locator(".ui-field").filter({ has: captionOf("图片文件") }).locator("input"), "snow.png")
   await waitFor("107", "a12.floaters.1.file", "snow.png")
   assert.equal((await animation(107)).a12.floaters[1].ride, undefined)
@@ -355,7 +357,10 @@ try {
   await page.keyboard.press('Escape')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.emulateMedia({ colorScheme: 'dark' })
-  await page.evaluate(async () => (await import('/src/app/mobile-layout.ts')).setMobilePane('inspector'))
+  await page.getByRole('button', { name: '开始编辑', exact: true }).click()
+  // 手机编辑入口默认选择键盘，重新打开待核对的动画。
+  await page.evaluate(async path => (await import('/src/app/navigation.ts')).selectFile(path), animationPath)
+  await expandMobileInspector(page)
   assert.equal(await row('时长').isVisible(), true)
   assert.equal(await fields.evaluate((node) => node.scrollWidth <= node.clientWidth + 1), true)
 
@@ -373,6 +378,7 @@ try {
     assert.equal(await fields.locator(`[data-animation-id="${index + 1}"]`).getAttribute('aria-selected'), 'true', '新建后选中它')
   }
   await show("3")
+  await row('作用区域').getByRole('button', { name: '添加作用区域', exact: true }).click()
   await row('作用区域').locator('select').selectOption('2')
   assert.equal((await animation(3)).af2.r, 2, '首次选择未设置的数值枚举不能写成字符串')
   await show("1")

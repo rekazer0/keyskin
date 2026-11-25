@@ -52,7 +52,7 @@
 .source #quick-inspector[hidden] { display: none; }
 
 /* 就地查看源码时保留对象头，编辑器占满剩余空间。 */
-.source:has(> #source-editor:not([hidden])) #quick-inspector { display: none; }
+.source:has(> #source-editor:not([hidden])) #quick-inspector,
 .source:has(> #source-editor:not([hidden])) .inspector-object-actions { display: none; }
 
 /* —— 右侧分类栏：顶部筛选，中间分组（图标 + 文字，点击滚动到分组），底部「已改 n · 重置」 —— */
@@ -122,12 +122,9 @@
   z-index: 1;
   display: none;
   margin: var(--space-sm) var(--_gutter);
-  padding-right: 0;
   background: var(--panel);
 }
 .source #quick-inspector[data-filter-open] .inspector-filter { display: flex; animation: inspector-reveal var(--duration-base) var(--ease-emphasized); }
-.source .inspector-filter > input { font-size: var(--font-size-xs); }
-.source .inspector-filter > .ui-icon-button { flex: none; }
 
 .source #quick-inspector[data-filtering] [data-filter-miss] { display: none; }
 /* 筛选时折叠的分组也展开（见分组折叠规则），说明文字收起，只留命中的属性行 */
@@ -171,7 +168,6 @@
 /* 标题旁的说明：只放图标，文字在悬停提示里 */
 .source .inspector-heading-note { display: inline-flex; color: var(--tertiary); font-weight: var(--font-weight-regular); }
 .source .inspector-heading-note[hidden] { display: none; }
-.source .inspector-group-subtitle { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
 .source #text-style-note { display: flex; align-items: center; gap: var(--space-xs); width: fit-content; max-width: 100%; font-size: var(--font-size-xs); color: var(--secondary); border-radius: var(--radius-sm); }
 .source #text-style-note[hidden] { display: none; }
 .source #text-style-note:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
@@ -197,9 +193,10 @@
 .source .document-field-caption { min-width: 0; color: var(--secondary); line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
 .source .document-field-caption { display: grid; }
 .source .document-field-caption:has(> .ui-field-actions) { display: flex; align-items: center; gap: var(--space-sm); }
-.source .ui-field-note { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
+.source :is(.ui-field-note, .inspector-group-subtitle, .bda-advanced-note, .bda-editor-summary) { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
 .source .ui-field-pair > .ui-input > input { height: 100%; }
-.source .ui-field[data-stack] { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
+.source .ui-field[data-stack],
+.source .ui-field.style-reference-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
 .source .config-value-control { display: grid; min-width: 0; }
 .source .style-field { display: block; min-width: 0; }
 
@@ -221,24 +218,17 @@
   margin-top: calc(-0.5 * var(--_gutter));
 }
 .source .inspector-modified[hidden] { display: none; }
-.source .inspector-modified::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: inspector-mark var(--duration-base) var(--ease-emphasized);
-}
-/* 分组里有改动时标题尾部也带一个点，折叠后仍看得到 */
+/* 行与分组标题共用改动标记；标题里的点不参与伸缩。 */
+.source .inspector-modified::after,
 .source h3[data-modified]::after {
   content: "";
-  flex: none;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
   animation: inspector-mark var(--duration-base) var(--ease-emphasized);
 }
+.source h3[data-modified]::after { flex: none; }
 
 /* 数值把手：标签与单位前缀左右拖动调整数值 */
 .source [data-scrub] { cursor: ew-resize; touch-action: pan-y; }
@@ -248,11 +238,7 @@
 @keyframes inspector-reveal { from { opacity: 0; transform: translateY(var(--space-xs)); } to { opacity: 1; transform: translateY(0); } }
 @keyframes inspector-mark { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
 
-/* —— 成对 / 四格数值 —— */
-
-/* —— 样式引用字段：标签在卡片上方，卡片本身是 components.css 的 .ui-style-ref（styleReferenceCard()）。 —— */
-.source .ui-field.style-reference-field { grid-template-columns: minmax(0, 1fr); gap: var(--space-sm); }
-/* 卡片上方的标签：小号弱化，和属性行标签区分开 */
+/* 样式引用卡上方的小号标签，与普通属性行标签区分。 */
 .source .ui-field.style-reference-field > :first-child { display: flex; align-items: center; color: var(--tertiary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 
 .source .ui-field[data-config-pending] { grid-template-columns: minmax(0, 1fr); }
@@ -321,7 +307,6 @@
 .source :is(.bda-style-controls, .bda-fore-styles-grid, .bda-sound-list, .bda-panel-list) { display: grid; gap: var(--_field-gap); min-width: 0; }
 
 .source .bda-inspector-context { display: flex; align-items: center; gap: var(--space-sm); color: var(--secondary); }
-.source :is(.bda-advanced-note, .bda-editor-summary) { margin: 0; color: var(--tertiary); font-size: var(--font-size-xs); }
 .source .bda-style-preview {
   min-height: 48px;
   padding: 0;
@@ -332,16 +317,14 @@
 .source .bda-style-resource-name { overflow: hidden; color: var(--tertiary); font-family: var(--font-mono); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 
 /* ================================ 资源视图 ================================ */
-.source #resource-inspector { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.source #resource-inspector[hidden], .source #resource-list-view[hidden], .source #resource-detail[hidden] { display: none; }
-.source :is(#resource-list-view, #resource-detail) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.source :is(#resource-inspector, #resource-list-view, #resource-detail) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.source :is(#resource-inspector, #resource-list-view, #resource-detail)[hidden] { display: none; }
 /* 资源列表头：第一行标题 · 数量，第二行搜索框占满剩余宽度、操作按钮紧跟其后。 */
 .source #resource-list-view > :is(.ui-pane-header, .resource-filters) { padding: 0 var(--_gutter); }
 .source #resource-list-view > .resource-filters { padding-block: var(--space-xs); }
 .source #resource-list-view > .resource-actions { margin: 0 var(--_gutter) var(--space-sm); }
 .source #resource-list-view > .resource-actions:not(:has(> :not([hidden]))) { display: none; }
 .source .resource-gallery { display: grid; flex: 1; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--style-card-width)), 1fr)); align-content: start; gap: var(--space-sm); min-height: 0; overflow: auto; padding: var(--space-md) var(--_gutter); }
-.source .resource-gallery:has(> .style-resource-item) { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--style-card-width)), 1fr)); }
 .source .resource-gallery[data-kind="sound"] { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 
 .source .resource-detail-heading { display: flex; flex: none; top: 0; margin: 0; align-items: center; gap: var(--space-sm); padding: var(--space-lg) var(--_gutter); position: relative; border-bottom: 1px solid transparent; background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -373,8 +356,6 @@
 .source #style-detail-previews > button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
 @media (hover: hover) { .source #style-detail-previews > button:hover { color: var(--text); } }
 .source #style-detail-previews[hidden] { display: none; }
-
-/* 资源视图里的工具按钮与检查器图标按钮一致 */
 
 /* ================================ 空状态 ================================ */
 .source .inspector-empty { display: none; }
@@ -504,7 +485,6 @@
 .source .animation-combo-item > .ui-list-item-text { display: grid; min-width: 0; }
 .source .animation-combo-item .ui-list-item-text > strong { overflow: hidden; font-weight: var(--font-weight-medium); text-overflow: ellipsis; white-space: nowrap; }
 .source .animation-combo-actions { display: flex; }
-/* 样式详情里动画事件（PRESS_ANIM…）引用的动画：每个编号一个按钮，打开动效设计 / 粒子设计 */
 
 @media (max-width: 760px) and (orientation: portrait) {
   .source .key-inspector-title { min-height: var(--control-height-md); }
@@ -519,13 +499,11 @@
   :root[data-mobile-panel="collapsed"] .source > :not(.source-heading),
   :root[data-mobile-panel="collapsed"] .source .source-heading :not(.key-inspector-title, .ui-inspector-object-copy, .ui-inspector-object-name, #selected-key, .inspector-view-controls) { display: none; }
   :root[data-mobile-panel="collapsed"] .source > .source-heading { padding-top: var(--space-lg); }
-}
-@media (max-width: 760px) and (orientation: portrait) {
+
   .source #workspace-image-figure { flex: none; width: 100%; height: 240px; margin-block: var(--space-lg); padding: var(--space-xl); border-radius: var(--radius-lg); background: var(--content); }
   .source #workspace-image-figure > canvas { max-width: 100%; max-height: 100%; }
   .source #resource-list-view > .ui-pane-header { display: none; }
-}
-@media (max-width: 760px) and (orientation: portrait) {
+
   .source .mobile-animation-stage > h3, .source .mobile-animation-stage .ui-animation-stage, .source .mobile-animation-stage .ui-animation-lanes { display: none; }
   .source .mobile-animation-stage .ui-animation-controls { padding: var(--space-md); border-radius: var(--radius-lg); background: var(--content); }
   .source #document-fields > .mobile-animation-parameters { padding: var(--space-lg) var(--mobile-page-gutter); }

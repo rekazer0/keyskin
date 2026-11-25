@@ -9,7 +9,7 @@ import { bdaColorHex } from "../bda-resolver.ts"
 import { addBdaStyle, updateBdaStyle } from "../bda-encode.ts"
 import { decodedBdaAppearancePart, applyDecodedBdaAppearancePart } from "../bda-source.ts"
 import { currentBdaAppearance, refreshBdaLayout, refreshSelectedBdaSource, bdaAppearancePart, visualResolver } from "./bda-documents"
-import { commitBytes, updateDirty, isEditing, commitText } from "./edit-history"
+import { commitBytes, updateDirty, isEditing, commitText, commitTextChanges } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { showError, showStatus } from "./file-operations"
 import { refreshBdaStyleReferenceField } from "../bda-editor.ts"
@@ -199,8 +199,8 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
   primaryCssFields.replaceChildren()
   if (!hasSelection || appState.archive?.format === "bda" || sections.length !== 1 || !appState.layoutDocument) return
   const path = styleConfigPath()
-  if (!appState.archive?.isText(path)) return
-  const styles = IniDocument.parse(appState.archive.getText(path))
+  const styles = cachedIniDocument(path)
+  if (!styles) return
   const section = sections[0]
   const foreground = isListCell(section)
     ? appState.layoutDocument.get("LIST", "FORE_STYLE") ?? ""
@@ -211,6 +211,7 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
   for (const [index, source] of sources.entries()) {
     const label = document.createElement("label")
     label.className = "ui-field"
+    label.dataset.inspectorRowKey = JSON.stringify([path, source.section, "SHOW"])
     const caption = `显示内容（来自 CSS · ${source.section}）`
     label.title = `${path} [${source.section}] SHOW`
     const name = document.createElement("span")
@@ -222,13 +223,10 @@ function populatePrimaryCssFields(hasSelection: boolean, sections: string[]): vo
     input.disabled = !isEditing()
     input.setAttribute("aria-label", caption)
     input.addEventListener("change", () => {
-      const before = styles.toString()
-      if (!styles.set(source.section, "SHOW", input.value)) return
-      const text = styles.toString()
-      commitText(path, before, text)
-      refreshPreview()
-      populateKeyInspector()
-      updateDirty()
+      if (!isEditing() || !appState.archive?.isText(path)) return
+      const before = appState.archive.getText(path)
+      const current = IniDocument.parse(before)
+      if (current.set(source.section, "SHOW", input.value)) commitTextChanges([{ path, before, after: current.toString() }])
     })
     label.append(input)
     primaryCssFields.append(label)
@@ -511,7 +509,7 @@ export function populateKeyInspector(): void {
   animationObjectHeading.replaceChildren()
   populateDocumentInspector()
   populateBdaConfigInspector()
-  populateAnimationStyleInspector()
+  populateAnimationStyleInspector(syncSelectionRows)
   if (bdaSelected) {
     for (const field of keyFields) {
       if (field.dataset.keyField === "SHOW") field.closest("label")?.setAttribute("hidden", "")
@@ -520,7 +518,12 @@ export function populateKeyInspector(): void {
   syncMobileInspectorGroups()
   revealSinglePageInspectorGroup(JSON.stringify([appState.selectedPath, appState.selectedKeySections, appState.selectedCandidate]))
   applyModeState()
-  syncInspectorRows(JSON.stringify([appState.selectedPath, appState.selectedKeySections, mode.value, animationSelectionContext()]))
+  syncSelectionRows()
+}
+
+function syncSelectionRows(): void {
+  syncInspectorRows(JSON.stringify([appState.selectedPath, appState.selectedKeySections, appState.selectedCandidate,
+    appState.selectedToolbarSections, currentSkinState(), theme.value, appState.bdaTextLayer, mode.value, animationSelectionContext()]), appState.archive)
 }
 
 export function updateSkinInfo(field: HTMLInputElement): void {

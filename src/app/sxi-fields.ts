@@ -15,7 +15,7 @@ import { commitText, isEditing } from "./edit-history"
 import { showError } from "./file-operations"
 import { typographyRows } from "./typography"
 import { skinFontChoices } from "./skin-fonts"
-import { fieldCaption, fieldControl, numberParts, section } from "./property-rows"
+import { bindFieldReset, fieldCaption, fieldControl, numberParts, section } from "./property-rows"
 import { appState } from "./state"
 import { decorateStyleReferenceInput } from "./style-references"
 import { openPalmSkin, refreshSxiDocument } from "./sxi-documents"
@@ -139,10 +139,7 @@ const isPrimitiveList = (value: Json): value is Array<string | number> => Array.
  */
 function trackRow(row: HTMLElement, block: SxiBlock, path: string[], rowKey: unknown, saved: Json[], restore: (current: Json, saved: Json) => Json = (_current, value) => value ?? undefined): void {
   row.dataset.inspectorRowKey = JSON.stringify([block.targets[0], path, rowKey])
-  row.dataset.inspectorValue = JSON.stringify(saved.map((value) => value ?? null))
-  row.addEventListener("inspector-reset", (event) => {
-    event.preventDefault()
-    const baseline = JSON.parse((event as CustomEvent<string>).detail) as Json[]
+  bindFieldReset(row, saved.map((value) => value ?? null), (baseline) => {
     writeSxiValue(block.targets, path, (current, index) => restore(current, baseline[index]))
   })
 }

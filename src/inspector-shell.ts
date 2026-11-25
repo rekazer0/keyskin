@@ -10,7 +10,7 @@
 
 import { playEnter } from "./motion"
 import { createIcon } from "./icons"
-import { shortcutLabel } from "./dom-element"
+import { searchField, shortcutLabel } from "./dom-element"
 import { scrubbableField } from "./number-input-wheel"
 import { styleReferenceAddButton } from "./style-card"
 
@@ -30,8 +30,10 @@ const SECTION_HINTS: Record<string, string> = {
 const SECTION_SELECTOR = ".ui-section"
 /** 一条属性行：筛选、改动标记和恢复都以它为单位。 */
 const ROW_SELECTOR = ".ui-field, .inspector-gesture, .ui-toolbar-icon"
+const VALUE_CONTROLS = 'input:not([type=file]):not([type=color]):not([type=range]):not([data-config-derived]), select:not([data-config-derived]), textarea:not([data-config-derived])'
+const EDITABLE_CONTROL = 'input:not(:disabled):not([readonly]), select:not(:disabled), textarea:not(:disabled):not([readonly]), button:not(:disabled):not([data-config-add])'
 const SCRUB_HANDLES = ".ui-input > .ui-input-affix, .ui-field > span:first-child, .document-field-caption"
-const baselines = new WeakMap<HTMLElement, string>()
+let baselines = new WeakMap<HTMLElement, string>()
 const keyedBaselines = new Map<string, string>()
 let rows: Row[] = []
 let filterQuery = ""
@@ -51,12 +53,11 @@ function emptyConfigValue(value: unknown): boolean {
   return false
 }
 
-function emptyRow(row: HTMLElement): boolean {
+function emptyRow(row: HTMLElement, values?: NodeListOf<InspectorInput>): boolean {
   if (row.dataset.configEmpty !== undefined) return row.dataset.configEmpty === "true"
   if (row.dataset.inspectorValue !== undefined) return emptyConfigValue(JSON.parse(row.dataset.inspectorValue))
-  const values = Array.from(row.querySelectorAll<InspectorInput>("input:not([type=file]), select, textarea"))
-    .filter(input => !input.hasAttribute("data-config-derived") && !input.matches('[type="color"], [type="range"]'))
-  return values.length > 0 && values.every(input => !("placeholder" in input && input.placeholder.includes("混合")) && emptyConfigValue(valueOf(input)))
+  values ??= row.querySelectorAll<InspectorInput>(VALUE_CONTROLS)
+  return values.length > 0 && Array.from(values).every(input => !("placeholder" in input && input.placeholder.includes("混合")) && emptyConfigValue(valueOf(input)))
 }
 
 function focusFirstControl(container: HTMLElement): void {
@@ -64,14 +65,18 @@ function focusFirstControl(container: HTMLElement): void {
     .find(control => control.getClientRects().length > 0)?.focus()
 }
 
+function sectionFields(section: HTMLElement): HTMLElement[] {
+  return Array.from(section.querySelectorAll<HTMLElement>(".ui-field"))
+    .filter(row => row.closest(".ui-section") === section && row.dataset.supported !== "false" && !isHidden(row, section))
+}
+
 /** 整组未配置时只留标题和添加入口；展开只改变界面，不创建默认配置。 */
 function syncEmptySections(fresh = false): void {
   for (const section of document.querySelectorAll<HTMLElement>("#quick-inspector .ui-section, #resource-inspector .ui-section")) {
     const heading = section.querySelector<HTMLElement>(":scope > h3")
     if (!heading || !(/动画$|文字|字体/.test(sectionName(section)) || section.querySelector(".ui-typography-preview"))) continue
-    const fields = Array.from(section.querySelectorAll<HTMLElement>(".ui-field"))
-      .filter(row => row.closest(".ui-section") === section && row.dataset.supported !== "false" && !isHidden(row, section))
-    const empty = fields.length > 0 && fields.every(emptyRow)
+    const fields = sectionFields(section)
+    const empty = fields.length > 0 && fields.every(row => emptyRow(row))
     if (fresh || !empty) section.removeAttribute("data-config-section-expanded")
     const pending = empty && !section.hasAttribute("data-config-section-expanded")
     section.toggleAttribute("data-config-section-pending", pending)
@@ -83,7 +88,7 @@ function syncEmptySections(fresh = false): void {
         section.removeAttribute("data-config-section-pending")
         add?.remove()
         // 普通空字段直接显示控件，资源引用仍保留原来的选择入口。
-        for (const row of fields) {
+        for (const row of sectionFields(section)) {
           row.setAttribute("data-config-expanded", "")
           row.removeAttribute("data-config-pending")
           row.querySelector("[data-config-add]")?.remove()
@@ -94,7 +99,7 @@ function syncEmptySections(fresh = false): void {
       add.setAttribute("aria-expanded", "false")
       heading.append(add)
     }
-    add.disabled = !fields.some(row => row.querySelector("input:not(:disabled):not([readonly]), select:not(:disabled), textarea:not(:disabled):not([readonly]), button:not(:disabled)"))
+    add.disabled = !fields.some(row => row.querySelector(EDITABLE_CONTROL))
   }
 }
 
@@ -106,16 +111,14 @@ function syncEmptyFields(root: HTMLElement, fresh = false): void {
       || row.querySelector('.ui-list-toolbar, .ui-field-pair[data-variant="colors"]')) continue
     const caption = row.firstElementChild
     if (!(caption instanceof HTMLElement) || caption.matches("input, select, textarea")) continue
-    const inputs = Array.from(row.querySelectorAll<InspectorInput>("input:not([type=file]), select, textarea"))
-    const values = inputs.filter(input => !input.hasAttribute("data-config-derived") && !input.matches('[type="color"], [type="range"]'))
-    if (!values.length && row.dataset.inspectorValue === undefined) continue
-    const empty = emptyRow(row)
+    const values = row.dataset.inspectorValue === undefined ? row.querySelectorAll<InspectorInput>(VALUE_CONTROLS) : undefined
+    if (values?.length === 0) continue
+    const empty = emptyRow(row, values)
     let add = caption.querySelector<HTMLButtonElement>("[data-config-add]")
     if (fresh || !empty) row.removeAttribute("data-config-expanded")
     const pending = empty && !row.hasAttribute("data-config-expanded")
     row.toggleAttribute("data-config-pending", pending)
     if (!pending) { add?.remove(); continue }
-    const controls = Array.from(row.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>("input, select, textarea, button:not([data-config-add])"))
     if (!add) {
       const label = caption.querySelector(".document-field-name")?.textContent ?? caption.textContent ?? "配置"
       add = styleReferenceAddButton(`添加${label.trim()}`, () => {
@@ -130,7 +133,7 @@ function syncEmptyFields(root: HTMLElement, fresh = false): void {
       add.addEventListener("click", event => event.preventDefault())
       caption.append(add)
     }
-    add.disabled = !controls.some(control => !control.disabled && (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) || !control.readOnly))
+    add.disabled = !row.querySelector(EDITABLE_CONTROL)
   }
 }
 
@@ -147,33 +150,28 @@ function sectionName(section: HTMLElement): string {
     || ""
 }
 
-function headedSections(root: HTMLElement): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(SECTION_SELECTOR)).filter((section) => section.querySelector(":scope > h3"))
+function sectionHeadings(root: HTMLElement) {
+  return root.querySelectorAll<HTMLElement>(".ui-section > h3")
 }
 
 function decorateSections(): void {
   const root = inspector()
   if (!root) return
-  for (const section of headedSections(root)) {
-    const heading = section.querySelector<HTMLElement>(":scope > h3")
-    if (!heading || heading.title) continue
-    const name = sectionName(section)
+  for (const heading of sectionHeadings(root)) {
+    if (heading.title) continue
+    const name = sectionName(heading.parentElement!)
     // 分区动画分组按分区命名（面板动画、列表动画…），沿用「动画」的字段说明。
-    heading.title = SECTION_HINTS[name] ?? (/动画$/.test(name) ? SECTION_HINTS["动画"] : "") ?? ""
+    heading.title = SECTION_HINTS[name] ?? (/动画$/.test(name) ? SECTION_HINTS["动画"] : "")
   }
-  for (const handle of Array.from(root.querySelectorAll<HTMLElement>(SCRUB_HANDLES))) {
+  for (const handle of root.querySelectorAll<HTMLElement>(SCRUB_HANDLES)) {
     handle.toggleAttribute("data-scrub", Boolean(scrubbableField(handle)))
   }
 }
 
 /* —— 筛选：按标签文字、属性名（INI 键）与分组名过滤属性行 —— */
-function filterInput(): HTMLInputElement | null {
-  return document.getElementById("inspector-filter") as HTMLInputElement | null
-}
-
 function rowText(row: HTMLElement): string {
   const parts = [row.textContent ?? "", row.title, row.dataset.documentKey ?? ""]
-  for (const input of Array.from(row.querySelectorAll<HTMLElement>("input, select, textarea"))) {
+  for (const input of row.querySelectorAll<HTMLElement>("input, select, textarea")) {
     parts.push(input.getAttribute("aria-label") ?? "", ...Object.values(input.dataset).map(String))
   }
   return parts.join(" ").toLowerCase()
@@ -182,95 +180,81 @@ function rowText(row: HTMLElement): string {
 function applyFilter(): void {
   const root = inspector()
   if (!root) return
-  const query = filterQuery.trim().toLowerCase()
+  const query = filterQuery
+  const empty = root.querySelector<HTMLElement>(".inspector-filter-empty")
   root.toggleAttribute("data-filtering", Boolean(query))
+  if (!query) {
+    if (empty) empty.hidden = true
+    for (const miss of root.querySelectorAll("[data-filter-miss]")) miss.removeAttribute("data-filter-miss")
+    return
+  }
   let matches = 0
-  for (const section of headedSections(root)) {
-    const sectionHit = !query || sectionName(section).toLowerCase().includes(query)
+  for (const heading of sectionHeadings(root)) {
+    const section = heading.parentElement!
+    const sectionHit = sectionName(section).toLowerCase().includes(query)
     const sectionRows = Array.from(section.querySelectorAll<HTMLElement>(ROW_SELECTOR))
     // 分组内的子标题也是分组名（手心动画按「时间与曲线」「液体外观」等再分），命中时整块保留。
-    const blockHits = Array.from(section.querySelectorAll<HTMLElement>(".ui-subsection"))
-      .filter((block) => block.querySelector(":scope > h4")?.textContent?.toLowerCase().includes(query))
+    const blocks = Array.from(section.querySelectorAll<HTMLElement>(".ui-subsection"))
+    const blockHits = blocks.filter((block) => block.querySelector(":scope > h4")?.textContent?.toLowerCase().includes(query))
     const hits = new Set(sectionRows.filter((row) => sectionHit || rowText(row).includes(query)
-      || Boolean(query) && blockHits.some((block) => block.contains(row))))
+      || blockHits.some((block) => block.contains(row))))
     // 外层行没命中、里面的子行命中时，外层也要留着。
     for (const row of hits) {
       for (let outer = row.parentElement?.closest<HTMLElement>(ROW_SELECTOR); outer && section.contains(outer); outer = outer.parentElement?.closest<HTMLElement>(ROW_SELECTOR)) hits.add(outer)
     }
     for (const row of sectionRows) {
       row.toggleAttribute("data-filter-miss", !hits.has(row))
-      if (query && hits.has(row)) row.closest("details")?.setAttribute("open", "")
+      if (hits.has(row)) row.closest("details")?.setAttribute("open", "")
     }
-    for (const details of Array.from(section.querySelectorAll("details"))) {
+    for (const details of section.querySelectorAll("details")) {
       details.toggleAttribute("data-filter-miss", !sectionRows.some((row) => hits.has(row) && details.contains(row)))
     }
-    for (const block of Array.from(section.querySelectorAll(".ui-subsection"))) {
-      block.toggleAttribute("data-filter-miss", Boolean(query) && !sectionHit && ![...hits].some((row) => block.contains(row)))
+    for (const block of blocks) {
+      block.toggleAttribute("data-filter-miss", !sectionHit && ![...hits].some((row) => block.contains(row)))
     }
     const visibleHits = [...hits].filter((row) => !isHidden(row, section)).length
     // 对象选择器（动画列表）不是属性：筛选时留着，才能换一个对象继续筛。
-    section.toggleAttribute("data-filter-miss", Boolean(query) && !sectionHit && visibleHits === 0 && !section.hasAttribute("data-filter-keep"))
+    section.toggleAttribute("data-filter-miss", !sectionHit && visibleHits === 0 && !section.hasAttribute("data-filter-keep"))
     if (!isHidden(section, root)) matches += visibleHits
   }
-  const empty = root.querySelector<HTMLElement>(".inspector-filter-empty")
-  if (empty) {
-    empty.hidden = !query || matches > 0
-    empty.textContent = "没有匹配的属性"
-  }
-}
-
-function setFilterOpen(open: boolean): void {
-  const root = inspector()
-  const input = filterInput()
-  if (!root || !input) return
-  root.toggleAttribute("data-filter-open", open)
-  document.querySelector(".inspector-filter-open")?.setAttribute("aria-expanded", String(open))
-  if (open) {
-    input.focus()
-    input.select()
-    return
-  }
-  input.value = ""
-  filterQuery = ""
-  applyFilter()
+  if (empty) empty.hidden = matches > 0
 }
 
 function bindFilter(root: HTMLElement): void {
-  const input = filterInput()
-  if (!input) return
-  input.addEventListener("input", () => {
-    filterQuery = input.value
+  const input = root.querySelector<HTMLInputElement>("#inspector-filter")
+  const toggle = root.querySelector<HTMLButtonElement>(".inspector-filter-open")
+  if (!input || !toggle) return
+  const setOpen = (open: boolean) => {
+    root.toggleAttribute("data-filter-open", open)
+    toggle.setAttribute("aria-expanded", String(open))
+    if (open) { input.focus(); input.select() }
+    else if (input.value) {
+      input.value = ""
+      input.dispatchEvent(new Event("input"))
+    }
+  }
+  const search = searchField({ input, label: "筛选属性", onInput(query) {
+    filterQuery = query.toLowerCase()
     applyFilter()
-  })
-  input.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return
+  } })
+  search.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return
     event.preventDefault()
     event.stopPropagation()
-    if (input.value) {
-      input.value = ""
-      filterQuery = ""
-      applyFilter()
-    } else {
-      setFilterOpen(false)
-      input.blur()
-    }
+    setOpen(false)
+    toggle.focus()
   })
-  input.addEventListener("blur", () => { if (!input.value) setFilterOpen(false) })
-  const openButton = document.querySelector(".inspector-filter-open")
-  // 按下时不让输入框失焦，否则空输入会先因 blur 收起、再被 click 重新打开。
-  openButton?.addEventListener("pointerdown", (event) => event.preventDefault())
-  openButton?.addEventListener("click", () => setFilterOpen(!root.hasAttribute("data-filter-open")))
-  root.querySelector(".inspector-filter-close")?.addEventListener("pointerdown", (event) => {
-    // 先于输入框失焦处理，避免按钮在点击前被收起。
-    event.preventDefault()
-    setFilterOpen(false)
+  search.addEventListener("focusout", event => {
+    if (!input.value && !search.contains(event.relatedTarget as Node | null)) setOpen(false)
   })
+  toggle.addEventListener("pointerdown", event => event.preventDefault())
+  toggle.addEventListener("click", () => setOpen(!root.hasAttribute("data-filter-open")))
   // 属性视图打开时 Ctrl/⌘ + F 筛选属性；源代码视图里仍是查找（editing-controls.ts）。
   window.addEventListener("keydown", (event) => {
     if (event.key.toLowerCase() !== "f" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
     if (root.hidden || !root.getClientRects().length) return
     event.preventDefault()
-    setFilterOpen(true)
+    setOpen(true)
   })
 }
 
@@ -298,15 +282,17 @@ function collectRows(): void {
   const root = inspector()
   if (!root) return
   const grouped = new Map<HTMLElement, InspectorInput[]>()
-  for (const input of Array.from(root.querySelectorAll<InspectorInput>("input, select, textarea"))) {
+  for (const input of root.querySelectorAll<InspectorInput>("input, select, textarea")) {
     if (input.id === "inspector-filter") continue
     if (input.hasAttribute("data-config-derived")) continue
     const el = input.closest<HTMLElement>(ROW_SELECTOR) ?? input.closest("label")
     if (!el) continue
-    grouped.set(el, [...(grouped.get(el) ?? []), input])
+    const inputs = grouped.get(el)
+    if (inputs) inputs.push(input)
+    else grouped.set(el, [input])
   }
   // 分段这类只有按钮的行（field()）靠自己记下的值参与改动标记与重置。
-  for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-inspector-value]"))) {
+  for (const el of root.querySelectorAll<HTMLElement>("[data-inspector-value]")) {
     if (el.matches(ROW_SELECTOR) && !grouped.has(el)) grouped.set(el, [])
   }
   rows = Array.from(grouped, ([el, inputs]) => {
@@ -335,9 +321,10 @@ function markRow(row: Row, modified: boolean): void {
 function updateStatus(): void {
   const count = rows.filter((row) => row.el.hasAttribute("data-modified")).length
   const reset = resetButton()
-  if (reset) {
+  const label = `重置本次修改的 ${count} 项属性`
+  if (reset && reset.getAttribute("aria-label") !== label) {
     reset.hidden = count === 0
-    reset.setAttribute("aria-label", `重置本次修改的 ${count} 项属性`)
+    reset.setAttribute("aria-label", label)
     reset.title = `本次选择后改了 ${count} 项，点击全部恢复`
     const badge = document.createElement("span")
     badge.className = "inspector-changes"
@@ -346,8 +333,8 @@ function updateStatus(): void {
   }
   const root = inspector()
   if (!root) return
-  for (const section of headedSections(root)) {
-    section.querySelector(":scope > h3")?.toggleAttribute("data-modified", Boolean(section.querySelector(":scope > :not(h3) [data-modified], :scope > [data-modified]:not(h3)")))
+  for (const heading of sectionHeadings(root)) {
+    heading.toggleAttribute("data-modified", Boolean(heading.parentElement!.querySelector(":scope > :not(h3) [data-modified], :scope > [data-modified]:not(h3)")))
   }
 }
 
@@ -372,7 +359,12 @@ function revertRow(row: Row): void {
 }
 
 function resetAll(): void {
-  for (const row of rows.filter((item) => item.el.hasAttribute("data-modified"))) revertRow(row)
+  for (const row of rows.filter(item => item.el.hasAttribute("data-modified"))) {
+    // 上一行写回可能重建整组；用新行的回调，避免旧快照覆盖刚恢复的兄弟字段。
+    const key = row.el.dataset.inspectorRowKey
+    const current = row.el.isConnected ? row : key ? rows.find(item => item.el.dataset.inspectorRowKey === key) : undefined
+    if (current?.el.hasAttribute("data-modified")) revertRow(current)
+  }
   updateStatus()
 }
 
@@ -384,7 +376,8 @@ function onInspectorInput(event: Event): void {
   if (!row) return
   markRow(row, rowValue(row) !== baselines.get(row.el))
   updateStatus()
-  syncGestures()
+  const grid = target?.closest(".inspector-gestures")
+  if (grid) syncGestures(grid)
 }
 
 /** 标签被截断时悬停显示全文。 */
@@ -417,25 +410,27 @@ function renderEmptyState(): void {
 }
 
 /** 每个手势十字（百度的静态分组、手心检查器生成的分组）各自统计已配置数。 */
-function syncGestures(): void {
-  for (const grid of Array.from(document.querySelectorAll<HTMLElement>("#quick-inspector .inspector-gestures"))) {
-    const cells = Array.from(grid.querySelectorAll<HTMLElement>("[data-gesture]"))
-    for (const cell of cells) {
-      const code = cell.querySelector<HTMLInputElement>("input")?.value ?? ""
-      cell.dataset.configured = String(Boolean(code && code !== "None"))
-      const caption = cell.querySelector<HTMLElement>(":scope > span")
-      const input = cell.querySelector<HTMLInputElement>("input")
-      if (caption && input) {
-        caption.setAttribute("role", "button")
-        caption.tabIndex = input.disabled || input.readOnly ? -1 : 0
-        caption.setAttribute("aria-disabled", String(input.disabled || input.readOnly))
-        caption.setAttribute("aria-label", `选择${caption.textContent?.trim()}动作码`)
-        caption.setAttribute("aria-haspopup", "dialog")
-      }
+function syncGestures(grid: Element): void {
+  const cells = grid.querySelectorAll<HTMLElement>("[data-gesture]")
+  let configured = 0
+  for (const cell of cells) {
+    const input = cell.querySelector<HTMLInputElement>("input")
+    const code = input?.value ?? ""
+    const active = Boolean(code && code !== "None")
+    cell.dataset.configured = String(active)
+    if (active) configured++
+    const caption = cell.querySelector<HTMLElement>(":scope > span")
+    if (caption && input) {
+      caption.setAttribute("role", "button")
+      caption.tabIndex = input.disabled || input.readOnly ? -1 : 0
+      caption.setAttribute("aria-disabled", String(input.disabled || input.readOnly))
+      caption.setAttribute("aria-label", `选择${caption.textContent?.trim()}动作码`)
+      caption.setAttribute("aria-haspopup", "dialog")
     }
-    const count = grid.closest(SECTION_SELECTOR)?.querySelector(".inspector-gesture-count")
-    if (count) count.textContent = `${cells.filter((cell) => cell.dataset.configured === "true").length} / ${cells.length}`
   }
+  const count = grid.closest(SECTION_SELECTOR)?.querySelector(".inspector-gesture-count")
+  const text = `${configured} / ${cells.length}`
+  if (count && count.textContent !== text) count.textContent = text
 }
 
 // WebKit 不会按位图内存及时触发 GC；移除的缩略图主动释放，同步复用的画布保留。
@@ -481,7 +476,7 @@ export function initInspectorShell(): void {
       if (filterQuery) applyFilter()
     })
   })
-  for (const view of Array.from(document.querySelectorAll("#quick-inspector, #resource-inspector"))) {
+  for (const view of document.querySelectorAll("#quick-inspector, #resource-inspector")) {
     observer.observe(view, { childList: true, subtree: true })
   }
 }
@@ -495,23 +490,23 @@ export function setInspectorKind(kind: "bds" | "bda" | ""): void {
 }
 
 let selectionContext = ""
-/** 渲染出新值后调用：换了选择对象就重拍基线，否则只清掉已回到基线的标记（撤销 / 重做不触发 input）。 */
-export function syncInspectorRows(context: string): void {
-  const fresh = context !== selectionContext
+let selectionDocument: object | undefined
+/** 渲染出新值后调用：换了选择对象就重拍基线，否则按当前值同步标记（撤销 / 重做不触发 input）。 */
+export function syncInspectorRows(context: string, document?: object): void {
+  const fresh = context !== selectionContext || document !== selectionDocument
   // 换了选择对象：整块内容淡入，说明检查器里已经是另一个对象（首次填充不算）
   if (fresh && selectionContext) playEnter(inspector())
   selectionContext = context
-  if (fresh) keyedBaselines.clear()
-  collectRows()
-  for (const row of rows) {
-    if (fresh) baselines.set(row.el, rowValue(row))
-    if (fresh && row.el.dataset.inspectorRowKey) keyedBaselines.set(row.el.dataset.inspectorRowKey, rowValue(row))
-    if (row.el.dataset.inspectorValue !== undefined) markRow(row, !fresh && rowValue(row) !== baselines.get(row.el))
-    else if (fresh || rowValue(row) === baselines.get(row.el)) markRow(row, false)
+  selectionDocument = document
+  if (fresh) {
+    baselines = new WeakMap()
+    keyedBaselines.clear()
   }
+  collectRows()
+  for (const row of rows) markRow(row, rowValue(row) !== baselines.get(row.el))
   updateStatus()
   const root = inspector()
   if (root) syncEmptyFields(root, fresh)
   syncEmptySections(fresh)
-  syncGestures()
+  root?.querySelectorAll(".inspector-gestures").forEach(syncGestures)
 }

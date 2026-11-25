@@ -22,3 +22,13 @@ export async function openEditorTemplate(page, template = 'default-android', { p
   const edit = page.locator('.mobile-preview-return')
   if (!preview && await edit.isVisible()) await edit.click()
 }
+
+// 手机默认只露出拖柄；检查字段之前要展开属性面板。
+export function expandMobileInspector(page) {
+  return page.evaluate(async () => {
+    const { setMobilePane } = await import('/src/app/mobile-layout.ts')
+    const { resizeMobileInspector } = await import('/src/app/mobile-inspector.ts')
+    setMobilePane('inspector')
+    resizeMobileInspector(50)
+  })
+}

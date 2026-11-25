@@ -416,14 +416,12 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 .ui-font-control > input { flex: 1; min-width: 0; width: 0; font-family: var(--font-mono); }
 .ui-font-picker { display: flex; flex: none; align-items: center; gap: var(--space-xs); width: calc(var(--control-height-md) * 2); min-width: 0; padding: 0 var(--space-xs); border: 0; position: relative; border-left: 1px solid transparent; border-radius: 0; background: transparent; }
 .ui-font-picker > .ui-font-sample { flex: 1; width: 0; height: var(--control-height-md); }
-.ui-font-picker > .ui-icon { flex: none; }
+.ui-font-picker > .ui-icon { flex: none; color: var(--secondary); }
 .ui-field-actions { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: auto; }
-.ui-font-sample { grid-column: 1 / -1; }
 .ui-font-picker > span { min-width: 0; overflow: hidden; font-family: var(--font-mono); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
-.ui-font-picker > .ui-icon { color: var(--secondary); }
 .ui-font-picker[data-variant="sample"] { flex: none; width: calc(var(--control-height-md) * 2); padding: 0; }
 .ui-font-picker[data-variant="sample"] > .ui-font-sample { height: var(--control-height-md); }
-.ui-font-sample { display: block; width: 100%; min-width: 0; height: var(--control-height-lg); }
+.ui-font-sample { grid-column: 1 / -1; display: block; width: 100%; min-width: 0; height: var(--control-height-lg); }
 .ui-font-sample[data-size="lg"] { height: calc(var(--control-height-lg) * 3); }
 .ui-listbox > .ui-font-option { display: grid; gap: var(--space-xs); text-align: left; }
 .ui-font-option > :is(strong, small) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -511,10 +509,9 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 .ui-image-editor .ui-dialog-body { flex: 1; grid-template-columns: minmax(0, 1fr) calc(var(--control-height-md) * 8); overflow-y: auto; overscroll-behavior: contain; }
 .ui-image-editor :is(.ui-dialog-header, .ui-dialog-footer) { flex-shrink: 0; }
 .ui-image-editor-preview { position: relative; min-height: 0; border-radius: var(--radius-lg); overflow: hidden; }
-.ui-image-editor-preview > canvas { display: block; width: 100%; height: 100%; }
 .ui-image-editor-controls { display: grid; align-content: start; gap: var(--space-lg); min-width: 0; }
 .ui-image-editor-result { height: calc(var(--control-height-md) * 4); border-radius: var(--radius-lg); overflow: hidden; }
-.ui-image-editor-result > canvas { display: block; width: 100%; height: 100%; }
+:is(.ui-image-editor-preview, .ui-image-editor-result) > canvas { display: block; width: 100%; height: 100%; }
 .ui-image-editor .ui-field { align-self: start; }
 .ui-image-editor:where(:not([data-variant="atlas"])) .ui-field-pair { grid-template-columns: minmax(0, 1fr); }
 .ui-image-editor[data-variant="atlas"] > form { gap: var(--space-md); padding: var(--space-lg); }
@@ -1056,8 +1053,7 @@ body {
 /* 字段标签右端的追加按钮（多张前景、粒子图片、前景动画、BDA 前景层） */
 .ui-style-ref-append { margin-left: auto; }
 /* 新建样式的虚线卡，只放 plus：样式网格末尾（styleAddCard()，和相邻卡片等高） */
-.ui-style-add { display: grid; place-items: center; width: 100%; padding: 0; border: 1px dashed var(--line); border-radius: var(--radius-lg); background: none; color: var(--tertiary); font: inherit; transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
-.ui-style-add { align-self: stretch; min-height: calc(var(--control-height-lg) * 4); }
+.ui-style-add { display: grid; place-items: center; align-self: stretch; width: 100%; min-height: calc(var(--control-height-lg) * 4); padding: 0; border: 1px dashed var(--line); border-radius: var(--radius-lg); background: none; color: var(--tertiary); font: inherit; transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
 @media (hover: hover) { .ui-style-add:hover { background: var(--hover); color: var(--text); } }
 .ui-style-add:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
 .ui-style-add:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
@@ -1240,8 +1236,7 @@ body {
   .ui-dialog:where(:not(.picker-dialog, .ui-mobile-sheet, .ui-mobile-sidebar, .ui-image-editor, [data-variant="tools"])) .ui-dialog-header { padding-inline: 0; }
   .ui-dialog:where(:not(.picker-dialog, .ui-mobile-sheet, .ui-mobile-sidebar, .ui-image-editor, [data-variant="tools"])) .ui-dialog-body { padding: 0; }
   .ui-dialog:where(:not(.picker-dialog, .ui-mobile-sheet, .ui-mobile-sidebar, .ui-image-editor, [data-variant="tools"])) .ui-dialog-footer { padding-inline: 0; }
-}
-@media (max-width: 760px) and (orientation: portrait) {
+
   .ui-dialog[data-stage="compatibility"] .ui-dialog-header { flex: none; min-height: 160px; align-items: flex-start; text-align: left; }
   .ui-dialog[data-stage="compatibility"] .ui-dialog-icon, .ui-dialog[data-stage="compatibility"] .ui-dialog-meter { display: none; }
   .ui-dialog[data-stage="compatibility"] #file-operation-result { white-space: pre-wrap; background: color-mix(in srgb, var(--state-warn) 12%, var(--panel)); }
