@@ -148,7 +148,9 @@ class FakeNode {
   }
 }
 
-class FakeInput extends FakeNode {}
+class FakeInput extends FakeNode {
+  validity = { badInput: false }
+}
 globalThis.HTMLInputElement = FakeInput
 globalThis.document = {
   createElement: (tag) => tag === "input" ? new FakeInput(tag) : new FakeNode(tag),
