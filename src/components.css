@@ -582,7 +582,7 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 /* —— 分组 —— */
 .ui-section { position: relative; border-top: 1px solid transparent; }
 .ui-section:first-child { border-top: 0; }
-.ui-section::before, .ui-sidebar-summary::before { content: ""; position: absolute; inset-inline: 0; top: -1px; height: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none; }
+.ui-section::before { content: ""; position: absolute; inset-inline: 0; top: -1px; height: 1px; background: var(--line-soft); border-radius: var(--radius-full); pointer-events: none; }
 .ui-section:first-child::before, .ui-resource-slices .ui-section::before { display: none; }
 .ui-section > header {
   display: flex;
@@ -1418,11 +1418,6 @@ body {
   .ui-dialog[data-variant="operation"][data-inline="true"] form:has(#file-operation-log:not([hidden])) { gap: var(--space-xs); padding: var(--space-sm); }
   .ui-dialog[data-inline="true"]:has(#file-operation-log:not([hidden])) .ui-dialog-icon { width: var(--control-height-lg); height: var(--control-height-lg); }
 }
-
-/* 概览侧栏的固定布局摘要。 */
-.ui-sidebar-summary { display: flex; flex: none; box-sizing: border-box; align-items: center; gap: var(--space-sm); min-width: 0; height: var(--workspace-status-height); margin: 0 var(--space-xl); padding: 0; position: relative; border-top: 1px solid transparent; color: var(--tertiary); font-size: var(--font-size-xs); white-space: nowrap; }
-.ui-sidebar-summary > .ui-icon { flex: none; width: var(--icon-size-sm); height: var(--icon-size-sm); }
-
 @media (max-width: 760px) and (orientation: portrait) {
   .ui-mobile-motion-picker { inset: auto 0 0; max-height: min(var(--mobile-motion-sheet-height), calc(var(--viewport-height) - var(--titlebar-height))); padding: var(--space-lg) var(--space-lg) max(var(--space-lg), var(--safe-area-bottom)); overflow: hidden; }
   .ui-sound-library > .ui-list-toolbar { display: none; }

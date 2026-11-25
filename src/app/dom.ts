@@ -215,10 +215,6 @@ export const assetBackButton = $("#asset-back") as HTMLButtonElement
 
 export const files = $("#files")
 
-export const sidebarLayoutCount = $("#sidebar-layout-count")
-
-export const sidebarLayoutSize = $("#sidebar-layout-size")
-
 export const sourceFileToolbar = $("#source-file-toolbar")
 
 export const sourceFileSearchToggle = $("#source-file-search-toggle") as HTMLButtonElement

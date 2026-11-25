@@ -2,7 +2,7 @@ import { appState } from "./state"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
 import { setSimulatedComposition, toolbarPreview, currentDeviceValue, deviceGeometryProperties, preview, previewScreenWidth, resizeKeyboardPreviews, schedulePreviewInteractionFrame, paintPreviewInteraction, applySkinState, REFERENCE_PHONE_WIDTH_SCALE, deviceFrameProperties } from "./canvas-interaction"
-import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, candidateBackgroundCanvas, candidateInputBackgroundCanvas, previewCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, mobilePreviewGuides, mobilePreviewState, toggleGuides, sidebarLayoutSize } from "./dom"
+import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, candidateBackgroundCanvas, candidateInputBackgroundCanvas, previewCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, mobilePreviewGuides, mobilePreviewState, toggleGuides } from "./dom"
 import { candidatePreview } from "../simulation.ts"
 import { isConfiguredSymbolLayout, knownSkinStates, skinStateLabel } from "../actions.ts"
 import { cachedIniDocument } from "./style-document"
@@ -525,7 +525,6 @@ export function updatePanelTools(
   native?: { items: PreviewItem[]; states: number[] },
 ): number {
   const items = native?.items ?? (appState.layoutDocument ? previewItems(appState.layoutDocument, width, height) : [])
-  sidebarLayoutSize.textContent = `${Math.round(width)} × ${Math.round(height)}`
   const surfaceHeight = previewSurfaceHeight(items, height)
   const content = previewContentVerticalBounds(items, width, surfaceHeight)
   deviceShell.style.setProperty("--canvas-width", `${width}px`)

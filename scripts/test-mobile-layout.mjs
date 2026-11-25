@@ -456,9 +456,9 @@ for (const colorScheme of ['light','dark']) {
     await openFiles(page)
     assert.equal((await rect(page, '#mobile-project-dialog')).y, 0, 'drawer includes the top safe area')
     assert.ok((await rect(page, '#mobile-files-close')).y >= 59, 'drawer header clears the notch')
-    assert.ok((await rect(page, '.ui-mobile-sidebar .ui-sidebar-summary')).bottom <= page.viewportSize().height - 34, 'drawer summary clears the home indicator')
+    assert.ok((await rect(page, '.ui-mobile-sidebar #files')).bottom <= page.viewportSize().height - 34, 'drawer file list clears the home indicator')
     assert.equal(await page.locator('#mobile-project-dialog').getByRole('button', { name: '返回首页' }).count(), 0)
-    assert.equal(await page.locator('.ui-mobile-sidebar .ui-sidebar-summary').isVisible(), true)
+    assert.equal(await page.locator('.ui-mobile-sidebar .sidebar-overview').isVisible(), true)
     for (const selector of ['#mobile-files-close', '[data-sidebar-view=overview]', '[data-sidebar-view=source]']) {
       assert.ok((await rect(page, selector)).height >= 44, `${selector} has a 44px touch target`)
     }
@@ -466,9 +466,8 @@ for (const colorScheme of ['light','dark']) {
     assert.equal(await page.locator('.mobile-page-heading').textContent(), '项目')
     assert.equal(await page.locator('[data-sidebar-view=source]').getAttribute('aria-pressed'), 'true')
     assert.equal(await page.locator('#source-file-toolbar').isVisible(), true)
-    assert.equal(await page.locator('.ui-mobile-sidebar .ui-sidebar-summary').isVisible(), false)
     await page.locator('[data-sidebar-view=overview]').click()
-    assert.equal(await page.locator('.ui-mobile-sidebar .ui-sidebar-summary').isVisible(), true)
+    assert.equal(await page.locator('.ui-mobile-sidebar .sidebar-overview').isVisible(), true)
     await page.setViewportSize({width:844,height:390})
     await page.waitForFunction(() => !document.querySelector('#mobile-project-dialog').open && document.querySelector('main > aside.sidebar'))
     for (const selector of ['main > aside','main > .source','main > .workspace']) assert.equal(await page.locator(selector).evaluate(n=>n.inert), false, 'landscape releases all panes')

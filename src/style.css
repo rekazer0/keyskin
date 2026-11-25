@@ -303,7 +303,6 @@ h2 {
 }
 .pane-heading > .sidebar-view-control { flex: 1; }
 aside:has(.sidebar-overview:not([hidden])) { display: flex; flex-direction: column; background: var(--panel); }
-.sidebar:not(:has(.sidebar-overview:not([hidden]))) > .ui-sidebar-summary { display: none; }
 aside:has(.raw-files:not([hidden])) { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 aside:has(.raw-files:not([hidden])) #files { height: 100%; }
 

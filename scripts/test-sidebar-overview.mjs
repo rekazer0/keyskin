@@ -114,27 +114,11 @@ try {
       assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.selectedPath), path)
       assert.equal(await general.getAttribute("aria-current"), "true")
       assert.equal(await page.evaluate(async () => (await import("/src/app/state.ts")).appState.archive.changed.size), 0)
-      const summary = page.locator(".ui-sidebar-summary")
-      assert.equal(await summary.isVisible(), true)
-      const footerBounds = await summary.evaluate(node => {
-        const summary = node.getBoundingClientRect()
-        const workspace = document.querySelector(".workspace").getBoundingClientRect()
-        const statusHeight = parseFloat(getComputedStyle(node).getPropertyValue("--workspace-status-height"))
-        return { top: summary.top, bottom: summary.bottom, expectedTop: workspace.bottom - statusHeight, expectedBottom: workspace.bottom }
-      })
-      assert.equal(footerBounds.top, footerBounds.expectedTop, "summary aligns with the canvas footer")
-      assert.equal(footerBounds.bottom, footerBounds.expectedBottom, "summary and canvas end at the same height")
       assert.equal(await page.locator(".sidebar-overview .nav-item > .source-item-count").count(), 0, "layout rows omit redundant key counts")
-      const total = await page.locator('.nav-group:not([data-overview-group="键盘组件"]) :is(.nav-layout, .nav-component)').count()
-      assert.equal(await page.locator("#sidebar-layout-count").textContent(), `共 ${total} 个布局`)
-      const dimensions = await page.evaluate(async () => {
-        const { appState } = await import("/src/app/state.ts")
-        return `${Math.round(appState.canvasLogicalSize.width)} × ${Math.round(appState.canvasLogicalSize.layoutPanelHeight)}`
-      })
-      assert.equal(await page.locator("#sidebar-layout-size").textContent(), dimensions)
+      assert.equal(await page.locator(".ui-sidebar-summary").count(), 0, "overview omits the sidebar footer")
       await page.locator(".sidebar").screenshot({ path: "/tmp/keyskin-sidebar-reference.png" })
       await page.evaluate(async () => (await import("/src/app/source-files.ts")).setSidebarView("source"))
-      assert.equal(await summary.isVisible(), false, "source view hides the overview summary")
+      assert.equal(await page.locator(".raw-files").isVisible(), true)
       await page.evaluate(async () => (await import("/src/app/source-files.ts")).setSidebarView("overview"))
       await checkSkinCard(page, "BDS")
       assert.equal(await page.locator(".skin-card-preview.ui-empty").count(), 1, "missing preview retains a compact placeholder")
@@ -194,16 +178,7 @@ try {
     await rows.last().click()
     if (width < 760) await page.locator('#mobile-project-toggle').click()
     assert.equal(await rows.last().getAttribute("aria-current"), "true")
-    assert.equal(await page.locator("#sidebar-layout-size").textContent(), await page.evaluate(async () => {
-      const { appState } = await import("/src/app/state.ts")
-      return `${Math.round(appState.canvasLogicalSize.width)} × ${Math.round(appState.canvasLogicalSize.layoutPanelHeight)}`
-    }), "summary follows the newly selected layout")
-    const summaryFits = await page.locator(".ui-sidebar-summary").evaluate(node => {
-      const bounds = node.getBoundingClientRect()
-      const sidebar = node.closest(".sidebar").getBoundingClientRect()
-      return bounds.top >= sidebar.top && bounds.bottom <= sidebar.bottom && node.scrollWidth <= node.clientWidth
-    })
-    assert.ok(summaryFits, "summary stays inside the sidebar without overflow")
+    assert.equal(await page.locator(".ui-sidebar-summary").count(), 0, "selecting a layout does not add a sidebar footer")
     assert.equal(await rows.last().isVisible(), true)
     assert.equal(await page.locator(".mobile-overview-groups").count(), 0)
     assert.equal(await page.locator(".skin-card-info").isVisible(), true)
