@@ -21,16 +21,13 @@
 .resource-workspace:not(.atlas-workspace) #resource-list-title { grid-column: 1; grid-row: 1; font-size: var(--font-size-xl); }
 .resource-workspace:not(.atlas-workspace) #resource-count { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-page-description { display: block; grid-column: 1; grid-row: 2; margin: 0; }
-.resource-workspace:not(.atlas-workspace) #resource-create-style { display: inline-flex; grid-column: 2; grid-row: 1 / 3; align-self: center; }
-.resource-workspace:not(.atlas-workspace) #resource-create-style[hidden] { display: none; }
-.resource-workspace:not(.atlas-workspace) #resource-upload { display: none; }
-.resource-workspace:not(.atlas-workspace) #resource-list-view:has(#resource-catalog[aria-label="字体"]:not([hidden])) #resource-upload:not([hidden]) { display: inline-flex; }
+.resource-workspace:not(.atlas-workspace) #resource-page-heading > :is(#resource-create-style, #resource-upload):not([hidden]) { display: inline-flex; grid-column: 2; grid-row: 1 / 3; align-self: center; }
+.resource-workspace:not(.atlas-workspace) .resource-actions > #resource-upload { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-sort-field { display: inline-flex; }
 .resource-workspace:not(.atlas-workspace) .resource-filters > .ui-search { flex-basis: calc(3 * var(--space-2xl)); }
 .resource-workspace:not(.atlas-workspace) .resource-filters .ui-style-filters { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-list-view > .resource-filters { grid-column: 1 / -1; grid-row: 2; align-self: start; padding: 0; min-width: 0; }
 .resource-workspace:not(.atlas-workspace) #resource-list-view > .resource-actions { grid-column: 2; grid-row: 2; align-self: start; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); width: auto; height: auto; margin: 0; padding: 0; background: transparent; }
-.resource-workspace #resource-list-view:has(#resource-catalog[aria-label="字体"]:not([hidden])) > .resource-filters { grid-column: 1; }
 .resource-workspace:not(.atlas-workspace) #resource-gallery { grid-column: 1 / -1; grid-row: 3; align-self: stretch; padding: 0; gap: var(--space-md); }
 .resource-workspace:not(.atlas-workspace) #resource-list-view:has(#resource-catalog[aria-label="全部资源"]:not([hidden])) .resource-actions { display: none; }
 .resource-workspace #resource-gallery[hidden] { display: none; }
@@ -38,7 +35,7 @@
   .resource-workspace:not(.atlas-workspace) #resource-list-view { padding: var(--space-lg); }
   .resource-workspace:not(.atlas-workspace) .resource-filter-options .ui-select { padding-inline: var(--space-xs); }
   .resource-workspace:not(.atlas-workspace) #resource-page-heading { grid-template-columns: minmax(0, 1fr) auto; }
-  .resource-workspace:not(.atlas-workspace) #resource-create-style { grid-row: 3; grid-column: 1; justify-self: start; }
+  .resource-workspace:not(.atlas-workspace) #resource-page-heading > :is(#resource-create-style, #resource-upload):not([hidden]) { grid-row: 3; grid-column: 1; justify-self: start; }
 }
 .resource-workspace .ui-sound-library > .ui-list-toolbar { display: none; }
 .resource-workspace:not(.atlas-workspace) #resource-detail:has(#sound-resource-detail:not([hidden])) > .resource-detail-heading,

@@ -92,10 +92,19 @@ function resourceFonts(): string[] {
 }
 
 /** 分类数量来自当前资源范围，引用统计复用删除保护的跨布局索引。 */
-export function updateResourcePage(title: string, count: number): void {
+export function updateResourcePage(title: string, count: number, fontCatalog = false): void {
   appState.resourceCatalog = ""
-  resourceListView.querySelector(".resource-actions")!.prepend(resourceUploadButton)
-  $(document.body.classList.contains("resource-workspace") || mobilePortraitQuery.matches ? "#resource-page-heading" : ".resource-actions").append(resourceDownloadButton)
+  const heading = $("#resource-page-heading")
+  const actions = $(".resource-actions")
+  if (fontCatalog) heading.append(resourceUploadButton)
+  else actions.prepend(resourceUploadButton)
+  const downloadHost = fontCatalog || document.body.classList.contains("resource-workspace") || mobilePortraitQuery.matches ? heading : actions
+  downloadHost.append(resourceDownloadButton)
+  if (fontCatalog !== (resourceUploadButton.dataset.variant === "primary")) {
+    if (fontCatalog) resourceUploadButton.dataset.variant = "primary"
+    else delete resourceUploadButton.dataset.variant
+    resourceUploadButton.firstElementChild!.replaceChildren(createIcon(fontCatalog ? "plus" : "upload"))
+  }
   $("#resource-catalog").hidden = true
   resourceGallery.hidden = false
   const archive = appState.archive
@@ -151,7 +160,7 @@ function renderCatalog(): void {
   if (!archive || !appState.resourceCatalog) return
   clearResourceWindow()
   const catalog = appState.resourceCatalog
-  updateResourcePage(catalog === "font" ? "字体" : "全部资源", 0)
+  updateResourcePage(catalog === "font" ? "字体" : "全部资源", 0, catalog === "font")
   appState.resourceCatalog = catalog
   resourceListView.hidden = false
   const styleFilters = resourceListView.querySelector<HTMLElement>(".ui-style-filter-bar")
@@ -178,7 +187,6 @@ function renderCatalog(): void {
   resourceCount.textContent = String(visible.length)
   setText("#resource-page-description", `${entries.length.toLocaleString()} 项${query ? ` · 筛出 ${visible.length.toLocaleString()} 项` : ""}`)
   $<HTMLButtonElement>("#resource-create-style").hidden = true
-  $(mobilePortraitQuery.matches ? "#resource-page-heading" : ".resource-filters").append(resourceUploadButton, resourceDownloadButton)
   resourceSelectionActions.querySelector<HTMLElement>(".ui-list-toolbar")!.hidden = true
   resourceUploadButton.hidden = catalog !== "font"
   resourceUploadButton.disabled = !canEditFonts

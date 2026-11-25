@@ -112,7 +112,11 @@ try {
       assert.equal(await cards.count(), 1)
 
       await switchSkinMode("dark")
-      await page.locator("#resource-upload-input").setInputFiles({ name: "Added.ttf", mimeType: "font/ttf", buffer: lightFont })
+      const [fontChooser] = await Promise.all([
+        page.waitForEvent("filechooser"),
+        page.locator("#resource-upload").click(),
+      ])
+      await fontChooser.setFiles({ name: "Added.ttf", mimeType: "font/ttf", buffer: lightFont })
       await finish()
       state = await snapshot()
       assert.ok(state.fonts.includes("dark/skin/res/Added.ttf"))
@@ -169,10 +173,24 @@ try {
       assert.match(state.dark, /FONT_PATH=Inspector.ttf/)
       await undo()
       assert.deepEqual(await snapshot(), before)
+      const titleActions = uploadID => page.locator("#resource-page-heading").evaluate((heading, uploadID) => {
+        const origin = heading.getBoundingClientRect()
+        return [uploadID, "resource-download"].map(id => {
+          const button = heading.querySelector(`#${id}`)
+          const box = button.getBoundingClientRect()
+          const { backgroundColor, borderRadius, color } = getComputedStyle(button)
+          return [[box.x - origin.x, box.y - origin.y, box.width, box.height].map(Math.round),
+            backgroundColor, borderRadius, color, button.querySelector("svg").innerHTML]
+        })
+      }, uploadID)
       for (const colorScheme of ["light", "dark"]) {
         await page.emulateMedia({ colorScheme })
         for (const width of [1600, 812]) {
           await page.setViewportSize({ width, height: 1000 })
+          await page.locator('[data-resource-page="image"]').click()
+          const imageActions = await titleActions("resource-create-style")
+          await page.locator('[data-resource-catalog="font"]').click()
+          assert.deepEqual(await titleActions("resource-upload"), imageActions, "font and image actions share heading placement and styling")
           await cards.first().click()
           await page.waitForFunction(() => document.querySelector('#style-detail-fields canvas[data-size="lg"]')?.dataset.fontFamily)
           assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false)
