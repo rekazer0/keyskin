@@ -4,6 +4,7 @@ import { chromium } from "playwright"
 import { createServer } from "vite"
 import { mobilePenFixture } from "../tests/helpers/mobile-pen-fixture.mjs"
 import { ssfFixture, wav } from "../tests/helpers/ssf-fixture.mjs"
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import { SkinArchive } from "../src/skin.ts"
 import { buildSxiZip } from "../src/palm/palm-export.ts"
 
@@ -32,6 +33,7 @@ try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, reducedMotion: "reduce", deviceScaleFactor: 2 })
     page.on("pageerror", error => errors.push(`${format}: ${error.message}`))
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+    await dismissStartupDisclaimer(page)
     await page.locator("#browser-open").setInputFiles({ name: `检查器.${format}`, mimeType: "application/octet-stream", buffer: Buffer.from(bytes) })
     await page.waitForFunction(() => !document.querySelector("#open").disabled && (!document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled))
     if (await page.locator("#file-operation-dialog[open]").count()) await page.locator("#file-operation-close").click()
@@ -46,7 +48,11 @@ try {
       preview.setSelected([key.section])
       for (const name of ["first.wav", "second.wav"]) appState.archive.setBytes(`light/skin/res/${name}`, Uint8Array.from(sound))
       ;(await import("/src/app/key-inspector.ts")).populateKeyInspector()
+      ;(await import("/src/app/preview-render.ts")).setGuidesVisible(true)
+      await preview.whenDrawn()
     }, { path, format, sound: [...wav()] })
+    assert.ok(await page.locator('.preview-guides:not([hidden]) g.selected').count(), 'selected key keeps its guide outline')
+    assert.equal(await page.locator('.ui-measurements').count(), 0, 'canvas does not show width and height buttons')
     const geometry = page.locator('#quick-inspector .ui-geometry-preview').filter({ visible: true }).first()
     await geometry.scrollIntoViewIfNeeded()
     const before = await snapshot(page)
@@ -96,8 +102,13 @@ try {
     await geometry.scrollIntoViewIfNeeded()
     await page.screenshot({ path: `${output}${format}-desktop.png` })
     await page.setViewportSize({ width: 390, height: 844 })
+    await page.evaluate(async () => {
+      ;(await import("/src/app/mobile-layout.ts")).setMobilePane("inspector")
+      ;(await import("/src/app/mobile-inspector.ts")).resizeMobileInspector(50)
+    })
     if (await page.locator('.mobile-geometry-detail > summary').isVisible()) await page.locator('.mobile-geometry-detail > summary').click()
     await geometry.scrollIntoViewIfNeeded()
+    assert.equal(await page.locator('.ui-measurements').count(), 0, 'mobile canvas does not show width and height buttons')
     assert.equal(await geometry.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
     await page.screenshot({ path: `${output}${format}-mobile.png` })
     await page.close()

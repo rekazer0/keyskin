@@ -266,7 +266,6 @@ export function populateKeyInspector(): void {
   // Native properties have their own inspectors; SSF also shows the skeleton's resolved gestures.
   const ssfSelected = appState.archive?.format === "ssf"
   const sxiSelected = appState.archive?.format === "sxi"
-  preview.measurementEditable = !bdaSelected && !ssfSelected
   const nativeSelected = ssfSelected || sxiSelected
   const candidateSelected = Boolean(bdaSelected && appState.selectedCandidate && appState.selectedPath === appState.layoutPath)
   skinFieldsGroup.hidden = !skinSelected || bdaSelected || sxiSelected

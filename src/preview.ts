@@ -110,9 +110,6 @@ export class Preview {
   selectionAnchor?: string
   guides = false
   guidesOverlay?: SVGSVGElement
-  measurements?: HTMLElement
-  measurementEditable = true
-  onMeasure?: (section: string, dimension: "width" | "height") => void
   skinState?: number
   private persistentOnly = false
   animation?: BdaAnimation
@@ -237,7 +234,6 @@ export class Preview {
     this.clearPress()
     this.cancelEditTouch()
     this.guidesOverlay?.remove()
-    this.measurements?.remove()
   }
 
   setMode(mode: "edit" | "preview"): void {

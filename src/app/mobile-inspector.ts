@@ -1,5 +1,4 @@
 import { iconButton } from "../dom-element"
-import { requestEditMode, setMobilePane, setMobileInspectorGroup } from "./mobile-layout"
 import { mobilePortraitQuery, preview } from "./canvas-interaction"
 import { appState } from "./state"
 import { mobileInspectorResize, quickInspector, inspectorPane } from "./dom"
@@ -34,22 +33,6 @@ export function resizeMobileInspector(value: number): void {
 
 export function wireMobileInspector(): void {
   wireGestureRecording(quickInspector)
-  preview.onMeasure = (_section, dimension) => {
-    if (mobilePortraitQuery.matches) {
-      setMobilePane("inspector")
-      if (document.documentElement.dataset.mobilePanel === "peek") resizeMobileInspector(50)
-    }
-    const input = appState.archive?.format === "sxi"
-      ? quickInspector.querySelectorAll<HTMLInputElement>('[data-document-key="rect.size"] input[type="number"]')[dimension === "width" ? 0 : 1]
-      : quickInspector.querySelector<HTMLInputElement>(`[data-key-field="${dimension}"]`)
-    if (!input) return
-    if (input.disabled) { requestEditMode(); return }
-    const group = input.closest<HTMLElement>(".mobile-inspector-managed")
-    if (group?.dataset.mobileInspectorGroup) setMobileInspectorGroup(group.dataset.mobileInspectorGroup)
-    input.scrollIntoView({ block: "nearest" })
-    input.focus({ preventScroll: true })
-    input.select()
-  }
   const root = document.documentElement
   const header = inspectorPane.querySelector<HTMLElement>(".key-inspector-title")!
   const selectableKeys = () => [...new Set(visiblePreviewItems(preview.keys, preview.skinState)

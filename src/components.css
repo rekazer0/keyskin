@@ -1120,18 +1120,6 @@ body {
 :where(.resource-gallery) :is(.ui-style-card > .ui-style-card-caption, .ui-image-card-caption) { padding: var(--space-sm); }
 :where(.resource-gallery) :is(.ui-style-card > .ui-style-preview, .ui-style-card .ui-animation-stage, .ui-image-card-preview) { border-radius: 0; }
 :where(.resource-gallery) .ui-image-card-preview { border: 0; }
-.ui-measurements {
-  position: absolute;
-  inset-inline: var(--space-xs);
-  bottom: var(--space-xs);
-  z-index: 3;
-  display: flex;
-  justify-content: center;
-  gap: var(--space-xs);
-  pointer-events: none;
-}
-.ui-measurements[hidden] { display: none; }
-.ui-measurements > .ui-button { pointer-events: auto; background: var(--panel); font-family: var(--font-mono); }
 
 /* 手机底部导航复用原工作区、AI 面板与设置窗口。 */
 .ui-mobile-navigation { display: none; }

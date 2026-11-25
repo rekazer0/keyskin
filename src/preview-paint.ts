@@ -1,5 +1,4 @@
 import type { Preview } from "./preview.ts"
-import { drawMeasurements } from "./preview-measurements.ts"
 import { legacyParticleFrames } from "./preview-animation.ts"
 import { drawSprite, withMotion, type SceneSprite } from "./native-motion.ts"
 import { scheduleNativeFrame } from "./preview-native.ts"
@@ -577,7 +576,6 @@ function strokeSelection(self: Preview, context: CanvasRenderingContext2D, key: 
 }
 
 function drawGuides(self: Preview, keys: readonly PreviewItem[]): void {
-  drawMeasurements(self)
   if (!self.guides) {
     self.guidesOverlay?.toggleAttribute("hidden", true)
     return

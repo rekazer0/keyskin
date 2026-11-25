@@ -197,7 +197,6 @@
 | 搜索框 | `.ui-search` | `.ui-input` + 放大镜前缀 + 有内容时出现的清除按钮；Esc 分层见 §7；`searchField()` 生成，传 `input` 时接管 HTML 里写好的 `label.ui-search` |
 | 空状态 | `.ui-empty` | 居中 `--icon-size-lg` 图标 + 可选一行 xs / `--tertiary` 短字 + 可选按钮，能只放图标就只放图标；文字不写在 CSS `content` 里；`emptyState()` 生成；加载中设 `aria-busy="true"` 显示骨架扫光 |
 | 棋盘格 | `.ui-checker` | 透明区域的唯一棋盘格：缩略图 `--checker-size-sm`（12px），`data-size="lg"` 与画布、动画舞台用 `--checker-size`（24px）；不再手写 `repeating-conic-gradient` |
-| 尺寸标注 | `.ui-measurements` | 辅助线开启且单选按键时，在画布底部显示真实宽高按钮；点击定位同一份属性字段，原生格式不支持编辑几何时只读 |
 | 新手引导 | `.ui-tour` | 由 `src/tour.ts` 的 `runTour()` 生成：遮罩挖空高亮目标，旁边是说明卡片；要求点击的步骤（`data-action`）允许点穿挖空处 |
 | 列表框 | `.ui-listbox` | 可滚动的单选列表（`role="listbox"`），行用 `.ui-list-item`（`role="option"` + `aria-selected`）；方向键、Home、End 切换；约 7 行高，超出在框内滚动；`data-size="fill"` 占满所在的栏（左侧栏的动画列表） |
 | 动画播放器 | `.ui-animation-player` / `.ui-animation-controls` / `.ui-animation-handle` / `.ui-animation-curve` | 舞台与时间轴使用同一份真实采样；时间轴、走带与说明合为 `.ui-animation-controls`，横排时整组在舞台旁边纵向居中；桌面动画工作区的走带在右侧轨道下方水平居中。BDI/BDS 编辑模式可拖缩放、位移、角度、粒子方向/速度及单程时长，方向键等价、Shift 加速、Esc 取消；松开一次提交一步撤销。优先显示当前布局的真实按键，按背景/前景绑定分层运动。播放头、播放/暂停、循环、慢放不写文件；未知粒子区域不画成已校准矩形。停靠时间轴不显示曲线；INTPOL 在检查器编辑。 |
