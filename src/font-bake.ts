@@ -12,6 +12,7 @@ export const BAKED_IMAGE = "keyskin_font"
 
 const TEXT_KEYS = ["SHOW", "FONT_SIZE", "FONT_NAME", "FONT_PATH", "FONT_WEIGHT", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR", "BORDER_COLOR", "BORDER_SIZE"]
 const BAKED_PREFIX = "BAKED_"
+const IMAGE_KEYS = ["NM_IMG", "HL_IMG"]
 const TILE_GAP = 2
 const ATLAS_WIDTH = 1024
 
@@ -43,9 +44,15 @@ function bakedFields(document: IniDocument, section: string): Record<string, str
     key.startsWith(BAKED_PREFIX) ? [[key.slice(BAKED_PREFIX.length), value]] : []))
 }
 
+const isBakedImage = (value: string | undefined): boolean => value?.split(",")[0]?.trim() === BAKED_IMAGE
+
+export function usesBakedFontImage(css: string): boolean {
+  return IniDocument.parse(css).entries().some(({ key, value }) => key.includes("IMG") && isBakedImage(value))
+}
+
 /**
  * 需要烘焙的样式：按键前景引用、写了 SHOW、自己没有图片的文字样式；
- * 之前烘焙过的样式（带 BAKED_SHOW）不论是否仍被引用都重新烘焙，换字体后不会留下旧字形。
+ * 之前烘焙过的状态只在仍引用字体图集时重新切片，不覆盖后来替换或清除的图片。
  */
 export function bakeableStyles(css: string, foregroundIDs: ReadonlySet<string>): BakeStyle[] {
   const document = IniDocument.parse(css)
@@ -55,7 +62,7 @@ export function bakeableStyles(css: string, foregroundIDs: ReadonlySet<string>):
     if (!id) continue
     const baked = bakedFields(document, section)
     if (baked.SHOW?.trim()) {
-      styles.push({ id, fields: baked, baked: true })
+      if (IMAGE_KEYS.some((key) => isBakedImage(document.get(section, key)))) styles.push({ id, fields: baked, baked: true })
       continue
     }
     const show = document.get(section, "SHOW")?.trim()
@@ -101,6 +108,7 @@ export function withBakedStyles(css: string, tiles: ReadonlyArray<{ id: string; 
   for (const { id, normal, highlight } of tiles) {
     const section = `STYLE${id}`
     const fields = { ...bakedFields(document, section) }
+    const rebaking = Boolean(fields.SHOW?.trim())
     for (const key of TEXT_KEYS) {
       const value = document.get(section, key)
       if (value === undefined) continue
@@ -108,27 +116,28 @@ export function withBakedStyles(css: string, tiles: ReadonlyArray<{ id: string; 
       document.remove(section, key)
     }
     for (const [key, value] of Object.entries(fields)) document.set(section, `${BAKED_PREFIX}${key}`, value)
-    document.set(section, "NM_IMG", `${BAKED_IMAGE},${normal}`)
-    document.set(section, "HL_IMG", `${BAKED_IMAGE},${highlight}`)
+    const tileNumbers = [normal, highlight]
+    for (const [index, key] of IMAGE_KEYS.entries()) {
+      if (!rebaking || isBakedImage(document.get(section, key))) document.set(section, key, `${BAKED_IMAGE},${tileNumbers[index]}`)
+    }
   }
   return document.toString()
 }
 
-/** 移除烘焙：BAKED_* 改回原字段，去掉指向烘焙图集的 NM_IMG / HL_IMG。没有烘焙过返回 undefined。 */
+/** 仅还原两态都未改动的字体切片；文字字段无法只还原其中一态。 */
 export function withoutBakedStyles(css: string): string | undefined {
+  if (!/^\s*BAKED_SHOW\s*=/m.test(css)) return undefined
   const document = IniDocument.parse(css)
   let changed = false
   for (const section of document.sections()) {
     const fields = bakedFields(document, section)
-    if (!Object.keys(fields).length) continue
+    if (!fields.SHOW?.trim() || !IMAGE_KEYS.every((key) => isBakedImage(document.get(section, key)))) continue
     changed = true
     for (const [key, value] of Object.entries(fields)) {
       document.remove(section, `${BAKED_PREFIX}${key}`)
       document.set(section, key, value)
     }
-    for (const key of ["NM_IMG", "HL_IMG"]) {
-      if (document.get(section, key)?.split(",")[0]?.trim() === BAKED_IMAGE) document.remove(section, key)
-    }
+    for (const key of IMAGE_KEYS) document.remove(section, key)
   }
   return changed ? document.toString() : undefined
 }

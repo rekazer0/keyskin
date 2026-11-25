@@ -11,6 +11,7 @@ import {
   keyForegroundStyleIDs,
   layoutsUsingStyle,
   packTiles,
+  usesBakedFontImage,
   withBakedStyles,
   withoutBakedStyles,
 } from "../font-bake.ts"
@@ -117,14 +118,14 @@ export async function bakeExportedFonts(archive: SkinArchive): Promise<void> {
   }
 }
 
-/** 皮肤里是否有导出时切过的字体图片。 */
-function hasBakedFonts(archive: SkinArchive): boolean {
-  return skinStylePaths(archive.names()).some((path) => /^BAKED_SHOW\s*=/m.test(archive.getText(path)))
-}
-
 /** 打开带字体切片的皮肤时询问是否还原成可编辑的文字；还原记为未保存的修改，保存时按当时的字体重新切片。 */
 export async function offerBakedFontRestore(archive: SkinArchive): Promise<void> {
-  if (archive.format !== "bds" && archive.format !== "bdi" || !hasBakedFonts(archive)) return
+  if (archive.format !== "bds" && archive.format !== "bdi") return
+  const restores = skinStylePaths(archive.names()).flatMap((path) => {
+    const text = withoutBakedStyles(archive.getText(path))
+    return text === undefined ? [] : [{ path, text }]
+  })
+  if (!restores.length) return
   const choice = await ask({
     title: "还原按键文字？",
     detail: `这个皮肤的按键文字是导出时切成的图片。还原后可以直接修改文字、字号、颜色和文字阴影，导出 ${archive.format.toUpperCase()} 时会重新切片。`,
@@ -134,11 +135,11 @@ export async function offerBakedFontRestore(archive: SkinArchive): Promise<void>
     ],
   })
   if (choice !== "restore") return
-  for (const path of skinStylePaths(archive.names())) {
-    const restored = withoutBakedStyles(archive.getText(path))
-    if (restored === undefined) continue
-    archive.setText(path, restored)
-    archive.delete(`${bakedImageBase(path)}.png`)
-    archive.delete(`${bakedImageBase(path)}.til`)
+  for (const { path, text } of restores) {
+    archive.setText(path, text)
+    if (!usesBakedFontImage(text)) {
+      archive.delete(`${bakedImageBase(path)}.png`)
+      archive.delete(`${bakedImageBase(path)}.til`)
+    }
   }
 }

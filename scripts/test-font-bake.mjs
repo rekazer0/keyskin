@@ -138,6 +138,58 @@ try {
       }
     }
   }
+
+  // Re-export a BDS after changing the normal image of one baked layer and both states of another.
+  const custom = await page.evaluate(async (bytes) => {
+    const { SkinArchive } = await import('/src/skin.ts')
+    const { IniDocument } = await import('/src/ini.ts')
+    const { appState } = await import('/src/app/state.ts')
+    const { exportArchive } = await import('/src/app/archive-io.ts')
+    const { bakeExportedFonts } = await import('/src/app/font-bake-export.ts')
+    const dir = 'light/skin/res/'
+    const cssPath = `${dir}default.css`
+    const layoutPath = 'light/skin/port/py_26.ini'
+    const archive = SkinArchive.open(new Uint8Array(bytes), 'bds')
+    archive.setText(layoutPath, '[KEY1]\nFORE_STYLE=900,901,902\n')
+    archive.setText(cssPath, [900, 901, 902].map(id => `[STYLE${id}]\nSHOW=${id}\nFONT_WEIGHT=700\n`).join(''))
+    await bakeExportedFonts(archive)
+    const source = IniDocument.parse(archive.getText(cssPath))
+    source.set('STYLE900', 'NM_IMG', 'btn,1')
+    source.set('STYLE901', 'NM_IMG', 'bg,0')
+    source.set('STYLE901', 'HL_IMG', 'btn,0')
+    archive.setText(cssPath, source.toString())
+    appState.archive = archive
+    const result = await exportArchive('bds')
+    document.querySelector('#file-operation-dialog').close()
+    const output = window.fontBakeArchive = SkinArchive.open(result.bytes, 'bds')
+    const css = IniDocument.parse(output.getText(cssPath))
+    const pressed = css.get('STYLE900', 'HL_IMG')
+    return {
+      layers: IniDocument.parse(output.getText(layoutPath)).get('KEY1', 'FORE_STYLE'),
+      images: ['STYLE900', 'STYLE901'].map(section => ['NM_IMG', 'HL_IMG'].map(key => css.get(section, key))),
+      hasImages: ['btn', 'bg', 'keyskin_font'].every(name => ['png', 'til'].every(ext => output.getBytes(`${dir}${name}.${ext}`))),
+      hasPressedTile: IniDocument.parse(output.getText(`${dir}keyskin_font.til`)).hasSection(`IMG${pressed.split(',')[1]}`),
+    }
+  }, [...bdsFixture()])
+  assert.equal(custom.layers, '900,901,902')
+  assert.equal(custom.hasImages, true)
+  assert.equal(custom.hasPressedTile, true)
+  assert.equal(custom.images[0][0], 'btn,1')
+  assert.match(custom.images[0][1], /^keyskin_font,\d+$/)
+  assert.deepEqual(custom.images[1], ['bg,0', 'btn,0'])
+
+  await page.evaluate(() => {
+    window.restoreDone = import('/src/app/font-bake-export.ts').then(({ offerBakedFontRestore }) => offerBakedFontRestore(window.fontBakeArchive))
+  })
+  await page.getByRole('button', { name: '还原文字', exact: true }).click()
+  await page.evaluate(() => window.restoreDone)
+  const restored = await page.evaluate(() => ({
+    css: window.fontBakeArchive.getText('light/skin/res/default.css'),
+    hasAtlas: Boolean(window.fontBakeArchive.getBytes('light/skin/res/keyskin_font.png') && window.fontBakeArchive.getBytes('light/skin/res/keyskin_font.til')),
+  }))
+  assert.match(restored.css, /\[STYLE902\]\s+SHOW=902/)
+  assert.match(restored.css, /\[STYLE900\][^[]*NM_IMG=btn,1/)
+  assert.equal(restored.hasAtlas, true, 'a state still uses the font atlas')
 } finally {
   await browser.close()
   await server.close()

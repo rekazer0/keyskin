@@ -78,6 +78,25 @@ test('baked styles are baked again with a new font, even when no longer referenc
   assert.equal(rebaked.get('STYLE1', 'NM_IMG'), `${BAKED_IMAGE},3`)
 })
 
+test('rebaking updates only states that still use an automatic font tile', () => {
+  const baked = withBakedStyles(css, [{ id: '1', normal: 1, highlight: 2 }])
+  const custom = baked.replace('NM_IMG=keyskin_font,1', 'NM_IMG=50031,1')
+  assert.equal(bakeableStyles(custom, new Set(['1']))[0]?.baked, true)
+  const rebaked = IniDocument.parse(withBakedStyles(custom, [{ id: '1', normal: 3, highlight: 4 }]))
+  assert.equal(rebaked.get('STYLE1', 'NM_IMG'), '50031,1')
+  assert.equal(rebaked.get('STYLE1', 'HL_IMG'), 'keyskin_font,4')
+  assert.equal(withoutBakedStyles(custom), undefined, 'restoring other labels must leave this customized style alone')
+
+  const fullyCustom = custom.replace('HL_IMG=keyskin_font,2', 'HL_IMG=50031,2')
+  assert.deepEqual(bakeableStyles(fullyCustom, new Set(['1'])), [])
+  assert.equal(withoutBakedStyles(fullyCustom), undefined)
+
+  const cleared = IniDocument.parse(baked)
+  cleared.remove('STYLE1', 'NM_IMG')
+  const afterClear = IniDocument.parse(withBakedStyles(cleared.toString(), [{ id: '1', normal: 3, highlight: 4 }]))
+  assert.equal(afterClear.get('STYLE1', 'NM_IMG'), undefined)
+})
+
 test('removing the bake restores the original style', () => {
   const baked = withBakedStyles(css, [{ id: '1', normal: 1, highlight: 2 }, { id: '5', normal: 3, highlight: 3 }])
   const restored = IniDocument.parse(withoutBakedStyles(baked))
