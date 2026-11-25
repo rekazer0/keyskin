@@ -367,6 +367,11 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
   return { ...result, bytes: await archive.toBytesAsync(format) }
 }
 
+const convertBdaArchive = (...args: Parameters<typeof import("../bda-convert.ts").convertBdaArchive>) =>
+  import("../bda-convert.ts").then((mod) => mod.convertBdaArchive(...args))
+const buildSxiZipAsync = (...args: Parameters<typeof import("../palm/palm-export.ts").buildSxiZipAsync>) =>
+  import("../palm/palm-export.ts").then((mod) => mod.buildSxiZipAsync(...args))
+
 async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<PackagedResult> {
   if (!appState.archive) throw new Error("当前没有可保存的皮肤")
   if (appState.aiDraftPreview) throw new Error("请先应用或丢弃 AI 修改草稿")
@@ -392,8 +397,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     if (appState.archive.format === "bda") {
       if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
       await report(0.45, "正在转换 BDA 配置…")
-      const { convertBdaArchive } = await import("../bda-convert.ts")
-      const converted = convertBdaArchive(appState.archive, appState.bdaBase)
+      const converted = await convertBdaArchive(appState.archive, appState.bdaBase)
       source = converted.archive
       warnings.push(...converted.warnings)
     }
@@ -401,7 +405,6 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     // 打包流程本身每隔几毫秒让出主线程，进度更新不必再等两帧，否则大皮肤会多等一两秒。
     const start = source === appState.archive ? 0.2 : 0.45
     const update = percentProgress(22, 78, "正在导出手心皮肤…")
-    const { buildSxiZipAsync } = await import("../palm/palm-export.ts")
     const result = await buildSxiZipAsync(source, async (fraction, detail) => update(start + fraction * (1 - start), detail))
     return { bytes: result.bytes, converted: true, warnings: [...warnings, ...result.warnings] }
   }
@@ -463,8 +466,7 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
   const report = conversionProgress(22, 80, "正在转换 BDA 配置…")
   await report(0.2)
-  const { convertBdaArchive } = await import("../bda-convert.ts")
-  const result = convertBdaArchive(appState.archive, appState.bdaBase, format)
+  const result = await convertBdaArchive(appState.archive, appState.bdaBase, format)
   await report(0.6, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
   const soundWarnings: string[] = []
   const bytes = await result.archive.platformBytesAsync(format, soundWarnings)
