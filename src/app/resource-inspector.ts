@@ -713,12 +713,14 @@ export function updateResourceActionButtons(): void {
   syncAtlasWorkspace()
 }
 
-export async function prepareResourceImage(file: File): Promise<Extract<Change, { kind: "bytes" }> & { after: Uint8Array }> {
+export async function prepareResourceImage(file: File, path?: string): Promise<Extract<Change, { kind: "bytes" }> & { after: Uint8Array }> {
   const archive = appState.archive!
   const filename = file.name.split(/[\\/]/).pop() ?? ""
   if (!/^[^\u0000-\u001f]+\.png$/i.test(filename)) throw new Error("请选择 PNG 图片")
-  const base = pickableImagePaths()[0]?.split("/").slice(0, -1).join("/") ?? `${theme.value}/skin/res`
-  const path = `${base}/${filename}`
+  if (path === undefined) {
+    const base = pickableImagePaths()[0]?.split("/").slice(0, -1).join("/") ?? `${theme.value}/skin/res`
+    path = `${base}/${filename}`
+  }
   const bytes = new Uint8Array(await file.arrayBuffer())
   if (bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71) throw new Error("图片不是有效的 PNG 文件")
   const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }))

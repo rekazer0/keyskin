@@ -1,11 +1,11 @@
 import { appState } from "./state"
 import { isBdaVirtualTextPath, isBdaAppearancePartPath, bdaBasePath } from "./bda-documents"
-import { symbolSpan } from "../icons"
-import { layout, files, theme, orientation, documentName } from "./dom"
+import { createIcon, symbolSpan } from "../icons"
+import { layout, files, theme, orientation, documentName, skinPreviewOpen } from "./dom"
 import { selectFile, overviewGroupState, currentNavigationMode } from "./navigation"
 import { isSsfBoardPath, ssfThemeFolder, SSF_SOUNDS_PATH } from "./ssf-documents"
 import { mobilePortraitQuery, sourceThumbnail } from "./canvas-interaction"
-import { setMobilePane } from "./mobile-layout"
+import { requestEditMode, setMobilePane } from "./mobile-layout"
 import { palmBoardLabel } from "../palm/palm-labels.ts"
 import { boardFileName } from "../palm/sxi-layout.ts"
 import { asObject } from "../palm/sxi-ini.ts"
@@ -17,13 +17,13 @@ import { toolbarConfigPath, legacyAnimationConfigPath } from "./config-context"
 import { firstExistingPath } from "../resources.ts"
 import { selectSourceRow, visibleSourceRows, isSourceMultiselect, filterSourceFiles, updateSourceFileActions, setSourceDropTarget, sourceDropFolder, commitSourceUploads, ensureSourcePathRendered, setSidebarView, setRowSelected } from "./source-files"
 import { isSoundPath, soundMimeType } from "../sounds.ts"
-import { isEditing } from "./edit-history"
+import { commitBytes, isEditing, updateDirty } from "./edit-history"
 import { runFileOperation } from "./file-operations"
 import { askToCreateAnimationConfig, canCreateAnimationConfig } from "./animation-resource"
 import { decorateLayoutGroup } from "./sidebar-layouts"
 import { releaseOnRemove } from "../dom-lifecycle"
 import { openResourceInventory } from "./resource-inventory"
-import { emptyState } from "../dom-element"
+import { prepareResourceImage } from "./resource-inspector"
 
 const layoutGroups = ["键盘布局", "数字与符号", "手写与语音", "手写与选择"]
 
@@ -88,6 +88,38 @@ function skinPreviewURL(bytes: Uint8Array): string {
     skinPreview = { bytes, url: URL.createObjectURL(new Blob([bytes as BlobPart])) }
   }
   return skinPreview.url
+}
+
+function addSkinPreviewUpload(card: HTMLElement, path: string): void {
+  const archive = appState.archive
+  const button = document.createElement("button")
+  button.type = "button"
+  button.className = "ui-list-item ui-empty skin-card-preview"
+  button.title = "上传效果预览图"
+  button.setAttribute("aria-label", button.title)
+  button.append(createIcon("plus", 20))
+  button.addEventListener("click", () => {
+    if (!isEditing()) return requestEditMode()
+    skinPreviewOpen.oncancel = () => { skinPreviewOpen.onchange = null }
+    skinPreviewOpen.onchange = () => {
+      skinPreviewOpen.onchange = null
+      const file = skinPreviewOpen.files?.[0]
+      skinPreviewOpen.value = ""
+      if (!file || appState.archive !== archive || !isEditing()) return
+      void runFileOperation("上传效果预览图", async () => {
+        const { after } = await prepareResourceImage(file, path)
+        if (appState.archive !== archive || !isEditing() || archive?.getBytes(path) !== undefined) return false
+        commitBytes(path, undefined, after)
+        const focused = document.activeElement === button
+        renderFiles()
+        if (focused) files.querySelector<HTMLButtonElement>(".skin-card-preview")?.focus({ preventScroll: true })
+        updateDirty()
+        return true
+      })
+    }
+    skinPreviewOpen.click()
+  })
+  card.prepend(button)
 }
 
 type NavEntry = {
@@ -225,16 +257,19 @@ export function renderFiles(): void {
     className: "nav-overview",
     icon: "info",
   })
-  // BDA 的 demo 在主题目录下，其他格式放在包根，手心 .sxi 用包根的 preview.png；条目只在文件存在时才显示。
-  const demoPath = ["preview.png", `${theme.value}/skin/demo.png`].find((path) => appState.archive?.getBytes(path) !== undefined) ?? "demo.png"
-  entries.push({ group: appState.archive.format === "bda" ? "皮肤信息" : "皮肤", label: "效果预览", path: demoPath, className: "nav-overview", icon: "image" })
+  const { format } = appState.archive
+  const themedDemo = `${theme.value}/skin/demo.png`
+  const defaultDemo = format === "bda" ? themedDemo : format === "sxi" ? "preview.png" : format === "ssf" ? "square_preview.png" : "demo.png"
+  const demoPath = [
+    ...(format === "ssf" ? ["square_preview.png", "candidate_preview.png"] : []),
+    "preview.png", themedDemo, "demo.png",
+  ].find((path) => appState.archive?.getBytes(path) !== undefined) ?? defaultDemo
+  entries.push({ group: format === "bda" ? "皮肤信息" : "皮肤", label: "效果预览", path: demoPath, className: "nav-overview", icon: "image" })
 
-  if (appState.archive.format === "ssf") {
+  if (format === "ssf") {
     const folder = ssfThemeFolder()
-    const preview = ["square_preview.png", "candidate_preview.png"].find((path) => appState.archive?.getBytes(path))
     entries.push(
       { group: "皮肤", label: "皮肤信息", path: "phoneTheme.ini", className: "nav-overview", icon: "info" },
-      ...preview ? [{ group: "皮肤", label: "效果预览", path: preview, className: "nav-overview", icon: "image" }] : [],
       { group: "资源配置", label: "外观切换", path: "time.ini", className: "nav-overview", icon: "sun" },
       { group: "资源配置", label: "按键前景", path: `${folder}keys.ini`, className: "nav-style", icon: "type" },
       { group: "资源配置", label: "按键动画", path: `${folder}anim.ini`, className: "nav-style", icon: "wand-sparkles" },
@@ -407,9 +442,7 @@ export function renderFiles(): void {
     button.title = `皮肤信息 · ${name}`
   }
   if (skinCard.childElementCount && !skinCard.querySelector(".skin-card-preview")) {
-    const preview = emptyState("keyboard")
-    preview.classList.add("skin-card-preview")
-    skinCard.prepend(preview)
+    addSkinPreviewUpload(skinCard, demoPath)
   }
   if (skinCard.childElementCount) overview.append(skinCard)
   const groups = appState.archive.format === "bda"

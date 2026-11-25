@@ -444,6 +444,7 @@ export const aiModelSettings = $(".ai-design-settings") as HTMLButtonElement
 
 export const browserOpen = $("#browser-open") as HTMLInputElement
 
+export const skinPreviewOpen = $("#skin-preview-open") as HTMLInputElement
 export const imageOpen = $("#image-open") as HTMLInputElement
 
 export const theme = $("#theme") as HTMLSelectElement
