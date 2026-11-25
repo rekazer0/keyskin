@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { declarations, run } from "./helpers/app-source.mjs"
+import { isSoundPath } from "../src/sounds.ts"
 import { isFontFile, sanitizeFontFileName } from "../src/font-files.ts"
 
 const png = Uint8Array.from([137, 80, 78, 71])
@@ -10,12 +11,12 @@ function uploadContext() {
   const archive = { format: "bds", getBytes: () => undefined }
   const context = run(declarations("uploadResourceFiles", "prepareResourceImage"), {
     archive, editing: true, Uint8Array, Blob, isFontFile, sanitizeFontFileName,
-    theme: { value: "light" }, orientation: { value: "port" },
+    theme: { value: "light" }, orientation: { value: "port" }, resourceSearch: { value: "" },
     isEditing: () => context.editing,
     currentSoundEntries: () => [], pickableImagePaths: () => ["light/skin/res/bg.png"],
-    createImageBitmap: async () => ({ close() {} }), isSoundPath: () => false,
+    createImageBitmap: async () => ({ close() {} }), isSoundPath,
     commitBatch: changes => commits.push(changes), keySoundBuffers: new Map(),
-    releaseKeySound() {}, openResources() {}, renderResourceInspector() {}, syncResourceSelection() {}, updateDirty() {}, showStatus() {},
+    releaseKeySound() {}, openResources(kind) { context.resourceInspectorMode = kind }, renderResourceInspector() {}, syncResourceSelection() {}, updateDirty() {}, showStatus() {},
     renderResourceCatalogSearch() {}, refreshPreview() {}, validateFont: async bytes => { if (bytes[0] !== 137) throw new Error("Invalid font") },
   })
   return { context, commits }
@@ -58,4 +59,20 @@ test("uploads cancel if the archive, mode or resource scope changes while readin
     assert.equal(await context.uploadResourceFiles([file("a.png"), delayed]), false)
     assert.equal(commits.length, 0)
   }
+})
+
+test("dropped resources are classified by extension, not the visible resource catalog", async () => {
+  const { context, commits } = uploadContext()
+  context.resourceCatalog = "font"
+  await assert.rejects(context.uploadResourceFiles([file("image.PNG"), file("notes.txt")], "drop"), /notes\.txt/)
+  assert.equal(commits.length, 0)
+  assert.equal(await context.uploadResourceFiles([file("image.PNG"), file("tap.WAV")], "drop"), true)
+  assert.deepEqual(Array.from(commits[0], change => change.path), ["light/skin/res/image.PNG", "light/skin/res/tap.WAV"])
+  assert.equal(context.resourceInspectorMode, "sound")
+  assert.deepEqual(Array.from(context.selectedResourceGalleryPaths), ["file:light/skin/res/tap.WAV"])
+
+  context.resourceCatalog = ""
+  assert.equal(await context.uploadResourceFiles([file("font.OTF")], "drop"), true)
+  assert.equal(context.resourceCatalog, "font")
+  assert.equal(context.selectedResourceCatalogItem, "light/skin/res/font.otf")
 })

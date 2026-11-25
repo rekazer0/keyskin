@@ -2,7 +2,7 @@ import { confirmDeletion } from "./ask"
 import { zipSync } from "fflate"
 import { isSoundPath, soundMimeType } from "../sounds"
 import { appState } from "./state"
-import { resourceListView, resourceInspector, workspacePane, resourceUploadInput, theme, orientation } from "./dom"
+import { resourceListView, resourceInspector, workspacePane, resourceUploadInput, resourceSearch, theme, orientation } from "./dom"
 import { currentSoundEntries, prepareResourceImage, renderResourceInspector } from "./resource-inspector"
 import { commitBatch, isEditing, updateDirty } from "./edit-history"
 import { isTauri, keySoundBuffers, releaseKeySound } from "./canvas-interaction"
@@ -58,7 +58,7 @@ export function startResourceDrag(event: DragEvent): void {
 }
 
 /** 拖入与文件选择共用：全部校验成功后只记一步撤销。 */
-export async function uploadResourceFiles(files: File[]): Promise<boolean> {
+export async function uploadResourceFiles(files: File[], source: "picker" | "drop" = "picker"): Promise<boolean> {
   const archive = appState.archive
   if (!archive || !isEditing() || !files.length) return false
   const fontTheme = theme.value
@@ -70,9 +70,10 @@ export async function uploadResourceFiles(files: File[]): Promise<boolean> {
     ?? (archive.format === "ssf" ? "default" : `${theme.value}/skin/res`)
   for (const file of files) {
     let change: Extract<Change, { kind: "bytes" }>
-    if (catalog === "font") {
+    const font = isFontFile(file.name)
+    if (source === "picker" && catalog === "font" && !font) throw new Error("请选择 TTF、OTF 或 TTC 字体文件")
+    if (font && (source === "drop" || catalog === "font")) {
       if (!["bdi", "bds"].includes(archive.format)) throw new Error("当前格式不支持上传字体")
-      if (!isFontFile(file.name)) throw new Error("请选择 TTF、OTF 或 TTC 字体文件")
       const path = `${fontTheme}/skin/res/${sanitizeFontFileName(file.name)}`
       const bytes = new Uint8Array(await file.arrayBuffer())
       await validateFont(bytes)
@@ -83,7 +84,7 @@ export async function uploadResourceFiles(files: File[]): Promise<boolean> {
       if (!name || /[\u0000-\u001f]/.test(name)) throw new Error("无效的音效文件名")
       const path = `${soundBase}/${name}`
       change = { kind: "bytes", path, before: archive.getBytes(path)?.slice(), after: new Uint8Array(await file.arrayBuffer()) }
-    } else throw new Error("请选择 PNG 图片或 OGG、WAV、AIFF、MP3 音效文件")
+    } else throw new Error(source === "drop" ? `不支持拖入此资源：${file.name}` : "请选择 PNG 图片或 OGG、WAV、AIFF、MP3 音效文件")
     if (appState.archive !== archive || !isEditing() || scope !== `${theme.value}/${orientation.value}`) return false
     if (catalog !== appState.resourceCatalog) return false
     if (paths.has(change.path)) throw new Error(`存在重名资源：${file.name}`)
@@ -92,22 +93,27 @@ export async function uploadResourceFiles(files: File[]): Promise<boolean> {
   }
   if (appState.archive !== archive || !isEditing()) return false
   commitBatch(changes)
-  if (catalog === "font") {
-    appState.selectedResourceCatalogItem = changes.at(-1)!.path
-    renderResourceCatalogSearch()
-    refreshPreview()
-    updateDirty()
-    showStatus(`已上传 ${files.length} 个字体文件，可撤销`)
-    return true
-  }
+  const lastPath = changes.at(-1)!.path
+  const font = isFontFile(lastPath)
   for (const path of paths) keySoundBuffers.delete(path)
-  releaseKeySound()
-  openResources(isSoundPath(changes.at(-1)!.path) ? "sound" : "image")
-  appState.selectedResourceGalleryPaths = [...paths].map(path => isSoundPath(path) ? `file:${path}` : path)
-  appState.selectedResourceGalleryPath = appState.selectedResourceGalleryPaths.at(-1) ?? ""
-  if (appState.resourceInspectorMode === "sound") appState.selectedSoundID = appState.selectedResourceGalleryPath
-  renderResourceInspector()
-  syncResourceSelection()
+  if (!font || [...paths].some(isSoundPath)) releaseKeySound()
+  if ([...paths].some(isFontFile)) refreshPreview()
+  if (font) {
+    if (catalog !== "font") resourceSearch.value = ""
+    appState.resourceCatalog = "font"
+    appState.selectedResourceCatalogItem = lastPath
+    renderResourceCatalogSearch()
+  } else {
+    const sound = isSoundPath(lastPath)
+    openResources(sound ? "sound" : "image")
+    appState.selectedResourceGalleryPaths = [...paths]
+      .filter(path => sound ? isSoundPath(path) : /\.png$/i.test(path))
+      .map(path => sound ? `file:${path}` : path)
+    appState.selectedResourceGalleryPath = appState.selectedResourceGalleryPaths.at(-1) ?? ""
+    if (appState.resourceInspectorMode === "sound") appState.selectedSoundID = appState.selectedResourceGalleryPath
+    renderResourceInspector()
+    syncResourceSelection()
+  }
   updateDirty()
   showStatus(`已上传 ${files.length} 个资源文件，可撤销`)
   return true
@@ -158,7 +164,7 @@ export function wireResourceTransfer(): void {
       event.stopPropagation()
       if (isEditing()) {
         const files = Array.from(event.dataTransfer.files)
-        void runFileOperation("上传资源", () => uploadResourceFiles(files))
+        void runFileOperation("上传资源", () => uploadResourceFiles(files, "drop"))
       }
     }, { capture: true })
   }

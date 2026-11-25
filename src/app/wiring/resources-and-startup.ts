@@ -425,35 +425,36 @@ export function wireResourcesAndStartup(): void {
           payload.position.x / scaleFactor,
           payload.position.y / scaleFactor,
         )
-        if (resourceDropTarget(target)) {
-          if (!isEditing()) return
-          if (payload.type === "drop") {
-            const archive = appState.archive
-            void runFileOperation("上传资源", async () => {
-              const files = await Promise.all(payload.paths.map(async path => new File(
-                [new Uint8Array(await invoke<ArrayBuffer>("read_file", { path }))], path.split(/[\\/]/).pop()!,
-              )))
-              return appState.archive === archive && uploadResourceFiles(files)
-            })
-          }
-          return
-        }
         const folder = sourceDropFolder(target)
         if (payload.type === "enter" || payload.type === "over") {
           setSourceDropTarget(folder === undefined ? undefined : target)
           return
         }
         setSourceDropTarget()
+        const archive = appState.archive
+        const uploadResources = resourceDropTarget(target)
         void (async () => {
-          if (payload.paths.length === 1 && isSupportedSkinPath(payload.paths[0])) {
-            await runFileOperation("打开", () => loadDroppedPath(payload.paths[0]))
-            return
-          }
           for (const path of payload.paths) {
             if (await invoke<boolean>("path_is_directory", { path })) {
               await runFileOperation("打开源码文件夹", () => loadDroppedSourceWorkspace(path))
               return
             }
+          }
+          const skin = payload.paths.find(isSupportedSkinPath)
+          if (skin) {
+            await runFileOperation("打开", () => loadDroppedPath(skin))
+            return
+          }
+          if (appState.archive !== archive) return
+          if (uploadResources) {
+            if (!isEditing()) return
+            await runFileOperation("上传资源", async () => {
+              const files = await Promise.all(payload.paths.map(async path => new File(
+                [new Uint8Array(await invoke<ArrayBuffer>("read_file", { path }))], path.split(/[\\/]/).pop()!,
+              )))
+              return appState.archive === archive && uploadResourceFiles(files, "drop")
+            })
+            return
           }
           if (folder !== undefined && appState.archive && isEditing()) {
             await runFileOperation("上传文件", async () => commitSourceUploads(
@@ -471,10 +472,7 @@ export function wireResourcesAndStartup(): void {
             const bytes = new Uint8Array(await invoke<ArrayBuffer>("read_file", { path: pngPath }))
             setLayoutImageBytes(bytes)
             openLayoutImageDialog()
-            return
           }
-          const path = payload.paths.find(isSupportedSkinPath)
-          if (path) await runFileOperation("打开", () => loadDroppedPath(path))
         })().catch((error) => showError(error, "处理拖入文件"))
       })
     })()

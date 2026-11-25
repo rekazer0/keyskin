@@ -9,7 +9,7 @@ import { requestEditMode, setMobilePane } from "../mobile-layout"
 import { sourcePasteButton, sourceMoveButton, toolbarMenus, newButton, openButton, browserOpen, $, saveButton, workspaceExport, mobileShareButton, checkUpdateButton, aboutDiagnostics, exportLogsButton, exportLogsStatus, copyQqGroupButton, settingsEntryButtons, settingsWorkspace, settingsModelNav, settingsStorageSection, settingsModelSection, aiDraftApply, aiDraftCancel, sourceDirectoryEnabled, sourceDirectory, chooseSourceDirectory, resetSourceDirectory, sourceDirectoryStatus, sidebarViewButtons, defaultDevice, device, canvasBackground, hintPreviewEnabled, editorCrosshair, editorCoordinateSnap, appTheme, interfaceTheme, sourceFontSize, windowMaterial, windowMaterialOpacity, overviewMetaVisible, files, sourceCompletionEnabled, sourceValueHintsEnabled, sourceLineExplanationEnabled, undoButton, redoButton, fileOperationDialog, canvasWrap, replaceAssetButton, imageOpen, assetBackButton, sourceColorPicker } from "../dom"
 import { appState } from "../state"
 import { isEditing, commitBatch, prepareDocumentReplacement, undo, redo, commitBytes, updateDirty, commitText } from "../edit-history"
-import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, setSidebarView, revealSourceFile } from "../source-files"
+import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterSourceMutation, setSourceTransfer, setSidebarView, revealSourceFile, setSourceDropTarget } from "../source-files"
 import { type Change } from "../../history.ts"
 import { preview, source, scheduleSelectionInspectorSync, isTauri, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
 import { startNewDocument, wireNewProjectChooser } from "../new-document"
@@ -477,6 +477,21 @@ export function wireFilesAndSettings(): void {
   fileOperationDialog.addEventListener("cancel", (event) => {
     if (appState.fileOperationRunning) event.preventDefault()
   })
+  document.addEventListener("dragover", (event) => {
+    if (event.dataTransfer?.types.includes("Files")) event.preventDefault()
+  })
+  // A skin package opens a document even when dropped on a resource upload target.
+  document.addEventListener("drop", (event) => {
+    const file = Array.from(event.dataTransfer?.files ?? []).find(file => isSupportedSkinPath(file.name))
+    if (!file) return
+    event.preventDefault()
+    event.stopPropagation()
+    appState.canvasDragDepth = 0
+    setCanvasDropState(false)
+    setLayoutImageHighlight(false)
+    setSourceDropTarget()
+    void runFileOperation("打开", () => loadDroppedFile(file))
+  }, { capture: true })
   canvasWrap.addEventListener("dragenter", (event) => {
     event.preventDefault()
     appState.canvasDragDepth += 1
@@ -504,18 +519,13 @@ export function wireFilesAndSettings(): void {
     setCanvasDropState(false)
     setLayoutImageHighlight(false)
     const file = event.dataTransfer?.files[0]
-    if (!file) return
-    if (/\.png$/i.test(file.name)) {
-      if (!appState.archive || appState.archive.format === "bda") return
-      const reader = new FileReader()
-      reader.onload = () => {
-        setLayoutImageBytes(new Uint8Array(reader.result as ArrayBuffer))
-        openLayoutImageDialog()
-      }
-      reader.readAsArrayBuffer(file)
-      return
+    if (!file || !/\.png$/i.test(file.name) || !appState.archive || appState.archive.format === "bda") return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setLayoutImageBytes(new Uint8Array(reader.result as ArrayBuffer))
+      openLayoutImageDialog()
     }
-    void runFileOperation("打开", () => loadDroppedFile(file))
+    reader.readAsArrayBuffer(file)
   })
   replaceAssetButton.addEventListener("click", () => imageOpen.click())
   assetBackButton.addEventListener("click", () => {
