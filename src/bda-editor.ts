@@ -526,8 +526,9 @@ export function renderBdaMetadataEditor(container: HTMLElement, options: Metadat
   for (const [key, value] of entries) {
     const label = options.label(key)
     const commit = (next: string) => options.onChange(key, next)
-    rows.push(configField("", key, label, value, options.editable, commit)
-      ?? field({ key, label, editable: options.editable, spec: { kind: "text", value }, commit }))
+    const rowKey = ["metadata", key]
+    rows.push(configField("", key, label, value, options.editable, commit, rowKey)
+      ?? field({ key, label, rowKey, editable: options.editable, spec: { kind: "text", value }, commit }))
   }
   container.replaceChildren(...skinMetadataSections(rows))
 }

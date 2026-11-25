@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import { chromium } from "playwright"
@@ -26,6 +27,8 @@ const group = id => page.locator(`#style-detail-fields [data-style-detail-group=
 const pending = locator => locator.evaluate(node => node.hasAttribute("data-config-section-pending"))
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await page.locator(".template-card").first().waitFor({ state: "attached" })
+  await dismissStartupDisclaimer(page)
   await page.locator("#browser-open").setInputFiles({ name: "empty-sections.bds", mimeType: "application/octet-stream", buffer: Buffer.from(archive.toBytes("bds")) })
   await page.waitForFunction(() => !document.querySelector("#open").disabled)
   const close = page.locator("#file-operation-dialog[open] #file-operation-close")

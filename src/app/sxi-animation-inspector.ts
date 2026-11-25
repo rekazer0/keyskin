@@ -47,7 +47,7 @@ import { compactPalmJSON } from "../palm/palm-json.ts"
 import { SXI_SKIN_PATH } from "../palm/sxi-json.ts"
 import { isEditing } from "./edit-history"
 import { showError } from "./file-operations"
-import { field as propertyField, section, type FieldSpec } from "./property-rows"
+import { bindFieldReset, field as propertyField, section, type FieldSpec } from "./property-rows"
 import { editSxi, sxiValue, writeSxiValue, type SxiPointer } from "./sxi-fields"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
 import type { PreviewItem } from "../preview-items.ts"
@@ -296,10 +296,7 @@ function trackedControl(identity: unknown[], value: Json, restore: (baseline: Js
   row.hidden = true
   row.dataset.inspectorRowKey = JSON.stringify(["list", identity])
   // Key order changes when skin.json is re-encoded, so compare the canonical Palm JSON instead.
-  row.dataset.inspectorValue = JSON.stringify([value === undefined ? null : compactPalmJSON(value)])
-  row.addEventListener("inspector-reset", (event) => {
-    event.preventDefault()
-    const baseline = (JSON.parse((event as CustomEvent<string>).detail) as Array<string | null>)[0]
+  bindFieldReset(row, [value === undefined ? null : compactPalmJSON(value)], ([baseline]) => {
     restore(baseline === null ? undefined : JSON.parse(baseline))
   })
   return row

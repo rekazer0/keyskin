@@ -77,9 +77,9 @@ export function searchField(options: { label: string; onInput(query: string): vo
     options.onInput(input.value.trim())
   }
   const clear = iconButton("x", "清除", () => {
+    input.focus()
     input.value = ""
     update()
-    input.focus()
   })
   clear.dataset.size = "sm"
   clear.hidden = true

@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer, expandMobileInspector } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import { chromium } from "playwright"
@@ -39,6 +40,8 @@ const reveal = async key => {
 }
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await page.locator(".template-card").first().waitFor({ state: "attached" })
+  await dismissStartupDisclaimer(page)
   await page.locator("#browser-open").setInputFiles({ name: "empty.bds", mimeType: "application/octet-stream", buffer: Buffer.from(archive.toBytes("bds")) })
   await page.waitForFunction(() => !document.querySelector("#open").disabled && (!document.querySelector("#file-operation-dialog").open || !document.querySelector("#file-operation-close").disabled))
   if (await page.locator("#file-operation-dialog[open]").count()) await page.locator("#file-operation-close").click()
@@ -97,10 +100,11 @@ try {
   for (const key of ["text", "color", "choice", "sxi-null", "missing-switch"]) await pending(key)
   for (const key of ["false", "mixed", "sxi-false"]) assert.equal(await row(key).getAttribute("data-config-pending"), null, `${key} is not an empty configuration`)
   await reveal("color")
-  assert.equal(await row("color").getByRole("button", { name: "空颜色", exact: true }).isVisible(), true)
+  assert.equal(await row("color").getByLabel("空颜色取色", { exact: true }).isVisible(), true)
   mkdirSync(new URL("../.ui-current/empty-config/", import.meta.url), { recursive: true })
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 })
+    if (width === 390) await expandMobileInspector(page)
     await row("FIX_SIZE").scrollIntoViewIfNeeded()
     assert.equal(await fields.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
     await page.screenshot({ path: new URL(`../.ui-current/empty-config/${width}.png`, import.meta.url).pathname })

@@ -5,11 +5,11 @@ import { element } from "../dom-element.ts"
 import { styleCard } from "../style-card.ts"
 import { asObject } from "../palm/sxi-ini.ts"
 import { styleConfigPath } from "./config-context"
-import { documentFields, selectedKeyName, selectedKeyContext, selectedKeyPreview, mode } from "./dom"
+import { documentFields, selectedKeyName, selectedKeyContext, selectedKeyPreview } from "./dom"
 import { createIcon } from "../icons.ts"
 import { writeSxiValue } from "./sxi-fields"
 import { isEditing } from "./edit-history"
-import { selectedAnimationStyle, selectAnimationStyle, previewStyleAnimation, openAnimation, animationSelectionContext } from "./animation-resource"
+import { selectedAnimationStyle, selectAnimationStyle, previewStyleAnimation, openAnimation } from "./animation-resource"
 import { selectFile } from "./navigation"
 import { layoutLabel } from "./file-tree"
 import { styleAnimationPlayers, styleAnimationSummary } from "./legacy-animation-inspector"
@@ -18,7 +18,6 @@ import { addStyle, canAddStyle, duplicateStyle, removeStyle, styleConfigDocument
 import { styleUsages } from "./style-references"
 import { openPalmSkin, sxiPointer } from "./sxi-documents"
 import { palmStyle, palmStylePointer } from "./sxi-styles"
-import { syncInspectorRows } from "../inspector-shell.ts"
 import { appState } from "./state"
 import { palmStyleAnimationStates } from "./style-card-preview"
 
@@ -53,13 +52,15 @@ export function animationStyleActions(pressAnimation: number | undefined): Pick<
 }
 
 /** Replaces only the parameter inspector, never the workspace lists or keyboard. */
-export function populateAnimationStyleInspector(): void {
+export function populateAnimationStyleInspector(syncRows: () => void): void {
   if (!appState.animationStyleEditing || appState.animationDesignMode === "all" || appState.archive?.format === "bda") return
   const id = selectedAnimationStyle()
   if (!id) return
   const container = documentFields
   const fields = element("div")
-  if (appState.archive?.format !== "sxi") void renderStyleResourceDetail({ container: fields, id, refresh: populateAnimationStyleInspector })
+  if (appState.archive?.format !== "sxi") void renderStyleResourceDetail({
+    container: fields, id, refresh() { populateAnimationStyleInspector(syncRows); syncRows() },
+  })
   const lists = Array.from(container.children).filter(node => node.querySelector(".ui-listbox"))
   container.replaceChildren(...lists, ...Array.from(fields.children))
   const bindings = section("触发动画")
@@ -136,5 +137,4 @@ export function populateAnimationStyleInspector(): void {
   selectedKeyName.textContent = `STYLE${id}`
   selectedKeyContext.textContent = styleConfigPath()
   selectedKeyPreview.replaceChildren(createIcon("paintbrush", 16))
-  syncInspectorRows(JSON.stringify([appState.selectedPath, appState.selectedKeySections, mode.value, animationSelectionContext()]))
 }

@@ -30,19 +30,19 @@ function encode(config: Config, value: string | string[] | boolean): string {
  */
 export function configValueControl(input: HTMLInputElement, section: string, key: string, label: string): HTMLElement | undefined {
   const config = baiduConfigControl(section, key, input.value)
-  const sum = config?.kind === "sum" ? config : undefined
+  if (!config) return
   const build = (): HTMLElement | undefined => {
     const value = input.value.trim()
     const editable = { editable: !input.disabled }
-    if (!sum) {
-      const spec = config && configSpec(config, value, label)
-      return spec && fieldControl(spec, label, (next) => commit(encode(config!, next as string | string[] | boolean)), editable)
+    if (config.kind !== "sum") {
+      const spec = configSpec(config, value, label)
+      return spec && fieldControl(spec, label, (next) => commit(encode(config, next as string | string[] | boolean)), editable)
     }
-    const parts = baiduConfigSumParts(sum, value)
+    const parts = baiduConfigSumParts(config, value)
     if (!parts) return
     const pair = element("span", "ui-field-pair")
-    sum.parts.forEach((part, index) => pair.append(fieldControl({ kind: "choice", value: parts[index], options: part.options }, `${label}${part.label}`, (next) => {
-      const values = parts.map((current, position) => Number(position === index ? next : current || sum.parts[position].options[0][0]))
+    config.parts.forEach((part, index) => pair.append(fieldControl({ kind: "choice", value: parts[index], options: part.options }, `${label}${part.label}`, (next) => {
+      const values = parts.map((current, position) => Number(position === index ? next : current || config.parts[position].options[0][0]))
       commit(String(values.reduce((total, item) => total + item, 0)))
     }, editable)))
     return pair
@@ -51,27 +51,27 @@ export function configValueControl(input: HTMLInputElement, section: string, key
     input.value = value
     input.dispatchEvent(new Event("change", { bubbles: true }))
   }
-  if (!build()) return
   const wrap = element("span", "config-value-control")
   const render = () => {
     const control = build()
-    if (!control) return
+    if (!control) return false
     // 重建会换掉被点的那个按钮：把焦点交给新控件里同名的那一个。
     const focused = wrap.contains(document.activeElement) ? document.activeElement?.getAttribute("aria-label") : undefined
     if (control.matches("input, select")) control.setAttribute("data-config-derived", "")
     for (const derived of control.querySelectorAll("input, select")) derived.setAttribute("data-config-derived", "")
     wrap.replaceChildren(control, input)
     if (focused) control.querySelector<HTMLElement>(`[aria-label="${CSS.escape(focused)}"]`)?.focus()
+    return true
   }
+  if (!render()) return
   input.type = "hidden"
   // 属性而不是监听器：皮肤信息字段每次同步都重新包一层，旧的一层不能再把输入框拿回去。
-  input.onchange = render
-  render()
+  input.onchange = () => { render() }
   return wrap
 }
 
 /** 一行百度配置值（类型化控件）；值不适合类型化控件时返回 undefined，调用方退回普通 field()。 */
-export function configField(section: string, key: string, label: string, value: string, editable: boolean, commit: (value: string) => void): HTMLElement | undefined {
+export function configField(section: string, key: string, label: string, value: string, editable: boolean, commit: (value: string) => void, rowKey: string[]): HTMLElement | undefined {
   const input = element("input")
   input.value = value
   input.disabled = !editable
@@ -80,6 +80,7 @@ export function configField(section: string, key: string, label: string, value: 
   const control = configValueControl(input, section, key, label)
   if (!control) return
   const row = element("div", "ui-field")
+  row.dataset.inspectorRowKey = JSON.stringify(rowKey)
   fieldCaption(row, key, label)
   row.append(control)
   return row

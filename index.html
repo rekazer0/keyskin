@@ -419,11 +419,11 @@
         </div>
         <div id="quick-inspector" class="ui-form" hidden>
           <div class="inspector-rail" role="group" aria-label="属性导航">
-            <button class="inspector-filter-open ui-icon-button" type="button" title="筛选属性" data-shortcut="F" aria-label="筛选属性" data-icon="search"></button>
+            <button class="inspector-filter-open ui-icon-button" type="button" title="筛选属性" data-shortcut="F" aria-label="筛选属性" aria-expanded="false" aria-controls="inspector-filter" data-icon="search"></button>
             <nav id="mobile-inspector-groups" aria-label="属性分组"></nav>
           </div>
-          <label class="inspector-filter ui-input" data-size="sm"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="inspector-filter" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="筛选属性" autocomplete="off" spellcheck="false" /><button class="inspector-filter-close ui-icon-button" data-size="sm" type="button" title="清除筛选（Esc）" aria-label="清除筛选" data-icon="x"></button></label>
-          <p class="inspector-filter-empty ui-empty" role="status" hidden></p>
+          <label class="inspector-filter ui-input ui-search" data-size="sm"><span class="ui-input-affix" data-icon="search" aria-hidden="true"></span><input id="inspector-filter" type="text" role="searchbox" enterkeyhint="search" placeholder="搜索" aria-label="筛选属性" autocomplete="off" spellcheck="false" /></label>
+          <p class="inspector-filter-empty ui-empty" role="status" hidden>没有匹配的属性</p>
           <div class="skin-fields" hidden>
             <div class="inspector-grid action-fields">
               <label class="ui-field"><span>名称</span><input data-skin-field="Name" /></label>

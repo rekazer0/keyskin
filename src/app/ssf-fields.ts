@@ -24,7 +24,7 @@ import { type Change } from "../history.ts"
 import { showError, showStatus } from "./file-operations"
 import { validateFont, skinFontChoices } from "./skin-fonts"
 import { typographyRows } from "./typography"
-import { fieldCaption, fieldControl, numberParts, section } from "./property-rows"
+import { bindFieldReset, fieldCaption, fieldControl, numberParts, section } from "./property-rows"
 import { ssfMediaField } from "./ssf-media-fields"
 import { openSsfImageEditor } from "./ssf-image-editor"
 import { refreshNativeScenes } from "./native-preview"
@@ -679,10 +679,7 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
       return [key, value === undefined ? null : card ? value.split(",")[0] : value]
     })) }))
     row.dataset.inspectorRowKey = JSON.stringify([locations, row.dataset.documentKey])
-    row.dataset.inspectorValue = JSON.stringify(saved)
-    row.addEventListener("inspector-reset", (event) => {
-      event.preventDefault()
-      const baseline = JSON.parse((event as CustomEvent<string>).detail) as typeof saved
+    bindFieldReset(row, saved, (baseline) => {
       editTargets(baseline, (document, target) => {
         for (const item of baseline.filter((item) => item.path === target.path && item.section === target.section)) {
           for (const [key, value] of Object.entries(item.values)) {

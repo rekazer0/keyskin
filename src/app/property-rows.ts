@@ -96,6 +96,15 @@ export function fieldCaption(row: HTMLElement, key: string, label: string, hint?
   row.append(span)
 }
 
+/** 行重建后，检查器会把首次渲染的基线随重置事件传回来。 */
+export function bindFieldReset<T>(row: HTMLElement, baseline: T[], restore: (baseline: T[]) => void): void {
+  row.dataset.inspectorValue = JSON.stringify(baseline)
+  row.addEventListener("inspector-reset", (event) => {
+    event.preventDefault()
+    restore(JSON.parse((event as CustomEvent<string>).detail) as T[])
+  })
+}
+
 /** 一行属性。 */
 export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElement {
   const { spec } = options
@@ -128,10 +137,7 @@ export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElemen
     row.dataset.configEmpty = String(!options.mixed && !spec.value.trim())
   }
   if (options.commit && spec.kind !== "readonly") {
-    row.dataset.inspectorValue = JSON.stringify(["baseline" in options ? options.baseline : specValue(spec)])
-    row.addEventListener("inspector-reset", (event) => {
-      event.preventDefault()
-      const [baseline] = JSON.parse((event as CustomEvent<string>).detail) as unknown[]
+    bindFieldReset(row, ["baseline" in options ? options.baseline : specValue(spec)], ([baseline]) => {
       if (options.reset) options.reset(baseline)
       else options.commit!(baseline as never, {})
     })
@@ -169,8 +175,8 @@ export function section(title: string, rows: HTMLElement[] = [], options: { clas
 
 /** 不带行的控件本身：给仍自己拼行的旧检查器用（configValueControl、numberParts）。 */
 export function fieldControl<S extends FieldSpec>(spec: S, label: string, commit: Commit<S>, state: { editable: boolean; mixed?: boolean }): HTMLElement {
-  const send = commit as (value: unknown, edit: Edit) => void
   const disabled = !state.editable
+  const send = (value: unknown, edit: Edit) => { if (!disabled) commit(value as Values[S["kind"]], edit) }
   const placeholder = state.mixed ? "混合" : "未设置"
   switch (spec.kind) {
     case "font": return fontControl(spec, label, value => send(value, {}), state)
@@ -278,13 +284,14 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
   // The row outlives its commits, so an invalid entry goes back to the last accepted value, not the rendered one.
   let accepted = spec.value
   input.addEventListener("change", () => {
+    if (input.disabled || input.readOnly) return
     const text = input.value.trim()
-    if (validNumber(text, spec.expression) && (!text || spec.min === undefined || Number(text) >= spec.min)) commit(accepted = text)
+    if (!input.validity.badInput && validNumber(text, spec.expression) && (!text || spec.min === undefined || Number(text) >= spec.min)) commit(accepted = text)
     else input.value = accepted
   })
   box.append(input)
   if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
-  if (input.type !== "number") return box
+  if (input.type !== "number" && !spec.expression) return box
   const bounds = spec.range && RANGES[spec.range]
   if (!bounds) return box
   const wrap = element("span", "ui-slider-field")
@@ -315,9 +322,11 @@ function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string
     if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
     pair.append(box)
     input.addEventListener("change", () => {
-      const values = inputs.map((field) => field.value.trim())
-      if (spec.options || values.every((text) => validNumber(text, spec.expression))) commit(accepted = values, index)
-      else inputs.forEach((field, position) => { field.value = accepted[position] ?? "" })
+      if (input.disabled || input instanceof HTMLInputElement && input.readOnly) return
+      const text = input.value.trim()
+      if (spec.options || !input.validity.badInput && validNumber(text, spec.expression)) {
+        commit(accepted = inputs.map((field, i) => i === index ? text : field.value), index)
+      } else input.value = accepted[index] ?? ""
     })
     return input
   })
@@ -342,16 +351,17 @@ function numberSlider(input: HTMLInputElement, bounds: Bounds): HTMLElement {
     // 当前值不恰好落在粗步长上时，保留原值及其精度。
     const ticks = (value - Number(range.min)) / step
     range.step = String(input.value && Math.abs(ticks - Math.round(ticks)) > 1e-8 ? 10 ** -decimals : step)
-    range.value = input.value || String(Math.max(min, 0))
-    range.disabled = input.disabled || input.readOnly
+    range.value = String(input.value ? value : Math.max(min, 0))
+    range.disabled = input.disabled || input.readOnly || input.validity.badInput || !validNumber(input.value.trim())
     range.setAttribute("aria-valuetext", input.value || input.placeholder || "未设置")
   }
   range.addEventListener("input", () => {
+    if (range.disabled || input.disabled || input.readOnly) return
     input.value = range.value
     range.setAttribute("aria-valuetext", range.value)
   })
   range.addEventListener("change", () => {
-    if (!input.disabled && !input.readOnly && range.value !== accepted) {
+    if (!range.disabled && !input.disabled && !input.readOnly && range.value !== accepted) {
       const inspector = range.closest("#quick-inspector, #resource-inspector")
       const selector = `.ui-number-slider > input[aria-label="${CSS.escape(range.getAttribute("aria-label")!)}"]`
       const index = document.activeElement === range && inspector ? Array.from(inspector.querySelectorAll(selector)).indexOf(range) : -1

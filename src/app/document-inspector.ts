@@ -10,7 +10,7 @@ import type { PreviewItem } from "../preview-items.ts"
 import { isListCell } from "../layout.ts"
 import { isToolbarPath, effectiveToolbarSections, isSkinInfoPath, setSourceValue, effectiveKeySection, currentSkinState, genConfigPath } from "./config-context"
 import { IniDocument } from "../ini.ts"
-import { commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
+import { commitTextChanges, commitText, updateDirty, isEditing, commitBytes } from "./edit-history"
 import { inputBarInKeyboard, refreshPreview } from "./preview-render"
 import { isStyleReferenceKey, openStyleReferenceEditor, openBdaStyleReferencePicker, layoutAnimationFields } from "./style-references"
 import { bdaPanelKeyName, bdaStyleID } from "../bda.ts"
@@ -31,7 +31,7 @@ import { soundResourcePaths, soundPathForFilename } from "../sounds.ts"
 import { bdaKeySoundSection } from "./bda-key-sound"
 import { nativeCandidateGeometrySection } from "./candidate-fields"
 
-export const documentFieldLabels: Record<string, string> = {
+const documentFieldLabels: Record<string, string> = {
   BACK_STYLE: "背景样式",
   FORE_STYLE: "前景样式",
   CELL_STYLE: "单元格样式",
@@ -125,7 +125,7 @@ export const documentFieldLabels: Record<string, string> = {
   FIX_SIZE: "图标固定大小",
 }
 
-export const documentSectionLabels: Record<string, string> = {
+const documentSectionLabels: Record<string, string> = {
   PANEL: "面板",
   INPUT: "输入区",
   CAND: "候选栏",
@@ -169,12 +169,12 @@ const documentNumericFields = new Set([
 ])
 
 /** number 输入框会清空非数字值，只有纯数字才切换到数字类型。 */
-export function looksNumeric(value: string): boolean {
+function looksNumeric(value: string): boolean {
   return /^-?\d+(?:\.\d+)?$/.test(value.trim())
 }
 
 /** MORE.SYM_LAYOUT 这类键按 id 绑定布局文件，沿用侧边栏使用的布局名称。 */
-export const layoutIDLabels: Record<string, string> = {
+const layoutIDLabels: Record<string, string> = {
   bh: "笔画键盘",
   def_9: "五笔 9 键",
   def_26: "五笔 26 键",
@@ -352,12 +352,7 @@ export function populateDocumentInspector(): void {
       if (!value) return
       document.appendSection(section, [{ key, value }])
     } else if (!document.set(section, key, value)) return
-    const text = document.toString()
-    commitText(path, before, text)
-    if (path === appState.selectedPath) setSourceValue(text)
-    if (path === appState.layoutPath) appState.layoutDocument = document
-    refreshPreview()
-    updateDirty()
+    commitTextChanges([{ path, before, after: document.toString() }])
   }
   const renderEntry = (entry: typeof entries[number]): HTMLElement[] => {
     const label = translatedConfigLabel(entry.key)
@@ -373,7 +368,7 @@ export function populateDocumentInspector(): void {
     if (/^SWITCH\d*$/i.test(entry.section) && entry.key === "PADDING" && (!entry.value.trim() || looksNumeric(entry.value))) {
       return [row({ kind: "number", value: entry.value }, commit)]
     }
-    // 只改动的那几格写回，其余格保持原值；不重绘，所以就地更新。
+    // 只改动的那几格写回，其余格保持原值。
     const count = documentPairAffixes[entry.key] ? 2 : documentRectFields.has(entry.key) || entry.key === "PADDING" ? 4 : 1
     const values = entry.value.trim() ? entry.value.split(",").map((value) => value.trim()) : Array<string>(count).fill("")
     const numeric = values.every((value) => !value || looksNumeric(value))
@@ -395,7 +390,7 @@ export function populateDocumentInspector(): void {
       })]
     }
     // 百度配置值的类型化控件（开关、分段、九宫格、颜色）。
-    const typed = configField(entry.section, entry.key, label, entry.value, isEditing(), commit)
+    const typed = configField(entry.section, entry.key, label, entry.value, isEditing(), commit, rowKey)
     if (typed) return [typed]
     // 值不是数字时保持文本输入：number 输入框会清空显示，用户一编辑就丢原值。
     if (documentNumericFields.has(entry.key) && (!entry.value.trim() || looksNumeric(entry.value))) {
