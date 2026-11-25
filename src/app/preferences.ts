@@ -49,7 +49,6 @@ const settingsDescriptions: Record<string, string> = {
   source: "调整编辑器显示与输入辅助。",
   model: "管理 AI 设计使用的对话和图像模型。",
   adb: "配置 Android 设备连接与皮肤预览。",
-  about: "查看版本、更新、诊断与反馈入口。",
 }
 
 export function showSettingsPage(page: string): void {
@@ -58,8 +57,12 @@ export function showSettingsPage(page: string): void {
   if (!target) return
   const current = target.dataset.settingsPanel!
   const category = settingsNavItems.find(tab => tab.dataset.settingsPage === current)?.textContent?.trim() ?? ""
-  settingsWorkspace.querySelector("#settings-category-title")!.textContent = category
-  settingsWorkspace.querySelector("#settings-category-description")!.textContent = settingsDescriptions[current]
+  const header = settingsWorkspace.querySelector<HTMLElement>(".settings-category-header")!
+  header.hidden = current === "about"
+  if (!header.hidden) {
+    header.querySelector("#settings-category-title")!.textContent = category
+    header.querySelector("#settings-category-description")!.textContent = settingsDescriptions[current]
+  }
   if (mobilePortraitQuery.matches) {
     settingsWorkspace.dataset.mobileSettings = "detail"
     const title = settingsWorkspace.querySelector<HTMLElement>("#settings-title")!

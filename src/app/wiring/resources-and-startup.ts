@@ -46,7 +46,7 @@ const DISCLAIMER_SHOWN_KEY = "keyskin-disclaimer-shown"
 async function showStartupDisclaimer(): Promise<void> {
   try { if (localStorage.getItem(DISCLAIMER_SHOWN_KEY)) return } catch {}
   const title = $("#about-disclaimer-title")
-  const detail = [...title.parentElement!.querySelectorAll("p")].map((paragraph) => paragraph.textContent).join("\n\n")
+  const detail = [...$("#about-disclaimer-copy").querySelectorAll("p")].map((paragraph) => paragraph.textContent).join("\n\n")
   const closed = ask({ title: title.textContent!, detail, actions: [{ value: "close", label: "我知道了", variant: "primary" }] })
   try { localStorage.setItem(DISCLAIMER_SHOWN_KEY, "1") } catch {}
   await closed

@@ -5,9 +5,10 @@
  * 重置时把那个值交回 commit。
  */
 import { drawVisualPreview, type Visual } from "../atlas.ts"
-import { element } from "../dom-element.ts"
+import { element, iconButton } from "../dom-element.ts"
 import { fontControl, type FontChoice } from "./font-picker.ts"
 import { createIcon } from "../icons.ts"
+import { stepNumber } from "../number-input-wheel.ts"
 import { styleReferenceAddButton, styleReferenceCard } from "../style-card.ts"
 import { soundControl } from "./sound-field.ts"
 
@@ -24,8 +25,6 @@ const RANGES = {
   rate: { min: 0, max: 50, step: 0.1 },
   alpha: { min: 0, max: 255 },
   angle: { min: -360, max: 360 },
-  fontSize: { min: 1, max: 160 },
-  border: { min: 0, max: 20 },
   weight: { min: 100, max: 900, step: 100 },
 } satisfies Record<string, Bounds>
 
@@ -34,7 +33,7 @@ export type FieldSpec =
   /** `validate` 返回问题时就地提示（浏览器校验气泡），不写回。 */
   | { kind: "text"; value: string; placeholder?: string; suggestions?: readonly string[]; validate?(value: string): string | undefined }
   /** `expression`：允许 rand(a,b) / inf，用 text + inputmode=decimal（DESIGN.md §10）。 */
-  | { kind: "number"; value: string; unit?: string; step?: number; min?: number; range?: keyof typeof RANGES; expression?: boolean }
+  | { kind: "number"; value: string; unit?: string; step?: number; min?: number; range?: keyof typeof RANGES; expression?: boolean; stepper?: boolean }
   /** 几格并排的值（X / Y、最小 / 最大、四边）；`options` 时每格是下拉（X / Y 各自的插值器）。 */
   | { kind: "parts"; affixes: readonly string[]; values: readonly string[]; columns?: number; expression?: boolean; step?: number; unit?: string; options?: readonly Choice[] }
   | { kind: "switch"; checked: boolean }
@@ -112,7 +111,7 @@ export function field<S extends FieldSpec>(options: FieldOptions<S>): HTMLElemen
     editable: (options.editable ?? services.editing()) && Boolean(options.commit), mixed: options.mixed,
   })
   // 只有一个输入控件时整行是 label；分段、卡片这类含按钮的行用 div，点标签不会误按第一个按钮。
-  const single = ["text", "number", "switch"].includes(spec.kind) || spec.kind === "choice" && control.classList.contains("ui-select")
+  const single = spec.kind === "text" || spec.kind === "switch" || spec.kind === "number" && !spec.stepper || spec.kind === "choice" && control.classList.contains("ui-select")
   const row = element(single ? "label" : "div", "ui-field")
   fieldCaption(row, options.key, options.label, options.hint)
   if (options.mixed || options.empty !== undefined) row.dataset.configEmpty = String(!options.mixed && options.empty === true)
@@ -291,6 +290,7 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
   })
   box.append(input)
   if (spec.unit) box.append(Object.assign(element("span", "ui-input-affix"), { textContent: spec.unit }))
+  if (spec.stepper) return numberStepper(input, box, label)
   if (input.type !== "number" && !spec.expression) return box
   const bounds = spec.range && RANGES[spec.range]
   if (!bounds) return box
@@ -298,6 +298,42 @@ function numberControl(spec: Extract<FieldSpec, { kind: "number" }>, label: stri
   wrap.append(numberSlider(input, bounds))
   wrap.append(box)
   return wrap
+}
+
+function numberStepper(input: HTMLInputElement, box: HTMLElement, label: string): HTMLElement {
+  const wrap = element("span", "ui-number-stepper")
+  const buttons = ([-1, 1] as const).map(direction => {
+    const button = iconButton(direction < 0 ? "minus" : "plus", `${direction < 0 ? "减小" : "增大"}${label}`, () => {
+      const previous = input.value
+      stepNumber(input, direction)
+      if (input.value !== previous) commitNumberInput(input, button, ".ui-number-stepper > button")
+    })
+    button.dataset.variant = "filled"
+    // 有输入草稿时，点步进按钮直接调整该值，不在鼠标松开前因失焦重建控件。
+    button.addEventListener("mousedown", event => { if (document.activeElement === input) event.preventDefault() })
+    return button
+  })
+  const sync = () => {
+    const value = input.value.trim()
+    for (const button of buttons) button.disabled = input.disabled || input.readOnly || input.validity.badInput || Boolean(value && !NUMBER.test(value))
+  }
+  wrap.append(buttons[0], box, buttons[1])
+  for (const event of ["input", "change"]) input.addEventListener(event, sync)
+  sync()
+  return wrap
+}
+
+function commitNumberInput(input: HTMLInputElement, control: HTMLElement, selector: string): void {
+  const inspector = control.closest("#quick-inspector, #resource-inspector")
+  const match = `${selector}[aria-label="${CSS.escape(control.getAttribute("aria-label")!)}"]`
+  const focused = document.activeElement === control ? control : document.activeElement === input ? input : null
+  const index = focused && inspector ? Array.from(inspector.querySelectorAll(match)).indexOf(control) : -1
+  input.dispatchEvent(new Event("change", { bubbles: true }))
+  // 动态属性提交后会重建这一行，键盘焦点留在原控件。
+  if (index >= 0 && !control.isConnected && document.activeElement === document.body) {
+    const next = inspector?.querySelectorAll<HTMLElement>(match)[index]
+    ;(focused === input ? next?.parentElement?.querySelector("input") : next)?.focus({ preventScroll: true })
+  }
 }
 
 function partsControl(spec: Extract<FieldSpec, { kind: "parts" }>, label: string, placeholder: string, disabled: boolean, commit: (values: string[], index: number) => void): HTMLElement {
@@ -362,15 +398,8 @@ function numberSlider(input: HTMLInputElement, bounds: Bounds): HTMLElement {
   })
   range.addEventListener("change", () => {
     if (!range.disabled && !input.disabled && !input.readOnly && range.value !== accepted) {
-      const inspector = range.closest("#quick-inspector, #resource-inspector")
-      const selector = `.ui-number-slider > input[aria-label="${CSS.escape(range.getAttribute("aria-label")!)}"]`
-      const index = document.activeElement === range && inspector ? Array.from(inspector.querySelectorAll(selector)).indexOf(range) : -1
       input.value = range.value
-      input.dispatchEvent(new Event("change", { bubbles: true }))
-      // 动态属性提交后会重建这一行，方向键仍应继续调节同一滑块。
-      if (index >= 0 && !range.isConnected && document.activeElement === document.body) {
-        inspector?.querySelectorAll<HTMLInputElement>(selector)[index]?.focus({ preventScroll: true })
-      }
+      commitNumberInput(input, range, ".ui-number-slider > input")
     }
     sync()
   })

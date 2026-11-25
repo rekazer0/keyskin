@@ -12,7 +12,7 @@ type TypographyOptions = {
   fonts?: FontChoice[]
   fontActions?: HTMLElement[]
   fontPlaceholder?: string
-  size?: Pick<Extract<FieldSpec, { kind: "number" }>, "unit" | "step" | "range" | "min">
+  size?: Pick<Extract<FieldSpec, { kind: "number" }>, "unit" | "step" | "min">
   codec?: "argb" | "0xargb"
   editable: boolean
   name?: string
@@ -71,9 +71,9 @@ export function typographyRows(options: TypographyOptions): HTMLElement[] {
       continue
     }
     const spec: FieldSpec = attribute === "font" ? { kind: "font", value, choices: options.fonts ?? SYSTEM_FONTS, placeholder: options.fontPlaceholder }
-      : attribute === "size" ? { kind: "number", value, unit: "px", range: "fontSize", expression: value === "inf", ...options.size }
+      : attribute === "size" ? { kind: "number", value, unit: "px", min: 0, stepper: true, expression: value === "inf", ...options.size }
       : attribute === "weight" ? { kind: "choice", value, layout: "wrap", options: Array.from({ length: 9 }, (_, index) => [String((index + 1) * 100), String((index + 1) * 100)] as const) }
-      : attribute === "shadowSize" ? { kind: "number", value, unit: "px", min: 0, range: "border" }
+      : attribute === "shadowSize" ? { kind: "number", value, unit: "px", min: 0, stepper: true }
       : attribute === "bold" ? { kind: "choice", value: binding.checked ? "1" : "0", options: [["0", "常规"], ["1", "粗"]] }
       : attribute === "smooth" ? { kind: "switch", checked: binding.checked ?? value === "1" }
       : ["color", "pressed", "shadowColor"].includes(attribute) ? { kind: "color", value, codec: options.codec ?? "argb", details: true }

@@ -9,7 +9,7 @@
       content="default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.github.com https://*.openai.com https://*.anthropic.com; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'"
     />
     <link rel="icon" type="image/png" href="./favicon.png" />
-    <title>键设 KeySkin v2.0.51</title>
+    <title>键设 KeySkin v2.5.66</title>
     <!-- 预连接优化 -->
     <link rel="dns-prefetch" href="https://api.github.com" />
     <link rel="preconnect" href="https://api.github.com" crossorigin />
@@ -259,7 +259,7 @@
               <header class="mobile-welcome-hero"><h1>键设</h1></header>
               <header class="welcome-hero">
                 <div><h1>键盘皮肤工作台</h1><p>打开已有皮肤，或从内置模板开始。</p></div>
-                <button id="welcome-recent-open" class="ui-button" data-variant="primary" type="button"><span data-icon="folder-open" aria-hidden="true"></span>打开皮肤…<kbd data-shortcut="O"></kbd></button>
+                <button id="welcome-recent-open" class="ui-button" data-variant="primary" type="button"><span data-icon="folder-open" aria-hidden="true"></span>打开皮肤<kbd data-shortcut="O"></kbd></button>
               </header>
               <section class="welcome-section welcome-recent">
                 <div class="welcome-section-head">
@@ -943,22 +943,24 @@
             </section>
 
             <section class="settings-page settings-about" data-settings-panel="about" role="tabpanel" id="settings-panel-about" aria-labelledby="settings-tab-about" hidden>
-              <section class="settings-group">
-                <img class="settings-about-logo" src="./src-tauri/icons/128x128@2x.png" alt="" />
-                <h3 class="settings-about-title">键设 KeySkin<span class="ui-badge">v2.0.51</span></h3>
-                <p class="settings-group-note">百度、搜狗与手心输入法皮肤可视化编辑器。支持读取、编辑和导出百度 BDI/BDS/BDA、搜狗 SSF 与手心 SXI 皮肤，并可在这些格式间转换导出。</p>
+              <header class="settings-about-intro">
+                <img src="./src-tauri/icons/128x128@2x.png" alt="" />
+                <h3>键设 KeySkin</h3>
+                <p class="settings-about-tagline">输入法皮肤编辑与格式转换</p>
+                <p class="settings-about-formats"><span class="ui-badge" data-variant="pill">v2.5.66</span><span>百度 BDI/BDS/BDA · 搜狗 SSF · 手心 SXI</span></p>
+              </header>
+              <section class="settings-group settings-about-support" aria-labelledby="about-support-title">
+                <h3 id="about-support-title">更新与支持</h3>
+                <div id="about-update" class="settings-row" data-current-version="2.5.66"><span><span data-icon="rotate-cw" aria-hidden="true"></span>版本更新<small id="update-status" aria-live="polite">正在检查更新…</small><a id="download-update" href="https://github.com/rekazer0/keyskin/releases" target="_blank" rel="noreferrer" hidden>查看最新版本</a></span><button id="check-update" class="ui-button" type="button">检查更新</button></div>
+                <div id="about-diagnostics" class="settings-row" hidden><span><span data-icon="file-text" aria-hidden="true"></span>诊断日志<small id="export-logs-status" aria-live="polite">用于排查卡顿和解析异常，不含皮肤文件正文。</small></span><button id="export-logs" class="ui-button" type="button">导出日志 ZIP</button></div>
+                <div class="settings-row"><span><span data-icon="message-square" aria-hidden="true"></span>交流与反馈</span><span class="about-contact-actions"><button id="copy-qq-group" class="ui-button" type="button" aria-live="polite">复制 QQ 群号</button><a class="ui-button" href="https://github.com/rekazer0/keyskin" target="_blank" rel="noreferrer">GitHub<span data-icon="arrow-up-right" aria-hidden="true"></span></a></span></div>
               </section>
-              <section class="settings-group" aria-labelledby="about-disclaimer-title">
-                <h3 id="about-disclaimer-title">免责声明</h3>
-                <p class="settings-group-note">键设（KeySkin）的宗旨是帮助皮肤作者和用户把创意做成自己的输入法皮肤。本编辑器仅用于皮肤制作与编辑的技术学习和交流，不提供或分发未经授权的皮肤资源。</p>
-                <p class="settings-group-note">我们支持正版输入法和原版皮肤，尊重创作者的劳动成果。请通过官方或作者授权的渠道获取皮肤，保留作者署名，并遵守相应的授权条款。</p>
-                <p class="settings-group-note">未经权利人授权，请勿二次修改他人的皮肤，也请勿传播原版或修改后的皮肤。此类未经授权的行为属于用户个人行为，与本软件无关。</p>
-                <p class="settings-group-note">如您认为键设侵犯了您的合法权益，请加入官方 QQ 技术交流群（群号：228040912）联系我们。我们会第一时间核实，并在确认后立即下架相关内容。感谢您的理解与支持。</p>
-              </section>
-              <section class="settings-group">
-                <div id="about-update" class="settings-row" data-current-version="2.0.51"><span>版本更新<small id="update-status" aria-live="polite">正在检查更新…</small><a id="download-update" href="https://github.com/rekazer0/keyskin/releases" target="_blank" rel="noreferrer" hidden>查看最新版本</a></span><button id="check-update" class="ui-button" type="button">检查更新</button></div>
-                <div id="about-diagnostics" class="settings-row" hidden><span>诊断日志<small id="export-logs-status" aria-live="polite">用于排查软件卡顿与皮肤解析异常，不包含皮肤文件正文。</small></span><button id="export-logs" class="ui-button" type="button">导出日志 ZIP</button></div>
-                <div class="settings-row"><span>技术交流与反馈</span><span class="about-contact-actions"><button id="copy-qq-group" class="ui-button" type="button">QQ群：228040912</button><a href="https://github.com/rekazer0/keyskin" target="_blank" rel="noreferrer">GitHub</a></span></div>
+              <section id="about-disclaimer-copy" class="settings-group settings-about-disclaimer" aria-labelledby="about-disclaimer-title">
+                <h3 id="about-disclaimer-title" tabindex="-1">免责声明</h3>
+                <p>键设（KeySkin）的宗旨是帮助皮肤作者和用户把创意做成自己的输入法皮肤。本编辑器仅用于皮肤制作与编辑的技术学习和交流，不提供或分发未经授权的皮肤资源。</p>
+                <p>我们支持正版输入法和原版皮肤，尊重创作者的劳动成果。请通过官方或作者授权的渠道获取皮肤，保留作者署名，并遵守相应的授权条款。</p>
+                <p>未经权利人授权，请勿二次修改他人的皮肤，也请勿传播原版或修改后的皮肤。此类未经授权的行为属于用户个人行为，与本软件无关。</p>
+                <p>如您认为键设侵犯了您的合法权益，请加入官方 QQ 技术交流群（群号：228040912）联系我们。我们会第一时间核实，并在确认后立即下架相关内容。感谢您的理解与支持。</p>
               </section>
             </section>
             </div>

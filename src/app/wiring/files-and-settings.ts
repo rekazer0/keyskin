@@ -177,7 +177,7 @@ export function wireFilesAndSettings(): void {
     }
   }))
   // 连点时第二次读到的是「已复制」：原文案只在绑定时取一次。
-  const qqGroupLabel = copyQqGroupButton.textContent ?? "QQ群：228040912"
+  const qqGroupLabel = copyQqGroupButton.textContent ?? "复制 QQ 群号"
   let qqGroupReset = 0
   copyQqGroupButton.addEventListener("click", async () => {
     const value = "228040912"

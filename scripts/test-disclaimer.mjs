@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 
-const server = await createServer({ logLevel: 'error', server: { port: 0, host: '127.0.0.1' } })
+const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.1', port: 41960, strictPort: false } })
 await server.listen()
 const url = `http://127.0.0.1:${server.httpServer.address().port}/`
 try {
@@ -34,11 +34,25 @@ try {
 
       const navigation = mobile ? '#mobile-navigation' : '#workspace-navigation'
       await page.locator(`${navigation} [data-settings-entry="settings"]`).click()
-      if (mobile) await page.getByRole('button', { name: '免责声明', exact: true }).click()
-      else await page.getByRole('tab', { name: '关于', exact: true }).click()
       const section = page.getByRole('region', { name: '免责声明' })
+      if (mobile) await page.getByRole('button', { name: /^版本/ }).click()
+      else await page.getByRole('tab', { name: '关于', exact: true }).click()
       await section.waitFor()
       assert.equal((await section.locator('p').allTextContents()).join('\n\n'), copy, 'About shows the same text')
+      const save = page.locator('#settings-save')
+      assert.equal(await save.isVisible(), false, 'clean About does not show a settings save action')
+      if (mobile) {
+        await page.locator('.mobile-settings-back').click()
+        assert.ok(await save.isVisible(), 'the mobile settings index retains its save action')
+        await page.getByRole('button', { name: '免责声明', exact: true }).click()
+        const heading = section.getByRole('heading', { name: '免责声明' })
+        assert.ok(await heading.evaluate(el => document.activeElement === el), 'the direct link focuses the disclaimer heading')
+      } else {
+        await page.getByRole('tab', { name: '外观', exact: true }).click()
+        await page.getByRole('button', { name: '深色', exact: true }).click()
+        await page.getByRole('tab', { name: '关于', exact: true }).click()
+        assert.ok(await save.isVisible(), 'About preserves the save action when a draft is dirty')
+      }
       assert.deepEqual(errors, [])
       await page.close()
       console.log(`PASS ${mobile ? 'mobile' : 'desktop'}: one-time startup disclaimer and About copy`)

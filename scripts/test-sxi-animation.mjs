@@ -138,7 +138,8 @@ try {
   // LEVEL 缺失时手心按上层处理，检查器不能显示成下层。
   assert.equal(await pressed("显示层级").textContent(), "上层")
   assert.equal(await input("空闲恢复间隔").inputValue(), "500")
-  assert.match(await section("预览").textContent(), /暂不支持桌面预览/, "特殊动效明确说明，不用示意动画代替")
+  assert.match(await section("预览").textContent(), /找不到路径文件「path\.json」/, "缺少路径时指出具体文件")
+  assert.equal(await section("预览").getByRole("button", { name: "播放预览", exact: true }).isDisabled(), true, "缺少路径时不能播放示意动画")
 
   await show("106")
   assert.equal(await input("碰撞区域位置").inputValue(), "1")

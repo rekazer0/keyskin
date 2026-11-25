@@ -394,7 +394,8 @@ export function populateDocumentInspector(): void {
     if (typed) return [typed]
     // 值不是数字时保持文本输入：number 输入框会清空显示，用户一编辑就丢原值。
     if (documentNumericFields.has(entry.key) && (!entry.value.trim() || looksNumeric(entry.value))) {
-      return [row({ kind: "number", value: entry.value, unit: entry.key === "IDLE_TIME" ? "ms" : undefined, range: entry.key === "FONT_SIZE" ? "fontSize" : undefined }, commit)]
+      const stepper = entry.key === "FONT_SIZE" || entry.key === "BORDER_SIZE"
+      return [row({ kind: "number", value: entry.value, unit: stepper ? "px" : entry.key === "IDLE_TIME" ? "ms" : undefined, stepper, min: stepper ? 0 : undefined }, commit)]
     }
     return [row({ kind: "text", value: entry.value }, commit)]
   }

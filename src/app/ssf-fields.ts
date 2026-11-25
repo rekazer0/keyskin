@@ -650,7 +650,7 @@ function renderBlock(block: SsfBlock, showHeading: boolean): HTMLElement[] {
   const size = ssfDocument(block.path).get(block.section, "TEXT_SIZE") ?? ""
   grid.append(...typographyRows({ fields: textFields, fonts: skinFontChoices(), fontActions: Object.hasOwn(textFields, "font") ? [ssfFontImportButton(targets)] : [], editable: isEditing(), codec: "0xargb",
     sample: appState.selectedKeySections.length === 1 ? preview.keys.find(key => key.section === appState.selectedKeySections[0])?.center : undefined,
-    size: { unit: Number(size) <= 1 ? "屏宽" : "px", step: Number(size) <= 1 ? 0.001 : 1, range: undefined },
+    size: { unit: Number(size) <= 1 ? "屏宽" : "px", step: Number(size) <= 1 ? 0.001 : 1 },
     track: () => {},
     write: (key, value, merge) => editTargets(targets, (document, target) => {
       if (!value || key === "BOLD" && value === "0") document.remove(target.section, key)

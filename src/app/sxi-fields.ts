@@ -153,15 +153,13 @@ function palmRow(tag: "div" | "label", block: SxiBlock, path: string[], label: s
   return row
 }
 
-/** 字号、字重这类有自然范围的数值配滑块（property-rows 的 RANGES）。 */
-const NUMBER_RANGES: Record<string, "fontSize" | "weight"> = { f_s: "fontSize", f_w: "weight" }
-
 function numberRow(block: SxiBlock, path: string[], label: string, values: Json[]): HTMLElement {
-  const row = palmRow("label", block, path, label, values)
+  const key = path[path.length - 1]
+  const row = palmRow(key === "f_s" ? "div" : "label", block, path, label, values)
   const { value, mixed } = sharedValue(values)
   const text = numberText(value) ?? ""
   // Int.max reads as "inf", which a number box cannot show.
-  row.append(fieldControl({ kind: "number", value: text, expression: text === "inf", range: NUMBER_RANGES[path[path.length - 1]] }, label, (entered) => {
+  row.append(fieldControl({ kind: "number", value: text, expression: text === "inf", stepper: key === "f_s", min: key === "f_s" ? 0 : undefined, range: key === "f_w" ? "weight" : undefined }, label, (entered) => {
     if (!entered) return writeSxiValue(block.targets, path, undefined)
     try {
       writeSxiValue(block.targets, path, numberValue(entered))

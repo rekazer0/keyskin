@@ -36,7 +36,7 @@ function isEditableNumberInput(target: EventTarget | null): target is HTMLInputE
   return target instanceof HTMLInputElement && isNumberField(target) && !target.disabled && !target.readOnly
 }
 
-function stepNumber(input: HTMLInputElement, steps: number): void {
+export function stepNumber(input: HTMLInputElement, steps: number): void {
   if (input.type === "number" && input.step !== "any") {
     input.stepUp(steps)
     return

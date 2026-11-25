@@ -918,6 +918,11 @@ canvas {
   display: none;
 }
 
+/* 欢迎页自带滚动；画布被遮住时不能再撑出滚动条，否则窗口边缘会露出一圈底色 */
+.canvas-wrap.empty {
+  overflow: hidden;
+}
+
 .canvas-wrap.empty .empty-state {
   position: absolute;
   inset: 0;

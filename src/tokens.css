@@ -83,8 +83,8 @@
   --home-background: var(--panel);
   --toolbar-icon-card-width: 72px;
   --skin-preview-size: 80px;
-  --about-logo-size: 128px;
-  --about-description-width: 52ch;
+  --about-content-width: 680px;
+  --about-logo-size: 96px;
   --resource-tile-size: 80px; /* 资源磁贴固定宽度，高度为宽度的 4/5，随侧栏宽度自动增减列 */
 
   --resource-tile-icon-stroke-width: 2;
@@ -475,7 +475,7 @@
     --radius-home: 20px;
     --radius-homepreview: 10px;
     --mobile-home-gutter: 20px;
-    --about-logo-size: 104px;
+    --about-logo-size: 56px;
     --font-size-page: 24px;
     --mobile-page-padding: 20px;
     --mobile-picker-height: 60%;

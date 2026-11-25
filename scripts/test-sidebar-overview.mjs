@@ -1,4 +1,4 @@
-import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
+import { dismissStartupDisclaimer, openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { chromium } from "playwright"
@@ -123,6 +123,9 @@ try {
       await checkSkinCard(page, "BDS")
       assert.equal(await page.locator(".skin-card-preview.ui-empty").count(), 1, "missing preview retains a compact placeholder")
       await page.reload()
+    } else {
+      await page.getByRole("dialog", { name: "免责声明" }).waitFor()
+      await dismissStartupDisclaimer(page)
     }
     await page.locator("#browser-open").setInputFiles({ name: "分类.bda", mimeType: "application/octet-stream", buffer: readFileSync(new URL("../public/default-template.bda", import.meta.url)) })
     await page.waitForFunction(() => !document.querySelector("#open").disabled)

@@ -187,8 +187,8 @@ function colorPairField(label: string, values: [number | undefined, number | und
     commit: (next, { index = 0 }) => { if (next[index]) onChange(index ? "HL_COLOR" : "NM_COLOR", next[index]) } })
 }
 
-function numberField(label: string, value: number, disabled: boolean, onChange: (value: number) => void, range?: "fontSize"): HTMLElement {
-  return field({ key: label, label, editable: !disabled, spec: { kind: "number", value: String(value), min: 1, step: 1, range },
+function numberField(label: string, value: number, disabled: boolean, onChange: (value: number) => void): HTMLElement {
+  return field({ key: label, label, editable: !disabled, spec: { kind: "number", value: String(value), min: 1, step: 1 },
     commit: (next) => { if (next !== "" && Number.isFinite(Number(next))) onChange(Number(next)) } })
 }
 
