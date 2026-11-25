@@ -75,7 +75,7 @@ export async function convertSsfDocument(
     import("./ssf-to-baidu.ts"), import("./ssf-state-tips.ts"), import("./ssf-native-toolbar.ts"),
   ])
   // Keep the SSF canvas geometry and artwork; the toolbar moves into Baidu's native F14 container and logo icons.
-  const { archive: converted, warnings } = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution), format)
+  const { archive: converted, warnings } = convertSsfToBaidu(pkg, templates.sogou, Number(pkg.resolution), format, true)
   syncKeyStateTips(converted)
   adaptSsfNativeToolbar(converted, pkg, format, warnings)
   if (format === "bds") for (const theme of pkg.themes.keys()) {

@@ -224,3 +224,18 @@ test('SXI → BDS preserves visible toolbar centres and materialises fixed icon 
     }
   }
 })
+
+test('SXI → Baidu keeps a direction image that uses the shared slice coordinates', async () => {
+  const palm = sxi()
+  const local = 'light/skin/port/res/btn'
+  const shared = 'light/skin/res/btn'
+  const image = palm.getBytes(`${shared}.png`).slice()
+  palm.setBytes(`${local}.png`, image)
+  for (const format of ['bds', 'bdi']) {
+    const { bytes } = await convertSxiToBaidu(palm, format)
+    const target = SkinArchive.open(bytes, format)
+    assert.deepEqual(target.getBytes(`${local}.png`), image)
+    assert.equal(target.getText(`${local}.til`), target.getText(`${shared}.til`))
+  }
+  assert.equal(palm.getBytes(`${local}.til`), undefined, 'conversion does not modify the SXI')
+})

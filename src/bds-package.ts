@@ -15,7 +15,7 @@ const INHERITED_SECTIONS = ["INPUT", "CAND", "MORE"]
 
 type AtlasPart = { png: Uint8Array; x: number; y: number }
 /** 把若干 PNG 画到一张 width×height 的透明图上；应用里用画布实现，测试里可以替换。 */
-type ComposeAtlas = (width: number, height: number, parts: AtlasPart[]) => Promise<Uint8Array>
+type ComposeAtlas = (width: number, height: number, parts: AtlasPart[]) => Uint8Array | Promise<Uint8Array>
 
 const rectOf = (value: string | undefined): TileRect | undefined => {
   const parts = value?.split(",").map((part) => Number(part.trim()))
@@ -141,7 +141,7 @@ async function packImages(archive: SkinArchive, theme: string, compose: ComposeA
   if (paths.length <= MAX_IMAGE_FILES) return
   const images = paths
     .map((path) => ({ name: path.slice(res.length, -4), png: archive.getBytes(path)!, til: archive.getBytes(path.replace(/\.png$/i, ".til")) }))
-    .filter((image) => image.til && !image.name.startsWith(BAKED_IMAGE))
+    .filter((image) => image.til && !image.name.startsWith(BAKED_IMAGE) && !image.name.startsWith("keyskin_keys_"))
     .flatMap((image) => {
       const size = pngSize(image.png)
       return size ? [{ ...image, ...size, tiles: IniDocument.parse(archive.getText(`${res}${image.name}.til`)) }] : []

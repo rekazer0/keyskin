@@ -194,6 +194,16 @@ export function sxiToBaiduArchive(archive: SkinArchive, target: "bdi" | "bds" = 
     if (bytes) add(mapped.directory, mapped.path, bytes)
   }
 
+  // Palm can pair direction-specific artwork with shared slice metadata. Baidu resolves PNG and TIL
+  // together, so materialize the shared map beside the overriding PNG without copying the artwork.
+  for (const path of Object.keys(files)) {
+    const match = /^(.*?)(?:port|land)\/res\/([^/]+)\.png$/i.exec(path)
+    if (!match) continue
+    const own = path.replace(/\.png$/i, ".til")
+    const shared = files[`${match[1]}res/${match[2]}.til`]
+    if (!files[own] && shared) files[own] = shared
+  }
+
   const info = derived.get("Info.txt")
   if (!info) throw new Error("skin.json 中缺少皮肤信息")
   files["Info.txt"] = strToU8(`SupportPlatform=${target === "bdi" ? "I" : "A"}\n${info}`)

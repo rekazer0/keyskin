@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { strToU8, unzipSync, zipSync } from 'fflate'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { SkinArchive } from '../src/skin.ts'
 import { IniDocument } from '../src/ini.ts'
 import { convertSsfSxi } from '../src/palm/ssf-sxi-convert.ts'
@@ -91,4 +91,29 @@ test('Baidu export covers the Sogou glyph on keys whose artwork is the label, an
   const pressedOnly = keys.get(section('w'), 'FG_IMAGES')
   assert.ok(pressedOnly)
   assert.notEqual(keys.get(pressedOnly, 'NORMAL'), keys.get(pressedOnly, 'PRESSED'))
+})
+
+test('SSF → SXI → BDS retains shared key tile references and positional coordinates', async () => {
+  const { convertSxiToBaidu } = await import('../src/palm/sxi-to-baidu.ts')
+  const files = unzipSync(ssfFixture())
+  const skinPath = '1080/status1/phoneSkin.ini'
+  files[skinPath] = strToU8(strFromU8(files[skinPath]).replace(/(26keyq(?:_press)?\.png),[^\r\n]+/g, '$1'))
+  const source = SkinArchive.open(zipSync(files), 'ssf')
+  const palm = SkinArchive.open((await convertSsfSxi(source, templates)).bytes, 'sxi')
+  const bds = SkinArchive.open((await convertSxiToBaidu(palm, 'bds')).bytes, 'bds')
+  const root = 'light/skin/'
+  const css = IniDocument.parse(bds.getText(`${root}res/default.css`))
+  const board = IniDocument.parse(bds.getText(`${root}port/py_26.ini`))
+  const key = action => board.sections().find(section => board.get(section, 'CENTER') === action)
+  const back = action => board.get(key(action), 'BACK_STYLE')
+  assert.equal(back('w'), back('e'), 'repeated key artwork shares the style')
+  assert.notEqual(back('q'), back('w'), 'a custom key keeps its own artwork')
+  const [sheet, index] = css.get(`STYLE${back('q')}`, 'NM_IMG').split(',')
+  assert.match(sheet, /keyskin_keys_port_py_26_back_normal/)
+  const atlas = `${root}res/${sheet}`
+  assert.deepEqual(bds.getBytes(`${atlas}.png`), palm.getBytes(`${atlas}.png`))
+  const til = IniDocument.parse(bds.getText(`${atlas}.til`))
+  const [x, y] = til.get(`IMG${index}`, 'SOURCE_RECT').split(',').map(Number)
+  const [keyX, keyY, width, height] = board.get(key('q'), 'VIEW_RECT').split(',').map(Number)
+  assert.ok(x >= keyX && x < keyX + width && y >= keyY && y < keyY + height)
 })

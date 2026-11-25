@@ -393,3 +393,18 @@ export function nineSliceImage(image: RgbaImage, source: readonly number[], inne
   }
   return { width, height, data }
 }
+
+/** 把多张 PNG 按坐标拼成一张图集（导出 BDS 合图用）。 */
+export function composeAtlasPng(width: number, height: number, parts: ReadonlyArray<{ png: Uint8Array; x: number; y: number }>): Uint8Array {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width * height > MAX_PIXELS) throw new Error("PNG 尺寸无效")
+  const data = new Uint8Array(width * height * 4)
+  // 直接复制切片像素，避免 Canvas 的预乘透明度舍入与 PNG 重编码膨胀。
+  for (const { png, x, y } of parts) {
+    const image = decodePng(png)
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x + image.width > width || y + image.height > height) throw new Error("图片超出图集范围")
+    for (let row = 0; row < image.height; row++) {
+      data.set(image.data.subarray(row * image.width * 4, (row + 1) * image.width * 4), ((y + row) * width + x) * 4)
+    }
+  }
+  return encodePng({ width, height, data })
+}

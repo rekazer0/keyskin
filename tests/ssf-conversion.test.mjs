@@ -52,14 +52,17 @@ function baiduStyleImage(archive, theme, styleID) {
   const [name] = (style('NM_IMG') ?? '').split(',')
   const result = { styleID, name, normalColor: style('NM_COLOR'), pressedColor: style('HL_COLOR') }
   if (!name) return result
-  const tile = IniDocument.parse(archive.getText(`${theme}/skin/res/${name}.til`))
-  const pressedName = style('HL_IMG').split(',')[0]
-  return {
-    ...result,
-    image: decodePng(archive.getBytes(`${theme}/skin/res/${name}.png`)),
-    pressed: decodePng(archive.getBytes(`${theme}/skin/res/${pressedName}.png`)),
-    inner: tile.get('IMG1', 'INNER_RECT'),
+  const slice = (reference) => {
+    const [file, index] = reference.split(',')
+    const tiles = IniDocument.parse(archive.getText(`${theme}/skin/res/${file}.til`))
+    const source = tiles.get(`IMG${index}`, 'SOURCE_RECT').split(',').map(Number)
+    const inner = tiles.get(`IMG${index}`, 'INNER_RECT')?.split(',').map(Number)
+    return {
+      image: cropImage(decodePng(archive.getBytes(`${theme}/skin/res/${file}.png`)), ...source),
+      inner: inner && [inner[0] - source[0], inner[1] - source[1], inner[2], inner[3]].join(','),
+    }
   }
+  return { ...result, ...slice(style('NM_IMG')), pressed: slice(style('HL_IMG')).image }
 }
 
 // —— PNG codec ——
@@ -736,4 +739,42 @@ test('real Sogou skins convert to every format and back', { skip: realSkins.leng
       await SsfPackage.open(back.bytes)
     }
   }
+})
+
+test('SSF conversion plans proportionally identical key backgrounds as one slice before writing styles', async () => {
+  const files = unzipSync(ssfFixture())
+  for (const [name, width, height] of [['26keyq.png', 98, 142], ['26keyq_press.png', 49, 71]]) {
+    assert.ok(files[`1080/status1/${name}`], name)
+    files[`1080/status1/${name}`] = encodePng(solid(width, height, COLORS.light.qKey))
+  }
+  const skinPath = '1080/status1/phoneSkin.ini'
+  files[skinPath] = strToU8(strFromU8(files[skinPath]).replace(/(26keyq(?:_press)?\.png),[^\r\n]+/g, '$1'))
+  const { bytes } = await convertSsfBytes(zipSync(files), 'bds')
+  const converted = SkinArchive.open(bytes, 'bds')
+  const q = baiduKeyStyle(converted, 'light', 'port', 'py_26', 'q')
+  const css = IniDocument.parse(converted.getText('light/skin/res/default.css'))
+  const normal = css.get(`STYLE${q.styleID}`, 'NM_IMG')
+  assert.equal(css.get(`STYLE${q.styleID}`, 'HL_IMG'), normal)
+  assert.deepEqual(rgb(q.image, 0, 0), COLORS.light.qKey)
+})
+
+test('SSF → BDA shares drawable styles and PNGs before writing either orientation', async () => {
+  const files = unzipSync(ssfFixture())
+  const folder = '1080/status1/'
+  const skinPath = `${folder}phoneSkin.ini`
+  files[skinPath] = strToU8(strFromU8(files[skinPath]).replace(/(26keyq(?:_press)?\.png),[^\r\n]+/g, '$1'))
+  files[`${folder}26keyq_press.png`] = encodePng(solid(49, 71, COLORS.light.qKey))
+  const { bytes } = await convertSsfBytes(zipSync(files), 'bda')
+  const archive = SkinArchive.open(bytes, 'bda')
+  for (const orientation of ['port', 'land']) {
+    const get = key => bdaKeyImage(archive, 'light', orientation, 'py_26', `KEY_${key}`)
+    const q = get('Q'), w = get('W'), e = get('E')
+    assert.deepEqual(w.ref, e.ref)
+    assert.notDeepEqual(q.ref, w.ref)
+    assert.equal(q.style.normalImage.resource.resourceID, q.style.highlightImage.resource.resourceID)
+    const id = q.style.normalImage.resource.resourceID
+    assert.deepEqual(rgb(decodePng(archive.getBytes(`light/skin/res/${id}.png`)), 0, 0), COLORS.light.qKey)
+  }
+  assert.deepEqual(bdaKeyImage(archive, 'light', 'port', 'py_26', 'KEY_W').ref,
+    bdaKeyImage(archive, 'light', 'land', 'py_26', 'KEY_W').ref)
 })

@@ -4,11 +4,13 @@
 // Sogou look (ssf-look.ts) is painted onto it as new single-image styles. Keys Sogou draws as text keep
 // the template glyph, recoloured to the Sogou label colour. Day/night statuses become light/dark themes.
 
-import { strToU8 } from "fflate"
+import { strFromU8, strToU8 } from "fflate"
 import { adaptBdiPanels } from "../bdi-panel-export.ts"
+import type { TileRect } from "../tiles.ts"
 import { IniDocument } from "../ini.ts"
 import { SkinArchive } from "../skin.ts"
 import { SsfBaiduMotion } from "./ssf-anim-to-baidu.ts"
+import { SsfBaiduImages } from "./ssf-baidu-images.ts"
 import { cached, fingerprint } from "./ssf-cache.ts"
 import { ssfQwerty } from "./ssf-keymap.ts"
 import { SsfLook, type LookColors, type LookImage, type LookPair, type LookText } from "./ssf-look.ts"
@@ -18,13 +20,6 @@ import { cropImage, decodePng, encodePng, isPng, pngSize, tintImage, whiteMask, 
 
 export type SsfConversion = { archive: SkinArchive; warnings: string[] }
 
-function tile(width: number, height: number, stretch?: LookImage["stretch"]): Uint8Array {
-  const inner = stretch && stretch[1] <= width && stretch[3] <= height
-    ? [`INNER_RECT=${stretch[0]},${stretch[2]},${stretch[1] - stretch[0]},${stretch[3] - stretch[2]}`]
-    : []
-  return strToU8(["[GLOBAL]", "TILE_NUM=1", "", "[IMG1]", `SOURCE_RECT=0,0,${width},${height}`, ...inner, ""].join("\n"))
-}
-
 function numbers(value: string | undefined): number[] {
   return value?.split(",").map((part) => Number(part.trim())) ?? []
 }
@@ -32,17 +27,13 @@ function numbers(value: string | undefined): number[] {
 /** One theme's `res/` folder and `default.css` being written. */
 class ThemeResources {
   readonly styles: IniDocument
-  private readonly theme: SsfTheme
-  private readonly output: Map<string, Uint8Array>
   private nextStyle: number
-  private nextImage = 1
-  private readonly images = new Map<string, string>()
-  private readonly animations = new Map<number, string>()
+  readonly images: SsfBaiduImages
+  private readonly styleIDs = new Map<string, string>()
 
   constructor(theme: SsfTheme, output: Map<string, Uint8Array>, css: string, scale = 1) {
-    this.theme = theme
-    this.output = output
     this.styles = IniDocument.parse(css)
+    this.images = new SsfBaiduImages(output, `${theme}/skin/res/`)
     if (scale !== 1) for (const { section, key, value } of this.styles.entries()) {
       if (key === "FONT_SIZE") this.styles.set(section, key, String(Math.round(Number(value) * scale)))
     }
@@ -54,29 +45,19 @@ class ThemeResources {
   }
 
   private addStyle(entries: Array<{ key: string; value: string }>): string {
+    const signature = JSON.stringify([...entries].sort((a, b) => a.key.localeCompare(b.key)).map(({ key, value }) => [key, value]))
+    const reused = this.styleIDs.get(signature)
+    if (reused) return reused
     const id = String(this.nextStyle++)
+    this.styleIDs.set(signature, id)
     this.styles.appendSection(`STYLE${id}`, entries)
     return id
   }
 
-  /** Writes a standalone png + til pair once per distinct image and returns its resource name. */
-  resource(image: LookImage): string {
-    let name = this.images.get(image.id)
-    if (!name) {
-      const size = pngSize(image.bytes)
-      if (!size) throw new Error(`${image.id} 不是有效的 PNG`)
-      name = `ssf${this.nextImage++}`
-      this.output.set(`${this.theme}/skin/res/${name}.png`, image.bytes)
-      this.output.set(`${this.theme}/skin/res/${name}.til`, tile(size[0], size[1], image.stretch))
-      this.images.set(image.id, name)
-    }
-    return name
-  }
-
-  imageStyle(pair: LookPair): string {
+  imageStyle(pair: LookPair, back = false): string {
     return this.addStyle([
-      { key: "NM_IMG", value: `${this.resource(pair.normal)},1` },
-      { key: "HL_IMG", value: `${this.resource(pair.pressed)},1` },
+      { key: "NM_IMG", value: this.images.reference(pair.normal, back) },
+      { key: "HL_IMG", value: this.images.reference(pair.pressed, back) },
     ])
   }
 
@@ -86,12 +67,7 @@ class ThemeResources {
 
   /** A style that plays anim.ini's `animation` on press, for a key's BACK_ANIM_STYLE / FORE_ANIM_STYLE. */
   animationStyle(animation: number): string {
-    let style = this.animations.get(animation)
-    if (!style) {
-      style = this.addStyle([{ key: "PRESS_ANIM", value: String(animation) }])
-      this.animations.set(animation, style)
-    }
-    return style
+    return this.addStyle([{ key: "PRESS_ANIM", value: String(animation) }])
   }
 
   soundStyle(filename: string): string {
@@ -106,8 +82,10 @@ class ThemeResources {
     return this.addStyle([...entries, ...Object.entries(overrides).map(([key, value]) => ({ key, value }))])
   }
 
-  css(): Uint8Array {
-    const count = String(this.styles.sections().filter((section) => /^STYLE\d+$/.test(section)).length)
+  css(used?: ReadonlySet<string>): Uint8Array {
+    const sections = this.styles.sections().filter((section) => /^STYLE\d+$/.test(section))
+    if (used) this.styles.removeSections(sections.filter((section) => !used.has(section.slice(5))))
+    const count = String(used ? sections.reduce((max, section) => used.has(section.slice(5)) ? Math.max(max, Number(section.slice(5))) : max, 0) : sections.length)
     if (this.styles.sections().includes("GLOBAL")) this.styles.set("GLOBAL", "STYLE_NUM", count)
     else this.styles.appendSection("GLOBAL", [{ key: "STYLE_NUM", value: count }])
     return strToU8(this.styles.toString())
@@ -130,12 +108,14 @@ class ThemeConverter {
   private keyboardStyles?: { panel?: string; cand?: string; input?: string }
   /** BDI: iOS types into a row inside the keyboard, which takes Sogou's pinyin bar. */
   private readonly inlineInput: boolean
+  private readonly packKeys: boolean
   /** Style of the Sogou keyboard background for the orientation being written, if the skin has one. */
   private panelStyle?: string
 
-  constructor(pkg: SsfPackage, base: SkinArchive, theme: SsfTheme, output: Map<string, Uint8Array>, warnings: string[], panelWidth?: number, inlineInput = false) {
+  constructor(pkg: SsfPackage, base: SkinArchive, theme: SsfTheme, output: Map<string, Uint8Array>, warnings: string[], panelWidth?: number, inlineInput = false, packKeys = false) {
     this.panelWidth = panelWidth
     this.inlineInput = inlineInput
+    this.packKeys = packKeys
     const panel = base.isText("light/skin/port/gen.ini") ? IniDocument.parse(base.getText("light/skin/port/gen.ini")).get("PANEL", "SIZE") : undefined
     const width = panelWidth || numbers(panel)[0] || 480
     this.look = new SsfLook(pkg, theme, warnings, width)
@@ -214,12 +194,18 @@ class ThemeConverter {
     const own = numbers(layout.get("PANEL", "SIZE"))
     const [boardWidth, boardHeight] = own.length === 2 ? own : panel
     const board = { width: boardWidth, height: boardHeight }
-    for (const section of layout.sections().filter((name) => /^KEY\d+$/.test(name))) {
+    const keys = layout.sections().filter((section) => /^KEY\d+$/.test(section)).flatMap((section) => {
       const action = layout.get(section, "CENTER")?.trim()
-      if (!action) continue
-      const [, , width, height] = numbers(layout.get(section, "VIEW_RECT"))
+      if (!action) return []
+      const rect = numbers(layout.get(section, "VIEW_RECT")) as TileRect
+      const [, , width, height] = rect
       const look = this.look.key(layoutName, action, landscape, width > 0 && height > 0 ? [width, height] : undefined, layout.get(section, "SSF_SECTION"), layout.get(section, "SSF_BG"), layout.get(section, "SSF_FG"))
-      if (look.back) layout.set(section, "BACK_STYLE", this.resources.imageStyle(look.back))
+      return [{ section, action, rect, look }]
+    })
+    if (this.packKeys) this.resources.images.plan(`${landscape ? "land" : "port"}_${layoutName}`, [boardWidth, boardHeight],
+      keys.map(({ rect, look }) => ({ rect, back: look.back, fore: look.fore })))
+    for (const { section, action, rect: [, , width, height], look } of keys) {
+      if (look.back) layout.set(section, "BACK_STYLE", this.resources.imageStyle(look.back, this.packKeys))
       if (look.fore) {
         layout.set(section, "FORE_STYLE", this.resources.imageStyle(look.fore))
         layout.remove(section, "FORE_OFFSET")
@@ -407,7 +393,10 @@ class ThemeConverter {
       this.convertGeneral(gen, orientation)
       this.bindHint(gen, this.convertHint(orientation, false))
       this.output.set(genPath, strToU8(gen.toString()))
-      for (const path of [...this.output.keys()]) {
+      const priority = (path: string) => /\/py_26\.ini$/.test(path) ? 0 : /\/py_9\.ini$/.test(path) ? 1 : 2
+      const paths = [...this.output.keys()]
+      if (this.packKeys) paths.sort((a, b) => priority(a) - priority(b))
+      for (const path of paths) {
         const match = path.match(new RegExp(`^${this.theme}/skin/${orientation}/([^/]+)\\.ini$`))
         if (!match || match[1] === "gen") continue
         const layout = IniDocument.parse(new TextDecoder().decode(this.output.get(path)!))
@@ -422,7 +411,21 @@ class ThemeConverter {
     const animations = this.motion?.ini()
     if (animations) this.output.set(`${this.theme}/skin/res/anim.ini`, strToU8(animations))
     if (this.motion?.throwsDecorations) this.warnings.push("按键动画中飞出的装饰图已转为百度粒子动效，随机位置与抛物轨迹为近似效果")
-    this.output.set(`${this.theme}/skin/res/default.css`, this.resources.css())
+    // Only write styles actually reached from the converted layouts (including inherited and animation styles).
+    const used = new Set<string>()
+    if (this.packKeys) for (const [path, bytes] of this.output) {
+      if (!path.startsWith(`${this.theme}/skin/`) || !/\.(?:ini|cnd|pop)$/i.test(path)) continue
+      for (const { key, value } of IniDocument.parse(strFromU8(bytes)).entries()) {
+        if (key === "STAT_STYLE" || !/(?:^|_)STYLE(?:_INDEX)?$|^FIRST_(?:BACK|FORE)$|^PARTICLE_IMAGE$/.test(key)) continue
+        for (const token of value.split(/[,;]/)) {
+          const id = token.trim()
+          if (!/^\d+$/.test(id)) continue
+          used.add(id)
+          if (!this.resources.styles.hasSection(`STYLE${id}`)) used.add(String(Math.floor(Number(id) / 100)))
+        }
+      }
+    }
+    this.output.set(`${this.theme}/skin/res/default.css`, this.resources.css(this.packKeys ? used : undefined))
   }
 }
 
@@ -451,12 +454,12 @@ export function ssfPreview(pkg: SsfPackage): Uint8Array | undefined {
  * A Sogou skin laid out on `base` (the Sogou BDS skeleton), as canonical package paths
  * (`light/skin/…`, `Info.txt`) before packaging; the editor previews an SSF document from these.
  */
-export function ssfToBaiduFiles(pkg: SsfPackage, base: SkinArchive, panelWidth?: number, format: "bdi" | "bds" = "bds"): { files: Map<string, Uint8Array>; warnings: string[] } {
+export function ssfToBaiduFiles(pkg: SsfPackage, base: SkinArchive, panelWidth?: number, format: "bdi" | "bds" = "bds", packKeys = false): { files: Map<string, Uint8Array>; warnings: string[] } {
   if (base.format === "bda") throw new Error("搜狗皮肤只能套用 BDS/BDI 模板")
   if (!base.isText("light/skin/res/default.css")) throw new Error("模板缺少 res/default.css")
   const warnings = [...pkg.warnings]
   const files = new Map<string, Uint8Array>()
-  for (const theme of pkg.themes.keys()) new ThemeConverter(pkg, base, theme, files, warnings, panelWidth, format === "bdi").convert()
+  for (const theme of pkg.themes.keys()) new ThemeConverter(pkg, base, theme, files, warnings, panelWidth, format === "bdi", packKeys).convert()
   files.set("Info.txt", infoText(base, pkg))
   const preview = ssfPreview(pkg)
   if (preview) files.set("demo.png", preview)
@@ -465,8 +468,8 @@ export function ssfToBaiduFiles(pkg: SsfPackage, base: SkinArchive, panelWidth?:
 }
 
 /** Converts a Sogou skin to a Baidu BDS archive laid out on `base` (the Sogou BDS skeleton); `bdi` lays it out for iOS. */
-export function convertSsfToBaidu(pkg: SsfPackage, base: SkinArchive, panelWidth?: number, format: "bdi" | "bds" = "bds"): SsfConversion {
-  const { files, warnings } = ssfToBaiduFiles(pkg, base, panelWidth, format)
+export function convertSsfToBaidu(pkg: SsfPackage, base: SkinArchive, panelWidth?: number, format: "bdi" | "bds" = "bds", packKeys = false): SsfConversion {
+  const { files, warnings } = ssfToBaiduFiles(pkg, base, panelWidth, format, packKeys)
   if (format === "bds") adaptBdiPanels(files, warnings)
   const dual = pkg.themes.size > 1
   const raw = Object.fromEntries([...files].map(([path, bytes]) => {

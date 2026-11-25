@@ -1,14 +1,14 @@
 // Sogou phone skin → Baidu BDA (protobuf) skin.
 //
 // Like the BDS writer, the official BDA template supplies panels and key geometry and the Sogou look
-// (ssf-look.ts) is painted onto it. BDA styles are shared by many keys, so each painted key gets new
-// image styles appended to `appearanceConfig` and its style references repointed; text glyphs get
-// recoloured copies of their template text styles. Unknown protobuf fields are kept byte for byte.
+// (ssf-look.ts) is painted onto it. Equivalent keys reference one generated style in `appearanceConfig`;
+// text glyphs get recoloured copies of their template text styles. Unknown protobuf fields are kept byte for byte.
 
 import { bdaPanelKeyName, type BdaStyleRef } from "../bda.ts"
 import { decodeBdaAppearanceUncached } from "../bda-decode.ts"
 import { bdaSoundResourceType, encodedField, encodeVarint, join, rawFields, rawString, removeFields, replaceField, updateBdaKeySound } from "../bda-encode.ts"
 import { SkinArchive } from "../skin.ts"
+import { SsfArtwork } from "./ssf-artwork.ts"
 import { SsfLook, type LookColors, type LookImage, type LookPair } from "./ssf-look.ts"
 import type { SsfPackage, SsfTheme } from "./ssf-package.ts"
 import { decodePng, encodePng, isPng, pngSize, tintImage } from "./ssf-png.ts"
@@ -59,7 +59,25 @@ function mapEntry(key: number, value: Uint8Array): Uint8Array {
  * Next free style keys of a theme. BDA style keys are global across a theme's orientations (the
  * converters merge both into one default.css), so new keys start above every orientation's maximum.
  */
-type StyleKeys = { image: number; text: number; color: number }
+type StyleType = keyof typeof STYLE_TYPES
+
+class StyleKeys {
+  private readonly assigned = new Map<string, number>()
+  private readonly next: Record<StyleType, number>
+
+  constructor(next: Record<StyleType, number>) {
+    this.next = next
+  }
+
+  key(type: StyleType, bytes: Uint8Array): number {
+    const signature = `${type}:${bytes.join(",")}`
+    const known = this.assigned.get(signature)
+    if (known !== undefined) return known
+    const key = this.next[type]++
+    this.assigned.set(signature, key)
+    return key
+  }
+}
 
 /** Collects every edit to one appearanceConfig and its theme's `res/` images. */
 class AppearanceWriter {
@@ -67,7 +85,8 @@ class AppearanceWriter {
   private readonly appended: Uint8Array[] = []
   private readonly keys: StyleKeys
   private readonly textStyles: Map<number, Uint8Array>
-  private readonly recoloured = new Map<string, number>()
+  private readonly recoloured = new Map<string, Uint8Array>()
+  private readonly emitted = new Set<string>()
   private readonly resources: ThemeImages
 
   constructor(bytes: Uint8Array, resources: ThemeImages, keys: StyleKeys) {
@@ -83,41 +102,42 @@ class AppearanceWriter {
     }))
   }
 
-  imageStyle(pair: LookPair): Uint8Array {
-    const key = this.keys.image++
-    const style = join([
-      encodedField(1, 2, imageAtom(this.resources.resource(pair.normal), pair.normal)),
-      encodedField(2, 2, imageAtom(this.resources.resource(pair.pressed), pair.pressed)),
-    ])
-    this.appended.push(encodedField(1, 2, mapEntry(key, style)))
-    return styleRef("image", key)
+  private style(type: StyleType, bytes: Uint8Array): Uint8Array {
+    const key = this.keys.key(type, bytes)
+    const id = `${type}:${key}`
+    if (!this.emitted.has(id)) {
+      this.emitted.add(id)
+      const field = { image: 1, text: 2, color: 3 }[type]
+      this.appended.push(encodedField(field, 2, mapEntry(key, bytes)))
+    }
+    return styleRef(type, key)
+  }
+
+  imageStyle(pair: LookPair, scalable = false): Uint8Array {
+    const atom = (image: LookImage) => {
+      const { id, source } = this.resources.resource(image, scalable)
+      return imageAtom(id, source)
+    }
+    return this.style("image", join([encodedField(1, 2, atom(pair.normal)), encodedField(2, 2, atom(pair.pressed))]))
   }
 
   colorStyle(color: string): Uint8Array {
-    const key = this.keys.color++
-    const style = join([1, 2].map((field) => encodedField(field, 0, encodeVarint(Number.parseInt(color, 16)))))
-    this.appended.push(encodedField(3, 2, mapEntry(key, style)))
-    return styleRef("color", key)
+    const value = encodeVarint(Number.parseInt(color, 16))
+    return this.style("color", join([1, 2].map((field) => encodedField(field, 0, value))))
   }
 
   /** A copy of a template text style with the Sogou label colours, shared by every key that needs it. */
   recolouredText(key: number, colors: LookColors): Uint8Array | undefined {
     const cacheKey = `${key}:${colors.normal}:${colors.pressed}`
-    let copy = this.recoloured.get(cacheKey)
-    if (copy === undefined) {
-      const original = this.textStyles.get(key)
-      if (!original) return
-      copy = this.keys.text++
-      const style = replaceField(
-        replaceField(original, 4, 0, encodeVarint(Number.parseInt(colors.normal, 16))),
-        5,
-        0,
-        encodeVarint(Number.parseInt(colors.pressed, 16)),
-      )
-      this.appended.push(encodedField(2, 2, mapEntry(copy, style)))
-      this.recoloured.set(cacheKey, copy)
-    }
-    return styleRef("text", copy)
+    const existing = this.recoloured.get(cacheKey)
+    if (existing) return existing
+    const original = this.textStyles.get(key)
+    if (!original) return
+    const style = replaceField(replaceField(original, 4, 0, encodeVarint(Number.parseInt(colors.normal, 16))),
+      5, 0, encodeVarint(Number.parseInt(colors.pressed, 16)))
+    const ref = this.style("text", style)
+    this.recoloured.set(cacheKey, ref)
+    return ref
   }
 
   /** Rewrites each panel (`appearance.panels`, field 4) through `update`. */
@@ -139,7 +159,8 @@ class AppearanceWriter {
 
 /** PNG resources of one theme: one numeric id per distinct image, next to the template's own. */
 class ThemeImages {
-  private readonly ids = new Map<string, string>()
+  private readonly artwork = new SsfArtwork()
+  private readonly ids = new Map<Uint8Array, string>()
   private next: number
   private readonly theme: SsfTheme
   private readonly output: Map<string, Uint8Array>
@@ -150,14 +171,17 @@ class ThemeImages {
     this.next = Math.max(90000, ...used.map(Number).filter(Number.isFinite)) + 1
   }
 
-  resource(image: LookImage): string {
-    let id = this.ids.get(image.id)
+  resource(image: LookImage, scalable: boolean): { id: string; source: LookImage } {
+    const { image: source } = this.artwork.artwork(image, scalable)
+    // Stretch belongs to the BDA image atom, not the PNG. The same bytes can use different borders.
+    const { image: { bytes } } = source.stretch ? this.artwork.artwork({ ...source, stretch: undefined }) : { image: source }
+    let id = this.ids.get(bytes)
     if (!id) {
       id = String(this.next++)
-      this.output.set(`${this.theme}/skin/res/${id}.png`, image.bytes)
-      this.ids.set(image.id, id)
+      this.output.set(`${this.theme}/skin/res/${id}.png`, bytes)
+      this.ids.set(bytes, id)
     }
-    return id
+    return { id, source }
   }
 }
 
@@ -187,11 +211,11 @@ class BdaThemeConverter {
     this.warnings = warnings
     const appearances = template.names().filter((path) => /^light\/skin\/[^/]+\/appearanceConfig$/.test(path))
       .map((path) => decodeBdaAppearanceUncached(template.getBytes(path)!))
-    this.keys = {
+    this.keys = new StyleKeys({
       image: Math.max(0, ...appearances.flatMap((appearance) => [...appearance.imageStyles.keys()])) + 1,
       text: Math.max(0, ...appearances.flatMap((appearance) => [...appearance.textStyles.keys()])) + 1,
       color: Math.max(0, ...appearances.flatMap((appearance) => [...appearance.colorStyles.keys()])) + 1,
-    }
+    })
     const used = template.names().filter((path) => /\/res\/[^/]+\.png$/i.test(path)).map((path) => path.split("/").pop()!.slice(0, -4))
     this.images = new ThemeImages(theme, output, used)
   }
@@ -217,7 +241,7 @@ class BdaThemeConverter {
     const look = this.look.key(panel, bdaKeyAction(name), landscape)
     let key = bytes
     if (look.back) {
-      const back = writer.imageStyle(look.back)
+      const back = writer.imageStyle(look.back, true)
       key = replaceField(key, 1, 2, back)
       if (rawFields(key).some((field) => field.number === 4)) key = replaceField(key, 4, 2, back)
     }

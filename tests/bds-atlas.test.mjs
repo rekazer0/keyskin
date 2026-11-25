@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { declarations, run } from './helpers/app-source.mjs'
-import { decodePng, encodePng, MAX_PIXELS } from '../src/ssf/ssf-png.ts'
-
-const { composeAtlasPng } = run(declarations('composeAtlasPng'), { decodePng, encodePng, MAX_PIXELS, Uint8Array })
+import { composeAtlasPng, decodePng, encodePng, MAX_PIXELS } from '../src/ssf/ssf-png.ts'
 
 test('BDS 合图逐字节保留切片，包括半透明和完全透明像素中的 RGB', async () => {
   const image = { width: 2, height: 2, data: new Uint8Array([123, 87, 41, 0, 234, 111, 77, 1, 23, 144, 87, 128, 222, 33, 44, 255]) }
@@ -17,7 +14,7 @@ test('BDS 合图逐字节保留切片，包括半透明和完全透明像素中�
 
 test('BDS 合图拒绝错误尺寸、越界切片和无效图片', async () => {
   const png = encodePng({ width: 1, height: 1, data: new Uint8Array(4) })
-  await assert.rejects(composeAtlasPng(MAX_PIXELS, 2, []), /尺寸无效/)
-  await assert.rejects(composeAtlasPng(2, 2, [{ png, x: -1, y: 0 }]), /超出图集范围/)
-  await assert.rejects(composeAtlasPng(2, 2, [{ png: new Uint8Array(), x: 0, y: 0 }]), /PNG/)
+  assert.throws(() => composeAtlasPng(MAX_PIXELS, 2, []), /尺寸无效/)
+  assert.throws(() => composeAtlasPng(2, 2, [{ png, x: -1, y: 0 }]), /超出图集范围/)
+  assert.throws(() => composeAtlasPng(2, 2, [{ png: new Uint8Array(), x: 0, y: 0 }]), /PNG/)
 })
