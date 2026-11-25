@@ -101,11 +101,12 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
 
   companion object {
     // 包名需同步写进 AndroidManifest.xml 的 <queries>，否则 Android 11+ 查不到已安装的应用。
+    private val BAIDU_SKIN_APP = SkinApp("百度输入法", setOf("bdi", "bds", "bda"), listOf(
+      "百度输入法（com.baidu.input）" to "com.baidu.input",
+      "百度输入法小米版（com.baidu.input_mi）" to "com.baidu.input_mi",
+    ))
     private val SKIN_APPS = listOf(
-      SkinApp("百度输入法", setOf("bdi", "bds", "bda"), listOf(
-        "百度输入法（com.baidu.input）" to "com.baidu.input",
-        "百度输入法小米版（com.baidu.input_mi）" to "com.baidu.input_mi",
-      )),
+      BAIDU_SKIN_APP,
       SkinApp("搜狗输入法", setOf("ssf"), listOf(
         "搜狗输入法（com.sohu.inputmethod.sogou）" to "com.sohu.inputmethod.sogou",
         "搜狗输入法小米版（com.sohu.inputmethod.sogou.xiaomi）" to "com.sohu.inputmethod.sogou.xiaomi",
@@ -223,9 +224,10 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
         return
       }
       // 百度、搜狗都以 VIEW 接收 content:// 下的皮肤文件（按扩展名匹配，MIME 为 */*）。
+      val importUri = if (app === BAIDU_SKIN_APP) baiduImportUri(uri) else uri
       val targets = app.packages.map { (label, packageName) ->
         label to Intent(Intent.ACTION_VIEW).apply {
-          setDataAndType(uri, args.mimeType)
+          setDataAndType(importUri, args.mimeType)
           setPackage(packageName)
           addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -247,6 +249,14 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
     } catch (error: Exception) {
       invoke.reject(error.message ?: "Unable to share skin", error)
     }
+  }
+
+  private fun baiduImportUri(uri: Uri): Uri {
+    // 百度直接用 URI 里的文件名显示提示。只保留文件名的 Unicode 字符，URI 分隔符仍须转义。
+    val name = requireNotNull(uri.lastPathSegment)
+    val encodedName = Uri.encode(name, name.filter { it > '\u007f' })
+    val directory = requireNotNull(uri.encodedPath).substringBeforeLast('/')
+    return uri.buildUpon().encodedPath("$directory/$encodedName").build()
   }
 
   private fun openSkin(invoke: Invoke, intent: Intent, unsupported: String) {
