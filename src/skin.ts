@@ -241,6 +241,7 @@ export class SkinArchive {
   private canonicalToRaw = new Map<string, string>()
   private cachedNames?: string[]
   private changedRaw = new Set<string>()
+  private zipWasRepaired = false
   readonly changed = new Set<string>()
   /** Bumped whenever file contents or paths change, so callers can skip redundant redraws. */
   revision = 0
@@ -280,6 +281,20 @@ export class SkinArchive {
   static open(bytes: Uint8Array, formatHint?: ExportFormat): SkinArchive {
     const sourceBytes = normalizeEntryCounts(bytes)
     validateArchiveLimits(sourceBytes)
+
+    // Check if normalization changed the bytes (indicating repair was needed)
+    let wasRepaired = false
+    if (sourceBytes.length === bytes.length) {
+      for (let i = 0; i < bytes.length; i++) {
+        if (sourceBytes[i] !== bytes[i]) {
+          wasRepaired = true
+          break
+        }
+      }
+    } else {
+      wasRepaired = true
+    }
+
     const unpacked = unzipSync(sourceBytes)
     const names = Object.keys(unpacked)
     if (names.length > MAX_FILES) throw new Error(`皮肤包含过多文件（${names.length}）`)
@@ -317,7 +332,9 @@ export class SkinArchive {
       if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
       files.set(name, data)
     }
-    return new SkinArchive(files, sourceBytes, formatHint)
+    const archive = new SkinArchive(files, sourceBytes, formatHint)
+    archive.zipWasRepaired = wasRepaired
+    return archive
   }
 
   static async openAsync(
@@ -327,6 +344,20 @@ export class SkinArchive {
   ): Promise<SkinArchive> {
     const sourceBytes = normalizeEntryCounts(bytes)
     validateArchiveLimits(sourceBytes)
+
+    // Check if normalization changed the bytes (indicating repair was needed)
+    let wasRepaired = false
+    if (sourceBytes.length === bytes.length) {
+      for (let i = 0; i < bytes.length; i++) {
+        if (sourceBytes[i] !== bytes[i]) {
+          wasRepaired = true
+          break
+        }
+      }
+    } else {
+      wasRepaired = true
+    }
+
     const unpacked = await unpackArchive(sourceBytes, onProgress)
     const names = Object.keys(unpacked)
     if (names.length > MAX_FILES) throw new Error(`皮肤包含过多文件（${names.length}）`)
@@ -344,6 +375,7 @@ export class SkinArchive {
       }
     }
     const archive = new SkinArchive(files, sourceBytes, formatHint)
+    archive.zipWasRepaired = wasRepaired
     onProgress?.(1)
     return archive
   }
@@ -646,20 +678,9 @@ export class SkinArchive {
       if (encrypted.length) throw new Error(`皮肤应该未加密，包含加密条目：${encrypted.join(", ")}`)
     }
 
-    // Validate ZIP structure integrity if exporting to platform format
-    if ((format === "bdi" || format === "bds") && this.sourceBytes.length > 0) {
-      const normalized = normalizeEntryCounts(this.sourceBytes)
-      let changed = false
-      if (normalized.length !== this.sourceBytes.length) changed = true
-      else {
-        for (let i = 0; i < normalized.length; i++) {
-          if (normalized[i] !== this.sourceBytes[i]) {
-            changed = true
-            break
-          }
-        }
-      }
-      if (changed) throw new Error("皮肤的 ZIP 结构完整性受损，无法转换")
+    // Validate ZIP structure integrity when converting to platform format
+    if ((format === "bdi" || format === "bds") && this.zipWasRepaired && this.changed.size === 0) {
+      throw new Error("皮肤的 ZIP 结构完整性受损，无法转换")
     }
 
     if (this.sourceBytes.length && this.changed.size === 0 && (!format || (format === this.format && this.layout !== "legacy-ios"))) {
