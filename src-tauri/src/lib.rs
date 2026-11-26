@@ -816,7 +816,7 @@ fn valid_share_filename(name: &str) -> bool {
                 .and_then(|value| value.to_str())
                 .map(str::to_ascii_lowercase)
                 .as_deref(),
-            Some("bdi" | "bds" | "bda" | "ssf" | "sxi")
+            Some("bdi" | "bds" | "bda" | "ssf" | "sxi" | "it" | "itx")
         )
 }
 
@@ -872,7 +872,7 @@ fn checked_skin_path(path: &Path) -> Result<Option<PathBuf>, String> {
         || path.components().any(|part| part == Component::ParentDir)
         || !matches!(
             extension.as_deref(),
-            Some("bdi" | "bds" | "bda" | "ssf" | "mssf" | "sxi")
+            Some("bdi" | "bds" | "bda" | "ssf" | "mssf" | "sxi" | "it" | "itx")
         )
     {
         return Err("只可删除本地皮肤文件".into());

@@ -19,7 +19,13 @@ try {
     localStorage.setItem('onboarding-tour-v1', 'done')
     window.showSaveFilePicker = async ({ suggestedName }) => ({
       name: suggestedName,
-      createWritable: async () => ({ write: async bytes => { window.exported = Array.from(bytes) }, close: async () => {} }),
+      createWritable: async () => ({
+        write: async bytes => { window.exported = Array.from(bytes) },
+        close: async () => {
+          const { appState } = await import('/src/app/state.ts')
+          window.sourceAtWrite = Array.from(appState.archive.getBytes('light/skin/res/bg.png'))
+        },
+      }),
     })
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
@@ -58,11 +64,7 @@ try {
   const back = read('port/logo.ini').get('PANEL', 'BACK_STYLE')
   assert.equal(read('res/default.css').get(`STYLE${back}`, 'NM_COLOR'), '808080')
   assert.deepEqual(archive.getBytes('light/skin/res/btn.png'), files['light/res/btn.png'])
-  const original = await page.evaluate(async () => {
-    const { appState } = await import('/src/app/state.ts')
-    return Array.from(appState.archive.getBytes('light/skin/res/bg.png'))
-  })
-  assert.deepEqual(original, Array.from(jpeg), 'conversion does not change the open BDS')
+  assert.deepEqual(await page.evaluate(() => window.sourceAtWrite), Array.from(jpeg), 'packing does not modify the source archive')
   console.log('PASS: BDS → BDI Save As handles a JPEG candidate background without changing the source')
 } finally {
   await browser?.close()

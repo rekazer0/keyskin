@@ -1,13 +1,14 @@
-import { IniDocument } from "./ini.ts"
-import type { SkinArchive } from "./skin.ts"
-import { actionText, asObject, rectParts, tipsText, type JsonObject } from "./palm/sxi-ini.ts"
-import { BUTTON_KEYS } from "./palm/sxi-layout.ts"
-import { parseSkinJson, sxiAddressPointer, sxiFragment, sxiFragmentPath } from "./palm/sxi-json.ts"
-import { convertIniLayout } from "./layout-conversion-ini.ts"
-import { convertSxiLayout } from "./palm/sxi-layout-conversion.ts"
-import { offsetFromSection } from "./preview-items.ts"
-import { stateTipSection } from "./panel-tools.ts"
-import { iniConversionText } from "./layout-conversion-text.ts"
+ import { IniDocument } from "./ini.ts"
+ import type { SkinArchive } from "./skin.ts"
+ import { actionText, asObject, rectParts, tipsText, type JsonObject } from "./palm/sxi-ini.ts"
+ import { BUTTON_KEYS } from "./palm/sxi-layout.ts"
+ import { parseSkinJson, sxiAddressPointer, sxiFragment, sxiFragmentPath } from "./palm/sxi-json.ts"
+ import { convertSxiLayout } from "./palm/sxi-layout-conversion.ts"
+ import { offsetFromSection } from "./preview-items.ts"
+ import { stateTipSection } from "./panel-tools.ts"
+ import { cloneJson } from "./clone-json.ts"
+ import { freeStyleId, textStyleSections } from "./style-properties.ts"
+ import { addPalmStyle, palmStyleIDList, palmStyleLocation } from "./palm/palm-style-edit.ts"
 
 type Pair = [number, number]
 export type LayoutRect = [number, number, number, number]
@@ -217,4 +218,145 @@ export function convertLayout(archive: SkinArchive, path: string, templateArchiv
   const text = iniConversionText(archive, current)
   const after = convertIniLayout(current, template, matches, text.foreground, listSource)
   return { path: sourcePath, before, after, styles: text.change() }
+}
+
+/** Keep current resources, gestures and state bindings; only the template's key arrangement is used. */
+export function convertIniLayout(current: ConversionLayout, template: ConversionLayout, matches: ConversionMatch[], textStyle: (text: string) => string, listSource?: ConversionLayout): string {
+  const output = IniDocument.parse(current.document!.toString())
+  const defaults = current.defaults!
+  const ids = new Map<string, string>()
+  const occupied = [output, defaults].flatMap(doc => [...doc.sections().flatMap(section => {
+    const match = /^(?:TIP|OFFSET)(\\d+)$/.exec(section)
+    return match ? [Number(match[1])] : []
+  }), ...doc.entries().flatMap(({ key, value }) => key === "STAT_STYLE"
+    ? [...value.matchAll(/S\\d+_(\\d+)/g)].map(match => Number(match[1]))
+    : key === "POS_TYPE" ? value.split(",").map(Number) : [])])
+  let next = occupied.reduce((max, id) => Number.isSafeInteger(id) ? Math.max(max, id) : max, 0) + 1
+  const sectionEntries = (layout: ConversionLayout, section: string) => {
+    const doc = layout.document!.hasSection(section) ? layout.document! : layout.defaults!
+    return doc.entries(section).map(({ key, value }) => ({ key, value }))
+  }
+  const reference = (layout: ConversionLayout, prefix: string, id: string): string => {
+    if (layout.path === current.path) return id
+    const token = `${layout.path}/${prefix}${id}`
+    const cached = ids.get(token)
+    if (cached) return cached
+    const allocated = String(next++)
+    ids.set(token, allocated)
+    const entries = sectionEntries(layout, `${prefix}${id}`)
+    if (entries.length) output.appendSection(`${prefix}${allocated}`, remap(layout, entries))
+    return allocated
+  }
+  const remap = (layout: ConversionLayout, entries: { key: string; value: string }[]) => entries.map(({ key, value }) => {
+    if (key === "POS_TYPE") value = value.split(",").map(id => /^\\d+$/.test(id.trim()) ? reference(layout, "OFFSET", id.trim()) : id).join(",")
+    if (key === "STAT_STYLE") value = value.replace(/(S\\d+_)(\\d+)/g, (_, state, id) => `${state}${reference(layout, "TIP", id)}`)
+    return { key, value }
+  })
+  output.removeSections(output.sections().filter(section => /^KEY\\d+$/.test(section)))
+  if (!output.hasSection("PANEL")) output.appendSection("PANEL", [])
+  output.set("PANEL", "KEY_NUM", String(template.keys.length))
+  for (const [index, match] of matches.entries()) {
+    const { layout, key, letters, glyph, fallback } = match
+    const geometry = template.keys[index]
+    const rect = scaledConversionRect(geometry.rect, current, template, true)
+    let entries = sectionEntries(layout, key.section).filter(entry => entry.key !== "VIEW_RECT" && entry.key !== "TOUCH_RECT")
+    if (fallback) {
+      entries = entries.filter(({ key }) => !BUTTON_KEYS.includes(key) && !["FORE_STYLE", "FORE_OFFSET", "FORE_ANIM_STYLE", "POS_TYPE", "STAT_STYLE", "CONVERSION_LETTERS"].includes(key))
+      entries.push(...Object.entries(geometry.actions).map(([key, value]) => ({ key, value })),
+        { key: "FORE_STYLE", value: textStyle(conversionKeyText(geometry, template.path)) })
+    }
+    if (letters || glyph !== undefined) {
+      const layers = (letters ?? [match]).map((letter, i) => conversionLetterForeground(letter) ?? { style: textStyle(geometry.letters?.[i] ?? geometry.actions.CENTER), animation: "" })
+      entries = entries.filter(({ key }) => !["FORE_STYLE", "FORE_OFFSET", "POS_TYPE", "STAT_STYLE", "FORE_ANIM_STYLE", "LEFT", "RIGHT", "SHOW"].includes(key))
+      entries.push({ key: "FORE_STYLE", value: layers.map(layer => layer.style).join(",") },
+        { key: "FORE_OFFSET", value: letters ? `${-Math.round(rect[2] / 6)},0;${Math.round(rect[2] / 6)},0` : "0,0" },
+        { key: "FORE_ANIM_STYLE", value: layers.map(layer => layer.animation || "0").join(",") })
+      if (letters) entries.push({ key: geometry.actions.CENTER === geometry.letters![0] ? "RIGHT" : "LEFT", value: geometry.letters!.replace(geometry.actions.CENTER, "") },
+        { key: "SHOW", value: geometry.letters!.toUpperCase() })
+      else entries = entries.map(entry => entry.key === "CENTER" ? { ...entry, value: geometry.actions.CENTER } : entry)
+    }
+    entries.push({ key: "VIEW_RECT", value: rect.join(",") })
+    if (geometry.touch) entries.push({ key: "TOUCH_RECT", value: scaledConversionRect(geometry.touch, current, template, true).join(",") })
+    output.appendSection(`KEY${index + 1}`, remap(layout, entries))
+  }
+  if (!output.hasSection("LIST")) output.appendSection("LIST", [])
+  const list = template.list
+  output.set("LIST", "LIST_NUM", String(list?.count ?? 0))
+  if (list) {
+    if (listSource && listSource.path !== current.path) {
+      const entries = new Map([...listSource.defaults!.entries("LIST"), ...listSource.document!.entries("LIST")].map(({ key, value }) => [key, value]))
+      output.removeSections(["LIST"])
+      output.appendSection("LIST", remap(listSource, [...entries].map(([key, value]) => ({ key, value }))))
+    }
+    if (!listSource) {
+      output.set("LIST", "NAMES", list.titles.join(" "))
+      output.set("LIST", "VALUES", list.values.join(" "))
+      output.set("LIST", "FORE_STYLE", textStyle(""))
+    }
+    const geometry = scaledConversionRect([...list.pos, ...list.size], current, template, true)
+    output.set("LIST", "LIST_NUM", String(list.count))
+    output.set("LIST", "POS", geometry.slice(0, 2).join(","))
+    output.set("LIST", "CELL_SIZE", geometry.slice(2).join(","))
+    output.set("LIST", "VIEW_RECT", scaledConversionRect(list.rect, current, template, true).join(","))
+    output.set("LIST", "LIST_ORDER", list.horizontal ? "1" : "0")
+  }
+  return output.toString()
+}
+
+/** Missing keys use the skin's typography; template artwork is never imported. */
+export function iniConversionText(archive: SkinArchive, current: ConversionLayout) {
+  const root = current.path.split("/").slice(0, 2).join("/")
+  const directory = current.path.replace(/[^/]+$/, "")
+  const path = [`${directory}res/default.css`, `${root}/res/default.css`].find(path => archive.isText(path)) ?? `${root}/res/default.css`
+  const before = archive.isText(path) ? archive.getText(path) : undefined
+  const styles = IniDocument.parse(before ?? "")
+  const source = current.keys.flatMap(key => textStyleSections(styles, current.document!.get(key.section, "FORE_STYLE") ?? ""))[0]
+    ?? styles.sections().find(section => /^STYLE\\d+$/.test(section) && styles.get(section, "FONT_SIZE") && !styles.get(section, "NM_IMG") && !styles.get(section, "HL_IMG"))
+  const font = ["FONT_SIZE", "FONT_NAME", "FONT_PATH", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR"].flatMap(key => {
+    const value = source ? styles.get(source, key) : undefined
+    return value === undefined ? [] : [{ key, value }]
+  })
+  if (!font.some(entry => entry.key === "FONT_SIZE")) font.push({ key: "FONT_SIZE", value: String(Math.round(Math.min(...current.keys[0].rect.slice(2)) * 0.4)) })
+  if (!font.some(entry => entry.key === "NM_COLOR")) font.push({ key: "NM_COLOR", value: current.path.startsWith("dark/") ? "FFFFFFFF" : "FF000000" })
+  let changed = false
+  const foreground = (text: string) => {
+    const show = label(text)
+    const existing = styles.sections().find(section => /^STYLE\\d+$/.test(section) && styles.get(section, "SHOW") === show && !styles.get(section, "NM_IMG") && !styles.get(section, "HL_IMG"))
+    if (existing) return existing.slice(5)
+    const id = String(freeStyleId(styles))
+    styles.appendSection(`STYLE${id}`, [...font, { key: "SHOW", value: show }])
+    if (!styles.hasSection("GLOBAL")) styles.appendSection("GLOBAL", [])
+    styles.set("GLOBAL", "STYLE_NUM", String(Math.max(Number(styles.get("GLOBAL", "STYLE_NUM")) || 0, Number(id))))
+    changed = true
+    return id
+  }
+  return { foreground, change: () => changed ? { path, before, after: styles.toString() } : undefined }
+}
+
+export function sxiConversionText(skin: JsonObject, current: ConversionLayout): (text: string) => string {
+  const pointer = sxiAddressPointer(current.path)!
+  const theme = pointer[0] === "night" ? "night" : "default"
+  const orientation = pointer[1] === "land_layout" ? "land" : "port"
+  const models = () => palmStyleIDList(skin, theme, orientation).map(id => ({ id, model: asObject(sxiFragment(skin, palmStyleLocation(skin, theme, orientation, id)!)) }))
+  const available = models()
+  const preferred = current.keys.filter(key => /^[a-z]$/i.test(key.actions.CENTER ?? "")).flatMap(key => {
+    const value = asObject((current.board!.keys as JsonObject[])[Number(key.section)].b)?.base_f
+    return (Array.isArray(value) ? value : [value]).flatMap(id => available.find(style => style.id === String(id)) ?? [])
+  })
+  const font = cloneJson([...preferred, ...available].map(({ model }) => asObject(model?.s_1)).find(text => text && text.for_back !== true) ?? {})
+  delete font.text
+  font.f_s ??= Math.round(Math.min(...current.keys[0].rect.slice(2)) * 0.4)
+  font.c_normal ??= theme === "night" ? "FFFFFFFF" : "FF000000"
+  return text => {
+    const show = label(text)
+    const existing = models().find(({ model }) => {
+      const text = asObject(model?.s_1)
+      return text && text.for_back !== true && (text.text ?? "") === show && !asObject(model?.s_2)
+    })
+    return existing?.id ?? addPalmStyle(skin, theme, { s_1: { ...font, ...show ? { text: show } : {} } })
+  }
+}
+
+function label(text: string): string {
+  return ({ F1: "符", F6: "123", F7: "☺", F10: "⇧", F11: "⇧", F15: "中", F16: "英", F36: "⌫", F38: "空格", F39: "换行", F75: "换行" } as Record<string, string>)[text] ?? text
 }

@@ -53,6 +53,8 @@ export const appState = {
   ssfSkeleton: undefined as { archive: SkinArchive; key: string; boards: SkinArchive } | undefined,
   /** The open `.sxi` document's parsed skin.json, for the archive revision it was read at. */
   palmSkin: undefined as { archive: SkinArchive; revision: number; skin: JsonObject } | undefined,
+  /** Parsed Xunfei (.it/.itx) theme data, for the archive revision it was read at. */
+  xunfeiTheme: undefined as { archive: SkinArchive; revision: number; config: import('../xunfei/xunfei-parser').IniConfig | null } | undefined,
   /** The open SSF document's own files as a package, for the archive revision it was read at. */
   ssfPackage: undefined as { archive: SkinArchive; revision: number; pkg: SsfPackage } | undefined,
   currentPath: "",

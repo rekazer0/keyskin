@@ -259,7 +259,7 @@ export function wireMobileStudio(): void {
       nav.hidden = true
       return
     }
-    const name = documentName.textContent?.replace(/\.(?:bdi|bds|bda|ssf|mssf|sxi)$/i, "") ?? ""
+    const name = documentName.textContent?.replace(/\.(?:bdi|bds|bda|ssf|mssf|sxi|it|itx)$/i, "") ?? ""
     if (documentName.dataset.mobileName !== name) documentName.dataset.mobileName = name
     nav.hidden = false
     for (const button of navButtons) {

@@ -25,8 +25,8 @@ function onboardingSteps(compact: boolean): TourStep[] {
       target: compact ? ["#mobile-welcome-open"] : ["#welcome-recent-open"],
       title: "打开已有皮肤",
       body: compact
-        ? "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi）时点这里导入；也可以在其他应用里把皮肤文件分享给键设。"
-        : "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi）时点这里导入，也可以直接把文件拖进窗口。打开过的皮肤会列在「我的皮肤」里。",
+        ? "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi / .it / .itx）时点这里导入；也可以在其他应用里把皮肤文件分享给键设。"
+        : "已经有皮肤文件（.bdi / .bds / .bda / .ssf / .sxi / .it / .itx）时点这里导入，也可以直接把文件拖进窗口。打开过的皮肤会列在「我的皮肤」里。",
       when: () => !hasSkin(),
     },
     {

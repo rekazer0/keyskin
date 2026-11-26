@@ -2,7 +2,7 @@ import { cloneJson } from "../clone-json.ts"
 import { conversionKeyText, conversionLetterForeground, scaledConversionRect, type ConversionMatch, type ConversionLayout, type LayoutRect } from "../layout-conversion.ts"
 import { actionValue, asObject, type Json, type JsonObject } from "./sxi-ini.ts"
 import { encodeSkinJson, parseSkinJson, setSxiFragment, sxiAddressPointer } from "./sxi-json.ts"
-import { sxiConversionText } from "../layout-conversion-text.ts"
+import { sxiConversionText } from "../layout-conversion.ts"
 import { BUTTON_KEYS } from "./sxi-layout.ts"
 
 const jsonRect = (rect: LayoutRect): Json => [rect.slice(0, 2), rect.slice(2)]

@@ -214,7 +214,7 @@ function startSourceWorkspace(archive: SkinArchive, path: string, name: string):
 export async function openNative(): Promise<boolean> {
   const path = isAndroidTauri() ? await pickAndroidSkinFile() : await open({
     multiple: false,
-    filters: [{ name: "输入法皮肤", extensions: ["bdi", "bds", "bda", "ssf", "mssf", "sxi"] }],
+    filters: [{ name: "输入法皮肤", extensions: ["bdi", "bds", "bda", "ssf", "mssf", "sxi", "it", "itx"] }],
   })
   if (typeof path !== "string") return false
   if (!(await prepareDocumentReplacement("open"))) return false
@@ -253,7 +253,7 @@ export async function loadSourceWorkspace(path: string, skinPath = ""): Promise<
   const sourcePrefix = themeFolderPrefix(name.toLowerCase(), files)
   const sourceFiles = files
     .filter((file) => !file.path.endsWith("/.DS_Store") && file.path !== ".DS_Store")
-    .filter((file) => file.path.includes("/") || !/\.(?:bdi|bds|bda)$/i.test(file.path))
+    .filter((file) => file.path.includes("/") || !/\.(?:bdi|bds|bda|it|itx)$/i.test(file.path))
     .map((file) => ({
       path: prefixedSourcePath(file.path, sourcePrefix),
       data: typeof file.data === "string" ? decodeBase64Archive(file.data) : file.data,
