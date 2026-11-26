@@ -13,7 +13,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -40,6 +40,10 @@ const SAMPLES = [
     path: '/Users/kaze/work/keyskin-md/讯飞皮【带漂浮物】大空格大回车底包@(3).it',
   },
 ]
+
+// The samples live outside the repository, so CI and other machines skip the checks instead of failing.
+const installed = SAMPLES.map(sample => existsSync(sample.path))
+const skipUnlessInstalled = (index) => installed[index] ? {} : { skip: `${SAMPLES[index].name} sample is not installed` }
 
 // ============================================================================
 // Mock Canvas & ImageData for Node.js
@@ -80,7 +84,7 @@ if (typeof ImageData === 'undefined') {
 // 1. Sample Loading Tests
 // ============================================================================
 
-test('Load Sample 1: UUID Theme', async () => {
+test('Load Sample 1: UUID Theme', skipUnlessInstalled(0), async () => {
   const samplePath = SAMPLES[0].path
   const data = readFileSync(samplePath)
 
@@ -92,7 +96,7 @@ test('Load Sample 1: UUID Theme', async () => {
   console.log(`  Format: ${formatInfo.type}, Encrypted: ${formatInfo.encrypted}`)
 })
 
-test('Load Sample 2: Xunfei Floating Objects Theme', async () => {
+test('Load Sample 2: Xunfei Floating Objects Theme', skipUnlessInstalled(1), async () => {
   const samplePath = SAMPLES[1].path
   const data = readFileSync(samplePath)
 
@@ -108,7 +112,7 @@ test('Load Sample 2: Xunfei Floating Objects Theme', async () => {
 // 2. ZIP Entry Parsing Tests
 // ============================================================================
 
-test('Parse Sample 1 ZIP entries', async () => {
+test('Parse Sample 1 ZIP entries', skipUnlessInstalled(0), async () => {
   const samplePath = SAMPLES[0].path
   const data = readFileSync(samplePath)
 
@@ -121,7 +125,7 @@ test('Parse Sample 1 ZIP entries', async () => {
   })
 })
 
-test('Parse Sample 2 ZIP entries', async () => {
+test('Parse Sample 2 ZIP entries', skipUnlessInstalled(1), async () => {
   const samplePath = SAMPLES[1].path
   const data = readFileSync(samplePath)
 
@@ -142,7 +146,7 @@ test('Full validation workflow for all samples', async (t) => {
   const validationResults = []
 
   for (const sample of SAMPLES) {
-    await t.test(`Validate: ${sample.name}`, async () => {
+    await t.test(`Validate: ${sample.name}`, { skip: installed[SAMPLES.indexOf(sample)] ? false : 'sample is not installed' }, async () => {
       const result = await validateSample(sample)
       validationResults.push(result)
 
