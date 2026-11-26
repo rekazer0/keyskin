@@ -117,7 +117,7 @@ export async function ssfAnimationLibraryPayload(input: HTMLInputElement): Promi
   }))
   if (appState.archive !== archive || archive?.revision !== revision || appState.stylePickerTarget !== input) return
   return {
-    ssfAnimation: data, sliceBack: false, editable: isEditing() && !input.disabled, canAdd: false,
+    ssfAnimation: data, sliceBack: false, editable: isEditing() && !input.disabled, canAdd: false, animationOnly: true,
     soundOnly: false, foreground: key !== "BG_ANIM", kind: "anim", currentID: input.value,
     imagesCompatible: false, bitmaps, animationText: "", animationFiles: {}, particleVisuals: {},
     styles: animationOptions(path, key).map(styleID => ({ styleID, label: styleID, kind: "anim", categories: ["key"], compatible: true, imagePaths: [], visuals: [] })),

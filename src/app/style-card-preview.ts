@@ -11,7 +11,7 @@ import { visualResolver } from "./bda-documents"
 import { openPalmSkin, palmOrientation, palmTheme } from "./sxi-documents"
 import { palmStyle } from "./sxi-styles"
 import { openAnimation } from "./animation-resource"
-import { chooseReferenceValue } from "./ask"
+import { availableStyleIDs, openAnimationStylePicker, styleKind } from "./style-picker"
 import { editSxi } from "./sxi-fields"
 import { appState } from "./state"
 
@@ -52,9 +52,17 @@ export function palmStyleAnimationStates(id: string) {
       }),
       onClick: (edit: boolean) => {
         if (edit) return openAnimation(path, Boolean(asObject(table[animation])?.a4), animation)
-        const archive = appState.archive, mode = palmTheme(), direction = palmOrientation()
-        chooseReferenceValue("动画", animation, Object.keys(table).map(key => [key, `动画 ${key}`]), value => {
-          if (appState.archive !== archive || palmTheme() !== mode || palmOrientation() !== direction || value === animation) return
+        const mode = palmTheme(), direction = palmOrientation()
+        const fields = Object.entries(asObject(palmStyle(id)?.s_5) ?? {}).filter(([, value]) => String(value) === animation).map(([key]) => key)
+        const choices = new Map<string, string>()
+        for (const styleID of availableStyleIDs()) {
+          if (styleKind(styleID) !== "anim") continue
+          const events = asObject(palmStyle(styleID)?.s_5) ?? {}
+          const next = [...fields.map(key => events[key]), ...Object.values(events)].map(String).find(value => Object.hasOwn(table, value))
+          if (next !== undefined) choices.set(styleID, next)
+        }
+        openAnimationStylePicker(animation, choices, value => {
+          if (palmTheme() !== mode || palmOrientation() !== direction) return
           editSxi(skin => {
             const events = asObject(palmStyle(id, skin)?.s_5)
             for (const [event, current] of Object.entries(events ?? {})) {

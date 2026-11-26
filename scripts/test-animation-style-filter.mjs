@@ -1,6 +1,7 @@
 // 动效设计 / 粒子设计（DESIGN.md §10）：左侧栏分动画与样式两份列表，样式只列引用了当前入口动画的样式；
 // 点一个样式回到动画列表，只看它播放的动画，可以清除。
 import assert from 'node:assert/strict'
+import { dismissStartupDisclaimer } from '../tests/helpers/open-editor-template.mjs'
 import { strToU8, strFromU8, unzipSync, zipSync } from 'fflate'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -49,6 +50,7 @@ const open = async (mode) => {
 
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles({ name: 'keys.bds', mimeType: 'application/octet-stream', buffer: Buffer.from(skin) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
@@ -112,14 +114,15 @@ try {
   await page.keyboard.press('ControlOrMeta+z')
   assert.equal(await eventInput.inputValue(), '1')
   assert.equal(await page.locator('#selected-key').textContent(), 'STYLE7')
-  const releaseInput = page.locator('#document-fields [data-document-key="RELEASE_ANIM"] input')
+  const releaseInput = page.locator('#document-fields [data-document-key="RELEASE_ANIM"] input[type="text"]')
   assert.equal(await releaseInput.inputValue(), '', '未配置释放事件也可编辑')
   await page.locator('#document-fields [data-document-key="RELEASE_ANIM"] .ui-style-ref-append').click()
-  const chooseAnimation = page.getByRole('dialog', { name: '选择动画', exact: true })
-  await chooseAnimation.locator('[role=option][data-value="2"]').click()
+  const chooseAnimation = page.frameLocator('#picker-frame')
+  await chooseAnimation.getByRole('heading', { name: '全部样式', exact: true }).waitFor()
+  await chooseAnimation.locator('.ui-style-card[data-style-id="8"]').click()
   await chooseAnimation.getByRole('button', { name: '应用', exact: true }).click()
-  await chooseAnimation.waitFor({ state: 'hidden' })
-  assert.equal(await page.evaluate(async () => { const { appState } = await import('/src/app/state.ts'); return appState.archive.getText('light/skin/res/default.css').includes('RELEASE_ANIM=2') }), true)
+  await page.locator('#picker-dialog').waitFor({ state: 'hidden' })
+  assert.equal(await releaseInput.inputValue(), '1', 'use the candidate style’s release animation, not its press animation or style number')
   for (const list of listsBeforeStyleEdit) assert.equal(await list.evaluate(el => el.isConnected), true, '新增释放事件不重建列表')
   await page.keyboard.press('ControlOrMeta+z')
   assert.equal(await releaseInput.inputValue(), '')
@@ -179,6 +182,7 @@ try {
   const bdaPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   bdaPage.on('pageerror', (error) => errors.push(error.message))
   await bdaPage.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(bdaPage)
   await bdaPage.locator('#browser-open').setInputFiles({ name: '动效.bda', mimeType: 'application/octet-stream', buffer: Buffer.from(bdaAnimatedSkinBytes()) })
   await bdaPage.waitForFunction(() => !document.querySelector('#open').disabled)
   const bdaClose = bdaPage.locator('#file-operation-dialog[open] #file-operation-close')
@@ -198,6 +202,7 @@ try {
   const palmPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   palmPage.on('pageerror', error => errors.push(error.message))
   await palmPage.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(palmPage)
   const palmFiles = unzipSync(sxiAnimationFixture())
   const palmSkin = JSON.parse(strFromU8(palmFiles['skin.json']))
   const mixedPalm = { s_1: { c_normal: 'FF102030', f_s: 32 }, s_2: { normal: 'btn,1' }, s_4: { path_1: 'tap.wav' } }

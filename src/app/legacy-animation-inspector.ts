@@ -45,11 +45,10 @@ import { preview } from "./canvas-interaction"
 import { visualResolver } from "./bda-documents"
 import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./config-context"
 import { commitText, commitTextChanges, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
-import { addStyle, editStyleConfig, refreshStyleReferenceThumbnails } from "./style-picker"
+import { addStyle, availableStyleIDs, editStyleConfig, openAnimationStylePicker, refreshStyleReferenceThumbnails, styleConfigDocument, styleKind } from "./style-picker"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
 import { keyAnimationItems, keyPlaysStyle, keyboardPlayback, openAnimation, rememberAnimation, selectAnimation, selectedAnimation, selectAnimationStyle, selectedAnimationStyle, shownInAnimationView, styleAnimationItems } from "./animation-resource"
-import { chooseReferenceValue } from "./ask"
 import { appState } from "./state"
 import { cachedIniDocument } from "./style-document"
 import { animationKeySample } from "./animation-key-sample"
@@ -504,13 +503,21 @@ export function styleAnimationPlayers(styleID: string, styles: IniDocument, thum
   }))
 }
 
-function chooseLegacyAnimation(current: string, commit: (value: string) => void): void {
-  const archive = appState.archive
+function chooseLegacyAnimation(current: string, commit: (value: string) => void, field?: string, slot = 0): void {
   const path = legacyAnimationConfigPath()
-  if (!isEditing() || !archive || !path || !archive.isText(path)) return
-  const entries = parseLegacyAnimationFile(archive.getText(path)).entries
-  chooseReferenceValue("动画", current, entries.map(entry => [String(entry.index), `动画 ${entry.index} · ${kindLabel(entry)}`]), value => {
-    if (appState.archive === archive && legacyAnimationConfigPath() === path && isEditing() && value !== current) commit(value)
+  const styles = styleConfigDocument()
+  if (!isEditing() || !path || !styles) return
+  const choices = new Map<string, string>()
+  for (const id of availableStyleIDs()) {
+    if (styleKind(id, styles) !== "anim") continue
+    const entries = styleAnimations(id, styles)
+    const preferred = field ? referencedAnimations(styles.get(`STYLE${id}`, field) ?? "") : []
+    const chosen = preferred.find(item => item.slot === slot)?.entry ?? preferred.find(item => item.entry)?.entry
+      ?? (!field ? entries.find(entry => String(entry.index) === current) : undefined) ?? entries[0]
+    if (chosen) choices.set(id, String(chosen.index))
+  }
+  openAnimationStylePicker(current, choices, value => {
+    if (legacyAnimationConfigPath() === path && styleConfigDocument() === styles) commit(value)
   })
 }
 
@@ -551,7 +558,7 @@ export function decorateStyleAnimationField(row: HTMLElement, styleID: string, k
     slots[index] = next
     input.value = slots.join(",")
     input.dispatchEvent(new Event("change", { bubbles: true }))
-  })
+  }, key, index)
   const boundStyles = new Set([styleID])
   const states: StyleReferenceState[] = animations.map(({ id, slot, entry }) => ({
     label: entry ? `更换动画 ${id} · ${kindLabel(entry)}` : `更换动画 ${id}（缺失）`,

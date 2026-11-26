@@ -3014,7 +3014,6 @@ body:has(.canvas-wrap.empty) .titlebar :is(.desktop-quick-actions, .mobile-quick
 @media (max-width: 760px) and (orientation: portrait) {
   :root[data-mobile-pane="inspector"] .picker-dialog { max-height: calc(var(--viewport-height) - var(--titlebar-height) - var(--mobile-preview-height)); }
   .picker-dialog::before { content: ""; position: absolute; top: var(--space-sm); left: 50%; width: var(--space-2xl); height: var(--space-xs); border-radius: var(--radius-full); background: var(--line-strong); transform: translateX(-50%); }
-  .picker-dialog[data-kind="animation"] { height: min(var(--mobile-motion-sheet-height), calc(var(--viewport-height) - var(--titlebar-height))); }
   :root[data-mobile-page="ai"] .titlebar { display: none; }
   :root[data-mobile-page="ai"] body.app-window main { height: calc(var(--viewport-height) - var(--mobile-navigation-height)); }
 }

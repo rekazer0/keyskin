@@ -1,5 +1,4 @@
 import { cloneJson } from "../clone-json.ts"
-import { openMobileMotionPicker } from "./mobile-motion-picker"
 import { appState } from "./state"
 import { bdaStyleRef, bdaStyleID } from "../bda.ts"
 import { currentBdaAppearance, visualResolver } from "./bda-documents"
@@ -12,7 +11,7 @@ import { commitText, commitBytes, isEditing, updateDirty, updateHistoryButtons }
 import { addBdaStyle, updateBdaStyle } from "../bda-encode"
 import { updateBdaRefs } from "./key-inspector"
 import { bdaImageResourceID } from "./tile-editing"
-import { theme, orientation, pickerDialog } from "./dom"
+import { theme, orientation } from "./dom"
 import { openImageSlicePicker, applyImageSliceSelection, imageDataURL, showPickerWindow, closePickerWindow, emitToPicker, clearImageSlicePicker } from "./image-pickers"
 import { type Visual, type VisualResolver } from "../atlas.ts"
 import { afterNextPaint, mobilePortraitQuery } from "./canvas-interaction"
@@ -174,7 +173,6 @@ export function removeStyleIDs(candidates: string[]): number {
 
 /** 由引用字段推断应优先展示的样式类型，打开样式库时据此预选筛选。 */
 function styleKindForKey(key: string): StyleKind | "all" {
-  if (layoutAnimationFields.has(key)) return "anim"
   if (key === "HW_FORE_STYLE") return "color"
   return "all"
 }
@@ -217,6 +215,10 @@ export function applyStyleLibrarySelection(toStyle = false, replaceAll = false):
     return
   }
   if (!target || target.disabled || !selected || !isEditing()) return
+  const animations = animationStyleChoices.get(target)
+  if (animations && (!selected.styleID || !animations.has(selected.styleID) || replaceAll)) return
+  if (layoutAnimationFields.has(styleReferenceKey(target)) && (!selected.styleID || styleKind(selected.styleID) !== "anim")) return
+  if (target.dataset.ssfAnimationPath && !selected.styleID) return
   if (selected.styleID) {
     const ref = bdaStyleRef(selected.styleID)
     if (target.dataset.bdaStyleType && ref?.type !== target.dataset.bdaStyleType) return
@@ -333,13 +335,24 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false, in
   appState.stylePickerTarget = input
   appState.pickerTarget = undefined
   appState.styleLibrarySelected = undefined
-  const animation = layoutAnimationFields.has(styleReferenceKey(input)) || Boolean(input.dataset.ssfAnimationPath)
-  const openLibrary = () => {
-    pickerDialog.dataset.kind = animation ? "animation" : "style"
-    void showPickerWindow("styles", "全部样式", 1100, 760)
-  }
-  if (mobilePortraitQuery.matches && animation && ["bdi", "bds"].includes(appState.archive?.format ?? "")) openMobileMotionPicker(input, openLibrary)
-  else openLibrary()
+  void showPickerWindow("styles", "全部样式", 1100, 760)
+}
+
+const animationStyleChoices = new WeakMap<HTMLInputElement, ReadonlyMap<string, string>>()
+
+/** 样式属性引用动画编号；从样式卡中挑选，但不把样式编号写入动画字段。 */
+export function openAnimationStylePicker(current: string, choices: ReadonlyMap<string, string>, commit: (animation: string) => void): void {
+  if (!isEditing()) return
+  const archive = appState.archive
+  const revision = archive?.revision
+  const input = document.createElement("input")
+  input.value = [...choices].find(([, animation]) => animation === current)?.[0] ?? ""
+  animationStyleChoices.set(input, choices)
+  input.addEventListener("change", () => {
+    const animation = choices.get(input.value)
+    if (animation !== undefined && animation !== current && appState.archive === archive && archive?.revision === revision) commit(animation)
+  })
+  openStylePicker(input)
 }
 
 type StyleLibraryCache = {
@@ -371,6 +384,8 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
   const revision = source.revision
   const key = target ? styleReferenceKey(target) : "FORE_STYLE"
   const styles = styleConfigDocument()
+  const animations = target && animationStyleChoices.get(target)
+  const animationOnly = Boolean(animations || layoutAnimationFields.has(key))
   const currentID = target?.value.split(",")[0]?.trim() ?? ""
   const targetType = source.format === "bda" ? target?.dataset.bdaStyleType : undefined
   const names = source.names()
@@ -425,11 +440,11 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     session, sliceBack, imageSelection, initialImages: Boolean(target && appState.styleLibraryInitialImages),
     recentStyles: (appState.recentStyles.get(source)?.get(recentStyleScope()) ?? []).filter(id => ids.includes(id)),
     editable: isEditing() && !target?.disabled,
-    canAdd, soundOnly: key === "SOUND_STYLE",
+    canAdd: canAdd && !animationOnly, animationOnly, soundOnly: key === "SOUND_STYLE",
     foreground: styleReferenceForeground(key),
-    kind: styleKindForKey(key), currentID,
-    imagesCompatible: !targetType || targetType === "image",
-    replaceReferences: Boolean(currentID && currentID !== "0" && !imageSelection),
+    kind: animationOnly ? "anim" : styleKindForKey(key), currentID,
+    imagesCompatible: !animationOnly && (!targetType || targetType === "image"),
+    replaceReferences: Boolean(currentID && currentID !== "0" && !imageSelection && !animations),
     applyToStyle: Boolean(currentID && ids.includes(currentID) && (!targetType || bdaStyleRef(currentID)?.type === "image")),
     bitmaps: {}, animationText: "", animationFiles: {}, particleVisuals: {}, styles: [], images: [], sounds: [],
   }
@@ -440,16 +455,22 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     })
     return payload
   }
-  // 只有「能否选用」随打开的引用字段变，其余整份复用。
+  // 只在发送时按引用字段筛选，缓存保持完整。
   const compatible = (styleID: string, kind: string) => imageSelection ? kind === "image" : !targetType || bdaStyleRef(styleID)?.type === targetType
-  if (cache.styles && cache.imageList) {
-    payload.styles = cache.styles.map(style => ({ ...style, compatible: compatible(style.styleID, style.kind) }))
-    payload.images = cache.imageList
+  const setCards = (styles: StyleLibraryPayload["styles"], imageList: StyleLibraryPayload["images"]) => {
+    payload.styles = styles.flatMap(style => {
+      const animation = animations?.get(style.styleID)
+      if ((animationOnly && style.kind !== "anim") || (animations && animation === undefined)) return []
+      return [{ ...style, compatible: compatible(style.styleID, style.kind),
+        summary: animation === undefined ? style.summary : `动画 ${animation}` }]
+    })
+    if (!animationOnly) payload.images = imageList
     return payload
   }
+  if (cache.styles && cache.imageList) return setCards(cache.styles, cache.imageList)
   const imageCategories = new Map<string, Set<string>>()
   const categories = styleLibraryCategories()
-  payload.styles = ids.map(styleID => {
+  cache.styles = ids.map(styleID => {
     const uses = categories.get(styleID) ?? new Set<string>()
     const imagePaths = [false, true].flatMap(pressed => resolver?.imagePath?.(styleID, pressed) ?? [])
     for (const path of imagePaths) {
@@ -462,19 +483,17 @@ async function nativeStyleLibraryPayload(sliceBack: boolean): Promise<StyleLibra
     return {
       styleID, label: stylePickerLabel(styleID), kind, categories: [...uses], imagePaths, visuals: [],
       info: styles?.get(`STYLE${styleID}`, "INFO")?.trim() || undefined,
-      compatible: compatible(styleID, kind),
+      compatible: true,
       summary: kind === "anim" && styles ? styleAnimationSummary(styleID, styles) : undefined,
       textVisuals: kind === "text" ? [false, true].map(pressed => resolver?.resolveStyleText?.(styleID, pressed) ?? resolver?.resolveText(styleID, pressed)) : undefined,
       sound, soundPlayable: Boolean(sound && soundPathForFilename(names, theme.value, orientation.value, sound)),
     }
   })
-  payload.images = resourceImagePaths(names, theme.value, orientation.value).map(path => {
+  cache.imageList = resourceImagePaths(names, theme.value, orientation.value).map(path => {
     if (!images.has(path)) images.set(path, memo(() => imageDataURL(source.getBytes(path)!)))
     return { path, categories: [...imageCategories.get(path) ?? []] }
   })
-  cache.styles = payload.styles
-  cache.imageList = payload.images
-  return payload
+  return setCards(cache.styles, cache.imageList)
 }
 
 export async function emitStyleLibrary(sliceBack = false): Promise<void> {

@@ -40,6 +40,7 @@ export type StyleLibraryPayload = {
   sliceBack: boolean
   editable: boolean
   canAdd: boolean
+  animationOnly?: boolean
   initialImages?: boolean
   imageSelection?: boolean
   soundOnly: boolean
@@ -512,7 +513,7 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
       return card
     } }))
   }
-  return payload.styles.filter(style => (libraryFilter !== "recent" || payload.recentStyles?.includes(style.styleID)) && styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, style.info, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter === "recent" ? "all" : libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
+  return payload.styles.filter(style => (libraryFilter !== "recent" || payload.recentStyles?.includes(style.styleID)) && styleMatches({ ...style, sound: Boolean(style.sound), search: [style.styleID, style.label, style.info, style.summary, ...style.imagePaths].join(" ") }, libraryKind, libraryFilter === "recent" ? "all" : libraryFilter, query)).map((style) => ({ key: style.styleID, build: () => {
     const card = styleCard({
       id: style.styleID, label: payload.ssfAnimation ? style.label : `STYLE${style.label}`, info: style.info, kind: style.kind,
       draw: (canvas, highlighted) => style.kind === "text"
@@ -529,26 +530,33 @@ function libraryCards(payload: StyleLibraryPayload | undefined, chooser: boolean
 function renderLibrary(): void {
   const payload = library
   const chooser = view === "resources"
+  const animationOnly = Boolean(payload?.animationOnly)
   libraryPreview.hidden = true
   librarySelected = undefined
   if (!chooser && payload) emitLibrary("style-library-preview-selection", { session: payload.session })
   libraryDuplicate.disabled = true
-  libraryToolbar.hidden = chooser || !payload?.canAdd || !payload.editable
+  libraryToolbar.hidden = chooser || (!animationOnly && (!payload?.canAdd || !payload.editable))
   const sound = Boolean(payload?.soundOnly)
   libraryView.dataset.soundOnly = String(sound)
-  libraryImport.hidden = chooser || !payload || sound || Boolean(payload.ssfAnimation)
-  libraryImport.disabled = !payload?.editable || !payload.imagesCompatible
-  libraryNew.hidden = chooser || !payload || Boolean(payload.imageSelection) || sound || Boolean(payload.ssfAnimation)
-  libraryNew.disabled = !payload?.canAdd || !payload.editable
+  libraryImport.hidden = chooser || !payload || sound
+  libraryImport.disabled = animationOnly || !payload?.editable || !payload.imagesCompatible
+  libraryNew.hidden = chooser || !payload || Boolean(payload.imageSelection) || sound
+  libraryNew.disabled = animationOnly || !payload?.canAdd || !payload.editable
+  libraryNew.dataset.variant = animationOnly ? "" : "primary"
   const images = chooser || libraryMode === "images" && !sound
   title.textContent = images ? "全部图片" : "全部样式"
   setWindowTitle(title.textContent)
   for (const button of libraryButtons("[data-library-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.libraryMode === libraryMode))
-    button.disabled = (sound || Boolean(payload?.ssfAnimation)) && button.dataset.libraryMode === "images"
+    button.disabled = (sound || animationOnly) && button.dataset.libraryMode === "images"
   }
   libraryModes.hidden = chooser || sound || Boolean(payload?.initialImages)
-  libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => { libraryKind = value; renderLibrary() }))
+  libraryKinds.replaceChildren(styleFilterButtons(styleTypeOptions, "libraryKind", libraryKind, value => {
+    if (value === libraryKind) return
+    libraryKind = value
+    renderLibrary()
+  }))
+  for (const button of libraryButtons("[data-library-kind]")) button.disabled = animationOnly && button.dataset.libraryKind !== "anim"
   const usageOptions = [...styleUsageOptions, ...(payload?.recentStyles?.length && !images ? [["recent", "最近使用"] as const] : [])]
   libraryFilters.replaceChildren(styleFilterButtons(usageOptions, "libraryFilter", libraryFilter, value => { libraryFilter = value; renderLibrary() }))
   libraryKinds.hidden = images || sound
@@ -609,7 +617,7 @@ function showStyleLibrary(payload?: StyleLibraryPayload): void {
       releaseLibraryBitmaps()
     }
     library = payload
-    libraryMode = payload.imageSelection || payload.initialImages ? "images" : "styles"
+    libraryMode = !payload.animationOnly && (payload.imageSelection || payload.initialImages) ? "images" : "styles"
     libraryKind = payload.kind
     libraryFilter = "all"
   } else if (reset) library = undefined

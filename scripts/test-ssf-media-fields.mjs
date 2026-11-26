@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { dismissStartupDisclaimer } from '../tests/helpers/open-editor-template.mjs'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
@@ -35,6 +36,7 @@ const picker = () => page.frameLocator('#picker-frame')
 const dialog = () => page.locator('#picker-dialog')
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles({ name: 'media.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(files)) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
@@ -56,7 +58,9 @@ try {
   await row('ANIM_STYLE').locator('.ui-style-state').click()
   await picker().locator('#style-library-grid [data-style-id="Anim_Style_Key_Qwertys"][aria-selected="true"]').waitFor()
   assert.deepEqual(await picker().locator('[role=option]').evaluateAll(cards => cards.map(card => card.dataset.styleId)), ['Anim_Style_Key_Qwertys', 'Anim_Style_Other'])
-  assert.equal(await picker().locator('[data-library-kind="anim"]').getAttribute('aria-pressed'), 'true')
+  assert.equal(await picker().locator('[data-library-kind="anim"][aria-pressed="true"]').isVisible(), true)
+  assert.equal(await picker().locator('[data-library-kind="all"]').isDisabled(), true)
+  assert.equal(await picker().locator('[data-library-mode="images"]').isVisible(), true)
   assert.equal(await picker().locator('[data-library-mode="images"]').isDisabled(), true)
   await picker().locator('#style-library-preview .ui-animation-player[data-playing="true"]').waitFor()
   const pickerFrames = await picker().locator('#style-library-preview canvas').evaluate(async canvas => {
@@ -85,6 +89,7 @@ try {
   await dialog().waitFor({ state: 'hidden' })
   await row('ANIM_STYLE').locator('.ui-style-remove').click()
   assert.equal(await read(keys, 'Key_Q', 'ANIM_STYLE'), undefined)
+  await fields.getByRole('button', { name: '添加动画', exact: true }).click()
   await row('ANIM_STYLE').getByRole('button', { name: '添加动画样式' }).click()
   await picker().locator('[data-style-id="Anim_Style_Other"]').focus()
   await picker().locator('[data-style-id="Anim_Style_Other"]').press('End')
