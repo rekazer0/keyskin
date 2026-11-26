@@ -23,13 +23,12 @@ import { renderFiles } from "../file-tree"
 import { selectFile } from "../navigation"
 import { IniDocument } from "../../ini.ts"
 import { importFontFile } from "../skin-fonts"
-import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, updateSelectedTile, nextSliceIndex } from "../tile-editing"
+import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, commitTiles, updateSelectedTile, nextSliceIndex, slicesEditable } from "../tile-editing"
 import { isEditing } from "../edit-history"
 import { selectStyleResource, showResourceList, renderResourceInspector, renderStyleResourceDetail } from "../resource-inspector"
 import { revealSourceFile } from "../source-files"
 import { type BdaAppearanceStyleGroup } from "../../bda.ts"
-import { tileSliceAt, boundedTileRect, moveTileRect } from "../../tiles.ts"
-import { resizeTileSlice } from "../../tiles"
+import { tileSliceAt, boundedTileRect, moveTileRect, resizeTileSlice, tileCorners, type TilePoint, type TileSlice } from "../../tiles.ts"
 import { runFileOperation, adaptArchiveForIos26, showError } from "../file-operations"
 import { openPanelCopyDialog, updatePanelCopyForm, copyPanel } from "../panel-copy"
 import { openLayoutImageDialog, acceptLayoutImageFile, syncLayoutImageConfig, updateLayoutImageForm, applyLayoutImage, layoutImageScopeText } from "../layout-image-replace"
@@ -308,90 +307,126 @@ export function wireEditingControls(): void {
       setDrawingTile(false)
     })
   }
-  atlasCanvas.addEventListener("pointerdown", (event) => {
-    if (!appState.resourceConfigActive || event.button !== 0) return
+  const updateTileSelection = (indices: number[], primary = indices.at(-1)) => {
+    appState.selectedTileIndex = primary
+    appState.selectedTileGroup = indices.length > 1 ? indices : []
+    updateSourceHighlight()
+    if (primary !== undefined) requestAnimationFrame(scrollSelectedSource)
+    populateTileInspector()
+    drawAtlas()
+  }
+  const canTransformTiles = () => isEditing() && slicesEditable()
+  const chooseTile = (index: number | undefined, event: PointerEvent) => {
+    const { selectedTileIndex, selectedTileGroup, slices } = appState
+    const additive = event.ctrlKey || event.metaKey
+    const current = selectedTileGroup.length ? selectedTileGroup : selectedTileIndex === undefined ? [] : [selectedTileIndex]
+    const selected = new Set(additive ? current : [])
+    const anchor = slices.findIndex(slice => slice.index === (appState.tileSelectionAnchor ?? selectedTileIndex))
+    const end = slices.findIndex(slice => slice.index === index)
+    if (event.shiftKey && anchor >= 0 && end >= 0) {
+      for (const slice of slices.slice(Math.min(anchor, end), Math.max(anchor, end) + 1)) selected.add(slice.index)
+      appState.tileSelectionAnchor = slices[anchor].index
+    } else if (index !== undefined) {
+      if (selected.has(index)) selected.delete(index)
+      else selected.add(index)
+      appState.tileSelectionAnchor = index
+    } else if (additive || event.shiftKey) return
+    else appState.tileSelectionAnchor = undefined
+    updateTileSelection([...selected], index !== undefined && selected.has(index) ? index : undefined)
+  }
+  const startTransform = (event: PointerEvent, point: TilePoint, slice: TileSlice, corner?: number) => {
+    const indices = appState.selectedTileGroup
+    const slices = indices.length ? appState.slices.filter(item => indices.includes(item.index)) : [slice]
+    appState.tileTransform = { pointerId: event.pointerId, start: point, slices, corner }
+    atlasCanvas.setPointerCapture(event.pointerId)
+  }
+  atlasCanvas.tabIndex = 0
+  const atlasFigure = atlasCanvas.parentElement!
+  atlasFigure.addEventListener("pointerdown", (event) => {
+    if (!appState.resourceConfigActive || event.button !== 0 || !event.isPrimary || atlasCanvas.hidden) return
+    const onCanvas = event.target === atlasCanvas
     const point = atlasPoint(event)
-    if (appState.drawingTile) {
+    if (appState.drawingTile && onCanvas && canTransformTiles()) {
+      atlasCanvas.focus({ preventScroll: true })
       appState.tileDragStart = point
       appState.tileDraft = undefined
       atlasCanvas.setPointerCapture(event.pointerId)
       return
     }
-    appState.tileResizeCorner = undefined
+    const modified = event.ctrlKey || event.metaKey || event.shiftKey
     const selected = appState.slices.find(slice => slice.index === appState.selectedTileIndex)
-    if (selected && isEditing() && appState.archive?.format !== "bda" && appState.guidesVisible) {
-      const [x, y, w, h] = selected.source
-      const radius = 9 * workspaceImage.naturalWidth / Math.max(1, atlasCanvas.getBoundingClientRect().width)
-      const corner = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].findIndex(([cx, cy]) => Math.abs(point.x - cx) <= radius && Math.abs(point.y - cy) <= radius)
+    if (!modified && selected && canTransformTiles() && appState.guidesVisible && !appState.drawingTile) {
+      const scale = workspaceImage.naturalWidth / atlasCanvas.getBoundingClientRect().width
+      const [, , width, height] = selected.source
+      const radius = event.pointerType === "touch" ? 22 : 6
+      const corner = tileCorners(selected.source).findIndex(({ x, y }) =>
+        Math.abs(point.x - x) <= Math.min(radius * scale, width / 3) &&
+        Math.abs(point.y - y) <= Math.min(radius * scale, height / 3))
       if (corner >= 0) {
-        appState.tileResizeCorner = corner
-        appState.movingTile = appState.tileDragOriginal = selected
-        atlasCanvas.setPointerCapture(event.pointerId)
+        atlasCanvas.focus({ preventScroll: true })
+        startTransform(event, point, selected, corner)
         return
       }
     }
-    const hit = appState.archive?.format === "bda"
-      ? appState.slices.find((slice) => slice.index === appState.selectedTileIndex)
-      : tileSliceAt(appState.slices, point)
-    appState.selectedTileIndex = hit?.index
-    updateSourceHighlight()
-    if (hit) requestAnimationFrame(scrollSelectedSource)
-    if (appState.tileMode === "move" && hit && isEditing() && appState.archive?.format !== "bda") {
-      appState.movingTile = hit
-      appState.tileDragOriginal = hit
-      appState.moveStart = point
-      appState.moveSource = hit.source
-      atlasCanvas.setPointerCapture(event.pointerId)
-    }
-    populateTileInspector()
-    drawAtlas()
+    if (!onCanvas) return
+    atlasCanvas.focus({ preventScroll: true })
+    if (appState.archive?.format === "bda") return
+    const hit = tileSliceAt(appState.slices, point)
+    if (!modified && appState.tileMode === "move" && hit && canTransformTiles()) {
+      if (!appState.selectedTileGroup.includes(hit.index)) chooseTile(hit.index, event)
+      startTransform(event, point, hit)
+    } else chooseTile(hit?.index, event)
   })
-  atlasCanvas.addEventListener("pointermove", (event) => {
-    if (appState.tileResizeCorner !== undefined && appState.tileDragOriginal) {
-      appState.movingTile = resizeTileSlice(appState.tileDragOriginal, appState.tileResizeCorner, atlasPoint(event), workspaceImage.naturalWidth, workspaceImage.naturalHeight)
-      scheduleAtlasDraw()
-      return
-    }
-    if (appState.tileDragStart && appState.drawingTile) {
-      appState.tileDraft = boundedTileRect(appState.tileDragStart, atlasPoint(event), workspaceImage.naturalWidth, workspaceImage.naturalHeight)
-      scheduleAtlasDraw()
-      return
-    }
-    if (!appState.moveStart || !appState.moveSource || !appState.movingTile) return
+  atlasCanvas.addEventListener("contextmenu", event => { if (event.ctrlKey) event.preventDefault() })
+  const updateTileDrag = (event: PointerEvent) => {
+    if (!atlasCanvas.hasPointerCapture(event.pointerId) || !canTransformTiles()) return
     const point = atlasPoint(event)
-    const source = moveTileRect(appState.moveSource, point.x - appState.moveStart.x, point.y - appState.moveStart.y, workspaceImage.naturalWidth, workspaceImage.naturalHeight)
-    const dx = source[0] - appState.moveSource[0]
-    const dy = source[1] - appState.moveSource[1]
-    appState.movingTile = { ...appState.movingTile, source, ...(appState.tileDragOriginal?.inner ? { inner: moveTileRect(appState.tileDragOriginal.inner, dx, dy, workspaceImage.naturalWidth, workspaceImage.naturalHeight) } : {}) }
-    scheduleAtlasDraw()
-  })
-  atlasCanvas.addEventListener("pointerup", (event) => {
-    if (atlasCanvas.hasPointerCapture(event.pointerId)) atlasCanvas.releasePointerCapture(event.pointerId)
-    appState.tileResizeCorner = undefined
-    appState.tileDragOriginal = undefined
+    const { naturalWidth: width, naturalHeight: height } = workspaceImage
     if (appState.tileDragStart && appState.drawingTile) {
-      appState.tileDraft = boundedTileRect(appState.tileDragStart, atlasPoint(event), workspaceImage.naturalWidth, workspaceImage.naturalHeight)
-      const source = appState.tileDraft
-      setDrawingTile(false)
-      if (source) commitTile({ index: nextSliceIndex(), source })
-      return
+      appState.tileDraft = boundedTileRect(appState.tileDragStart, point, width, height)
+    } else {
+      const drag = appState.tileTransform
+      if (!drag || drag.pointerId !== event.pointerId) return
+      const dx = Math.round(point.x - drag.start.x)
+      const dy = Math.round(point.y - drag.start.y)
+      const corner = drag.corner
+      appState.movingTiles = !dx && !dy ? [] : drag.slices.map(slice => {
+        if (corner !== undefined) {
+          const origin = tileCorners(slice.source)[corner]
+          return resizeTileSlice(slice, corner, { x: origin.x + dx, y: origin.y + dy }, width, height)
+        }
+        const source = moveTileRect(slice.source, dx, dy, width, height)
+        const inner = slice.inner && moveTileRect(slice.inner, source[0] - slice.source[0], source[1] - slice.source[1], width, height)
+        return { ...slice, source, inner }
+      })
     }
-    if (appState.movingTile) {
-      const moved = appState.movingTile
-      appState.movingTile = undefined
-      appState.moveStart = undefined
-      appState.moveSource = undefined
-      commitTile(moved)
-    }
-  })
-  atlasCanvas.addEventListener("pointercancel", () => {
-    appState.tileResizeCorner = undefined
-    appState.tileDragOriginal = undefined
+    scheduleAtlasDraw()
+  }
+  atlasCanvas.addEventListener("pointermove", updateTileDrag)
+  atlasCanvas.addEventListener("pointerup", (event) => {
+    if (!atlasCanvas.hasPointerCapture(event.pointerId)) return
+    updateTileDrag(event)
+    const { tileDraft, movingTiles } = appState
     setDrawingTile(false)
-    appState.movingTile = undefined
-    appState.moveStart = undefined
-    appState.moveSource = undefined
-    drawAtlas()
+    if (tileDraft) commitTile({ index: nextSliceIndex(), source: tileDraft })
+    else if (movingTiles.length) commitTiles(movingTiles, true)
+  })
+  for (const type of ["pointercancel", "lostpointercapture"]) {
+    atlasCanvas.addEventListener(type, () => {
+      if (appState.tileTransform || appState.tileDragStart) setDrawingTile(false)
+    })
+  }
+  document.addEventListener("keydown", (event) => {
+    const target = event.target as Element | null
+    if (event.defaultPrevented || !target?.closest("#atlas-editor-dialog[open]") || target.closest("input, textarea, select, [contenteditable]")) return
+    if (event.key === "Escape" && (appState.tileTransform || appState.tileDragStart)) {
+      event.preventDefault()
+      setDrawingTile(false)
+    } else if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "a" && slicesEditable()) {
+      event.preventDefault()
+      const indices = appState.slices.map(slice => slice.index)
+      updateTileSelection(indices, appState.selectedTileIndex ?? indices[0])
+    }
   })
   for (const field of [...tileSourceFields, ...tileInnerFields]) {
     field.addEventListener("change", updateSelectedTile)

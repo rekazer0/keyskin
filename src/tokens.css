@@ -21,8 +21,8 @@
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-home-heading: inherit;
 
-  /* 字号：正文 12；9 仅用于图片尺寸角标，10 用于概览注脚与列表摘要，其余最小 11 */
-  --font-size-micro: 9px; /* 仅限图片资源尺寸角标 */
+  /* 字号：正文 12；9 用于图片尺寸与切片序号角标，10 用于概览注脚与列表摘要，其余最小 11 */
+  --font-size-micro: 9px; /* 图片资源尺寸、切片序号角标 */
   --font-size-xxs: 10px; /* 概览文件名注脚、列表框行的第二行 */
   --font-size-xs: 11px;  /* 辅助说明、角标、单位 */
   --font-size-sm: 12px;  /* 正文、控件、列表行 */

@@ -141,6 +141,7 @@ export function createAtlasWorkspace(actions: {
   let state: AtlasState | undefined
   let zoomValue = 1
   let fitted = true
+  let panLocked = true
   let editorActive = false
   let lastPath = ""
   let panX = 0
@@ -164,7 +165,6 @@ export function createAtlasWorkspace(actions: {
     image.style.width = canvas.style.width = `${Math.round(state.width * zoomValue)}px`
     image.style.height = canvas.style.height = `${Math.round(state.height * zoomValue)}px`
     image.dataset.sampling = zoomValue * devicePixelRatio > 1 ? "nearest" : "auto"
-    fit.setAttribute("aria-pressed", String(fitted))
   }
   // 与主画布一致：以指针为锚点缩放，锚点下的图像位置保持不动
   const zoomBy = (factor: number, anchor?: { x: number; y: number }) => {
@@ -182,52 +182,70 @@ export function createAtlasWorkspace(actions: {
     actions.redraw()
   }
   const fit = button("atlas-zoom-fit", "适配", "scan", () => { fitted = true; resize(); actions.redraw() })
+  const syncPanLock = () => {
+    fit.ariaPressed = String(panLocked)
+    fit.ariaLabel = fit.title = panLocked ? "图集已锁定（双击解锁）" : "适配图集（双击锁定）"
+  }
+  fit.addEventListener("dblclick", () => { panLocked = !panLocked; syncPanLock() })
+  syncPanLock()
   zoom.append(button("atlas-zoom-out", "缩小", "minus", () => zoomBy(1 / 1.2)), fit, button("atlas-zoom-in", "放大", "plus", () => zoomBy(1.2)))
   stage.append(zoom)
   wrap.addEventListener("wheel", event => {
     if (!editorActive) return
     event.preventDefault()
-    zoomBy(wheelZoomFactor(event), { x: event.clientX, y: event.clientY })
+    if (!panLocked) zoomBy(wheelZoomFactor(event), { x: event.clientX, y: event.clientY })
   }, { passive: false })
-  // 与主画布一致：拖动任意处（超过 3px）平移；中键或按住空格立即平移。
+  // 解锁后可拖动画布；与主画布一样，空格左键或中键可临时平移。
   // 切片绘制、移动、缩放会捕获指针，此时不平移。
   let spaceHeld = false
   let candidate: { id: number; x: number; y: number } | undefined
-  let pan: { x: number; y: number; panX: number; panY: number } | undefined
-  addEventListener("keydown", event => {
-    if (event.code === "Space" && !(event.target as Element).closest?.("input, textarea, select, [contenteditable]")) spaceHeld = true
+  let pan: { id: number; x: number; y: number; panX: number; panY: number } | undefined
+  dialog.addEventListener("keydown", event => {
+    if (event.code !== "Space" || (event.target as Element).closest("input, textarea, select, [contenteditable]")) return
+    spaceHeld = true
+    if (event.target === canvas || wrap.matches(":hover")) event.preventDefault()
   })
   addEventListener("keyup", event => { if (event.code === "Space") spaceHeld = false })
   addEventListener("blur", () => { spaceHeld = false })
   const startPan = (event: PointerEvent) => {
     candidate = undefined
-    pan = { x: event.clientX, y: event.clientY, panX, panY }
+    fitted = false
+    pan = { id: event.pointerId, x: event.clientX, y: event.clientY, panX, panY }
     wrap.setPointerCapture(event.pointerId)
     wrap.classList.add("atlas-panning")
   }
   wrap.addEventListener("pointerdown", event => {
-    if (!editorActive || !(event.button === 1 || event.button === 0 && spaceHeld)) return
+    if (!editorActive || pan || !(event.button === 1 || event.button === 0 && spaceHeld)) return
     event.preventDefault()
     event.stopPropagation()
+    canvas.focus({ preventScroll: true })
     startPan(event)
   }, { capture: true })
   wrap.addEventListener("pointerdown", event => {
-    if (!editorActive || pan || event.button !== 0 || event.pointerType === "touch" || canvas.hasPointerCapture(event.pointerId)) return
+    if (!editorActive || panLocked || pan || event.button !== 0 || event.pointerType === "touch"
+      || event.ctrlKey || event.metaKey || event.shiftKey || canvas.hasPointerCapture(event.pointerId)) return
     candidate = { id: event.pointerId, x: event.clientX, y: event.clientY }
   })
   wrap.addEventListener("pointermove", event => {
-    if (candidate?.id === event.pointerId && Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y) >= 3) {
+    if (!(event.buttons & 1) && candidate?.id === event.pointerId) candidate = undefined
+    if (!panLocked && candidate?.id === event.pointerId && Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y) >= 3) {
       const start = candidate
       startPan(event)
       pan!.x = start.x
       pan!.y = start.y
     }
-    if (!pan) return
+    if (pan?.id !== event.pointerId) return
     setPan(pan.panX + event.clientX - pan.x, pan.panY + event.clientY - pan.y)
   })
-  const endPan = () => { candidate = undefined; pan = undefined; wrap.classList.remove("atlas-panning") }
+  const endPan = (event: PointerEvent) => {
+    if (candidate?.id === event.pointerId) candidate = undefined
+    if (pan?.id !== event.pointerId) return
+    pan = undefined
+    wrap.classList.remove("atlas-panning")
+  }
   wrap.addEventListener("pointerup", endPan)
   wrap.addEventListener("pointercancel", endPan)
+  wrap.addEventListener("lostpointercapture", endPan)
   let resizeFrame = 0
   const observer = new ResizeObserver(() => {
     if (!editorActive || resizeFrame) return

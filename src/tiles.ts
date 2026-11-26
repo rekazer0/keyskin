@@ -155,6 +155,10 @@ export function moveTileRect(
   ].map(Math.round) as TileRect
 }
 
+export function tileCorners([x, y, width, height]: TileRect): TilePoint[] {
+  return [{ x, y }, { x: x + width, y }, { x, y: y + height }, { x: x + width, y: y + height }]
+}
+
 export function resizeTileSlice(slice: TileSlice, corner: number, point: TilePoint, imageWidth: number, imageHeight: number): TileSlice {
   const [x, y, width, height] = slice.source
   const right = Boolean(corner % 2)

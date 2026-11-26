@@ -3,7 +3,7 @@ import type { JsonObject } from "../palm/sxi-ini.ts"
 import { type BdaTileUsage } from "./types"
 import { appState } from "./state"
 import { currentBdaAppearance } from "./bda-documents"
-import { type TileSlice, type TileRect, nextTileIndex, tilePreviewDestination, tilePreviewInnerRect, tileSlices, type TilePoint, updateTileSlice, removeTileSlice, moveTileRect, duplicateTileSlice, withTileHeader } from "../tiles.ts"
+import { type TileSlice, type TileRect, nextTileIndex, tilePreviewDestination, tilePreviewInnerRect, tileSlices, tileCorners, type TilePoint, updateTileSlice, removeTileSlice, moveTileRect, duplicateTileSlice, withTileHeader } from "../tiles.ts"
 import { bdaStyleID } from "../bda.ts"
 import { updateBdaImageInnerRect } from "../bda-encode.ts"
 import { sourceName, workspaceImage, atlasCanvas, tilePreviewWrap, tilePreview, tileInspector, bdaTileUsage, tileSourceFieldsGroup, tileInnerTitle, newTileButton, duplicateTileButton, deleteTileButton, moveTileButton, tileTitle, tileSourceFields, tileInnerFields, resourceGallery } from "./dom"
@@ -77,7 +77,7 @@ function sliceStore(): "til" | "bda" | "palm" | "none" {
 }
 
 /** Slices that can be drawn, moved and deleted. */
-function slicesEditable(): boolean {
+export function slicesEditable(): boolean {
   return sliceStore() === "til" || sliceStore() === "palm"
 }
 
@@ -101,6 +101,10 @@ export function nextSliceIndex(): number {
 
 export function finishAtlasEdits(save: boolean, back: () => void): void {
   const changes = appState.atlasEdits
+  appState.selectedTileGroup = []
+  appState.tileSelectionAnchor = undefined
+  appState.tileTransform = undefined
+  appState.movingTiles = []
   appState.atlasEdits = undefined
   if (save && changes?.size) commitBatch([...changes.values()].map(change =>
     change.kind === "text" && !appState.archive?.isText(change.path)
@@ -163,6 +167,8 @@ function reloadPalmSlices(selected = appState.selectedTileIndex, path = appState
 }
 
 function selectMobileAtlasSlice(index: number): void {
+  appState.selectedTileGroup = []
+  appState.tileSelectionAnchor = index
   appState.selectedTileIndex = index
   populateTileInspector()
   drawAtlas()
@@ -171,7 +177,7 @@ function selectMobileAtlasSlice(index: number): void {
 
 export function syncAtlasWorkspace(): void {
   if (appState.resourceConfigActive && appState.resourceInspectorMode === "image" && appState.inspectorTab === "properties" && appState.selectedResourcePath) sourceName.textContent = appState.selectedResourcePath
-  const slice = appState.movingTile ?? appState.slices.find(item => item.index === appState.selectedTileIndex)
+  const slice = appState.selectedTileGroup.length ? undefined : primaryTile()
   appState.atlasWorkspace?.update({
     active: appState.resourceConfigActive && appState.resourceInspectorMode === "image",
     preview: Boolean(appState.selectedResourceGalleryPath),
@@ -192,7 +198,7 @@ export function scheduleAtlasDraw(): void {
   appState.atlasDrawFrame = requestAnimationFrame(() => {
     appState.atlasDrawFrame = 0
     // 只有切片本身变化才需要刷新检查器；平移和缩放只更新画面。
-    if (appState.movingTile) drawAtlas()
+    if (appState.tileTransform) drawAtlas()
     else paintAtlas()
   })
 }
@@ -252,85 +258,92 @@ function paintAtlas(): void {
   }
   if (!appState.resourceConfigActive || !appState.guidesVisible) return
 
+  const moved = new Map(appState.movingTiles.map(slice => [slice.index, slice]))
   const allVisible = appState.tileDraft
     ? [...appState.slices, { index: nextSliceIndex(), source: appState.tileDraft }]
-    : appState.movingTile
-      ? appState.slices.map((slice) => slice.index === appState.movingTile?.index ? appState.movingTile : slice)
-      : appState.slices
+    : appState.slices.map(slice => moved.get(slice.index) ?? slice)
   const visible = appState.archive?.format === "bda"
     ? allVisible.filter((slice) => slice.index === appState.selectedTileIndex)
     : allVisible
   const displayScale = Math.max(0.01, imageBounds.width / Math.max(1, naturalWidth))
   const lineWidth = Math.min(6, 1.5 / displayScale)
   context.textBaseline = "top"
-  const accent = getComputedStyle(atlasCanvas).getPropertyValue("--accent").trim() || "#3a6df0"
+  const tokens = getComputedStyle(atlasCanvas)
+  const token = (name: string) => tokens.getPropertyValue(name).trim()
+  const selection = token("--selection")
+  const secondary = token("--secondary")
+  const panel = token("--panel")
+  const text = token("--text")
+  const warning = token("--state-warn")
+  const fontSize = parseFloat(token("--font-size-micro")) / displayScale
+  const font = token("--font-mono")
+  const labelInset = parseFloat(token("--space-xs")) / displayScale
   const handle = 8 / displayScale
+  const selectedIndices = new Set([appState.selectedTileIndex, ...appState.selectedTileGroup])
+  const showHandles = isEditing() && slicesEditable()
   const visibleLeft = bounds ? (bounds.left - imageBounds.left) / displayScale - handle : 0
   const visibleTop = bounds ? (bounds.top - imageBounds.top) / displayScale - handle : 0
   const visibleRight = bounds ? visibleLeft + bounds.width / displayScale + handle * 2 : naturalWidth
   const visibleBottom = bounds ? visibleTop + bounds.height / displayScale + handle * 2 : naturalHeight
-  for (const slice of visible) {
+  // 将主选区最后绘制，避免相邻切片盖住它的拖柄。
+  const primary = visible.find(slice => slice.index === appState.selectedTileIndex)
+  for (const slice of primary ? [...visible.filter(slice => slice !== primary), primary] : visible) {
     const [x, y, width, height] = slice.source
     if (x + width < visibleLeft || y + height < visibleTop || x > visibleRight || y > visibleBottom) continue
-    const selected = slice.index === appState.selectedTileIndex || slice.source === appState.tileDraft
+    const selected = selectedIndices.has(slice.index) || slice.source === appState.tileDraft
     context.lineWidth = selected ? lineWidth * 2 : lineWidth
-    context.strokeStyle = selected ? accent : "#8d96a7"
+    context.strokeStyle = selected ? selection : secondary
     context.strokeRect(x + context.lineWidth / 2, y + context.lineWidth / 2, width - context.lineWidth, height - context.lineWidth)
     const usage = appState.bdaTileUsages.find((item) => item.index === slice.index)
-    drawSliceLabel(context, usage?.label ?? `IMG${slice.index}`, String(slice.index), slice.source, displayScale, selected ? accent : "#68758a")
-    if (selected) {
-      for (const [hx, hy] of [[x, y], [x + width, y], [x, y + height], [x + width, y + height]]) {
-        context.fillStyle = accent
-        context.fillRect(hx - handle / 2, hy - handle / 2, handle, handle)
-        context.strokeStyle = "#fff"
-        context.lineWidth = handle / 7
-        context.strokeRect(hx - handle / 2, hy - handle / 2, handle, handle)
-      }
-    }
+    drawSliceLabel(context, usage?.label ?? `IMG${slice.index}`, String(slice.index), slice.source, fontSize, labelInset, font, panel, text)
     if (slice.inner && (appState.archive?.format === "bda" || selected)) {
       const [innerX, innerY, innerWidth, innerHeight] = slice.inner
       if (innerWidth > 0 && innerHeight > 0) {
         context.save()
         context.lineWidth = lineWidth * 2
-        context.strokeStyle = "#ff9500"
+        context.strokeStyle = warning
         context.setLineDash([lineWidth * 4, lineWidth * 3])
         context.strokeRect(innerX, innerY, innerWidth, innerHeight)
         context.restore()
       }
     }
+    if (showHandles && slice === primary && !appState.drawingTile) {
+      for (const { x: hx, y: hy } of tileCorners(slice.source)) {
+        context.fillStyle = selection
+        context.fillRect(hx - handle / 2, hy - handle / 2, handle, handle)
+        context.strokeStyle = panel
+        context.lineWidth = handle / 7
+        context.strokeRect(hx - handle / 2, hy - handle / 2, handle, handle)
+      }
+    }
   }
 }
 
-// 角标随切片缩小：最多占切片高度的 35%、不超出切片宽度，放不下完整名称时只显示序号，避免小切片被角标整个盖住
-function drawSliceLabel(context: CanvasRenderingContext2D, label: string, shortLabel: string, source: TileSlice["source"], displayScale: number, fill: string): void {
+// 优先显示完整名称，窄切片只显示序号；极小切片不覆盖原图。
+function drawSliceLabel(context: CanvasRenderingContext2D, label: string, shortLabel: string, source: TileRect, fontSize: number, inset: number, font: string, fill: string, text: string): void {
   const [x, y, width, height] = source
-  const font = (size: number) => `${size}px ui-monospace, monospace`
-  const minimum = 6 / displayScale
-  let size = Math.min(11 / displayScale, height * 0.35 / (17 / 11))
-  if (size < minimum) return
-  context.font = font(size)
-  const fits = (text: string) => context.measureText(text).width + size * 6 / 11 <= width
-  const text = fits(label) ? label : shortLabel
-  if (!fits(text)) {
-    size *= width / (context.measureText(text).width + size * 6 / 11)
-    if (size < minimum) return
-    context.font = font(size)
-  }
-  const padding = size * 3 / 11
-  context.save()
-  context.globalAlpha = 0.85
+  const padding = fontSize / 5
+  const labelHeight = fontSize + padding * 2
+  if (labelHeight > height * 0.35) return
+  context.font = `${fontSize}px ${font}`
+  const labelWidth = (value: string) => context.measureText(value).width + padding * 2
+  const value = labelWidth(label) + inset <= width ? label : shortLabel
+  const w = labelWidth(value)
+  if (w + inset > width) return
+  const left = x + width - w - inset
   context.fillStyle = fill
-  context.fillRect(x, y, context.measureText(text).width + padding * 2, size * 17 / 11)
-  context.globalAlpha = 1
-  context.fillStyle = "#fff"
-  context.fillText(text, x + padding, y + size * 2 / 11)
-  context.restore()
+  context.fillRect(left, y + inset, w, labelHeight)
+  context.fillStyle = text
+  context.fillText(value, left + padding, y + inset + padding)
+}
+
+function primaryTile(): TileSlice | undefined {
+  return appState.movingTiles.find(slice => slice.index === appState.selectedTileIndex)
+    ?? appState.slices.find(slice => slice.index === appState.selectedTileIndex)
 }
 
 function drawTilePreview(): void {
-  const slice = appState.movingTile?.index === appState.selectedTileIndex
-    ? appState.movingTile
-    : appState.slices.find((item) => item.index === appState.selectedTileIndex)
+  const slice = appState.selectedTileGroup.length ? undefined : primaryTile()
   tilePreviewWrap.hidden = !slice
   const context = tilePreview.getContext("2d")
   if (!context) return
@@ -363,7 +376,8 @@ function drawTilePreview(): void {
 }
 
 export function populateTileInspector(): void {
-  const slice = appState.slices.find((item) => item.index === appState.selectedTileIndex)
+  const count = appState.selectedTileGroup.length
+  const slice = count ? undefined : primaryTile()
   const bdaSelected = appState.archive?.format === "bda"
   const fixed = !slicesEditable()
   const usage = selectedBdaTileUsage()
@@ -387,7 +401,7 @@ export function populateTileInspector(): void {
   newTileButton.disabled = !appState.selectedResourcePath || !isEditing() || fixed
   duplicateTileButton.disabled = !slice || !isEditing() || fixed
   deleteTileButton.disabled = !slice || !isEditing() || fixed
-  tileTitle.textContent = usage ? "图片样式切片" : slice ? `切片 #${slice.index}`
+  tileTitle.textContent = count ? `已选择 ${count} 个切片` : usage ? "图片样式切片" : slice ? `切片 #${slice.index}`
     : bdaSelected ? "未使用"
     : sliceStore() === "none" ? "整张图片，没有切片"
     : "未选择切片"
@@ -411,6 +425,12 @@ export function populateTileInspector(): void {
 }
 
 export function loadTiles(path: string): void {
+  appState.selectedTileGroup = []
+  appState.tileSelectionAnchor = undefined
+  appState.tileTransform = undefined
+  appState.movingTiles = []
+  appState.tileDragStart = undefined
+  appState.tileDraft = undefined
   const previousUsage = bdaTileUsageKey(selectedBdaTileUsage())
   if (appState.archive?.format === "bda") {
     const tiles = bdaImageTiles(path)
@@ -422,10 +442,6 @@ export function loadTiles(path: string): void {
     appState.bdaTileUsages = tiles.usages
     appState.selectedTileIndex = appState.bdaTileUsages.find((usage) => bdaTileUsageKey(usage) === previousUsage)?.index
       ?? appState.bdaTileUsages[0]?.index
-    appState.tileDraft = undefined
-    appState.movingTile = undefined
-    appState.moveStart = undefined
-    appState.moveSource = undefined
     populateTileInspector()
     drawAtlas()
     return
@@ -437,10 +453,6 @@ export function loadTiles(path: string): void {
     appState.tileDocument = IniDocument.parse("")
     source.disabled = false
     sourceName.textContent = SXI_SKIN_PATH
-    appState.tileDraft = undefined
-    appState.movingTile = undefined
-    appState.moveStart = undefined
-    appState.moveSource = undefined
     reloadPalmSlices(undefined, path)
     return
   }
@@ -463,10 +475,6 @@ export function loadTiles(path: string): void {
   source.disabled = false
   appState.selectedTileIndex = undefined
   updateSourceHighlight()
-  appState.tileDraft = undefined
-  appState.movingTile = undefined
-  appState.moveStart = undefined
-  appState.moveSource = undefined
   populateTileInspector()
   drawAtlas()
 }
@@ -505,26 +513,34 @@ function commitBdaTileInnerRect(rect: TileRect): void {
 }
 
 export function commitTile(slice: TileSlice, coalesce = false): void {
-  if (!appState.archive || !slicesEditable() || !appState.selectedResourcePath || !isEditing()) return
-  const [x, y, width, height] = slice.source
-  if (
-    slice.source.some(value => !Number.isInteger(value)) ||
-    width <= 0 || height <= 0 || x < 0 || y < 0 ||
-    x + width > workspaceImage.naturalWidth || y + height > workspaceImage.naturalHeight
-  ) return
+  commitTiles([slice], false, coalesce)
+}
+
+export function commitTiles(slices: TileSlice[], keepSelection: boolean, coalesce = false): void {
+  if (!slices.length || !appState.archive || !slicesEditable() || !appState.selectedResourcePath || !isEditing()) return
+  if (slices.some(({ source }) => {
+    const [x, y, width, height] = source
+    return source.some(value => !Number.isInteger(value)) || width <= 0 || height <= 0 || x < 0 || y < 0
+      || x + width > workspaceImage.naturalWidth || y + height > workspaceImage.naturalHeight
+  })) return
+  const selected = keepSelection ? appState.selectedTileIndex : slices[0].index
+  if (!keepSelection) {
+    appState.selectedTileGroup = []
+    appState.tileSelectionAnchor = selected
+  }
   if (sliceStore() === "palm") {
     const path = appState.selectedResourcePath
-    editPalmTiles((skin) => setPalmTile(skin, path, slice), coalesce)
-    return reloadPalmSlices(slice.index)
+    editPalmTiles(skin => { for (const slice of slices) setPalmTile(skin, path, slice) }, coalesce)
+    return reloadPalmSlices(selected)
   }
   const before = appState.tileDocument.toString()
-  updateTileSlice(appState.tileDocument, slice)
+  for (const slice of slices) updateTileSlice(appState.tileDocument, slice)
   appState.tileDocument = withTileHeader(appState.tileDocument)
   const after = appState.tileDocument.toString()
   writeTileText(appState.tilePath, before, after, coalesce)
   setSourceValue(after)
   appState.slices = tileSlices(appState.tileDocument)
-  appState.selectedTileIndex = slice.index
+  appState.selectedTileIndex = selected
   updateSourceHighlight()
   populateTileInspector()
   drawAtlas()
@@ -553,6 +569,8 @@ export async function autoSliceSelectedImage(): Promise<void> {
     }
     if (appState.archive !== currentArchive || appState.selectedResourcePath !== path || draft !== appState.atlasEdits || !isEditing()) return
     if (sliceStore() === "palm") {
+      appState.selectedTileGroup = []
+      appState.tileSelectionAnchor = undefined
       editPalmTiles((skin) => setPalmTiles(skin, path, cells.map((source, index) => ({ index: index + 1, source }))))
       reloadPalmSlices(1)
       showStatus(`已自动切片 ${cells.length} 个区域`)
@@ -587,18 +605,15 @@ export function setDrawingTile(active: boolean): void {
   appState.drawingTile = active
   appState.tileDragStart = undefined
   appState.tileDraft = undefined
-  if (active) {
-    appState.movingTile = undefined
-    appState.moveStart = undefined
-    appState.moveSource = undefined
-  }
+  appState.tileTransform = undefined
+  appState.movingTiles = []
   newTileButton.setAttribute("aria-pressed", String(active))
   atlasCanvas.classList.toggle("drawing", active)
   drawAtlas()
 }
 
 export function moveSelectedTile(deltaX: number, deltaY: number, coalesce = false): void {
-  if (!appState.archive || !appState.selectedResourcePath || !isEditing()) return
+  if (appState.selectedTileGroup.length || !appState.archive || !appState.selectedResourcePath || !isEditing()) return
   const existing = appState.slices.find((slice) => slice.index === appState.selectedTileIndex)
   if (!existing) return
   const source = moveTileRect(existing.source, deltaX, deltaY, workspaceImage.naturalWidth, workspaceImage.naturalHeight)
@@ -613,7 +628,7 @@ export function moveSelectedTile(deltaX: number, deltaY: number, coalesce = fals
 
 export async function deleteSelectedTile(): Promise<void> {
   const { archive, selectedResourcePath, selectedTileIndex, tileDocument } = appState
-  if (!archive || !slicesEditable() || !selectedResourcePath || !isEditing() || selectedTileIndex === undefined) return
+  if (appState.selectedTileGroup.length || !archive || !slicesEditable() || !selectedResourcePath || !isEditing() || selectedTileIndex === undefined) return
   const revision = archive.revision
   if (!await confirmDeletion(`删除切片 IMG${selectedTileIndex}？`) || appState.archive !== archive || archive.revision !== revision || !isEditing()
     || appState.selectedResourcePath !== selectedResourcePath || appState.selectedTileIndex !== selectedTileIndex || appState.tileDocument !== tileDocument) return

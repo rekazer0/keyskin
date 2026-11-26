@@ -653,7 +653,8 @@ export function showResourceList(): void {
   const restoreFocus = mobilePortraitQuery.matches && appState.resourceInspectorMode === "image" && Boolean(appState.selectedResourcePath)
   appState.selectedResourcePath = ""
   hideImageWorkspace()
-  appState.movingTile = undefined
+  appState.selectedTileGroup = []
+  appState.tileSelectionAnchor = undefined
   appState.selectedTileIndex = undefined
   if (appState.selectedDocument) setSourceValue(appState.selectedDocument.toString())
   sourceName.textContent = appState.selectedPath

@@ -295,7 +295,7 @@ export function wireResourcesAndStartup(): void {
     const direction = movement[event.key]
     if (direction) {
       if (appState.resourceConfigActive && !isTextEditingTarget(event.target)) {
-        if (appState.selectedTileIndex === undefined || !isEditing()) return
+        if (appState.selectedTileGroup.length || appState.selectedTileIndex === undefined || !isEditing()) return
         event.preventDefault()
         const distance = event.shiftKey ? 10 : 1
         moveSelectedTile(direction[0] * distance, direction[1] * distance, event.repeat)
@@ -315,6 +315,7 @@ export function wireResourcesAndStartup(): void {
       }
       if (event.metaKey || event.ctrlKey) {
         if (event.key.toLowerCase() === "c") {
+          if (appState.selectedTileGroup.length) return
           const existing = appState.slices.find((slice) => slice.index === appState.selectedTileIndex)
           if (existing) {
             appState.copiedTile = duplicateTileSlice(existing, existing.index)
