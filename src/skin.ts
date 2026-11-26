@@ -704,7 +704,7 @@ export class SkinArchive {
     const files = new Map(Object.entries(this.packagedFiles(format, notes)))
     // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons.
     if (fromAndroid) {
-      adaptIosToolbar(files, notes)
+      await adaptIosToolbar(files, notes)
       sortIosTiles(files)
     }
     // An iOS BDI on Android: Android draws the candidate bar's function icons from res/logo/pop_menu_icons,

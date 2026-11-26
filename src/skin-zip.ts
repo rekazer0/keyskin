@@ -624,6 +624,7 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
   }
 
   // 原有逻辑保留用于其他情况
+  const decoder = new TextDecoder()
   const repairs: Array<[number, number]> = [
     [endOffset + 4, 0],
     [endOffset + 6, 0],

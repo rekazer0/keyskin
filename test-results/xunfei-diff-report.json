@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-26T09:33:09.371Z",
+  "timestamp": "2026-11-26T09:52:25.081Z",
   "summary": {
     "total": 10,
     "passed": 0,
@@ -10,7 +10,7 @@
   "reports": [
     {
       "name": "preview-animation-frame-0",
-      "timestamp": "2026-11-26T09:33:08.111Z",
+      "timestamp": "2026-11-26T09:52:23.958Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -43,7 +43,7 @@
     },
     {
       "name": "preview-animation-frame-1",
-      "timestamp": "2026-11-26T09:33:08.510Z",
+      "timestamp": "2026-11-26T09:52:24.098Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -76,7 +76,7 @@
     },
     {
       "name": "preview-animation-frame-2",
-      "timestamp": "2026-11-26T09:33:08.599Z",
+      "timestamp": "2026-11-26T09:52:24.226Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -109,7 +109,7 @@
     },
     {
       "name": "preview-compare-idle",
-      "timestamp": "2026-11-26T09:33:08.803Z",
+      "timestamp": "2026-11-26T09:52:24.344Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -142,7 +142,7 @@
     },
     {
       "name": "preview-compare-pressed",
-      "timestamp": "2026-11-26T09:33:08.922Z",
+      "timestamp": "2026-11-26T09:52:24.460Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -175,7 +175,7 @@
     },
     {
       "name": "preview-idle",
-      "timestamp": "2026-11-26T09:33:08.974Z",
+      "timestamp": "2026-11-26T09:52:24.556Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -208,7 +208,7 @@
     },
     {
       "name": "preview-pressed",
-      "timestamp": "2026-11-26T09:33:09.082Z",
+      "timestamp": "2026-11-26T09:52:24.676Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -241,7 +241,7 @@
     },
     {
       "name": "preview-snapshot-01",
-      "timestamp": "2026-11-26T09:33:09.165Z",
+      "timestamp": "2026-11-26T09:52:24.767Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -274,7 +274,7 @@
     },
     {
       "name": "preview-snapshot-02",
-      "timestamp": "2026-11-26T09:33:09.304Z",
+      "timestamp": "2026-11-26T09:52:24.971Z",
       "preview": {
         "hasFile": true,
         "dimensions": {
@@ -307,7 +307,7 @@
     },
     {
       "name": "preview-snapshot-03",
-      "timestamp": "2026-11-26T09:33:09.371Z",
+      "timestamp": "2026-11-26T09:52:25.081Z",
       "preview": {
         "hasFile": true,
         "dimensions": {

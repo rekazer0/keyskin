@@ -2,7 +2,7 @@
 import { strFromU8, strToU8 } from "fflate"
 import { IniDocument } from "./ini.ts"
 import { parseXmlPlist, type PalmPlistValue } from "./palm/palm-plist.ts"
-import { cropImage, decodePng, encodePng, placeImage, pngSize, type RgbaImage } from "./ssf/ssf-png.ts"
+import { cropImage, decodePng, encodePng, MAX_PIXELS, placeImage, pngSize, type RgbaImage } from "./ssf/ssf-png.ts"
 import { addZipEntry } from "./skin-zip.ts"
 import type { SkinArchive } from "./skin.ts"
 
@@ -162,11 +162,38 @@ export function fillIosToolbarEdgeSizes(files: Map<string, Uint8Array>): void {
   }
 }
 
+/** Some Android resources use a .png name even when the image is JPEG. Keep their names and slice coordinates. */
+async function normalizeIosResourcePngs(files: Map<string, Uint8Array>): Promise<void> {
+  for (const [path, bytes] of files) {
+    if (!/\/res\/.+\.png$/i.test(path) || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) continue
+    try {
+      const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: "image/jpeg" }))
+      try {
+        const { width, height } = bitmap
+        if (!width || !height || width * height > MAX_PIXELS) throw new Error("图片尺寸无效")
+        const canvas = document.createElement("canvas")
+        canvas.width = width
+        canvas.height = height
+        const context = canvas.getContext("2d")
+        if (!context) throw new Error("无法读取图片像素")
+        context.drawImage(bitmap, 0, 0)
+        const data = context.getImageData(0, 0, width, height).data
+        files.set(path, encodePng({ width, height, data: new Uint8Array(data.buffer) }))
+      } finally {
+        bitmap.close()
+      }
+    } catch (error) {
+      throw new Error(`无法转换图片 ${path}：${error instanceof Error ? error.message : String(error)}`, { cause: error })
+    }
+  }
+}
+
 /**
  * Gives an Android-authored package the iOS toolbar entry points: [LOGO] with logo.ini coloured like the CND logo key,
  * and native function artwork from the Android menu atlas. Existing iOS values and plists are preserved.
  */
-export function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: string[]): void {
+export async function adaptIosToolbar(files: Map<string, Uint8Array>, warnings?: string[]): Promise<void> {
+  await normalizeIosResourcePngs(files)
   fillIosToolbarEdgeSizes(files)
   const text = (path: string) => {
     const bytes = files.get(path)
