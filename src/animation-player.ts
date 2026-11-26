@@ -4,6 +4,7 @@ import { PREVIEW_KEY_SIZE, type PreviewClip } from "./animation-preview-model.ts
 import { animationDirectControls, type AnimationDirectEdit } from "./animation-direct-controls.ts"
 import { element, iconButton } from "./dom-element.ts"
 import { createIcon } from "./icons.ts"
+import { cssTimeMs } from "./motion.ts"
 import { decodeFrames, frameAt, motionAt, withMotion, type Frame, type Track } from "./native-motion.ts"
 import { legacyParticleFrames } from "./preview-animation.ts"
 import { drawVisual } from "./preview-draw.ts"
@@ -22,7 +23,7 @@ export type AnimationPlayerOptions = {
   readFile?: (path: string) => Uint8Array | undefined
   media?: (id: string, kind: "gif" | "video") => { bytes: Uint8Array; mime: string } | undefined
   keyboard?: KeyboardPlayback
-  /** A card-sized player: no transport, loops while visible, one frame every 30 ms. */ thumbnail?: boolean | "slow"
+  /** A card-sized player: no transport, loops with a pause between plays while visible. */ thumbnail?: boolean | "slow"
   docked?: boolean
   direct?: AnimationDirectEdit
   sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
@@ -120,6 +121,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
   let startedAt = 0
   let timer = 0
   let lastFrame = -Infinity
+  let thumbnailGap = 0
   let thumbnailVisible = false
   let thumbnailMeasured = false
   let disposed = false
@@ -454,12 +456,20 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     // An edit rebuilds the inspector: the replacement player under the same key keeps looping.
     if (!root.isConnected) return stop(true)
     if (document.hidden || thumbnail && !thumbnailVisible) return stop()
-    // A card draws 30 times a second; a full player draws every frame.
-    if (thumbnail && now - lastFrame < 1000 / 30) { timer = requestAnimationFrame(tick); return }
+    // Thumbnails cap the draw rate and hold the last frame before replaying.
+    const replayThumbnail = thumbnail && elapsed >= duration
+    if (thumbnail && now - lastFrame < (replayThumbnail ? thumbnailGap : 1000 / 30)) {
+      timer = requestAnimationFrame(tick)
+      return
+    }
     if (!root.checkVisibility()) return stop()
+    if (replayThumbnail) {
+      startedAt = now
+      keyboard?.play()
+    }
     lastFrame = now
     elapsed = (now - startedAt) * rate()
-    if (elapsed >= duration && (thumbnail || session.loop)) {
+    if (elapsed >= duration && !thumbnail && session.loop) {
       // Carry the overshoot into the next round: a clip shorter than one drawn frame keeps its own period.
       elapsed = duration > 0 ? elapsed % duration : 0
       startedAt = now - elapsed / rate()
@@ -467,7 +477,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     }
     elapsed = Math.min(duration, elapsed)
     draw()
-    if (elapsed >= duration) stop()
+    if (elapsed >= duration && !thumbnail) stop()
     else {
       timer = requestAnimationFrame(tick)
       if (!thumbnail) updateTime()
@@ -523,6 +533,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
     else if (!timer) {
       if (!thumbnailMeasured) {
         measure()
+        thumbnailGap = cssTimeMs(getComputedStyle(root).getPropertyValue("--animation-thumbnail-gap")) || 0
         thumbnailMeasured = true
       }
       draw()

@@ -129,6 +129,7 @@
   --motion-repeat: infinite; /* 减少动态效果时不启动循环 */
   --long-press-delay: 500ms; /* 长按选择，不受减少动态效果影响 */
   --double-click-delay: 400ms; /* 位移控件等待双击，不受减少动态效果影响 */
+  --animation-thumbnail-gap: 500ms; /* 动画卡片两次自动播放之间的间隔 */
   --duration-base: 200ms;   /* 展开收起、浮层出现 */
   --duration-slow: 320ms;   /* 对话框、sheet、页面切换 */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);

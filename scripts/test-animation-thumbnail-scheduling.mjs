@@ -19,6 +19,7 @@ try {
     const sample = Promise.withResolvers()
     window.finishSample = sample.resolve
     window.draws = Array(24).fill(0)
+    window.firstCardPaintTimes = []
     window.samples = Array(24).fill(0)
     window.loads = Array(24).fill(0)
     document.querySelector('#spacer').style.height = `${innerHeight * 4}px`
@@ -29,7 +30,11 @@ try {
       const player = animationPlayer({ key: String(i), thumbnail: true, clip, sample() { ++window.loads[i]; return sample.promise } })
       const ctx = player.querySelector('canvas').getContext('2d')
       const clear = ctx.clearRect.bind(ctx)
-      ctx.clearRect = (...args) => { ++window.draws[i]; clear(...args) }
+      ctx.clearRect = (...args) => {
+        ++window.draws[i]
+        if (i === 0) window.firstCardPaintTimes.push(performance.now())
+        clear(...args)
+      }
       document.body.append(player)
     }
   })
@@ -58,4 +63,7 @@ try {
   assert.equal(latePaints, 0)
   assert.equal(lateSamples, 0)
   assert.ok(keyWidth > 100, 'returning to the card paints the fitted thumbnail, not the unscaled 64-unit key')
+  const replayGap = await (await page.waitForFunction(() => window.firstCardPaintTimes
+    .map((time, i, times) => time - times[i - 1]).find(gap => gap >= 350), null, { timeout: 4000 })).jsonValue()
+  assert.ok(replayGap >= 495 && replayGap < 600, `thumbnail holds the final frame for 500 ms before replaying (${replayGap} ms)`)
 } finally { await browser.close(); await server.close() }
