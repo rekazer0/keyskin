@@ -287,3 +287,151 @@ export function nativeCandidateText(width: number): CandidateText | undefined {
   const archive = appState.archive
   return archive?.format === "ssf" ? ssfCandidateText(archive, width) : undefined
 }
+
+/**
+ * Check if the open archive is a Xunfei skin (.it/.itx).
+ */
+function isXunfeiArchive(archive: SkinArchive): boolean {
+  return archive.format === "it" || archive.format === "itx"
+}
+
+// ============================================================================
+// Xunfei (.it/.itx) Preview
+// ============================================================================
+
+/**
+ * Find the main config directory in a Xunfei archive.
+ * Priority: config/ → 1080/ → first directory containing offset.ini or style.ini
+ */
+function xunfeiConfigDir(archive: SkinArchive): string | undefined {
+  const names = archive.names()
+  
+  // Try standard candidates first
+  for (const candidate of ["config", "1080", "720"]) {
+    if (names.some((n) => n === `${candidate}/offset.ini` || n === `${candidate}/style.ini`)) {
+      return candidate
+    }
+  }
+  
+  // Try looking for skinname/<resolution>/ pattern
+  const dirMatch = names.find((n) => /^[^/]+\/\d{3,4}\/(offset|style)\.ini$/.test(n))
+  if (dirMatch) {
+    const parts = dirMatch.split("/")
+    return `${parts[0]}/${parts[1]}`
+  }
+  
+  // Fall back: find any directory containing offset.ini or style.ini
+  const match = names.find((n) => n.endsWith("/offset.ini") || n.endsWith("/style.ini"))
+  return match ? match.slice(0, match.lastIndexOf("/")) : undefined
+}
+
+/**
+ * Read a panel size from offset.ini or style.ini.
+ */
+function xunfeiPanelSize(archive: SkinArchive, dir: string): { width: number; height: number } {
+  const offsetPath = `${dir}/offset.ini`
+  if (archive.isText(offsetPath)) {
+    const doc = IniDocument.parse(archive.getText(offsetPath))
+    const w = Number(doc.get("PANEL", "W") ?? doc.get("PANEL", "Width") ?? 0)
+    const h = Number(doc.get("PANEL", "H") ?? doc.get("PANEL", "Height") ?? 0)
+    if (w > 0 && h > 0) return { width: w, height: h }
+  }
+  const stylePath = `${dir}/style.ini`
+  if (archive.isText(stylePath)) {
+    const doc = IniDocument.parse(archive.getText(stylePath))
+    const size = doc.get("PANEL", "SIZE")?.split(",").map(Number)
+    if (size && size[0] > 0 && size[1] > 0) return { width: size[0], height: size[1] }
+  }
+  return { width: 1080, height: 585 }
+}
+
+/**
+ * Refresh the editor's main preview canvas for an open Xunfei (.it/.itx) skin.
+ * Returns false when the open archive is not a Xunfei skin.
+ */
+export function refreshXunfeiPreview(
+  updatePanelToolsFn: (w: number, h: number) => number,
+  applyDeviceKeyboardGeometryFn: (w: number, h: number, ch: number, ci: number) => void,
+  devicePreviewTransparentFn: () => boolean,
+): boolean {
+  const archive = appState.archive
+  if (!archive || !isXunfeiArchive(archive)) return false
+
+  const dir = xunfeiConfigDir(archive)
+  if (!dir) return false
+
+  const { width, height } = xunfeiPanelSize(archive, dir)
+
+  // Xunfei has no candidate bar support yet
+  candidateArea.hidden = true
+  toolbarStrip.hidden = true
+  toolbarStrip.dataset.path = ""
+  candidateBackgroundCanvas.hidden = true
+
+  preview.setResolver(undefined)
+  preview.setOffsets(undefined)
+  preview.setDefaults(undefined)
+  preview.setTheme("light")
+  preview.setTransparent(devicePreviewTransparentFn())
+  preview.setPanel("", width, height)
+  preview.setDocument(undefined, appState.layoutPath)
+  preview.setLegacyAnimation(undefined)
+  preview.setLegacyShowAnimation(undefined)
+  preview.setLegacyHints(undefined, undefined, false)
+  preview.setAnimation(undefined)
+  preview.setNativeItems(undefined)
+
+  // Build NativeScene from actual skin images in the archive
+  preview.setScene(async () => {
+    const cur = appState.archive
+    if (!cur || !isXunfeiArchive(cur)) return undefined
+    const curDir = xunfeiConfigDir(cur)
+    if (!curDir) return undefined
+
+    // Parse image.ini to find the background image
+    const imagePath = `${curDir}/image.ini`
+    let bgFile: string | undefined
+    if (cur.isText(imagePath)) {
+      const imageDoc = IniDocument.parse(cur.getText(imagePath))
+      for (const section of imageDoc.sections()) {
+        const src = imageDoc.get(section, "SRC") ?? imageDoc.get(section, "Src") ?? imageDoc.get(section, "src")
+        if (src) {
+          // Look for file in archive relative to config dir, res/ subdir, or archive root
+          const candidates = [
+            src,
+            `${curDir}/res/${src}`,
+            `${curDir}/${src}`,
+            `res/${src}`,
+            src.replace(/\\/g, "/"),
+          ]
+          for (const c of candidates) {
+            if (cur.getBytes(c)) { bgFile = c; break }
+          }
+          if (bgFile) break
+        }
+      }
+    }
+    // Fallback: scan for bg.jpg / bg.png / any image
+    if (!bgFile) {
+      bgFile = cur.names().find((n) => /\/(bg|background)\.(jpg|png|webp)$/i.test(n))
+        ?? cur.names().find((n) => /\.(jpg|png|webp)$/.test(n) && Boolean(cur.getBytes(n)))
+    }
+    if (!bgFile) return undefined
+
+    const bytes = cur.getBytes(bgFile)
+    if (!bytes) return undefined
+
+    const type = /\.(jpg|jpeg)$/i.test(bgFile) ? "image/jpeg" : "image/png"
+    const blob = new Blob([bytes.buffer as ArrayBuffer], { type })
+    const bitmap = await createImageBitmap(blob)
+    return {
+      background: [{ kind: "image" as const, rect: { x: 0, y: 0, width: bitmap.width, height: bitmap.height }, bitmap }],
+      keys: [],
+    } as any
+  })
+
+  const surfaceHeight = updatePanelToolsFn(width, height)
+  appState.activeKeyboardGeometry = { panelWidth: width, panelHeight: surfaceHeight, candidateHeight: 0, candidateInputHeight: 0 }
+  applyDeviceKeyboardGeometryFn(width, surfaceHeight, 0, 0)
+  return true
+}

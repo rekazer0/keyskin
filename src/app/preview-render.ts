@@ -21,7 +21,7 @@ import { resolveCandidateInputTextVisual, resolveCandidateTextVisuals } from "..
 import { availableSkinStates, canvasFitWidth, previewScalePercent } from "../panel-tools.ts"
 import { populateKeyInspector } from "./key-inspector"
 import { setDrawingTile, drawAtlas } from "./tile-editing"
-import { nativeCandidateText, refreshNativeScenes, refreshPalmPreview } from "./native-preview"
+import { nativeCandidateText, refreshNativeScenes, refreshPalmPreview, refreshXunfeiPreview } from "./native-preview"
 
 export function simulationLanguage(): "zh" | "en" {
   return /^en_/i.test(appState.layoutPath.split("/").pop() ?? "") ? "en" : "zh"
@@ -166,6 +166,7 @@ export function refreshPreview(): void {
   const currentArchive = appState.archive
   const composing = refreshSimulationState()
   if (refreshPalmPreview()) return
+  if (refreshXunfeiPreview(updatePanelTools, applyDeviceKeyboardGeometry, devicePreviewTransparent)) return
   const resolver = visualResolver()
   const context = keyboardContext()
   const toolbarSize = resolver ? refreshToolbarPreview(composing, resolver) : undefined

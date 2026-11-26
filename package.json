@@ -13,7 +13,7 @@
     "version:bugfix": "node scripts/bump-version.mjs bugfix",
     "tauri": "node scripts/tauri.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:e2e": "for f in scripts/test-*.mjs; do echo \"== $f\"; node \"$f\" || exit 1; done",
+    "test:e2e": "for f in tests/test-*.mjs; do echo \"== $f\"; node \"$f\" || exit 1; done",
     "test:ui": "node scripts/ui-snapshot.mjs compare"
   },
   "dependencies": {

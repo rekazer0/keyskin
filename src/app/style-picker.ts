@@ -1,4 +1,5 @@
 import { cloneJson } from "../clone-json.ts"
+import { openMobileMotionPicker } from "./mobile-motion-picker.ts"
 import { appState } from "./state"
 import { bdaStyleRef, bdaStyleID } from "../bda.ts"
 import { currentBdaAppearance, visualResolver } from "./bda-documents"
@@ -335,7 +336,10 @@ export function openStylePicker(input: HTMLInputElement, highlighted = false, in
   appState.stylePickerTarget = input
   appState.pickerTarget = undefined
   appState.styleLibrarySelected = undefined
-  void showPickerWindow("styles", "全部样式", 1100, 760)
+  const animation = layoutAnimationFields.has(styleReferenceKey(input)) || Boolean(input.dataset.ssfAnimationPath)
+  const openLibrary = () => void showPickerWindow("styles", "全部样式", 1100, 760)
+  if (mobilePortraitQuery.matches && animation && ["bdi", "bds"].includes(appState.archive?.format ?? "")) openMobileMotionPicker(input, openLibrary)
+  else openLibrary()
 }
 
 const animationStyleChoices = new WeakMap<HTMLInputElement, ReadonlyMap<string, string>>()

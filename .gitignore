@@ -1,40 +1,47 @@
+# Dependencies and build output
 node_modules/
 dist/
 dist-release/
 docs/
-*.apk
-*.apk.idsig
-/artifacts/
-src-tauri/target/
-src-tauri/gen/
+test-results/
+
+# Platform
 .DS_Store
 *.log
+
+# Mobile builds
+*.apk
+*.apk.idsig
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Local tools
+/artifacts/
 .tmp/
 .worktrees/
 .mimosa/
 .zcode/
 .release/
-/design-qa.md
-/design-qa-*.png
-/implementation-*.png
-/*-comparison*.png
-/*-comparison*.jpg
-/*-implementation.png
-/inspector-design-*.png
-/inspector-reference-*.png
-/codex-clipboard-*.png
-/island-skin-*.png
-/tmp-*.mjs
-/scripts/verify-*
-/whiten_background.py
-/public/iphone-notes-keyboard-blank.png
-/public/iphone-notes-reference.png
-/public/iphone-notes-reference-dark.png
-/.tmp-menu.png
 /.pi/
 /probe/
 
-# Local credentials and signing material
+# Design experiments (screenshots and comparisons)
+/design-qa.md
+/*-*.png
+/*-*.jpg
+/codex-clipboard-*.png
+/island-skin-*.png
+/public/iphone-notes-*.png
+/.tmp-menu.png
+
+# Temporary files
+/tmp-*.mjs
+/scripts/verify-*
+/whiten_background.py
+
+# Credentials and signing
 .env
 .env.*
 !.env.example
@@ -42,8 +49,9 @@ src-tauri/gen/
 *.jks
 *.keystore
 
-# Local design experiments and scratch files
+# Local design work
 /INSPECTOR_REDESIGN_PLAN.md
+/research/*.md
 /harness.html
 /harness.ts
 /inspector-flat-demo.html
@@ -53,7 +61,7 @@ src-tauri/gen/
 .ui-baseline/
 .ui-current/
 
-# Local design drafts
+# Design drafts and assets
 /*.pen
 /assets/icon-background-options/
 /assets/keyskin-icon-concepts*.png

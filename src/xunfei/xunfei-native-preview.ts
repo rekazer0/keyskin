@@ -53,11 +53,12 @@ export interface KeyHitbox {
   label?: string
 }
 
-export enum KeyState {
-  Idle = 'idle',
-  Pressed = 'pressed',
-  LongPressed = 'longPressed',
-}
+export const KeyState = {
+  Idle: 'idle',
+  Pressed: 'pressed',
+  LongPressed: 'longPressed',
+} as const
+export type KeyState = typeof KeyState[keyof typeof KeyState]
 
 export interface KeyStatus {
   keyId: string | number
@@ -91,7 +92,15 @@ export class XunfeiNativePreview {
   private canvas: HTMLCanvasElement | OffscreenCanvas
   private ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
   private theme: XunfeiTheme
-  private options: Required<Omit<NativePreviewOptions, 'canvas' | 'theme'>>
+  private options: {
+    resolution: string
+    orientation: 'portrait' | 'landscape'
+    customResolution?: { width: number; height: number }
+    scale: number
+    interactive: boolean
+    onKeyPress?: (keyId: string | number) => void
+    onKeyRelease?: (keyId: string | number) => void
+  }
 
   private canvasWidth: number
   private canvasHeight: number
@@ -102,7 +111,6 @@ export class XunfeiNativePreview {
   private backgroundImageId?: string | number
 
   private animationFrameId: number | null = null
-  private lastFrameTime = 0
   private isDirty = true
 
   constructor(options: NativePreviewOptions) {
@@ -119,7 +127,9 @@ export class XunfeiNativePreview {
     }
 
     // Get canvas context
-    const ctx = this.canvas.getContext('2d')
+    const ctx = this.canvas instanceof HTMLCanvasElement
+      ? this.canvas.getContext('2d') as CanvasRenderingContext2D | null
+      : (this.canvas as OffscreenCanvas).getContext('2d') as OffscreenCanvasRenderingContext2D | null
     if (!ctx) throw new Error('Failed to get 2D canvas context')
     this.ctx = ctx
 
@@ -153,7 +163,8 @@ export class XunfeiNativePreview {
       baseWidth = this.options.customResolution.width
       baseHeight = this.options.customResolution.height
     } else {
-      const preset = RESOLUTION_PRESETS[this.options.resolution]
+      const preset = RESOLUTION_PRESETS[this.options.resolution as keyof typeof RESOLUTION_PRESETS]
+      if (!preset) throw new Error(`Unknown resolution: ${this.options.resolution}`)
       baseWidth = preset.width
       baseHeight = preset.height
     }
@@ -220,7 +231,7 @@ export class XunfeiNativePreview {
   private parseImageIni(): void {
     // Store background image ID if present
     if (this.theme.images) {
-      const bgImage = this.theme.images.get(0) || this.theme.images.get('bg')
+      const bgImage = this.theme.images.get("0") || this.theme.images.get("bg")
       if (bgImage) {
         this.backgroundImageId = bgImage.id
       }
@@ -263,7 +274,7 @@ export class XunfeiNativePreview {
     for (const [name, data] of this.theme.resources.files) {
       promises.push(
         new Promise<void>((resolve) => {
-          const blob = new Blob([data], { type: 'image/png' })
+          const blob = new Blob([data.buffer as ArrayBuffer], { type: 'image/png' })
           const url = URL.createObjectURL(blob)
           const img = new Image()
 
@@ -403,7 +414,7 @@ export class XunfeiNativePreview {
   private renderBackgroundImage(): void {
     if (!this.backgroundImageId) return
 
-    const bgImage = this.theme.images?.get(this.backgroundImageId)
+    const bgImage = this.theme.images?.get(String(this.backgroundImageId))
     if (!bgImage) return
 
     const cached = this.imageCache.get(bgImage.sourceFile)
@@ -490,11 +501,8 @@ export class XunfeiNativePreview {
   public start(): void {
     if (this.animationFrameId !== null) return
 
-    const loop = (timestamp: number) => {
-      const deltaTime = timestamp - this.lastFrameTime
-      this.lastFrameTime = timestamp
-
-      this.updateStateTransitions(deltaTime)
+    const loop = (_timestamp: number) => {
+      this.updateStateTransitions()
 
       if (this.isDirty) {
         this.render()
