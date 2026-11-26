@@ -271,7 +271,9 @@ export function validateMetadataPreservation(
   const fields = ["id", "name", "author", "version"]
   for (const field of fields) {
     checked++
-    if ((originalInfo as Record<string, unknown>)[field] === (editedInfo as Record<string, unknown>)[field]) {
+    const originalVal = (originalInfo as any)[field]
+    const editedVal = (editedInfo as any)[field]
+    if (originalVal === editedVal) {
       preserved++
     }
   }
@@ -280,7 +282,7 @@ export function validateMetadataPreservation(
     percentage: (preserved / Math.max(checked, 1)) * 100,
     itemsChecked: checked,
     itemsPreserved: preserved,
-    details: `Metadata fields preserved: ${fields.filter((f) => (originalInfo as Record<string, unknown>)[f] === (editedInfo as Record<string, unknown>)[f]).join(", ")}`,
+    details: `Metadata fields preserved: ${fields.filter((f) => (originalInfo as any)[f] === (editedInfo as any)[f]).join(", ")}`,
   }
 }
 
@@ -301,10 +303,10 @@ export function validateMetadataPreservation(
  * @returns Complete validation report
  */
 export function validateRoundTrip(
-  originalBytes: Uint8Array,
+  _originalBytes: Uint8Array,
   decodedTheme: XunfeiTheme,
   editedTheme: XunfeiTheme,
-  reserializedBytes: Uint8Array,
+  _reserializedBytes: Uint8Array,
   reparsedTheme: XunfeiTheme,
   originalText?: string,
   editDelta?: { fieldsModified: string[]; resourcesChanged: boolean }

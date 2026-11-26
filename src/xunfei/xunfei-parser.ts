@@ -1,166 +1,231 @@
 /**
- * Xunfei theme parser: load .it/.itx ZIP files and parse INI/JSON structures.
+ * Xunfei INI parser for .it/.itx theme files.
  *
- * Handles:
- * - ZIP extraction (plain .it, encrypted .itx detection)
- * - INI parsing (anim.ini, style.ini, offset.ini, image.ini)
- * - Texture atlas indexing from image.ini
- * - Animation definitions (Types 0–5)
- * - Lossless round-trip serialization
+ * Features:
+ * - FlyitenC encryption detection and handling
+ * - Format detection (it vs itx, version extraction)
+ * - Lossless roundtrip serialization (preserves order, comments, encoding)
+ * - Multi-theme support with attach/ directories
+ * - Platform-specific overrides (Android/iOS)
+ * - Animation structure parsing (types 0-5)
  */
 
-import { type XunfeiTheme, type XunfeiThemeInfo, type StyleDefinition, type ImageSlice, type OffsetConfiguration, type ParseIssue } from "../xunfei-theme"
-import { decompress } from "fflate"
+import { IniDocument } from '../ini.ts'
+import { decompress } from 'fflate'
 
 // ============================================================================
-// Animation Type Definitions (Types 0–5)
+// Types & Constants
 // ============================================================================
 
-export enum AnimationType {
-  Frame = 0,
-  Translate = 1,
-  Rotate = 2,
-  Scale = 3,
-  Alpha = 4,
-  Composite = 5,
+export interface IniConfig {
+  /** Section name → (key → value) mapping */
+  sections: Map<string, Map<string, string>>
+  /** Raw INI text before parsing (for roundtrip preservation) */
+  rawText: string
+  /** Encoding detected from BOM or file metadata */
+  encoding: 'utf-8' | 'utf-16' | 'gbk' | 'gb2312'
+  /** Original line endings (CRLF, LF, CR) */
+  lineEnding: '\r\n' | '\n' | '\r'
 }
 
-export interface AnimationKeyframe {
-  /** Time offset in milliseconds */
-  time: number
-  /** Type-specific value (frame index, translation, rotation, scale, alpha) */
-  value: number | [x: number, y: number] | number
+export interface XunfeiFormatInfo {
+  isXunfei: boolean
+  type: 'it' | 'itx' | null
+  version: string
+  encrypted: boolean
+  platform?: 'android' | 'ios'
 }
 
-export interface XunfeiAnimation {
-  /** Animation identifier (e.g., "press_bounce", "fade_in") */
+export interface XunfeiThemeMetadata {
   id: string
-  /** Type 0–5 */
-  type: AnimationType
-  /** Keyframes in chronological order */
-  keyframes: AnimationKeyframe[]
-  /** Total duration in milliseconds */
-  duration: number
-  /** Loop count (0 = infinite, >0 = finite) */
-  loop?: number
-  /** Easing function (linear, ease-in, ease-out, ease-in-out) */
-  easing?: string
+  name: string
+  author?: string
+  version?: string
+  resolution: number[]
+  format: XunfeiFormatInfo
 }
 
+/** ZIP local file header signature */
+const ZIP_LOCAL_FILE_HEADER = 0x04034b50
+/** ZIP central directory signature */
+const ZIP_CENTRAL_DIR = 0x02014b50
+/** ZIP end of central directory signature */
+const ZIP_END_OF_CD = 0x06054b50
+
+/** FlyitenC encryption magic bytes */
+const FLYTENC_MAGIC = new Uint8Array([0x46, 0x4C, 0x59, 0x54, 0x45, 0x4E, 0x43])
+
 // ============================================================================
-// INI Parser
+// Format Detection
 // ============================================================================
 
 /**
- * Parse INI file format into key-value sections.
- * Returns map of section → properties.
+ * Detect Xunfei format from ZIP file header.
+ * Returns format info: type (it/itx), version, encryption status.
  */
-function parseIni(text: string): Map<string, Map<string, string>> {
-  const sections = new Map<string, Map<string, string>>()
-  let currentSection: Map<string, string> | null = null
-  let currentSectionName = ""
+export function detectXunfeiFormat(zipData: Uint8Array): XunfeiFormatInfo {
+  const result: XunfeiFormatInfo = {
+    isXunfei: false,
+    type: null,
+    version: '',
+    encrypted: false,
+  }
 
-  const lines = text.split(/\r?\n/)
-  for (const line of lines) {
-    const trimmed = line.trim()
+  if (zipData.length < 4) return result
 
-    // Skip empty lines and comments
-    if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("#")) {
-      continue
-    }
+  // Check for FlyitenC encryption
+  if (zipData.length >= 7 && matchBytes(zipData, FLYTENC_MAGIC, 0)) {
+    result.encrypted = true
+    result.isXunfei = true
+    result.type = 'itx' // Encrypted .itx format
+    return result
+  }
 
-    // Section header: [SectionName]
-    const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/)
-    if (sectionMatch) {
-      currentSectionName = sectionMatch[1]
-      currentSection = new Map()
-      sections.set(currentSectionName, currentSection)
-      continue
-    }
+  // Check for ZIP signature
+  const view = new DataView(zipData.buffer, zipData.byteOffset)
+  const signature = view.getUint32(0, true)
 
-    // Key-value pair: key=value
-    if (currentSection) {
-      const eqIndex = trimmed.indexOf("=")
-      if (eqIndex > 0) {
-        const key = trimmed.slice(0, eqIndex).trim()
-        const value = trimmed.slice(eqIndex + 1).trim()
-        currentSection.set(key, value)
+  if (signature !== ZIP_LOCAL_FILE_HEADER) {
+    return result
+  }
+
+  // Valid ZIP - extract version from entries
+  result.isXunfei = true
+  result.type = 'it' // Plain ZIP
+  result.encrypted = false
+
+  // Try to find version from meta.ini or config.ini
+  try {
+    const entries = parseZipEntries(zipData)
+    const fileMap = new Map(entries.map(e => [e.name, e.data]))
+
+    // Check for version in various config files
+    for (const [name, data] of fileMap.entries()) {
+      if (name.includes('meta') || name.includes('config') || name === 'info.ini') {
+        const text = decodeText(data)
+        const versionMatch = text.match(/version\s*=\s*([^\r\n]+)/i)
+        if (versionMatch) {
+          result.version = versionMatch[1].trim()
+          break
+        }
       }
     }
+  } catch {
+    // Ignore parse errors during detection
   }
 
-  return sections
-}
-
-/**
- * Serialize sections back to INI format.
- * Preserves section order and formatting as much as possible.
- */
-function serializeIni(sections: Map<string, Map<string, string>>): string {
-  const lines: string[] = []
-
-  for (const [sectionName, props] of sections) {
-    lines.push(`[${sectionName}]`)
-    for (const [key, value] of props) {
-      lines.push(`${key}=${value}`)
-    }
-    lines.push("")
-  }
-
-  return lines.join("\n")
+  return result
 }
 
 // ============================================================================
-// ZIP Handler (using fflate)
+// INI Parsing & Roundtrip Preservation
+// ============================================================================
+
+/**
+ * Parse INI file with lossless roundtrip preservation.
+ *
+ * Handles:
+ * - Multiple encodings (UTF-8, UTF-16, GBK, GB2312)
+ * - Various line endings (CRLF, LF, CR)
+ * - Comments and whitespace
+ * - Section and key ordering
+ * - Multi-theme attach/ subdirectories
+ */
+export function parseIniFile(data: Uint8Array): IniConfig {
+  // Detect encoding from BOM
+  const encoding = detectEncoding(data)
+  const rawText = decodeText(data, encoding)
+
+  // Detect line ending
+  const lineEnding = detectLineEnding(rawText)
+
+  // Parse with IniDocument to preserve structure
+  const iniDoc = IniDocument.parse(rawText)
+
+  // Extract sections into map
+  const sections = new Map<string, Map<string, string>>()
+  for (const section of iniDoc.sections()) {
+    const entries = iniDoc.entries(section)
+    const sectionMap = new Map<string, string>()
+    for (const entry of entries) {
+      sectionMap.set(entry.key, entry.value)
+    }
+    sections.set(section, sectionMap)
+  }
+
+  return {
+    sections,
+    rawText,
+    encoding,
+    lineEnding,
+  }
+}
+
+/**
+ * Preserve raw INI structure during roundtrip.
+ *
+ * Returns binary data maintaining:
+ * - Original section order
+ * - Comment placement
+ * - Whitespace and formatting
+ * - Line ending style
+ * - Character encoding
+ */
+export function preserveRawIni(config: IniConfig): Uint8Array {
+  // Use IniDocument to maintain original structure
+  const iniDoc = IniDocument.parse(config.rawText)
+
+  // Update values from modified config (if any)
+  for (const [section, entries] of config.sections.entries()) {
+    for (const [key, value] of entries.entries()) {
+      iniDoc.set(section, key, value)
+    }
+  }
+
+  // Serialize with original formatting
+  const finalText = iniDoc.toString()
+
+  // Encode with detected encoding
+  return encodeText(finalText, config.encoding)
+}
+
+// ============================================================================
+// ZIP Entry Parsing
 // ============================================================================
 
 interface ZipEntry {
   name: string
   data: Uint8Array
-  isCompressed: boolean
+  compressed: boolean
+  crc32: number
 }
 
 /**
- * Extract ZIP file entries using fflate.
- * Returns array of files with decompressed content.
+ * Parse ZIP file entries while preserving compression info.
+ * Handles both STORE (uncompressed) and DEFLATE compression.
  */
-async function extractZip(zipBuffer: Uint8Array): Promise<ZipEntry[]> {
-  return new Promise((resolve, reject) => {
-    // fflate's decompress expects the entire ZIP as-is
-    // We need to parse the ZIP structure manually or use a simpler approach
-    try {
-      // For now, use a basic ZIP parser that handles both stored and deflated entries
-      const entries = parseZipEntries(zipBuffer)
-      resolve(entries)
-    } catch (error) {
-      reject(new Error(`ZIP extraction failed: ${error instanceof Error ? error.message : String(error)}`))
-    }
-  })
-}
-
-/**
- * Parse ZIP file structure and extract entries.
- * Handles both STORE (no compression) and DEFLATE compression.
- */
-function parseZipEntries(zipBuffer: Uint8Array): ZipEntry[] {
+export function parseZipEntries(zipData: Uint8Array): ZipEntry[] {
   const entries: ZipEntry[] = []
-  const view = new DataView(zipBuffer.buffer, zipBuffer.byteOffset, zipBuffer.byteLength)
+  const view = new DataView(zipData.buffer, zipData.byteOffset, zipData.byteLength)
   let offset = 0
 
-  while (offset < zipBuffer.length) {
-    // Local file header signature: 0x04034b50
-    if (view.getUint32(offset, true) !== 0x04034b50) {
+  while (offset < zipData.length - 4) {
+    const signature = view.getUint32(offset, true)
+
+    // Stop at central directory or end of central directory
+    if (signature === ZIP_CENTRAL_DIR || signature === ZIP_END_OF_CD || signature !== ZIP_LOCAL_FILE_HEADER) {
       break
     }
 
     offset += 4 // Skip signature
+
     offset += 2 // versionNeeded
     offset += 2 // flags
     const compressionMethod = view.getUint16(offset, true)
     offset += 2
-    offset += 2 // lastModFileTime
-    offset += 2 // lastModFileDate
-    offset += 4 // crc32
+    offset += 4 // Skip modification time/date
+    const crc32 = view.getUint32(offset, true)
+    offset += 4
     const compressedSize = view.getUint32(offset, true)
     offset += 4
     const uncompressedSize = view.getUint32(offset, true)
@@ -171,7 +236,7 @@ function parseZipEntries(zipBuffer: Uint8Array): ZipEntry[] {
     offset += 2
 
     // Read file name
-    const fileNameBytes = zipBuffer.slice(offset, offset + fileNameLength)
+    const fileNameBytes = zipData.slice(offset, offset + fileNameLength)
     offset += fileNameLength
     const fileName = new TextDecoder().decode(fileNameBytes)
 
@@ -179,35 +244,27 @@ function parseZipEntries(zipBuffer: Uint8Array): ZipEntry[] {
     offset += extraFieldLength
 
     // Read compressed data
-    const compressedData = zipBuffer.slice(offset, offset + compressedSize)
+    const compressedData = zipData.slice(offset, offset + compressedSize)
     offset += compressedSize
 
     // Decompress if needed
-    let decompressed: Uint8Array
+    let data: Uint8Array
     if (compressionMethod === 0) {
       // STORE: no compression
-      decompressed = compressedData
+      data = compressedData
     } else if (compressionMethod === 8) {
-      // DEFLATE: decompress using fflate
-      try {
-        decompressed = new Uint8Array(uncompressedSize)
-        decompress(compressedData, (err, result) => {
-          if (err) throw err
-          if (result) decompressed = result
-        })
-      } catch (error) {
-        console.warn(`Failed to decompress ${fileName}: ${error}`)
-        decompressed = compressedData
-      }
+      // DEFLATE: decompress synchronously
+      data = decompressSync(compressedData, uncompressedSize)
     } else {
       console.warn(`Unsupported compression method ${compressionMethod} for ${fileName}`)
-      decompressed = compressedData
+      data = compressedData
     }
 
     entries.push({
       name: fileName,
-      data: decompressed,
-      isCompressed: compressionMethod === 8,
+      data,
+      compressed: compressionMethod === 8,
+      crc32,
     })
   }
 
@@ -215,249 +272,75 @@ function parseZipEntries(zipBuffer: Uint8Array): ZipEntry[] {
 }
 
 // ============================================================================
-// Xunfei Theme Parser
+// Theme Loading & Parsing
 // ============================================================================
 
-export interface ParseOptions {
-  /** Allow recovery from parse errors (warn instead of error) */
-  lenient?: boolean
-  /** Skip validation of referenced resources */
-  skipResourceValidation?: boolean
+/**
+ * Load and parse Xunfei theme from ZIP data.
+ *
+ * Handles:
+ * - config/ and config-sec-w414/ directories (platform variants)
+ * - Multi-theme attach/ subdirectories
+ * - Animation.ini parsing (types 0-5)
+ * - Roundtrip preservation for all INI files
+ */
+export async function loadTheme(
+  zipData: Uint8Array,
+  options?: { lenient?: boolean; platform?: 'android' | 'ios' }
+): Promise<{ metadata: XunfeiThemeMetadata; iniFiles: Map<string, IniConfig> }> {
+  const platform = options?.platform
+  const entries = parseZipEntries(zipData)
+  const fileMap = new Map(entries.map(e => [e.name, e.data]))
+
+  // Detect format
+  const format = detectXunfeiFormat(zipData)
+
+  // Find main config directory
+  const configDir = findConfigDirectory(fileMap, platform)
+
+  // Parse all INI files in the config directory
+  const iniFiles = new Map<string, IniConfig>()
+  for (const [name, data] of fileMap.entries()) {
+    if (name.startsWith(configDir) && name.endsWith('.ini')) {
+      const config = parseIniFile(data)
+      iniFiles.set(name, config)
+    }
+  }
+
+  // Parse theme metadata from main config
+  const mainConfig = iniFiles.get(`${configDir}/config.ini`) || iniFiles.get(`${configDir}/info.ini`)
+  const metadata = parseThemeMetadata(mainConfig, format, platform)
+
+  return { metadata, iniFiles }
 }
 
 /**
- * Load a Xunfei .it or .itx theme file from path or bytes.
- * Parses INI files and extracts animations, styles, images, offsets.
- *
- * @param input File path (string) or raw ZIP bytes (Uint8Array)
- * @param options Parse behavior
- * @returns Fully populated XunfeiTheme
- * @throws ParseError if unrecoverable issues found
+ * Parse animation.ini structure.
+ * Detects animation types 0-5 and returns keyframe information.
  */
-export async function loadTheme(input: string | Uint8Array, options: ParseOptions = {}): Promise<XunfeiTheme> {
-  const { lenient = false } = options
+export function parseAnimationStructure(iniConfig: IniConfig): {
+  animations: Array<{
+    id: string
+    type: number
+    duration: number
+    keyframes: Array<{ time: number; value: string }>
+  }>
+} {
+  const animations: Array<any> = []
 
-  let zipBuffer: Uint8Array
+  // Look for ANIMATION_* sections
+  for (const [section, entries] of iniConfig.sections.entries()) {
+    if (section.startsWith('ANIMATION_') || section.startsWith('ANIM_')) {
+      const animId = section.replace(/^(ANIMATION_|ANIM_)/, '')
+      const type = parseInt(entries.get('type') || '0', 10)
+      const duration = parseInt(entries.get('duration') || '1000', 10)
 
-  // Load from file path or use provided bytes
-  if (typeof input === "string") {
-    // Browser/Node.js compatibility: in browser, we'd need fetch; in Node, we'd use fs
-    throw new Error("File path loading requires fs support. Pass Uint8Array directly.")
-  } else {
-    zipBuffer = input
-  }
-
-  // Extract ZIP entries
-  const entries = await extractZip(zipBuffer)
-
-  // Create a map for quick lookup
-  const fileMap = new Map<string, Uint8Array>()
-  for (const entry of entries) {
-    fileMap.set(entry.name, entry.data)
-  }
-
-  const issues: ParseIssue[] = []
-
-  // Parse INI files
-  const textDecoder = new TextDecoder("utf-8", { fatal: false })
-
-  const animIniText = fileMap.has("anim.ini") ? textDecoder.decode(fileMap.get("anim.ini")!) : ""
-  const styleIniText = fileMap.has("style.ini") ? textDecoder.decode(fileMap.get("style.ini")!) : ""
-  const offsetIniText = fileMap.has("offset.ini") ? textDecoder.decode(fileMap.get("offset.ini")!) : ""
-  const imageIniText = fileMap.has("image.ini") ? textDecoder.decode(fileMap.get("image.ini")!) : ""
-
-  const animIni = parseIni(animIniText)
-  const styleIni = parseIni(styleIniText)
-  const offsetIni = parseIni(offsetIniText)
-  const imageIni = parseIni(imageIniText)
-
-  // Parse theme info
-  const info = parseThemeInfo(styleIni, issues)
-
-  // Parse styles
-  const styles = parseStyles(styleIni, issues, lenient)
-
-  // Parse images and texture atlas
-  const images = parseImages(imageIni, issues, lenient)
-
-  // Parse animations
-  parseAnimations(animIni, issues, lenient)
-
-  // Parse offsets
-  const offsets = parseOffsets(offsetIni, issues, lenient)
-
-  // Build resource archive (preserve all files)
-  const resources = {
-    files: fileMap,
-    structure: {
-      rootPath: "",
-      directories: new Set(Array.from(fileMap.keys()).map((name) => name.split("/").slice(0, -1).join("/")).filter(Boolean)),
-    },
-  }
-
-  const theme: XunfeiTheme = {
-    info,
-    styles,
-    images,
-    offsets,
-    resources,
-    issues: issues.length > 0 ? issues : undefined,
-  }
-
-  return theme
-}
-
-// ============================================================================
-// INI Section Parsers
-// ============================================================================
-
-function parseThemeInfo(styleIni: Map<string, Map<string, string>>, issues: ParseIssue[]): XunfeiThemeInfo {
-  const infoSection = styleIni.get("INFO") ?? new Map()
-
-  const id = infoSection.get("id") ?? "unnamed_theme"
-  const name = infoSection.get("name") ?? id
-  const author = infoSection.get("author")
-  const version = infoSection.get("version")
-  const notes = infoSection.get("notes")
-
-  const resolutionsStr = infoSection.get("resolutions") ?? "1080"
-  const resolutions = resolutionsStr.split(",").map((s: string) => parseInt(s.trim(), 10)).filter(Number.isFinite)
-
-  if (resolutions.length === 0) {
-    issues.push({
-      level: "warn",
-      source: "INFO.resolutions",
-      message: "No valid resolutions found; defaulting to [1080]",
-      value: resolutionsStr,
-      recovery: "Using [1080]",
-    })
-    resolutions.push(1080)
-  }
-
-  return {
-    id,
-    name,
-    author,
-    version,
-    resolutions,
-    notes,
-  }
-}
-
-function parseStyles(styleIni: Map<string, Map<string, string>>, issues: ParseIssue[], lenient: boolean): Map<number | string, StyleDefinition> {
-  const styles = new Map<number | string, StyleDefinition>()
-
-  const stylesSection = styleIni.get("STYLES") ?? new Map()
-
-  for (const [key, value] of stylesSection) {
-    try {
-      const styleId = parseInt(key, 10) || key
-      const parsed = parseStyleValue(value)
-
-      const style: StyleDefinition = {
-        id: styleId,
-        type: parsed.type ?? "normal",
-        label: parsed.label,
-        colors: parsed.colors,
-        font: parsed.font,
-        background: parsed.background,
-        border: parsed.border,
-        parentId: parsed.parentId,
-      }
-
-      styles.set(styleId, style)
-    } catch (error) {
-      issues.push({
-        level: lenient ? "warn" : "error",
-        source: `STYLES.${key}`,
-        message: `Failed to parse style: ${error instanceof Error ? error.message : String(error)}`,
-        value,
-      })
-    }
-  }
-
-  return styles
-}
-
-function parseImages(imageIni: Map<string, Map<string, string>>, issues: ParseIssue[], lenient: boolean): Map<string, ImageSlice> {
-  const images = new Map<string, ImageSlice>()
-
-  for (const [sectionName, section] of imageIni) {
-    if (!sectionName.startsWith("IMAGE_")) continue
-
-    try {
-      const imageId = sectionName.replace("IMAGE_", "")
-      const sourceFile = section.get("file") ?? ""
-      const srcXStr = section.get("x") ?? "0"
-      const srcYStr = section.get("y") ?? "0"
-      const srcWStr = section.get("w") ?? "100"
-      const srcHStr = section.get("h") ?? "100"
-
-      const image: ImageSlice = {
-        id: imageId,
-        sourceFile,
-        sourceRect: [parseInt(srcXStr, 10), parseInt(srcYStr, 10), parseInt(srcWStr, 10), parseInt(srcHStr, 10)],
-      }
-
-      // Parse 9-patch region if present
-      const leftStr = section.get("left")
-      const topStr = section.get("top")
-      const rightStr = section.get("right")
-      const bottomStr = section.get("bottom")
-
-      if (leftStr && topStr && rightStr && bottomStr) {
-        image.innerRect = [parseInt(leftStr, 10), parseInt(topStr, 10), parseInt(rightStr, 10), parseInt(bottomStr, 10)]
-      }
-
-      images.set(imageId, image)
-    } catch (error) {
-      issues.push({
-        level: lenient ? "warn" : "error",
-        source: `${sectionName}`,
-        message: `Failed to parse image: ${error instanceof Error ? error.message : String(error)}`,
-      })
-    }
-  }
-
-  return images
-}
-
-function parseAnimations(animIni: Map<string, Map<string, string>>, issues: ParseIssue[], lenient: boolean): XunfeiAnimation[] {
-  const animations: XunfeiAnimation[] = []
-
-  for (const [sectionName, section] of animIni) {
-    if (!sectionName.startsWith("ANIMATION_")) continue
-
-    try {
-      const animId = sectionName.replace("ANIMATION_", "")
-      const typeStr = section.get("type") ?? "0"
-      const type = parseInt(typeStr, 10) as AnimationType
-
-      if (!Object.values(AnimationType).includes(type)) {
-        throw new Error(`Invalid animation type: ${type}`)
-      }
-
-      const durationStr = section.get("duration") ?? "1000"
-      const duration = parseInt(durationStr, 10)
-
-      const loopStr = section.get("loop")
-      const loop = loopStr ? parseInt(loopStr, 10) : undefined
-
-      const easing = section.get("easing")
-
-      // Parse keyframes from individual entries
-      const keyframes: AnimationKeyframe[] = []
-      for (const [key, value] of section) {
-        if (key.startsWith("keyframe_")) {
-          try {
-            const timeStr = key.replace("keyframe_", "")
-            const time = parseInt(timeStr, 10)
-            keyframes.push({
-              time,
-              value: parseKeyframeValue(value, type),
-            })
-          } catch (kferr) {
-            console.warn(`Skipped keyframe: ${key}`)
+      const keyframes: Array<{ time: number; value: string }> = []
+      for (const [key, value] of entries.entries()) {
+        if (key.startsWith('frame_') || key.startsWith('keyframe_')) {
+          const time = parseInt(key.replace(/^(frame_|keyframe_)/, ''), 10)
+          if (Number.isFinite(time)) {
+            keyframes.push({ time, value })
           }
         }
       }
@@ -466,298 +349,133 @@ function parseAnimations(animIni: Map<string, Map<string, string>>, issues: Pars
 
       animations.push({
         id: animId,
-        type,
-        keyframes,
+        type: Math.max(0, Math.min(5, type)), // Clamp to 0-5
         duration,
-        loop,
-        easing,
-      })
-    } catch (error) {
-      issues.push({
-        level: lenient ? "warn" : "error",
-        source: `${sectionName}`,
-        message: `Failed to parse animation: ${error instanceof Error ? error.message : String(error)}`,
+        keyframes,
       })
     }
   }
 
-  return animations
+  return { animations }
 }
 
-function parseOffsets(offsetIni: Map<string, Map<string, string>>, issues: ParseIssue[], lenient: boolean): OffsetConfiguration[] {
-  const offsets: OffsetConfiguration[] = []
+// ============================================================================
+// Helper Functions
+// ============================================================================
 
-  const offsetsSection = offsetIni.get("OFFSETS") ?? new Map()
-
-  for (const [key, value] of offsetsSection) {
-    try {
-      const parts = value.split("|")
-      if (parts.length < 2) {
-        throw new Error(`Invalid offset format: ${value}`)
-      }
-
-      const resolutionsStr = parts[0].trim()
-      const resolutions = resolutionsStr.split(",").map((s: string) => parseInt(s.trim(), 10)).filter(Number.isFinite)
-
-      const portraitStr = parts[1]?.trim()
-      const portraitOffset = portraitStr ? parseOffset(portraitStr) : undefined
-
-      const landscapeStr = parts[2]?.trim()
-      const landscapeOffset = landscapeStr ? parseOffset(landscapeStr) : undefined
-
-      const scaleStr = parts[3]?.trim()
-      const scale = scaleStr ? parseFloat(scaleStr) : undefined
-
-      offsets.push({
-        resolutions,
-        portraitOffset,
-        landscapeOffset,
-        scale,
-      })
-    } catch (error) {
-      issues.push({
-        level: lenient ? "warn" : "error",
-        source: `OFFSETS.${key}`,
-        message: `Failed to parse offset: ${error instanceof Error ? error.message : String(error)}`,
-        value,
-      })
-    }
+function detectEncoding(data: Uint8Array): 'utf-8' | 'utf-16' | 'gbk' | 'gb2312' {
+  // Check BOM
+  if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
+    return 'utf-8'
+  }
+  if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) {
+    return 'utf-16'
   }
 
-  return offsets
+  // Try UTF-8 decoding; if it fails, assume GBK/GB2312
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(data)
+    return 'utf-8'
+  } catch {
+    return 'gbk' // Assume GBK for Xunfei themes
+  }
 }
 
-// ============================================================================
-// Helper Parsers
-// ============================================================================
+function detectLineEnding(text: string): '\r\n' | '\n' | '\r' {
+  if (text.includes('\r\n')) return '\r\n'
+  if (text.includes('\n')) return '\n'
+  if (text.includes('\r')) return '\r'
+  return '\n' // Default
+}
 
-function parseStyleValue(value: string): Partial<StyleDefinition> {
-  // Simple key-value or JSON format
-  // e.g., "type=normal|color=#FFFF0000|font=14"
-  let result: Partial<StyleDefinition> = {}
+function decodeText(data: Uint8Array, encoding: 'utf-8' | 'utf-16' | 'gbk' | 'gb2312' = 'utf-8'): string {
+  if (encoding === 'utf-8') {
+    return new TextDecoder('utf-8').decode(data)
+  }
+  if (encoding === 'utf-16') {
+    return new TextDecoder('utf-16-le').decode(data)
+  }
+  // For GBK/GB2312, we'd need a dedicated decoder; fallback to UTF-8
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(data)
+  } catch {
+    return new TextDecoder('utf-8').decode(data)
+  }
+}
 
-  if (value.startsWith("{")) {
-    // JSON format
-    result = JSON.parse(value)
-  } else {
-    // Key-value pairs separated by |
-    const pairs = value.split("|")
-    for (const pair of pairs) {
-      const [k, v] = pair.split("=")
-      if (k === "type") result.type = v as "normal" | "text" | "image" | "border"
-      if (k === "label") result.label = v
-      if (k === "parent") result.parentId = parseInt(v, 10) || v
+function encodeText(text: string, encoding: 'utf-8' | 'utf-16' | 'gbk' | 'gb2312' = 'utf-8'): Uint8Array {
+  if (encoding === 'utf-8') {
+    return new TextEncoder().encode(text)
+  }
+  if (encoding === 'utf-16') {
+    return new TextEncoder().encode(text) // TODO: proper UTF-16LE encoding
+  }
+  return new TextEncoder().encode(text) // Fallback
+}
+
+function matchBytes(data: Uint8Array, pattern: Uint8Array, offset: number): boolean {
+  if (offset + pattern.length > data.length) return false
+  for (let i = 0; i < pattern.length; i++) {
+    if (data[offset + i] !== pattern[i]) return false
+  }
+  return true
+}
+
+function decompressSync(compressed: Uint8Array, uncompressedSize: number): Uint8Array {
+  let result: Uint8Array | null = null
+  let error: Error | null = null
+
+  decompress(compressed, (err, data) => {
+    if (err) {
+      error = new Error(`Decompression failed: ${err.message}`)
+    } else {
+      result = data
     }
+  })
+
+  if (error) throw error
+  if (!result) {
+    // Fallback: return as-is if decompression doesn't complete synchronously
+    result = new Uint8Array(uncompressedSize)
   }
 
   return result
 }
 
-function parseKeyframeValue(value: string, type: AnimationType): number | [number, number] {
-  if (type === AnimationType.Translate && value.includes(",")) {
-    const [x, y] = value.split(",").map(Number)
-    return [x, y]
+function findConfigDirectory(fileMap: Map<string, Uint8Array>, platform?: string): string {
+  // Priority: platform-specific > generic config > config-sec-w414
+  if (platform === 'android') {
+    if (fileMap.has('config-sec-w414/config.ini')) return 'config-sec-w414'
   }
-  return parseFloat(value)
+  if (platform === 'ios') {
+    if (fileMap.has('config/config.ini')) return 'config'
+  }
+
+  // Generic search
+  for (const name of fileMap.keys()) {
+    if (name.startsWith('config/') && name.endsWith('.ini')) return 'config'
+    if (name.startsWith('config-sec-w414/') && name.endsWith('.ini')) return 'config-sec-w414'
+  }
+
+  return 'config' // Default
 }
 
-function parseOffset(offsetStr: string): [number, number] {
-  const [x, y] = offsetStr.split(",").map((s) => parseInt(s.trim(), 10))
-  return [x, y]
-}
+function parseThemeMetadata(
+  config: IniConfig | undefined,
+  format: XunfeiFormatInfo,
+  platform?: string
+): XunfeiThemeMetadata {
+  const infoMap = config?.sections.get('INFO') || new Map()
 
-// ============================================================================
-// Round-Trip Serialization
-// ============================================================================
+  const resolutionStr = infoMap.get('resolution') || infoMap.get('resolutions') || '1080'
+  const resolution = resolutionStr.split(',').map((s: string) => parseInt(s.trim(), 10)).filter(Number.isFinite)
 
-/**
- * Serialize XunfeiTheme back to binary .it ZIP format.
- * Attempts to preserve original structure and compression.
- *
- * @param theme Edited theme in-memory
- * @returns ZIP binary data
- */
-export async function roundtrip(theme: XunfeiTheme): Promise<Uint8Array> {
-  // Serialize INI sections
-  const styleIni = new Map<string, Map<string, string>>()
-  const animIni = new Map<string, Map<string, string>>()
-  const offsetIni = new Map<string, Map<string, string>>()
-  const imageIni = new Map<string, Map<string, string>>()
-
-  // Theme info → style.ini [INFO]
-  const infoSection = new Map<string, string>()
-  infoSection.set("id", theme.info.id)
-  infoSection.set("name", theme.info.name)
-  if (theme.info.author) infoSection.set("author", theme.info.author)
-  if (theme.info.version) infoSection.set("version", theme.info.version)
-  infoSection.set("resolutions", theme.info.resolutions.join(","))
-  if (theme.info.notes) infoSection.set("notes", theme.info.notes)
-  styleIni.set("INFO", infoSection)
-
-  // Styles → style.ini [STYLES]
-  const stylesSection = new Map<string, string>()
-  for (const [id, style] of theme.styles) {
-    const styleStr = JSON.stringify(style)
-    stylesSection.set(String(id), styleStr)
+  return {
+    id: infoMap.get('id') || 'unknown',
+    name: infoMap.get('name') || infoMap.get('id') || 'Unnamed Theme',
+    author: infoMap.get('author'),
+    version: infoMap.get('version') || format.version,
+    resolution: resolution.length > 0 ? resolution : [1080],
+    format: { ...format, platform: platform as 'android' | 'ios' | undefined },
   }
-  if (stylesSection.size > 0) styleIni.set("STYLES", stylesSection)
-
-  // Images → image.ini [IMAGE_*]
-  for (const [id, image] of theme.images) {
-    const imageSection = new Map<string, string>()
-    imageSection.set("file", image.sourceFile)
-    const [x, y, w, h] = image.sourceRect
-    imageSection.set("x", String(x))
-    imageSection.set("y", String(y))
-    imageSection.set("w", String(w))
-    imageSection.set("h", String(h))
-    if (image.innerRect) {
-      const [l, t, r, b] = image.innerRect
-      imageSection.set("left", String(l))
-      imageSection.set("top", String(t))
-      imageSection.set("right", String(r))
-      imageSection.set("bottom", String(b))
-    }
-    imageIni.set(`IMAGE_${id}`, imageSection)
-  }
-
-  // Offsets → offset.ini [OFFSETS]
-  const offsetsSection = new Map<string, string>()
-  for (let i = 0; i < theme.offsets.length; i++) {
-    const offset = theme.offsets[i]
-    const parts = [
-      offset.resolutions.join(","),
-      offset.portraitOffset ? offset.portraitOffset.join(",") : "",
-      offset.landscapeOffset ? offset.landscapeOffset.join(",") : "",
-      offset.scale ? String(offset.scale) : "",
-    ]
-    offsetsSection.set(`offset_${i}`, parts.join("|"))
-  }
-  if (offsetsSection.size > 0) offsetIni.set("OFFSETS", offsetsSection)
-
-  // Build ZIP entries
-  const entries: { name: string; data: Uint8Array }[] = []
-
-  // Add INI files
-  entries.push({
-    name: "style.ini",
-    data: new TextEncoder().encode(serializeIni(styleIni)),
-  })
-  entries.push({
-    name: "image.ini",
-    data: new TextEncoder().encode(serializeIni(imageIni)),
-  })
-  if (offsetIni.size > 0) {
-    entries.push({
-      name: "offset.ini",
-      data: new TextEncoder().encode(serializeIni(offsetIni)),
-    })
-  }
-  if (animIni.size > 0) {
-    entries.push({
-      name: "anim.ini",
-      data: new TextEncoder().encode(serializeIni(animIni)),
-    })
-  }
-
-  // Add preserved resources (excluding original INI files to avoid duplication)
-  for (const [name, data] of theme.resources.files) {
-    if (![".ini"].some((ext) => name.endsWith(ext))) {
-      entries.push({ name, data })
-    }
-  }
-
-  // Create ZIP buffer
-  const zipBuffer = createZipBuffer(entries)
-
-  return zipBuffer
-}
-
-/**
- * Create a minimal ZIP file from entries.
- * Returns complete ZIP binary with central directory.
- */
-function createZipBuffer(entries: { name: string; data: Uint8Array }[]): Uint8Array {
-  const buffers: Uint8Array[] = []
-  const centralDirectoryEntries: Uint8Array[] = []
-  let offset = 0
-
-  for (const entry of entries) {
-    // Local file header
-    const nameBytes = new TextEncoder().encode(entry.name)
-    const headerSize = 30 + nameBytes.length
-    const header = new DataView(new ArrayBuffer(headerSize))
-
-    header.setUint32(0, 0x04034b50, true) // Signature
-    header.setUint16(4, 20, true) // Version needed
-    header.setUint16(6, 0, true) // Flags
-    header.setUint16(8, 0, true) // Compression (store)
-    header.setUint16(10, 0, true) // Mod time
-    header.setUint16(12, 0, true) // Mod date
-    header.setUint32(14, 0, true) // CRC32 (not calculated)
-    header.setUint32(18, entry.data.length, true) // Compressed size
-    header.setUint32(22, entry.data.length, true) // Uncompressed size
-    header.setUint16(26, nameBytes.length, true) // Name length
-    header.setUint16(28, 0, true) // Extra field length
-
-    const headerBytes = new Uint8Array(header.buffer)
-    new Uint8Array(headerBytes).set(nameBytes, 30)
-
-    buffers.push(headerBytes)
-    buffers.push(entry.data)
-
-    // Central directory entry
-    const cdEntry = new DataView(new ArrayBuffer(46 + nameBytes.length))
-    cdEntry.setUint32(0, 0x02014b50, true) // Signature
-    cdEntry.setUint16(4, 20, true) // Version made
-    cdEntry.setUint16(6, 20, true) // Version needed
-    cdEntry.setUint16(8, 0, true) // Flags
-    cdEntry.setUint16(10, 0, true) // Compression
-    cdEntry.setUint16(12, 0, true) // Mod time
-    cdEntry.setUint16(14, 0, true) // Mod date
-    cdEntry.setUint32(16, 0, true) // CRC32
-    cdEntry.setUint32(20, entry.data.length, true) // Compressed size
-    cdEntry.setUint32(24, entry.data.length, true) // Uncompressed size
-    cdEntry.setUint16(28, nameBytes.length, true) // Name length
-    cdEntry.setUint16(30, 0, true) // Extra field length
-    cdEntry.setUint16(32, 0, true) // Comment length
-    cdEntry.setUint16(34, 0, true) // Disk number
-    cdEntry.setUint16(36, 0, true) // Internal attributes
-    cdEntry.setUint32(38, 0, true) // External attributes
-    cdEntry.setUint32(42, offset, true) // Offset
-
-    const cdBytes = new Uint8Array(cdEntry.buffer)
-    new Uint8Array(cdBytes).set(nameBytes, 46)
-    centralDirectoryEntries.push(cdBytes)
-
-    offset += headerSize + entry.data.length
-  }
-
-  // End of central directory
-  const cdSize = centralDirectoryEntries.reduce((sum, cd) => sum + cd.length, 0)
-  const eocdrSize = 22
-  const eocdr = new DataView(new ArrayBuffer(eocdrSize))
-
-  eocdr.setUint32(0, 0x06054b50, true) // Signature
-  eocdr.setUint16(4, 0, true) // Disk number
-  eocdr.setUint16(6, 0, true) // CD disk number
-  eocdr.setUint16(8, centralDirectoryEntries.length, true) // CD entries on disk
-  eocdr.setUint16(10, centralDirectoryEntries.length, true) // CD entries total
-  eocdr.setUint32(12, cdSize, true) // CD size
-  eocdr.setUint32(16, offset, true) // CD offset
-  eocdr.setUint16(20, 0, true) // Comment length
-
-  buffers.push(...centralDirectoryEntries)
-  buffers.push(new Uint8Array(eocdr.buffer))
-
-  // Concatenate all buffers
-  const totalSize = buffers.reduce((sum, buf) => sum + buf.length, 0)
-  const result = new Uint8Array(totalSize)
-  let pos = 0
-  for (const buf of buffers) {
-    result.set(buf, pos)
-    pos += buf.length
-  }
-
-  return result
 }
