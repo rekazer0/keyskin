@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xunfei Sample Validation Report</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 24px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 8px;
+      font-size: 28px;
+    }
+    .metadata {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 24px;
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+    .metadata-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .metadata-label {
+      color: #999;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .summary-card {
+      padding: 16px;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .summary-card.pass {
+      background: #E8F5E9;
+      border: 1px solid #4CAF50;
+    }
+    .summary-card.warning {
+      background: #FFF3E0;
+      border: 1px solid #FF9800;
+    }
+    .summary-card.fail {
+      background: #FFEBEE;
+      border: 1px solid #F44336;
+    }
+    .summary-card-number {
+      font-size: 32px;
+      font-weight: bold;
+      color: inherit;
+    }
+    .summary-card-label {
+      font-size: 14px;
+      color: #666;
+      margin-top: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+      font-size: 14px;
+    }
+    th {
+      background: #f9f9f9;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #333;
+      border-bottom: 2px solid #e0e0e0;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    td {
+      max-width: 400px;
+      word-break: break-word;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid #e0e0e0;
+      color: #999;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Xunfei Sample Validation Report</h1>
+
+    <div class="metadata">
+      <div class="metadata-item">
+        <span class="metadata-label">Report Generated</span>
+        <span>2026-11-26T09:33:15.329Z</span>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">Total Samples</span>
+        <span>2</span>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div class="summary-card pass">
+        <div class="summary-card-number">0</div>
+        <div class="summary-card-label">Passed</div>
+      </div>
+      <div class="summary-card warning">
+        <div class="summary-card-number">2</div>
+        <div class="summary-card-label">Warnings</div>
+      </div>
+      <div class="summary-card fail">
+        <div class="summary-card-number">0</div>
+        <div class="summary-card-label">Failed</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Sample Name</th>
+          <th>File Path</th>
+          <th>Size</th>
+          <th>Format</th>
+          <th>Theme ID</th>
+          <th>Theme Name</th>
+          <th>Integrity</th>
+          <th>Styles</th>
+          <th>Images</th>
+          <th>Roundtrip</th>
+          <th>Preservation</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+    <tr style="background-color: #FFF3E0">
+      <td style="padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold;">
+        <span style="color: #FF9800; font-size: 18px; margin-right: 8px;">
+          ⚠
+        </span>
+        Sample 1: UUID Theme
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">/Users/kaze/Downloads/301a8530-c551-11ec-a6d6-0800200c9a66.it</td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: center;">
+        88KB
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        it
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        N/A
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        N/A
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: center;">
+        ✓
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        6
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        12
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        ✓
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        100.0%
+      </td>
+    </tr>
+    
+      <tr style="background-color: #FAFAFA;">
+        <td colspan="11" style="padding: 12px; border-bottom: 1px solid #ddd;">
+          <strong style="color: #666;">Issues:</strong>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+            <li style="color: #666; margin: 4px 0;">No metadata found in info.ini</li><li style="color: #666; margin: 4px 0;">Theme metadata not found (optional)</li>
+          </ul>
+        </td>
+      </tr>
+    
+  
+    <tr style="background-color: #FFF3E0">
+      <td style="padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold;">
+        <span style="color: #FF9800; font-size: 18px; margin-right: 8px;">
+          ⚠
+        </span>
+        Sample 2: Xunfei Floating Objects Theme
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">/Users/kaze/work/keyskin-md/讯飞皮【带漂浮物】大空格大回车底包@(3).it</td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: center;">
+        89KB
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        it
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        N/A
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        N/A
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: center;">
+        ✓
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        7
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        25
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        ✓
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid #ddd;">
+        100.0%
+      </td>
+    </tr>
+    
+      <tr style="background-color: #FAFAFA;">
+        <td colspan="11" style="padding: 12px; border-bottom: 1px solid #ddd;">
+          <strong style="color: #666;">Issues:</strong>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+            <li style="color: #666; margin: 4px 0;">No metadata found in info.ini</li><li style="color: #666; margin: 4px 0;">Theme metadata not found (optional)</li>
+          </ul>
+        </td>
+      </tr>
+    
+  
+      </tbody>
+    </table>
+
+    <div class="footer">
+      <strong>Legend:</strong>
+      <div>✓ = Pass (all checks successful)</div>
+      <div>⚠ = Warning (checks passed with issues noted)</div>
+      <div>✗ = Fail (one or more critical checks failed)</div>
+    </div>
+  </div>
+</body>
+</html>
