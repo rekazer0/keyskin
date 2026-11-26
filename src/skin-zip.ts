@@ -553,9 +553,9 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
 
   // 如果所有本地头偏移都是 0xFFFFFFFF，需要重建整个中央目录
   if (allOffsetsInvalid) {
-    // 扫描所有本地文件头并按顺序记录
+    // 扫描所有本地文件头并按文件名映射
     const decoder = new TextDecoder()
-    const reconstructedEntries: Array<{ offset: number; name: string; compressed: number; uncompressed: number }> = []
+    const localsByName = new Map<string, { offset: number; compressed: number; uncompressed: number }>()
 
     for (let local = 0; local + 30 <= centralOffset && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
       const nameLen = data.getUint16(local + 26, true)
@@ -565,7 +565,7 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
 
       try {
         const name = decoder.decode(bytes.subarray(local + 30, local + 30 + nameLen))
-        reconstructedEntries.push({ offset: local, name, compressed, uncompressed })
+        localsByName.set(name, { offset: local, compressed, uncompressed })
       } catch {
         // 忽略无法解码的文件名
       }
@@ -574,11 +574,11 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
     }
 
     // 如果成功找到本地头，使用本地头信息修复中央目录
-    if (reconstructedEntries.length > 0 && reconstructedEntries.length <= total) {
+    if (localsByName.size > 0) {
       const repairs: Array<[number, number]> = [
         [endOffset + 4, 0],
         [endOffset + 6, 0],
-        [endOffset + 8, reconstructedEntries.length],
+        [endOffset + 8, Math.min(total, localsByName.size)],
       ]
 
       let currentCentral = centralOffset
@@ -589,19 +589,22 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
         const extraLen = data.getUint16(currentCentral + 30, true)
         const commentLen = data.getUint16(currentCentral + 32, true)
 
-        // 修复中央目录中的值为 0xFFFFFFFF 的字段
-        const uncompressed = data.getUint32(currentCentral + 24, true)
-        const compressed = data.getUint32(currentCentral + 20, true)
-        const offset = data.getUint32(currentCentral + 42, true)
+        // 按文件名从本地头映射中查找匹配的条目
+        try {
+          const name = decoder.decode(bytes.subarray(currentCentral + 46, currentCentral + 46 + nameLen))
+          const localEntry = localsByName.get(name)
 
-        if (uncompressed === 0xFFFFFFFF || compressed === 0xFFFFFFFF || offset === 0xFFFFFFFF) {
-          // 从本地头中查找匹配的文件
-          if (i < reconstructedEntries.length) {
-            const entry = reconstructedEntries[i]
-            if (compressed === 0xFFFFFFFF) repairs.push([currentCentral + 20, entry.compressed])
-            if (uncompressed === 0xFFFFFFFF) repairs.push([currentCentral + 24, entry.uncompressed])
-            if (offset === 0xFFFFFFFF) repairs.push([currentCentral + 42, entry.offset])
+          if (localEntry) {
+            const uncompressed = data.getUint32(currentCentral + 24, true)
+            const compressed = data.getUint32(currentCentral + 20, true)
+            const offset = data.getUint32(currentCentral + 42, true)
+
+            if (compressed === 0xFFFFFFFF) repairs.push([currentCentral + 20, localEntry.compressed])
+            if (uncompressed === 0xFFFFFFFF) repairs.push([currentCentral + 24, localEntry.uncompressed])
+            if (offset === 0xFFFFFFFF) repairs.push([currentCentral + 42, localEntry.offset])
           }
+        } catch {
+          // 忽略解码错误
         }
 
         currentCentral += 46 + nameLen + extraLen + commentLen
@@ -628,7 +631,6 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
   ]
   const wideRepairs: Array<[number, number]> = []
   // 本地文件头的顺序可以和中央目录不同，按文件名对应。
-  const decoder = new TextDecoder()
   const locals = new Map<string, number>()
   for (let local = 0; local + 30 <= centralOffset && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
     locals.set(decoder.decode(bytes.subarray(local + 30, local + 30 + data.getUint16(local + 26, true))), local)
