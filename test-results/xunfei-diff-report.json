@@ -1,0 +1,342 @@
+{
+  "timestamp": "2026-11-26T09:02:57.720Z",
+  "summary": {
+    "total": 10,
+    "passed": 0,
+    "failed": 0,
+    "pending": 10,
+    "averageSimilarity": 0
+  },
+  "reports": [
+    {
+      "name": "preview-animation-frame-0",
+      "timestamp": "2026-11-26T09:02:57.508Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-animation-frame-0.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-animation-frame-1",
+      "timestamp": "2026-11-26T09:02:57.535Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-animation-frame-1.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-animation-frame-2",
+      "timestamp": "2026-11-26T09:02:57.557Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-animation-frame-2.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-compare-idle",
+      "timestamp": "2026-11-26T09:02:57.579Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-compare-idle.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-compare-pressed",
+      "timestamp": "2026-11-26T09:02:57.601Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-compare-pressed.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-idle",
+      "timestamp": "2026-11-26T09:02:57.622Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-idle.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-pressed",
+      "timestamp": "2026-11-26T09:02:57.642Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-pressed.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-snapshot-01",
+      "timestamp": "2026-11-26T09:02:57.663Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-snapshot-01.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-snapshot-02",
+      "timestamp": "2026-11-26T09:02:57.699Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-snapshot-02.png"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "name": "preview-snapshot-03",
+      "timestamp": "2026-11-26T09:02:57.720Z",
+      "preview": {
+        "hasFile": true,
+        "dimensions": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "device": {
+        "hasFile": false,
+        "dimensions": null
+      },
+      "comparison": {
+        "similarity": null,
+        "ssim": null,
+        "mse": null,
+        "diffPixels": null,
+        "totalPixels": 2073600,
+        "diffPercentage": null
+      },
+      "tolerances": {
+        "antiAliasingPerChannel": "±5% (12.75/255)",
+        "alphaChannel": "exact match required",
+        "ssimThreshold": "0.85 (85% similarity)"
+      },
+      "hotspots": [],
+      "recommendations": [
+        "⚠️ No device screenshot - capture device screenshot as device-snapshot-03.png"
+      ],
+      "status": "PENDING"
+    }
+  ]
+}

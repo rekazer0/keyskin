@@ -64,7 +64,7 @@ export function adaptAndroidToolbar(files: Map<string, Uint8Array>, warnings?: s
     const tiles: Array<{ index: number; image: RgbaImage }> = []
     for (const value of entries) {
       const item = typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, PalmPlistValue> : undefined
-      if (item?.Position !== "toolbar" && item?.Position !== "menu") continue
+      if (item?.Position !== "toolbar" && item?.Position !== "menu" && item?.Position !== "left" && item?.Position !== "right") continue
       const index = TOOLBAR_FUNCTIONS.find(([, , id]) => id === String(item.Name ?? ""))?.[0]
       const name = toolbarImageName(item.Images)
       const image = index === undefined || !name ? undefined : logoImage(files, `${root}res/logo/`, name)

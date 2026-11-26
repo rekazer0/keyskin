@@ -456,6 +456,15 @@ export function validateArchiveLimits(bytes: Uint8Array): void {
   const decoder = new TextDecoder()
   let offset = data.getUint32(endOffset + 16, true)
   let total = 0
+
+  // 建立本地文件头映射，用于从防解包工具损坏的 ZIP 中恢复大小信息
+  const locals = new Map<string, number>()
+  for (let local = 0; local + 30 <= bytes.length && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
+    const nameLen = data.getUint16(local + 26, true)
+    locals.set(decoder.decode(bytes.subarray(local + 30, local + 30 + nameLen)), local)
+    local += 30 + nameLen + data.getUint16(local + 28, true) + data.getUint32(local + 18, true)
+  }
+
   for (let index = 0; index < count; index++) {
     if (offset + 46 > endOffset || data.getUint32(offset, true) !== CENTRAL_SIGNATURE) {
       throw new Error("无效的 ZIP 中央目录")
@@ -467,7 +476,41 @@ export function validateArchiveLimits(bytes: Uint8Array): void {
     if (offset + length > endOffset) throw new Error("无效的 ZIP 中央目录")
     const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength))
     if (!safePath(name)) throw new Error(`皮肤包含不安全路径：${name}`)
-    total += data.getUint32(offset + 24, true)
+
+    // 处理 ZIP64：从中央目录读取大小，可能需要从 extra 字段或本地头恢复
+    let uncompressedSize = data.getUint32(offset + 24, true)
+    if (uncompressedSize === 0xFFFFFFFF && extraLength > 0) {
+      let extraOffset = offset + 46 + nameLength
+      const extraEnd = extraOffset + extraLength
+      while (extraOffset + 4 <= extraEnd) {
+        const headerId = data.getUint16(extraOffset, true)
+        const headerSize = data.getUint16(extraOffset + 2, true)
+        extraOffset += 4
+        // ZIP64 扩展字段标签为 0x0001，包含未压缩大小在第一个 8 字节
+        if (headerId === 0x0001 && headerSize >= 8) {
+          const low = data.getUint32(extraOffset, true)
+          const high = data.getUint32(extraOffset + 4, true)
+          if (high === 0) {
+            uncompressedSize = low
+            break
+          }
+        }
+        extraOffset += headerSize
+      }
+    }
+
+    // 如果中央目录仍为 0xFFFFFFFF，从本地文件头恢复（防解包工具情况）
+    if (uncompressedSize === 0xFFFFFFFF) {
+      const localOffset = locals.get(name)
+      if (localOffset !== undefined && localOffset + 26 <= bytes.length) {
+        uncompressedSize = data.getUint32(localOffset + 22, true)
+      }
+      if (uncompressedSize === 0xFFFFFFFF) {
+        uncompressedSize = 0 // 无法恢复则按 0 处理，避免累计溢出
+      }
+    }
+
+    total += uncompressedSize
     if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
     offset += length
   }

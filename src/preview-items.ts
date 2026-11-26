@@ -531,6 +531,20 @@ export function previewItems(
   const sections = real.length
     ? document.sections().filter((section) => /^ICON\d+$/.test(section) && !real.some((item) => item.section === section))
     : document.sections().filter((section) => /^(CAND|SWITCH|PANEL|LIST|MORE|ICON\d+)$/.test(section))
+
+  // Calculate the width occupied by left and right toolbar icons
+  let leftIconWidth = 0, rightIconWidth = 0
+  for (const section of sections) {
+    if (!/^ICON\d+$/.test(section)) continue
+    const size = document.get(section, "SIZE")?.split(",").map(Number)
+    const anchor = Number(document.get(section, "ANCHOR_TYPE"))
+    if (!size || size[0] <= 0) continue
+    // anchor 1,4,7 = left; 3,6,9 = right; 2,5,8 = center
+    const xAnchor = ((anchor - 1) % 3) + 1
+    if (xAnchor === 1) leftIconWidth = Math.max(leftIconWidth, size[0])
+    else if (xAnchor === 3) rightIconWidth = Math.max(rightIconWidth, size[0])
+  }
+
   return [...real, ...sections.flatMap((section) => {
     if (!persistVisible(document.get(section, "PERSIST"), persistentOnly)) return []
     const backStyle = document.get(section, "BACK_STYLE")?.split(",")[0] ?? ""
@@ -545,7 +559,8 @@ export function previewItems(
       (!document.get(section, "SIZE") || (!/^ICON\d+$/i.test(section) && !backStyle && !foreStyle))
     ) return []
     const size = document.get(section, "SIZE")?.split(",").map(Number)
-    const width = section === "CAND" ? panelWidth : size?.[0] ?? 0
+    // For CAND, subtract left and right icon widths to get the actual candidate bar display width
+    const width = section === "CAND" ? Math.max(0, panelWidth - leftIconWidth - rightIconWidth) : size?.[0] ?? 0
     const height = section === "CAND" ? panelHeight : size?.[1] ?? 0
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return []
     const position = document.get(section, "POS")?.split(",").map(Number) ?? [0, 0]

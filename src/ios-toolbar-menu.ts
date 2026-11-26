@@ -44,7 +44,7 @@ type BdiMenuIcon = { id: string; path: string; label: string; icon: string; posi
 function menuEntries(bytes?: Uint8Array): BdiMenuIcon[] {
   const plist = bytes && parseXmlPlist(bytes)
   return (Array.isArray(plist) ? plist : []).map(asObject)
-    .filter((item) => item?.Position === "toolbar" || item?.Position === "menu")
+    .filter((item) => item?.Position === "toolbar" || item?.Position === "menu" || item?.Position === "left" || item?.Position === "right")
     .map((item) => {
       const image = asObject(asObject(item?.Images)?.Normal)?.Normal
       const path = typeof image === "string" ? image.trim().replace(/^\/+/, "").replace(/\.png$/i, "") : ""

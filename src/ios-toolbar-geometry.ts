@@ -139,7 +139,7 @@ export function adaptIosToolbarGeometry(files: Map<string, Uint8Array>, source: 
     const implicit = source === "bdi" && implicitIosToolbarRect(gen, cand, width, originalHeight)
     const menu = source === "bdi" && plist && parseXmlPlist(plist)
     const functionHeights = Array.isArray(menu) ? menu.flatMap((value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value) || value.Position !== "toolbar") return []
+      if (!value || typeof value !== "object" || Array.isArray(value) || (value.Position !== "toolbar" && value.Position !== "left" && value.Position !== "right")) return []
       const name = (value.Images as { Normal?: { Normal?: string } } | undefined)?.Normal?.Normal
       if (!name) return []
       const path = [name, `${name}_iphone@3x.png`, `${name}.png`].map((name) => `${root}res/logo/${name}`).find((path) => files.has(path))

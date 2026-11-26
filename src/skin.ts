@@ -543,9 +543,6 @@ export class SkinArchive {
 
   private packagedFiles(format: ExportFormat, notes?: string[]): Record<string, Uint8Array> {
     const bdiToBds = format === "bds" && this.format === "bdi"
-    if (bdiToBds && this.zipEncryptedPaths().length) {
-      throw new Error("BDI 转 BDS 不支持加密的皮肤包")
-    }
     const output = new Map<string, Uint8Array>()
     const promoted = this.needsThemeRepack()
     const single = this.layout.endsWith("single") && !promoted
