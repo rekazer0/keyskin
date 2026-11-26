@@ -533,6 +533,94 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
   }
   const data = view(bytes)
   const total = data.getUint16(endOffset + 10, true)
+  const centralOffset = data.getUint32(endOffset + 16, true)
+
+  // 检测是否所有本地头偏移都是 0xFFFFFFFF（防解包工具情况）
+  let allOffsetsInvalid = true
+  let checkOffset = centralOffset
+  for (let i = 0; i < Math.min(total, 10); i++) {
+    if (checkOffset + 46 > endOffset || data.getUint32(checkOffset, true) !== CENTRAL_SIGNATURE) break
+    const localOffset = data.getUint32(checkOffset + 42, true)
+    if (localOffset !== 0xFFFFFFFF) {
+      allOffsetsInvalid = false
+      break
+    }
+    const nameLen = data.getUint16(checkOffset + 28, true)
+    const extraLen = data.getUint16(checkOffset + 30, true)
+    const commentLen = data.getUint16(checkOffset + 32, true)
+    checkOffset += 46 + nameLen + extraLen + commentLen
+  }
+
+  // 如果所有本地头偏移都是 0xFFFFFFFF，需要重建整个中央目录
+  if (allOffsetsInvalid) {
+    // 扫描所有本地文件头并按顺序记录
+    const decoder = new TextDecoder()
+    const reconstructedEntries: Array<{ offset: number; name: string; compressed: number; uncompressed: number }> = []
+
+    for (let local = 0; local + 30 <= centralOffset && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
+      const nameLen = data.getUint16(local + 26, true)
+      const extraLen = data.getUint16(local + 28, true)
+      const compressed = data.getUint32(local + 18, true)
+      const uncompressed = data.getUint32(local + 22, true)
+
+      try {
+        const name = decoder.decode(bytes.subarray(local + 30, local + 30 + nameLen))
+        reconstructedEntries.push({ offset: local, name, compressed, uncompressed })
+      } catch {
+        // 忽略无法解码的文件名
+      }
+
+      local += 30 + nameLen + extraLen + compressed
+    }
+
+    // 如果成功找到本地头，使用本地头信息修复中央目录
+    if (reconstructedEntries.length > 0 && reconstructedEntries.length <= total) {
+      const repairs: Array<[number, number]> = [
+        [endOffset + 4, 0],
+        [endOffset + 6, 0],
+        [endOffset + 8, reconstructedEntries.length],
+      ]
+
+      let currentCentral = centralOffset
+      for (let i = 0; i < total && currentCentral + 46 <= endOffset; i++) {
+        if (data.getUint32(currentCentral, true) !== CENTRAL_SIGNATURE) break
+
+        const nameLen = data.getUint16(currentCentral + 28, true)
+        const extraLen = data.getUint16(currentCentral + 30, true)
+        const commentLen = data.getUint16(currentCentral + 32, true)
+
+        // 修复中央目录中的值为 0xFFFFFFFF 的字段
+        const uncompressed = data.getUint32(currentCentral + 24, true)
+        const compressed = data.getUint32(currentCentral + 20, true)
+        const offset = data.getUint32(currentCentral + 42, true)
+
+        if (uncompressed === 0xFFFFFFFF || compressed === 0xFFFFFFFF || offset === 0xFFFFFFFF) {
+          // 从本地头中查找匹配的文件
+          if (i < reconstructedEntries.length) {
+            const entry = reconstructedEntries[i]
+            if (compressed === 0xFFFFFFFF) repairs.push([currentCentral + 20, entry.compressed])
+            if (uncompressed === 0xFFFFFFFF) repairs.push([currentCentral + 24, entry.uncompressed])
+            if (offset === 0xFFFFFFFF) repairs.push([currentCentral + 42, entry.offset])
+          }
+        }
+
+        currentCentral += 46 + nameLen + extraLen + commentLen
+      }
+
+      // 应用修复
+      if (repairs.length > 3) {
+        const normalized = bytes.slice()
+        const normalizedView = view(normalized)
+        for (const [offset, value] of repairs) {
+          if (offset + 4 <= normalized.length) normalizedView.setUint32(offset, value, true)
+          else if (offset + 2 <= normalized.length) normalizedView.setUint16(offset, value, true)
+        }
+        return normalized
+      }
+    }
+  }
+
+  // 原有逻辑保留用于其他情况
   const repairs: Array<[number, number]> = [
     [endOffset + 4, 0],
     [endOffset + 6, 0],
@@ -542,11 +630,11 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
   // 本地文件头的顺序可以和中央目录不同，按文件名对应。
   const decoder = new TextDecoder()
   const locals = new Map<string, number>()
-  for (let local = 0; local + 30 <= bytes.length && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
+  for (let local = 0; local + 30 <= centralOffset && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
     locals.set(decoder.decode(bytes.subarray(local + 30, local + 30 + data.getUint16(local + 26, true))), local)
     local += 30 + data.getUint16(local + 26, true) + data.getUint16(local + 28, true) + data.getUint32(local + 18, true)
   }
-  // ZIP64 把 8 字节大小放在中央目录的 extra 字段（id 1）里；值按“未压缩、压缩、偏移”的顺序出现。
+  // ZIP64 把 8 字节大小放在中央目录的 extra 字段（id 1）里；值按”未压缩、压缩、偏移”的顺序出现。
   const zip64Values = (central: number, nameLength: number, extraLength: number): number[] | undefined => {
     let extra = central + 46 + nameLength
     const end = extra + extraLength
@@ -566,7 +654,7 @@ export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
     }
     return
   }
-  let central = data.getUint32(endOffset + 16, true)
+  let central = centralOffset
   for (let index = 0; index < total && central + 46 <= endOffset && data.getUint32(central, true) === CENTRAL_SIGNATURE; index++) {
     const nameLength = data.getUint16(central + 28, true)
     const extraLength = data.getUint16(central + 30, true)

@@ -639,6 +639,29 @@ export class SkinArchive {
   /** `warnings` collects key sounds the target cannot play; `notes` (by default the same list) what packaging for iOS adjusted. */
   async toBytesAsync(format?: ExportFormat, warnings?: string[], notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
+
+    // Validate encrypted entries if exporting to platform format
+    if ((format === "bdi" || format === "bds") && this.sourceZip) {
+      const encrypted = this.zipEncryptedPaths()
+      if (encrypted.length) throw new Error(`皮肤应该未加密，包含加密条目：${encrypted.join(", ")}`)
+    }
+
+    // Validate ZIP structure integrity if exporting to platform format
+    if ((format === "bdi" || format === "bds") && this.sourceBytes.length > 0) {
+      const normalized = normalizeEntryCounts(this.sourceBytes)
+      let changed = false
+      if (normalized.length !== this.sourceBytes.length) changed = true
+      else {
+        for (let i = 0; i < normalized.length; i++) {
+          if (normalized[i] !== this.sourceBytes[i]) {
+            changed = true
+            break
+          }
+        }
+      }
+      if (changed) throw new Error("皮肤的 ZIP 结构完整性受损，无法转换")
+    }
+
     if (this.sourceBytes.length && this.changed.size === 0 && (!format || (format === this.format && this.layout !== "legacy-ios"))) {
       return this.sourceBytes.slice()
     }
@@ -673,6 +696,13 @@ export class SkinArchive {
 
   toBytes(format?: ExportFormat): Uint8Array {
     assertRepackable(this.format, format)
+
+    // Validate encrypted entries if exporting to platform format
+    if ((format === "bdi" || format === "bds") && this.sourceZip) {
+      const encrypted = this.zipEncryptedPaths()
+      if (encrypted.length) throw new Error(`皮肤应该未加密，但包含加密 ZIP 条目：${encrypted.join(", ")}`)
+    }
+
     if (this.format === "bdi" && (!format || format === "bdi")) refreshIosLogo(this)
     if (format && (format !== this.format || this.layout === "legacy-ios")) {
       return this.packagedBytes(format)
