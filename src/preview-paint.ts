@@ -15,14 +15,9 @@ import { type TextVisual } from "./atlas.ts"
 import { previewSurfaceColor } from "./preview-items.ts"
 import { drawVisual } from "./preview-draw.ts"
 import { previewSelectionVisible } from "./preview-items.ts"
-import { bdaTransforms } from "./preview-animation.ts"
-import { legacyAnimationScale } from "./preview-animation.ts"
-import { legacyAnimationTranslation } from "./preview-animation.ts"
-import { legacyAnimationRotation } from "./preview-animation.ts"
-import { legacyAnimationOpacity } from "./preview-animation.ts"
+import { bdaTransforms, legacyAnimationMotion } from "./preview-animation.ts"
 import { phoneForegroundLayers } from "./preview-draw.ts"
 import { shouldDrawItemBackground } from "./preview-items.ts"
-import { withTransform } from "./preview-draw.ts"
 import { offsetFromSection } from "./preview-items.ts"
 import { paddedRect } from "./preview-items.ts"
 import { foregroundLayerRect } from "./preview-draw.ts"
@@ -234,21 +229,6 @@ export async function paintPreview(self: Preview): Promise<void> {
     const animationElapsed = player?.motion && player.key?.section === key.section ? player.elapsed
       : keyAnimation ? Date.now() - keyAnimation.startedAt : -1
     const activeBdaElapsed = self.bdaAnimationState?.key.section === key.section ? bdaAnimationElapsed : -1
-    const bdaBack = bdaTransforms(self.animation, key, activeBdaElapsed, "back")
-    const bdaFore = bdaTransforms(self.animation, key, activeBdaElapsed, "fore")
-    const backAnimationStyle = key.backAnimStyle || key.animStyle
-    const backScale = animationElapsed >= 0
-      ? legacyAnimationScale(self.legacyAnimation, backAnimationStyle, animationElapsed)
-      : bdaBack.scale
-    const backTranslation = animationElapsed >= 0
-      ? legacyAnimationTranslation(self.legacyAnimation, backAnimationStyle, animationElapsed, key.rect)
-      : bdaBack.translation
-    const backRotation = animationElapsed >= 0
-      ? legacyAnimationRotation(self.legacyAnimation, backAnimationStyle, animationElapsed)
-      : bdaBack.rotation
-    const backOpacity = animationElapsed >= 0
-      ? legacyAnimationOpacity(self.legacyAnimation, backAnimationStyle, animationElapsed)
-      : bdaBack.opacity
     const sceneKey = sceneKeys.get(key.section)
     if (scene && (!scene.partial || sceneKey)) {
       const press = self.nativePress?.section === key.section ? self.nativePress : undefined
@@ -273,30 +253,24 @@ export async function paintPreview(self: Preview): Promise<void> {
       continue
     }
     const area = paddedRect(key)
+    const backMotion = animationElapsed >= 0
+      ? legacyAnimationMotion(self.legacyAnimation, key.backAnimStyle || key.animStyle, animationElapsed, area, key.rect)
+      : bdaTransforms(self.animation, key, activeBdaElapsed, "back")
+    const bdaFore = animationElapsed < 0 ? bdaTransforms(self.animation, key, activeBdaElapsed, "fore") : undefined
+    const foreMotion = (style?: string) => animationElapsed >= 0
+      ? legacyAnimationMotion(self.legacyAnimation, style || key.foreAnimStyle || key.animStyle, animationElapsed, area)
+      : bdaFore
     const visual = visuals.get(key.section)
     const styleTexts = visual?.styleTexts ?? []
     const foregrounds = phoneForegroundLayers(visual?.fore ?? [])
     const hasForeground = foregrounds.some(Boolean) || styleTexts.some(Boolean)
     if (shouldDrawItemBackground(key, self.panelStyle, self.panelWidth, self.panelHeight)) {
-      withTransform(context, area, backScale, backTranslation, backRotation, backOpacity, () => {
+      withMotion(context, area, backMotion, () => {
         const back = visual?.back
         drawVisual(context, back?.inner && nineSlicePixelScale !== 1 ? { ...back, nineSlicePixelScale } : back, area, true)
       })
     }
     for (const [layer, fore] of foregrounds.entries()) {
-      const animationStyle = key.foreAnimStyles[layer] || key.foreAnimStyle || key.animStyle
-      const foreScale = animationElapsed >= 0
-        ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.scale
-      const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
-        : bdaFore.translation
-      const foreRotation = animationElapsed >= 0
-        ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.rotation
-      const foreOpacity = animationElapsed >= 0
-        ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.opacity
       const offset = key.foreOffsets[layer] ?? offsetFromSection(
         self.offsets,
         `OFFSET${key.positionTypes[layer] ?? ""}`,
@@ -312,7 +286,7 @@ export async function paintPreview(self: Preview): Promise<void> {
         context.rect(key.rect.x, key.rect.y, key.rect.width, key.rect.height)
         context.clip()
       }
-      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
+      withMotion(context, area, foreMotion(key.foreAnimStyles[layer]), () => {
         drawVisual(context, fore, destination, false)
       })
       if (clipKey) context.restore()
@@ -320,26 +294,13 @@ export async function paintPreview(self: Preview): Promise<void> {
 
     for (const [layer, styleText] of styleTexts.entries()) {
       if (!styleText || foregrounds[layer]) continue
-      const animationStyle = key.foreAnimStyles[layer] || key.foreAnimStyle || key.animStyle
-      const foreScale = animationElapsed >= 0
-        ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.scale
-      const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
-        : bdaFore.translation
-      const foreRotation = animationElapsed >= 0
-        ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.rotation
-      const foreOpacity = animationElapsed >= 0
-        ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.opacity
       const offset = key.foreOffsets[layer] ?? offsetFromSection(
         self.offsets,
         `OFFSET${key.positionTypes[layer] ?? ""}`,
         area,
       )
       const point = foregroundTextPoint(key.foreRect ?? area, offset)
-      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
+      withMotion(context, area, foreMotion(key.foreAnimStyles[layer]), () => {
         drawStyleText(context, styleText, point, self.theme)
       })
     }
@@ -354,20 +315,7 @@ export async function paintPreview(self: Preview): Promise<void> {
     context.textBaseline = "middle"
     const fallbackText = previewFallbackText(key, hasForeground)
     if (fallbackText) {
-      const animationStyle = key.foreAnimStyle || key.animStyle
-      const foreScale = animationElapsed >= 0
-        ? legacyAnimationScale(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.scale
-      const foreTranslation = animationElapsed >= 0
-        ? legacyAnimationTranslation(self.legacyAnimation, animationStyle, animationElapsed, area)
-        : bdaFore.translation
-      const foreRotation = animationElapsed >= 0
-        ? legacyAnimationRotation(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.rotation
-      const foreOpacity = animationElapsed >= 0
-        ? legacyAnimationOpacity(self.legacyAnimation, animationStyle, animationElapsed)
-        : bdaFore.opacity
-      withTransform(context, area, foreScale, foreTranslation, foreRotation, foreOpacity, () => {
+      withMotion(context, area, foreMotion(), () => {
         const centerX = area.x + area.width / 2
         const centerY = area.y + area.height / 2
         withTextShadow(context, textVisual, () => {

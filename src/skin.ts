@@ -230,7 +230,6 @@ export class SkinArchive {
   private originals: Map<string, Uint8Array>
   private sourceBytes: Uint8Array
   private sourceZip?: ReturnType<typeof parseZip>
-  private readonly sourceZipNeededRepair: boolean
   private layout: PackageLayout
   private bdaRoots?: Map<BdaTheme, string>
   private sxiNested: boolean
@@ -241,11 +240,10 @@ export class SkinArchive {
   /** Bumped whenever file contents or paths change, so callers can skip redundant redraws. */
   revision = 0
 
-  private constructor(files: Map<string, Uint8Array>, sourceBytes: Uint8Array, formatHint?: ExportFormat, sourceZipNeededRepair = false) {
+  private constructor(files: Map<string, Uint8Array>, sourceBytes: Uint8Array, formatHint?: ExportFormat) {
     this.files = files
     this.originals = new Map(files)
     this.sourceBytes = sourceBytes.slice()
-    this.sourceZipNeededRepair = sourceZipNeededRepair
     const info = packageInfo(files, formatHint)
     this.layout = info.layout
     this.bdaRoots = info.bdaRoots
@@ -288,7 +286,7 @@ export class SkinArchive {
       if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
       files.set(name, unpacked[name])
     }
-    return new SkinArchive(files, sourceBytes, formatHint, sourceBytes !== bytes)
+    return new SkinArchive(files, sourceBytes, formatHint)
   }
 
   static async openAsync(
@@ -314,7 +312,7 @@ export class SkinArchive {
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
       }
     }
-    const archive = new SkinArchive(files, sourceBytes, formatHint, sourceBytes !== bytes)
+    const archive = new SkinArchive(files, sourceBytes, formatHint)
     onProgress?.(1)
     return archive
   }
@@ -545,8 +543,8 @@ export class SkinArchive {
 
   private packagedFiles(format: ExportFormat, notes?: string[]): Record<string, Uint8Array> {
     const bdiToBds = format === "bds" && this.format === "bdi"
-    if (bdiToBds && (this.sourceZipNeededRepair || (this.sourceBytes.length && !this.sourceZip) || this.zipEncryptedPaths().length)) {
-      throw new Error("BDI 转 BDS 仅支持未加密且 ZIP 结构完整的原始皮肤包")
+    if (bdiToBds && this.zipEncryptedPaths().length) {
+      throw new Error("BDI 转 BDS 不支持加密的皮肤包")
     }
     const output = new Map<string, Uint8Array>()
     const promoted = this.needsThemeRepack()

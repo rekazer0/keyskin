@@ -171,8 +171,9 @@ export function styleCard(options: {
   sound?: () => HTMLElement
   canvas?: (width: number, height: number) => HTMLCanvasElement
   note?: string
-}): HTMLElement {
-  const card = element("div", "ui-style-card")
+}, existing?: HTMLElement): HTMLElement {
+  const card = existing ?? element("div", "ui-style-card")
+  card.replaceChildren()
   card.tabIndex = 0
   card.setAttribute("role", "option")
   card.setAttribute("aria-selected", "false")
@@ -184,7 +185,7 @@ export function styleCard(options: {
   label.textContent = options.label
   heading.append(label)
   heading.append(styleKindIcon(options.kind, options.kindLabel, options.kindIcon))
-  bindCardKeys(card)
+  if (!existing) bindCardKeys(card)
   const previews = element("span", "ui-style-preview")
   if (options.kind === "anim" || options.animationPreview) {
     previews.dataset.variant = "animation"
@@ -192,11 +193,11 @@ export function styleCard(options: {
     previews.setAttribute("aria-label", previews.title)
     pendingDraws.set(previews, () => {
       if (card.isConnected) void Promise.resolve(options.animation?.() ?? []).then(players => {
-        if (card.isConnected) previews.append(...players)
+        if (previews.isConnected) previews.append(...players)
       })
     })
     drawObserver().observe(previews)
-    releaseOnRemove(card, () => drawObserver().unobserve(previews))
+    releaseOnRemove(previews, () => drawObserver().unobserve(previews))
   } else if (options.kind === "empty") {
     previews.title = "暂无样式属性"
     previews.setAttribute("aria-label", previews.title)

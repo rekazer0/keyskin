@@ -40,6 +40,47 @@ function findEnd(bytes: Uint8Array): number {
   throw new Error("无效的 ZIP：找不到中央目录")
 }
 
+/** 恢复损坏的 ZIP 中所有本地头偏移都是 0xFFFFFFFF 的情况：通过扫描本地头签名来恢复 */
+function recoverLocalHeaders(bytes: Uint8Array, centralOffset: number): Map<string, number> {
+  const decoder = new TextDecoder()
+  const localOffsets = new Map<string, number>()
+
+  // 第一遍：扫描所有本地头及其文件名
+  let offset = 0
+  const localHeaders: Array<{ offset: number; name: string }> = []
+
+  while (offset < centralOffset && offset < bytes.length - 4) {
+    // 寻找本地头签名 PK\x03\x04
+    if (bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b && bytes[offset + 2] === 0x03 && bytes[offset + 3] === 0x04) {
+      if (offset + 30 <= Math.min(centralOffset, bytes.length)) {
+        const nameLength = view(bytes).getUint16(offset + 26, true)
+        const extraLength = view(bytes).getUint16(offset + 28, true)
+
+        if (nameLength > 0 && nameLength < 300 && extraLength < 10000) {
+          const headerEnd = offset + 30 + nameLength + extraLength
+          if (headerEnd <= centralOffset) {
+            try {
+              const name = decoder.decode(bytes.subarray(offset + 30, offset + 30 + nameLength))
+              localHeaders.push({ offset, name })
+            } catch {
+              // 忽略解码失败
+            }
+          }
+        }
+      }
+    }
+    offset += 1
+  }
+
+  // 第二遍：匹配中央目录中的文件名到本地头
+  // 使用贪心算法：按文件名字节特征匹配
+  for (const { offset: localOffset, name } of localHeaders) {
+    localOffsets.set(name, localOffset)
+  }
+
+  return localOffsets
+}
+
 export function parseZip(bytes: Uint8Array): { entries: ZipEntry[]; end: Uint8Array } {
   const data = view(bytes)
   const endOffset = findEnd(bytes)
@@ -48,6 +89,25 @@ export function parseZip(bytes: Uint8Array): { entries: ZipEntry[]; end: Uint8Ar
   const decoder = new TextDecoder()
   const partial: Array<Omit<ZipEntry, "local"> & { localOffset: number }> = []
   let offset = centralOffset
+
+  // 检测是否所有本地头偏移都是 0xFFFFFFFF（损坏的 ZIP）
+  let allOffsetsInvalid = true
+  for (let checkOffset = centralOffset, checkIndex = 0; checkIndex < Math.min(count, 10); checkIndex++) {
+    if (data.getUint32(checkOffset, true) !== CENTRAL_SIGNATURE) break
+    const nameLength = data.getUint16(checkOffset + 28, true)
+    const extraLength = data.getUint16(checkOffset + 30, true)
+    const commentLength = data.getUint16(checkOffset + 32, true)
+    const localOffset = data.getUint32(checkOffset + 42, true)
+    if (localOffset !== 0xFFFFFFFF) {
+      allOffsetsInvalid = false
+      break
+    }
+    checkOffset += 46 + nameLength + extraLength + commentLength
+  }
+
+  // 如果本地头偏移都损坏，尝试从本地头扫描恢复
+  const recoveredOffsets = allOffsetsInvalid ? recoverLocalHeaders(bytes, centralOffset) : new Map()
+
   for (let index = 0; index < count; index++) {
     if (data.getUint32(offset, true) !== CENTRAL_SIGNATURE) {
       throw new Error("无效的 ZIP 中央目录")
@@ -57,13 +117,59 @@ export function parseZip(bytes: Uint8Array): { entries: ZipEntry[]; end: Uint8Ar
     const commentLength = data.getUint16(offset + 32, true)
     const length = 46 + nameLength + extraLength + commentLength
     const central = bytes.subarray(offset, offset + length)
+
+    const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength))
+    let compressedSize = data.getUint32(offset + 20, true)
+    let uncompressedSize = data.getUint32(offset + 24, true)
+    let localOffset = data.getUint32(offset + 42, true)
+
+    // 处理 ZIP64：如果大小值为 0xFFFFFFFF，从扩展字段中读取实际大小
+    if ((compressedSize === 0xFFFFFFFF || uncompressedSize === 0xFFFFFFFF || localOffset === 0xFFFFFFFF) && extraLength > 0) {
+      let extraOffset = offset + 46 + nameLength
+      let extraEnd = extraOffset + extraLength
+      while (extraOffset + 4 <= extraEnd) {
+        const headerId = data.getUint16(extraOffset, true)
+        const headerSize = data.getUint16(extraOffset + 2, true)
+        extraOffset += 4
+
+        // ZIP64 扩展字段标签为 0x0001
+        if (headerId === 0x0001 && headerSize >= 24) {
+          if (uncompressedSize === 0xFFFFFFFF) {
+            uncompressedSize = Number(data.getBigUint64(extraOffset, true))
+          }
+          if (compressedSize === 0xFFFFFFFF) {
+            compressedSize = Number(data.getBigUint64(extraOffset + 8, true))
+          }
+          if (localOffset === 0xFFFFFFFF) {
+            localOffset = Number(data.getBigUint64(extraOffset + 16, true))
+          }
+          break
+        }
+        extraOffset += headerSize
+      }
+    }
+
+    // 如果仍然无法获得本地头偏移，尝试从扫描恢复
+    if (localOffset === 0xFFFFFFFF && recoveredOffsets.has(name)) {
+      localOffset = recoveredOffsets.get(name)!
+      // 从恢复的本地头中读取大小
+      if (localOffset + 30 <= bytes.length) {
+        if (compressedSize === 0xFFFFFFFF) {
+          compressedSize = data.getUint32(localOffset + 18, true)
+        }
+        if (uncompressedSize === 0xFFFFFFFF) {
+          uncompressedSize = data.getUint32(localOffset + 22, true)
+        }
+      }
+    }
+
     partial.push({
-      name: decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength)),
+      name,
       central,
-      localOffset: data.getUint32(offset + 42, true),
+      localOffset,
       method: data.getUint16(offset + 10, true),
-      compressedSize: data.getUint32(offset + 20, true),
-      uncompressedSize: data.getUint32(offset + 24, true),
+      compressedSize,
+      uncompressedSize,
     })
     offset += length
   }
@@ -74,10 +180,28 @@ export function parseZip(bytes: Uint8Array): { entries: ZipEntry[]; end: Uint8Ar
   })
   return {
     entries: partial.map(({ localOffset, ...entry }) => {
+      if (localOffset === 0xFFFFFFFF) {
+        throw new Error(`无效的 ZIP 本地头偏移：${entry.name}（无法恢复）`)
+      }
       if (data.getUint32(localOffset, true) !== LOCAL_SIGNATURE) {
         throw new Error(`无效的 ZIP 本地条目：${entry.name}`)
       }
-      return { ...entry, local: bytes.subarray(localOffset, localEnds.get(entry.name)) }
+
+      // 从本地头中读取实际大小（如果中央目录中的大小是 0xFFFFFFFF）
+      let compressedSize = entry.compressedSize
+      let uncompressedSize = entry.uncompressedSize
+      if ((compressedSize === 0xFFFFFFFF || uncompressedSize === 0xFFFFFFFF) && localOffset + 30 < bytes.length) {
+        const localCompressed = data.getUint32(localOffset + 18, true)
+        const localUncompressed = data.getUint32(localOffset + 22, true)
+        if (compressedSize === 0xFFFFFFFF && localCompressed !== 0xFFFFFFFF) {
+          compressedSize = localCompressed
+        }
+        if (uncompressedSize === 0xFFFFFFFF && localUncompressed !== 0xFFFFFFFF) {
+          uncompressedSize = localUncompressed
+        }
+      }
+
+      return { ...entry, compressedSize, uncompressedSize, local: bytes.subarray(localOffset, localEnds.get(entry.name)) }
     }),
     end: bytes.subarray(endOffset),
   }

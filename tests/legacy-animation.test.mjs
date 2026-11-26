@@ -19,11 +19,7 @@ import {
   writeLegacyAnimationKind,
   writeLegacyAnimationType,
 } from "../src/legacy-animation.ts"
-import {
-  legacyAnimationOpacity,
-  legacyAnimationTranslation,
-  parseLegacyAnimation,
-} from "../src/preview-animation.ts"
+import { legacyAnimationMotion, parseLegacyAnimation } from "../src/preview-animation.ts"
 import { iniPreviewClip } from "../src/animation-preview-model.ts"
 import { motionAt } from "../src/native-motion.ts"
 
@@ -345,14 +341,36 @@ PRESS_ANIM=2
 `)
   const legacy = parseLegacyAnimation(styles, IniDocument.parse(ANIM_INI))
   for (const elapsed of [0, 50, 100, 150, 200, 250, 300]) {
-    assert.equal(sample(ANIM_INI, "ANIM1", elapsed).opacity, legacyAnimationOpacity(legacy, "1", elapsed), `透明度在 ${elapsed}ms 应该一致`)
-    const expected = legacyAnimationTranslation(legacy, "2", elapsed, SIZE) ?? [10, 20]
+    assert.equal(sample(ANIM_INI, "ANIM1", elapsed).opacity, legacyAnimationMotion(legacy, "1", elapsed, SIZE)?.opacity, `透明度在 ${elapsed}ms 应该一致`)
+    const expected = legacyAnimationMotion(legacy, "2", elapsed, SIZE)?.translation ?? [10, 20]
     const actual = sample(ANIM_INI, "ANIM2", elapsed).translation
     assert.ok(
       Math.abs(actual[0] - expected[0]) < 1e-9 && Math.abs(actual[1] - expected[1]) < 1e-9,
       `平移到 ${elapsed}ms 应该一致（${actual} vs ${expected}）`,
     )
   }
+})
+
+test("光波画布预览绕靠下的 PIVOT 放大，渐隐结束后不随缩放重现", () => {
+  const styles = IniDocument.parse("[STYLE367]\nPRESS_ANIM=3\n")
+  const source = "[ANIM1]\nTYPE=0 \nDURATION=500\nFROM=300\nTO=0\n" +
+    "[ANIM2]\nTYPE=4\nDURATION=300\nFROM=100,100\nTO=120,120\nPIVOT=50,90\nREPEAT_MODE=1\nREPEAT_CNT=2\n" +
+    "[ANIM3]\nBUILD_LIST=1,2\nBUILD_METHOD=0\n"
+  const animations = IniDocument.parse(source)
+  const legacy = parseLegacyAnimation(styles, animations)
+  const motion = (elapsed) => legacyAnimationMotion(legacy, "367", elapsed, { width: 40, height: 70 })
+  assert.equal(motion(0).opacity, 1, "透明度 TYPE 允许尾随空格")
+  assert.deepEqual(motion(150).scale, [1.1, 1.1])
+  assert.deepEqual(motion(150).pivot, [0.5, 0.9])
+  assert.ok(motion(250).opacity > 0 && motion(250).opacity < 1)
+  for (const elapsed of [500, 700, 1100]) assert.equal(motion(elapsed).opacity, 0)
+  assert.equal(animations.toString(), source, "预览不改写皮肤里的空格")
+})
+
+test("画布按变换区域的尺寸解析像素变换中心", () => {
+  const styles = IniDocument.parse("[STYLE1]\nPRESS_ANIM=1\n")
+  const legacy = parseLegacyAnimation(styles, IniDocument.parse("[ANIM1]\nTYPE=1\nFROM=0\nTO=90\nDURATION=100\nPIVOT_PX=10,30\n"))
+  assert.deepEqual(legacyAnimationMotion(legacy, "1", 50, { width: 40, height: 60 }).pivot, [0.25, 0.5])
 })
 
 test("新建与复制动效追加在末尾，序号接续并同步 ANIM_NUM", () => {

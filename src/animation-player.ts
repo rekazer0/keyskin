@@ -26,7 +26,7 @@ export type AnimationPlayerOptions = {
   /** A card-sized player: no transport, loops with a pause between plays while visible. */ thumbnail?: boolean | "slow"
   docked?: boolean
   direct?: AnimationDirectEdit
-  sample?: () => Promise<{ width: number; height: number; trial: boolean; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
+  sample?: () => Promise<{ width: number; height: number; layers: Array<{ visual: Visual; animate: boolean }> } | undefined>
   native?: () => Promise<{ key: SceneKey; effects: SceneEffects } | undefined>
 }
 
@@ -537,7 +537,7 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
         thumbnailMeasured = true
       }
       draw()
-      start()
+      if (clip.status !== "zero-translation") start()
     }
   }
   if (thumbnail) {
@@ -593,15 +593,17 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
       duration = Math.min(MAX_DURATION, nativeScene.effects.pressDuration(nativeScene.key.section, 1))
       hasContent = duration > 0
     }
-    const artwork = await sample?.()
+    const artwork = clip.status === "unconfigured" ? undefined : await sample?.()
     if (disposed) return
     if (artwork) {
-      sampleLayers = artwork.layers
+      const missingTarget = tracks.length > 0 && !artwork.layers.some(layer => layer.animate)
+      // A bound but undrawn layer cannot show the transform; use the visible key for a trial.
+      sampleLayers = missingTarget ? artwork.layers.map(layer => ({ ...layer, animate: true })) : artwork.layers
       const ratio = Math.min(64 / artwork.width, 88 / artwork.height)
       keyRect.width = artwork.width * ratio; keyRect.height = artwork.height * ratio
       keyRect.x = 160 - keyRect.width / 2; keyRect.y = 80 - keyRect.height / 2
       root.dataset.sample = "skin"
-      if (artwork.trial) notes.push("当前按键未绑定此动画，舞台为临时试放")
+      if (missingTarget) notes.push("绑定的图层不可见，舞台为临时试放")
     }
     const ids = [...new Set(clip.particles.flatMap(({ emitter }) => emitter.images))]
     await Promise.all(ids.map(async (id) => {

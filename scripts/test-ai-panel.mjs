@@ -14,7 +14,8 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.route('**/src/ai-design.ts', route => route.fulfill({
     contentType: 'application/javascript',
-    body: `export async function runAiSkinDesign(config, project, prompt, options) {
+    body: `export { generateAiImagePreview } from '/src/ai-design.ts?image-test-real';
+    export async function runAiSkinDesign(config, project, prompt, options) {
       if (window.sessionMode) {
         await options.onStatus('reading', '读取测试文件');
         await options.onThinking('测试思考');
@@ -41,6 +42,14 @@ try {
     window.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label: 'main' } }, invoke: async (command, args) => {
       window.modelCalls.push({ command, args })
       if (command === 'plugin:window|set_theme') return
+      if (command === 'model_http_request') {
+        const canvas = document.createElement('canvas')
+        const encoded = canvas.toDataURL('image/png').split(',')[1]
+        args.events.onmessage({ type: 'headers', status: 200, headers: [['content-type', 'application/json']] })
+        args.events.onmessage({ type: 'chunk', body: [...new TextEncoder().encode(JSON.stringify({ data: [{ b64_json: encoded }] }))] })
+        args.events.onmessage({ type: 'end' })
+        return
+      }
       if (command === 'fetch_model_thinking_levels') return args.configuration.model === 'deepseek-flash'
         ? ['off', 'low', 'high', 'max'] : ['low', 'medium', 'high', 'xhigh']
       if (command === 'model_oauth_accounts') return [{ provider: 'chatgpt-subscription', email: 'test@example.com' }]
@@ -114,6 +123,29 @@ try {
     document.querySelector('#mode').value = 'preview'
     return appState.archive.names().map(path => [path, Array.from(appState.archive.getBytes(path))])
   })
+  await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    window.__TAURI_INTERNALS__.transformCallback = () => 1
+    appState.savedImageModel = { provider: 'openai', protocol: 'openai-chat', apiUrl: 'https://example.com/v1', apiKey: 'test', model: 'gpt-image-test', kind: 'image' }
+  })
+  await page.locator('#ai-design-chat #text-input').fill('测试生图模型：画一个橙色按键')
+  await send.click()
+  const generatedImage = page.locator('#ai-design-chat img[src^="data:image/png;base64,"]')
+  await generatedImage.waitFor()
+  await page.waitForFunction(() => document.querySelector('#ai-design-chat').shadowRoot.querySelector('img[src^="data:image/png;base64,"]')?.naturalWidth > 0)
+  await page.locator('#ai-design-chat .ai-run[data-state="done"]').waitFor()
+  assert.deepEqual(await page.evaluate(() => window.modelCalls.filter(call => call.command === 'model_http_request').map(({ args }) => [args.request.url, JSON.parse(args.request.body).prompt])), [
+    ['https://example.com/v1/images/generations', '画一个橙色按键'],
+  ])
+  await page.evaluate(async () => {
+    const { appState } = await import('/src/app/state.ts')
+    if (appState.aiDesignDraft || appState.aiDesignConversation.length) throw new Error('A model test must not change the skin or the design conversation')
+    appState.savedImageModel = undefined
+  })
+  await page.locator('#ai-design-chat #text-input').fill('试试生图模型')
+  await send.click()
+  await page.getByText(/未配置生图模型，请在设置/).waitFor()
+  assert.equal(await page.evaluate(() => window.modelCalls.filter(call => call.command === 'model_http_request').length), 1)
   await page.locator('#ai-design-chat #text-input').fill('分析当前设计')
   assert.equal(await send.getAttribute('data-variant'), 'primary')
   await composer.screenshot({ path: '/tmp/keyskin-ai-composer-send.png' })
@@ -367,7 +399,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#image-model-status').textContent.includes('test API unavailable'))
   assert.equal(await page.locator('#refresh-image-model-list').isDisabled(), false)
   assert.deepEqual(errors, [])
-  console.log('PASS: model efforts/default, preview read-only and mode switch, send and stop controls, session title/icon/dismiss/transcript/input/attachments/context/keyboard, subscription image API list and errors')
+  console.log('PASS: model efforts/default, image test preview, preview read-only and mode switch, send and stop controls, session title/icon/dismiss/transcript/input/attachments/context/keyboard, subscription image API list and errors')
 } finally {
   await browser?.close()
   await server.close()

@@ -13,6 +13,7 @@ export type PreviewClip = {
   lanes: PreviewLane[]
   duration: number
   notes: string[]
+  status?: "unconfigured" | "zero-translation"
 }
 
 export const emptyClip = (): PreviewClip => ({ tracks: [], particles: [], images: [], lanes: [], duration: 0, notes: [] })
@@ -72,8 +73,13 @@ export function iniPreviewClip(document: IniDocument, section: string, options: 
     clip.notes.push("组合引用循环或层级过深，已跳过")
     return clip
   }
-  if (!document.sections().includes(section)) {
+  if (!document.hasSection(section)) {
     clip.notes.push(`${sectionTitle(section)} 不存在`)
+    return clip
+  }
+  if (document.entries(section).every(({ key }) => key.toUpperCase() === "INFO")) {
+    clip.status = "unconfigured"
+    clip.notes.push("未配置动画")
     return clip
   }
   const get = (key: string) => document.get(section, key)
@@ -146,6 +152,10 @@ export function iniPreviewClip(document: IniDocument, section: string, options: 
         return scalar ? [values[0] * scale, values[0] * scale] : [values[0] * scale, values[1] * scale]
       }
       const from = ends("FROM"), to = ends("TO")
+      if (type === 2 && [get(pixels ? "FROM_PX" : "FROM"), get(pixels ? "TO_PX" : "TO")]
+        .every(value => value && pair(value, [NaN, NaN]).every(component => component === 0))) {
+        clip.status = "zero-translation"
+      }
       const x = ease(from[0], to[0], 0), y = ease(from[1], to[1], scalar ? 0 : 1)
       clip.tracks.push({
         ...timing,

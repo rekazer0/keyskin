@@ -1,6 +1,7 @@
 import "./ai-design-panel.css"
 import "deep-chat"
 import type { DeepChat } from "deep-chat"
+import type { MessageFiles } from "deep-chat/dist/types/messageFile"
 import { iconMarkup } from "./icons"
 
 export type AiChatRunHooks = {
@@ -13,6 +14,7 @@ export type AiChatRunHooks = {
 export type AiChatRunResult = {
   fallback: string
   summary?: string
+  files?: MessageFiles
 }
 
 type AiChatRun = (prompt: string, hooks: AiChatRunHooks, files: readonly File[]) => Promise<AiChatRunResult>
@@ -649,18 +651,21 @@ export async function connectAiChat(element: HTMLElement, run: AiChatRun, sendBu
           streamed = true
           await signals.onResponse({ text: delta })
         },
-      }, files).then(async ({ fallback, summary }) => {
+      }, files).then(async ({ fallback, summary, files }) => {
         if (currentGeneration !== generation) return
         if (controller.signal.aborted) throw new DOMException("已停止生成", "AbortError")
-        if (!streamed && fallback) await signals.onResponse({ text: fallback })
-        if (summary) await signals.onResponse({ text: `\n\n${summary}` })
+        if (!streamed && fallback) {
+          await signals.onResponse({ text: fallback })
+          streamed = true
+        }
+        if (summary) await signals.onResponse({ text: `${streamed ? "\n\n" : ""}${summary}` })
+        if (files?.length && isCurrent() && !controller.signal.aborted) await signals.onResponse({ files })
       }).catch(async (error) => {
         if (currentGeneration !== generation) return
         failed = !controller.signal.aborted
         const message = controller.signal.aborted
           ? "AI 设计已取消，没有应用任何修改。"
           : error instanceof Error ? error.message : String(error)
-        appendStep("error", message)
         await signals.onResponse({ text: `${streamed ? "\n\n" : ""}${message}` })
       }).finally(() => {
         if (activeController === controller) activeController = undefined

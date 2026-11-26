@@ -1,4 +1,5 @@
 import { IniDocument } from "./ini.ts"
+import type { Motion, Pair } from "./native-motion.ts"
 import { type Rect, type PreviewItem } from "./preview-items.ts"
 import { type BdaAnimation, type BdaAnimationSequence, type BdaAnimationBinding, type BdaAnimationEffect, type BdaTransformAnimation, type BdaEmitterAnimation } from "./bda.ts"
 
@@ -13,6 +14,7 @@ type LegacyAnimationFrame = {
   easing: readonly [number, number]
   from: readonly [number, number]
   to: readonly [number, number]
+  pivot?: { point: Pair; relative: boolean }
 }
 
 export type LegacyParticleEmitter = {
@@ -82,7 +84,7 @@ function legacyNumbers(value: string | undefined): number[] {
   return numbers
 }
 
-export function scalePair(value: string | undefined): [number, number] | undefined {
+function scalePair(value: string | undefined): [number, number] | undefined {
   const parts = legacyNumbers(value)
   if (parts.length < 2) return
   return [parts[0] / 100, parts[1] / 100]
@@ -213,7 +215,7 @@ export function parseLegacyAnimation(
         particles.push(particle)
         return []
       }
-      const type = animations.get(frame, "TYPE")
+      const type = animations.get(frame, "TYPE")?.trim()
       const fromPixels = animations.get(frame, "FROM_PX")
       const toPixels = animations.get(frame, "TO_PX")
       const from = type === "0"
@@ -237,7 +239,9 @@ export function parseLegacyAnimation(
       const reverse = animations.get(frame, "REPEAT_MODE") === "1"
       const easingValues = (animations.get(frame, "INTPOL") ?? "0")
         .split(",").map((value) => Number(value.trim()) || 0)
-      const parsed = {
+      const pivot = scalePair(animations.get(frame, "PIVOT"))
+      const pivotPixels = pixelPair(animations.get(frame, "PIVOT_PX"))
+      const parsed: LegacyAnimationFrame = {
         type: type === "0"
           ? "opacity" as const
           : type === "1"
@@ -254,6 +258,7 @@ export function parseLegacyAnimation(
         easing: [easingValues[0] ?? 0, easingValues[1] ?? easingValues[0] ?? 0] as const,
         from,
         to,
+        pivot: pivot ? { point: pivot, relative: true } : pivotPixels ? { point: pivotPixels, relative: false } : undefined,
       }
       if (!parallel) start += delay + animationDuration(parsed)
       return [parsed]
@@ -263,23 +268,16 @@ export function parseLegacyAnimation(
   return result
 }
 
-function legacyAnimationPair(
-  animation: LegacyAnimation | undefined,
-  styleID: string | undefined,
+function sampleLegacyProperty(
+  effect: LegacyAnimationEffect,
   elapsed: number,
-  type: "opacity" | "translate" | "scale" | "rotate",
-  relativeSize?: Pick<Rect, "width" | "height">,
-): readonly [number, number] | undefined {
-  const effect = styleID ? animation?.get(styleID) : undefined
-  if (elapsed < 0) return
-  const frames = effect?.frames
-  if (!frames?.length) return
-  const total = Math.max(...frames.map((frame) => frame.start + frame.delay + animationDuration(frame)))
-  if (elapsed > total) return
+  type: LegacyAnimationFrame["type"],
+  relativeSize: Pick<Rect, "width" | "height">,
+): { value: Pair; pivot?: LegacyAnimationFrame["pivot"] } | undefined {
   const relativeValue = (
     frame: LegacyAnimationFrame,
     value: readonly [number, number],
-  ): readonly [number, number] => frame.relative && relativeSize
+  ): Pair => frame.relative
     ? [value[0] * relativeSize.width / 100, value[1] * relativeSize.height / 100]
     : value
   const valueAt = (frame: LegacyAnimationFrame): readonly [number, number] => {
@@ -300,61 +298,54 @@ function legacyAnimationPair(
       frame.from[1] + (frame.to[1] - frame.from[1]) * y,
     ])
   }
-  const matching = frames.filter((frame) => frame.type === type)
-  if (effect?.parallel && matching.length) {
+  const matching = effect.frames.filter((frame) => frame.type === type)
+  if (effect.parallel && matching.length) {
     const multiply = type === "scale" || type === "opacity"
-    return matching.reduce<readonly [number, number]>((combined, frame) => {
+    const value = matching.reduce<Pair>((combined, frame) => {
       const value = valueAt(frame)
       return multiply
         ? [combined[0] * value[0], combined[1] * value[1]]
         : [combined[0] + value[0], combined[1] + value[1]]
     }, multiply ? [1, 1] : [0, 0])
+    return { value, pivot: matching.find((frame) => frame.pivot)?.pivot }
   }
-  let previous: (typeof frames)[number] | undefined
+  let previous: LegacyAnimationFrame | undefined
+  const endValue = (frame: LegacyAnimationFrame) => ({
+    value: relativeValue(frame, frame.reverse ? frame.from : frame.to), pivot: frame.pivot,
+  })
   for (const frame of matching) {
     const start = frame.start + frame.delay
     const duration = animationDuration(frame)
     const end = start + duration
     if (elapsed < start) return previous
-      ? relativeValue(previous, previous.reverse ? previous.from : previous.to)
-      : relativeValue(frame, frame.from)
-    if (elapsed <= end) return valueAt(frame)
+      ? endValue(previous)
+      : { value: relativeValue(frame, frame.from), pivot: frame.pivot }
+    if (elapsed <= end) return { value: valueAt(frame), pivot: frame.pivot }
     previous = frame
   }
-  return previous ? relativeValue(previous, previous.reverse ? previous.from : previous.to) : undefined
+  return previous && endValue(previous)
 }
 
-export function legacyAnimationScale(
+export function legacyAnimationMotion(
   animation: LegacyAnimation | undefined,
   styleID: string | undefined,
   elapsed: number,
-): readonly [number, number] | undefined {
-  return legacyAnimationPair(animation, styleID, elapsed, "scale")
-}
-
-export function legacyAnimationTranslation(
-  animation: LegacyAnimation | undefined,
-  styleID: string | undefined,
-  elapsed: number,
-  relativeSize?: Pick<Rect, "width" | "height">,
-): readonly [number, number] | undefined {
-  return legacyAnimationPair(animation, styleID, elapsed, "translate", relativeSize)
-}
-
-export function legacyAnimationOpacity(
-  animation: LegacyAnimation | undefined,
-  styleID: string | undefined,
-  elapsed: number,
-): number | undefined {
-  return legacyAnimationPair(animation, styleID, elapsed, "opacity")?.[0]
-}
-
-export function legacyAnimationRotation(
-  animation: LegacyAnimation | undefined,
-  styleID: string | undefined,
-  elapsed: number,
-): number | undefined {
-  return legacyAnimationPair(animation, styleID, elapsed, "rotate")?.[0]
+  size: Pick<Rect, "width" | "height">,
+  relativeSize = size,
+): Motion | undefined {
+  const effect = styleID ? animation?.get(styleID) : undefined
+  if (!effect?.frames.length || elapsed < 0 ||
+    elapsed > Math.max(...effect.frames.map((frame) => frame.start + frame.delay + animationDuration(frame)))) return
+  const sample = (type: LegacyAnimationFrame["type"]) => sampleLegacyProperty(effect, elapsed, type, relativeSize)
+  const scale = sample("scale"), rotate = sample("rotate")
+  const pivot = scale?.pivot ?? rotate?.pivot
+  return {
+    scale: scale?.value,
+    rotation: rotate?.value[0],
+    translation: sample("translate")?.value,
+    opacity: sample("opacity")?.value[0],
+    pivot: pivot && (pivot.relative ? pivot.point : [pivot.point[0] / size.width, pivot.point[1] / size.height]),
+  }
 }
 
 export function animationSequenceForKey(

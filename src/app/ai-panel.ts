@@ -205,6 +205,7 @@ export function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
 export function aiDesignErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error)
   const normalized = raw.toLowerCase()
+  if (raw.startsWith("模型回复中断")) return raw
   if (normalized.includes("connection error") || normalized.includes("failed to fetch") || normalized.includes("networkerror")) {
     return "无法连接模型服务。请在设置 > AI 模型中检查 API 地址、模型名称和密钥。"
   }
@@ -231,14 +232,15 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
   if (!prompt.trim()) throw new Error("请填写设计要求。")
   if (appState.aiDesignBusy) throw new Error("上一轮设计尚未结束，请稍候。")
   if (appState.aiDesignDraft) throw new Error("请先应用或丢弃待确认的草稿，再继续对话。")
-  if (isEditing()) source.commit()
+  const imageTest = files.length === 0 ? /^(?:请\s*)?(?:测试(?:一下)?\s*生图模型|试试生图模型|生图模型测试)(?:\s*[:：]\s*([\s\S]+)|[。！!？?]?)$/.exec(prompt) : null
+  if (!imageTest && isEditing()) source.commit()
   const target = appState.archive
   const previewOnly = !isEditing()
   const configuration = appState.savedModels[Number(aiDesignModel.value)]
-  if (!configuration) {
+  if (!configuration && !imageTest) {
     throw new Error("请先配置 AI 模型。")
   }
-  if (appState.aiThinkingPending.has(configuration)) throw new Error("请等待模型能力获取完成。")
+  if (!imageTest && appState.aiThinkingPending.has(configuration)) throw new Error("请等待模型能力获取完成。")
   if (appState.aiDesignConversationTarget !== target) {
     appState.aiDesignConversationTarget = target
     appState.aiDesignConversation = []
@@ -249,6 +251,17 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
   aiDesignStatus.textContent = ""
   syncAiDesignControls()
   try {
+    if (imageTest) {
+      const model = appState.savedImageModel
+      if (!model) throw new Error("未配置生图模型，请在设置 > AI 模型 > 生图模型中配置。")
+      await hooks.onStatus?.("正在用生图模型生成测试图片…", "thinking")
+      const { generateAiImagePreview } = await import("../ai-design.ts")
+      const src = await generateAiImagePreview(model, imageTest[1]?.trim() || "生成一张用于测试键盘皮肤生图能力的插画：深蓝夜空、柔和的青色极光，留出干净的中央区域，不要文字。", hooks.signal)
+      hooks.signal.throwIfAborted()
+      if (appState.archive !== target) throw new Error("生图期间已切换皮肤项目")
+      aiDesignPanel.dataset.state = "done"
+      return { fallback: "生图模型已返回测试图片，没有修改皮肤。", files: [{ type: "image", name: "生图测试.png", src }] }
+    }
     if (aiWantsWholeProject(prompt)) setAiDesignScope(true)
     const panelScope = aiDesignScope.getAttribute("aria-pressed") === "true" ? "project" as const : "panel" as const
     const mode = aiDesignIntensity.value
@@ -296,7 +309,10 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
       appState.aiDesignConversation = result.conversation
       aiDesignPanel.dataset.state = "done"
       aiDesignStatus.textContent = "交互预览仅支持 AI 分析，不能修改皮肤"
-      return { fallback: result.response || "AI 分析完成。交互预览不能修改皮肤。" }
+      return {
+        fallback: result.response || (result.notice ? "" : "AI 分析完成。交互预览不能修改皮肤。"),
+        summary: result.notice && (result.changes.length ? "本轮未完成；交互预览未保留任何修改。" : result.notice),
+      }
     }
     if (!isEditing()) throw new Error("已退出编辑模式，本轮草稿未应用")
     if (result.variants?.length) {
@@ -334,8 +350,7 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
     if (!changes.length) {
       appState.aiDesignConversation = result.conversation
       aiDesignPanel.dataset.state = "done"
-      aiDesignStatus.textContent = "分析完成 · 没有文件修改"
-      return { fallback: result.response || "AI 分析完成，没有需要应用的修改。" }
+      return { fallback: result.response || (result.notice ? "" : "本轮没有修改皮肤。"), summary: result.notice }
     }
     // Keep the committed conversation unchanged until the user accepts the draft.
     setAiDesignDraft({
@@ -348,7 +363,7 @@ async function runAiDesignRequest(prompt: string, hooks: AiChatRunHooks, files: 
     })
     return {
       fallback: result.response,
-      summary: `已生成 ${changes.length} 个文件的草稿，审阅后应用。`,
+      summary: result.notice ?? `已生成 ${changes.length} 个文件的草稿，审阅后应用。`,
     }
   } catch (error) {
     if (appState.archive === target) {

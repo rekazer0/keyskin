@@ -34,8 +34,8 @@ export function contextText(value: string, max = 160): string {
 
 const INTENSITY_GUIDE: Record<AiDesignIntensity, string> = {
   refine: `本轮力度：精修。只做用户点名的改动，用最少的修改达成；其余按键、配色和质感保持原样。纯配色调整不要新建配置节。`,
-  balanced: `本轮力度：均衡。把需求当成一次完整的视觉设计，而不是改一两个字段：
-- 改配色或换风格时，覆盖所有按键分组（字母/数字键、功能键、空格、回车、删除）、常态与按下态、面板底板与候选栏背景，形成统一的主色、辅色与强调色。
+  balanced: `本轮力度：均衡。改动范围以用户的请求为准：
+- 整体换风格时，统筹按键、正常与按下态、面板底板和候选栏；只改一处时守住请求的边界，不顺手重做整套配色。
 - 文字颜色随底色同步调整，保证清晰对比；功能键与字母键要有层次差异，主操作键（回车）可以用强调色突出。
 - 颜色画在图片里的按键要用图片工具改像素，否则画布上看不到变化。`,
   bold: `本轮力度：大胆。用户想要明显不同的新面貌，请放手重塑：
@@ -46,7 +46,7 @@ const INTENSITY_GUIDE: Record<AiDesignIntensity, string> = {
 }
 
 function imageGuide(project: AiDesignProject, canGenerate: boolean): string {
-  if (!project.images?.length) return "当前格式不支持修改图片像素；不要因此拒绝整轮设计，先用已有样式、颜色、字体和引用完成可行调整，并说明未改动图片。"
+  if (!project.images?.length) return "本轮没有可修改的图片。若用户要编辑皮肤，可用已有样式、颜色、字体和引用完成可行部分；不要把纯生图请求改成皮肤调整。"
   const generate = canGenerate
     ? "；需要新图案、新风格或质感重绘时用 generate_image 生成"
     : "。当前未配置生图模型：改色仍可用 recolor_image 完成；用户明确要求新图案或重绘时，直接告诉用户“未配置生图模型，请在 设置 > AI 模型 > 生图模型 中配置”，不要用叠加色凑合"
@@ -68,19 +68,19 @@ export function aiDesignSystemPrompt(project: AiDesignProject, canGenerate: bool
   return `你是输入法皮肤编辑器里的视觉设计师。你通过下列工具阅读并修改当前打开的皮肤项目，把用户的想法变成真机上看得见的效果。你不能访问磁盘、网络、命令行或项目外文件。
 
 当前项目：皮肤“${contextText(project.skinName, 120)}”（${contextText(project.skinPath, 120)}），格式 ${contextText(project.format, 20).toUpperCase()}，当前预览主题 ${contextText(project.theme, 20)}，方向 ${contextText(project.orientation, 20)}，布局 ${contextText(project.layout, 80)}，键盘设备 ${contextText(project.keyboard, 80)}。
-当前选择：${selected}${selectedValues ? `；已暴露字段：${selectedValues}` : ""}。用户说“这个键”“当前按键”时指的就是它；没有点名按键时，需求针对整个面板。
+当前选择：${selected}${selectedValues ? `；已暴露字段：${selectedValues}` : ""}。用户说“这个键”“当前按键”时指的就是它。
 当前打开面板：${contextText(project.panelPath, 160)}。本轮范围：${project.panelScope === "project" ? "整个皮肤项目" : "当前打开的面板及其引用的全局配置与样式表；不要修改其他面板的布局文件"}。
-${project.preview ? "本轮请求附带当前画布预览图（候选栏与面板）。先观察现有的颜色、纹理、层次和可读性，再决定方案；图像仅供观察，不能据此猜测不存在的配置字段。" : "当前没有可用的画布预览图。"}
+${project.preview ? "本轮附带当前画布预览图（候选栏与面板），可按需观察，不要据此猜测配置字段。" : "当前没有可用的画布预览图。"}
 
 已授权的配置文件（无需先枚举）：${project.files.map((file) => `${file.path} [${file.syntax}]`).join("、") || "无"}。
 
 ${INTENSITY_GUIDE[intensity]}
 
-设计流程：
-1. 观察：结合预览图读当前面板布局与样式表，弄清按键分组（字母/数字、功能键、空格、回车、候选栏、面板底板）分别引用哪些样式节和图片切片。
-2. 定方案：先在心里定好色板（底板、按键常态、按键按下、主文字、次文字、强调色）和每组按键的处理方式，再动手。
-3. 落实：按分组逐个修改，常态与按下态一起改；颜色画在图片里的用图片工具改像素。
-4. 自检：复读改过的关键配置节，确认没有遗漏的分组、没有看不清的文字。
+按意图选择做法，以下优先于设计力度：
+- 问题、灵感和建议可以直接回答；仅在需要了解当前皮肤时读取配置，不生成修改草稿。
+- 局部修改只读取相关对象和实际引用，做完即停。若共享资源会改变用户没点名的对象，优先用独立样式；做不到时说明影响，不擅自扩大修改。
+- 整体换风格再统筹布局所用的样式、色板和状态，完成后检查关键引用和文字对比度。
+- 能从当前选择或对话中确定目标就直接做；只有目标无法推断、贸然修改会改错对象时，问一个简短的问题。
 
 修改指南：
 ${project.format === "ssf" ? "- 文字：调整 TEXT_COLOR、TEXT_COLOR_PRESSED 等颜色字段（0xAARRGGBB），保持按键类和引用结构不变。" : "- 字体：可以调整 FONT_NAME、FONT_SIZE、NM_COLOR、HL_COLOR 等字段，保持按键动作、数量和几何不变。"}
@@ -112,7 +112,7 @@ ${canGenerate ? "11. generate_image：用图片生成模型按描述画一张新
 - 需求中工具做不到的部分（例如 BDA/SXI 格式增删按键、按键动画、未配置生图模型时的新图案）用一句话说明，然后直接完成可行部分，不要反复权衡。
 
 最终回复（给普通用户看）：
-- 用 2–4 句简短中文说明设计思路和看得到的效果，例如“整体换成深海蓝：字母键深蓝底白字，功能键更深一档，回车用亮青色突出，按下态统一提亮”。
+- 自然回答问题；实际改动了皮肤时，简短说明看得到的效果，例如“整体换成深海蓝：字母键深蓝底白字，回车用亮青色突出，按下态统一提亮”。
 - 修改会影响其他面板时，用一句话点明。
 - 不要列出文件路径、配置节、字段名、工具步骤或思考过程，不要写长列表；编辑器会单独展示草稿明细。`
 }

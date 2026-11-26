@@ -262,21 +262,26 @@ function problem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Legac
   if (entry.kind === "particle" && !fieldValue(entry, "PARTICLE_IMAGE")) return "还没有设置粒子图片"
 }
 
-function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>, uses: number): AnimationListItem {
+function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, LegacyAnimationEntry>, uses: number, document: IniDocument, styles: ReadonlySet<string>): AnimationListItem {
+  const clip = entry.kind === "basic" && (entry.type === 2 || entry.type === undefined)
+    ? iniPreviewClip(document, entry.section) : undefined
+  const unconfigured = clip?.status === "unconfigured"
   const timeline = legacyAnimationTimeline(entry, byIndex)
   const detail = entry.kind === "frame" ? fieldValue(entry, "ANIM_PATH") || "未设置 gif"
     : entry.kind === "particle" ? `${fieldValue(entry, "TOTAL_NUMBER") ?? "?"} 个粒子 · ${timelineText(timeline)}`
       : entry.kind === "combination" ? `${fieldValue(entry, "BUILD_METHOD") === "0" ? "同时" : "接续"} · ${buildList(entry).length} 个子动画 · ${timelineText(timeline)}`
-        : timelineText(timeline)
+        : unconfigured ? clip.notes[0] : `${clip?.status === "zero-translation" ? "无位移 · " : ""}${timelineText(timeline)}`
   return {
     id: entry.section,
     title: `动画 ${entry.index ?? entry.section}`,
     info: fieldValue(entry, "INFO")?.trim() || undefined,
-    kind: kindLabel(entry),
+    kind: unconfigured ? "未配置" : kindLabel(entry),
     particle: entry.kind === "particle",
-    icon: entry.kind === "basic" ? TYPE_ICONS[entry.type ?? 0] ?? "blend" : KIND_ICONS[entry.kind],
+    icon: unconfigured ? "image-off" : entry.kind === "basic" ? TYPE_ICONS[entry.type ?? 0] ?? "blend" : KIND_ICONS[entry.kind],
     detail,
     uses,
+    previewRevision: JSON.stringify([entry.fields, [...styles], entry.kind === "combination"
+      ? buildList(entry).map(id => byIndex.get(String(Number(id)))?.fields) : undefined]),
     problem: problem(entry, byIndex),
   }
 }
@@ -327,7 +332,8 @@ function legacyDirectEdit(text: string, document: IniDocument, section: string):
 /* —— 对外入口 —— */
 export function populateLegacyAnimationInspector(container: HTMLElement): boolean {
   if (!isLegacyAnimationDocument()) return false
-  const text = appState.selectedDocument!.toString()
+  const document = appState.selectedDocument!
+  const text = document.toString()
   const model = parseLegacyAnimationFile(text)
   const byIndex = new Map(model.entries.flatMap((entry) => entry.index === undefined ? [] : [[String(entry.index), entry] as const]))
   const references = legacyAnimationReferences(styleDocument(), layoutDocument())
@@ -336,7 +342,8 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
   const pressByAnimation = new Map(entries.map((candidate) => [candidate.section, pressStyles(candidate, model.entries, references)]))
   const boundStyles = (id: string) => pressByAnimation.get(id) ?? new Set<string>()
   const plays = (id: string, key: PreviewItem) => keyPlaysStyle(key, boundStyles(id))
-  const { items: keyItems, keyFilter } = keyAnimationItems(entries.map((entry) => listItem(entry, byIndex, referencesOf(entry).length)), plays)
+  const { items: keyItems, keyFilter } = keyAnimationItems(entries.map(entry =>
+    listItem(entry, byIndex, referencesOf(entry).length, document, boundStyles(entry.section))), plays)
   // 样式列表只列引用了当前入口动效的样式。
   const styles = legacyAnimationStyles(styleDocument())
   const shown = new Set(entries.flatMap((candidate) => candidate.index === undefined ? [] : [candidate.index]))

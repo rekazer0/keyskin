@@ -89,6 +89,18 @@ async function encode(canvas: OffscreenCanvas): Promise<Uint8Array> {
   return new Uint8Array(await (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer())
 }
 
+export async function previewImageDataUrl(bytes: Uint8Array): Promise<string> {
+  const image = await createImageBitmap(new Blob([bytes as BlobPart]))
+  try {
+    const scale = Math.min(1, 1024 / Math.max(image.width, image.height))
+    const [canvas, context] = canvas2d(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)))
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    return `data:image/png;base64,${base64(await encode(canvas))}`
+  } finally {
+    image.close()
+  }
+}
+
 function canvas2d(width: number, height: number): [OffscreenCanvas, OffscreenCanvasRenderingContext2D] {
   const canvas = new OffscreenCanvas(width, height)
   const context = canvas.getContext("2d", { willReadFrequently: true })

@@ -28,6 +28,7 @@ export type AnimationListItem = {
   uses: number
   particle?: boolean
   problem?: string
+  previewRevision?: string
 }
 
 
@@ -130,7 +131,7 @@ function actionButton(icon: string, label: string, onClick: () => void, disabled
   return button
 }
 
-function listOption(view: AnimationResourceView, item: AnimationListItem, selected: boolean): HTMLElement {
+function listOption(view: AnimationResourceView, item: AnimationListItem, selected: boolean, existing?: HTMLElement): HTMLElement {
   const card = styleCard({
     id: item.id, label: item.title, kind: "anim", kindLabel: item.kind, kindIcon: item.icon,
     info: item.info,
@@ -140,7 +141,7 @@ function listOption(view: AnimationResourceView, item: AnimationListItem, select
       return player ? [animationPlayer({ ...player, thumbnail: true, direct: undefined, keyboard: undefined })] : []
     },
     note: item.detail,
-  })
+  }, existing)
   delete card.dataset.styleId
   card.dataset.animationId = item.id
   card.setAttribute("aria-selected", String(selected))
@@ -153,28 +154,30 @@ function listOption(view: AnimationResourceView, item: AnimationListItem, select
     card.dataset.animationDraggable = dragID
     card.title += "\n拖到画布应用；已有选择时也可按 Alt + Enter"
   }
-  if (item.problem) card.dataset.problem = ""
+  card.toggleAttribute("data-problem", Boolean(item.problem))
   return card
 }
+
+type OptionItem = Pick<AnimationListItem, "id" | "previewRevision">
 
 type OptionBoxState = {
   signature: string
   source?: object
   list: HTMLElement
   rows: Map<string, HTMLElement>
-  items: Array<{ id: string }>
+  items: OptionItem[]
   selected?: string
   onSelect(id: string): void
 }
 const optionBoxStates = new WeakMap<HTMLElement, Map<string, OptionBoxState>>()
 
-function optionBox<T extends { id: string }>(options: {
+function optionBox<T extends OptionItem>(options: {
   items: T[]
   selected: string | undefined
   label: string
   empty: string
   dataKey: "animationId" | "styleId"
-  row(item: T, selected: boolean): HTMLElement
+  row(item: T, selected: boolean, existing?: HTMLElement): HTMLElement
   onSelect(id: string): void
   fill: boolean
   owner: HTMLElement
@@ -206,14 +209,20 @@ function optionBox<T extends { id: string }>(options: {
       current.onSelect(row.dataset[options.dataKey]!)
     })
   }
+  const previousItems = state.items
   state.items = options.items
   state.selected = options.selected
   state.onSelect = options.onSelect
   state.list.setAttribute("aria-label", options.label)
   if (options.fill) state.list.dataset.size = "fill"
   else delete state.list.dataset.size
-  for (const item of options.items) {
+  for (const [index, item] of options.items.entries()) {
     const row = state.rows.get(item.id)!
+    const previous = previousItems[index]
+    if (item.previewRevision !== previous.previewRevision) {
+      // Refresh only the affected preview; keep the card, focus, and other players in place.
+      options.row(item, item.id === options.selected, row)
+    }
     row.setAttribute("aria-selected", String(item.id === options.selected))
     row.tabIndex = item.id === options.selected || options.selected === undefined ? 0 : -1
   }
@@ -240,7 +249,7 @@ function listBox(view: AnimationResourceView, fill = false): HTMLElement {
   const noun = MODE_NOUN[view.mode]
   return optionBox({ owner: view.listOwner!, context: view.listContext!, source: view.listSource, items: view.items, selected: view.selected, label: `${noun}列表`,
     empty: `没有${noun}`,
-    dataKey: "animationId", row: (item, selected) => listOption(view, item, selected), onSelect: view.onSelect, fill })
+    dataKey: "animationId", row: (item, selected, existing) => listOption(view, item, selected, existing), onSelect: view.onSelect, fill })
 }
 
 function styleOption(styles: AnimationStyleList, item: AnimationStyleItem, selected: boolean, noun: string): HTMLElement {

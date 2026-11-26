@@ -34,6 +34,23 @@ test('nested sequential combinations shift tracks by full child duration; simult
   assert.match(invalid.notes.join(' '), /循环.*不存在/)
 })
 
+test('Baidu preview distinguishes empty definitions and zero displacement from playable effects', () => {
+  const source = '[ANIM1]\nINFO=占位\n[ANIM2]\nTYPE=2\nFROM_PX=0,0\nTO_PX=0,0\nDURATION=20\n' +
+    '[ANIM3]\nTYPE=2\nFROM_PX=0,0\nTO_PX=1,0\nDURATION=20\n' +
+    '[ANIM4]\nTYPE=2\nFROM=0,0\nTO=rand(-2,2),0\nDURATION=20\n'
+  const ini = IniDocument.parse(source)
+  const empty = iniPreviewClip(ini, 'ANIM1')
+  assert.equal(empty.status, 'unconfigured')
+  assert.deepEqual(empty.tracks, [])
+  assert.deepEqual(empty.lanes, [])
+  const stationary = iniPreviewClip(ini, 'ANIM2')
+  assert.equal(stationary.status, 'zero-translation')
+  assert.equal(stationary.duration, 20, 'the full timeline retains the real duration')
+  assert.equal(iniPreviewClip(ini, 'ANIM3').status, undefined)
+  assert.equal(iniPreviewClip(ini, 'ANIM4').status, undefined, 'a random range is not necessarily static')
+  assert.equal(ini.toString(), source)
+})
+
 test('Palm animations preview straight from skin.json and keep unsupported special effects explicit', () => {
   const table = animationTable()
   const before = JSON.stringify(table)

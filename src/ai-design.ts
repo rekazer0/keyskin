@@ -16,7 +16,7 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy"
 import { Channel, invoke } from "@tauri-apps/api/core"
 import { AI_DESIGN_DIRECTIONS, SUBAGENT_GUIDE, SUBAGENT_RULES, aiDesignSystemPrompt, contextText, type AiDesignIntensity, type AiDesignProject } from "./ai-design-prompt.ts"
-import { AiSkinImages, base64 } from "./ai-skin-images.ts"
+import { AiSkinImages, base64, previewImageDataUrl } from "./ai-skin-images.ts"
 import { AiSkinWorkspace, type AiSkinDraftChange } from "./ai-skin-workspace.ts"
 import { MODEL_APIS, modelProviderPreset, type ModelProtocol } from "./model-providers.ts"
 import { modelThinking, modelThinkingLevel } from "./model-thinking.ts"
@@ -29,6 +29,7 @@ type AiDesignResult = {
   response: string
   toolCalls: number
   conversation: AiDesignConversation
+  notice?: string
   variants?: AiDesignVariant[]
 }
 
@@ -341,11 +342,11 @@ async function responseJson(response: Response): Promise<any> {
   return JSON.parse(text)
 }
 
-/** Calls an OpenAI-compatible images endpoint or Gemini generateContent; runs under nativeModelFetch. */
+/** Calls the saved image service through the desktop model proxy. */
 async function requestImage(config: AiDesignConfiguration, prompt: string, reference: string | undefined, signal?: AbortSignal): Promise<Uint8Array> {
   const base = normalizedUrl(config.apiUrl)
   if (config.provider === "minimax-image") {
-    const body = await responseJson(await fetch(`${base}/image_generation`, {
+    const body = await responseJson(await nativeModelFetch(`${base}/image_generation`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey.trim()}` },
       body: JSON.stringify({ model: config.model.trim(), prompt, aspect_ratio: "1:1", response_format: "base64", n: 1 }),
@@ -359,7 +360,7 @@ async function requestImage(config: AiDesignConfiguration, prompt: string, refer
   if (config.protocol === "google") {
     const parts: unknown[] = [{ text: prompt }]
     if (reference) parts.push({ inlineData: { mimeType: "image/png", data: reference } })
-    const body = await responseJson(await fetch(`${base}/models/${encodeURIComponent(config.model.trim())}:generateContent`, {
+    const body = await responseJson(await nativeModelFetch(`${base}/models/${encodeURIComponent(config.model.trim())}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": config.apiKey.trim() },
       body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
@@ -372,7 +373,7 @@ async function requestImage(config: AiDesignConfiguration, prompt: string, refer
   const model = config.model.trim()
   const body = config.protocol === "openai-codex"
     ? await codexImage(config, model, prompt, reference, signal)
-    : await responseJson(await fetch(`${base}/images/generations`, {
+    : await responseJson(await nativeModelFetch(`${base}/images/generations`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey.trim()}` },
       // gpt-image models always return base64 and reject response_format.
@@ -390,7 +391,7 @@ async function requestImage(config: AiDesignConfiguration, prompt: string, refer
 async function codexImage(config: AiDesignConfiguration, model: string, prompt: string, reference: string | undefined, signal?: AbortSignal): Promise<any> {
   const token = await invoke<string>("model_oauth_token", { provider: config.provider })
   const claims = JSON.parse(atob(token.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/") ?? ""))
-  return responseJson(await fetch(`${normalizedUrl(config.apiUrl)}/codex/images/${reference ? "edits" : "generations"}`, {
+  return responseJson(await nativeModelFetch(`${normalizedUrl(config.apiUrl)}/codex/images/${reference ? "edits" : "generations"}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -422,7 +423,6 @@ const TOOL_LABELS: Record<string, string> = {
 const EDIT_TOOLS = new Set(["set_ini_value", "remove_ini_value", "add_ini_section", "remove_ini_sections", "set_json_value", "replace_project_text", "recolor_image", "generate_image"])
 
 function eventStatus(event: AgentEvent): { kind: StatusKind; text: string } | undefined {
-  if (event.type === "agent_start") return { kind: "thinking", text: "AI 正在分析当前皮肤…" }
   if (event.type === "tool_execution_start") {
     const path = typeof event.args?.path === "string" ? ` · ${event.args.path}` : ""
     return { kind: EDIT_TOOLS.has(event.toolName) ? "editing" : "reading", text: `AI ${TOOL_LABELS[event.toolName] ?? "处理项目"}${path}…` }
@@ -431,7 +431,6 @@ function eventStatus(event: AgentEvent): { kind: StatusKind; text: string } | un
   if (event.type === "tool_execution_end" && event.isError) {
     return { kind: EDIT_TOOLS.has(event.toolName) ? "editing" : "reading", text: `AI 操作失败：${TOOL_LABELS[event.toolName] ?? event.toolName}` }
   }
-  if (event.type === "agent_end") return { kind: "done", text: "AI 已完成分析，正在校验修改…" }
   return undefined
 }
 
@@ -458,15 +457,17 @@ function subagentTool(
 function finalResponse(agent: Agent): string {
   const message = [...agent.state.messages].reverse().find((entry) => entry.role === "assistant")
   if (!message || message.role !== "assistant") return ""
-  const text = message.content.flatMap((content) => content.type === "text" ? [content.text] : []).join("\n").trim()
-  if (text || message.stopReason !== "length") return text
-  return "模型输出达到长度上限（多半是思考过长），本轮没有完成修改。请调低思考强度或拆小需求后重试。"
+  return assistantText(message)
+}
+
+function assistantText(message: Extract<AgentMessage, { role: "assistant" }>): string {
+  return message.content.flatMap((content) => content.type === "text" ? [content.text] : []).join("\n").trim()
 }
 
 function recentConversation(messages: readonly AgentMessage[]): AgentMessage[] {
   const conversational = messages.flatMap<AgentMessage>((message) => {
     if (message.role === "user") return [message]
-    if (message.role !== "assistant" || message.stopReason === "toolUse") return []
+    if (message.role !== "assistant" || message.stopReason !== "stop") return []
     const content = message.content.filter((part) => part.type === "text")
     return content.length ? [{ ...message, content }] : []
   })
@@ -512,6 +513,17 @@ async function nativeModelFetch(input: RequestInfo | URL, init: RequestInit = {}
   })
 }
 
+export async function generateAiImagePreview(config: AiDesignConfiguration, prompt: string, signal: AbortSignal): Promise<string> {
+  signal.throwIfAborted()
+  const bytes = await requestImage(config, prompt, undefined, signal)
+  signal.throwIfAborted()
+  try {
+    return await previewImageDataUrl(bytes)
+  } catch {
+    throw new Error("生图模型返回的图片无法打开，请检查模型配置后重试")
+  }
+}
+
 type AiDesignOptions = {
   history?: readonly AgentMessage[]
   variantCount?: number
@@ -555,7 +567,7 @@ export async function runAiSkinDesign(
         onThinking: undefined,
         onStatus: (kind, text) => options.onStatus?.(kind, `方案 ${index + 1} · ${text}`),
       })
-      return { id, title, changes: result.changes, response: result.response, toolCalls: result.toolCalls, conversation: result.conversation }
+      return { id, title, changes: result.changes, response: [result.response, result.notice].filter(Boolean).join("\n\n"), toolCalls: result.toolCalls, conversation: result.conversation }
     }))
     if (options.signal?.aborted) throw new DOMException("AI 设计已取消", "AbortError")
     // One failed direction should not throw away the others.
@@ -622,7 +634,7 @@ async function runDesignAgent(
     const label = `子任务 ${index + 1}「${contextText(task.title, 24)}」`
     const unsubscribeChild = child.subscribe((event) => {
       const status = eventStatus(event)
-      if (status && status.kind !== "done") options.onStatus?.(status.kind, `${label} · ${status.text.replace(/^AI\s*/, "")}`)
+      if (status) options.onStatus?.(status.kind, `${label} · ${status.text.replace(/^AI\s*/, "")}`)
     })
     const abortChild = () => child.abort()
     signal?.addEventListener("abort", abortChild, { once: true })
@@ -654,12 +666,33 @@ async function runDesignAgent(
     const referenceCount = options.attachments?.images.length ?? 0
     const referenceNote = referenceCount ? `用户附带了 ${referenceCount} 张参考图片${project.preview ? "（排在当前画布预览图之后）" : ""}。` : ""
     const text = [prompt.trim(), referenceNote, options.attachments?.text].filter(Boolean).join("\n\n")
+    options.signal?.throwIfAborted()
+    options.onStatus?.("thinking", "AI 正在理解你的需求…")
     await agent.prompt(text, images.length ? images : undefined)
-    if (options.signal?.aborted) throw new DOMException("AI 设计已取消", "AbortError")
-    if (agent.state.errorMessage) throw new Error(agent.state.errorMessage)
+    options.signal?.throwIfAborted()
+    const failed = agent.state.messages.at(-1)
+    if (failed?.role === "assistant" && failed.errorMessage === "Stream ended without finish_reason" && !assistantText(failed)) {
+      // Retry only the interrupted model turn, with earlier tool results still in context.
+      agent.state.messages = agent.state.messages.slice(0, -1)
+      thinking = ""
+      options.onStatus?.("thinking", "模型回复中断，正在继续本轮…")
+      options.signal?.throwIfAborted()
+      await agent.continue()
+      options.signal?.throwIfAborted()
+    }
+    const changes = [...workspace.changes(), ...imageAssets.changes()]
+    const last = agent.state.messages.at(-1)
+    const interrupted = agent.state.errorMessage === "Stream ended without finish_reason"
+    const truncated = last?.role === "assistant" && last.stopReason === "length"
+    if (interrupted && !changes.length) throw new Error("模型回复中断，没有生成草稿。请重试，或调低思考强度后再试。")
+    if (agent.state.errorMessage && !interrupted) throw new Error(agent.state.errorMessage)
+    const reason = interrupted ? "模型回复中断。" : truncated ? "模型输出达到长度上限，可以调低思考强度或拆小需求后重试。" : ""
+    if (reason && changes.length) options.onStatus?.("editing", "本轮未完成，正在校验已生成的草稿…")
+    else if (changes.length) options.onStatus?.("done", "正在校验草稿…")
     return {
-      changes: [...workspace.changes(), ...imageAssets.changes()],
+      changes,
       response: finalResponse(agent),
+      notice: reason ? `${reason}${changes.length ? "已保留部分草稿，请核对后应用。" : "本轮没有生成草稿。"}` : undefined,
       toolCalls,
       conversation: recentConversation(agent.state.messages),
     }
