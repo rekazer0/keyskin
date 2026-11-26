@@ -1,12 +1,12 @@
 /** Package formats the editor opens, edits and saves in place. */
-export type ExportFormat = "bdi" | "bds" | "bda" | "ssf" | "sxi"
+export type ExportFormat = "bdi" | "bds" | "bda" | "ssf" | "sxi" | "it" | "itx"
 
 export function exportFormatFromPath(path: string): ExportFormat | undefined {
   const match = path.match(/\.([^.\\/]+)$/)
   const extension = match?.[1].toLowerCase()
   if (extension === "mssf") return "ssf"
-  return extension === "bdi" || extension === "bds" || extension === "bda" || extension === "ssf" || extension === "sxi"
-    ? extension
+  return extension === "bdi" || extension === "bds" || extension === "bda" || extension === "ssf" || extension === "sxi" || extension === "it" || extension === "itx"
+    ? (extension as ExportFormat)
     : undefined
 }
 

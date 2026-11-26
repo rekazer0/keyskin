@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
+import { strFromU8, strToU8, unzipSync, zipSync, inflateSync } from "fflate"
 import type { ExportFormat } from "./export.ts"
 import { IniDocument } from "./ini.ts"
 import { adaptPackageSounds } from "./sounds.ts"
@@ -20,6 +20,7 @@ type PackageLayout =
   | "bda-single"
   | "ssf"
   | "sxi"
+  | "xunfei"
   | "legacy-ios"
 
 type BdaTheme = "light" | "dark"
@@ -72,6 +73,10 @@ function packageInfo(files: Map<string, Uint8Array>, formatHint?: ExportFormat):
   const bdaRoots = bdaThemeRoots(files)
   if (formatHint === "bda" && !bdaRoots) throw new Error("BDA 皮肤缺少 port/land appearanceConfig")
   if (bdaRoots) return { layout: bdaRoots.size > 1 ? "bda-dual" : "bda-single", bdaRoots }
+
+  // Check for Xunfei format (.it/.itx)
+  if (formatHint === "it" || formatHint === "itx") return { layout: "xunfei" }
+
   // A Sogou phone skin keeps its own folder layout, so its paths are used as they are. Without a
   // file name (Android content:// URIs) its phoneTheme.ini identifies it.
   if (formatHint === "ssf" || !formatHint && names.includes("phoneTheme.ini")) return { layout: "ssf" }
@@ -267,6 +272,7 @@ export class SkinArchive {
   get format(): ExportFormat {
     if (this.layout === "ssf") return "ssf"
     if (this.layout === "sxi") return "sxi"
+    if (this.layout === "xunfei") return "it"
     if (this.layout.startsWith("bda")) return "bda"
     return this.layout.startsWith("bds") ? "bds" : "bdi"
   }
@@ -280,11 +286,36 @@ export class SkinArchive {
 
     let total = 0
     const files = new Map<string, Uint8Array>()
+
+    // 额外验证：防解包工具可能导致某些文件内容为空或损坏
+    // 通过重新解析 ZIP 结构并直接读取本地文件头来恢复正确的文件内容
+    const sourceZip = parseZip(sourceBytes)
+    const localFiles = new Map<string, Uint8Array>()
+    for (const entry of sourceZip.entries) {
+      if (entry.uncompressedSize === 0 || entry.local.length === 0) continue
+      const nameLen = entry.local.byteLength >= 30 ? new DataView(entry.local.buffer, entry.local.byteOffset).getUint16(26, true) : 0
+      const extraLen = entry.local.byteLength >= 30 ? new DataView(entry.local.buffer, entry.local.byteOffset).getUint16(28, true) : 0
+      const headerEnd = 30 + nameLen + extraLen
+      if (headerEnd < entry.local.length) {
+        const compressed = entry.local.subarray(headerEnd)
+        try {
+          const decompressed = entry.method === 8 ? inflateSync(compressed) : compressed
+          if (decompressed.length === entry.uncompressedSize) {
+            localFiles.set(entry.name, decompressed)
+          }
+        } catch {
+          // 如果本地头解压失败，使用 unzipSync 的结果
+        }
+      }
+    }
+
     for (const name of names) {
       if (!safePath(name)) throw new Error(`皮肤包含不安全路径：${name}`)
-      total += unpacked[name].byteLength
+      // 优先使用本地头直接解压的文件（防解包工具场景）
+      const data = localFiles.get(name) ?? unpacked[name]
+      total += data.byteLength
       if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
-      files.set(name, unpacked[name])
+      files.set(name, data)
     }
     return new SkinArchive(files, sourceBytes, formatHint)
   }

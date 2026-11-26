@@ -277,11 +277,19 @@ export async function restoreLastSourceWorkspace(): Promise<void> {
     }
   })
 }
-export const UNSUPPORTED_SKIN_MESSAGE = "仅支持 .bda、.bdi、.bds、.ssf、.mssf 或 .sxi 皮肤文件"
+export const UNSUPPORTED_SKIN_MESSAGE = "仅支持 .bda、.bdi、.bds、.ssf、.mssf、.sxi、.it 或 .itx 皮肤文件"
 /** Opens a skin file's bytes; a Sogou skin is unpacked first when it uses the encrypted container. */
 export async function openSkinBytes(bytes: Uint8Array, path: string): Promise<boolean> {
   // Android pickers return content:// URIs without the file name, so the bytes decide there.
   const ssf = isSsfPath(path) || (path.startsWith("content://") && looksLikeSsf(bytes))
+
+  // Handle Xunfei format (.it/.itx)
+  if (path.endsWith(".it") || path.endsWith(".itx")) {
+    // Xunfei files are already in the correct format, pass them directly
+    await loadArchive(bytes, path)
+    return true
+  }
+
   await loadArchive(ssf ? await ssfDocumentBytes(bytes) : bytes, path)
   return true
 }
@@ -304,7 +312,7 @@ export async function loadNativePath(path: string): Promise<boolean> {
 }
 
 export function isSupportedSkinPath(path: string): boolean {
-  return path.startsWith("content://") || /\.(bdi|bds|bda|m?ssf|sxi)$/i.test(path)
+  return path.startsWith("content://") || /\.(bdi|bds|bda|m?ssf|sxi|it|itx)$/i.test(path)
 }
 
 export async function loadDroppedFile(file: File): Promise<boolean> {
@@ -454,6 +462,9 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
     const result = convertBdaPlatform(appState.archive, targetBdaPlatform)
     return { bytes: await result.toBytesAsync(), converted: true, warnings: bdaCompatibilityWarnings(appState.archive) }
   }
+  if (format === "it" || format === "itx") {
+    throw new Error(`暂不支持导出为 ${format.toUpperCase()} 皮肤包（仅支持导入）`)
+  }
   if (appState.archive.format !== "bda" || format === "bda" || format === "sxi") {
     updateFileOperationProgress(35, `正在打包 ${format.toUpperCase()} 皮肤包…`)
     await waitForInterfacePaint()
@@ -466,10 +477,10 @@ async function exportArchiveBytes(format: ExportFormat, targetBdaPlatform?: Excl
   if (!appState.bdaBase) throw new Error("无法加载 BDA 官方基础布局")
   const report = conversionProgress(22, 80, "正在转换 BDA 配置…")
   await report(0.2)
-  const result = await convertBdaArchive(appState.archive, appState.bdaBase, format)
+  const result = await convertBdaArchive(appState.archive, appState.bdaBase, format as "bdi" | "bds")
   await report(0.6, `正在压缩 ${format.toUpperCase()} 皮肤包…`)
   const soundWarnings: string[] = []
-  const bytes = await result.archive.platformBytesAsync(format, soundWarnings)
+  const bytes = await result.archive.platformBytesAsync(format as "bdi" | "bds", soundWarnings)
   reportExportWarnings(soundWarnings)
   return { bytes, converted: true, warnings: [...result.warnings, ...soundWarnings] }
 }
