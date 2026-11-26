@@ -59,11 +59,11 @@ test("样式库在切片窗口内作为视图打开，切片返回直接切到�
         assert.equal(context.styleLibrarySelected, undefined)
         assert.equal(context.pickerTarget, undefined)
         assert.equal(context.stylePickerTarget, input)
-        opens.push([view, title, pickerDialog.dataset.kind])
+        opens.push([view, title])
       },
     })
     context.openStylePicker(input)
-    assert.deepEqual(opens, [["styles", "全部样式", kind]])
+    assert.deepEqual(opens, [["styles", "全部样式"]])
   }
   assert.match(main, /onPickerEvent\("image-picker-back-styles", \(\) => void emitStyleLibrary\(true\)\)/)
   assert.match(main, /styleLibrary: Boolean\(appState\.stylePickerTarget\),/)

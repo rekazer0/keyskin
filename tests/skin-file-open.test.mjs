@@ -19,7 +19,7 @@ for (const android of [true, false]) {
       open: async (options) => {
         assert.ok(!android, 'Android must not use the read-only dialog picker')
         assert.equal(options.multiple, false)
-        assert.deepEqual(Array.from(options.filters[0].extensions), ['bdi', 'bds', 'bda', 'ssf', 'mssf', 'sxi'])
+        assert.deepEqual(Array.from(options.filters[0].extensions), ['bdi', 'bds', 'bda', 'ssf', 'mssf', 'sxi', 'it', 'itx'])
         return '/皮肤.ssf'
       },
       loadNativePath: async (path) => loaded.push(path),

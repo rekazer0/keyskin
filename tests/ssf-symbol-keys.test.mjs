@@ -51,9 +51,15 @@ for (const format of ['bds', 'bdi']) {
         const section = english.sections().find((name) => english.get(name, 'CENTER') === action)
         const style = `STYLE${english.get(section, 'FORE_STYLE')}`
         assert.equal(css.get(style, 'SHOW'), undefined, 'explicit artwork wins over text fallback')
-        const [resource] = css.get(style, 'NM_IMG').split(',')
+        // Key artwork is packed into a shared atlas, so only the referenced tile must be empty or painted.
+        const [resource, tile] = css.get(style, 'NM_IMG').split(',')
         const image = decodePng(output.getBytes(`${prefix}res/${resource}.png`))
-        assert.equal(image.data.some((value, index) => index % 4 === 3 && value > 0), visible)
+        const [x, y, width, height] = IniDocument.parse(output.getText(`${prefix}res/${resource}.til`)).get(`IMG${tile}`, 'SOURCE_RECT').split(',').map(Number)
+        let painted = false
+        for (let row = 0; row < height && !painted; row++) for (let column = 0; column < width; column++) {
+          if (image.data[((y + row) * image.width + x + column) * 4 + 3] > 0) { painted = true; break }
+        }
+        assert.equal(painted, visible)
       }
     }
   })

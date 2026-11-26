@@ -123,12 +123,6 @@ function createMockConfig() {
   return config
 }
 
-function createMockImageData(width = 500, height = 500) {
-  // Mock ImageData for Node.js environment
-  const data = new Uint8ClampedArray(width * height * 4)
-  return { data, width, height }
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -233,9 +227,8 @@ test('applyPatches: deep clones config to avoid mutations', () => {
 test('runAutoRepair: full pipeline returns improvement metrics', () => {
   const diffReport = createMockDiffReport(85)
   const config = createMockConfig()
-  const renderedImages = new Map([['preview', createMockImageData()]])
 
-  const result = runAutoRepair(diffReport, config, renderedImages, 85)
+  const result = runAutoRepair(diffReport, config, 85)
 
   assert.ok(result.patches, 'result should have patches')
   assert.ok(result.repairedConfig, 'result should have repaired config')
@@ -251,9 +244,8 @@ test('runAutoRepair: works with zero hotspots', () => {
   const diffReport = createMockDiffReport(99)
   diffReport.hotspots = []
   const config = createMockConfig()
-  const renderedImages = new Map([['preview', createMockImageData()]])
 
-  const result = runAutoRepair(diffReport, config, renderedImages, 99)
+  const result = runAutoRepair(diffReport, config, 99)
 
   assert.strictEqual(result.patches.length, 0, 'no patches should be generated for clean diff')
   assert.ok(result.repairedConfig, 'result should still have config')
@@ -262,9 +254,8 @@ test('runAutoRepair: works with zero hotspots', () => {
 test('runAutoRepair: handles mixed hotspot severities', () => {
   const diffReport = createMockDiffReport(80)
   const config = createMockConfig()
-  const renderedImages = new Map([['preview', createMockImageData()]])
 
-  const result = runAutoRepair(diffReport, config, renderedImages, 80)
+  const result = runAutoRepair(diffReport, config, 80)
 
   // Should have at least some patches for the lower-severity hotspots
   assert.ok(result.patches.length >= 1, 'should handle mixed severities')

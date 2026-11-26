@@ -35,8 +35,10 @@ test('SSF export uses the Sogou canvas skeleton at 1080', () => {
 
 test('SSF → BDI and BDS reopen with every preview layout, toolbar, image and font unchanged', async () => {
   const fixture = await open(ssfFixture())
-  const preview = ssfToBaiduFiles(documentPackage(fixture), templates.sogou, Number(documentPackage(fixture).resolution)).files
+  const pkg = documentPackage(fixture)
   for (const format of ['bdi', 'bds']) {
+    // The export packs key artwork into an atlas, so the preview must use the same mode to stay comparable.
+    const preview = ssfToBaiduFiles(pkg, templates.sogou, Number(pkg.resolution), format, true).files
     const { bytes } = await convertSsfDocument(fixture, format, templates)
     const output = SkinArchive.open(bytes, format)
     for (const theme of ['light', 'dark']) {

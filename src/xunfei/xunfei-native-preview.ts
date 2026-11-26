@@ -126,10 +126,9 @@ export class XunfeiNativePreview {
       onKeyRelease: options.onKeyRelease,
     }
 
-    // Get canvas context
-    const ctx = this.canvas instanceof HTMLCanvasElement
-      ? this.canvas.getContext('2d') as CanvasRenderingContext2D | null
-      : (this.canvas as OffscreenCanvas).getContext('2d') as OffscreenCanvasRenderingContext2D | null
+    // Get canvas context. Both HTMLCanvasElement and OffscreenCanvas expose getContext and
+    // width/height, so avoid `instanceof` here: Node tests run with a plain mock canvas.
+    const ctx = this.canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
     if (!ctx) throw new Error('Failed to get 2D canvas context')
     this.ctx = ctx
 
@@ -139,13 +138,8 @@ export class XunfeiNativePreview {
     this.canvasHeight = dim.height
 
     // Set canvas size
-    if (this.canvas instanceof HTMLCanvasElement) {
-      this.canvas.width = this.canvasWidth
-      this.canvas.height = this.canvasHeight
-    } else {
-      ;(this.canvas as OffscreenCanvas).width = this.canvasWidth
-      ;(this.canvas as OffscreenCanvas).height = this.canvasHeight
-    }
+    this.canvas.width = this.canvasWidth
+    this.canvas.height = this.canvasHeight
 
     // Initialize
     this.initializeParsing()
@@ -210,18 +204,9 @@ export class XunfeiNativePreview {
    * Parse offset.ini to build keyboard layout hitboxes.
    */
   private parseOffsetIni(): void {
-    // Parse offset configuration from theme.offsets
-    if (!this.theme.offsets) return
-
-    const offset = this.theme.offsets[0]
-    if (!offset) return
-
-    // Extract key positions from offset configuration
-    // This is theme-specific; for now, use placeholder structure
-    // In production, parse actual offset.ini INI file
-
-    // TODO: Integrate with actual offset.ini parsing
-    // For MVP, we'll infer from image slices and manual layout
+    // Extract key positions from offset configuration.
+    // This is theme-specific; for now, use the default 9-key fallback.
+    // TODO: Integrate with actual offset.ini parsing.
     this.buildDefaultKeyboard()
   }
 
@@ -301,7 +286,7 @@ export class XunfeiNativePreview {
    * Setup touch/mouse event listeners for key interaction.
    */
   private setupEventListeners(): void {
-    if (!this.options.interactive || !(this.canvas instanceof HTMLCanvasElement)) return
+    if (!this.options.interactive || typeof HTMLCanvasElement === 'undefined' || !(this.canvas instanceof HTMLCanvasElement)) return
 
     const canvas = this.canvas as HTMLCanvasElement
 
@@ -500,6 +485,8 @@ export class XunfeiNativePreview {
    */
   public start(): void {
     if (this.animationFrameId !== null) return
+    // Node tests and non-browser hosts have no animation frame; rendering stays manual there.
+    if (typeof requestAnimationFrame === 'undefined') return
 
     const loop = (_timestamp: number) => {
       this.updateStateTransitions()

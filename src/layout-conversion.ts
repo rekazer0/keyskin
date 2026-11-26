@@ -226,10 +226,10 @@ export function convertIniLayout(current: ConversionLayout, template: Conversion
   const defaults = current.defaults!
   const ids = new Map<string, string>()
   const occupied = [output, defaults].flatMap(doc => [...doc.sections().flatMap(section => {
-    const match = /^(?:TIP|OFFSET)(\\d+)$/.exec(section)
+    const match = /^(?:TIP|OFFSET)(\d+)$/.exec(section)
     return match ? [Number(match[1])] : []
   }), ...doc.entries().flatMap(({ key, value }) => key === "STAT_STYLE"
-    ? [...value.matchAll(/S\\d+_(\\d+)/g)].map(match => Number(match[1]))
+    ? [...value.matchAll(/S\d+_(\d+)/g)].map(match => Number(match[1]))
     : key === "POS_TYPE" ? value.split(",").map(Number) : [])])
   let next = occupied.reduce((max, id) => Number.isSafeInteger(id) ? Math.max(max, id) : max, 0) + 1
   const sectionEntries = (layout: ConversionLayout, section: string) => {
@@ -248,11 +248,11 @@ export function convertIniLayout(current: ConversionLayout, template: Conversion
     return allocated
   }
   const remap = (layout: ConversionLayout, entries: { key: string; value: string }[]) => entries.map(({ key, value }) => {
-    if (key === "POS_TYPE") value = value.split(",").map(id => /^\\d+$/.test(id.trim()) ? reference(layout, "OFFSET", id.trim()) : id).join(",")
-    if (key === "STAT_STYLE") value = value.replace(/(S\\d+_)(\\d+)/g, (_, state, id) => `${state}${reference(layout, "TIP", id)}`)
+    if (key === "POS_TYPE") value = value.split(",").map(id => /^\d+$/.test(id.trim()) ? reference(layout, "OFFSET", id.trim()) : id).join(",")
+    if (key === "STAT_STYLE") value = value.replace(/(S\d+_)(\d+)/g, (_, state, id) => `${state}${reference(layout, "TIP", id)}`)
     return { key, value }
   })
-  output.removeSections(output.sections().filter(section => /^KEY\\d+$/.test(section)))
+  output.removeSections(output.sections().filter(section => /^KEY\d+$/.test(section)))
   if (!output.hasSection("PANEL")) output.appendSection("PANEL", [])
   output.set("PANEL", "KEY_NUM", String(template.keys.length))
   for (const [index, match] of matches.entries()) {
@@ -311,7 +311,7 @@ export function iniConversionText(archive: SkinArchive, current: ConversionLayou
   const before = archive.isText(path) ? archive.getText(path) : undefined
   const styles = IniDocument.parse(before ?? "")
   const source = current.keys.flatMap(key => textStyleSections(styles, current.document!.get(key.section, "FORE_STYLE") ?? ""))[0]
-    ?? styles.sections().find(section => /^STYLE\\d+$/.test(section) && styles.get(section, "FONT_SIZE") && !styles.get(section, "NM_IMG") && !styles.get(section, "HL_IMG"))
+    ?? styles.sections().find(section => /^STYLE\d+$/.test(section) && styles.get(section, "FONT_SIZE") && !styles.get(section, "NM_IMG") && !styles.get(section, "HL_IMG"))
   const font = ["FONT_SIZE", "FONT_NAME", "FONT_PATH", "FONT_CLEARTYPE", "NM_COLOR", "HL_COLOR"].flatMap(key => {
     const value = source ? styles.get(source, key) : undefined
     return value === undefined ? [] : [{ key, value }]
@@ -321,7 +321,7 @@ export function iniConversionText(archive: SkinArchive, current: ConversionLayou
   let changed = false
   const foreground = (text: string) => {
     const show = label(text)
-    const existing = styles.sections().find(section => /^STYLE\\d+$/.test(section) && styles.get(section, "SHOW") === show && !styles.get(section, "NM_IMG") && !styles.get(section, "HL_IMG"))
+    const existing = styles.sections().find(section => /^STYLE\d+$/.test(section) && styles.get(section, "SHOW") === show && !styles.get(section, "NM_IMG") && !styles.get(section, "HL_IMG"))
     if (existing) return existing.slice(5)
     const id = String(freeStyleId(styles))
     styles.appendSection(`STYLE${id}`, [...font, { key: "SHOW", value: show }])

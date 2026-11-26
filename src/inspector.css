@@ -90,23 +90,16 @@
   border-top: 1px solid transparent;
 }
 .source #mobile-inspector-groups[hidden] { display: none; }
- .source :is(#mobile-inspector-groups > button, .inspector-reset) {
-   display: grid;
-   grid-auto-flow: row;
-   justify-items: center;
-   align-items: center;
-   gap: var(--space-2xs);
-   width: 100%;
-   min-height: auto;
-   padding: var(--space-xs) var(--space-2xs);
-   border: 0;
-   border-radius: var(--radius-md);
-   background: none;
-   color: var(--secondary);
-   font: inherit;
-   font-size: var(--font-size-xs);
-   transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
- }
+.source :is(#mobile-inspector-groups > button, .inspector-reset) {
+  display: grid;
+  grid-auto-flow: row;
+  justify-items: center;
+  align-items: center;
+  gap: var(--space-2xs);
+  width: 100%;
+  min-height: auto;
+  padding: var(--space-xs) var(--space-2xs);
+  border: 0;
   border-radius: var(--radius-md);
   background: none;
   color: var(--secondary);
