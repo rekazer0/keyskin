@@ -58,9 +58,20 @@ try {
   assert.deepEqual(rendered.logo, [17, 34, 51, 255], 'legacy F31 artwork is drawn')
   assert.deepEqual(rendered.hide, [81, 99, 117, 255], 'legacy F8 artwork is drawn from the second slice')
   assert.deepEqual(rendered.functions, [[26, true], [31, true], [27, true]], 'without skin artwork the canvas uses the reference three-slot toolbar')
-  assert.ok(rendered.keyEdge[0] > 0 && rendered.keyEdge[0] < 255, `a one-device-pixel edge is thinner than a layout unit: ${rendered.keyEdge}`)
+  assert.deepEqual(rendered.keyEdge, [0, 0, 0, 255], 'canvas mode keeps the original one-pixel border')
   assert.deepEqual(rendered.keyInside, [255, 255, 255, 255])
   assert.equal(rendered.revision, 0, 'preview does not rewrite legacy source files')
+
+  const readKeyEdge = () => page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    await preview.rendered()
+    return Array.from(preview.canvas.getContext('2d').getImageData(3, 20, 1, 1).data)
+  })
+  await page.locator('#device').selectOption('galaxy-s25-ultra')
+  const keyEdge = await readKeyEdge()
+  assert.ok(keyEdge[0] > 0 && keyEdge[0] < 255, `a one-device-pixel edge is thinner than a layout unit: ${keyEdge}`)
+  await page.locator('#device').selectOption('canvas-checkerboard')
+  assert.deepEqual(await readKeyEdge(), rendered.keyEdge, 'returning to the canvas restores the original border')
   console.log('Android legacy canvas matches the reference toolbar, background and key borders')
 } finally {
   await browser.close()

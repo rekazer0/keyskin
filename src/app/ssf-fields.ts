@@ -28,7 +28,7 @@ import { bindFieldReset, fieldCaption, fieldControl, numberParts, section } from
 import { ssfMediaField } from "./ssf-media-fields"
 import { openSsfImageEditor } from "./ssf-image-editor"
 import { refreshNativeScenes } from "./native-preview"
-import { preview, previewScreenWidth } from "./canvas-interaction"
+import { preview, previewDevicePixelWidth } from "./canvas-interaction"
 
 type SsfEntry = { key: string; value: string }
 
@@ -164,7 +164,7 @@ function editImage(targets: SsfLocation[], key: string): void {
     load: () => imageVisual(stateImage(ssfDocument(path), section, key)),
     stretch: () => stretchField(targets, key),
     size: () => preview.keys.find((item) => appState.selectedKeySections.includes(item.section))?.rect ?? { width: preview.panelWidth, height: preview.surfaceHeight },
-    pixelScale: () => previewScreenWidth() / preview.panelWidth,
+    pixelScale: () => (previewDevicePixelWidth() ?? preview.panelWidth) / preview.panelWidth,
     replace: (refresh) => openImageResourceChooser((resourceID) => {
       replaceImage(targets, key, /\.\w+$/.test(resourceID) ? resourceID : `${resourceID}.png`)
       refresh()

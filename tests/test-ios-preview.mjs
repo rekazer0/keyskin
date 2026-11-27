@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { strToU8, zipSync } from 'fflate'
+import { dismissStartupDisclaimer } from './helpers/open-editor-template.mjs'
 import { encodePng } from '../src/ssf/ssf-png.ts'
 
 const files = {
@@ -21,10 +22,15 @@ try {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
-  await page.locator('#browser-open').setInputFiles({ name: 'ios-preview.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(files)) })
-  await page.waitForFunction(() => !document.querySelector('#open').disabled && !document.querySelector('.canvas-wrap').classList.contains('empty'))
-  const close = page.locator('#file-operation-dialog[open] #file-operation-close')
-  if (await close.isVisible()) await close.click()
+  await dismissStartupDisclaimer(page)
+  const open = async (name, source, replace = false) => {
+    await page.locator('#browser-open').setInputFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(source)) })
+    if (replace) await page.getByRole('dialog', { name: '是否导出当前皮肤？' }).getByRole('button', { name: '不导出' }).click()
+    await page.waitForFunction(() => !document.querySelector('#open').disabled && !document.querySelector('.canvas-wrap').classList.contains('empty'))
+    const close = page.locator('#file-operation-dialog[open] #file-operation-close')
+    if (await close.isVisible()) await close.click()
+  }
+  await open('ios-preview.bdi', files)
   const inspect = () => page.evaluate(async () => {
     const { preview, toolbarPreview, candidateBackgroundPreview } = await import('/src/app/canvas-interaction.ts')
     const { appState } = await import('/src/app/state.ts')
@@ -47,7 +53,7 @@ try {
   assert.ok(Math.abs(idle.barTop[0] - 22) <= 1, 'transparent candidate bar shows the same picture below the input row')
   assert.equal(idle.toolbar.find(key => key.section === 'ICON1').types[0], 'image', 'native logo replaces Android text')
   assert.equal(idle.toolbar.find(key => key.section === 'ICON3').types[0], 'image', 'native hide replaces a whitespace-padded Android action')
-  assert.equal(idle.toolbar.find(key => key.section === 'ICON2').types.length, 3, 'native functions fill the empty F14 container')
+  assert.deepEqual(idle.toolbar.find(key => key.section === 'ICON2').types, Array(4).fill('image'), 'the four default functions fill the empty F14 container')
   await page.evaluate(async () => {
     const { setSimulatedComposition } = await import('/src/app/canvas-interaction.ts')
     const { refreshSimulationPreview } = await import('/src/app/preview-render.ts')
@@ -87,9 +93,7 @@ try {
     native[`skin/${orientation}/py_26.ini`] = strToU8('[PANEL]\nKEY_NUM=1\n[KEY1]\nVIEW_RECT=0,0,1125,592\nCENTER=a\n')
     native[`skin/${orientation}/cand1.cnd`] = strToU8('[CAND]\nBACK_STYLE=1\n[ICON1]\nSIZE=229,186\nPOS=0,20\nANCHOR_TYPE=1\nFIX_SIZE=50,52\nFORE_STYLE=2\nKEY=F31\n[ICON2]\nSIZE=780,58\nPOS=-390,43\nANCHOR_TYPE=2\nKEY=F14\n')
   }
-  await page.locator('#browser-open').setInputFiles({ name: 'native-toolbar.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(native)) })
-  await page.waitForFunction(() => !document.querySelector('#open').disabled)
-  if (await close.isVisible()) await close.click()
+  await open('native-toolbar.bdi', native, true)
   await page.locator('#layout').selectOption('py_26.ini', { force: true })
   await page.evaluate(async () => {
     const { toolbarPreview, candidateBackgroundPreview } = await import('/src/app/canvas-interaction.ts')
@@ -113,14 +117,15 @@ try {
     }, expectedHeight)
     return result.jsonValue()
   }
-  for (const [device, points] of [['canvas-checkerboard', 440], ['iphone-17-pro', 402], ['iphone-17-pro-max', 440]]) {
+  for (const [device, points] of [['canvas-checkerboard', undefined], ['iphone-17-pro', 402], ['iphone-17-pro-max', 440]]) {
     await page.locator('#device').selectOption(device)
-    const scale = 1125 / (3 * points)
+    const scale = points ? 1125 / (3 * points) : 1
     const geometry = await nativeGeometry(124 * scale)
-    assert.ok(Math.abs(geometry.height - 124 * scale) < 0.000001, `${device}: native toolbar keeps its fixed point height`)
+    assert.ok(Math.abs(geometry.height - 124 * scale) < 0.000001, `${device}: native toolbar uses only the selected device density`)
     assert.ok(Math.abs(geometry.input - 30 * scale) < 0.000001, `${device}: input row uses the same density`)
     assert.equal(geometry.backgroundHeight, geometry.height)
-    assert.equal(geometry.layers.length, 2, 'fixed logo and native functions both render')
+    assert.equal(geometry.layers.length, 5, 'fixed logo and the four function slots render')
+    assert.ok(Math.abs(geometry.layers[1].width - 80 * scale) < 0.000001, `${device}: custom icon uses the same density`)
     for (const rect of geometry.layers) assert.ok(rect.y >= 0 && rect.y + rect.height <= geometry.height, 'all artwork remains inside the visible toolbar')
     assert.equal(geometry.revision, 0, 'preview calibration leaves the archive unchanged')
   }
@@ -131,16 +136,14 @@ try {
   await page.locator('#device').selectOption('pixel-10-pro')
   assert.equal((await nativeGeometry(124)).height, 124, 'Android keeps the skin coordinate height')
   await page.locator('#device').selectOption('canvas-checkerboard')
-  assert.ok(Math.abs((await nativeGeometry(124 * 1125 / 1320)).height - 124 * 1125 / 1320) < 0.000001, 'returning to canvas restores native sizing')
+  assert.equal((await nativeGeometry(124)).input, 30, 'returning to canvas restores the authored input height')
   const menuOnly = { ...native,
     'skin/res/logo/com.baidu.inputmethod.toolbarMenuItems.plist': strToU8('<plist><array>' + ['26', '19', '18', '17'].map(id =>
       `<dict><key>Position</key><string>menu</string><key>Name</key><string>${id}</string><key>Images</key><dict><key>Normal</key><dict><key>Normal</key><string>${id === '26' ? 'missing-function' : 'function'}</string></dict></dict></dict>`
     ).join('') + '</array></plist>'),
   }
-  await page.locator('#browser-open').setInputFiles({ name: 'menu-only-toolbar.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(menuOnly)) })
-  await page.waitForFunction(() => !document.querySelector('#open').disabled)
-  if (await close.isVisible()) await close.click()
-  const menuGeometry = await nativeGeometry(124 * 1125 / 1320)
+  await open('menu-only-toolbar.bdi', menuOnly, true)
+  const menuGeometry = await nativeGeometry(124)
   assert.equal(menuGeometry.layers.length, 5, 'menu-only skins render four common functions alongside the fixed logo')
   const fallback = await page.evaluate(async () => {
     const { toolbarPreview } = await import('/src/app/canvas-interaction.ts')

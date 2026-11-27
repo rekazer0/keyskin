@@ -1,7 +1,7 @@
 import { appState } from "./state"
 import { rebuildSsfPreview } from "./ssf-preview"
 import { type TextVisual, canvasFontFamily } from "../atlas.ts"
-import { setSimulatedComposition, toolbarPreview, currentDeviceValue, deviceGeometryProperties, preview, previewScreenWidth, resizeKeyboardPreviews, schedulePreviewInteractionFrame, paintPreviewInteraction, applySkinState, REFERENCE_PHONE_WIDTH_SCALE, deviceFrameProperties } from "./canvas-interaction"
+import { setSimulatedComposition, toolbarPreview, currentDeviceValue, deviceGeometryProperties, preview, previewDevicePixelWidth, resizeKeyboardPreviews, schedulePreviewInteractionFrame, paintPreviewInteraction, applySkinState, REFERENCE_PHONE_WIDTH_SCALE, deviceFrameProperties } from "./canvas-interaction"
 import { simulatedOutput, skinState, candidateComposition, candidateInput, candidateInputText, candidateWords, candidateArea, toolbarStrip, deviceShell, orientation, theme, layout, hintPreviewEnabled, canvasWrap, toolbarCanvas, candidateBackgroundCanvas, candidateInputBackgroundCanvas, previewCanvas, panelStatus, previewZoomOut, previewZoomIn, $, skinStateValue, skinStateControl, mobilePreviewGuides, mobilePreviewState, toggleGuides } from "./dom"
 import { candidatePreview } from "../simulation.ts"
 import { isConfiguredSymbolLayout, knownSkinStates, skinStateLabel } from "../actions.ts"
@@ -100,8 +100,7 @@ export function inputBarInKeyboard(): boolean {
 }
 
 export function toolbarDevicePointWidth(): number | undefined {
-  const device = currentDeviceValue()
-  const frame = deviceSpec(device === "canvas" ? "iphone-17-pro-max" : device)?.frame
+  const frame = deviceSpec(currentDeviceValue())?.frame
   return frame && (orientation.value === "port" ? frame.viewportWidth : frame.viewportHeight)
 }
 
@@ -572,9 +571,8 @@ export function updateDevicePreview(): void {
   deviceShell.dataset.theme = theme.value
   deviceShell.classList.toggle("canvas-only", deviceValue === "canvas")
   const spec = deviceSpec(deviceValue)
-  // 画布模式没有机型，按真机测试用的 iPhone 17 Pro Max 算工具栏图标的 pt 尺寸。
+  preview.devicePixelWidth = toolbarPreview.devicePixelWidth = previewDevicePixelWidth()
   toolbarPreview.setDevicePointWidth(toolbarDevicePointWidth())
-  preview.devicePixelWidth = toolbarPreview.devicePixelWidth = previewScreenWidth()
   const referenceFrame = spec?.family === "iphone" && orientation.value === "port"
   deviceShell.dataset.referenceFrame = String(referenceFrame)
   deviceShell.dataset.accessories = showsKeyboardAccessories(spec, orientation.value)

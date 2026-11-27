@@ -7,7 +7,7 @@ import type { StyleLibraryPayload, StyleLibraryVisual, SsfLibraryAnimation } fro
 import { SsfMotion } from "../ssf/ssf-motion"
 import { firstValue } from "../ssf/ssf-parts"
 import { SsfStyles } from "../ssf/ssf-scene"
-import { preview, previewScreenWidth } from "./canvas-interaction"
+import { preview, previewDevicePixelWidth } from "./canvas-interaction"
 import { isEditing } from "./edit-history"
 import { selectFile } from "./navigation"
 import { ssfDocument, ssfPackage } from "./ssf-documents"
@@ -51,7 +51,7 @@ export function ssfAnimationPreview(path: string, key: string, value: string): H
     const scene = await preview.sceneForState()
     const target = scene?.keys.find(item => item.section === appState.selectedKeySections[0]) ?? scene?.keys[0]
     if (!target) return
-    const motion = await SsfMotion.load(styles, { width: preview.panelWidth, height: preview.panelHeight }, document, previewScreenWidth())
+    const motion = await SsfMotion.load(styles, { width: preview.panelWidth, height: preview.panelHeight }, document, previewDevicePixelWidth())
     const effects = motion?.effects([{ section: target.section, rect: target.rect, binding: { sections: [], defaults: [], keyClass: "char" } }], {
       section: value, field: key === "ANIM_STYLE" ? undefined : key,
     })
@@ -97,7 +97,7 @@ export async function ssfAnimationLibraryPayload(input: HTMLInputElement): Promi
   }
   const data: SsfLibraryAnimation = {
     text: animation.toString(), skin: styles.skin.toString(), keys: styles.keys.toString(),
-    sogouWidth: styles.sogouWidth, screenWidth: previewScreenWidth(),
+    sogouWidth: styles.sogouWidth, screenWidth: previewDevicePixelWidth() ?? preview.panelWidth,
     board: { width: preview.panelWidth, height: preview.panelHeight },
     field: key === "ANIM_STYLE" ? undefined : key, images: {},
   }

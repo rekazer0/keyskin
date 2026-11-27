@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { dismissStartupDisclaimer } from './helpers/open-editor-template.mjs'
 import { ssfFixture } from '../tests/helpers/ssf-fixture.mjs'
 import { encodePng } from '../src/ssf/ssf-png.ts'
 
@@ -60,6 +61,7 @@ const frame = () => page.evaluate(async () => {
 })
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+  await dismissStartupDisclaimer(page)
   await page.locator('#browser-open').setInputFiles({ name: 'image-editor.ssf', mimeType: 'application/octet-stream', buffer: Buffer.from(zipSync(files)) })
   await page.waitForFunction(() => !document.querySelector('#open').disabled)
   const close = page.locator('#file-operation-dialog[open] #file-operation-close')
@@ -67,6 +69,22 @@ try {
   await page.getByRole('button', { name: '编辑模式', exact: true }).click()
   await selectKeys(['q'])
   const before = await state()
+  const keyBackground = () => page.evaluate(async () => {
+    const { preview } = await import('/src/app/canvas-interaction.ts')
+    const section = preview.keys.find(key => key.center === 'q').section
+    const key = (await preview.sceneForState()).keys.find(key => key.section === section)
+    const layer = key.layers(false).back.find(layer => layer.visual?.inner)
+    return { rect: key.rect, scale: layer.visual.nineSlicePixelScale, width: preview.panelWidth }
+  })
+  const canvas = await keyBackground()
+  assert.equal(canvas.scale, 1, 'without a device the key border uses original pixels')
+  await page.locator('#device').selectOption('galaxy-s25-ultra')
+  assert.deepEqual(await keyBackground(), { ...canvas, scale: 1440 / canvas.width }, 'only the device scales the border, not the key geometry')
+  await page.locator('#device').selectOption('canvas-checkerboard')
+  assert.deepEqual(await keyBackground(), canvas)
+  assert.deepEqual(await state(), before, 'switching devices does not write the skin')
+  // Only a device with a different pixel width stretches this same-size fixture.
+  await page.locator('#device').selectOption('galaxy-s25-ultra')
   assert.equal(await page.locator('#document-fields [data-document-key=STRETCH]').count(), 0, 'stretch controls live only in the image editor')
   const background = page.locator('#document-fields [data-inspector-group-label="背景"] .ui-style-ref').first()
   await background.locator('.ui-style-ref-action').click()
@@ -202,9 +220,10 @@ try {
   assert.equal((await state()).values.NORMAL, '26keyq.png,5,96,3,139', 'mixed editing preserves other coordinates')
   assert.equal(await page.evaluate(async path => (await import('/src/app/ssf-documents.ts')).ssfDocument(path).get('KeyBg_Default_Latin', 'NORMAL'), path), '26key.png,5,97,1,141')
   await finish(); await undo()
-  await selectKeys(['q'])
+  await page.locator('#device').selectOption('canvas-checkerboard')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  await selectKeys(['q'])
   await page.evaluate(async () => (await import('/src/app/mobile-layout.ts')).setMobilePane('inspector'))
   await background.getByRole('button', { name: '编辑正常图片', exact: true }).click()
   await editor.waitFor()
@@ -230,6 +249,7 @@ try {
     await page.waitForFunction(() => !document.querySelector('#open').disabled)
     const close = page.locator('#file-operation-dialog[open] #file-operation-close')
     if (await close.isVisible()) await close.click()
+    await page.locator('#device').selectOption('galaxy-s25-ultra')
     await selectKeys(['F36'], 'py_9')
     await open()
     const original = await frame()

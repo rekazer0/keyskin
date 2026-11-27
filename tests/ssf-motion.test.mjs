@@ -32,7 +32,7 @@ ACCELERATION=0,0
 }
 
 test('SSF decorations keep intrinsic physical pixels at different screen and layout widths', async () => {
-  for (const [screen, board, expected] of [[2160, 1080, 21.5], [1080, 1080, 43], [2160, 720, 43 / 3]]) {
+  for (const [screen, board, expected] of [[2160, 1080, 21.5], [1080, 1080, 43], [2160, 720, 43 / 3], [undefined, 720, 43]]) {
     const { sprite, after } = await decoration(screen, '', board)
     assert.ok(Math.abs(sprite.rect.width - expected) < 1e-9)
     assert.ok(Math.abs(sprite.rect.height - expected) < 1e-9)

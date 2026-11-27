@@ -20,7 +20,7 @@ import type { SsfPackage, SsfTheme } from "../ssf/ssf-package.ts"
 import { animateSsfScene } from "../ssf/ssf-motion.ts"
 import { SsfStyles, ssfBoardScene, ssfCandidateScene } from "../ssf/ssf-scene.ts"
 import { textDocument, visualResolver } from "./bda-documents"
-import { candidateBackgroundPreview, preview, previewScreenWidth, toolbarPreview } from "./canvas-interaction"
+import { candidateBackgroundPreview, preview, previewDevicePixelWidth, toolbarPreview } from "./canvas-interaction"
 import { applyCandidateSpacing, genConfigPath, hideCandidateInputBar, showCandidateInputBar, toolbarConfigPath } from "./config-context"
 import { candidateArea, candidateBackgroundCanvas, candidateComposition, candidateInput, candidateWords, hintPreviewEnabled, theme as themeInput, toolbarCanvas, toolbarStrip } from "./dom"
 import { canvasEditable } from "./edit-history"
@@ -177,8 +177,8 @@ function ssfScenes(archive: SkinArchive, draft?: SsfPackage): boolean {
   const templateLayout = templateText(`${name}.ini`)
   if (!templateLayout) return false
   const pkg = draft ?? ssfDocumentPackage(archive)
-  const screenWidth = previewScreenWidth()
-  const styles = new SsfStyles(archive, pkg, theme as SsfTheme, screenWidth / preview.panelWidth)
+  const screenWidth = previewDevicePixelWidth()
+  const styles = new SsfStyles(archive, pkg, theme as SsfTheme, screenWidth ? screenWidth / preview.panelWidth : 1)
   const resolver = new AtlasResolver(template, "light", orientation)
   const templateGen = templateText("gen.ini")
   const width = (document?: IniDocument) => Number(document?.get("PANEL", "SIZE")?.split(",")[0])

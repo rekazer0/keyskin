@@ -69,10 +69,9 @@ export function currentDeviceValue(): string {
   return effectiveDeviceValue(device.value)
 }
 
-export function previewScreenWidth(): number {
-  // 画布模式按校准搜狗预览的 2160×3840 Android 屏幕换算物理像素。
-  const spec = deviceSpec(currentDeviceValue()) ?? { width: 2160, height: 3840 }
-  return orientation.value === "land" ? spec.height : spec.width
+export function previewDevicePixelWidth(): number | undefined {
+  const spec = deviceSpec(currentDeviceValue())
+  return orientation.value === "land" ? spec?.height : spec?.width
 }
 
 export const LAST_SOURCE_WORKSPACE_KEY = "last-source-workspace"

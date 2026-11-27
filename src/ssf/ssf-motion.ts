@@ -67,7 +67,7 @@ export class SsfMotion {
   }
 
   /** The theme's anim.ini with every decoration image decoded; none without the file. */
-  static async load(styles: SsfStyles, board: Size, document?: IniDocument, screenWidth = 2160): Promise<SsfMotion | undefined> {
+  static async load(styles: SsfStyles, board: Size, document?: IniDocument, screenWidth = board.width): Promise<SsfMotion | undefined> {
     const path = styles.pkg.path(styles.theme, "anim.ini")
     if (!path && !document) return
     return SsfMotion.fromDocument(styles, board, document ?? styles.pkg.ini(path!), screenWidth)
@@ -273,7 +273,7 @@ function holdPopup(styles: SsfStyles, key: SceneKey, layout: IniDocument, layout
 }
 
 /** Adds native press animations and long-press character bars (when `popups`) to the scene. */
-export async function animateSsfScene(scene: NativeScene, styles: SsfStyles, layout: IniDocument, layoutName: string, landscape: boolean, popups: boolean, screenWidth = 2160): Promise<NativeScene> {
+export async function animateSsfScene(scene: NativeScene, styles: SsfStyles, layout: IniDocument, layoutName: string, landscape: boolean, popups: boolean, screenWidth?: number): Promise<NativeScene> {
   const panel = numbers(layout.get("PANEL", "SIZE"))
   const board = { width: panel[0] || styles.sogouWidth, height: panel[1] || styles.sogouWidth / 2 }
   const unit = board.width / styles.sogouWidth
