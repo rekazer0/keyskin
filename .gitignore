@@ -4,6 +4,7 @@ dist/
 dist-release/
 docs/
 test-results/
+/screenshots/
 
 # Platform
 .DS_Store
