@@ -33,12 +33,27 @@ export function isZipEntryEncrypted(entry: ZipEntry): boolean {
   return Boolean((localFlags | view(entry.central).getUint16(8, true)) & ENCRYPTION_FLAGS)
 }
 
-function findEnd(bytes: Uint8Array): number {
+export function findEnd(bytes: Uint8Array): number {
   const data = view(bytes)
   for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65_557); offset--) {
     if (data.getUint32(offset, true) === END_SIGNATURE) return offset
   }
   throw new Error("无效的 ZIP：找不到中央目录")
+}
+
+/** Read encryption flags even when an incorrect entry count hides records from parseZip. */
+export function hasEncryptedCentralEntries(bytes: Uint8Array): boolean {
+  if (bytes.length < 22) return false
+  let endOffset: number
+  try { endOffset = findEnd(bytes) } catch { return false }
+  const data = view(bytes)
+  let offset = data.getUint32(endOffset + 16, true)
+  for (let index = 0; index < MAX_FILES && offset + 46 <= endOffset; index++) {
+    if (data.getUint32(offset, true) !== CENTRAL_SIGNATURE) break
+    if (data.getUint16(offset + 8, true) & ENCRYPTION_FLAGS) return true
+    offset += 46 + data.getUint16(offset + 28, true) + data.getUint16(offset + 30, true) + data.getUint16(offset + 32, true)
+  }
+  return false
 }
 
 /** 恢复损坏的 ZIP 中所有本地头偏移都是 0xFFFFFFFF 的情况：通过扫描本地头签名来恢复 */
@@ -452,183 +467,6 @@ export function validateArchiveLimits(bytes: Uint8Array): void {
     if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
     offset += length
   }
-}
-
-/**
- * 部分 Android 打包工具（以及少数第三方皮肤）会把 EOCD 里的“本磁盘条目数”留成 0，
- * 只把总条目数写对。fflate 只读前者，会把整包解出 0 个文件，皮肤因此打不开或预览失败。
- * 这里按中央目录把 EOCD 的计数补齐，顺带把磁盘号归零，得到常规单磁盘 ZIP。
- * 防解包工具还会把中央目录里的大小和本地头偏移全写成 0xFFFFFFFF（又没有 ZIP64 记录），
- * 解包按它算会报“超过 256 MB”或读出垃圾；这时按顺序用对应的本地文件头把这三个值补回。
- */
-export function normalizeEntryCounts(bytes: Uint8Array): Uint8Array {
-  let endOffset: number
-  try {
-    if (bytes.byteLength > MAX_ARCHIVE_BYTES) return bytes
-    endOffset = findEnd(bytes)
-  } catch {
-    return bytes
-  }
-  const data = view(bytes)
-  const total = data.getUint16(endOffset + 10, true)
-  const centralOffset = data.getUint32(endOffset + 16, true)
-
-  // 检测是否所有本地头偏移都是 0xFFFFFFFF（防解包工具情况）
-  let allOffsetsInvalid = true
-  let checkOffset = centralOffset
-  for (let i = 0; i < Math.min(total, 10); i++) {
-    if (checkOffset + 46 > endOffset || data.getUint32(checkOffset, true) !== CENTRAL_SIGNATURE) break
-    const localOffset = data.getUint32(checkOffset + 42, true)
-    if (localOffset !== 0xFFFFFFFF) {
-      allOffsetsInvalid = false
-      break
-    }
-    const nameLen = data.getUint16(checkOffset + 28, true)
-    const extraLen = data.getUint16(checkOffset + 30, true)
-    const commentLen = data.getUint16(checkOffset + 32, true)
-    checkOffset += 46 + nameLen + extraLen + commentLen
-  }
-
-  // 如果所有本地头偏移都是 0xFFFFFFFF，需要重建整个中央目录
-  if (allOffsetsInvalid) {
-    // 扫描所有本地文件头并按文件名映射
-    const decoder = new TextDecoder()
-    const localsByName = new Map<string, { offset: number; compressed: number; uncompressed: number }>()
-
-    for (let local = 0; local + 30 <= centralOffset && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
-      const nameLen = data.getUint16(local + 26, true)
-      const extraLen = data.getUint16(local + 28, true)
-      const compressed = data.getUint32(local + 18, true)
-      const uncompressed = data.getUint32(local + 22, true)
-
-      try {
-        const name = decoder.decode(bytes.subarray(local + 30, local + 30 + nameLen))
-        localsByName.set(name, { offset: local, compressed, uncompressed })
-      } catch {
-        // 忽略无法解码的文件名
-      }
-
-      local += 30 + nameLen + extraLen + compressed
-    }
-
-    // 如果成功找到本地头，使用本地头信息修复中央目录
-    if (localsByName.size > 0) {
-      const repairs: Array<[number, number]> = [
-        [endOffset + 4, 0],
-        [endOffset + 6, 0],
-        [endOffset + 8, Math.min(total, localsByName.size)],
-      ]
-
-      let currentCentral = centralOffset
-      for (let i = 0; i < total && currentCentral + 46 <= endOffset; i++) {
-        if (data.getUint32(currentCentral, true) !== CENTRAL_SIGNATURE) break
-
-        const nameLen = data.getUint16(currentCentral + 28, true)
-        const extraLen = data.getUint16(currentCentral + 30, true)
-        const commentLen = data.getUint16(currentCentral + 32, true)
-
-        // 按文件名从本地头映射中查找匹配的条目
-        try {
-          const name = decoder.decode(bytes.subarray(currentCentral + 46, currentCentral + 46 + nameLen))
-          const localEntry = localsByName.get(name)
-
-          if (localEntry) {
-            const uncompressed = data.getUint32(currentCentral + 24, true)
-            const compressed = data.getUint32(currentCentral + 20, true)
-            const offset = data.getUint32(currentCentral + 42, true)
-
-            if (compressed === 0xFFFFFFFF) repairs.push([currentCentral + 20, localEntry.compressed])
-            if (uncompressed === 0xFFFFFFFF) repairs.push([currentCentral + 24, localEntry.uncompressed])
-            if (offset === 0xFFFFFFFF) repairs.push([currentCentral + 42, localEntry.offset])
-          }
-        } catch {
-          // 忽略解码错误
-        }
-
-        currentCentral += 46 + nameLen + extraLen + commentLen
-      }
-
-      // 应用修复
-      if (repairs.length > 3) {
-        const normalized = bytes.slice()
-        const normalizedView = view(normalized)
-        for (const [offset, value] of repairs) {
-          if (offset + 4 <= normalized.length) normalizedView.setUint32(offset, value, true)
-          else if (offset + 2 <= normalized.length) normalizedView.setUint16(offset, value, true)
-        }
-        return normalized
-      }
-    }
-  }
-
-  // 原有逻辑保留用于其他情况
-  const decoder = new TextDecoder()
-  const repairs: Array<[number, number]> = [
-    [endOffset + 4, 0],
-    [endOffset + 6, 0],
-    [endOffset + 8, total],
-  ]
-  const wideRepairs: Array<[number, number]> = []
-  // 本地文件头的顺序可以和中央目录不同，按文件名对应。
-  const locals = new Map<string, number>()
-  for (let local = 0; local + 30 <= centralOffset && data.getUint32(local, true) === LOCAL_SIGNATURE;) {
-    locals.set(decoder.decode(bytes.subarray(local + 30, local + 30 + data.getUint16(local + 26, true))), local)
-    local += 30 + data.getUint16(local + 26, true) + data.getUint16(local + 28, true) + data.getUint32(local + 18, true)
-  }
-  // ZIP64 把 8 字节大小放在中央目录的 extra 字段（id 1）里；值按”未压缩、压缩、偏移”的顺序出现。
-  const zip64Values = (central: number, nameLength: number, extraLength: number): number[] | undefined => {
-    let extra = central + 46 + nameLength
-    const end = extra + extraLength
-    while (extra + 4 <= end) {
-      const content = extra + 4
-      const size = data.getUint16(extra + 2, true)
-      if (data.getUint16(extra, true) === 1) {
-        const values: number[] = []
-        for (let cursor = content; cursor + 8 <= content + size; cursor += 8) {
-          const low = data.getUint32(cursor, true)
-          const high = data.getUint32(cursor + 4, true)
-          values.push(high === 0 ? low : Number.POSITIVE_INFINITY)
-        }
-        return values
-      }
-      extra = content + size
-    }
-    return
-  }
-  let central = centralOffset
-  for (let index = 0; index < total && central + 46 <= endOffset && data.getUint32(central, true) === CENTRAL_SIGNATURE; index++) {
-    const nameLength = data.getUint16(central + 28, true)
-    const extraLength = data.getUint16(central + 30, true)
-    const sentinel = new Set(
-      [20, 24, 42].filter((field) => data.getUint32(central + field, true) === 0xffffffff),
-    )
-    if (sentinel.size) {
-      const zipped = zip64Values(central, nameLength, extraLength)
-      const order = [24, 20, 42].filter((field) => sentinel.has(field))
-      for (const [position, field] of order.entries()) {
-        const value = zipped?.[position]
-        if (value === undefined || value >= 0xffffffff) continue
-        wideRepairs.push([central + field, value])
-        sentinel.delete(field)
-      }
-      const local = locals.get(decoder.decode(bytes.subarray(central + 46, central + 46 + nameLength)))
-      // 带数据描述符且头里大小为 0 的条目补不回来，保持原样交给后面的本地文件头解包。
-      if (local !== undefined && !(data.getUint16(local + 6, true) & 8 && !data.getUint32(local + 18, true))) {
-        const fallback: Array<[number, number]> = [[24, data.getUint32(local + 22, true)], [20, data.getUint32(local + 18, true)], [42, local]]
-        for (const [field, value] of fallback) {
-          if (!sentinel.has(field) || value === 0xffffffff) continue
-          wideRepairs.push([central + field, value])
-        }
-      }
-    }
-    central += 46 + nameLength + extraLength + data.getUint16(central + 32, true)
-  }
-  if (!wideRepairs.length && repairs.every(([offset, value]) => data.getUint16(offset, true) === value)) return bytes
-  const normalized = bytes.slice()
-  const normalizedView = view(normalized)
-  for (const [offset, value] of repairs) normalizedView.setUint16(offset, value, true)
-  for (const [offset, value] of wideRepairs) normalizedView.setUint32(offset, value, true)
-  return normalized
 }
 
 /**

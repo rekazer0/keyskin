@@ -7,7 +7,8 @@ import { adaptIosToolbarGeometry } from "./ios-toolbar-geometry.ts"
 import { adaptBdiPanels } from "./bdi-panel-export.ts"
 import { bdiPinyinListSymbols } from "./preview-items.ts"
 import { SXI_INFO_PATH, SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "./palm/sxi-json.ts"
-import { parseZip, patchZip, zipArchiveAsync, validateArchiveLimits, normalizeEntryCounts, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, isZipEntryEncrypted, addZipEntry } from "./skin-zip.ts"
+import { parseZip, patchZip, zipArchiveAsync, validateArchiveLimits, MAX_FILES, safePath, MAX_UNPACKED_BYTES, unpackArchive, isZipEntryEncrypted, hasEncryptedCentralEntries, addZipEntry } from "./skin-zip.ts"
+import { normalizeArchive } from "./skin-zip-repair.ts"
 
 const TEXT_EXTENSIONS = new Set(["ini", "css", "til", "cnd", "pop", "txt", "plist"])
 
@@ -242,6 +243,7 @@ export class SkinArchive {
   private cachedNames?: string[]
   private changedRaw = new Set<string>()
   private zipWasRepaired = false
+  private zipDirectoryRebuilt = false
   readonly changed = new Set<string>()
   /** Bumped whenever file contents or paths change, so callers can skip redundant redraws. */
   revision = 0
@@ -279,7 +281,8 @@ export class SkinArchive {
   }
 
   static open(bytes: Uint8Array, formatHint?: ExportFormat): SkinArchive {
-    const sourceBytes = normalizeEntryCounts(bytes)
+    const normalized = normalizeArchive(bytes)
+    const sourceBytes = normalized.bytes
     validateArchiveLimits(sourceBytes)
 
     // Check if normalization changed the bytes (indicating repair was needed)
@@ -334,6 +337,7 @@ export class SkinArchive {
     }
     const archive = new SkinArchive(files, sourceBytes, formatHint)
     archive.zipWasRepaired = wasRepaired
+    archive.zipDirectoryRebuilt = normalized.directoryRebuilt
     return archive
   }
 
@@ -342,7 +346,8 @@ export class SkinArchive {
     formatHint?: ExportFormat,
     onProgress?: (value: number) => void,
   ): Promise<SkinArchive> {
-    const sourceBytes = normalizeEntryCounts(bytes)
+    const normalized = normalizeArchive(bytes)
+    const sourceBytes = normalized.bytes
     validateArchiveLimits(sourceBytes)
 
     // Check if normalization changed the bytes (indicating repair was needed)
@@ -376,6 +381,7 @@ export class SkinArchive {
     }
     const archive = new SkinArchive(files, sourceBytes, formatHint)
     archive.zipWasRepaired = wasRepaired
+    archive.zipDirectoryRebuilt = normalized.directoryRebuilt
     onProgress?.(1)
     return archive
   }
@@ -668,18 +674,21 @@ export class SkinArchive {
     return zipSync(this.packagedFiles(format), { level: 6 })
   }
 
+  private assertPlatformZipUnencrypted(format?: ExportFormat): void {
+    if (format !== "bdi" && format !== "bds") return
+    if (this.sourceZip?.entries.some(isZipEntryEncrypted) || hasEncryptedCentralEntries(this.sourceBytes)) {
+      throw new Error("此皮肤包的 ZIP 条目标记为加密，无法导出。请使用未加密的原始皮肤包。")
+    }
+  }
+
   /** `warnings` collects key sounds the target cannot play; `notes` (by default the same list) what packaging for iOS adjusted. */
   async toBytesAsync(format?: ExportFormat, warnings?: string[], notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
 
-    // Validate encrypted entries if exporting to platform format
-    if ((format === "bdi" || format === "bds") && this.sourceZip) {
-      const encrypted = this.zipEncryptedPaths()
-      if (encrypted.length) throw new Error(`皮肤应该未加密，包含加密条目：${encrypted.join(", ")}`)
-    }
+    this.assertPlatformZipUnencrypted(format)
 
     // Validate ZIP structure integrity when converting to platform format
-    if ((format === "bdi" || format === "bds") && this.zipWasRepaired && this.changed.size === 0) {
+    if ((format === "bdi" || format === "bds") && this.zipWasRepaired && !this.zipDirectoryRebuilt && this.changed.size === 0) {
       throw new Error("皮肤的 ZIP 结构完整性受损，无法转换")
     }
 
@@ -701,6 +710,7 @@ export class SkinArchive {
   /** Packages for a BDI/BDS platform, pointing key sounds at a format that platform plays (AIFF / OGG). */
   async platformBytesAsync(format: "bdi" | "bds", warnings?: string[], fromAndroid = false, notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
+    this.assertPlatformZipUnencrypted(format)
     const files = new Map(Object.entries(this.packagedFiles(format, notes)))
     // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons.
     if (fromAndroid) {
@@ -718,11 +728,7 @@ export class SkinArchive {
   toBytes(format?: ExportFormat): Uint8Array {
     assertRepackable(this.format, format)
 
-    // Validate encrypted entries if exporting to platform format
-    if ((format === "bdi" || format === "bds") && this.sourceZip) {
-      const encrypted = this.zipEncryptedPaths()
-      if (encrypted.length) throw new Error(`皮肤应该未加密，但包含加密 ZIP 条目：${encrypted.join(", ")}`)
-    }
+    this.assertPlatformZipUnencrypted(format)
 
     if (this.format === "bdi" && (!format || format === "bdi")) refreshIosLogo(this)
     if (format && (format !== this.format || this.layout === "legacy-ios")) {

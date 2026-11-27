@@ -14,7 +14,8 @@
 
 import { unzipSync } from "fflate"
 import { IniDocument } from "../ini.ts"
-import { MAX_FILES, MAX_UNPACKED_BYTES, normalizeEntryCounts, parseZip, safePath, validateArchiveLimits } from "../skin-zip.ts"
+import { MAX_FILES, MAX_UNPACKED_BYTES, parseZip, safePath, validateArchiveLimits } from "../skin-zip.ts"
+import { normalizeArchive } from "../skin-zip-repair.ts"
 import { isSkinContainer, unpackSkinContainer } from "./ssf-container.ts"
 
 export type SsfTheme = "light" | "dark"
@@ -52,7 +53,7 @@ export function ssfColor(value: string | undefined): string | undefined {
 }
 
 function zipEntries(bytes: Uint8Array): Map<string, Uint8Array> {
-  const normalized = normalizeEntryCounts(bytes)
+  const normalized = normalizeArchive(bytes).bytes
   validateArchiveLimits(normalized)
   const unpacked = unzipSync(normalized)
   const names = Object.keys(unpacked)

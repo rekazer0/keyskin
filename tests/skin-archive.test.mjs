@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { deflateSync, strToU8, zipSync } from 'fflate'
 import { SkinArchive } from "../src/skin.ts"
-import { readArchiveEntry } from "../src/skin-zip.ts"
+import { isZipEntryEncrypted, parseZip, readArchiveEntry } from "../src/skin-zip.ts"
 import { AtlasResolver } from "../src/atlas.ts"
 import { encodePng } from "../src/ssf/ssf-png.ts"
 
@@ -182,6 +182,47 @@ test('recovers central directory sizes and offsets from local headers', async ()
   archive.setText('Info.txt', 'AtomSkinName=changed')
   const saved = await SkinArchive.openAsync(await archive.toBytesAsync('bds'))
   assert.equal(saved.getText('Info.txt'), 'AtomSkinName=changed')
+})
+
+// Some anti-extraction packers poison the central directory and also flag every entry "encrypted";
+// the local headers stay sane, so the flag is a decoy (seen in JM馨-萌度可爱.bds).
+function markCentralEncrypted(bytes, local = false) {
+  const view = dataView(bytes)
+  for (let offset = 0; offset + 46 <= bytes.length; offset++) {
+    const signature = view.getUint32(offset, true)
+    if (local && signature === LOCAL_SIGNATURE) view.setUint16(offset + 6, view.getUint16(offset + 6, true) | 1, true)
+    if (signature === CENTRAL_SIGNATURE) view.setUint16(offset + 8, view.getUint16(offset + 8, true) | 1, true)
+  }
+}
+
+test('recovers a poisoned central directory whose entries fake an encryption flag', async () => {
+  const bytes = sampleArchive()
+  poisonCentralSizes(bytes)
+  markCentralEncrypted(bytes)
+  for (const archive of [SkinArchive.open(bytes), await SkinArchive.openAsync(bytes)]) {
+    assert.equal(archive.names().length, 4)
+    assert.equal(archive.getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
+  }
+  const archive = await SkinArchive.openAsync(bytes)
+  // The repaired ZIP must be readable and free of the decoy encryption bits, even without edits.
+  for (const saved of [archive.toBytes('bds'), await archive.toBytesAsync('bds')]) {
+    const entries = parseZip(saved).entries
+    assert.equal(entries.length, 4)
+    assert.equal(entries.filter(isZipEntryEncrypted).length, 0)
+    assert.equal(SkinArchive.open(saved, 'bds').getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
+  }
+  const bdi = SkinArchive.open(await archive.toBytesAsync('bdi'), 'bdi')
+  assert.equal(bdi.format, 'bdi')
+  assert.equal(bdi.getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
+  assert.equal(bdi.getText('light/skin/port/res/default.css'), '[GLOBAL]\n')
+})
+
+test('still refuses a poisoned central directory when the local headers mark entries encrypted', async () => {
+  const bytes = sampleArchive()
+  poisonCentralSizes(bytes)
+  markCentralEncrypted(bytes, true)
+  const archive = await SkinArchive.openAsync(bytes)
+  await assert.rejects(archive.toBytesAsync('bdi'), /标记为加密/)
 })
 
 // Palm 的打包器把真实大小写进中央目录的 ZIP64 extra 字段，却不写 ZIP64 结束记录，
@@ -388,6 +429,21 @@ test('BDI → BDS refuses ZIP entries marked as encrypted, without repackaging t
     assert.throws(() => source.toBytes('bds'), /未加密/)
     await assert.rejects(source.toBytesAsync('bds'), /未加密/)
   }
+})
+
+test('BDS → BDI refuses encrypted markers even when the parsed ZIP has no indexed entries', async () => {
+  const bytes = sampleArchive()
+  const header = dataView(bytes)
+  const central = header.getUint32(bytes.length - 6, true)
+  header.setUint16(central + 8, header.getUint16(central + 8, true) | 1, true)
+  header.setUint32(bytes.length - 14, 0, true)
+  const source = await SkinArchive.openAsync(bytes, 'bds', () => {})
+  const expected = /标记为加密.*未加密的原始皮肤包/
+  await assert.rejects(source.toBytesAsync('bdi'), expected)
+  source.setText('Info.txt', 'Name=edited')
+  assert.throws(() => source.toBytes('bdi'), expected)
+  await assert.rejects(source.toBytesAsync('bdi'), expected)
+  await assert.rejects(source.platformBytesAsync('bdi'), expected)
 })
 
 test('BDI → BDS does not export a ZIP opened through directory repair', async () => {
