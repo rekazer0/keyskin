@@ -5,7 +5,7 @@ import vm from 'node:vm'
 import ts from 'typescript'
 import { IniDocument } from '../src/ini.ts'
 import { SkinArchive } from '../src/skin.ts'
-import { boundedTileRect, nextTileIndex, updateTileSlice, removeTileSlice, tileSlices } from '../src/tiles.ts'
+import { tileRectFromPoints, nextTileIndex, updateTileSlice, removeTileSlice, tileSlices } from '../src/tiles.ts'
 import { applyCandidateImageStyles, applyLayoutImageStyles, planLayoutImage } from '../src/layout-image.ts'
 import { combinedSource, withAppState } from '../tests/helpers/app-source.mjs'
 
@@ -24,10 +24,10 @@ test('editing and deleting a slice preserve its original section spelling', () =
   assert.deepEqual(doc.sections(), [])
 })
 
-test('drag rectangles use rounded endpoints and discard zero-pixel selections', () => {
-  assert.deepEqual(boundedTileRect({ x: 0.6, y: 0.6 }, { x: 1.4, y: 2.4 }, 10, 10), undefined)
-  assert.deepEqual(boundedTileRect({ x: 0.6, y: 0.6 }, { x: 2.4, y: 3.4 }, 10, 10), [1, 1, 1, 2])
-  assert.deepEqual(boundedTileRect({ x: 12, y: 12 }, { x: -2, y: -2 }, 10, 10), [0, 0, 10, 10])
+test('drag rectangles use rounded endpoints and discard zero-pixel selections without clipping to the image', () => {
+  assert.deepEqual(tileRectFromPoints({ x: 0.6, y: 0.6 }, { x: 1.4, y: 2.4 }), undefined)
+  assert.deepEqual(tileRectFromPoints({ x: 0.6, y: 0.6 }, { x: 2.4, y: 3.4 }), [1, 1, 1, 2])
+  assert.deepEqual(tileRectFromPoints({ x: 12, y: 12 }, { x: -2, y: -2 }), [-2, -2, 14, 14])
 })
 
 test('panel and candidate image replacement retain the referenced background style', () => {

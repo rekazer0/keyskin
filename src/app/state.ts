@@ -173,6 +173,8 @@ export const appState = {
   tilePath: "",
   tileDocument: IniDocument.parse(""),
   atlasEdits: undefined as Map<string, Exclude<Change, { kind: "batch" }>> | undefined,
+  expandedAtlasImage: undefined as { bytes: Uint8Array; canvas: HTMLCanvasElement } | undefined,
+  atlasFeedback: "",
   slices: [] as TileSlice[],
   bdaTileUsages: [] as BdaTileUsage[],
   selectedTileIndex: undefined as number | undefined,

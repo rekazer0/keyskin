@@ -18,6 +18,7 @@ type AtlasState = {
   selected?: TileSlice
   selectMobileSlice?(index: number): void
   dirty: boolean
+  feedback: string
   editable: boolean
   bda: boolean
   guides: boolean
@@ -85,7 +86,7 @@ export function createAtlasWorkspace(actions: {
   cancel.addEventListener("click", discard)
   form.addEventListener("submit", event => {
     if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
-    if (save.disabled) event.preventDefault()
+    if (save.disabled || state?.feedback) event.preventDefault()
   })
   footer.append(status, cancel, save)
   form.append(dialogHeader, body, footer)
@@ -295,7 +296,8 @@ export function createAtlasWorkspace(actions: {
     }
     extras.hidden = !desktopEditor || !next.active || !next.preview
     save.disabled = !next.editable
-    const message = next.dirty ? "有未保存的切片修改" : ""
+    const message = next.feedback || (next.dirty ? "有未保存的切片修改" : "")
+    status.classList.toggle("ui-field-error", Boolean(next.feedback))
     if (status.textContent !== message) status.textContent = message
     const libraryActive = desktopEditor && (next.active || next.styleActive || next.soundActive)
     document.body.classList.toggle("resource-workspace", libraryActive)

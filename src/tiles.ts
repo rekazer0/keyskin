@@ -109,16 +109,11 @@ export function withTileHeader(document: IniDocument): IniDocument {
   return document
 }
 
-export function boundedTileRect(
-  start: TilePoint,
-  end: TilePoint,
-  width: number,
-  height: number,
-): TileRect | undefined {
-  const left = Math.round(Math.max(0, Math.min(start.x, end.x, width)))
-  const top = Math.round(Math.max(0, Math.min(start.y, end.y, height)))
-  const right = Math.round(Math.max(0, Math.min(Math.max(start.x, end.x), width)))
-  const bottom = Math.round(Math.max(0, Math.min(Math.max(start.y, end.y), height)))
+export function tileRectFromPoints(start: TilePoint, end: TilePoint): TileRect | undefined {
+  const left = Math.round(Math.min(start.x, end.x))
+  const top = Math.round(Math.min(start.y, end.y))
+  const right = Math.round(Math.max(start.x, end.x))
+  const bottom = Math.round(Math.max(start.y, end.y))
   if (right <= left || bottom <= top) return
   return [left, top, right - left, bottom - top]
 }
@@ -159,12 +154,12 @@ export function tileCorners([x, y, width, height]: TileRect): TilePoint[] {
   return [{ x, y }, { x: x + width, y }, { x, y: y + height }, { x: x + width, y: y + height }]
 }
 
-export function resizeTileSlice(slice: TileSlice, corner: number, point: TilePoint, imageWidth: number, imageHeight: number): TileSlice {
+export function resizeTileSlice(slice: TileSlice, corner: number, point: TilePoint): TileSlice {
   const [x, y, width, height] = slice.source
   const right = Boolean(corner % 2)
   const bottom = corner >= 2
-  const px = Math.round(Math.max(right ? x + 1 : 0, Math.min(point.x, right ? imageWidth : x + width - 1)))
-  const py = Math.round(Math.max(bottom ? y + 1 : 0, Math.min(point.y, bottom ? imageHeight : y + height - 1)))
+  const px = Math.round(right ? Math.max(x + 1, point.x) : Math.min(point.x, x + width - 1))
+  const py = Math.round(bottom ? Math.max(y + 1, point.y) : Math.min(point.y, y + height - 1))
   const source: TileRect = [right ? x : px, bottom ? y : py, right ? px - x : x + width - px, bottom ? py - y : y + height - py]
   const result: TileSlice = { index: slice.index, source }
   if (slice.inner) {

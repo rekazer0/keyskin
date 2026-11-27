@@ -5,7 +5,7 @@ import { searchField } from "../../dom-element.ts"
 import { closeDialog } from "../../motion.ts"
 import { type SourceEditorValueClick } from "../../lazy-source-editor.ts"
 import { openSourceColorPicker, openSourceStyleDefinition, openSourceStylePicker, scheduleSourceSearch, closeSourceFind, findSourceMatch, openSourceFind, syncSourceFindBarOffset, replaceSourceMatches, updateInspectorView, updateSourceHighlight, toggleInspectorSource } from "../source-panel"
-import { settingsWorkspace, sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, workspaceImage, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, fontImportInput } from "../dom"
+import { settingsWorkspace, sourceSearch, sourceSearchPrevious, sourceSearchNext, sourceFindToggle, sourceEditor, sourceReplaceToggle, sourceReplaceRow, sourceReplacement, sourceReplace, sourceReplaceAll, keyFields, toolbarFields, skinFields, gapFields, quickInspector, keyModeButtons, keyActionButtons, keyActionMenuItems, aiDesignPanel, aiDesignStatus, theme, orientation, mode, eventLog, modeChoiceButtons, mobileChoiceButtons, toggleGuides, mobilePreviewGuides, newTileButton, duplicateTileButton, deleteTileButton, resourceBackButton, resourceSearch, resourceCategory, bdaTileUsage, tileModeButtons, atlasCanvas, tileSourceFields, tileInnerFields, skinState, panelScaleButton, adaptIos26Button, replaceLayoutImageButton, layoutImageFile, layoutImageOpen, layoutImageDialog, layoutImageTargetInputs, layoutImageScope, layoutImageError, layoutImageConfigButtons, layoutImageConfigFieldset, layoutImageForm, panelCopySource, panelTargetWidth, panelTargetHeight, panelCopyTarget, panelScaleEnabled, panelScaleForm, panelScaleDialog, candidateArea, fontImportInput } from "../dom"
 import { appState } from "../state"
 import { resourceSourceToggle } from "../dom"
 import { resizeMobileInspector } from "../mobile-inspector"
@@ -23,12 +23,12 @@ import { renderFiles } from "../file-tree"
 import { selectFile } from "../navigation"
 import { IniDocument } from "../../ini.ts"
 import { importFontFile } from "../skin-fonts"
-import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, scheduleAtlasDraw, commitTile, commitTiles, updateSelectedTile, nextSliceIndex, slicesEditable } from "../tile-editing"
+import { populateTileInspector, setDrawingTile, duplicateSelectedTile, deleteSelectedTile, drawAtlas, atlasPoint, atlasImageSize, scheduleAtlasDraw, commitTile, commitTiles, updateSelectedTile, nextSliceIndex, slicesEditable } from "../tile-editing"
 import { isEditing } from "../edit-history"
 import { selectStyleResource, showResourceList, renderResourceInspector, renderStyleResourceDetail } from "../resource-inspector"
 import { revealSourceFile } from "../source-files"
 import { type BdaAppearanceStyleGroup } from "../../bda.ts"
-import { tileSliceAt, boundedTileRect, moveTileRect, resizeTileSlice, tileCorners, type TilePoint, type TileSlice } from "../../tiles.ts"
+import { tileSliceAt, tileRectFromPoints, moveTileRect, resizeTileSlice, tileCorners, type TilePoint, type TileSlice } from "../../tiles.ts"
 import { runFileOperation, adaptArchiveForIos26, showError } from "../file-operations"
 import { openPanelCopyDialog, updatePanelCopyForm, copyPanel } from "../panel-copy"
 import { openLayoutImageDialog, acceptLayoutImageFile, syncLayoutImageConfig, updateLayoutImageForm, applyLayoutImage, layoutImageScopeText } from "../layout-image-replace"
@@ -308,6 +308,7 @@ export function wireEditingControls(): void {
     })
   }
   const updateTileSelection = (indices: number[], primary = indices.at(-1)) => {
+    appState.atlasFeedback = ""
     appState.selectedTileIndex = primary
     appState.selectedTileGroup = indices.length > 1 ? indices : []
     updateSourceHighlight()
@@ -356,7 +357,7 @@ export function wireEditingControls(): void {
     const modified = event.ctrlKey || event.metaKey || event.shiftKey
     const selected = appState.slices.find(slice => slice.index === appState.selectedTileIndex)
     if (!modified && selected && canTransformTiles() && appState.guidesVisible && !appState.drawingTile) {
-      const scale = workspaceImage.naturalWidth / atlasCanvas.getBoundingClientRect().width
+      const scale = atlasImageSize()[0] / atlasCanvas.getBoundingClientRect().width
       const [, , width, height] = selected.source
       const radius = event.pointerType === "touch" ? 22 : 6
       const corner = tileCorners(selected.source).findIndex(({ x, y }) =>
@@ -381,9 +382,9 @@ export function wireEditingControls(): void {
   const updateTileDrag = (event: PointerEvent) => {
     if (!atlasCanvas.hasPointerCapture(event.pointerId) || !canTransformTiles()) return
     const point = atlasPoint(event)
-    const { naturalWidth: width, naturalHeight: height } = workspaceImage
+    const [width, height] = atlasImageSize()
     if (appState.tileDragStart && appState.drawingTile) {
-      appState.tileDraft = boundedTileRect(appState.tileDragStart, point, width, height)
+      appState.tileDraft = tileRectFromPoints(appState.tileDragStart, point)
     } else {
       const drag = appState.tileTransform
       if (!drag || drag.pointerId !== event.pointerId) return
@@ -393,7 +394,7 @@ export function wireEditingControls(): void {
       appState.movingTiles = !dx && !dy ? [] : drag.slices.map(slice => {
         if (corner !== undefined) {
           const origin = tileCorners(slice.source)[corner]
-          return resizeTileSlice(slice, corner, { x: origin.x + dx, y: origin.y + dy }, width, height)
+          return resizeTileSlice(slice, corner, { x: origin.x + dx, y: origin.y + dy })
         }
         const source = moveTileRect(slice.source, dx, dy, width, height)
         const inner = slice.inner && moveTileRect(slice.inner, source[0] - slice.source[0], source[1] - slice.source[1], width, height)

@@ -14,13 +14,14 @@ import { mobilePortraitQuery, source } from "./canvas-interaction"
 import { updateSourceHighlight } from "./source-panel"
 import { refreshPreview } from "./preview-render"
 import { populateKeyInspector } from "./key-inspector"
-import { decodePngMask, showStatus } from "./file-operations"
+import { decodePngMask, showImage, showStatus } from "./file-operations"
 import { detectGridCells, detectLineCells } from "../layout-scan.ts"
 import { type Change } from "../history.ts"
 import { SXI_SKIN_PATH, encodeSkinJson, parseSkinJson } from "../palm/sxi-json.ts"
 import { editSxi } from "./sxi-fields"
 import { palmTileSlices, removePalmTile, setPalmTile, setPalmTiles } from "../palm/palm-style-edit.ts"
 import { openPalmSkin, refreshSxiDocument } from "./sxi-documents"
+import { renderResourceInspector } from "./resource-inspector"
 
 function bdaTileUsageKey(usage: BdaTileUsage | undefined): string {
   return usage ? `${usage.ref.key}:${usage.highlighted ? "highlight" : "normal"}` : ""
@@ -106,11 +107,13 @@ export function finishAtlasEdits(save: boolean, back: () => void): void {
   appState.tileTransform = undefined
   appState.movingTiles = []
   appState.atlasEdits = undefined
-  if (save && changes?.size) commitBatch([...changes.values()].map(change =>
-    change.kind === "text" && !appState.archive?.isText(change.path)
-      ? { kind: "bytes", path: change.path, after: new TextEncoder().encode(change.after) }
-      : change,
-  ))
+  appState.expandedAtlasImage = undefined
+  appState.atlasFeedback = ""
+  workspaceImage.style.visibility = ""
+  if (save && changes?.size) {
+    commitAtlasBatch([...changes.values()])
+    if (changes.get(appState.selectedResourcePath)?.kind === "bytes") renderResourceInspector()
+  }
   back()
   if (save && changes?.size) {
     if (sliceStore() === "palm") refreshSxiDocument()
@@ -139,19 +142,29 @@ function stageTileChange(change: Exclude<Change, { kind: "batch" }>): void {
   else edits.set(change.path, { ...change, before: original as Uint8Array | undefined })
 }
 
-function writeTileText(path: string, before: string, after: string, coalesce = false): void {
-  if (appState.atlasEdits) stageTileChange({ kind: "text", path, before, after })
+function commitAtlasBatch(changes: Exclude<Change, { kind: "batch" }>[]): void {
+  commitBatch(changes.map(change => change.kind === "text" && !appState.archive?.isText(change.path)
+    ? { kind: "bytes", path: change.path, after: new TextEncoder().encode(change.after) }
+    : change))
+}
+
+function writeTileText(path: string, before: string, after: string, coalesce = false, image?: Extract<Change, { kind: "bytes" }>): void {
+  const text = { kind: "text" as const, path, before, after }
+  if (appState.atlasEdits) {
+    if (image) stageTileChange(image)
+    stageTileChange(text)
+  } else if (image) commitAtlasBatch(before === after ? [image] : [image, text])
   else commitText(path, before, after, coalesce)
 }
 
-function editPalmTiles(change: (skin: JsonObject) => void, coalesce = false): void {
-  if (!appState.atlasEdits) return editSxi(change, coalesce)
+function editPalmTiles(change: (skin: JsonObject) => void, coalesce = false, image?: Extract<Change, { kind: "bytes" }>): void {
+  if (!appState.atlasEdits && !image) return editSxi(change, coalesce)
   const before = tileText(SXI_SKIN_PATH)
   const skin = parseSkinJson(before)
   const baseline = encodeSkinJson(skin)
   change(skin)
   const after = encodeSkinJson(skin)
-  if (after !== baseline) writeTileText(SXI_SKIN_PATH, before, after)
+  if (after !== baseline || image) writeTileText(SXI_SKIN_PATH, before, after === baseline ? before : after, coalesce, image)
 }
 
 function reloadPalmSlices(selected = appState.selectedTileIndex, path = appState.selectedResourcePath): void {
@@ -167,6 +180,7 @@ function reloadPalmSlices(selected = appState.selectedTileIndex, path = appState
 }
 
 function selectMobileAtlasSlice(index: number): void {
+  appState.atlasFeedback = ""
   appState.selectedTileGroup = []
   appState.tileSelectionAnchor = index
   appState.selectedTileIndex = index
@@ -175,9 +189,25 @@ function selectMobileAtlasSlice(index: number): void {
   syncAtlasWorkspace()
 }
 
+function tileImageBytes(path = appState.selectedResourcePath): Uint8Array | undefined {
+  const change = appState.atlasEdits?.get(path)
+  return change?.kind === "bytes" ? change.after : appState.archive?.getBytes(path)
+}
+
+function expandedAtlasCanvas(): HTMLCanvasElement | undefined {
+  const expanded = appState.expandedAtlasImage
+  if (expanded && expanded.bytes === tileImageBytes()) return expanded.canvas
+}
+
+export function atlasImageSize(): [number, number] {
+  const expanded = expandedAtlasCanvas()
+  return expanded ? [expanded.width, expanded.height] : [workspaceImage.naturalWidth, workspaceImage.naturalHeight]
+}
+
 export function syncAtlasWorkspace(): void {
   if (appState.resourceConfigActive && appState.resourceInspectorMode === "image" && appState.inspectorTab === "properties" && appState.selectedResourcePath) sourceName.textContent = appState.selectedResourcePath
   const slice = appState.selectedTileGroup.length ? undefined : primaryTile()
+  const [width, height] = atlasImageSize()
   appState.atlasWorkspace?.update({
     active: appState.resourceConfigActive && appState.resourceInspectorMode === "image",
     preview: Boolean(appState.selectedResourceGalleryPath),
@@ -185,11 +215,10 @@ export function syncAtlasWorkspace(): void {
     soundActive: appState.resourceConfigActive && appState.resourceInspectorMode === "sound",
     styleSelected: Boolean(appState.selectedStyleID),
     path: appState.selectedResourcePath,
-    width: workspaceImage.naturalWidth,
-    height: workspaceImage.naturalHeight,
+    width, height,
     slices: appState.slices, selected: slice, editable: isEditing(), bda: appState.archive?.format === "bda",
     selectMobileSlice: appState.bdaSliceReturn ? undefined : selectMobileAtlasSlice,
-    guides: appState.guidesVisible, dirty: Boolean(appState.atlasEdits?.size),
+    guides: appState.guidesVisible, dirty: Boolean(appState.atlasEdits?.size), feedback: appState.atlasFeedback,
   })
 }
 
@@ -212,8 +241,11 @@ export function drawAtlas(): void {
 }
 
 function paintAtlas(): void {
-  if (!workspaceImage.complete || !workspaceImage.naturalWidth) return
-  const { naturalWidth, naturalHeight } = workspaceImage
+  const expanded = expandedAtlasCanvas()
+  const viewport = appState.atlasWorkspace?.viewportCanvas()
+  workspaceImage.style.visibility = expanded && viewport ? "hidden" : ""
+  if (!expanded && (!workspaceImage.complete || !workspaceImage.naturalWidth)) return
+  const [naturalWidth, naturalHeight] = atlasImageSize()
   const figure = atlasCanvas.parentElement!
   if (mobilePortraitQuery.matches && figure.closest("#image-resource-detail") && figure.clientHeight) {
     const style = getComputedStyle(figure)
@@ -223,7 +255,6 @@ function paintAtlas(): void {
     atlasCanvas.style.width = `${naturalWidth * scale}px`
     atlasCanvas.style.height = `${naturalHeight * scale}px`
   }
-  const viewport = appState.atlasWorkspace?.viewportCanvas()
   const canvas = viewport ?? atlasCanvas
   const bounds = viewport?.getBoundingClientRect()
   if (bounds && (!bounds.width || !bounds.height)) return
@@ -252,9 +283,9 @@ function paintAtlas(): void {
   context.setTransform(scaleX, 0, 0, scaleY,
     bounds ? (imageBounds.left - bounds.left) * backingWidth / bounds.width : 0,
     bounds ? (imageBounds.top - bounds.top) * backingHeight / bounds.height : 0)
-  if (!viewport) {
-    context.imageSmoothingEnabled = scaleX <= 1
-    context.drawImage(workspaceImage, 0, 0)
+  if (!viewport || expanded) {
+    context.imageSmoothingEnabled = imageBounds.width <= naturalWidth
+    context.drawImage(expanded ?? workspaceImage, 0, 0)
   }
   if (!appState.resourceConfigActive || !appState.guidesVisible) return
 
@@ -348,12 +379,13 @@ function drawTilePreview(): void {
   const context = tilePreview.getContext("2d")
   if (!context) return
   context.clearRect(0, 0, tilePreview.width, tilePreview.height)
-  if (!slice || !workspaceImage.complete || !workspaceImage.naturalWidth) return
+  const expanded = expandedAtlasCanvas()
+  if (!slice || !expanded && (!workspaceImage.complete || !workspaceImage.naturalWidth)) return
   const [x, y, width, height] = slice.source
   const destination = tilePreviewDestination(width, height, tilePreview.width)
   context.imageSmoothingEnabled = false
   context.drawImage(
-    workspaceImage,
+    expanded ?? workspaceImage,
     x, y, width, height,
     destination.x, destination.y, destination.width, destination.height,
   )
@@ -425,6 +457,8 @@ export function populateTileInspector(): void {
 }
 
 export function loadTiles(path: string): void {
+  if (appState.expandedAtlasImage?.bytes !== tileImageBytes(path)) appState.expandedAtlasImage = undefined
+  appState.atlasFeedback = ""
   appState.selectedTileGroup = []
   appState.tileSelectionAnchor = undefined
   appState.tileTransform = undefined
@@ -481,9 +515,10 @@ export function loadTiles(path: string): void {
 
 export function atlasPoint(event: Pick<PointerEvent, "clientX" | "clientY">): TilePoint {
   const bounds = atlasCanvas.getBoundingClientRect()
+  const [width, height] = atlasImageSize()
   return {
-    x: ((event.clientX - bounds.left) / bounds.width) * workspaceImage.naturalWidth,
-    y: ((event.clientY - bounds.top) / bounds.height) * workspaceImage.naturalHeight,
+    x: ((event.clientX - bounds.left) / bounds.width) * width,
+    y: ((event.clientY - bounds.top) / bounds.height) * height,
   }
 }
 
@@ -516,28 +551,89 @@ export function commitTile(slice: TileSlice, coalesce = false): void {
   commitTiles([slice], false, coalesce)
 }
 
+function validTileSource(source: TileRect): boolean {
+  return source.every(Number.isSafeInteger) && source[2] > 0 && source[3] > 0
+}
+
+function showTileFeedback(message: string): void {
+  appState.atlasFeedback = message
+  populateTileInspector()
+  showStatus(message)
+}
+
 export function commitTiles(slices: TileSlice[], keepSelection: boolean, coalesce = false): void {
-  if (!slices.length || !appState.archive || !slicesEditable() || !appState.selectedResourcePath || !isEditing()) return
-  if (slices.some(({ source }) => {
-    const [x, y, width, height] = source
-    return source.some(value => !Number.isInteger(value)) || width <= 0 || height <= 0 || x < 0 || y < 0
-      || x + width > workspaceImage.naturalWidth || y + height > workspaceImage.naturalHeight
-  })) return
+  const path = appState.selectedResourcePath
+  if (!slices.length || !appState.archive || !slicesEditable() || !path || !isEditing()) return
+  if (slices.some(({ source }) => !validTileSource(source))) {
+    return showTileFeedback("切片坐标必须为整数，宽高必须为正整数")
+  }
+  const [width, height] = atlasImageSize()
+  if (!width || !height) return
+  let left = 0, top = 0, right = width, bottom = height
+  for (const { source: [x, y, w, h] } of slices) {
+    left = Math.min(left, x)
+    top = Math.min(top, y)
+    right = Math.max(right, x + w)
+    bottom = Math.max(bottom, y + h)
+  }
+  let expanded: typeof appState.expandedAtlasImage
+  let image: Extract<Change, { kind: "bytes" }> | undefined
+  if (left || top || right > width || bottom > height) {
+    const newWidth = right - left, newHeight = bottom - top
+    if (newWidth > 8192 || newHeight > 8192 || newWidth * newHeight > 16e6) {
+      return showTileFeedback("扩展后的图片不能超过 8192 像素（单边）或 1600 万像素（总计）")
+    }
+    const before = tileImageBytes()
+    if (!before) return
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.width = newWidth
+      canvas.height = newHeight
+      const context = canvas.getContext("2d")
+      if (!context) throw new Error("画布不可用")
+      context.drawImage(expandedAtlasCanvas() ?? workspaceImage, -left, -top)
+      const data = canvas.toDataURL("image/png")
+      if (!data.startsWith("data:image/png;base64,")) throw new Error("无法生成 PNG")
+      const bytes = Uint8Array.from(atob(data.slice("data:image/png;base64,".length)), char => char.charCodeAt(0))
+      expanded = { bytes, canvas }
+      image = { kind: "bytes", path, before, after: bytes }
+    } catch {
+      return showTileFeedback("无法扩展图片，原图和切片未修改")
+    }
+  }
+  appState.atlasFeedback = ""
   const selected = keepSelection ? appState.selectedTileIndex : slices[0].index
   if (!keepSelection) {
     appState.selectedTileGroup = []
     appState.tileSelectionAnchor = selected
   }
+  if (left || top) {
+    const updated = new Set(slices.map(slice => slice.index))
+    const translate = ([x, y, w, h]: TileRect): TileRect => [x - left, y - top, w, h]
+    slices = [...slices, ...appState.slices.filter(slice => !updated.has(slice.index))].map(slice => ({
+      ...slice, source: translate(slice.source), inner: slice.inner && translate(slice.inner),
+    }))
+  }
+  const updateExpandedImage = () => {
+    if (!expanded) return
+    appState.expandedAtlasImage = expanded
+    if (!appState.atlasEdits) {
+      showImage(path)
+      renderResourceInspector()
+    }
+  }
   if (sliceStore() === "palm") {
-    const path = appState.selectedResourcePath
-    editPalmTiles(skin => { for (const slice of slices) setPalmTile(skin, path, slice) }, coalesce)
+    editPalmTiles(skin => { for (const slice of slices) setPalmTile(skin, path, slice) }, coalesce, image)
+    updateExpandedImage()
+    if (expanded && !appState.atlasEdits) refreshSxiDocument()
     return reloadPalmSlices(selected)
   }
   const before = appState.tileDocument.toString()
   for (const slice of slices) updateTileSlice(appState.tileDocument, slice)
   appState.tileDocument = withTileHeader(appState.tileDocument)
   const after = appState.tileDocument.toString()
-  writeTileText(appState.tilePath, before, after, coalesce)
+  writeTileText(appState.tilePath, before, after, coalesce, image)
+  updateExpandedImage()
   setSourceValue(after)
   appState.slices = tileSlices(appState.tileDocument)
   appState.selectedTileIndex = selected
@@ -553,7 +649,7 @@ export async function autoSliceSelectedImage(): Promise<void> {
   const path = appState.selectedResourcePath
   const draft = appState.atlasEdits
   if (!currentArchive || !slicesEditable() || !path || !appState.tilePath && sliceStore() === "til" || !isEditing()) return
-  const bytes = currentArchive.getBytes(path)
+  const bytes = tileImageBytes(path)
   if (!bytes) return
   try {
     const scan = await decodePngMask(bytes)
@@ -567,7 +663,7 @@ export async function autoSliceSelectedImage(): Promise<void> {
       showStatus("未识别到可切片的透明图块")
       return
     }
-    if (appState.archive !== currentArchive || appState.selectedResourcePath !== path || draft !== appState.atlasEdits || !isEditing()) return
+    if (appState.archive !== currentArchive || appState.selectedResourcePath !== path || draft !== appState.atlasEdits || bytes !== tileImageBytes(path) || !isEditing()) return
     if (sliceStore() === "palm") {
       appState.selectedTileGroup = []
       appState.tileSelectionAnchor = undefined
@@ -602,6 +698,7 @@ function renderResourceInspectorMetadata(): void {
 }
 
 export function setDrawingTile(active: boolean): void {
+  if (active) appState.atlasFeedback = ""
   appState.drawingTile = active
   appState.tileDragStart = undefined
   appState.tileDraft = undefined
@@ -616,12 +713,13 @@ export function moveSelectedTile(deltaX: number, deltaY: number, coalesce = fals
   if (appState.selectedTileGroup.length || !appState.archive || !appState.selectedResourcePath || !isEditing()) return
   const existing = appState.slices.find((slice) => slice.index === appState.selectedTileIndex)
   if (!existing) return
-  const source = moveTileRect(existing.source, deltaX, deltaY, workspaceImage.naturalWidth, workspaceImage.naturalHeight)
+  const [width, height] = atlasImageSize()
+  const source = moveTileRect(existing.source, deltaX, deltaY, width, height)
   const actualX = source[0] - existing.source[0]
   const actualY = source[1] - existing.source[1]
   if (!actualX && !actualY) return
   const inner = existing.inner
-    ? moveTileRect(existing.inner, actualX, actualY, workspaceImage.naturalWidth, workspaceImage.naturalHeight)
+    ? moveTileRect(existing.inner, actualX, actualY, width, height)
     : undefined
   commitTile({ index: existing.index, source, ...(inner ? { inner } : {}) }, coalesce)
 }
@@ -680,8 +778,10 @@ export function updateSelectedTile(): void {
     if (inner) commitBdaTileInnerRect(inner)
     return
   }
-  const source = tileSourceFields.map((field) => Number(field.value)) as TileRect
-  if (source.some((value) => !Number.isFinite(value))) return
+  const source = tileSourceFields.map((field) => field.valueAsNumber) as TileRect
+  if (!validTileSource(source)) {
+    return showTileFeedback("切片坐标必须为整数，宽高必须为正整数")
+  }
   if (inner) {
     const [left, top, right, bottom] = inner
     if (inner.some(value => value < 0 || !Number.isInteger(value)) || left + right >= source[2] || top + bottom >= source[3]) {

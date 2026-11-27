@@ -4,7 +4,7 @@ import { chromium, webkit } from "playwright"
 import { createServer } from "vite"
 import { bdsFixture } from "../tests/helpers/baidu-fixture.mjs"
 import { SkinArchive } from "../src/skin.ts"
-import { encodePng } from "../src/ssf/ssf-png.ts"
+import { decodePng, encodePng } from "../src/ssf/ssf-png.ts"
 import { bdaAnimatedSkinBytes } from "../tests/helpers/bda-animation-fixture.mjs"
 import { sxiAnimationFixture } from "../tests/helpers/sxi-animation-fixture.mjs"
 import { ssfFixture } from "../tests/helpers/ssf-fixture.mjs"
@@ -250,6 +250,49 @@ try {
       assert.match(resized, /\[IMG4\]\nSOURCE_RECT=15,0,4,4/)
       await page.keyboard.press('ControlOrMeta+z')
       assert.equal(await readGridTil(), added, 'all resized slices are restored in a single undo')
+      const readGridPng = () => page.evaluate(async path => {
+        const { appState } = await import('/src/app/state.ts')
+        return Array.from(appState.archive.getBytes(path))
+      }, gridPath)
+      const originalPng = await readGridPng()
+      await gridCard.dblclick()
+      await dialog.locator('.atlas-image-title small').getByText('35 × 25', { exact: false }).waitFor()
+      await width.fill('99999')
+      await width.press('Tab')
+      await dialog.getByRole('status').getByText('扩展后的图片不能超过', { exact: false }).waitFor()
+      await width.fill('40')
+      await width.press('Tab')
+      assert.match(await dialog.locator('.atlas-image-title small').textContent(), /^40 × 25/)
+      assert.deepEqual(await readGridPng(), originalPng, 'expansion is only a draft')
+      await dialog.locator('#new-tile').click()
+      const expandedBounds = await atlas.boundingBox()
+      await drag([expandedBounds.x + 8, expandedBounds.y + 6], 33, 22)
+      assert.match(await dialog.locator('.atlas-image-title small').textContent(), /^41 × 28 · 37 个切片/)
+      await cancel.click()
+      await dialog.waitFor({ state: 'hidden' })
+      assert.deepEqual(await readGridPng(), originalPng, 'cancel discards the expanded PNG')
+      assert.equal(await readGridTil(), added, 'cancel discards the expanded slice')
+
+      await gridCard.dblclick()
+      await dialog.locator('.atlas-image-title small').getByText('35 × 25', { exact: false }).waitFor()
+      await drag(await canvasPoint(0, 0), -3, -2)
+      assert.match(await dialog.locator('.atlas-image-title small').textContent(), /^38 × 27/)
+      await width.fill('42')
+      await save.click()
+      await dialog.waitFor({ state: 'hidden' })
+      const expanded = decodePng(Uint8Array.from(await readGridPng()))
+      assert.deepEqual([expanded.width, expanded.height], [42, 27])
+      const expected = new Uint8Array(42 * 27 * 4)
+      for (let y = 0; y < grid.height; y++) {
+        expected.set(grid.data.subarray(y * 35 * 4, (y + 1) * 35 * 4), ((y + 2) * 42 + 3) * 4)
+      }
+      assert.deepEqual(expanded.data, expected, 'original pixels are translated without resampling; padding is transparent')
+      assert.match(await readGridTil(), /\[IMG1\]\nSOURCE_RECT=0,0,42,6/)
+      assert.match(await readGridTil(), /\[IMG2\]\nSOURCE_RECT=8,2,4,4/, 'other slices follow their pixels')
+      await page.keyboard.press('ControlOrMeta+z')
+      assert.deepEqual(await readGridPng(), originalPng, 'one undo restores the original PNG')
+      assert.equal(await readGridTil(), added, 'one undo also restores every slice')
+
       for (const [format, bytes] of Object.entries({ bdi: archive.toBytes("bdi"), bda: bdaAnimatedSkinBytes(), sxi: sxiAnimationFixture(), ssf: ssfFixture() })) {
         const other = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" })
         other.on("pageerror", error => errors.push(`${format}: ${error.message}`))
@@ -278,7 +321,7 @@ try {
               const path = card.dataset.path
               for (const slice of resourceImageSlices(path)) {
                 if (slice.source[2] < 2) continue
-                if (format === "sxi" && !slice.inner) return { path, index: slice.index, value: slice.source[2] - 1, file: "skin.json" }
+                if (format === "sxi" && !slice.inner) return { path, index: slice.index, file: "skin.json" }
                 if (format === "bda" && slice.inner && slice.inner[2] > 1) {
                   return { path, index: slice.index, value: slice.inner[2] - 1, file: currentBdaAppearance().path }
                 }
@@ -287,25 +330,30 @@ try {
             throw new Error(`No editable ${format} fixture slice`)
           }, format)
           await other.locator(`#resource-gallery .ui-image-card[data-path="${path}"]`).click()
-          const read = () => other.evaluate(async file => Array.from((await import("/src/app/state.ts")).appState.archive.getBytes(file)), file)
+          const read = (target = file) => other.evaluate(async target => Array.from((await import("/src/app/state.ts")).appState.archive.getBytes(target)), target)
           const original = await read()
+          const originalImage = await read(path)
+          const newWidth = format === "sxi" ? decodePng(Uint8Array.from(originalImage)).width + 1 : value
           const editor = other.locator("#atlas-editor-dialog[open]")
           const field = editor.locator(format === "bda" ? '[data-tile-inner="2"]' : '[data-tile-source="2"]')
           const open = () => other.locator(`#image-resource-slices [data-slice-index="${index}"]`).dblclick()
           await open()
-          await field.fill(String(value))
+          await field.fill(String(newWidth))
           await field.press("Tab")
           assert.deepEqual(await read(), original, `${format} does not write the draft`)
           await editor.getByRole("button", { name: "取消", exact: true }).click()
           await editor.waitFor({ state: "hidden" })
           assert.deepEqual(await read(), original, `${format} cancel discards the draft`)
+          assert.deepEqual(await read(path), originalImage, `${format} cancel leaves the PNG unchanged`)
           await open()
-          await field.fill(String(value))
+          await field.fill(String(newWidth))
           await editor.getByRole("button", { name: "保存", exact: true }).click()
           await editor.waitFor({ state: "hidden" })
           assert.notDeepEqual(await read(), original, `${format} save writes the draft`)
+          if (format === "sxi") assert.ok(decodePng(Uint8Array.from(await read(path))).width >= newWidth)
           await other.keyboard.press("ControlOrMeta+z")
           assert.deepEqual(await read(), original, `${format} save is reversible`)
+          assert.deepEqual(await read(path), originalImage, `${format} undo restores the PNG too`)
         }
         await other.close()
       }
