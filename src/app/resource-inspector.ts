@@ -8,7 +8,7 @@ import { type BdaStyleRef, bdaStyleID } from "../bda.ts"
 import { updateBdaRefs } from "./key-inspector"
 import { isEditing, commitText, updateDirty, commitBytes } from "./edit-history"
 import { currentBdaAppearance, bdaAppearancePart, visualResolver, bdaAppearanceStyleGroups, bdaAppearanceStylePath } from "./bda-documents"
-import { resourceImagePaths } from "../resources.ts"
+import { logoImageFolder, resourceImagePaths } from "../resources.ts"
 import { theme, orientation, resourceName, resourceMeta, imageResourceDetail, styleResourceDetail, styleDetailPreviews, styleDetailFields, styleDetailNormal, styleDetailHighlighted, resourceListView, resourceDetail, resourceInspector, tileModeButtons, resourceGallery, resourceCategory, resourceSearch, resourceListTitle, resourceCount, resourceUploadButton, resourceSelectionActions, imageResourcePreview, soundResourceDetail, resourceDownloadButton, resourceRenameButton, resourceDeleteButton, resourceUploadInput, sourceName, atlasCanvas, assetImage, workspaceImageError, workspaceImageFigure, deviceShell, sourceEditor } from "./dom"
 import { selectFile } from "./navigation"
 import { populateTileInspector, drawAtlas, loadTiles, syncAtlasWorkspace, setDrawingTile } from "./tile-editing"
@@ -585,9 +585,13 @@ export function renderResourceInspector(): void {
   resourceDeleteButton.title = "删除选中图片"
   resourceDeleteButton.setAttribute("aria-label", resourceDeleteButton.title)
   const query = resourceSearch.value.trim().toLowerCase()
-  const paths = sortResources(pickableImagePaths()
-    .filter((path) => !query || path.toLowerCase().includes(query)))
-  listHeader("图片", paths.length)
+  const images = pickableImagePaths()
+  const folder = appState.resourceImageFolder
+  const scoped = folder ? images.filter(path => logoImageFolder(path) === folder) : images
+  if (!scoped.length) appState.resourceImageFolder = ""
+  const title = appState.resourceImageFolder.split("/").at(-1) || "图片"
+  const paths = sortResources((scoped.length ? scoped : images).filter(path => !query || path.toLowerCase().includes(query)))
+  listHeader(title, paths.length)
   const browsing = browsingResources()
   resourceListView.hidden = Boolean(appState.selectedResourcePath) && !browsing
   resourceDetail.hidden = !appState.selectedResourcePath && !browsing
@@ -611,7 +615,7 @@ export function renderResourceInspector(): void {
   })
   if (!paths.length) resourceGallery.append(emptyState(query ? "search-x" : "image-off"))
   resourceGallery.setAttribute("role", "listbox")
-  resourceGallery.setAttribute("aria-label", "图片")
+  resourceGallery.setAttribute("aria-label", title)
   if (browsing && !appState.selectedResourceGalleryPath && paths[0]) {
     appState.selectedResourceGalleryPaths = [paths[0]]
     appState.selectedResourceGalleryPath = paths[0]

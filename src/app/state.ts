@@ -282,6 +282,7 @@ export const appState = {
   styleLibrarySelected: undefined as { styleID?: string; imagePath?: string } | undefined,
   styleUsageFilter: "all",
   resourceStyleType: "all",
+  resourceImageFolder: "",
   resourceUsageFilter: "all",
   resourceCatalog: "",
   selectedResourceCatalogItem: "",

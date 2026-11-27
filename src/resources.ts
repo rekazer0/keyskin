@@ -23,3 +23,8 @@ export function resourceImagePaths(
       return [path]
     }))
 }
+
+/** Keep direct logo images separate from each first-level subfolder. */
+export function logoImageFolder(path: string): string | undefined {
+  return /^[^/]+\/skin\/res\/(logo(?:\/[^/]+)?)\//.exec(path)?.[1]
+}

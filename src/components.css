@@ -930,6 +930,9 @@ body {
 .ui-resource-types { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-resource-types[data-variant="nested"] { margin-bottom: var(--space-sm); }
 .ui-resource-types[data-variant="nested"] > button { padding-left: var(--space-2xl); font-size: var(--font-size-xs); }
+.ui-resource-types[data-variant="nested"] > .ui-resource-types { padding-inline-start: var(--space-md); margin-bottom: 0; }
+.ui-resource-types > .ui-resource-types:empty { display: none; }
+.ui-resource-types > button[data-image-folder] > span { min-width: 0; overflow-wrap: anywhere; }
 .ui-resource-types > button > .ui-icon { flex: none; width: var(--icon-size-sm); height: var(--icon-size-sm); color: var(--secondary); }
 .ui-resource-types > button[aria-pressed="true"] > .ui-icon { color: inherit; }
 .ui-resource-types > button { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; min-height: var(--control-height-lg); padding: var(--space-sm); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text); text-align: left; font-size: var(--font-size-sm); cursor: default; transition: background-color var(--duration-fast) var(--ease-standard); }

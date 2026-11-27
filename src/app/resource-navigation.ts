@@ -21,13 +21,14 @@ export function resourceNavigationPath(kind: "style" | "image" | "sound"): strin
 }
 
 /** 桌面与手机共用资源入口，不再依赖概览中的资源磁贴。 */
-export function openResources(kind: "style" | "image" | "sound" = "style"): void {
+export function openResources(kind: "style" | "image" | "sound" = "style", imageFolder = ""): void {
   const path = resourceNavigationPath(kind)
   if (!path) {
     if (kind === "style") openResources("image")
     return
   }
   resourceSearch.value = ""
+  appState.resourceImageFolder = imageFolder
   appState.inspectorTab = "properties"
   selectFile(path, "overview", kind)
   setSidebarView("overview")

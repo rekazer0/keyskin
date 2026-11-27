@@ -2,6 +2,7 @@ import { bindResourceMenu } from "./resource-gallery"
 import { clearResourceWindow } from "./resource-grid-window"
 import { bindListActionKeys, bindListboxKeys, element, emptyState } from "../dom-element"
 import { createIcon } from "../icons"
+import { logoImageFolder } from "../resources"
 import { skinFontFiles, themeOfPath } from "../font-files"
 import { loadEmbeddedFont } from "../atlas"
 import { appState } from "./state"
@@ -91,6 +92,40 @@ function resourceFonts(): string[] {
   })
 }
 
+function updateImageFolders(images: string[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const path of images) {
+    const folder = logoImageFolder(path)
+    if (folder) counts.set(folder, (counts.get(folder) ?? 0) + 1)
+  }
+  const group = $("#resource-image-folders")
+  const folders = [...counts.keys()].sort(resourceNames.compare)
+  if (group.childElementCount !== folders.length || folders.some((folder, index) => (group.children[index] as HTMLElement).dataset.imageFolder !== folder)) {
+    const imageOption = $("#mobile-resource-category option[value=image]")
+    imageOption.parentElement!.querySelectorAll("[data-image-folder]").forEach(option => option.remove())
+    group.replaceChildren(...folders.map(folder => {
+      const label = folder.split("/").at(-1)!
+      const button = Object.assign(element("button"), { type: "button" })
+      const value = `image:${folder}`
+      button.dataset.imageFolder = folder
+      button.dataset.resourceChoice = value
+      button.append(createIcon("folder"), Object.assign(element("span"), { textContent: label }), element("small"))
+      button.addEventListener("click", () => openResources("image", folder))
+      return button
+    }))
+    imageOption.after(...folders.map(folder => {
+      const option = new Option("", `image:${folder}`)
+      option.dataset.imageFolder = folder
+      return option
+    }))
+  }
+  for (const button of group.querySelectorAll<HTMLButtonElement>("button")) {
+    const folder = button.dataset.imageFolder!
+    button.querySelector("small")!.textContent = counts.get(folder)!.toLocaleString()
+  }
+  return counts
+}
+
 /** 分类数量来自当前资源范围，引用统计复用删除保护的跨布局索引。 */
 export function updateResourcePage(title: string, count: number, fontCatalog = false): void {
   appState.resourceCatalog = ""
@@ -126,7 +161,9 @@ export function updateResourcePage(title: string, count: number, fontCatalog = f
     }
     appState.resourcePageStatistics = { archive, key, types, unused: supported ? ids.filter(id => !styleUsages(id).length).length : 0 }
   }
-  const counts = { style: ids.length, image: pickableImagePaths().length, sound: currentSoundEntries().length, font: resourceFonts().length, all: 0 }
+  const images = pickableImagePaths()
+  const imageFolders = updateImageFolders(images)
+  const counts = { style: ids.length, image: images.length, sound: currentSoundEntries().length, font: resourceFonts().length, all: 0 }
   counts.all = counts.image + counts.sound + counts.font
   setText("#mobile-resource-summary", `共 ${(counts.style + counts.all).toLocaleString()} 个资源 · ${archive?.format.toUpperCase() ?? ""}`)
   for (const [kind, value] of Object.entries(counts)) setText(`[data-resource-count="${kind}"]`, value.toLocaleString())
@@ -135,10 +172,12 @@ export function updateResourcePage(title: string, count: number, fontCatalog = f
   $<HTMLButtonElement>("#resource-show-unused").disabled = !supported
   resourceUsage.parentElement!.hidden = !supported || appState.resourceInspectorMode !== "style"
   resourceUsage.value = appState.resourceUsageFilter
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-page], [data-resource-catalog], [data-resource-style-type]")) {
-    const type = button.dataset.resourceStyleType
-    const selected = type ? appState.resourceInspectorMode === "style" && type === appState.resourceStyleType
-      : button.dataset.resourcePage === appState.resourceInspectorMode && (appState.resourceInspectorMode !== "style" || appState.resourceStyleType === "all")
+  for (const button of $("#resource-page-tabs").querySelectorAll<HTMLButtonElement>("button")) {
+    const { resourceStyleType: type, imageFolder, resourcePage } = button.dataset
+    const selected = imageFolder ? appState.resourceInspectorMode === "image" && imageFolder === appState.resourceImageFolder
+      : type ? appState.resourceInspectorMode === "style" && type === appState.resourceStyleType
+      : resourcePage === appState.resourceInspectorMode && (appState.resourceInspectorMode !== "style" || appState.resourceStyleType === "all")
+        && (appState.resourceInspectorMode !== "image" || !appState.resourceImageFolder)
     button.setAttribute("aria-pressed", String(selected))
     if (type) {
       button.disabled = !archive || archive.format === "ssf" || archive.format === "bda" && !["image", "color", "text"].includes(type)
@@ -147,8 +186,9 @@ export function updateResourcePage(title: string, count: number, fontCatalog = f
   }
   syncMobileResourceCategory()
   const kind = appState.resourceInspectorMode
-  const total = counts[kind]
-  setText("#resource-page-description", `${total.toLocaleString()} 个${title}${kind === "style" ? ` · ${counts.all.toLocaleString()} 个资源` : ""}${count !== total ? ` · 筛出 ${count.toLocaleString()} 项` : ""}`)
+  const folderCount = kind === "image" ? imageFolders.get(appState.resourceImageFolder) : undefined
+  const total = folderCount ?? counts[kind]
+  setText("#resource-page-description", `${total.toLocaleString()} ${folderCount === undefined ? `个${title}` : "张图片"}${kind === "style" ? ` · ${counts.all.toLocaleString()} 个资源` : ""}${count !== total ? ` · 筛出 ${count.toLocaleString()} 项` : ""}`)
   const create = $<HTMLButtonElement>("#resource-create-style")
   create.hidden = false
   create.lastChild!.textContent = kind === "style" ? (mobilePortraitQuery.matches ? "新建样式" : "新建资源") : kind === "image" ? "上传" : "添加"
@@ -206,7 +246,7 @@ function renderCatalog(): void {
   if (!visible.some(item => item.id === appState.selectedResourceCatalogItem)) appState.selectedResourceCatalogItem = ""
   resourceUsage.parentElement!.hidden = true
   resourceListView.querySelector<HTMLElement>(".ui-style-filter-bar")?.setAttribute("hidden", "")
-  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-resource-page], [data-resource-catalog], [data-resource-style-type]")) button.setAttribute("aria-pressed", String(button.dataset.resourceCatalog === appState.resourceCatalog))
+  for (const button of $("#resource-page-tabs").querySelectorAll<HTMLButtonElement>("button")) button.setAttribute("aria-pressed", String(button.dataset.resourceCatalog === appState.resourceCatalog))
   syncMobileResourceCategory()
   const choose = (row: HTMLElement, focus = true) => {
     appState.selectedResourceCatalogItem = row.dataset.catalogId!
@@ -292,7 +332,7 @@ function syncMobileResourceCategory(): void {
   const select = $<HTMLSelectElement>("#mobile-resource-category")
   for (const button of $("#resource-page-tabs").querySelectorAll<HTMLButtonElement>("[data-resource-choice]")) {
     const value = button.dataset.resourceChoice!
-    const option = select.querySelector<HTMLOptionElement>(`[value="${value}"]`)!
+    const option = select.querySelector<HTMLOptionElement>(`[value="${CSS.escape(value)}"]`)!
     const label = button.querySelector(":scope > span:not([aria-hidden])")?.textContent ?? ""
     const count = button.querySelector("small")?.textContent
     const text = count ? `${label} (${count})` : label
@@ -336,7 +376,7 @@ export function wireResourcePage(): void {
     const group = resourceStyleType || resourcePage === "style" ? styleChoices : fileChoices
     group.append(new Option("", value))
   }
-  category.addEventListener("change", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-choice="${category.value}"]`)?.click())
+  category.addEventListener("change", () => $("#resource-page-tabs").querySelector<HTMLButtonElement>(`[data-resource-choice="${CSS.escape(category.value)}"]`)?.click())
   const filterToggle = $("#mobile-resource-filters-toggle")
   const filterOptions = $("#resource-filter-options")
   filterToggle.addEventListener("click", () => {
@@ -353,12 +393,12 @@ export function wireResourcePage(): void {
   $("#resource-sort").addEventListener("change", redraw)
   for (const button of resourceTheme.querySelectorAll<HTMLButtonElement>("[data-resource-theme]")) button.addEventListener("click", async () => {
     if (resourceTheme.hidden || theme.value === button.dataset.resourceTheme) return
-    const { resourceCatalog, resourceInspectorMode } = appState
+    const { resourceCatalog, resourceInspectorMode, resourceImageFolder } = appState
     const search = resourceSearch.value
     const focused = document.activeElement === button
     await selectChoice(theme, button.dataset.resourceTheme!)
     if (theme.value !== button.dataset.resourceTheme) return
-    openResources(resourceInspectorMode)
+    openResources(resourceInspectorMode, resourceImageFolder)
     appState.resourceCatalog = resourceCatalog
     resourceSearch.value = search
     if (resourceCatalog || search) redraw()
@@ -385,6 +425,6 @@ export function wireResourcePage(): void {
   bindListActionKeys($("#resource-catalog"), resourceSelectionActions)
   bindResourceMenu($("#resource-catalog"), '[role="option"]', row => row.click())
   $("#resource-page-tabs").addEventListener("click", event => {
-    if ((event.target as Element).closest("[data-resource-page]")) appState.resourceCatalog = ""
+    if ((event.target as Element).closest("[data-resource-page], [data-image-folder]")) appState.resourceCatalog = ""
   }, { capture: true })
 }

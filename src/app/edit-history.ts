@@ -191,12 +191,12 @@ function refreshHistorySelection(): void {
   const resourceMode = appState.resourceConfigActive ? appState.resourceInspectorMode : "document"
   const themes = usesSkinThemeDirectories() ? availableSkinThemes() : []
   if (themes.length && !themes.includes(theme.value)) {
-    const { resourceCatalog } = appState
+    const { resourceCatalog, resourceImageFolder } = appState
     const search = resourceSearch.value
     theme.value = themes[0]
     theme.dispatchEvent(new Event("change"))
     if (resourceMode !== "document") {
-      openResources(resourceMode)
+      openResources(resourceMode, resourceImageFolder)
       appState.resourceCatalog = resourceCatalog
       resourceSearch.value = search
       if (resourceCatalog || search) renderResourceInspector()
