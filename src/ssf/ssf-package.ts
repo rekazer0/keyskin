@@ -53,7 +53,7 @@ export function ssfColor(value: string | undefined): string | undefined {
 }
 
 function zipEntries(bytes: Uint8Array): Map<string, Uint8Array> {
-  const normalized = normalizeArchive(bytes).bytes
+  const normalized = normalizeArchive(bytes)
   validateArchiveLimits(normalized)
   const unpacked = unzipSync(normalized)
   const names = Object.keys(unpacked)

@@ -240,12 +240,15 @@ test('clears decoy encryption flags that the packer writes only into the central
   assert.equal(converted.getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
 })
 
-test('still refuses a poisoned central directory when the local headers mark entries encrypted', async () => {
+test('rebuilds from the opened content when the local headers also carry an encryption marker', async () => {
   const bytes = sampleArchive()
   poisonCentralSizes(bytes)
   markCentralEncrypted(bytes, true)
   const archive = await SkinArchive.openAsync(bytes)
-  await assert.rejects(archive.toBytesAsync('bdi'), /标记为加密/)
+  // 能打开说明内容已经解出来了：导出按解包结果重新压缩，不再被源包标记挡住。
+  const bdi = await archive.toBytesAsync('bdi')
+  assert.deepEqual(parseZip(bdi).entries.filter(isZipEntryEncrypted), [])
+  assert.equal(SkinArchive.open(bdi, 'bdi').getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
 })
 
 // Palm 的打包器把真实大小写进中央目录的 ZIP64 extra 字段，却不写 ZIP64 结束记录，
@@ -442,15 +445,38 @@ test('BDI → BDS preserves the normal, pressed and panel artwork of an out-of-o
   assert.deepEqual(source.getBytes(`${path}.til`), strToU8(til))
 })
 
-test('BDI → BDS refuses ZIP entries whose local headers mark them encrypted', async () => {
-  // 中央目录的加密位可能只是防解包的假标记，本地文件头的加密位才是真的。
+test('BDI → BDS rebuilds entries whose local headers only carry a fake encryption marker', async () => {
   for (const flag of [1, 64]) {
-    const bytes = zipSync({ 'skin/port/py_26.ini': strToU8('[PANEL]\nSIZE=10,10\n') }, { level: 0 })
+    const view = '[PANEL]\nSIZE=10,10\n'
+    const bytes = zipSync({ 'skin/port/py_26.ini': strToU8(view) }, { level: 0 })
     const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     header.setUint16(6, header.getUint16(6, true) | flag, true)
-    const source = SkinArchive.open(bytes, 'bdi')
-    assert.throws(() => source.toBytes('bds'), /未加密/)
-    await assert.rejects(source.toBytesAsync('bds'), /未加密/)
+    // 同步打开和带进度回调的流式解包都要能打开，并记下来源的加密标记。
+    for (const source of [SkinArchive.open(bytes, 'bdi'), await SkinArchive.openAsync(bytes, 'bdi', () => {})]) {
+      assert.deepEqual(source.zipEncryptedPaths(), ['skin/port/py_26.ini'])
+      // 原始字节带标记，导出必须按已解包的内容重新压缩成干净 ZIP。
+      for (const output of [source.toBytes('bds'), await source.toBytesAsync('bds')]) {
+        assert.deepEqual(parseZip(output).entries.filter(isZipEntryEncrypted), [])
+        assert.equal(SkinArchive.open(output, 'bds').getText('light/skin/port/py_26.ini'), view)
+      }
+    }
+  }
+})
+
+test('same-format save of a marked archive rebuilds instead of copying the markers', async () => {
+  const view = '[PANEL]\nSIZE=10,10\n'
+  const bytes = zipSync({ 'skin/port/py_26.ini': strToU8(view) }, { level: 0 })
+  const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  header.setUint16(6, header.getUint16(6, true) | 1, true)
+  const source = SkinArchive.open(bytes, 'bdi')
+  for (const output of [source.toBytes('bdi'), await source.toBytesAsync('bdi')]) {
+    assert.deepEqual(parseZip(output).entries.filter(isZipEntryEncrypted), [])
+    assert.equal(SkinArchive.open(output, 'bdi').getText('light/skin/port/py_26.ini'), view)
+  }
+  source.setText('skin/port/py_26.ini', `${view}[KEY1]\nCENTER=a\n`)
+  for (const output of [source.toBytes('bdi'), await source.toBytesAsync('bdi')]) {
+    assert.deepEqual(parseZip(output).entries.filter(isZipEntryEncrypted), [])
+    assert.equal(SkinArchive.open(output, 'bdi').getText('light/skin/port/py_26.ini'), `${view}[KEY1]\nCENTER=a\n`)
   }
 })
 
@@ -467,11 +493,16 @@ test('clears decoy central encryption flags even when the EOCD per-disk count is
   assert.equal(SkinArchive.open(bdi, 'bdi').getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
 })
 
-test('BDI → BDS does not export a ZIP opened through directory repair', async () => {
+test('exports a ZIP opened through directory repair instead of refusing to convert', async () => {
   const bytes = zipSync({ 'skin/port/py_26.ini': strToU8('[PANEL]\nSIZE=10,10\n') })
   new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint16(bytes.length - 14, 0, true)
   const source = await SkinArchive.openAsync(bytes, 'bdi')
-  await assert.rejects(source.toBytesAsync('bds'), /ZIP 结构完整/)
+  const bds = await source.toBytesAsync('bds')
+  assert.equal(SkinArchive.open(bds, 'bds').getText('light/skin/port/py_26.ini'), '[PANEL]\nSIZE=10,10\n')
+  // 同格式保存也按解包内容重新压缩，修好的 EOCD 计数不会丢。
+  const saved = source.toBytes('bdi')
+  assert.equal(parseZip(saved).entries.length, 1)
+  assert.equal(SkinArchive.open(saved, 'bdi').getText('light/skin/port/py_26.ini'), '[PANEL]\nSIZE=10,10\n')
 })
 
 test('BDS → BDI writes .til slices in IMG order, since iOS numbers them by position', async () => {

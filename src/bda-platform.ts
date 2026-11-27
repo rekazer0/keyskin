@@ -99,8 +99,6 @@ export function bdaCompatibilityWarnings(archive: SkinArchive): string[] {
   if (platform !== "unknown" && declared && !declared.toUpperCase().includes(platform === "ios" ? "I" : "A")) {
     warnings.push(`Info.txt 声明为 ${declared}，但配置属于 ${platform === "ios" ? "iOS" : "Android"} BDA`)
   }
-  const encrypted = archive.zipEncryptedPaths().filter((path) => !path.endsWith("/"))
-  if (encrypted.length) warnings.push(`ZIP 有 ${encrypted.length} 个条目被标记为加密，目标输入法可能静默拒绝`)
   return warnings
 }
 

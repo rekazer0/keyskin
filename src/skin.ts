@@ -242,8 +242,6 @@ export class SkinArchive {
   private canonicalToRaw = new Map<string, string>()
   private cachedNames?: string[]
   private changedRaw = new Set<string>()
-  private zipWasRepaired = false
-  private zipRepairVerified = false
   readonly changed = new Set<string>()
   /** Bumped whenever file contents or paths change, so callers can skip redundant redraws. */
   revision = 0
@@ -281,22 +279,8 @@ export class SkinArchive {
   }
 
   static open(bytes: Uint8Array, formatHint?: ExportFormat): SkinArchive {
-    const normalized = normalizeArchive(bytes)
-    const sourceBytes = normalized.bytes
+    const sourceBytes = normalizeArchive(bytes)
     validateArchiveLimits(sourceBytes)
-
-    // Check if normalization changed the bytes (indicating repair was needed)
-    let wasRepaired = false
-    if (sourceBytes.length === bytes.length) {
-      for (let i = 0; i < bytes.length; i++) {
-        if (sourceBytes[i] !== bytes[i]) {
-          wasRepaired = true
-          break
-        }
-      }
-    } else {
-      wasRepaired = true
-    }
 
     const unpacked = unzipSync(sourceBytes)
     const names = Object.keys(unpacked)
@@ -335,10 +319,7 @@ export class SkinArchive {
       if (total > MAX_UNPACKED_BYTES) throw new Error("皮肤解压后超过 256 MB")
       files.set(name, data)
     }
-    const archive = new SkinArchive(files, sourceBytes, formatHint)
-    archive.zipWasRepaired = wasRepaired
-    archive.zipRepairVerified = normalized.verified
-    return archive
+    return new SkinArchive(files, sourceBytes, formatHint)
   }
 
   static async openAsync(
@@ -346,22 +327,8 @@ export class SkinArchive {
     formatHint?: ExportFormat,
     onProgress?: (value: number) => void,
   ): Promise<SkinArchive> {
-    const normalized = normalizeArchive(bytes)
-    const sourceBytes = normalized.bytes
+    const sourceBytes = normalizeArchive(bytes)
     validateArchiveLimits(sourceBytes)
-
-    // Check if normalization changed the bytes (indicating repair was needed)
-    let wasRepaired = false
-    if (sourceBytes.length === bytes.length) {
-      for (let i = 0; i < bytes.length; i++) {
-        if (sourceBytes[i] !== bytes[i]) {
-          wasRepaired = true
-          break
-        }
-      }
-    } else {
-      wasRepaired = true
-    }
 
     const unpacked = await unpackArchive(sourceBytes, onProgress)
     const names = Object.keys(unpacked)
@@ -379,11 +346,8 @@ export class SkinArchive {
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
       }
     }
-    const archive = new SkinArchive(files, sourceBytes, formatHint)
-    archive.zipWasRepaired = wasRepaired
-    archive.zipRepairVerified = normalized.verified
     onProgress?.(1)
-    return archive
+    return new SkinArchive(files, sourceBytes, formatHint)
   }
 
   static fromSourceFiles(files: Array<{ path: string; data: Uint8Array }>): SkinArchive {
@@ -674,25 +638,22 @@ export class SkinArchive {
     return zipSync(this.packagedFiles(format), { level: 6 })
   }
 
-  private assertPlatformZipUnencrypted(format?: ExportFormat): void {
-    if (format !== "bdi" && format !== "bds") return
-    if (this.sourceZip?.entries.some(isZipEntryEncrypted) || hasEncryptedCentralEntries(this.sourceBytes)) {
-      throw new Error("此皮肤包的 ZIP 条目标记为加密，无法导出。请使用未加密的原始皮肤包。")
-    }
+  /**
+   * 源 ZIP 条目带加密标记时，不能复用原始字节（会把假标记写进新包）；
+   * 但皮肤既然已经打开，导出就按解包后的内容重新压缩，不再拒绝导出。
+   */
+  private sourceHasEncryptionMarkers(): boolean {
+    return this.zipEncryptedPaths().length > 0 || hasEncryptedCentralEntries(this.sourceBytes)
   }
 
   /** `warnings` collects key sounds the target cannot play; `notes` (by default the same list) what packaging for iOS adjusted. */
   async toBytesAsync(format?: ExportFormat, warnings?: string[], notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
 
-    this.assertPlatformZipUnencrypted(format)
-
-    // Validate ZIP structure integrity when converting to platform format
-    if ((format === "bdi" || format === "bds") && this.zipWasRepaired && !this.zipRepairVerified && this.changed.size === 0) {
-      throw new Error("皮肤的 ZIP 结构完整性受损，无法转换")
-    }
-
-    if (this.sourceBytes.length && this.changed.size === 0 && (!format || (format === this.format && this.layout !== "legacy-ios"))) {
+    const sameFormat = !format || format === this.format
+    // 源包的加密标记只是打包器伪装时，按解包后的内容重新压缩；原始字节不能复用。
+    const reuseSource = !this.sourceHasEncryptionMarkers() && this.sourceBytes.length > 0
+    if (reuseSource && this.changed.size === 0 && sameFormat && this.layout !== "legacy-ios") {
       return this.sourceBytes.slice()
     }
     // Avoid fflate's one-worker-per-large-file async ZIP path, which can exhaust WebView workers.
@@ -702,7 +663,9 @@ export class SkinArchive {
     }
     if (this.format !== "bdi") {
       if (this.needsThemeRepack()) return zipArchiveAsync(this.promotedBdaFiles() ?? this.packagedFiles(this.format))
-      if (!this.sourceZip) return zipArchiveAsync(Object.fromEntries(this.files))
+      if (!this.sourceZip || (sameFormat && !reuseSource)) return zipArchiveAsync(Object.fromEntries(this.files))
+    } else if (sameFormat && !reuseSource) {
+      return zipArchiveAsync(Object.fromEntries(this.files))
     }
     return this.toBytes(format)
   }
@@ -710,7 +673,6 @@ export class SkinArchive {
   /** Packages for a BDI/BDS platform, pointing key sounds at a format that platform plays (AIFF / OGG). */
   async platformBytesAsync(format: "bdi" | "bds", warnings?: string[], fromAndroid = false, notes = warnings): Promise<Uint8Array> {
     assertRepackable(this.format, format)
-    this.assertPlatformZipUnencrypted(format)
     const files = new Map(Object.entries(this.packagedFiles(format, notes)))
     // An Android BDS on iOS: without LOGO entry points iOS draws faint default toolbar icons.
     if (fromAndroid) {
@@ -728,24 +690,25 @@ export class SkinArchive {
   toBytes(format?: ExportFormat): Uint8Array {
     assertRepackable(this.format, format)
 
-    this.assertPlatformZipUnencrypted(format)
-
     if (this.format === "bdi" && (!format || format === "bdi")) refreshIosLogo(this)
     if (format && (format !== this.format || this.layout === "legacy-ios")) {
       return this.packagedBytes(format)
     }
-    if (this.sourceBytes.length && this.changed.size === 0) return this.sourceBytes.slice()
+    // 带加密标记的源包不能复用原始字节，按解包后的内容重新压缩成干净 ZIP。
+    const reuseSource = !this.sourceHasEncryptionMarkers() && this.sourceBytes.length > 0
+    if (reuseSource && this.changed.size === 0) return this.sourceBytes.slice()
     if (this.needsThemeRepack()) return zipSync(this.promotedBdaFiles() ?? this.packagedFiles(this.format), { level: 6 })
-    if (!this.sourceZip) {
+    const sourceZip = this.sourceZip
+    if (!reuseSource || !sourceZip) {
       return zipSync(Object.fromEntries(this.files), { level: 6 })
     }
 
     const changes = new Map<string, Uint8Array | undefined>()
-    const sourceNames = new Set(this.sourceZip.entries.map((entry) => entry.name))
+    const sourceNames = new Set(sourceZip.entries.map((entry) => entry.name))
     for (const name of sourceNames) if (!this.files.has(name)) changes.set(name, undefined)
     for (const [name, data] of this.files) {
       if (!sourceNames.has(name) || this.changedRaw.has(name)) changes.set(name, data)
     }
-    return patchZip(this.sourceZip, changes)
+    return patchZip(sourceZip, changes)
   }
 }
