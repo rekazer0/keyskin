@@ -6,6 +6,7 @@ import { resourceCount, resourceGallery, resourceSearch, resourceDownloadButton 
 import { playSoundPath, releaseKeySound } from "./canvas-interaction"
 import { isEditing } from "./edit-history"
 import { runFileOperation } from "./file-operations"
+import { chooseResourceReplacement } from "./resource-transfer"
 import { uploadKeySound } from "./resource-inspector"
 import type { SoundEntry } from "./types"
 import { bindResourceCard, selectGalleryItem, syncResourceSelection } from "./resource-gallery"
@@ -19,10 +20,10 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void, 
   const visible = sortResources(entries.filter(entry => `${entry.filename} ${entry.usage}`.toLowerCase().includes(query)), entry => entry.filename)
   resourceCount.textContent = query ? `${visible.length} / ${entries.length}` : String(entries.length)
   const library = element("div", "ui-sound-library")
-  const chooseFile = (entry?: SoundEntry) => {
+  const chooseFile = () => {
     const input = element("input")
     input.type = "file"
-    input.accept = entry ? `.${entry.filename.split(".").pop()}` : SOUND_ACCEPT
+    input.accept = SOUND_ACCEPT
     input.hidden = true
     library.append(input)
     const archive = appState.archive
@@ -30,7 +31,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void, 
       const file = input.files?.[0]
       input.remove()
       if (file && appState.archive === archive && library.isConnected) {
-        void runFileOperation(entry ? "替换按键音效" : "添加按键音效", () => uploadKeySound(file, entry?.path))
+        void runFileOperation("添加按键音效", () => uploadKeySound(file))
       }
     }, { once: true })
     input.addEventListener("cancel", () => input.remove(), { once: true })
@@ -107,7 +108,7 @@ export function renderSoundLibrary(entries: SoundEntry[], onSelect: () => void, 
     replace.append(createIcon("upload"), "替换文件")
     replace.disabled = !isEditing()
     replace.title = "替换音频内容，保留原文件名和引用"
-    replace.addEventListener("click", () => chooseFile(selected))
+    replace.addEventListener("click", () => chooseResourceReplacement(selected.path))
     const download = iconButton("download", "下载选中按键音效", () => resourceDownloadButton.click())
     actions.append(play, replace, download)
     status.textContent = ""

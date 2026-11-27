@@ -16,6 +16,9 @@ import {
 import { baiduConfigControl } from "../baidu-config-controls.ts"
 import { field, section, type FieldSpec } from "./property-rows"
 import { decodeFrames } from "../native-motion.ts"
+import { element } from "../dom-element.ts"
+import { normalizeArchivePath } from "../font-files.ts"
+import { MAX_ARCHIVE_BYTES, safePath } from "../skin-zip.ts"
 import { createIcon } from "../icons.ts"
 import {
   LEGACY_ANIMATION_KINDS,
@@ -44,7 +47,9 @@ import {
 import { preview } from "./canvas-interaction"
 import { visualResolver } from "./bda-documents"
 import { legacyAnimationConfigPath, setSourceValue, styleConfigPath } from "./config-context"
-import { commitText, commitTextChanges, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
+import { commitBytes, commitText, commitTextChanges, isEditing, updateDirty, updateHistoryButtons } from "./edit-history"
+import { runFileOperation, showFileOperationProgress, updateFileOperationProgress } from "./file-operations"
+import { renderFiles } from "./file-tree"
 import { addStyle, availableStyleIDs, editStyleConfig, openAnimationStylePicker, refreshStyleReferenceThumbnails, styleConfigDocument, styleKind } from "./style-picker"
 import { populateKeyInspector } from "./key-inspector"
 import { refreshPreview } from "./preview-render"
@@ -145,18 +150,57 @@ function fieldSpec(entry: LegacyAnimationEntry, key: string, value: string): Fie
   return { kind: "text", value }
 }
 
+/** 补回缺失的 GIF，不改动画引用，也不覆盖已有文件。 */
+function uploadMissingGif(path: string): void {
+  const archive = appState.archive
+  if (!archive || !isEditing() || archive.getBytes(path)) return
+  const revision = archive.revision
+  const valid = () => appState.archive === archive && archive.revision === revision && isEditing()
+  const input = element("input")
+  input.type = "file"
+  input.accept = ".gif,image/gif"
+  input.hidden = true
+  document.body.append(input)
+  input.addEventListener("cancel", () => input.remove(), { once: true })
+  input.addEventListener("change", () => {
+    const file = input.files?.[0]
+    input.remove()
+    if (!file || !valid()) return
+    void runFileOperation("上传 GIF", async () => {
+      showFileOperationProgress()
+      updateFileOperationProgress(0, file.name)
+      if (file.size > MAX_ARCHIVE_BYTES) throw new Error("GIF 文件超过 64 MB")
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const header = new TextDecoder().decode(bytes.subarray(0, 6))
+      if (!/^GIF8[79]a$/.test(header) || !(await decodeFrames(bytes, "image/gif")).length) {
+        throw new Error("请选择可解码的 GIF 文件")
+      }
+      if (!valid()) return false
+      commitBytes(path, undefined, bytes)
+      renderFiles()
+      refreshPreview()
+      populateKeyInspector()
+      updateDirty()
+      return true
+    })
+  }, { once: true })
+  input.click()
+}
+
 /** ANIM_PATH 是 anim.ini 旁（或 res 里）的 gif / webp / png：图片卡片，名称可选现有文件。 */
 function animPathSpec(value: string): FieldSpec {
-  const folder = appState.selectedPath.replace(/[^/]*$/, "")
+  const config = appState.selectedPath
+  const folder = config.replace(/[^/]*$/, "")
+  const bytes = readSkinFile(value, config)
+  const target = !bytes && safePath(value) ? normalizeArchivePath(folder, value) : undefined
   return {
     kind: "image",
     value,
     placeholder: "选择或输入文件",
     suggestions: (appState.archive?.names() ?? []).filter((path) => path.startsWith(folder) && /\.(gif|webp|png)$/i.test(path)).map((path) => path.slice(folder.length)),
-    load: () => {
-      const bytes = value ? readSkinFile(value) : undefined
-      return bytes && decodeFrames(bytes, /\.gif$/i.test(value) ? "image/gif" : /\.png$/i.test(value) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual)
-    },
+    load: () => bytes && decodeFrames(bytes, /\.gif$/i.test(value) ? "image/gif" : /\.png$/i.test(value) ? "image/png" : "image/webp").then((frames) => frames[0]?.visual),
+    pick: target?.startsWith(folder) && /\.gif$/i.test(target) ? () => uploadMissingGif(target) : undefined,
+    pickLabel: "上传 GIF…",
   }
 }
 
@@ -281,18 +325,18 @@ function listItem(entry: LegacyAnimationEntry, byIndex: ReadonlyMap<string, Lega
     detail,
     uses,
     previewRevision: JSON.stringify([entry.fields, [...styles], entry.kind === "combination"
-      ? buildList(entry).map(id => byIndex.get(String(Number(id)))?.fields) : undefined]),
+      ? buildList(entry).map(id => byIndex.get(String(Number(id)))?.fields) : undefined,
+    entry.kind === "frame" || entry.kind === "combination" ? appState.archive?.revision : undefined]),
     problem: problem(entry, byIndex),
   }
 }
 /** ANIM_PATH 相对 anim.ini 所在目录；找不到时再试皮肤的 res 目录。 */
-function readSkinFile(path: string): Uint8Array | undefined {
+function readSkinFile(path: string, config: string): Uint8Array | undefined {
   const archive = appState.archive
-  if (!archive) return
-  const folder = appState.selectedPath.replace(/[^/]*$/, "")
-  const res = styleConfigPath().replace(/[^/]*$/, "")
-  for (const candidate of [`${folder}${path}`, `${res}${path}`, path]) {
-    const bytes = archive.getBytes(candidate.replace(/\/\.\//g, "/"))
+  if (!archive || !path) return
+  for (const folder of [config.replace(/[^/]*$/, ""), styleConfigPath().replace(/[^/]*$/, ""), ""]) {
+    const candidate = normalizeArchivePath(folder, path)
+    const bytes = candidate ? archive.getBytes(candidate) : undefined
     if (bytes) return bytes
   }
 }
@@ -305,10 +349,10 @@ function pressStyles(entry: LegacyAnimationEntry, entries: readonly LegacyAnimat
     .map((reference) => reference.styleSection.replace(/^STYLE/i, "")))
 }
 
-function legacyPlayerArtwork(styles: ReadonlySet<string>) {
+function legacyPlayerArtwork(styles: ReadonlySet<string>, config: string) {
   return {
     resolver: visualResolver(),
-    readFile: readSkinFile,
+    readFile: (file: string) => readSkinFile(file, config),
     sample: () => animationKeySample(styles),
   }
 }
@@ -385,7 +429,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
     thumbnail: id => ({
       clip: iniPreviewClip(appState.selectedDocument!, id, { fillBefore: true }),
       key: `${appState.selectedPath}|${id}`,
-      ...legacyPlayerArtwork(boundStyles(id)),
+      ...legacyPlayerArtwork(boundStyles(id), appState.selectedPath),
     }),
     styleFilter,
     editable: isEditing(),
@@ -432,7 +476,7 @@ export function populateLegacyAnimationInspector(container: HTMLElement): boolea
     player: entry && {
       clip: iniPreviewClip(appState.selectedDocument!, entry.section, { fillBefore: true }),
       key: `${appState.selectedPath}|${entry.section}`,
-      ...legacyPlayerArtwork(boundStyles(entry.section)),
+      ...legacyPlayerArtwork(boundStyles(entry.section), appState.selectedPath),
       keyboard: keyboardPlayback(key => plays(entry.section, key)),
       direct: isEditing() ? legacyDirectEdit(text, appState.selectedDocument!, entry.section) : undefined,
     },
@@ -488,7 +532,7 @@ export function styleAnimationSources(styleID: string, styles: IniDocument) {
   const clips = entries.map(entry => iniPreviewClip(document, entry.section, { fillBefore: true }))
   const files: Record<string, number[]> = {}
   for (const file of new Set(clips.flatMap(clip => clip.images.flatMap(item => item.file ? [item.file] : [])))) {
-    const bytes = readSkinFile(file)
+    const bytes = readSkinFile(file, path)
     if (bytes) files[file] = Array.from(bytes)
   }
   return { text, sections: entries.map(entry => entry.section), files,
@@ -504,7 +548,7 @@ export function styleAnimationPlayers(styleID: string, styles: IniDocument, thum
   return animations.map((entry) => animationPlayer({
     clip: iniPreviewClip(animationsDocument!, entry.section, { fillBefore: true }),
     key: `${path}|${entry.section}`,
-    ...legacyPlayerArtwork(boundStyles),
+    ...legacyPlayerArtwork(boundStyles, path),
     thumbnail,
     keyboard: thumbnail ? undefined : keyboardPlayback(key => keyPlaysStyle(key, boundStyles)),
   }))
@@ -572,7 +616,7 @@ export function decorateStyleAnimationField(row: HTMLElement, styleID: string, k
     content: entry ? animationPlayer({
       clip: iniPreviewClip(document!, entry.section, { fillBefore: true }),
       key: `${path}|${entry.section}`,
-      ...legacyPlayerArtwork(boundStyles),
+      ...legacyPlayerArtwork(boundStyles, path),
       thumbnail: true,
     }) : createIcon("image-off", 16),
     onClick: edit => edit && entry ? openAnimation(path, entry.kind === "particle", entry.section) : choose(id, slot),

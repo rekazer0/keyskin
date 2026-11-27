@@ -520,7 +520,10 @@
   .source #tile-preview-wrap { display: none; }
 }
 
-.mobile-resource-heading, .mobile-resource-classification, #mobile-resource-filters-toggle { display: none; }
+.mobile-resource-heading, .mobile-resource-classification, #mobile-resource-filters-toggle, [data-resource-more] { display: none; }
+@media (max-width: 760px) and (orientation: portrait), (max-width: 950px) and (max-height: 600px) and (pointer: coarse) {
+  [data-resource-more]:not([hidden]) { display: inline-flex; --_height: var(--mobile-control-height); }
+}
 @media (max-width: 760px) and (orientation: portrait) {
   .source .mobile-resource-heading { display: flex; flex: none; order: 0; align-items: center; justify-content: space-between; gap: var(--space-sm); padding-top: var(--safe-area-top); }
   .mobile-resource-heading h1 { margin: 0; font-size: var(--font-size-page); font-weight: var(--font-weight-semibold); }

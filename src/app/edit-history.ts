@@ -1,10 +1,11 @@
+import { isSoundPath } from "../sounds"
 import { canvasWrap, mode, theme, resourceSearch, dirty, undoButton, redoButton, sourceName, documentName, mobileDocumentStatus, shareDocumentStatus } from "./dom"
 import { appState } from "./state"
 import { ask } from "./ask"
 import { flushNumberInputWheel, numberInputGesture } from "../number-input-wheel.ts"
 import { flushSourceAutosave, scheduleSourceAutosave } from "./source-workspace"
 import { showError } from "./file-operations"
-import { recordChange, mobilePortraitQuery, pendingSourcePaths } from "./canvas-interaction"
+import { keySoundBuffers, recordChange, mobilePortraitQuery, pendingSourcePaths, releaseKeySound } from "./canvas-interaction"
 import { saveArchive, currentExportFormat } from "./archive-io"
 import { acceptAiDraftPreview, discardAiDesignDraft } from "./ai-panel"
 import { type Change } from "../history.ts"
@@ -213,7 +214,7 @@ function refreshHistorySelection(): void {
     appState.selectedTileIndex = appState.slices.some(slice => slice.index === index) ? index : undefined
     populateTileInspector()
     drawAtlas()
-  } else if (resourceMode === "image") {
+  } else if (resourceMode === "image" || resourceMode === "sound") {
     renderResourceInspector()
   } else if (appState.animationDesignMode !== "all" && appState.archive?.format !== "bda" && !legacyAnimationConfigPath() && appState.layoutPath) {
     // Undoing 「自动创建」 removes the animation configuration being shown.
@@ -274,6 +275,10 @@ export function applyBytesSnapshot(path: string, bytes?: Uint8Array, refresh = t
   if (bytes) appState.archive.setBytes(path, bytes)
   else appState.archive.delete(path)
   scheduleSourceAutosave([path])
+  if (isSoundPath(path)) {
+    keySoundBuffers.delete(path)
+    if (appState.keySoundPath === path) releaseKeySound()
+  }
   if (!refresh) return
   refreshBinaryViews(path, bytes)
   refreshSnapshotViews()

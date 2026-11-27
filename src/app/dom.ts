@@ -537,6 +537,8 @@ export const soundResourceDetail = $("#sound-resource-detail")
 
 export const resourceDownloadButton = $("#resource-download") as HTMLButtonElement
 
+export const resourceMoreButton = $("#resource-more") as HTMLButtonElement
+
 export const resourceRenameButton = $("#resource-rename") as HTMLButtonElement
 
 export const resourceDeleteButton = $("#resource-delete") as HTMLButtonElement

@@ -1,9 +1,11 @@
+import { iconButton } from "../dom-element"
 import { openActionMenu } from "./context-menu"
 import { resourceWindow } from "./resource-grid-window"
 import { appState } from "./state"
-import { resourceDetail, resourceGallery, resourceSelectionActions } from "./dom"
+import { $, resourceDetail, resourceGallery, resourceMoreButton, resourceSelectionActions } from "./dom"
 import { updateResourceActionButtons } from "./resource-inspector"
-import { startResourceDrag } from "./resource-transfer"
+import { chooseResourceReplacement, resourceReplacementExtension, startResourceDrag } from "./resource-transfer"
+import { isEditing } from "./edit-history"
 import { mobilePortraitQuery, releaseKeySound } from "./canvas-interaction"
 
 function resourceCards(): HTMLElement[] {
@@ -110,6 +112,17 @@ export function bindResourceCard(card: HTMLElement, path: string, open: () => vo
       && !event.metaKey && !event.ctrlKey && !event.shiftKey
       && !(event.target instanceof Element && event.target.closest("button, input, audio") && event.target !== card)) open()
   })
+  const caption = card.querySelector(".ui-image-card-caption")
+  if (caption) {
+    const more = iconButton("ellipsis", "更多资源操作", event => {
+      event.stopPropagation()
+      selectGalleryItem(path)
+      openResourceMore(more)
+    })
+    more.dataset.resourceMore = ""
+    more.setAttribute("aria-haspopup", "menu")
+    caption.append(more)
+  }
   if (preview) card.addEventListener("resource-preview", preview)
   card.addEventListener("dblclick", event => {
     if (event.target instanceof Element && event.target.closest("button, input, audio") && event.target !== card) return
@@ -126,13 +139,42 @@ export function bindResourceCard(card: HTMLElement, path: string, open: () => vo
   }
 }
 
+function replacementPath(): string | undefined {
+  if (appState.resourceCatalog) {
+    return $("#resource-catalog").querySelector<HTMLElement>('[aria-selected="true"]')?.dataset.catalogId
+  }
+  if (appState.selectedResourceGalleryPaths.length === 1) return appState.selectedResourceGalleryPath.replace(/^file:/, "")
+}
+
+function resourceMenuActions(): HTMLButtonElement[] {
+  const actions = [...resourceSelectionActions.querySelectorAll<HTMLButtonElement>("button")]
+    .filter(button => !resourceSelectionActions.contains(button.closest("[hidden]")))
+  const path = replacementPath()
+  if (path && resourceReplacementExtension(path)) {
+    const replace = iconButton("upload", "上传并替换", () => chooseResourceReplacement(path))
+    replace.disabled = !isEditing()
+    actions.unshift(replace)
+  }
+  return actions
+}
+
+function openResourceMore(button: HTMLButtonElement): void {
+  const box = button.getBoundingClientRect()
+  openActionMenu(button, box.left, box.top, "资源操作", resourceMenuActions(), true)
+}
+
 export function bindResourceMenu(list: HTMLElement, selector: string, select: (row: HTMLElement) => void): void {
+  list.addEventListener("resource-selection-change", () => {
+    const path = replacementPath()
+    const imageGrid = !appState.resourceCatalog && appState.resourceInspectorMode === "image"
+    resourceMoreButton.hidden = imageGrid || !path || !resourceReplacementExtension(path)
+  })
   function open(event: MouseEvent | KeyboardEvent) {
     const row = (event.target as Element).closest<HTMLElement>(selector)
     if (!row) return
     event.preventDefault()
     select(row)
-    const actions = [...resourceSelectionActions.querySelectorAll<HTMLButtonElement>("button")].filter(button => !resourceSelectionActions.contains(button.closest("[hidden]")))
+    const actions = resourceMenuActions()
     if (!actions.length) return
     const box = row.getBoundingClientRect()
     const [x, y] = event instanceof MouseEvent ? [event.clientX, event.clientY] : [box.left, box.bottom]
@@ -145,6 +187,7 @@ export function bindResourceMenu(list: HTMLElement, selector: string, select: (r
 }
 
 export function wireResourceSelection(): void {
+  resourceMoreButton.addEventListener("click", () => openResourceMore(resourceMoreButton))
   bindResourceMenu(resourceGallery, ".resource-item", row => {
     selectGalleryItem(row.dataset.path!)
     row.dispatchEvent(new Event("resource-preview"))

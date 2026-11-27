@@ -95,6 +95,8 @@ test('saving a read-only Android skin asks for write access and writes back to t
     recordRecentFile: (path) => workspaceUpdates.push(['recent', path]),
     startSourceWorkspace: (_archive, path) => workspaceUpdates.push(['start', path]),
     updateDirty: () => {},
+    logShareExport: () => {},
+    operationErrorLog: () => 'Error',
   })
   assert.equal(await context.saveNative(false, 'bdi', '皮肤.bdi'), true)
   assert.deepEqual(picks, [original])

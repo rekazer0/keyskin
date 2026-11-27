@@ -204,6 +204,9 @@ body:has(.ui-dialog[open][data-toolbar-spotlight="true"]) .ui-pinned-toolbar,
 .ui-menu[data-variant="context"][data-popover-fallback]:not([open]) { display: none; }
 .ui-menu[data-variant="context"][data-popover-fallback] { right: auto; bottom: auto; z-index: 31; }
 .ui-menu[data-variant="context"] > [role="menu"] { display: grid; gap: var(--space-2xs); }
+@media (max-width: 760px) and (orientation: portrait), (pointer: coarse) {
+  .ui-menu[data-variant="context"] [role="menuitem"] { min-height: var(--mobile-control-height); }
+}
 .ui-menu-separator { height: 1px; margin: var(--space-sm) 0; border: 0; border-radius: var(--radius-full); background: var(--line-soft); }
 /* 菜单从触发按钮所在的角展开（各菜单自己的 transform-origin） */
 @keyframes ui-menu {

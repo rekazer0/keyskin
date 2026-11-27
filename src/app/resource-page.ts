@@ -293,6 +293,7 @@ function renderCatalog(): void {
     resourceDetail.hidden = false
     resourceDownloadButton.disabled = row.dataset.font !== "true"
     resourceDeleteButton.disabled = !canEditFonts || row.dataset.font !== "true"
+    host.dispatchEvent(new Event("resource-selection-change"))
   }
   for (const item of visible) {
     const row = element("div", "ui-list-item ui-resource-catalog-item")
@@ -320,6 +321,7 @@ function renderCatalog(): void {
   if (!visible.length) host.append(emptyState(query ? "search-x" : appState.resourceCatalog === "font" ? "type" : "layers"))
   const selected = [...host.querySelectorAll<HTMLElement>('[role="option"]')].find(row => row.dataset.catalogId === appState.selectedResourceCatalogItem)
   if (selected) choose(selected, false)
+  else host.dispatchEvent(new Event("resource-selection-change"))
 }
 
 export function renderResourceCatalogSearch(): boolean {

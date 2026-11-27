@@ -44,6 +44,7 @@ import { bindListActionKeys, emptyState, listToolbar } from "../dom-element.ts"
 import { releaseOnRemove } from "../dom-lifecycle.ts"
 import { appendResourceCards, clearResourceWindow } from "./resource-grid-window"
 import { bindResourceCard, selectGalleryItem, syncResourceSelection } from "./resource-gallery"
+import { replaceResourceFile } from "./resource-transfer"
 import type { Change } from "../history"
 import { renderResourceCatalogSearch, renderStyleFilters, resourceStyleMatchesUsage, sortResources, updateResourcePage } from "./resource-page"
 
@@ -744,19 +745,14 @@ export async function uploadResourceImage(file: File): Promise<string | undefine
 }
 
 export async function uploadKeySound(file: File, replacePath?: string): Promise<boolean> {
+  if (replacePath) return replaceResourceFile(file, replacePath)
   if (!appState.archive || !isSoundPath(file.name)) throw new Error("按键音效仅支持 OGG、WAV、AIFF 或 MP3 文件")
   if (!isEditing()) return false
   const targetArchive = appState.archive
   const filename = file.name.split(/[\\/]/).pop() ?? file.name
-  const entries = currentSoundEntries()
-  if (replacePath && !entries.some(entry => entry.path === replacePath)) throw new Error("要替换的音效已不存在")
-  if (replacePath && replacePath.split(".").pop()?.toLowerCase() !== filename.split(".").pop()?.toLowerCase()) {
-    throw new Error("替换文件需与原音效格式相同；其他格式请用「添加音效」。")
-  }
-  const base = replacePath?.split("/").slice(0, -1).join("/")
-    ?? entries[0]?.path.split("/").slice(0, -1).join("/")
-    ?? (appState.archive.format === "ssf" ? "default" : `${theme.value}/skin/res`)
-  const targetPath = replacePath ?? `${base}/${filename}`
+  const base = currentSoundEntries()[0]?.path.split("/").slice(0, -1).join("/")
+    ?? (targetArchive.format === "ssf" ? "default" : `${theme.value}/skin/res`)
+  const targetPath = `${base}/${filename}`
   const beforeResource = appState.archive.getBytes(targetPath)?.slice()
   const resourceBytes = new Uint8Array(await file.arrayBuffer())
   if (appState.archive !== targetArchive || !isEditing()) return false

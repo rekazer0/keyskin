@@ -44,7 +44,7 @@ export type FieldSpec =
   | ({ kind: "colorPair"; values: readonly [string, string] } & ColorOptions)
   /** 样式编号（逗号分隔）：bindFieldServices 的 decorateStyle 把输入框换成引用卡列表。 */
   | { kind: "style"; value: string; reference: string }
-  | { kind: "image"; value: string; placeholder?: string; suggestions?: readonly string[]; load(): Promise<Visual | undefined> | undefined; pick?(): void }
+  | { kind: "image"; value: string; placeholder?: string; suggestions?: readonly string[]; load(): Promise<Visual | undefined> | undefined; pick?(): void; pickLabel?: string }
   | { kind: "sound"; value: string; files: readonly string[]; sample?: HTMLElement }
   | { kind: "readonly"; value: string }
 
@@ -613,11 +613,12 @@ function imageControl(spec: Extract<FieldSpec, { kind: "image" }>, label: string
   name.setAttribute("aria-label", label)
   name.addEventListener("change", () => commit(name.value.trim()))
   const visual = spec.load()?.catch(() => undefined)
+  const pickLabel = spec.pickLabel ?? `更换${label}`
   const card = styleReferenceCard({
     name,
-    reference: spec.pick ? { label: `更换${label}`, run: spec.pick } : undefined,
+    reference: spec.pick ? { label: pickLabel, run: spec.pick } : undefined,
     states: [{
-      label: spec.pick ? `更换${label}` : label,
+      label: spec.pick ? pickLabel : label,
       draw: async (canvas) => { const loaded = await visual; if (loaded) drawVisualPreview(canvas, [loaded], false) },
       onClick: spec.pick && !disabled ? () => spec.pick!() : undefined,
     }],

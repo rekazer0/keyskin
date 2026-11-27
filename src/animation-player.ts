@@ -644,9 +644,16 @@ export function animationPlayer({ clip, key, resolver, resourceParticles, readFi
           else notes.push(`帧资源 ${resource.id || "（空）"} 未找到`)
         }
       } else {
-        const bytes = asset?.bytes ?? (!item.media && item.file ? readFile?.(item.file) : undefined)
-        if (bytes) frames = await decodeFrames(bytes, asset?.mime ?? (/\.gif$/i.test(item.file!) ? "image/gif" : /\.png$/i.test(item.file!) ? "image/png" : "image/webp"))
-        if (!frames.length) notes.push(`${item.media ? "GIF" : "图片序列"} ${item.file || "（未设置）"} 无法加载`)
+        const file = item.file ?? ""
+        const mime = asset?.mime ?? (item.media || /\.gif$/i.test(file) ? "image/gif" : /\.png$/i.test(file) ? "image/png" : "image/webp")
+        const label = mime === "image/gif" ? "GIF" : "图片序列"
+        const bytes = asset?.bytes ?? (!item.media && file ? readFile?.(file) : undefined)
+        if (!file) notes.push(`未设置${label}文件`)
+        else if (!bytes) notes.push(`未找到 ${label} ${file}`)
+        else {
+          frames = await decodeFrames(bytes, mime)
+          if (!frames.length) notes.push(`无法解码 ${label} ${file}`)
+        }
       }
       const total = frames.reduce((sum, frame) => sum + frame.duration, 0)
       if (disposed) return

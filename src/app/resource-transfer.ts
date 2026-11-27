@@ -1,12 +1,13 @@
+import { element } from "../dom-element"
 import { confirmDeletion } from "./ask"
 import { zipSync } from "fflate"
-import { isSoundPath, soundMimeType } from "../sounds"
+import { decodeSound, isSoundPath, soundMimeType } from "../sounds"
 import { appState } from "./state"
 import { resourceListView, resourceInspector, workspacePane, resourceUploadInput, resourceSearch, theme, orientation } from "./dom"
-import { currentSoundEntries, prepareResourceImage, renderResourceInspector } from "./resource-inspector"
-import { commitBatch, isEditing, updateDirty } from "./edit-history"
+import { currentSoundEntries, prepareResourceImage, renderResourceInspector, uploadKeySound } from "./resource-inspector"
+import { commitBatch, commitBytes, isEditing, updateDirty } from "./edit-history"
 import { isTauri, keySoundBuffers, releaseKeySound } from "./canvas-interaction"
-import { runFileOperation, showError, showStatus } from "./file-operations"
+import { runFileOperation, showError, showFileOperationProgress, showImage, showStatus } from "./file-operations"
 import { invoke } from "@tauri-apps/api/core"
 import { writeToChosenFile } from "./archive-io"
 import { syncResourceSelection } from "./resource-gallery"
@@ -16,6 +17,73 @@ import { isFontFile, sanitizeFontFileName, skinStylePaths, withFontReferencesCle
 import { validateFont } from "./skin-fonts"
 import { renderResourceCatalogSearch } from "./resource-page"
 import { refreshPreview } from "./preview-render"
+
+export function resourceReplacementExtension(path: string): string | undefined {
+  const archive = appState.archive
+  if (!archive?.getBytes(path)) return
+  if (archive.isImage(path) || isSoundPath(path) || isFontFile(path) && ["bdi", "bds"].includes(archive.format)) {
+    return path.match(/\.[^.\/]+$/)?.[0].toLowerCase()
+  }
+}
+
+export async function replaceResourceFile(file: File, path: string): Promise<boolean> {
+  const archive = appState.archive
+  const before = archive?.getBytes(path)
+  const extension = resourceReplacementExtension(path)
+  if (!archive || !before || !extension || !isEditing()) return false
+  if (!file.name.toLowerCase().endsWith(extension)) throw new Error(`请选择 ${extension} 格式的文件`)
+  const after = extension === ".png" ? (await prepareResourceImage(file, path)).after : new Uint8Array(await file.arrayBuffer())
+  if (isFontFile(path)) await validateFont(after)
+  else if (isSoundPath(path)) {
+    if (extension === ".caf") await new OfflineAudioContext(1, 1, 44100).decodeAudioData(after.slice().buffer)
+    else await decodeSound(after)
+  }
+  if (appState.archive !== archive || archive.getBytes(path) !== before || !isEditing()) return false
+  const focused = document.activeElement
+  commitBytes(path, before.slice(), after)
+  if (isSoundPath(path)) {
+    keySoundBuffers.delete(path)
+    if (appState.keySoundPath === path) releaseKeySound()
+    if (!appState.resourceCatalog && appState.resourceInspectorMode === "sound" && !appState.selectedResourceGalleryPath) {
+      appState.selectedResourceGalleryPaths = [appState.selectedResourceGalleryPath = `file:${path}`]
+    }
+  }
+  if (appState.selectedResourcePath === path && extension === ".png") showImage(path)
+  if (appState.resourceConfigActive) renderResourceInspector()
+  if (focused && !focused.isConnected) {
+    resourceListView.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.focus({ preventScroll: true })
+  }
+  refreshPreview()
+  updateDirty()
+  return true
+}
+
+export function chooseResourceReplacement(path: string): void {
+  const archive = appState.archive
+  const extension = resourceReplacementExtension(path)
+  if (!archive || !extension || !isEditing()) return
+  const before = archive.getBytes(path)
+  const input = element("input")
+  input.type = "file"
+  input.accept = extension
+  input.hidden = true
+  resourceInspector.append(input)
+  input.addEventListener("cancel", () => input.remove(), { once: true })
+  input.addEventListener("change", () => {
+    const file = input.files?.[0]
+    input.remove()
+    if (!file || appState.archive !== archive || archive.getBytes(path) !== before || !isEditing()) return
+    void runFileOperation("替换资源", async () => {
+      try {
+        return await (isSoundPath(path) ? uploadKeySound(file, path) : replaceResourceFile(file, path))
+      } catch (error) {
+        showFileOperationProgress()
+        throw error
+      }
+    })
+  }, { once: true })
+  input.click()
+}
 
 function selectedResourceFiles(): string[] {
   return (appState.resourceCatalog ? [appState.selectedResourceCatalogItem] : appState.selectedResourceGalleryPaths).map(path => path.replace(/^file:/, ""))
