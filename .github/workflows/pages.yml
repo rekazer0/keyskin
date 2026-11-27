@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -17,6 +18,8 @@ concurrency:
 
 jobs:
   deploy:
+    env:
+      PAGES_ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -28,15 +31,34 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run verify:ci
+      - run: npm run verify
       - run: npm run build
       - uses: actions/configure-pages@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           enablement: true
       - uses: actions/upload-pages-artifact@v3
+        id: upload
         with:
+          name: ${{ env.PAGES_ARTIFACT_NAME }}
           path: dist
+      - name: Wait for Pages artifact metadata
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+        run: |
+          # A successful upload can precede the metadata becoming queryable.
+          for delay in 0 2 4 8 15 30; do
+            sleep "$delay"
+            if gh api --silent "repos/$GITHUB_REPOSITORY/actions/artifacts/${ARTIFACT_ID:?Missing Pages artifact ID}"; then
+              exit 0
+            fi
+          done
+          echo "::error::Pages artifact $ARTIFACT_ID is not available for deployment"
+          exit 1
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}
