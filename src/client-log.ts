@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { strToU8, zipSync } from "fflate"
+import { operationLogText } from "./operations.ts"
 
 type LogLevel = "info" | "warn" | "error"
 type LogDetails = Record<string, string | number | boolean | null | undefined>
@@ -12,9 +13,7 @@ let flushPromise: Promise<void> | undefined
 
 function sanitizeDiagnosticText(value: unknown): string {
   const text = value instanceof Error ? value.message : String(value)
-  return text
-    .replace(/content:\/\/\S+/gi, "content://[redacted]")
-    .replace(/file:\/\/\S+/gi, "file://[redacted]")
+  return operationLogText(text)
     .replace(/(?:[A-Za-z]:\\|\/)(?:[^\\/\s:]+[\\/])+([^\\/\s:]+)/g, "[path]/$1")
     .slice(0, 4_000)
 }

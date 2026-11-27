@@ -602,7 +602,8 @@ input.ui-input, select.ui-input { padding: 0 var(--space-sm); }
 .ui-disclosure > summary::-webkit-details-marker { display: none; }
 .ui-disclosure > summary > .ui-icon { transition: transform var(--duration-fast) var(--ease-standard); }
 .ui-disclosure[open] > summary > .ui-icon { transform: rotate(90deg); }
-.ui-operation-log-lines { max-height: min(16vh, var(--skin-preview-size)); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; color: var(--secondary); font-size: var(--font-size-sm); }
+.ui-operation-log-lines { max-height: min(16vh, var(--skin-preview-size)); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--secondary); font: var(--font-size-sm) var(--font-mono); }
+.ui-dialog[data-variant="operation"]:not(:has(#file-operation-log[open]:not([hidden]))) #file-operation-log-export { display: none; }
 .ui-disclosure > .ui-subsection { margin-top: var(--space-sm); }
 
 /* —— 列表行 —— */
@@ -1338,6 +1339,9 @@ body {
 .ui-dialog[data-variant="share"] { overflow: hidden; }
 .ui-share-content { display: flex; flex-direction: column; gap: var(--space-lg); padding: var(--space-xl); max-height: min(var(--share-dialog-max-height), calc(var(--viewport-height) - var(--space-2xl) - var(--space-2xs))); }
 .ui-share-content > .ui-dialog-header { flex: none; }
+.ui-share-content .ui-operation-log-lines {
+  max-height: min(var(--share-operation-log-max-height), calc(var(--viewport-height) / 3), max(var(--space-lg), calc(var(--viewport-height) - var(--share-operation-log-reserved-height))));
+}
 .ui-share-content > .ui-dialog-body { overflow-y: auto; overscroll-behavior: contain; gap: var(--space-lg); padding: var(--space-xs); margin: calc(var(--space-xs) * -1); }
 [data-share-operation] .ui-share-document,
 [data-share-operation] .ui-share-section,
@@ -1384,7 +1388,7 @@ body {
 .ui-share-resource-check li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-xs) var(--space-sm); padding-block: var(--space-sm); border-top: 1px solid var(--line-soft); color: var(--text); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
 .ui-share-resource-check li > small { grid-column: 1 / -1; }
 .ui-dialog[data-variant="operation"][data-inline="true"][open] { display: flex; position: static; inset: auto; width: 100%; max-width: none; max-height: none; height: auto; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: none; animation: none; }
-.ui-dialog[data-variant="operation"][data-inline="true"] form { width: 100%; min-height: 0; height: auto; max-height: min(var(--dialog-max-height), calc(var(--viewport-height) - var(--titlebar-height) - var(--space-2xl))); padding: var(--space-lg); gap: var(--space-lg); }
+.ui-dialog[data-variant="operation"][data-inline="true"] form { width: 100%; min-height: 0; height: auto; max-height: min(var(--share-dialog-max-height), calc(var(--viewport-height) - var(--titlebar-height) - var(--space-2xl))); padding: var(--space-lg); gap: var(--space-lg); }
 .ui-dialog[data-variant="operation"][data-inline="true"] .ui-operation-content { display: contents; }
 .ui-dialog[data-variant="operation"][data-inline="true"] .ui-operation-navigation,
 .ui-dialog[data-variant="operation"][data-inline="true"] .ui-operation-note,

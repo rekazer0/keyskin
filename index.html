@@ -1004,8 +1004,9 @@
           <progress id="file-operation-progress" aria-labelledby="file-operation-title" aria-describedby="file-operation-detail" max="100" value="0">0%</progress>
         </div>
         <details id="file-operation-log" class="ui-disclosure" hidden>
-          <summary class="ui-button" data-variant="quiet" data-size="sm" data-icon="chevron-right">导出日志</summary>
-          <div id="file-operation-log-lines" class="ui-operation-log-lines" role="log" aria-label="导出日志" aria-live="off" tabindex="0"></div>
+          <summary class="ui-button" data-variant="quiet" data-size="sm" data-icon="chevron-right">操作日志</summary>
+          <div id="file-operation-log-lines" class="ui-operation-log-lines" role="log" aria-label="操作日志" aria-live="off" tabindex="0"></div>
+          <p id="file-operation-log-status" class="ui-field-note" role="status" hidden></p>
         </details>
         <div id="file-operation-result" class="ui-dialog-body" aria-live="polite" tabindex="0" hidden></div>
         <aside class="ui-operation-note" data-outcome="success"><strong>保存位置由浏览器或系统决定</strong><span>浏览器会提示选择保存位置，或按下载设置保存。完成后继续编辑，当前修改保持不变。</span></aside>
@@ -1013,7 +1014,7 @@
         <aside class="ui-operation-note" data-outcome="error"><strong>你的修改仍然保留</strong><span>请检查可用空间与写入权限，再重试或返回编辑。</span></aside>
         <button id="mobile-operation-share" class="ui-button" type="button">分享当前皮肤</button>
         </div>
-        <footer class="ui-dialog-footer"><button id="file-operation-cancel" class="ui-button" data-size="lg" type="button" hidden>取消</button><button id="file-operation-close" class="ui-button" data-variant="primary" data-size="lg" value="close" disabled>关闭</button><button id="mobile-operation-retry" class="ui-button" data-variant="primary" type="button" hidden>重试导出</button></footer>
+        <footer class="ui-dialog-footer"><button id="file-operation-cancel" class="ui-button" data-size="lg" type="button" hidden>取消</button><button id="file-operation-log-export" class="ui-button" data-variant="quiet" data-size="lg" type="button"><span data-icon="download" aria-hidden="true"></span>导出日志</button><button id="file-operation-close" class="ui-button" data-variant="primary" data-size="lg" value="close" disabled>关闭</button><button id="mobile-operation-retry" class="ui-button" data-variant="primary" type="button" hidden>重试导出</button></footer>
       </form>
     </dialog>
 

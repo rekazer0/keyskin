@@ -8,13 +8,16 @@ function downgradeSurface() {
   const fileOperationDetail = { textContent: '' }
   const fileOperationResult = {}
   const listed = []
+  const log = []
   const showFileOperationCompatibility = (title, warnings) => {
     listed.push(warnings)
     fileOperationDetail.textContent = `有 ${warnings.length} 项内容需要确认 · ${title}。原始皮肤保持不变`
   }
   return {
-    fileOperationDialog, listed,
-    globals: { fileOperationDialog, fileOperationDetail, fileOperationResult, showFileOperationCompatibility },
+    fileOperationDialog, listed, log,
+    globals: { fileOperationDialog, fileOperationDetail, fileOperationResult, showFileOperationCompatibility,
+      logShareExport: (detail, level) => log.push({ detail, level }),
+    },
   }
 }
 
@@ -46,6 +49,7 @@ test('multi-stage BDA → SXI opens progress first, then confirms unique warning
   const result = await context.exportArchive('sxi')
   assert.deepEqual(Array.from(result.warnings), warnings)
   assert.deepEqual(events, ['progress', 'confirm'])
+  assert.deepEqual(surface.log.filter(entry => entry.level === 'WARN').map(entry => entry.detail), warnings)
   assert.equal(context.fileOperationResult.hidden, true)
   assert.equal(context.fileOperationResult.textContent, '')
   assert.equal(surface.fileOperationDialog.dataset.stage, undefined)
@@ -55,7 +59,7 @@ for (const native of [false, true]) for (const platform of [undefined, 'ios']) {
   test(`${native ? 'native' : 'browser'} ${platform ?? 'standard'} export confirms before choosing or writing a file`, async () => {
     const events = []
     const surface = downgradeSurface()
-    const archive = { markSaved: () => assert.fail('conversion must not mark source as saved') }
+    const archive = { format: 'bds', markSaved: () => assert.fail('conversion must not mark source as saved') }
     const context = run(declarations('saveArchive', 'saveNative', 'downloadArchive', 'exportForSave', 'exportArchive', 'acceptDowngrade', 'exportTargetLabel'), { summarizeWarnings,
       archive, currentPath: '', documentName: { textContent: '测试' },
       flushNumberInputWheel: () => {}, exportName: (_, format) => `测试.${format}`,
@@ -80,6 +84,7 @@ for (const native of [false, true]) for (const platform of [undefined, 'ios']) {
 test('an expired browser activation opens the save picker inside the next tap', async () => {
   const events = []
   const context = run(declarations('writeToChosenFile'), {
+    logShareExport: () => {},
     Uint8Array, DOMException,
     isTauri: () => false, isAndroidWeb: () => false, isIOSWeb: () => false,
     navigator: { userActivation: { isActive: false } },
@@ -105,6 +110,7 @@ for (const path of ['/Users/test/皮肤/保存.bds', 'content://provider/documen
   test(`native writes report the actual destination only after success: ${path}`, async () => {
     const events = []
     const context = run(declarations('writeNativePath'), {
+      logShareExport: () => {},
       updateFileOperationProgress: () => {},
       isAndroidTauri: () => false,
       invokeBinary: async (command, bytes, data) => { assert.equal(command, 'write_binary_file'); assert.equal(data.path, path); assert.ok(bytes instanceof Uint8Array); events.push('write') },
@@ -124,6 +130,7 @@ test('Android local writes retain the JSON command because its bridge does not s
   const bytes = new Uint8Array([1, 2, 255])
   const path = '/storage/emulated/0/Download/皮肤.bds'
   const context = run(declarations('writeNativePath'), {
+      logShareExport: () => {},
     updateFileOperationProgress() {}, showFileOperationResult() {},
     isAndroidTauri: () => true,
     invoke: async (command, args) => {

@@ -1,6 +1,6 @@
 import { aiSessions, aiNewSession } from "./dom"
 import { clientLog, flushClientLogs } from "../client-log.ts"
-import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, conversionProgress, percentProgress, waitForTap } from "./file-operations"
+import { showSkinLoadProgress, showFileOperationProgress, showFileOperationResult, showFileOperationCompatibility, waitForInterfacePaint, updateFileOperationProgress, showStatus, showError, runFileOperation, readNativeSkinFile, readBrowserSkinFile, conversionProgress, percentProgress, waitForTap, logShareExport } from "./file-operations"
 import { flushSourceAutosave, activateSourceWorkspace, sourceFilesPayload, decodeBase64Archive, sourceArchiveFromFiles } from "./source-workspace"
 import { ask } from "./ask.ts"
 import { appState } from "./state"
@@ -31,7 +31,7 @@ import { open, save } from "@tauri-apps/plugin-dialog"
 import { type SourceFilePayload, type BrowserSaveFileHandle } from "./types"
 import { readFile, writeFile } from "@tauri-apps/plugin-fs"
 import { flushNumberInputWheel } from "../number-input-wheel.ts"
-import { loadBdaBase } from "../operations.ts"
+import { loadBdaBase, operationErrorLog } from "../operations.ts"
 import { isSsfPath, looksLikeSsf } from "../ssf/ssf-package.ts"
 import { convertLegacyToBda, convertSsfDocument, exportSsf, ssfDocumentBytes } from "../ssf/ssf-convert.ts"
 import { rebuildSsfPreview, ssfTemplates } from "./ssf-preview"
@@ -359,8 +359,11 @@ type PackagedResult = Omit<ExportResult, "document">
 export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Exclude<BdaPlatform, "unknown">): Promise<ExportResult | undefined> {
   showFileOperationProgress()
   await waitForInterfacePaint()
+  logShareExport(`格式：${appState.archive?.format.toUpperCase() ?? "未打开皮肤"} → ${format.toUpperCase()}${targetBdaPlatform ? ` (${targetBdaPlatform})` : ""}`)
   const packaged = await exportArchiveBytes(format, targetBdaPlatform)
   const result: ExportResult = { ...packaged, document: packaged.bytes, warnings: summarizeWarnings(packaged.warnings) }
+  logShareExport(`初始皮肤包：${result.bytes.byteLength} bytes · ${result.converted ? "已转换" : "未转换"} · ${result.warnings.length} 项警告`)
+  for (const warning of result.warnings) logShareExport(warning, "WARN")
   if (result.converted && !await acceptDowngrade(`转换为${exportTargetLabel(format)}时将降级以下内容`, result.warnings)) return
   if (format !== "bds" && format !== "bdi") return result
   updateFileOperationProgress(88, "正在检查字体兼容性…")
@@ -372,7 +375,10 @@ export async function exportArchive(format: ExportFormat, targetBdaPlatform?: Ex
     await waitForInterfacePaint()
     await completeBdsPackage(archive, composeAtlasPng)
   }
-  return { ...result, bytes: await archive.toBytesAsync(format) }
+  updateFileOperationProgress(89, "正在压缩最终皮肤包…")
+  const bytes = await archive.toBytesAsync(format)
+  logShareExport(`最终皮肤包：${bytes.byteLength} bytes`)
+  return { ...result, bytes }
 }
 
 const convertBdaArchive = (...args: Parameters<typeof import("../bda-convert.ts").convertBdaArchive>) =>
@@ -498,6 +504,7 @@ async function acceptDowngrade(title: string, warnings: string[]): Promise<boole
   showFileOperationCompatibility(title, warnings)
   fileOperationDialog.dataset.stage = "compatibility"
   const accepted = await waitForTap(fileOperationDetail.textContent ?? title, "确认并继续")
+  logShareExport(accepted ? "已确认兼容性警告" : "已取消兼容性确认")
   delete fileOperationDialog.dataset.stage
   fileOperationResult.hidden = true
   fileOperationResult.textContent = ""
@@ -528,6 +535,7 @@ async function saveNative(saveAs: boolean, format: ExportFormat, suggestedName: 
     } catch (error) {
       // 别的应用打开过来的文件只给了读权限，先请用户在系统选择器里授权写入原文件。
       if (!isAndroidTauri() || !path.startsWith("content://") || !/Permission Denial/i.test(String(error))) throw error
+      logShareExport(`需要重新授权写入\n${operationErrorLog(error)}`, "WARN")
       const granted = await ask({
         title: "需要写入权限",
         detail: "系统只允许读取这个皮肤文件。请在接下来打开的文件选择器中再次选中它，授权后保存会写回原文件。",
@@ -566,8 +574,11 @@ export function documentNameForPath(path: string, archive: SkinArchive): string 
     : path.split(/[\\/]/).pop() || "未命名皮肤"
 }
 
-export async function writeNativePath(path: string, bytes: Uint8Array): Promise<void> {
-  updateFileOperationProgress(90, "正在写入文件…")
+export async function writeNativePath(path: string, bytes: Uint8Array, report = true): Promise<void> {
+  if (report) {
+    updateFileOperationProgress(90, "正在写入文件…")
+    logShareExport(`客户端写入：${bytes.byteLength} bytes · ${path.startsWith("content://") ? "SAF" : "本地文件"}`)
+  }
   if (path.startsWith("content://")) {
     await writeFile(path, bytes)
   } else if (isAndroidTauri()) {
@@ -575,7 +586,10 @@ export async function writeNativePath(path: string, bytes: Uint8Array): Promise<
   } else {
     await invokeBinary("write_binary_file", bytes, { path })
   }
-  showFileOperationResult(`保存位置：${path}`)
+  if (report) {
+    logShareExport("客户端已确认写入")
+    showFileOperationResult(`保存位置：${path}`)
+  }
 }
 
 export async function writeToChosenFile(
@@ -583,8 +597,10 @@ export async function writeToChosenFile(
   bytes: Uint8Array,
   description = "文件",
 ): Promise<string | undefined> {
+  logShareExport(`输出文件：${filename} · ${bytes.byteLength} bytes`)
   const extension = filename.match(/\.([^.\\/]+)$/)?.[1]
   if (isTauri()) {
+    logShareExport("正在打开系统保存窗口")
     let path: string | null
     try {
       path = await save({
@@ -610,6 +626,7 @@ export async function writeToChosenFile(
   }).showSaveFilePicker
   const downloadBytes = async (retry = false) => {
     updateFileOperationProgress(90, "正在准备下载…")
+    logShareExport("输出方式：浏览器下载")
     const link = document.createElement("a")
     const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/octet-stream" }))
     link.href = url
@@ -640,6 +657,7 @@ export async function writeToChosenFile(
       } else download()
       showFileOperationResult(`文件：${filename}\n保存位置：浏览器下载目录（以浏览器设置为准）`)
     }
+    logShareExport("已将下载交给浏览器；未验证文件落盘")
     // The browser may read the URL after the click handler returns.
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
     return filename
@@ -647,6 +665,7 @@ export async function writeToChosenFile(
   if (!picker) return downloadBytes()
   let file: BrowserSaveFileHandle | undefined
   const pick = async () => {
+    logShareExport("正在打开浏览器文件选择器（showSaveFilePicker）")
     try {
       file = await picker.call(window, {
         suggestedName: filename,
@@ -669,12 +688,18 @@ export async function writeToChosenFile(
   updateFileOperationProgress(90, "正在写入文件…")
   let writable: Awaited<ReturnType<BrowserSaveFileHandle["createWritable"]>> | undefined
   try {
+    logShareExport("正在打开写入流（createWritable）")
     writable = await file.createWritable()
     await writable.write(bytes)
+    logShareExport(`已写入 ${bytes.byteLength} bytes，正在提交（close）`)
     await writable.close()
+    logShareExport("浏览器已确认写入")
   } catch (error) {
     await writable?.abort?.().catch(() => undefined)
-    if (error instanceof DOMException && error.name === "InvalidStateError") return downloadBytes(true)
+    if (error instanceof DOMException && error.name === "InvalidStateError") {
+      logShareExport(`无法直接写入，改用浏览器下载\n${operationErrorLog(error)}`, "WARN")
+      return downloadBytes(true)
+    }
     throw error
   }
   showFileOperationResult(`文件：${file.name}\n保存位置：浏览器中选择的文件夹`)
@@ -723,6 +748,7 @@ export async function saveArchive(
 export async function shareArchiveToMobile(): Promise<boolean> {
   if (!appState.archive) return false
   const ios = isIOSWeb()
+  logShareExport(`分享方式：${isAndroidTauri() ? "Android 系统分享" : "Web Share API"}`)
   if (!isAndroidTauri()) {
     showFileOperationProgress()
     if (!navigator.share) {
@@ -739,9 +765,11 @@ export async function shareArchiveToMobile(): Promise<boolean> {
   if (!exported) return false
   const currentName = documentName.textContent?.trim() || "皮肤"
   const name = exportName(currentName, format)
+  logShareExport(`分享文件：${name} · ${exported.bytes.byteLength} bytes`)
   if (isAndroidTauri()) {
-    updateFileOperationProgress(72, "正在交给系统分享…")
+    updateFileOperationProgress(92, "正在交给系统分享…")
     await invoke("share_file", { name, data: exported.bytes })
+    logShareExport("系统已接收分享请求")
     return true
   }
   // WebKit shares the file under its name and types it by extension (WKShareSheet), so the .bdi/.bda/.ssf/.sxi
@@ -752,10 +780,16 @@ export async function shareArchiveToMobile(): Promise<boolean> {
   }
   // Only the file: with no URL or text, WebKit adds the title as a string item ahead of the files, and iOS then
   // hides "copy to app" targets such as the input methods, which accept the skin file alone.
-  const share = () => navigator.share!({ files: [file] }).then(() => true).catch((error) => {
-    if (error instanceof DOMException && error.name === "AbortError") return false
-    throw error
-  })
+  const share = async () => {
+    updateFileOperationProgress(92, "正在交给系统分享…")
+    try { await navigator.share!({ files: [file] }) }
+    catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return false
+      throw error
+    }
+    logShareExport("系统已接收分享请求")
+    return true
+  }
   // Packaging has already awaited asynchronous work. Older iOS versions do not
   // expose userActivation, so always get a fresh tap there before calling share.
   if (ios || navigator.userActivation && !navigator.userActivation.isActive) {

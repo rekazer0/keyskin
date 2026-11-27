@@ -1,10 +1,45 @@
+/** Keep diagnostic context without exposing credentials or private system locations. */
+export function operationLogText(text: string): string {
+  return text
+    .replace(/(\b(?:authorization|(?:set[-_]?)?cookie)["']?[ \t]*:[ \t]*)[^\r\n]+/gi, "$1[credential]")
+    .replace(/\bBearer[ \t]+[\w.=/+~-]+/gi, "[credential]")
+    .replace(/(\b(?:password|passphrase|(?:access[-_]?|refresh[-_]?)?token|secret|(?:api|private)[-_ ]?key|pair[-_ ]?code|(?:system|developer)[-_ ]?prompt)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&]+)/gi, "$1[credential]")
+    .replace(/\b(?:file|content):\/\/[^\s"'<>]+/gi, "[private URI]")
+    .replace(/\bhttps?:\/\/[^/\s)'"<>]+/gi, "[origin]")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, "[address]")
+    .replace(/(^|[\s("'=])(?:[A-Z]:[\\/]|\/(?:Users|home|private|var|tmp|mnt|data|storage|sdcard)\/)[^\r\n"'<>]+/gi, "$1[private path]")
+}
+
 /** Why an operation failed, in the user's words; the failure dialog's title already names the action. */
 export function operationErrorDetail(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : typeof error === "string" && error.trim()
-      ? error
-      : "未知错误"
+  if (error instanceof Error || error instanceof DOMException) return operationLogText(error.message)
+  if (typeof error === "string" && error.trim()) return operationLogText(error)
+  return "未知错误"
+}
+
+/** Preserve the exception as received, for the local operation log rather than its summary. */
+export function operationErrorLog(error: unknown): string {
+  const seen = new Set<Error | DOMException>()
+  const format = (value: unknown): string => {
+    if (value instanceof Error || value instanceof DOMException) {
+      const header = value.toString()
+      if (seen.has(value)) return `${header}（已记录）`
+      seen.add(value)
+      const stack = value.stack
+      const trace = stack?.startsWith(header) ? stack : [header, stack].filter(Boolean).join("\n")
+      const errors = value instanceof AggregateError ? value.errors.map(format) : []
+      return [trace, ...errors, ...("cause" in value ? [`Caused by: ${format(value.cause)}`] : [])].join("\n")
+    }
+    if (typeof value === "function") return "[函数异常值]"
+    if (value === null || typeof value !== "object") return String(value)
+    // Structured rejections may also include request/configuration payloads; only show error fields.
+    const fields = Object.entries(Object.getOwnPropertyDescriptors(value))
+      .filter(([key, field]) => ["name", "code", "message", "stack"].includes(key) && ["string", "number"].includes(typeof field.value))
+      .map(([key, field]) => `${key}: ${field.value}`)
+    return fields.join("\n") || "[未提供错误字段的异常对象]"
+  }
+  try { return operationLogText(format(error)) }
+  catch { return "[无法读取原始异常]" }
 }
 
 export function operationError(action: string, error: unknown): string {

@@ -5,7 +5,7 @@ import { exportName, skinFileName } from "../export"
 import { isTauri } from "./canvas-interaction"
 import { appState } from "./state"
 import { exportArchive } from "./archive-io"
-import { runFileOperation, showFileOperationProgress, updateFileOperationProgress } from "./file-operations"
+import { runFileOperation, showFileOperationProgress, updateFileOperationProgress, logShareExport } from "./file-operations"
 import { prepareSogouShare, prepareShouXinShare } from "../adb-package.ts"
 import { invokeBinary } from "../native-binary.ts"
 
@@ -110,16 +110,19 @@ export function wireAdbShare(): void {
       showFileOperationProgress()
       const format = appState.archive.format === "bdi" ? "bds" : appState.archive.format
       const config = shareSettings(format)
+      logShareExport(`分享方式：ADB · ${format.toUpperCase()}`)
       const exportedName = exportName(documentName.textContent?.trim() || "未命名皮肤", format)
       let name = skinFileName(exportedName.slice(0, -(format.length + 1)), format)
       const result = await exportArchive(format, format === "bda" ? "android" : undefined)
       if (!result || cancelRequested) return false
       let bytes = result.bytes
       if (format === "ssf") {
+        logShareExport("正在生成搜狗安装包")
         const prepared = prepareSogouShare(bytes)
         bytes = prepared.bytes
         name = prepared.name
       } else if (format === "sxi") {
+        logShareExport("正在生成手心安装包")
         const prepared = await prepareShouXinShare(bytes)
         bytes = prepared.bytes
         name = prepared.name
@@ -128,7 +131,9 @@ export function wireAdbShare(): void {
       const progress = new Channel<string>()
       progress.onmessage = (detail) => updateFileOperationProgress(94, detail)
       updateFileOperationProgress(92, "正在通过 ADB 推送皮肤…")
+      logShareExport(`推送文件：${name} · ${bytes.byteLength} bytes`)
       await invokeBinary<string>("share_skin_adb", bytes, { settings: config, name, format, progress })
+      logShareExport("ADB 推送及导入流程已返回")
       return true
     }, async () => {
       cancelRequested = true

@@ -22,6 +22,7 @@ function sharing({ activation, native = false, supported = true, outcome, format
     },
     showFileOperationProgress: () => calls.push('progress'),
     updateFileOperationProgress: () => {},
+    logShareExport: () => {},
     invoke: async (command, data) => calls.push({ command, ...data }),
     navigator: {
       userActivation: activation,

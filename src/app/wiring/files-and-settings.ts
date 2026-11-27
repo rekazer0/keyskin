@@ -13,7 +13,7 @@ import { wireSourceFileSearch, sourceTargetFolder, sourceCopyPath, refreshAfterS
 import { type Change } from "../../history.ts"
 import { preview, source, scheduleSelectionInspectorSync, isTauri, settingsNavItems, isAndroidTauri, isAndroidWeb, isIOSWeb, LAST_SOURCE_WORKSPACE_KEY, currentDeviceValue } from "../canvas-interaction"
 import { startNewDocument, wireNewProjectChooser } from "../new-document"
-import { runFileOperation, readBrowserSkinFile, showImage, showError } from "../file-operations"
+import { runFileOperation, readBrowserSkinFile, showImage, showError, wireFileOperationLog } from "../file-operations"
 import { openNative, saveArchive, currentExportFormat, shareArchiveToMobile, writeToChosenFile, isSupportedSkinPath, loadDroppedFile, openSkinBytes, UNSUPPORTED_SKIN_MESSAGE } from "../archive-io"
 import { renderRecentFiles, wireRecentPage } from "../recent-files"
 import { dismissLayoutOverview } from "../layout-overview"
@@ -158,6 +158,7 @@ export function wireFilesAndSettings(): void {
     void runFileOperation("分享皮肤", shareArchiveToMobile)
   })
   wireMobileExport()
+  wireFileOperationLog()
   checkUpdateButton.addEventListener("click", () => void refreshUpdateStatus())
   aboutDiagnostics.hidden = !isTauri()
   exportLogsButton.addEventListener("click", () => void runFileOperation("导出日志", async () => {

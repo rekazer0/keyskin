@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import { openEditorTemplate } from "../tests/helpers/open-editor-template.mjs"
 import assert from "node:assert/strict"
 import { chromium } from "playwright"
@@ -15,6 +16,7 @@ try {
   await page.waitForFunction(() => !document.querySelector("#open").disabled)
   const dialog = page.locator("#file-operation-dialog")
   const close = page.locator("#file-operation-close")
+  const log = page.locator("#file-operation-log")
   if (await dialog.isVisible()) await close.click()
 
   const progressSamples = await page.evaluate(async () => {
@@ -66,6 +68,12 @@ try {
   assert.equal(await page.locator("#file-operation-result").isVisible(), true)
   assert.equal(await page.locator("#event-log").textContent(), "保存完成")
   assert.equal(await page.locator("#document-name").textContent(), "保存反馈.bds", "use the name actually chosen in the save picker")
+  await log.locator("summary").click()
+  const savedLog = (await log.locator("[role=log] > div").allTextContents()).join("\n")
+  assert.match(savedLog, /T\d{2}:\d{2}:\d{2}\.\d{3}Z \[INFO\] 开始保存/)
+  assert.match(savedLog, /格式：BDS → BDS/)
+  assert.match(savedLog, /最终皮肤包：\d+ bytes/)
+  assert.match(savedLog, /正在提交（close）[\s\S]*浏览器已确认写入[\s\S]*保存完成 · \d+ ms/)
   await close.click()
   await dialog.waitFor({ state: "hidden" })
 
@@ -74,7 +82,7 @@ try {
       window.showSaveFilePicker = async () => {
         if (outcome === "cancel") throw new DOMException("已取消", "AbortError")
         return { name: "失败.bds", createWritable: async () => ({
-          write: async () => {}, close: async () => { throw new Error("磁盘已满") },
+          write: async () => {}, close: async () => { throw new Error("磁盘已满 access_token=fake-secret", { cause: new DOMException("No space left on device", "QuotaExceededError") }) },
         }) }
       }
       const { runFileOperation } = await import("/src/app/file-operations.ts")
@@ -84,6 +92,20 @@ try {
     if (outcome === "error") {
       assert.equal(await dialog.getAttribute("data-outcome"), "error")
       assert.equal(await dialog.isVisible(), true, "write failure stays visible")
+      assert.equal(await log.evaluate(el => el.open), true, "failure expands the developer log")
+      const failedLog = await log.textContent()
+      assert.match(failedLog, /\[ERROR\] Error: 磁盘已满 access_token=\[credential\]\n\s+at /)
+      assert.match(failedLog, /Caused by: QuotaExceededError: No space left on device/)
+      assert.doesNotMatch(failedLog, /开始保存/, "each new operation resets the log")
+      const download = page.waitForEvent("download")
+      await dialog.locator(".ui-dialog-footer").getByRole("button", { name: "导出日志", exact: true }).click()
+      const exported = await download
+      assert.match(exported.suggestedFilename(), /^keyskin-operation-.*\.txt$/)
+      const text = await readFile(await exported.path(), "utf8")
+      assert.match(text, /\[ERROR\] Error: 磁盘已满/)
+      assert.match(text, /Caused by: QuotaExceededError: No space left on device/)
+      assert.doesNotMatch(text, /fake-secret/)
+      assert.equal(await dialog.getAttribute("data-outcome"), "error", "exporting the log must not change the operation result")
       await close.click()
     }
     await dialog.waitFor({ state: "hidden" })

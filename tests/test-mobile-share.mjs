@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "./helpers/open-editor-template.mjs"
 // Exercise the real mobile menu and packaging flow with a gesture-gated Web Share stub.
 // The operating-system share sheet and receiving Baidu app still require an iPhone.
 import assert from 'node:assert/strict'
@@ -40,6 +41,7 @@ try {
         } })
       }, activation)
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`)
+      await dismissStartupDisclaimer(page)
       await page.evaluate(async () => {
         const { SkinArchive } = await import('/src/skin.ts')
         const exportBytes = SkinArchive.prototype.toBytesAsync
@@ -51,6 +53,7 @@ try {
       await page.locator('#browser-open').setInputFiles({ name: '分享回归.bdi', mimeType: 'application/octet-stream', buffer: Buffer.from(source) })
       await page.waitForFunction(() => document.querySelector('#document-name').textContent === '分享回归.bdi' && !document.querySelector('#open').disabled)
       const close = page.locator('#file-operation-dialog[open] #file-operation-close')
+      const log = page.locator('#file-operation-log')
       if (await close.isVisible()) await close.click()
       const openShare = async () => {
         if (!await page.locator('#share-dialog').isVisible()) {
@@ -67,8 +70,10 @@ try {
       await tap.waitFor({ state: 'visible' })
       assert.equal(await page.evaluate(() => shareCalls.length), 0, 'do not share automatically after asynchronous export')
       await tap.click()
-      // 成功不弹模态框：进度框随之关闭，结果只写状态栏。
+      // 成功仍关闭进度框，日志留在分享窗口供查看。
       await page.locator('#file-operation-dialog').waitFor({ state: 'hidden' })
+      await log.locator('summary').click()
+      assert.match(await log.textContent(), /Web Share API[\s\S]*系统已接收分享请求[\s\S]*分享皮肤完成 · \d+ ms/)
       const shared = await page.evaluate(async () => ({ name: shareCalls[0].name, bytes: [...new Uint8Array(await shareCalls[0].arrayBuffer())] }))
       assert.equal(shared.name, '分享回归.bdi')
       assert.equal(SkinArchive.open(Uint8Array.from(shared.bytes), 'bdi').format, 'bdi', 'share a real BDI archive')
@@ -79,10 +84,14 @@ try {
         await tap.click()
         if (outcome === 'AbortError') {
           await page.locator('#file-operation-dialog').waitFor({ state: 'hidden' })
+          assert.match(await log.textContent(), /分享皮肤已取消/)
+          assert.doesNotMatch(await log.textContent(), /\[ERROR\]/)
           continue
         }
         await page.waitForSelector('#file-operation-dialog[data-outcome="error"]')
         assert.equal(await tap.count(), 0, 'remove the completed action button')
+        assert.equal(await log.evaluate(el => el.open), true)
+        assert.match(await log.textContent(), /\[ERROR\] NotAllowedError: Share failed/)
         await close.click()
       }
       await page.locator('#share-dialog').getByRole('button', { name: '关闭', exact: true }).click()
@@ -93,6 +102,7 @@ try {
       assert.ok(await page.getByText('当前环境不支持系统分享，可使用保存或另存为。').isVisible())
       const download = page.waitForEvent('download')
       await page.locator('#share-dialog #save').click()
+      await page.getByRole('link', { name: '下载', exact: true }).click()
       const file = await download
       assert.equal(file.suggestedFilename(), '分享回归.bdi')
       assert.equal(SkinArchive.open(readFileSync(await file.path()), 'bdi').format, 'bdi')

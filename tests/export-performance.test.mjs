@@ -31,7 +31,7 @@ test('BDS 导出只解包和写包一次，保留原背景、切片和布局引�
     } },
     showFileOperationProgress() {}, waitForInterfacePaint: async () => {}, updateFileOperationProgress() {},
     exportArchiveBytes: async () => ({ bytes, converted: false, warnings: [] }),
-    summarizeWarnings,
+    summarizeWarnings, logShareExport() {},
     bakeExportedFonts: async (archive) => archive.setText('light/skin/res/default.css', css.replace('FONT_SIZE=24', 'NM_IMG=keyskin_font,1')),
     completeBdsPackage,
     composeAtlasPng: () => assert.fail('无需合图'),

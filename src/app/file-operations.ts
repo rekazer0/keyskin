@@ -1,4 +1,4 @@
-import { fileOperationLog, fileOperationLogLines, adbShareButton, shareDialog, shareOperation } from "./dom"
+import { fileOperationLog, fileOperationLogLines, fileOperationLogExport, fileOperationLogStatus, adbShareButton, shareDialog, shareOperation } from "./dom"
 import { IniDocument } from "../ini.ts"
 import { appState } from "./state"
 import { newButton, openButton, saveButton, mobileShareButton, eventLog, fileOperationDialog, fileOperationProgress, fileOperationPercent, fileOperationDetail, fileOperationTitle, fileOperationIcon, fileOperationResult, fileOperationClose, fileOperationCancel, workspaceImage, assetImage, deviceShell, workspaceImageFigure, sourceEditor, asset, sourceName, assetBackButton } from "./dom"
@@ -10,11 +10,13 @@ import { updateDirty, commitBatch, commitTextChanges } from "./edit-history"
 import { refreshPreview } from "./preview-render"
 import { updateSourceFileActions } from "./source-files"
 import { exportTargets, isTauri, LARGE_SKIN_BYTES } from "./canvas-interaction"
-import { operationError, operationErrorDetail } from "../operations.ts"
+import { operationError, operationErrorDetail, operationErrorLog, operationLogText } from "../operations.ts"
 import { clientLog, flushClientLogs } from "../client-log.ts"
 import { ask } from "./ask.ts"
 import { animateProgress, closeDialog } from "../motion.ts"
 import { invoke, Channel } from "@tauri-apps/api/core"
+import { save } from "@tauri-apps/plugin-dialog"
+import { writeNativePath } from "./archive-io"
 import { adaptIos26Variant, adaptIos26KeyboardLayout } from "../ios26.ts"
 import { adaptBdaForIos26 } from "../bda-ios26.ts"
 import { refreshBdaLayout, refreshSelectedBdaSource } from "./bda-documents"
@@ -116,23 +118,71 @@ export function showError(error: unknown, action = "操作"): void {
   }
 }
 
-fileOperationLog.addEventListener("toggle", () => {
-  if (fileOperationLog.open) fileOperationLogLines.scrollTop = fileOperationLogLines.scrollHeight
-})
+function scrollOperationLog(): void {
+  const last = fileOperationLogLines.lastElementChild
+  if (last && fileOperationDialog.dataset.outcome === "error" && fileOperationDialog.contains(fileOperationLog)) {
+    // Start at the original error line, not at the tail of a long stack.
+    fileOperationLogLines.scrollTop += last.getBoundingClientRect().top - fileOperationLogLines.getBoundingClientRect().top
+  } else fileOperationLogLines.scrollTop = fileOperationLogLines.scrollHeight
+}
 
-function appendExportLog(detail: string): void {
-  if (fileOperationLog.hidden || !appState.fileOperationRunning || fileOperationLogLines.lastElementChild?.textContent === detail) return
+export function wireFileOperationLog(): void {
+  fileOperationLog.addEventListener("toggle", () => {
+    if (fileOperationLog.open) scrollOperationLog()
+  })
+  fileOperationLogExport.addEventListener("click", async () => {
+    const first = fileOperationLogLines.firstElementChild
+    if (!first) return
+    const text = Array.from(fileOperationLogLines.children, line => line.textContent).join("\n") + "\n"
+    const filename = `keyskin-operation-${new Date().toISOString().replaceAll(":", "-")}.txt`
+    const status = (message: string) => {
+      if (fileOperationLogLines.firstElementChild !== first) return
+      fileOperationLogStatus.textContent = message
+      fileOperationLogStatus.hidden = !message
+    }
+    fileOperationLogExport.disabled = true
+    status("")
+    try {
+      if (isTauri()) {
+        const path = await save({ title: "导出日志", defaultPath: filename, filters: [{ name: "文本文件", extensions: ["txt"] }] })
+        if (!path) return
+        await writeNativePath(path, new TextEncoder().encode(text), false)
+        status("日志已保存。")
+      } else {
+        const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }))
+        const link = Object.assign(document.createElement("a"), { href: url, download: filename, hidden: true })
+        document.body.append(link)
+        link.click()
+        link.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        status("已发起日志下载。")
+      }
+    } catch (error) {
+      status(operationError("导出日志", error))
+    } finally {
+      fileOperationLogExport.disabled = false
+    }
+  })
+}
+
+export function logShareExport(detail: string, level: "INFO" | "WARN" | "ERROR" = "INFO"): void {
+  if (fileOperationLog.hidden || !appState.fileOperationRunning) return
+  const entry = ` [${level}] ${operationLogText(detail)}`
+  if (fileOperationLogLines.lastElementChild?.lastChild?.textContent === entry) return
   const follow = fileOperationLog.open && fileOperationLogLines.scrollTop + fileOperationLogLines.clientHeight >= fileOperationLogLines.scrollHeight - 1
-  fileOperationLogLines.append(Object.assign(document.createElement("div"), { textContent: detail }))
+  const line = document.createElement("div")
+  line.append(new Date().toISOString(), entry)
+  fileOperationLogLines.append(line)
   if (follow) fileOperationLogLines.scrollTop = fileOperationLogLines.scrollHeight
 }
 
 export function updateFileOperationProgress(value: number, detail: string): void {
-  animateProgress(fileOperationProgress, Math.max(0, Math.min(100, value)), (current) => {
+  const percent = Math.max(0, Math.min(100, value))
+  animateProgress(fileOperationProgress, percent, (current) => {
     fileOperationProgress.textContent = `${Math.round(current)}%`
     fileOperationPercent.textContent = fileOperationProgress.textContent
   })
-  appendExportLog(detail)
+  logShareExport(`${Math.round(percent)}% · ${detail}`)
   fileOperationDetail.textContent = detail
 }
 
@@ -153,8 +203,7 @@ export function showFileOperationProgress(): void {
 }
 
 export function showFileOperationCompatibility(title: string, warnings: string[]): void {
-  appendExportLog(`兼容性确认：${title}`)
-  warnings.forEach(appendExportLog)
+  logShareExport(`等待确认 ${warnings.length} 项兼容性警告：${title}`)
   fileOperationTitle.textContent = "兼容性确认"
   fileOperationResult.replaceChildren(...warnings.map(text => Object.assign(document.createElement("p"), { textContent: text })))
   fileOperationResult.hidden = false
@@ -295,10 +344,15 @@ export async function runFileOperation(
     return
   }
   const exporting = ["保存", "导出", "另存为"].includes(action)
-  const inline = shareDialog.open && (exporting || ["分享皮肤", "分享到 ADB"].includes(action))
-  fileOperationLog.hidden = !exporting
+  const sharing = ["分享皮肤", "分享到 ADB"].includes(action)
+  const logged = exporting || sharing
+  const inline = shareDialog.open && logged
+  fileOperationResult.before(fileOperationLog)
+  fileOperationClose.before(fileOperationLogExport)
+  fileOperationLog.hidden = !logged
   fileOperationLog.open = false
   fileOperationLogLines.replaceChildren()
+  fileOperationLogStatus.hidden = true
   fileOperationDialog.dataset.inline = String(inline)
   ;(inline ? shareOperation : document.body).append(fileOperationDialog)
   appState.currentFileOperation = action
@@ -315,16 +369,19 @@ export async function runFileOperation(
   fileOperationResult.textContent = ""
   fileOperationClose.disabled = true
   let cancelling = false
+  let active = true
   const requestCancel = async () => {
     if (!cancelOperation || cancelling) return
     cancelling = true
     fileOperationCancel.disabled = true
     fileOperationCancel.textContent = "正在取消…"
     fileOperationDetail.textContent = "正在取消…"
+    logShareExport(`请求取消：${action}`)
     clientLog.info("operation.cancel", { action })
     try {
       await cancelOperation()
     } catch (error) {
+      if (active) logShareExport(`取消请求失败\n${operationErrorLog(error)}`, "ERROR")
       clientLog.error("operation.cancel.error", { action }, error)
     }
   }
@@ -332,8 +389,14 @@ export async function runFileOperation(
   fileOperationCancel.disabled = false
   fileOperationCancel.hidden = !cancelOperation
   if (cancelOperation) fileOperationCancel.addEventListener("click", requestCancel)
-  updateFileOperationProgress(0, "正在准备…")
   const started = performance.now()
+  const finish = (outcome: "completed" | "cancelled" | "failed", result: string) => {
+    const durationMs = Math.round(performance.now() - started)
+    logShareExport(`${result} · ${durationMs} ms`, outcome === "failed" ? "ERROR" : "INFO")
+    clientLog.info("operation.finish", { action, outcome, durationMs })
+  }
+  logShareExport(`开始${action}`)
+  updateFileOperationProgress(0, "正在准备…")
   clientLog.info("operation.start", { action })
   try {
     let completed: boolean
@@ -343,13 +406,9 @@ export async function runFileOperation(
     } catch (error) {
       // 取消会让后端以错误结束；用户主动取消不算失败。
       if (!cancelling) throw error
+      logShareExport(`取消后的原始错误\n${operationErrorLog(error)}`, "WARN")
       completed = false
     }
-    clientLog.info("operation.finish", {
-      action,
-      outcome: completed ? "completed" : "cancelled",
-      durationMs: Math.round(performance.now() - started),
-    })
     const downloadRequested = fileOperationDialog.dataset.resultKind === "download-requested"
     const result = downloadRequested ? "已发起下载" : `${action}完成`
     showStatus(completed ? result : `${action}已取消`)
@@ -360,28 +419,40 @@ export async function runFileOperation(
       fileOperationTitle.textContent = result
       fileOperationIcon.replaceChildren(createIcon("check", 20))
       updateFileOperationProgress(100, fileOperationDialog.dataset.resultFile ?? `${action}完成`)
-    } else if (appState.fileOperationProgressVisible) {
-      if (completed) updateFileOperationProgress(100, `${action}完成`)
+    } else if (appState.fileOperationProgressVisible && completed) {
+      updateFileOperationProgress(100, `${action}完成`)
+    }
+    finish(completed ? "completed" : "cancelled", completed ? result : `${action}已取消`)
+    if ((!completed || !exporting) && appState.fileOperationProgressVisible) {
+      if (inline) {
+        // Sharing and cancellation leave the disclosure on the share page without the operation footer.
+        fileOperationLogStatus.before(fileOperationLogExport)
+        shareOperation.after(fileOperationLog)
+      }
       closeDialog(fileOperationDialog)
       appState.fileOperationProgressVisible = false
     }
   } catch (error) {
-    clientLog.info("operation.finish", {
-      action,
-      outcome: "failed",
-      durationMs: Math.round(performance.now() - started),
-    })
+    finish("failed", `${action}失败`)
+    if (logged) {
+      logShareExport(operationErrorLog(error), "ERROR")
+      showFileOperationProgress()
+    }
     showError(error, action)
     if (appState.fileOperationProgressVisible) {
       fileOperationDialog.dataset.outcome = "error"
+      if (logged) {
+        fileOperationLog.open = true
+        scrollOperationLog()
+      }
       fileOperationIcon.replaceChildren(createIcon("circle-alert", 20))
       fileOperationTitle.textContent = `${action}未完成`
       fileOperationDetail.textContent = "处理已停止"
       fileOperationResult.textContent = operationErrorDetail(error)
-      appendExportLog(fileOperationResult.textContent)
       fileOperationResult.hidden = false
     }
   } finally {
+    active = false
     fileOperationCancel.hidden = true
     fileOperationCancel.textContent = "取消"
     fileOperationCancel.removeEventListener("click", requestCancel)
@@ -441,6 +512,7 @@ export function waitForTap(detail: string, action: string | HTMLAnchorElement, o
   return new Promise((resolve, reject) => {
     showFileOperationProgress()
     fileOperationDetail.textContent = detail
+    logShareExport(detail)
     const control = typeof action === "string"
       ? Object.assign(document.createElement("button"), { type: "button", textContent: action })
       : action

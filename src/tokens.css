@@ -14,7 +14,9 @@
   --toolbar-spotlight-w: 0px;
   --toolbar-spotlight-h: 0px;
   --tool-tile-min-width: 104px;
-  --share-dialog-max-height: 720px;
+  --share-dialog-max-height: 840px;
+  --share-operation-log-max-height: 280px;
+  --share-operation-log-reserved-height: 320px;
   --share-format-height: 56px;
   /* 字体 */
   --font-ui: system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans SC Variable", sans-serif;

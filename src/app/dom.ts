@@ -273,6 +273,8 @@ export const fileOperationPercent = $("#file-operation-percent")
 
 export const fileOperationLog = $<HTMLDetailsElement>("#file-operation-log")
 export const fileOperationLogLines = $("#file-operation-log-lines")
+export const fileOperationLogExport = $<HTMLButtonElement>("#file-operation-log-export")
+export const fileOperationLogStatus = $("#file-operation-log-status")
 export const fileOperationResult = $("#file-operation-result")
 
 export const fileOperationClose = $("#file-operation-close") as HTMLButtonElement

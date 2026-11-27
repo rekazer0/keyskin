@@ -1,3 +1,4 @@
+import { dismissStartupDisclaimer } from "./helpers/open-editor-template.mjs"
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
@@ -24,6 +25,7 @@ try {
     const page = await context.newPage()
     await page.addInitScript((touch) => Object.defineProperty(navigator, 'maxTouchPoints', { value: touch }), touch)
     await page.goto(url)
+    await dismissStartupDisclaimer(page)
     await page.waitForSelector('.template-card')
     assert.equal(await page.locator('#adb-share').getAttribute('hidden'), '', 'web menu stays hidden')
     if (native) await page.evaluate(async () => {
@@ -33,7 +35,7 @@ try {
         transformCallback: fn => { window.adbProgress = fn; return 1 },
         invoke: async (cmd, payload, options) => {
           let args = payload
-          if (cmd === 'share_skin_adb') {
+          if (cmd === 'share_skin_adb' || cmd === 'write_binary_file') {
             if (!(payload instanceof Uint8Array)) throw new Error('ADB must use a binary IPC body')
             const metadata = options.headers['x-keyskin-args']
             if (!/^[\x20-\x7e]*$/.test(metadata)) throw new Error('IPC metadata must be ASCII')
@@ -41,6 +43,7 @@ try {
           }
           window.adbCalls.push({ cmd, args })
           if (window.adbFailure) throw window.adbFailure
+          if (cmd === 'plugin:dialog|save') return '/tmp/keyskin-operation-test.txt'
           if (cmd === 'share_skin_adb') {
             window.adbProgress({ index: 0, message: '等待百度输入法完成导入；请在设备上查看兼容性或权限提示' })
             await new Promise((resolve, reject) => { window.finishAdbShare = resolve; window.rejectAdbShare = reject })
@@ -137,7 +140,8 @@ try {
         document.querySelector('#document-name').textContent = '测试 皮肤.bdi'
         document.querySelector('#adb-share').disabled = false
       })
-      await page.locator('#adb-share').evaluate(el => el.click())
+      await page.evaluate(async () => { (await import('/src/app/mobile-export.ts')).openShareDialog() })
+      await page.locator('#adb-share').click()
       await page.waitForFunction(() => window.adbCalls.some(call => call.cmd === 'share_skin_adb'))
       await page.waitForFunction(() => document.querySelector('#file-operation-detail').textContent.includes('兼容性或权限提示'))
       const progress = await page.locator('#file-operation-progress').evaluate(el => el.value)
@@ -157,6 +161,17 @@ try {
       assert.equal(shared.activity, '')
       assert.ok(shared.bytes > 0)
       await page.locator('#file-operation-dialog').waitFor({ state: 'hidden' })
+      const log = page.locator('#file-operation-log')
+      await log.locator('summary').click()
+      assert.match(await log.textContent(), /分享方式：ADB[\s\S]*等待百度输入法完成导入[\s\S]*ADB 推送及导入流程已返回/)
+      assert.doesNotMatch(await log.textContent(), /saved-device|192\.0\.2\.10/)
+      await log.getByRole('button', { name: '导出日志', exact: true }).click()
+      await log.getByText('日志已保存。').waitFor()
+      const exportedLog = await page.evaluate(() => new TextDecoder().decode(adbCalls.find(call => call.cmd === 'write_binary_file').args.data))
+      assert.match(exportedLog, /\[INFO\] 分享到 ADB完成 · \d+ ms/)
+      assert.doesNotMatch(exportedLog, /saved-device|192\.0\.2\.10/)
+      await page.locator('#share-dialog').getByRole('button', { name: '关闭', exact: true }).click()
+      await page.locator('#share-dialog').waitFor({ state: 'hidden' })
       // SSF + 旧百度设置：保留原格式，自动选搜狗，不沿用百度的入口或目录。
       await page.evaluate(async bytes => {
         const { appState } = await import('/src/app/state.ts')
