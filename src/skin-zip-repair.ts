@@ -1,4 +1,4 @@
-import { CENTRAL_SIGNATURE, LOCAL_SIGNATURE, MAX_ARCHIVE_BYTES, findEnd, view } from "./skin-zip.ts"
+import { CENTRAL_SIGNATURE, ENCRYPTION_FLAGS, LOCAL_SIGNATURE, MAX_ARCHIVE_BYTES, MAX_FILES, findEnd, view } from "./skin-zip.ts"
 
 /** 本地文件头里的条目信息；中央目录被防解包工具写坏时，它是唯一可信的来源。 */
 type LocalEntry = {
@@ -102,8 +102,49 @@ function rebuildCentralDirectory(
 
 export type ArchiveNormalization = {
   bytes: Uint8Array
-  /** 中央目录整张按本地头重建并核对过，重新打包不会丢失内容。 */
-  directoryRebuilt: boolean
+  /** 修复结果已按本地文件头核对过（目录重建或清除假加密标记），重新打包不会丢失内容。 */
+  verified: boolean
+}
+
+/**
+ * 少数第三方打包器（如微光 9.0）在中央目录给每个条目都打上“加密”标记，本地文件头却是干净的，
+ * 数据也能正常解开——这是防解包用的假标记。ZIP 解压时以本地文件头为准，所以按本地头清掉中央目录里的假标记，
+ * 让保存和转换出的包不再带着会让其它工具误判为加密的字段。
+ */
+function clearDecoyCentralEncryption(bytes: Uint8Array): Uint8Array {
+  let endOffset: number
+  try {
+    endOffset = findEnd(bytes)
+  } catch {
+    return bytes
+  }
+  const data = view(bytes)
+  const repairs: Array<[number, number]> = []
+  let central = data.getUint32(endOffset + 16, true)
+  // 不看 EOCD 的条目数：计数被写坏时中央目录本身仍然可读，假加密标记也要清掉。
+  for (let index = 0; index < MAX_FILES && central + 46 <= endOffset; index++) {
+    if (data.getUint32(central, true) !== CENTRAL_SIGNATURE) break
+    const nameLength = data.getUint16(central + 28, true)
+    const flags = data.getUint16(central + 8, true)
+    const localOffset = data.getUint32(central + 42, true)
+    if ((flags & ENCRYPTION_FLAGS) && localOffset + 30 <= bytes.length && data.getUint32(localOffset, true) === LOCAL_SIGNATURE) {
+      const localFlags = data.getUint16(localOffset + 6, true)
+      const localNameLength = data.getUint16(localOffset + 26, true)
+      if ((localFlags & ENCRYPTION_FLAGS) === 0 && localNameLength === nameLength) {
+        const centralName = bytes.subarray(central + 46, central + 46 + nameLength)
+        const localName = bytes.subarray(localOffset + 30, localOffset + 30 + localNameLength)
+        if (localName.every((byte, position) => byte === centralName[position])) {
+          repairs.push([central + 8, flags & ~ENCRYPTION_FLAGS])
+        }
+      }
+    }
+    central += 46 + nameLength + data.getUint16(central + 30, true) + data.getUint16(central + 32, true)
+  }
+  if (!repairs.length) return bytes
+  const normalized = bytes.slice()
+  const normalizedView = view(normalized)
+  for (const [offset, value] of repairs) normalizedView.setUint16(offset, value, true)
+  return normalized
 }
 
 /**
@@ -116,10 +157,10 @@ export type ArchiveNormalization = {
 export function normalizeArchive(bytes: Uint8Array): ArchiveNormalization {
   let endOffset: number
   try {
-    if (bytes.byteLength > MAX_ARCHIVE_BYTES) return { bytes, directoryRebuilt: false }
+    if (bytes.byteLength > MAX_ARCHIVE_BYTES) return { bytes, verified: false }
     endOffset = findEnd(bytes)
   } catch {
-    return { bytes, directoryRebuilt: false }
+    return { bytes, verified: false }
   }
   const data = view(bytes)
   const decoder = new TextDecoder()
@@ -144,7 +185,7 @@ export function normalizeArchive(bytes: Uint8Array): ArchiveNormalization {
 
   if (allOffsetsInvalid) {
     const rebuilt = rebuildCentralDirectory(bytes, data, endOffset, centralOffset, total, decoder)
-    if (rebuilt) return { bytes: rebuilt.bytes, directoryRebuilt: rebuilt.complete }
+    if (rebuilt) return verify(rebuilt.bytes, clearDecoyCentralEncryption(rebuilt.bytes), rebuilt.complete)
   }
 
   // 中央目录只有个别字段是 0xFFFFFFFF：优先读 ZIP64 extra，其次读对应的本地文件头。
@@ -209,11 +250,16 @@ export function normalizeArchive(bytes: Uint8Array): ArchiveNormalization {
     central += 46 + nameLength + extraLength + data.getUint16(central + 32, true)
   }
   if (!wideRepairs.length && repairs.every(([offset, value]) => data.getUint16(offset, true) === value)) {
-    return { bytes, directoryRebuilt: false }
+    return verify(bytes, clearDecoyCentralEncryption(bytes), false)
   }
   const normalized = bytes.slice()
   const normalizedView = view(normalized)
   for (const [offset, value] of repairs) normalizedView.setUint16(offset, value, true)
   for (const [offset, value] of wideRepairs) normalizedView.setUint32(offset, value, true)
-  return { bytes: normalized, directoryRebuilt: false }
+  return verify(normalized, clearDecoyCentralEncryption(normalized), false)
+}
+
+/** 目录按本地头重建，或只清除了假加密标记（数据未改动），都算核对过的修复，可以安全重新打包。 */
+function verify(original: Uint8Array, bytes: Uint8Array, rebuilt: boolean): ArchiveNormalization {
+  return { bytes, verified: rebuilt || bytes !== original }
 }

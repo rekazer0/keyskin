@@ -243,7 +243,7 @@ export class SkinArchive {
   private cachedNames?: string[]
   private changedRaw = new Set<string>()
   private zipWasRepaired = false
-  private zipDirectoryRebuilt = false
+  private zipRepairVerified = false
   readonly changed = new Set<string>()
   /** Bumped whenever file contents or paths change, so callers can skip redundant redraws. */
   revision = 0
@@ -337,7 +337,7 @@ export class SkinArchive {
     }
     const archive = new SkinArchive(files, sourceBytes, formatHint)
     archive.zipWasRepaired = wasRepaired
-    archive.zipDirectoryRebuilt = normalized.directoryRebuilt
+    archive.zipRepairVerified = normalized.verified
     return archive
   }
 
@@ -381,7 +381,7 @@ export class SkinArchive {
     }
     const archive = new SkinArchive(files, sourceBytes, formatHint)
     archive.zipWasRepaired = wasRepaired
-    archive.zipDirectoryRebuilt = normalized.directoryRebuilt
+    archive.zipRepairVerified = normalized.verified
     onProgress?.(1)
     return archive
   }
@@ -688,7 +688,7 @@ export class SkinArchive {
     this.assertPlatformZipUnencrypted(format)
 
     // Validate ZIP structure integrity when converting to platform format
-    if ((format === "bdi" || format === "bds") && this.zipWasRepaired && !this.zipDirectoryRebuilt && this.changed.size === 0) {
+    if ((format === "bdi" || format === "bds") && this.zipWasRepaired && !this.zipRepairVerified && this.changed.size === 0) {
       throw new Error("皮肤的 ZIP 结构完整性受损，无法转换")
     }
 

@@ -14,7 +14,8 @@ export const CENTRAL_SIGNATURE = 0x02014b50
 export const END_SIGNATURE = 0x06054b50
 
 const DATA_DESCRIPTOR_FLAG = 1 << 3
-const ENCRYPTION_FLAGS = (1 << 0) | (1 << 6) | (1 << 13)
+/** ZIP 的加密标记位：传统加密、强加密和掩码头加密。 */
+export const ENCRYPTION_FLAGS = (1 << 0) | (1 << 6) | (1 << 13)
 
 type ZipEntry = {
   name: string

@@ -217,6 +217,29 @@ test('recovers a poisoned central directory whose entries fake an encryption fla
   assert.equal(bdi.getText('light/skin/port/res/default.css'), '[GLOBAL]\n')
 })
 
+// Anti-extraction packers (seen in 微光 9.0.bdi) leave the central directory otherwise intact
+// but flag every entry "encrypted"; the local headers and the data are clean.
+test('clears decoy encryption flags that the packer writes only into the central directory', async () => {
+  const bytes = sampleArchive()
+  markCentralEncrypted(bytes)
+  for (const archive of [SkinArchive.open(bytes), await SkinArchive.openAsync(bytes)]) {
+    assert.equal(archive.names().length, 4)
+    assert.deepEqual(archive.zipEncryptedPaths(), [])
+  }
+  const archive = await SkinArchive.openAsync(bytes)
+  archive.setText('Info.txt', 'AtomSkinName=decoy')
+  // Same-format save reuses the untouched entries: the decoy must not be written back either.
+  for (const saved of [archive.toBytes('bds'), await archive.toBytesAsync('bds')]) {
+    const entries = parseZip(saved).entries
+    assert.equal(entries.filter(isZipEntryEncrypted).length, 0)
+    assert.equal(SkinArchive.open(saved, 'bds').getText('Info.txt'), 'AtomSkinName=decoy')
+  }
+  // Converting to another format works without any edit.
+  const converted = SkinArchive.open(await archive.toBytesAsync('bdi'), 'bdi')
+  assert.equal(converted.format, 'bdi')
+  assert.equal(converted.getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
+})
+
 test('still refuses a poisoned central directory when the local headers mark entries encrypted', async () => {
   const bytes = sampleArchive()
   poisonCentralSizes(bytes)
@@ -419,31 +442,29 @@ test('BDI → BDS preserves the normal, pressed and panel artwork of an out-of-o
   assert.deepEqual(source.getBytes(`${path}.til`), strToU8(til))
 })
 
-test('BDI → BDS refuses ZIP entries marked as encrypted, without repackaging them', async () => {
-  for (const [flag, central] of [[1, true], [1, false], [64, true]]) {
+test('BDI → BDS refuses ZIP entries whose local headers mark them encrypted', async () => {
+  // 中央目录的加密位可能只是防解包的假标记，本地文件头的加密位才是真的。
+  for (const flag of [1, 64]) {
     const bytes = zipSync({ 'skin/port/py_26.ini': strToU8('[PANEL]\nSIZE=10,10\n') }, { level: 0 })
     const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    const offset = central ? header.getUint32(bytes.length - 6, true) + 8 : 6
-    header.setUint16(offset, header.getUint16(offset, true) | flag, true)
+    header.setUint16(6, header.getUint16(6, true) | flag, true)
     const source = SkinArchive.open(bytes, 'bdi')
     assert.throws(() => source.toBytes('bds'), /未加密/)
     await assert.rejects(source.toBytesAsync('bds'), /未加密/)
   }
 })
 
-test('BDS → BDI refuses encrypted markers even when the parsed ZIP has no indexed entries', async () => {
+test('clears decoy central encryption flags even when the EOCD per-disk count is broken', async () => {
   const bytes = sampleArchive()
   const header = dataView(bytes)
   const central = header.getUint32(bytes.length - 6, true)
   header.setUint16(central + 8, header.getUint16(central + 8, true) | 1, true)
   header.setUint32(bytes.length - 14, 0, true)
   const source = await SkinArchive.openAsync(bytes, 'bds', () => {})
-  const expected = /标记为加密.*未加密的原始皮肤包/
-  await assert.rejects(source.toBytesAsync('bdi'), expected)
-  source.setText('Info.txt', 'Name=edited')
-  assert.throws(() => source.toBytes('bdi'), expected)
-  await assert.rejects(source.toBytesAsync('bdi'), expected)
-  await assert.rejects(source.platformBytesAsync('bdi'), expected)
+  assert.deepEqual(source.zipEncryptedPaths(), [])
+  const bdi = await source.toBytesAsync('bdi')
+  assert.equal(parseZip(bdi).entries.filter(isZipEntryEncrypted).length, 0)
+  assert.equal(SkinArchive.open(bdi, 'bdi').getText('light/skin/port/py_9.ini'), '[PANEL]\nSIZE=480,320')
 })
 
 test('BDI → BDS does not export a ZIP opened through directory repair', async () => {
